@@ -30,6 +30,7 @@ import { describeSeriesAt, isSeriesGame, nameSeriesGame } from "./series-games.j
 import { session } from "./session.js";
 import { wireSheetSections } from "#shared/sheet-sections.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
+import { letGoOfGame, noteShownGame } from "#shared/sheet-memory.js";
 
 /** @typedef {import("./matchup.js").MatchupGame} MatchupGame */
 /** @typedef {{ game: MatchupGame, sides: any[], boxScore: any }} ShownGame */
@@ -192,9 +193,23 @@ function offerHighlights(game) {
   else if (sections?.readShown() === "highlights") sections.showSection("game", true);
 }
 
+// A game called off is over as much as a final, and won't be played on its day.
+/** @param {MatchupGame} game */
+const isOver = (game) => game.state === "final" || game.state === "off";
+
+/** @param {MatchupGame} game */
+function noteGame(game) {
+  noteShownGame(findSheet(), {
+    key: nameGameKey(game),
+    isPlayingToday: game.state === "live" || (game.state === "pre" && !!game.today),
+    isOver: isOver(game),
+  });
+}
+
 function renderSheet() {
   if (!shown) return;
   const game = readCurrentGame(shown.game);
+  noteGame(game);
   offerHighlights(game);
   setHtml(findElement("gameTitle"), titleGame(game));
   setHtml(findElement("gameWhen"), renderWhen(game));
@@ -385,6 +400,7 @@ export function startGameSheet() {
     forget: () => {
       stopWatchingBoxScore();
       highlights?.forget();
+      letGoOfGame(sheet);
       shown = null;
     },
   });

@@ -12,6 +12,7 @@ import {
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -79,6 +80,35 @@ test("settings open on a reload show again, with the season, notifications, and 
   release();
   await expect(page.locator("#bracketWrap")).toContainText("Phillies");
   await settings.getByRole("button", { name: "Close" }).click();
+  await expect(settings).toBeHidden();
+});
+
+test("settings left off the screen two minutes are closed as the page comes back, before it draws, and a reload then opens without them", async ({
+  page,
+}) => {
+  await openApp(page);
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await openSettings(page);
+  await expect(settings.locator("#rankList .rank-item")).toHaveCount(12);
+
+  await setHidden(page, true);
+  await page.clock.runFor(2 * 60_000 - 1000);
+  expect(await comeBackTo(page, "#settingsDialog")).toBe(true);
+
+  await setHidden(page, true);
+  await page.clock.runFor(2 * 60_000);
+  const release = await holdRequests(page, matchPath("/js/app.js"));
+  await page.reload({ waitUntil: "commit" });
+  await expect(page.locator("#bracketWrap")).toContainText("Phillies");
+  await expect(settings).toBeHidden();
+  release();
+  await page.waitForLoadState("domcontentloaded");
+  await expect(settings).toBeHidden();
+
+  await openSettings(page);
+  await setHidden(page, true);
+  await page.clock.runFor(2 * 60_000);
+  expect(await comeBackTo(page, "#settingsDialog")).toBe(false);
   await expect(settings).toBeHidden();
 });
 

@@ -87,6 +87,9 @@ function showPart(id, { markup, hidden, classes, style, scrolls, savedAt }) {
 }
 
 /** @param {any} saved */
+const isForgotten = (saved) => typeof saved?.forgetAt === "number" && Date.now() >= saved.forgetAt;
+
+/** @param {any} saved */
 function findLastSheet(saved) {
   const sheet = typeof saved?.id === "string" ? document.getElementById(saved.id) : null;
   const dialog = sheet?.closest("dialog");
@@ -158,7 +161,7 @@ function showLastDialog(dialog, sheets) {
 
 // A sheet that was showing is still there when the page comes back, so it shows without rising
 // again, beside any it was opened from, until the page's modules take it over (sheet.js's
-// reopenSheets) or close it.
+// reopenSheets) or close it, unless it was left open longer than it stays (sheet-memory.js).
 function showLastSheets() {
   const saved = readSaved("openSheets");
   if (!Array.isArray(saved)) return;
@@ -172,7 +175,8 @@ function showLastSheets() {
         { sheet: found.sheet, saved: each },
       ]);
   }
-  for (const [dialog, sheets] of dialogs) showLastDialog(dialog, sheets);
+  for (const [dialog, sheets] of dialogs)
+    if (!sheets.some(({ saved }) => isForgotten(saved))) showLastDialog(dialog, sheets);
 }
 
 // What the page last showed is a drawing of its own, so the note that its views are still empty

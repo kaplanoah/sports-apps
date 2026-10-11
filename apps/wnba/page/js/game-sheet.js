@@ -6,7 +6,7 @@
 // from the cards of the team's nearest games. Details that didn't load read again on a tap on Try
 // again, as the phone comes back online, or as the page comes back.
 
-import { describeDay } from "#shared/days.js";
+import { countDaysBetween, describeDay } from "#shared/days.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";
@@ -14,6 +14,7 @@ import { renderNetworks } from "#shared/network-logos.js";
 import { renderRetryBlock, watchRetries } from "#shared/retry.js";
 import { wireSheetSections } from "#shared/sheet-sections.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
+import { letGoOfGame, noteShownGame } from "#shared/sheet-memory.js";
 import { renderBoxScore, renderPendingBoxScore } from "./box-score-view.js";
 import { renderClub } from "./clubs.js";
 import { readGameDay } from "./days.js";
@@ -166,9 +167,29 @@ function offerHighlights(game) {
   else if (sections?.readShown() === "highlights") sections.showSection("game", true);
 }
 
+// The league marks a game it put off or called off in its status, and keeps it as one to come.
+/** @param {Game} game */
+const isOver = (game) => game.state === "final" || /postpon|ppd|cancel/i.test(game.status);
+
+/** @param {Game} game */
+function isToday(game) {
+  const day = readGameDay(game);
+  return !!day && countDaysBetween(day, new Date()) === 0;
+}
+
+/** @param {Game} game */
+function noteGame(game) {
+  noteShownGame(findSheet(), {
+    key: game.id,
+    isPlayingToday: game.state === "live" || (game.state === "pre" && isToday(game)),
+    isOver: isOver(game),
+  });
+}
+
 function renderSheet() {
   const game = shown && findGame(shown.id);
   if (!game) return;
+  noteGame(game);
   offerHighlights(game);
   const body = findElement("gameBody");
   findElement("gameTitle").textContent = nameGame(game);
@@ -373,6 +394,7 @@ function prepareFromRow(button) {
 }
 
 function forgetGame() {
+  letGoOfGame(findSheet());
   shown = null;
   highlights?.forget();
   stopWatchingDetails();

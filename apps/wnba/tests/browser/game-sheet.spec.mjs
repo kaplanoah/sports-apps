@@ -15,6 +15,7 @@ import {
   waitForTimedMotions,
 } from "../../../../tests/browser/sheet-motions.mjs";
 import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-row.mjs";
+import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -985,6 +986,97 @@ test("a sheet whose game the season no longer has closes once the page's code ar
   await openApp(page);
 
   await expect(page.locator("#gameSheet")).toBeHidden();
+});
+
+const MINUTE_MS = 60 * 1000;
+const SHEET_KEPT_MS = 6 * 60 * MINUTE_MS;
+
+/**
+ * Moves the page's clock on by `ms` without running its timers, as a phone that suspends it does.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} ms
+ */
+const passTime = async (page, ms) =>
+  page.clock.setSystemTime((await page.evaluate(() => Date.now())) + ms);
+
+test("a sheet left off the screen six hours is closed as the page comes back, before it draws, and one left for less is still open", async ({
+  page,
+}) => {
+  await openApp(page);
+  const sheet = await openGameSheet(page, ACES_AT_FEVER);
+  await expect(sheet.locator(".foul-chip")).toHaveText(["Fouled out"]);
+
+  await setHidden(page, true);
+  await passTime(page, SHEET_KEPT_MS - MINUTE_MS);
+  expect(await comeBackTo(page, "#sheetDialog")).toBe(true);
+  await expect(sheet).toBeVisible();
+
+  await setHidden(page, true);
+  await passTime(page, SHEET_KEPT_MS);
+  expect(await comeBackTo(page, "#sheetDialog")).toBe(false);
+  await expect(sheet).toBeHidden();
+});
+
+test("a reload six hours after the page left the screen opens without the sheet it showed, before the page's code arrives", async ({
+  page,
+}) => {
+  await openApp(page);
+  const sheet = await openGameSheet(page, ACES_AT_FEVER);
+  await expect(sheet.locator(".foul-chip")).toHaveText(["Fouled out"]);
+  await setHidden(page, true);
+  await passTime(page, SHEET_KEPT_MS);
+  const release = await holdPageCode(page);
+
+  await page.reload({ waitUntil: "commit" });
+
+  await expect(page.locator("#bracketWrap")).toContainText("Fever");
+  await expect(sheet).toBeHidden();
+  release();
+  await page.waitForLoadState("domcontentloaded");
+  await expect(sheet).toBeHidden();
+});
+
+test("a live game's sheet stays open however long the page is away, until an hour after its final shows", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await app.changeSeason(startValkyriesAtWings);
+  const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
+  await expect(sheet.locator(".faceoff .score")).toHaveText(/74\s*72/);
+
+  await setHidden(page, true);
+  await passTime(page, 2 * SHEET_KEPT_MS);
+  expect(await comeBackTo(page, "#sheetDialog")).toBe(true);
+  await app.changeSeason(finishValkyriesAtWings);
+  await expect(sheet.locator(".faceoff .score")).toHaveText(/100\s*108/);
+
+  await setHidden(page, true);
+  await passTime(page, 59 * MINUTE_MS);
+  expect(await comeBackTo(page, "#sheetDialog")).toBe(true);
+
+  await setHidden(page, true);
+  await passTime(page, MINUTE_MS);
+  expect(await comeBackTo(page, "#sheetDialog")).toBe(false);
+});
+
+test("a live game's sheet whose final came while the page was off the screen opens again on a reload however long after", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await app.changeSeason(startValkyriesAtWings);
+  const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
+  await expect(sheet.locator(".faceoff .score")).toHaveText(/74\s*72/);
+  await setHidden(page, true);
+  await app.changeSeason(finishValkyriesAtWings);
+  await expect(sheet.locator(".faceoff .score")).toHaveText(/100\s*108/);
+  await passTime(page, 2 * 60 * MINUTE_MS);
+  const release = await holdPageCode(page);
+
+  await page.reload({ waitUntil: "commit" });
+
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator(".faceoff .score")).toHaveText(/100\s*108/);
+  release();
 });
 
 test.describe("on a phone", () => {
