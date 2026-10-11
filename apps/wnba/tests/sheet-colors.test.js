@@ -69,25 +69,66 @@ test("every dot with a black half gives its light half the same smaller share", 
 });
 
 // The lead chart's tile is a mix of the sheet and the floor, so reading on both reads on it too.
-test("every team's chart colors read as text on the sheet and the floor, on each theme", () => {
-  const surfaces = {
-    light: [readToken(":root", "--card"), readToken(":root", "--bg")],
-    dark: [
-      readToken(':root[data-theme="dark"]', "--card"),
-      readToken(':root[data-theme="dark"]', "--bg"),
-    ],
-  };
+const CHART_SURFACES = {
+  light: [readToken(":root", "--card"), readToken(":root", "--bg")],
+  dark: [
+    readToken(':root[data-theme="dark"]', "--card"),
+    readToken(':root[data-theme="dark"]', "--bg"),
+  ],
+};
+
+/**
+ * The shade of a team's chart color its name reads in: its name color for its first choice, if it
+ * keeps one, or the color itself.
+ * @param {string} code
+ * @param {"light" | "dark"} theme
+ * @param {number} choice
+ */
+function readNameColor(code, theme, choice) {
+  const team = TEAMS[code];
+  const nameColor = choice === 0 && "nameColors" in team ? team.nameColors[theme] : undefined;
+  return nameColor ?? team.chartColors[theme][choice];
+}
+
+test("every team's chart colors stand out as marks, and its name reads in each of them or in its darker shade, on the sheet and the floor, on each theme", () => {
   for (const code of CODES) {
     for (const theme of THEMES) {
-      for (const color of TEAMS[code].chartColors[theme]) {
-        for (const surface of surfaces[theme]) {
-          const contrast = measureContrast(color, surface);
+      TEAMS[code].chartColors[theme].forEach((color, choice) => {
+        const nameColor = readNameColor(code, theme, choice);
+        for (const surface of CHART_SURFACES[theme]) {
+          const markContrast = measureContrast(color, surface);
+          const nameContrast = measureContrast(nameColor, surface);
           assert.ok(
-            contrast >= SMALLEST_CONTRAST,
-            `${code}'s ${color} on ${surface} is ${contrast.toFixed(2)} to 1`,
+            markContrast >= MARK_CONTRAST,
+            `${code}'s ${color} on ${surface} is ${markContrast.toFixed(2)} to 1`,
+          );
+          assert.ok(
+            nameContrast >= SMALLEST_CONTRAST,
+            `${code}'s name in ${nameColor} on ${surface} is ${nameContrast.toFixed(2)} to 1`,
           );
         }
-      }
+      });
+    }
+  }
+});
+
+test("a team keeps a darker shade for its name only where its first chart color is too light to read as text, in that color's hue", () => {
+  for (const code of CODES) {
+    const team = TEAMS[code];
+    if (!("nameColors" in team)) continue;
+    for (const [theme, nameColor] of Object.entries(team.nameColors)) {
+      const color = team.chartColors[/** @type {"light" | "dark"} */ (theme)][0];
+      const contrasts = CHART_SURFACES[/** @type {"light" | "dark"} */ (theme)].map((surface) =>
+        measureContrast(color, surface),
+      );
+      assert.ok(
+        Math.min(...contrasts) < SMALLEST_CONTRAST,
+        `${code}'s ${color} already reads as text`,
+      );
+      assert.ok(
+        measureHueGap(color, nameColor) <= SAME_HUE_DEGREES,
+        `${code}'s ${nameColor} turns ${color}'s hue`,
+      );
     }
   }
 });
@@ -151,6 +192,30 @@ test("every pairing of teams, either way round, gets two colors that read apart,
   }
 });
 
+test("the Storm's green and the Fever's navy read apart, so each team keeps its first color either way round, on each theme", () => {
+  for (const theme of THEMES) {
+    for (const [away, home] of [
+      ["IND", "SEA"],
+      ["SEA", "IND"],
+    ]) {
+      assert.deepEqual(pickSheetColors(away, home, theme), {
+        away: TEAMS[away].chartColors[theme][0],
+        home: TEAMS[home].chartColors[theme][0],
+      });
+    }
+  }
+});
+
+// Two dark colors look alike on a mark at a distance that sets lighter ones well apart, so the
+// Tempo's bordeaux keeps further from the Aces' black than the sheet asks of two colors.
+const DARK_PAIR_DISTANCE = 0.4;
+
+test("the Tempo's bordeaux reads well apart from the Aces' black on Maple", () => {
+  const colors = pickSheetColors("TOR", "LVA", "light");
+  assert.equal(colors.away, TEAMS.TOR.chartColors.light[0]);
+  assert.ok(measureColorDistance(colors.away, colors.home) >= DARK_PAIR_DISTANCE);
+});
+
 test("each team keeps its first color unless it looks like the other team's", () => {
   assert.deepEqual(pickSheetColors("GSV", "DAL", "light"), {
     away: TEAMS.GSV.chartColors.light[0],
@@ -172,11 +237,16 @@ test("when neither of the away team's colors reads apart from the home team's fi
   });
 });
 
-test("the sheet's style hands it each side's color on each theme, and nothing while a team isn't known", () => {
+test("the sheet's style hands it each side's color on each theme, with the darker shade a side's name reads in where it keeps one, and nothing while a team isn't known", () => {
   assert.equal(
     formatSheetColors("ATL", "WAS"),
     `--away-light: ${TEAMS.ATL.chartColors.light[1]}; --home-light: ${TEAMS.WAS.chartColors.light[0]}; ` +
       `--away-dark: ${TEAMS.ATL.chartColors.dark[1]}; --home-dark: ${TEAMS.WAS.chartColors.dark[0]};`,
+  );
+  assert.equal(
+    formatSheetColors("IND", "SEA"),
+    `--away-light: ${TEAMS.IND.chartColors.light[0]}; --home-light: ${TEAMS.SEA.chartColors.light[0]}; --home-name-light: ${TEAMS.SEA.nameColors.light}; ` +
+      `--away-dark: ${TEAMS.IND.chartColors.dark[0]}; --home-dark: ${TEAMS.SEA.chartColors.dark[0]};`,
   );
   assert.equal(formatSheetColors(null, "LVA"), "");
 });
