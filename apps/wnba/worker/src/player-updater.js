@@ -18,10 +18,9 @@ import {
   nameTeamGameLogRequest,
   nameTotalsRequest,
 } from "./player.js";
+import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import {
   describeRoster,
-  fetchEspnRoster,
-  listOutNames,
   nameLeagueRosterRequest,
   namePlayerListRequest,
   nameRosterKey,
@@ -31,14 +30,14 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 // Keeps what player and roster sheets show, so a tap reads only the store and never waits on the
 // league. Each run reads only the feeds that may have changed: every player's totals and game logs
 // and every team's games as a game ends, each team's roster every few hours, the league's list of
-// every player once a day, and who ESPN lists as out on each team still playing every hour. It
-// keeps each feed trimmed to the columns the sheets read, and saves only the documents that
-// changed: each team's roster, each player's numbers, and the season's ranked numbers, which go
-// last, so a season that has them is whole. Each run also fills one season the store keeps from
-// before the current one, newest first, and a filled season is never read again, since a past
-// season doesn't change, unless the sheets come to read a column it was filled without. Each run
-// ends by saving how it went in `players/status`, with how often a sheet had to read the league
-// for a player the store hadn't saved.
+// every player once a day, and ESPN's injury report, once for the whole league, every hour while a
+// team still plays. It keeps each feed trimmed to the columns the sheets read, and saves only the
+// documents that changed: each team's roster, each player's numbers, and the season's ranked
+// numbers, which go last, so a season that has them is whole. Each run also fills one season the
+// store keeps from before the current one, newest first, and a filled season is never read again,
+// since a past season doesn't change, unless the sheets come to read a column it was filled
+// without. Each run ends by saving how it went in `players/status`, with how often a sheet had to
+// read the league for a player the store hadn't saved.
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -77,9 +76,11 @@ const PLAYER_LIST_COLUMNS = [
   "FROM_YEAR",
 ];
 
-// A team no one reads ESPN for, or whose read failed, has no one out.
-/** @type {string[]} */
+// A team no one reads ESPN for, or whose report didn't answer, has no one out.
+/** @type {import("./injuries.js").OutPlayer[]} */
 const NO_ONE_OUT = [];
+/** @type {Record<string, import("./injuries.js").OutPlayer[]>} */
+const NO_TEAM_OUT = {};
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
 /**
@@ -186,17 +187,16 @@ function createStoreKeeper() {
     );
 
   /**
-   * Who ESPN lists as out on a team today, or no one when ESPN hasn't answered.
+   * Who ESPN lists as out on each team today, and why, or no one when ESPN hasn't answered.
    * @param {RunContext} context
-   * @param {string} team
    */
-  const readOutNames = (context, team) =>
+  const readOutPlayers = (context) =>
     /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper)
-      .readFeed("out", team, async () => {
+      .readFeed("out", "league", async () => {
         addOne(context.log.feeds, "out");
-        return listOutNames(await fetchEspnRoster(context.fetchImpl, team, null));
+        return listOutPlayers(await fetchInjuries(context.fetchImpl, null));
       })
-      .catch(() => NO_ONE_OUT);
+      .catch(() => NO_TEAM_OUT);
 
   /**
    * @param {RunContext} context
@@ -250,24 +250,25 @@ function createStoreKeeper() {
     );
 
   /**
-   * Who is out on each team, read only for a team that still plays this season, since a page shows
-   * it only then.
+   * Who is out on each team, kept only for a team that still plays this season, since a page shows
+   * it only then, and read only while one does.
    * @param {RunContext} context
    * @param {any[] | null} series the season's series, or null for a past season
    */
-  const readOutFeeds = (context, series) =>
-    Promise.all(
-      TEAM_KEYS.map((team) =>
-        series && isStillPlaying(series, team) ? readOutNames(context, team) : NO_ONE_OUT,
-      ),
+  async function readOutFeeds(context, series) {
+    const playing = TEAM_KEYS.map((team) => !!series && isStillPlaying(series, team));
+    const byTeam = playing.some(Boolean) ? await readOutPlayers(context) : NO_TEAM_OUT;
+    return TEAM_KEYS.map((team, index) =>
+      playing[index] ? (byTeam[team] ?? NO_ONE_OUT) : NO_ONE_OUT,
     );
+  }
 
   /**
    * @param {RunContext} context
    * @param {number} season
-   * @param {{ leagueRosters: any[], outNames: string[][], playerList: any }} answers
+   * @param {{ leagueRosters: any[], outPlayers: import("./injuries.js").OutPlayer[][], playerList: any }} answers
    */
-  async function saveRosters(context, season, { leagueRosters, outNames, playerList }) {
+  async function saveRosters(context, season, { leagueRosters, outPlayers, playerList }) {
     for (const [index, team] of TEAM_KEYS.entries()) {
       const leagueRoster = leagueRosters[index];
       if (!leagueRoster) continue;
@@ -276,7 +277,7 @@ function createStoreKeeper() {
         season,
         leagueRoster,
         playerList,
-        outNames: outNames[index],
+        outPlayers: outPlayers[index],
         now: context.now(),
       });
       await saveDoc(context, nameRosterKey(season, team), roster);
@@ -310,7 +311,7 @@ function createStoreKeeper() {
    * @param {any[] | null} series the season's series, or null for a past season
    */
   async function updateSeason(context, season, series) {
-    const [stats, leagueRosters, outNames, playerList] = await Promise.all([
+    const [stats, leagueRosters, outPlayers, playerList] = await Promise.all([
       readSeasonFeeds(context, season).catch((error) => {
         noteFailure(context, `Reading ${season}'s stats`, error);
         return null;
@@ -325,7 +326,7 @@ function createStoreKeeper() {
         PLAYER_LIST_COLUMNS,
       ).catch(() => null),
     ]);
-    await saveRosters(context, season, { leagueRosters, outNames, playerList });
+    await saveRosters(context, season, { leagueRosters, outPlayers, playerList });
     if (stats) await savePlayers(context, season, stats);
     return !!stats && !!playerList && leagueRosters.every(Boolean);
   }

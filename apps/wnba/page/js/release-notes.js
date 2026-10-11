@@ -6,6 +6,10 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
+    at: "2026-10-11T19:25:00Z",
+    text: "If a player is out, for example because of an injury, their player page shows why they're out",
+  },
+  {
     at: "2026-10-11T00:40:00Z",
     text: html`Freeform search for games. Tap <b>Search</b> on the games page and type a team, city, date range, or things like "games this weekend" or "Aces in New York".`,
   },

@@ -62,6 +62,19 @@ const SHEETS = [
       await expect(page.locator("#playerSheet .player-curve b")).toHaveCount(8);
     },
   },
+  {
+    id: "playerSheet",
+    name: "why a player is out",
+    read: "/player",
+    open: async (/** @type {import("@playwright/test").Page} */ page) => {
+      await openTeamRoster(page, "New York Liberty");
+      await page
+        .locator("#rosterSection")
+        .getByRole("button", { name: "Elizabeth Balogun" })
+        .click();
+      await expect(page.locator("#playerSheet .out-sentence")).toBeVisible();
+    },
+  },
 ];
 
 /**

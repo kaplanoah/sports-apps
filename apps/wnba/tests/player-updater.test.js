@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildSnapshot } from "../page/js/snapshot.js";
 import { isStillPlaying } from "../page/js/series.js";
 import { TEAMS } from "../page/js/teams.js";
 import {
@@ -15,31 +14,24 @@ import {
 } from "../worker/src/player.js";
 import { createPlayerJob } from "../worker/src/player-updater.js";
 import { addTurnovers, joinGameLogs } from "./player-fixtures.js";
+import { nameInjuriesRequest } from "../worker/src/injuries.js";
 import {
   createRosterServer,
-  nameEspnRosterRequest,
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../worker/src/roster.js";
 
 // Every player's totals and every team's games as the league answered the morning after the
 // Liberty's last game, with the game logs of a few players standing in for every player's, beside
-// the rosters recorded that morning.
+// the rosters recorded that morning and ESPN's injury report of a few days later.
 const PLAYERS = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-06-players.json`, "utf8"),
 );
 const ROSTERS = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-06-league-rosters.json`, "utf8"),
 );
-const AFTERNOON = JSON.parse(
-  readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
-);
-const GAMES = JSON.parse(
-  readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
-);
-const { series: SERIES } = buildSnapshot(
-  { ...AFTERNOON.responses, players: GAMES.preview.players },
-  { season: 2026, now: Date.parse(AFTERNOON.now) },
+const INJURIES = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-11-espn-injuries.json`, "utf8"),
 );
 const NOW = Date.parse(ROSTERS.recordedAt);
 const MINUTE_MS = 60 * 1000;
@@ -68,8 +60,8 @@ const EMPTY_ROSTER = {
 };
 
 /**
- * The league's answers, by request: every team has a roster and ESPN's, the recorded or an empty
- * one.
+ * The league's answers, by request: every team has a roster, the recorded or an empty one, and
+ * ESPN has its injury report.
  */
 function listAnswers() {
   /** @type {Record<string, any>} */
@@ -96,10 +88,7 @@ function listAnswers() {
       games,
     );
   }
-  for (const team of Object.keys(TEAMS))
-    answers[nameEspnRosterRequest(TEAMS[team].espnId)] = ROSTERS.espnRosters[team] ?? {
-      athletes: [],
-    };
+  answers[nameInjuriesRequest()] = INJURIES.report;
   return answers;
 }
 
@@ -247,14 +236,14 @@ test("a player's sheet from the store is the one the league's feeds make, and re
   }
 });
 
-test("a team's roster from the store is the one the league's feeds make, with who ESPN says is out", async () => {
+test("a team's roster from the store is the one the league's feeds make, with who ESPN says is out and why", async () => {
   const { docs, runJob } = createRun();
   await runJob();
 
   const fromStore = await askForRoster("team=IND&season=2026", { docs });
   const fromLeague = await askForRoster("team=IND&season=2026");
   assert.deepEqual(fromStore.body, fromLeague.body);
-  assert.ok(fromStore.body.players.some((/** @type {any} */ player) => player.isOut));
+  assert.ok(fromStore.body.players.some((/** @type {any} */ player) => player.out?.reason));
   assert.deepEqual(fromStore.requests, []);
 });
 
@@ -340,16 +329,55 @@ test("a past season filled before the sheets read a column is filled once more, 
   assert.equal(league.requests.filter((url) => /Season=2025/.test(url)).length, pastReads.length);
 });
 
-test("ESPN is read only for the teams still playing", async () => {
-  const { league, runJob } = createRun({ series: SERIES });
+test("ESPN's injury report is read once a run for the whole league, and says who is out only on the teams still playing", async () => {
+  /** @type {any[]} */
+  const series = [
+    {
+      round: 1,
+      top: { team: "MIN", seed: 1, wins: 2 },
+      bottom: { team: "NYL", seed: 8, wins: 0 },
+      winner: "MIN",
+    },
+    {
+      round: 1,
+      top: { team: "LVA", seed: 3, wins: 1 },
+      bottom: { team: "IND", seed: 6, wins: 1 },
+      winner: null,
+    },
+  ];
+  const { docs, league, runJob } = createRun({ series });
   await runJob();
 
-  const playing = Object.keys(TEAMS).filter((team) => isStillPlaying(SERIES, team));
-  const espnReads = league.requests.filter((url) => url.includes("espn.com"));
-  assert.ok(playing.length > 0 && playing.length < TEAM_COUNT);
+  assert.deepEqual([isStillPlaying(series, "NYL"), isStillPlaying(series, "IND")], [false, true]);
   assert.deepEqual(
-    espnReads.sort(),
-    playing.map((team) => nameEspnRosterRequest(TEAMS[team].espnId)).sort(),
+    league.requests.filter((url) => url.includes("espn.com")),
+    [nameInjuriesRequest()],
+  );
+  /** @param {string} team */
+  const listOut = (team) =>
+    docs.stored
+      .get(`rosters/2026-${team}`)
+      .players.filter((/** @type {any} */ player) => player.out)
+      .map((/** @type {any} */ player) => player.lastName);
+  assert.deepEqual(listOut("NYL"), []);
+  assert.deepEqual(listOut("IND"), ["Harris"]);
+});
+
+test("ESPN's injury report isn't read once no team plays", async () => {
+  /** @type {any} */
+  const finals = {
+    round: 3,
+    top: { team: "NYL", seed: 8, wins: 3 },
+    bottom: { team: "LVA", seed: 3, wins: 1 },
+    winner: "NYL",
+  };
+  const { league, runJob } = createRun({ series: [finals] });
+  await runJob();
+
+  assert.ok(Object.keys(TEAMS).every((team) => !isStillPlaying([finals], team)));
+  assert.deepEqual(
+    league.requests.filter((url) => url.includes("espn.com")),
+    [],
   );
 });
 
@@ -426,7 +454,7 @@ test("each run saves its status: the requests it made by feed, what it saved, an
     teamGames: 4,
     roster: 2 * TEAM_COUNT,
     playerList: 2,
-    out: TEAM_COUNT,
+    out: 1,
   });
   assert.deepEqual(Object.keys(first.saved).sort(), ["players", "ranks", "rosters"]);
   assert.equal(first.saved.ranks, 2);

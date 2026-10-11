@@ -1,27 +1,20 @@
 import { TEAMS } from "../../page/js/teams.js";
 import { normalizeName } from "../../page/js/player-names.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
-import { createReusedLoader, fetchUpstream } from "../../../../shared/worker/upstream.js";
+import { createReusedLoader } from "../../../../shared/worker/upstream.js";
+import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { readKeptDoc } from "./store-docs.js";
-import {
-  ESPN_HEADERS,
-  SEASON_PARAM,
-  fetchWnbaJson,
-  hasTable,
-  isCurrentSeason,
-  readTable,
-} from "./wnba.js";
+import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
 
 // Reads a team's roster for a season, for its sheet's Roster page: each player's number, position,
 // height, and age from the league's roster of that season, and where she came from and her first
 // season from the league's list of every player it has had, which has a college or country for
-// each. ESPN says who is out, and only for today's roster, so a past season's has no one out. The
-// store keeps each season's rosters (player-updater.js), so a sheet reads the league itself only
-// for a season the store doesn't keep. The page takes each player's averages from the store, which
-// the season updater keeps.
+// each. ESPN's injury report says who is out and why, and only for today's roster, so a past
+// season's has no one out. The store keeps each season's rosters (player-updater.js), so a sheet
+// reads the league itself only for a season the store doesn't keep. The page takes each player's
+// averages from the store, which the season updater keeps.
 
 const WNBA_STATS = "https://stats.wnba.com/stats";
-const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba";
 // A roster changes with a signing or an injury, a past season's never, and the list of every
 // player once a player joins the league.
 const ROSTER_CACHE_SECONDS = 30 * 60;
@@ -64,9 +57,6 @@ export const namePlayerListRequest = (season) =>
  * @param {string} team
  */
 export const nameRosterKey = (season, team) => `rosters/${season}-${team}`;
-
-/** @param {number} espnId */
-export const nameEspnRosterRequest = (espnId) => `${ESPN_SITE}/teams/${espnId}/roster`;
 
 // The league writes a height as 6-4.
 /** @param {string | null | undefined} height */
@@ -118,17 +108,6 @@ function chooseAgeDay(season, now) {
   return { year: season, month: MIDSEASON_MONTH, day: 1 };
 }
 
-/** @param {any} athlete one of ESPN's roster's athletes */
-const isOut = (athlete) => (athlete.injuries ?? []).some((injury) => injury.status === "Out");
-
-/**
- * The players ESPN lists as out, by their names' letters.
- * @param {any} espnRoster
- * @returns {string[]}
- */
-export const listOutNames = (espnRoster) =>
-  (espnRoster?.athletes ?? []).filter(isOut).map((athlete) => normalizeName(athlete));
-
 /**
  * The player's first and last names: the list's, or her roster name split at its first space.
  * @param {any} row the league roster's row for her
@@ -143,9 +122,9 @@ function readNames(row, listed) {
 /**
  * @param {any} row the league roster's row for a player
  * @param {Map<number, any>} listed every player the league has had, by id
- * @param {{ outNames: Set<string>, ageDay: { year: number, month: number, day: number } }} context
+ * @param {{ outByName: Map<string, import("./injuries.js").OutReason>, ageDay: { year: number, month: number, day: number } }} context
  */
-function describePlayer(row, listed, { outNames, ageDay }) {
+function describePlayer(row, listed, { outByName, ageDay }) {
   const entry = listed.get(row.PLAYER_ID);
   const names = readNames(row, entry);
   const debut = Number(entry?.FROM_YEAR);
@@ -158,7 +137,7 @@ function describePlayer(row, listed, { outNames, ageDay }) {
     age: measureAge(readBirthday(row.BIRTH_DATE), ageDay),
     college: readText(entry?.COLLEGE),
     country: readText(entry?.COUNTRY),
-    isOut: outNames.has(normalizeName(names)),
+    out: outByName.get(normalizeName(names)) ?? null,
     debut: Number.isFinite(debut) && debut > 0 ? debut : null,
   };
 }
@@ -170,11 +149,13 @@ function nameHeadCoach(leagueRoster) {
 }
 
 /**
- * @param {{ team: string, season: number, leagueRoster: any, playerList: any, outNames: string[], now: number }} reads
+ * @param {{ team: string, season: number, leagueRoster: any, playerList: any, outPlayers: import("./injuries.js").OutPlayer[], now: number }} reads
+ *   `outPlayers` are the team's players ESPN lists as out
  */
-export function describeRoster({ team, season, leagueRoster, playerList, outNames, now }) {
+export function describeRoster({ team, season, leagueRoster, playerList, outPlayers, now }) {
   const listed = new Map(readTable(playerList, "PlayerIndex").map((row) => [row.PERSON_ID, row]));
-  const context = { outNames: new Set(outNames), ageDay: chooseAgeDay(season, now) };
+  const outByName = new Map(outPlayers.map(({ name, ...out }) => [name, out]));
+  const context = { outByName, ageDay: chooseAgeDay(season, now) };
   return {
     team,
     season,
@@ -191,37 +172,25 @@ function readTeam(searchParams) {
   return Object.hasOwn(TEAMS, team) ? team : null;
 }
 
-/**
- * ESPN's roster of a team today, which says who is out.
- * @param {(input: string, init: object) => Promise<Response>} fetchImpl
- * @param {string} team
- * @param {number | null} cacheSeconds
- */
-export async function fetchEspnRoster(fetchImpl, team, cacheSeconds) {
-  const response = await fetchUpstream(fetchImpl, nameEspnRosterRequest(TEAMS[team].espnId), {
-    headers: ESPN_HEADERS,
-    cacheSeconds,
-  });
-  if (!response.ok) throw new Error(`ESPN answered ${response.status} for ${team}'s roster`);
-  return response.json();
-}
-
 export function createRosterServer({
   fetchImpl = (input, init) => fetch(input, init),
   now = () => Date.now(),
 } = {}) {
   /** @param {string} team */
-  const readOutNames = (team) =>
-    fetchEspnRoster(fetchImpl, team, ROSTER_CACHE_SECONDS).then(listOutNames, () => []);
+  const readOutPlayers = (team) =>
+    fetchInjuries(fetchImpl, ROSTER_CACHE_SECONDS).then(
+      (report) => listOutPlayers(report)[team] ?? [],
+      () => [],
+    );
 
-  // Who is out is today's news, so only today's roster reads it, and one ESPN doesn't answer
+  // Who is out is today's news, so only today's roster reads it, and a report ESPN doesn't answer
   // shows no one out rather than holding up the roster.
   /** @param {string} key a team and season, as NYL:2026 */
   async function readRoster(key) {
     const [team, seasonText] = key.split(":");
     const season = Number(seasonText);
     const isCurrent = isCurrentSeason(season, now());
-    const [leagueRoster, playerList, outNames] = await Promise.all([
+    const [leagueRoster, playerList, outPlayers] = await Promise.all([
       fetchWnbaJson(
         fetchImpl,
         nameLeagueRosterRequest(team, season),
@@ -234,9 +203,9 @@ export function createRosterServer({
         PLAYER_LIST_CACHE_SECONDS,
         hasTable("PlayerIndex"),
       ),
-      isCurrent ? readOutNames(team) : [],
+      isCurrent ? readOutPlayers(team) : [],
     ]);
-    return describeRoster({ team, season, leagueRoster, playerList, outNames, now: now() });
+    return describeRoster({ team, season, leagueRoster, playerList, outPlayers, now: now() });
   }
 
   const loadRoster = createReusedLoader(readRoster, ROSTER_REUSE_MS, now);

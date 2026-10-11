@@ -113,6 +113,19 @@ const VIEWS = [
     close: (page) => page.keyboard.press("Escape"),
   },
   {
+    name: "the sheet of a player who is out",
+    open: async (page) => {
+      await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+      await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
+      await page
+        .locator("#rosterSection")
+        .getByRole("button", { name: "Elizabeth Balogun" })
+        .click();
+    },
+    shown: (page) => page.locator("#playerSheet .out-box"),
+    close: (page) => page.keyboard.press("Escape"),
+  },
+  {
     name: "a final's Highlights",
     open: async (page) => {
       const sheet = await openGameSheet(page, FINAL_WITH_HIGHLIGHTS);

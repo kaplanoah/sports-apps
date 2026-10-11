@@ -98,7 +98,7 @@ function renderSheet() {
   if (!subject) return;
   const { player, isLoading } = readPlayer(subject, session.year);
   const showsOut = !isPastSeason() && isStillPlaying(session.season?.series ?? [], subject.team);
-  setHtml(findElement("playerTitle"), renderPlayerHeading(subject, player, showsOut));
+  setHtml(findElement("playerTitle"), renderPlayerHeading(subject, player));
   setHtml(findElement("playerNote"), describePlayerNote(subject, player));
   setHtml(findElement("playerFacts"), renderPlayerFacts(player, isLoading) || "");
   setHtml(
@@ -108,6 +108,7 @@ function renderSheet() {
       isLoading,
       season: session.season,
       isPastSeason: isPastSeason(),
+      showsOut,
       now: Date.now(),
     }),
   );

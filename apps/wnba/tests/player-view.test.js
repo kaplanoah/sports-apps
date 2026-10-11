@@ -59,7 +59,7 @@ function createPlayer(changes = {}) {
       age: 32,
       college: "Connecticut",
       country: "USA",
-      isOut: true,
+      out: null,
       debut: 2016,
     },
     lastGame: {
@@ -97,14 +97,76 @@ function createPlayer(changes = {}) {
 }
 
 /** @param {any} player */
-const renderBody = (player, { isLoading = false, isPastSeason = false } = {}) =>
-  readText(renderPlayerBody({ player, isLoading, season: SEASON, isPastSeason, now: NOW }));
+const renderBody = (player, { isLoading = false, isPastSeason = false, showsOut = true } = {}) =>
+  readText(
+    renderPlayerBody({ player, isLoading, season: SEASON, isPastSeason, showsOut, now: NOW }),
+  );
 
-test("her heading is her team's dot and her name, with Out only while her team still plays", () => {
+/** @param {any} [out] */
+function createOutPlayer(out = {}) {
   const player = createPlayer();
-  assert.match(readText(renderPlayerHeading(SUBJECT, player, true)), /^Breanna Stewart ?Out$/);
-  assert.equal(readText(renderPlayerHeading(SUBJECT, player, false)), "Breanna Stewart");
-  assert.equal(readText(renderPlayerHeading(SUBJECT, null, true)), "Breanna Stewart");
+  player.facts.out = {
+    reason: "Not injury related",
+    isForSeason: false,
+    sentence: "Stewart (not with team) is out for Wednesday's game against the Dream.",
+    updated: "2026-09-22T21:05:00.000Z",
+    ...out,
+  };
+  return player;
+}
+
+test("her heading is her team's dot and her name, and never her Out chip, which leads the box under it", () => {
+  assert.equal(readText(renderPlayerHeading(SUBJECT, createOutPlayer())), "Breanna Stewart");
+  assert.equal(readText(renderPlayerHeading(SUBJECT, null)), "Breanna Stewart");
+  assert.doesNotMatch(String(renderPlayerHeading(SUBJECT, createOutPlayer()).text), /foul-chip/);
+});
+
+test("a player who is out has a box first saying why, with RotoWire's sentence and the day ESPN changed it, only while her team still plays", () => {
+  const text = checkInTimeZone(EASTERN, () => renderBody(createOutPlayer()));
+  assert.match(
+    text,
+    /^Out Not injury related Stewart \(not with team\) is out for Wednesday's game against the Dream\. RotoWire \| Sep 22 Last game /,
+  );
+  const markup = String(
+    renderPlayerBody({
+      player: createOutPlayer(),
+      isLoading: false,
+      season: SEASON,
+      isPastSeason: false,
+      showsOut: true,
+      now: NOW,
+    }).text,
+  );
+  assert.match(
+    markup,
+    /^<section class="out-box">\s*<p class="out-line"><span class="foul-chip"><span class="foul-chip-words">Out<\/span><\/span><span class="out-words">Not injury related<\/span><\/p>/,
+  );
+  assert.match(markup, /<p class="out-sentence" data-quoted>Stewart/);
+  assert.doesNotMatch(renderBody(createOutPlayer(), { showsOut: false }), /^Out|RotoWire/);
+  assert.doesNotMatch(renderBody(createPlayer()), /^Out|RotoWire/);
+});
+
+test("a player out for the season has Rest of season after her reason, past an en dash, and a box without RotoWire's sentence has no source", () => {
+  const player = createOutPlayer({ reason: "Concussion", isForSeason: true, sentence: null });
+  const markup = String(
+    renderPlayerBody({
+      player,
+      isLoading: false,
+      season: SEASON,
+      isPastSeason: false,
+      showsOut: true,
+      now: NOW,
+    }).text,
+  );
+  assert.match(
+    markup,
+    /<span class="out-words">Concussion<span class="out-dash">\u2013<\/span>Rest of season<\/span>/,
+  );
+  assert.match(renderBody(player), /^Out Concussion \u2013 ?Rest of season Last game /);
+  assert.match(
+    renderBody(createOutPlayer({ reason: null, isForSeason: true, sentence: null })),
+    /^Out Rest of season Last game /,
+  );
 });
 
 test("under her name, her team, number, and college, or her country for a player who skipped college", () => {
@@ -189,6 +251,7 @@ test("her regular season ranks each average among the players the WNBA ranks, on
         isLoading: false,
         season: SEASON,
         isPastSeason: false,
+        showsOut: true,
         now: NOW,
       }).text,
     ),
@@ -205,6 +268,7 @@ test("a stat she isn't ranked in shows her number alone, and the note says why",
     isLoading: false,
     season: SEASON,
     isPastSeason: false,
+    showsOut: true,
     now: NOW,
   });
   assert.match(readText(body), /Pts 20\.8 3P% 25\.4 76th of 76/);
@@ -254,6 +318,7 @@ test("while her numbers load the sheet holds their shape, and says so when they 
         isLoading: true,
         season: SEASON,
         isPastSeason: false,
+        showsOut: true,
         now: NOW,
       }).text,
     ),
@@ -266,6 +331,7 @@ test("while her numbers load the sheet holds their shape, and says so when they 
       isLoading: false,
       season: SEASON,
       isPastSeason: false,
+      showsOut: true,
       now: NOW,
     }).text,
     /class="retry-block"[\s\S]*class="retry-button filled" data-retry/,

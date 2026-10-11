@@ -16,13 +16,12 @@ import {
   nameTotalsRequest,
 } from "../../worker/src/player.js";
 import { createPreviewServer, listUpcomingMeetings } from "../../worker/src/preview.js";
+import { nameInjuriesRequest } from "../../worker/src/injuries.js";
 import {
   createRosterServer,
-  nameEspnRosterRequest,
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../../worker/src/roster.js";
-import { TEAMS } from "../../page/js/teams.js";
 import { SeasonStore } from "../../worker/src/store.js";
 import worker from "../../worker/src/index.js";
 import {
@@ -52,9 +51,13 @@ const LEAD = JSON.parse(
   readFileSync(new URL("../fixtures/2026-10-01-espn-lead.json", import.meta.url), "utf8"),
 );
 // The league's rosters of the Liberty, Dream, Aces, Fever, and Wings this season and the Liberty's
-// last, its list of every player trimmed to theirs, and ESPN's rosters of today, as they were.
+// last, and its list of every player trimmed to theirs, as they were.
 const ROSTERS = JSON.parse(
   readFileSync(new URL("../fixtures/2026-10-06-league-rosters.json", import.meta.url), "utf8"),
+);
+// ESPN's injury report, which says who is out and why.
+const INJURIES = JSON.parse(
+  readFileSync(new URL("../fixtures/2026-10-11-espn-injuries.json", import.meta.url), "utf8"),
 );
 
 const listRosterAnswers = () => [
@@ -65,10 +68,7 @@ const listRosterAnswers = () => [
   ...[2025, 2026].map(
     (season) => /** @type {[string, any]} */ ([namePlayerListRequest(season), ROSTERS.playerList]),
   ),
-  ...Object.entries(ROSTERS.espnRosters).map(
-    ([team, roster]) =>
-      /** @type {[string, any]} */ ([nameEspnRosterRequest(TEAMS[team].espnId), roster]),
-  ),
+  /** @type {[string, any]} */ ([nameInjuriesRequest(), INJURIES.report]),
 ];
 
 // The league's totals, team game logs, and the game logs of a few players, as a player's sheet

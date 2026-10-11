@@ -1,30 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { TEAMS } from "../../page/js/teams.js";
-import {
-  nameEspnRosterRequest,
-  nameLeagueRosterRequest,
-  namePlayerListRequest,
-} from "../../worker/src/roster.js";
-import { ESPN_HEADERS, FEED_HEADERS } from "../../worker/src/wnba.js";
+import { nameLeagueRosterRequest, namePlayerListRequest } from "../../worker/src/roster.js";
+import { FEED_HEADERS } from "../../worker/src/wnba.js";
 
-// Records what a team's Roster page reads for the teams and seasons named: the league's roster of
-// each, the league's list of every player trimmed to theirs, and ESPN's roster of today, trimmed
-// to who is out. Run with NODE_USE_ENV_PROXY=1 behind a proxy.
+// Records what a team's Roster page reads from the league for the teams and seasons named: the
+// league's roster of each, and its list of every player trimmed to theirs. ESPN's injury report,
+// which says who is out, has its own recorder in record-injuries.js. Run with
+// NODE_USE_ENV_PROXY=1 behind a proxy.
 
 async function fetchJson(url, headers) {
   const response = await fetch(url, { headers });
   if (!response.ok) throw new Error(`${response.status} for ${url}`);
   return response.json();
 }
-
-const trimAthlete = (athlete) => ({
-  firstName: athlete.firstName,
-  lastName: athlete.lastName,
-  injuries: (athlete.injuries ?? []).map(({ status }) => ({ status })),
-});
-
-const trimEspnRoster = ({ athletes }) => ({ athletes: athletes.map(trimAthlete) });
 
 /**
  * The list of every player, keeping only the rows of the players named.
@@ -59,16 +48,10 @@ async function recordFixture(name, teamSeasons) {
     await fetchJson(namePlayerListRequest(latest), FEED_HEADERS),
     ids,
   );
-  const espnRosters = {};
-  for (const team of new Set(teamSeasons.map(([team]) => team))) {
-    espnRosters[team] = trimEspnRoster(
-      await fetchJson(nameEspnRosterRequest(TEAMS[team].espnId), ESPN_HEADERS),
-    );
-  }
   const file = path.join(import.meta.dirname, `${name}.json`);
   fs.writeFileSync(
     file,
-    JSON.stringify({ recordedAt: new Date().toISOString(), rosters, playerList, espnRosters }),
+    JSON.stringify({ recordedAt: new Date().toISOString(), rosters, playerList }),
   );
   console.log(`Wrote ${file}`);
 }

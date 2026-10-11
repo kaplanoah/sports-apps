@@ -11,7 +11,8 @@ import {
 } from "../page/js/roster-view.js";
 import { isStillPlaying } from "../page/js/series.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
-import { describeRoster, listOutNames } from "../worker/src/roster.js";
+import { listOutPlayers } from "../worker/src/injuries.js";
+import { describeRoster } from "../worker/src/roster.js";
 import { convertToText, Markup } from "../../../shared/page/html.js";
 import { stripTags } from "../../../tests/text.js";
 
@@ -24,6 +25,9 @@ const GAMES = JSON.parse(
 const ROSTERS = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-06-league-rosters.json`, "utf8"),
 );
+const INJURIES = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-11-espn-injuries.json`, "utf8"),
+);
 const { averages: AVERAGES, series: SERIES } = buildSnapshot(
   { ...AFTERNOON.responses, players: GAMES.preview.players },
   { season: 2026, now: Date.parse(AFTERNOON.now) },
@@ -33,7 +37,7 @@ const LIBERTY = describeRoster({
   season: 2026,
   leagueRoster: ROSTERS.rosters["NYL:2026"],
   playerList: ROSTERS.playerList,
-  outNames: listOutNames(ROSTERS.espnRosters.NYL),
+  outPlayers: listOutPlayers(INJURIES.report).NYL,
   now: Date.parse(ROSTERS.recordedAt),
 });
 
