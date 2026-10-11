@@ -742,7 +742,10 @@ const readNumberLineMiddles = (sheet) =>
 test("where an unranked starter near the innings would rank is a hairline in his club's color through each curve, 4px above it and 3.5px past its foot, with no dot", async ({
   page,
 }) => {
-  const sheet = await openMatchup(page, { ...PITCHERS, 2: { ...PITCHERS[2], ranks: null } });
+  const sheet = await openMatchup(page, {
+    ...MATCHUP_STARTERS,
+    2: { ...MATCHUP_STARTERS[2], ranks: null },
+  });
   const lines = sheet.locator(".tape .player-curve i.home.provisional");
   await expect(lines).toHaveCount(4);
   await expect(sheet.locator(".tape-number.home .tape-rank").first()).toHaveText(
