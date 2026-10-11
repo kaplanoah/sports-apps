@@ -5,6 +5,11 @@ import { createAppWorker } from "../../../../shared/worker/app-worker.js";
 import { describeBoxScore } from "../../worker/src/box-score.js";
 import { describeHighlights } from "../../worker/src/highlights.js";
 import {
+  indexInjuredPlayers,
+  listInjuredPlayers,
+  nameInjuredKey,
+} from "../../worker/src/injuries.js";
+import {
   composePitcher,
   describePitcher,
   describeStarters,
@@ -81,6 +86,12 @@ export const ROSTER_DOCS = Object.fromEntries(
   }),
 );
 
+// ESPN's MLB injury report on the evening of Oct 11, which says why each player on the injured
+// list is there.
+const OUT_PLAYERS = indexInjuredPlayers(
+  listInjuredPlayers(loadFixture("2026-10-11-espn-injuries").report),
+);
+
 const PITCHERS_FIXTURE = loadFixture("2026-10-06-pitchers");
 const RECORDED_CLUBS = { CLE: 114, NYY: 147, LAD: 119 };
 
@@ -109,6 +120,7 @@ function buildPlayerDocs() {
         season,
         person: people.get(entry.person.id) ?? null,
         lastGames: describeLastGames(ROSTERS_FIXTURE.gameLogs[entry.person.id] ?? {}),
+        out: OUT_PLAYERS.get(nameInjuredKey(club, entry.person.fullName)) ?? null,
       });
       return [namePlayerKey(season, entry.person.id), player];
     }),
