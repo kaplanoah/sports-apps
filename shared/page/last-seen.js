@@ -3,9 +3,11 @@
 // markup of each part it draws whole and the sheets it showed, which show-last-drawn.js puts back
 // before the first paint, with the pictures from other sites in it, which the service worker
 // keeps, and the season, which the page draws from once its modules load, before its sheets take
-// back what they showed.
+// back what they showed. A sheet left open too long is gone by the time the page shows again
+// (sheet-memory.js).
 
 import { keepImages } from "./service-worker.js";
+import { closeForgottenDialogs, noteShownEndsSeen } from "./sheet-memory.js";
 import { listOpenSheets, reopenSheets } from "./sheet-reopen.js";
 
 const LAST_SEEN_KEY = "lastSeen";
@@ -132,12 +134,13 @@ function saveLastSeen(readShown, savedAt) {
   if (!shown) return;
   saveItem(LAST_SEEN_KEY, shown);
   saveItem(LAST_DRAWN_KEY, readDrawnParts(savedAt));
-  saveItem(OPEN_SHEETS_KEY, listOpenSheets());
+  noteShownEndsSeen(savedAt);
+  saveItem(OPEN_SHEETS_KEY, listOpenSheets(savedAt));
   keepImages(listDrawnImages());
 }
 
 // Leaving the screen is the last moment the page is sure to run, whether it then reloads, sleeps,
-// or is dropped.
+// or is dropped. Coming back, the page closes what it kept open too long before it draws.
 /** @param {() => any} readShown what the page shows, or null before it has anything to show */
 export function keepLastSeen(readShown) {
   /** @type {number | null} */
@@ -146,8 +149,11 @@ export function keepLastSeen(readShown) {
   // A page that unloads while hidden says it's hidden once more, but has been away since it was
   // first hidden.
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) hiddenAt = null;
-    else {
+    if (!document.hidden) {
+      if (hiddenAt !== null) closeForgottenDialogs(hiddenAt);
+      noteShownEndsSeen(Date.now());
+      hiddenAt = null;
+    } else {
       hiddenAt = readLeftAt();
       saveLastSeen(readShown, hiddenAt);
     }

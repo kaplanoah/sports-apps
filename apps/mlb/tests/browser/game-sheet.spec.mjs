@@ -21,6 +21,7 @@ import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
+import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 // The games of the first day after today, which the Games view lists under today's.
 const NEXT_DAY_GAMES = "#seasonGames .listed-day:has(.is-today) + .listed-day .game-open";
@@ -1132,6 +1133,40 @@ test("a live game's box score follows each one the store pushes, and passes over
   await app.writeFromWorker("games/849833", earlier);
   await expect(sheet.locator(".line-score .total").nth(2)).toHaveText("5");
   await expect(lastInning).toHaveText("2");
+});
+
+const MINUTE_MS = 60 * 1000;
+
+/**
+ * Moves the page's clock on by `ms` without running its timers, as a phone that suspends it does.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} ms
+ */
+const passTime = async (page, ms) =>
+  page.clock.setSystemTime((await page.evaluate(() => Date.now())) + ms);
+
+test("a live game's sheet stays open however long the page is away, until an hour after its final shows", async ({
+  page,
+}) => {
+  const { app, sheet } = await openOctoberGame(page, "Guardians at White Sox, Wed, Oct 7");
+  await expect(sheet.locator(".line-score")).toBeVisible();
+
+  await setHidden(page, true);
+  await passTime(page, 12 * 60 * MINUTE_MS);
+  expect(await comeBackTo(page, "#sheetDialog")).toBe(true);
+  const season = /** @type {any} */ (await app.readDocument("seasons/2026"));
+  const game = season.slate.today.games.find((/** @type {any} */ each) => each.id === "849833");
+  Object.assign(game, { state: "final" });
+  await app.writeFromWorker("seasons/2026", season);
+  await expect(sheet.getByRole("tab", { name: "Highlights" })).toBeVisible();
+
+  await setHidden(page, true);
+  await passTime(page, 59 * MINUTE_MS);
+  expect(await comeBackTo(page, "#sheetDialog")).toBe(true);
+
+  await setHidden(page, true);
+  await passTime(page, MINUTE_MS);
+  expect(await comeBackTo(page, "#sheetDialog")).toBe(false);
 });
 
 test("a reload shows the open box score before the page's code arrives, and the code reads it again", async ({

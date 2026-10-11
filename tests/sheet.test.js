@@ -2,6 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openSheet, wireSheet } from "../shared/page/sheet.js";
 import { listOpenSheets, reopenSheets } from "../shared/page/sheet-reopen.js";
+import {
+  closeForgottenDialogs,
+  keepDialogFor,
+  letGoOfGame,
+  noteShownEndsSeen,
+  noteShownGame,
+} from "../shared/page/sheet-memory.js";
 
 /** @typedef {import("../shared/page/sheet.js").SheetKeeper} SheetKeeper */
 /** @typedef {import("../shared/page/sheet.js").SheetParts} SheetParts */
@@ -277,6 +284,11 @@ function findById(root, id) {
   }
   return null;
 }
+
+const LEFT_AT = Date.parse("2026-10-11T23:00:00Z");
+const MINUTE_MS = 60 * 1000;
+const SHEET_KEPT_MS = 6 * 60 * MINUTE_MS;
+const GAME_KEPT_AFTER_END_MS = 60 * MINUTE_MS;
 
 // The row of sheets leaves this gap between two side by side, as an app's --sheet-gap does.
 const GAP = "15px";
@@ -835,7 +847,7 @@ test("the sheets showing are listed up to the shown one, with where each is scro
   click(sheets.playerSheet.backButton);
   sheets.gameSheet.sheet.scrollTop = 240;
 
-  assert.deepEqual(listOpenSheets(), [
+  assert.deepEqual(listOpenSheets(LEFT_AT), [
     {
       id: "gameSheet",
       scrollTop: 240,
@@ -843,6 +855,8 @@ test("the sheets showing are listed up to the shown one, with where each is scro
       subject: { id: "game-1" },
       showing: null,
       backLabel: null,
+      heldGame: null,
+      forgetAt: LEFT_AT + SHEET_KEPT_MS,
     },
     {
       id: "teamSheet",
@@ -851,6 +865,8 @@ test("the sheets showing are listed up to the shown one, with where each is scro
       subject: { team: "NY" },
       showing: null,
       backLabel: "Game",
+      heldGame: null,
+      forgetAt: LEFT_AT + SHEET_KEPT_MS,
     },
   ]);
 
@@ -953,4 +969,147 @@ test("saved sheets that can't be read leave every dialog as it is", () => {
   reopenSheets({ id: "gameSheet" });
   assert.equal(dialog.open, true);
   assert.deepEqual(listOpenSheets(), []);
+});
+
+/**
+ * Has the game sheet note the game it draws, as each app's does.
+ * @param {FakeElement} sheet
+ * @param {{ isPlayingToday?: boolean, isOver?: boolean }} game
+ */
+const drawGame = (sheet, { isPlayingToday = false, isOver = false }) =>
+  noteShownGame(/** @type {any} */ (sheet), { key: "game-1", isPlayingToday, isOver });
+
+/** @param {{ forgetAt: number | null }[]} sheets */
+const listForgetTimes = (sheets) => sheets.map(({ forgetAt }) => forgetAt);
+
+test("a sheet left off the screen closes six hours after the page left, and a dialog kept for less, like settings, closes then", () => {
+  const { dialog, sheets } = createRowDialog(["gameSheet", "teamSheet"]);
+  open(sheets.gameSheet.sheet);
+  open(sheets.teamSheet.sheet);
+  assert.deepEqual(listForgetTimes(listOpenSheets(LEFT_AT)), [
+    LEFT_AT + SHEET_KEPT_MS,
+    LEFT_AT + SHEET_KEPT_MS,
+  ]);
+
+  keepDialogFor(/** @type {any} */ (dialog), 2 * MINUTE_MS);
+  assert.deepEqual(listForgetTimes(listOpenSheets(LEFT_AT)), [
+    LEFT_AT + 2 * MINUTE_MS,
+    LEFT_AT + 2 * MINUTE_MS,
+  ]);
+  dialog.close();
+});
+
+test("a page coming back closes a dialog left open as long as it stays, and keeps one left for less", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: LEFT_AT + SHEET_KEPT_MS - 1 });
+  const { dialog, sheets } = createRowDialog(["gameSheet"]);
+  open(sheets.gameSheet.sheet);
+
+  closeForgottenDialogs(LEFT_AT);
+  assert.equal(dialog.open, true);
+
+  t.mock.timers.tick(1);
+  closeForgottenDialogs(LEFT_AT);
+  assert.equal(dialog.open, false);
+});
+
+test("a game's sheet showing a game on today stays open off the screen until an hour after its end shows on the screen", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: LEFT_AT });
+  const { dialog, sheets } = createRowDialog(["gameSheet"]);
+  const sheet = sheets.gameSheet.sheet;
+  open(sheet);
+  drawGame(sheet, { isPlayingToday: true });
+  assert.deepEqual(listForgetTimes(listOpenSheets(LEFT_AT)), [null]);
+
+  t.mock.timers.tick(3 * SHEET_KEPT_MS);
+  closeForgottenDialogs(LEFT_AT);
+  assert.equal(dialog.open, true);
+
+  drawGame(sheet, { isOver: true });
+  const endSeenAt = Date.now();
+  t.mock.timers.tick(10 * MINUTE_MS);
+  drawGame(sheet, { isOver: true });
+  assert.deepEqual(listForgetTimes(listOpenSheets(Date.now())), [
+    endSeenAt + GAME_KEPT_AFTER_END_MS,
+  ]);
+
+  closeForgottenDialogs(endSeenAt);
+  assert.equal(dialog.open, true);
+  t.mock.timers.tick(GAME_KEPT_AFTER_END_MS);
+  closeForgottenDialogs(endSeenAt);
+  assert.equal(dialog.open, false);
+});
+
+test("a game's end that came while the page was off the screen counts as seen once it's back", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: LEFT_AT });
+  const { dialog, sheets } = createRowDialog(["gameSheet"]);
+  const sheet = sheets.gameSheet.sheet;
+  open(sheet);
+  drawGame(sheet, { isPlayingToday: true });
+  Object.assign(globalThis.document, { hidden: true });
+  drawGame(sheet, { isOver: true });
+  assert.deepEqual(listForgetTimes(listOpenSheets(LEFT_AT)), [null]);
+
+  t.mock.timers.tick(SHEET_KEPT_MS);
+  Object.assign(globalThis.document, { hidden: false });
+  noteShownEndsSeen(Date.now());
+
+  assert.deepEqual(listForgetTimes(listOpenSheets(Date.now())), [
+    Date.now() + GAME_KEPT_AFTER_END_MS,
+  ]);
+  dialog.close();
+});
+
+test("a game's sheet holds only a game it showed on its day or under way, and only while it's on top", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: LEFT_AT + SHEET_KEPT_MS });
+  const { dialog, sheets } = createRowDialog(["gameSheet", "teamSheet"]);
+  const sheet = sheets.gameSheet.sheet;
+  open(sheet);
+  drawGame(sheet, { isOver: true });
+  assert.deepEqual(listForgetTimes(listOpenSheets(LEFT_AT)), [LEFT_AT + SHEET_KEPT_MS]);
+
+  drawGame(sheet, { isPlayingToday: true });
+  open(sheets.teamSheet.sheet);
+  assert.deepEqual(listForgetTimes(listOpenSheets(LEFT_AT)), [
+    LEFT_AT + SHEET_KEPT_MS,
+    LEFT_AT + SHEET_KEPT_MS,
+  ]);
+  closeForgottenDialogs(LEFT_AT);
+  assert.equal(dialog.open, false);
+});
+
+test("a game's sheet that closes lets go of its game, so the same game opened again after its end isn't held", () => {
+  const { dialog, sheets } = createRowDialog(["gameSheet"], {
+    gameSheet: { forget: () => letGoOfGame(/** @type {any} */ (sheets.gameSheet.sheet)) },
+  });
+  const sheet = sheets.gameSheet.sheet;
+  open(sheet);
+  drawGame(sheet, { isPlayingToday: true });
+  dialog.close();
+
+  open(sheet);
+  drawGame(sheet, { isOver: true });
+  assert.deepEqual(listForgetTimes(listOpenSheets(LEFT_AT)), [LEFT_AT + SHEET_KEPT_MS]);
+  dialog.close();
+});
+
+test("a page that loads again has a game's sheet hold its game as it did, its end seen when it was", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: LEFT_AT });
+  const { dialog, sheets } = createRowDialog(["gameSheet"], {
+    gameSheet: { keeper: keepShown(null) },
+  });
+  const endSeenAt = LEFT_AT - 30 * MINUTE_MS;
+  dialog.open = true;
+
+  reopenSheets([
+    {
+      id: "gameSheet",
+      scrollTop: 0,
+      subject: null,
+      heldGame: { key: "game-1", isOver: true, endSeenAt },
+    },
+  ]);
+  drawGame(sheets.gameSheet.sheet, { isOver: true });
+
+  assert.deepEqual(listForgetTimes(listOpenSheets(LEFT_AT)), [endSeenAt + GAME_KEPT_AFTER_END_MS]);
+  dialog.close();
 });
