@@ -134,14 +134,15 @@ export const renderTeamSheetButton = ({ team, name, content, className = "" }) =
   html`<button type="button" class="${className ? `${className} ` : ""}team-open" data-team="${team}" aria-label="Team details: ${name}">${content}</button>`;
 
 /**
- * A grid of a team's numbers, each under its label, leaving out those it has none for, or nothing
- * when it has none at all.
+ * A grid of numbers, each under its label, leaving out those it has none for, or nothing when it
+ * has none at all.
  * @param {[Markup | string, Markup | string | number | null | undefined][]} stats
+ * @param {number} [columns]
  */
-export function renderTeamStats(stats) {
+export function renderTeamStats(stats, columns = 3) {
   const shown = stats.filter(([, value]) => value != null);
   if (!shown.length) return false;
-  return html`<div class="team-stats">
+  return html`<div class="team-stats" style="--team-stat-columns: ${columns}">
     ${shown.map(
       ([label, value]) =>
         html`<div class="team-stat">

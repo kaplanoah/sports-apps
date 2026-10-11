@@ -101,7 +101,7 @@
   --gate-heading-font: "Chivo Mono", "JetBrains Mono", monospace;
   --gate-code-font: "Chivo Mono", "JetBrains Mono", monospace;
   --gate-problem: var(--now);
-  --radius-card: 6px;
+  --radius-card: 3px;
   --radius-chip: 3px;
   --radius-control: 6px;
   --radius-sheet: 12px;
@@ -340,7 +340,7 @@ header.top h1 {
 .div-block {
   min-width: 0;
   border: 1px solid var(--card-border);
-  border-radius: 6px;
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 .div-title {
@@ -1680,13 +1680,8 @@ body.kbd .player-open:focus {
   font-size: var(--size-glance);
   color: var(--ink-mid);
 }
-.totals {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+.player-body .team-stats {
   margin-bottom: 8px;
-  padding: 12px 0;
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-chip);
 }
 /* A player on the injured list has a box as his sheet's first part, outlined and cornered as his
    totals are: his stay on a chip, then what's wrong, both in the color of what's happening now,
@@ -1694,7 +1689,7 @@ body.kbd .player-open:focus {
 .out-box {
   padding: 12px 12px 10.5px;
   border: 1px solid var(--card-border);
-  border-radius: var(--radius-chip);
+  border-radius: var(--radius-card);
   background: var(--card);
 }
 .out-line {
@@ -1720,15 +1715,6 @@ body.kbd .player-open:focus {
   margin: 4.5px 0 0;
   font-size: var(--size-small);
   color: var(--credit-ink);
-}
-.total {
-  display: grid;
-  justify-items: center;
-  gap: 3px;
-}
-.total b {
-  font-size: 1.05rem;
-  font-weight: 500;
 }
 .player-ranks {
   display: grid;
@@ -2518,10 +2504,6 @@ body.kbd .player-open:focus {
 }
 .team-label span[title] {
   cursor: help;
-}
-.team-stat b {
-  font-size: 1.05rem;
-  font-weight: 550;
 }
 .team-titles {
   margin: 0;

@@ -6,8 +6,8 @@
  * Apps link it after sheet.css, before their own styles.css, which sets the title's font and may
  * refine these rules.
  *
- * Beside chrome.css's --card, --divider, --ink, --accent, --focus-ring, and --radius-card, and
- * sheet.css's --sheet-part-head, an app's :root defines these tokens:
+ * Beside chrome.css's --card-border, --accent, --focus-ring, and --radius-card, an app's :root
+ * defines these tokens:
  *   --ink-mid              text between --ink and --ink-dim, for the note and the labels
  *   --ink-hover            a team's name under the pointer, --ink with enough of --accent to see
  */
@@ -81,25 +81,20 @@ body.kbd .team-open:focus {
 }
 .team-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid var(--divider);
+  grid-template-columns: repeat(var(--team-stat-columns), minmax(0, 1fr));
+  row-gap: 12px;
+  padding: 12px 0;
+  border: 1px solid var(--card-border);
   border-radius: var(--radius-card);
-  background: var(--card);
 }
 .team-stat {
   display: grid;
-  gap: 1px;
-  padding: 7px 10px;
-}
-.team-stat:nth-child(n + 4) {
-  border-top: 1px solid var(--divider);
-}
-.team-stat:not(:nth-child(3n + 1)) {
-  border-left: 1px solid var(--divider);
+  justify-items: center;
+  gap: 3px;
 }
 .team-stat b {
-  font-size: 1.15rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 500;
 }
 .team-detail {
   margin: 0;
