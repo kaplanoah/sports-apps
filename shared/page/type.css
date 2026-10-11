@@ -20,6 +20,9 @@
   /* Settings set a setting's name and its note a step up, as the phone's own Settings do. */
   --size-setting: 1.0625rem;
   --size-setting-note: 0.9375rem;
+  /* A field's text: an iPhone zooms in on a field under 16px when it's tapped. A field meant to
+     look smaller gets a face whose size-adjust draws it at that step. */
+  --size-field: 1rem;
   /* Safari on an iPhone otherwise enlarges some text on a turn to landscape and can keep it big
      on the turn back, off the scale. */
   -webkit-text-size-adjust: 100%;
