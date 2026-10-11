@@ -5,6 +5,7 @@
 - Keep code clean, consistent, reliable, readable, secure, and maintainable.
 - Follow best practices. Don't be unique or clever.
 - Leave code better than you found it. Don't leave something sub-optimal just because that's how you found it.
+- Write every change as it would have been written had its final design been known from the start, however many rounds of mockups, sliders, comparisons, or fixes it took to get there. Build from the values picked, never from a playground's code, and leave nothing those rounds left behind: values or options no longer chosen, a setting or branch kept only to compare, a case that can no longer happen, a name for an earlier version, or a rule that overrides another where one rule would do. Before each push, read the whole diff against `main` for it, and the review flags any of it.
 - Start function names with a verb naming the action (boolean predicates excepted). No generic names like `call`, `run`, `execute`, or `handle`.
 - Make every function do one thing well. Make orchestration a sequence of named steps. Extract and name any non-trivial logic inside blocks or chained conditions.
 - Name variables with full words that are reasonable for their types. No opaque abbreviations.
