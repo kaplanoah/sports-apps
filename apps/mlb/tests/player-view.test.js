@@ -122,11 +122,13 @@ test("his postseason shows over his season, as one line", () => {
   assert.match(text, /^Postseason 3 games 2-13 • \.154 AVG • 2 R • 1 RBI • 1 BB • 1 K Season/);
 });
 
-test("a hitter MLB doesn't rank shows his numbers without ranks, and his plate appearances against the ones he needs", () => {
+test("a hitter MLB doesn't rank shows where he would rank in each rate, but not in a count, once he has a quarter of the plate appearances he needs, and his plate appearances against them", () => {
   const genao = describeRostered(114, "CLE", "Angel Genao");
   const text = renderText(genao, { clubGames: 162 });
-  assert.match(text, /AVG \.213 OBP/);
+  assert.match(text, /AVG \.213 would be 129th OBP \.281 would be 130th /);
+  assert.match(text, / HR 2 RBI 6 R 15 SB 1 BB% 7\.9% would be 92nd K% 15\.1% would be 31st /);
   assert.doesNotMatch(text, / of 135|ranked by fewest/);
+  assert.match(renderText(genao, { clubGames: 200 }), /AVG \.213 OBP \.281 SLG/);
   assert.match(
     text,
     new RegExp(
@@ -153,13 +155,19 @@ test("a starter's season ranks his numbers among the qualified starters, and sho
   assert.match(text, /What he throws/);
 });
 
-test("a starter outside the qualified starters has his innings set against the ones he needs", () => {
+test("a starter outside the qualified starters has his innings set against the ones he needs, and where he would rank once he has a quarter of them", () => {
   const ohtani = describeRostered(119, "LAD", "Shohei Ohtani");
   const side = { line: { starts: 14, era: "1.79", k9: 10.5, bb9: 2.4, speed: 98.4 } };
   const text = renderText(ohtani, { starters: STARTERS, side, clubGames: 162 });
   assert.match(text, /He has pitched 85 2\/3 of the 162 innings needed to qualify/);
+  assert.match(
+    text,
+    /ERA 1\.79 would be 1st K\/9 10\.5 would be 1st BB\/9 2\.4 would be 2nd Velo 98\.4 would be 1st/,
+  );
+  assert.doesNotMatch(renderText(ohtani, { starters: STARTERS, side, clubGames: 400 }), /would be/);
   const unknown = renderText(ohtani, { starters: STARTERS, side });
   assert.match(unknown, /He hasn't pitched the innings needed to qualify/);
+  assert.doesNotMatch(unknown, /would be/);
 });
 
 test("a reliever's season shows his totals alone", () => {

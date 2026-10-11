@@ -1,4 +1,4 @@
-import { test, expect, openApp, openGameSheet, matchPath } from "./harness.mjs";
+import { test, expect, openApp, openGameSheet, matchPath, formatRgb } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
@@ -226,17 +226,48 @@ test.describe("a player who is out", () => {
   });
 });
 
-test("a player short of the WNBA's rule shows her numbers without a rank, and says why", async ({
+test("a player short of the WNBA's rule shows her numbers without a rank, but where she would rank, and says why", async ({
   page,
 }) => {
   await openApp(page);
   const sheet = await openFromRoster(page, "Leonie Fiebich");
 
-  await expect(sheet.locator(".player-rank-place")).toHaveText(["7th"]);
+  await expect(sheet.locator(".player-rank", { hasText: " of " })).toHaveText(["7th of 76"]);
+  await expect(sheet.locator(".player-rank", { hasText: "would be" })).toHaveCount(7);
   await expect(sheet.locator(".player-rank-note")).toHaveText(
     "The WNBA only ranks players who've played 31 games or, for shooting percentages, made a certain number of shots. She's played 21 games.",
   );
   expect(await listStrayPeriods(page)).toEqual([]);
+});
+
+test("where a player short of the rule would rank is a hairline in her mark color through the curve, 4px above it and 3.5px past its foot, with no dot", async ({
+  page,
+}) => {
+  await openApp(page);
+  const sheet = await openFromRoster(page, "Leonie Fiebich");
+  const line = sheet.locator(".player-curve i.provisional").first();
+  await expect(line).toBeVisible();
+  await expect(sheet.locator(".player-rank").first()).toHaveText(/^would be \d+(st|nd|rd|th)$/);
+
+  const shape = await line.evaluate((element) => {
+    const curve = /** @type {HTMLElement} */ (element.parentElement);
+    const box = element.getBoundingClientRect();
+    const curveBox = curve.getBoundingClientRect();
+    const place = (parseFloat(element.style.top) / 100) * curveBox.height + curveBox.top;
+    return {
+      width: box.width,
+      above: place - box.top,
+      past: box.bottom - curveBox.bottom,
+      color: getComputedStyle(element).backgroundColor,
+      team: getComputedStyle(curve).getPropertyValue("--team").trim(),
+      dots: curve.querySelectorAll("b").length,
+    };
+  });
+  expect(shape.width).toBeCloseTo(0.5, 1);
+  expect(shape.above).toBeCloseTo(4, 1);
+  expect(shape.past).toBeCloseTo(3.5, 1);
+  expect(shape.dots).toBe(0);
+  expect(shape.color).toBe(formatRgb(shape.team));
 });
 
 test("on a phone, a player who played enough games but made too few shots for a percentage says which, its lines even, so no word sits alone", async ({
