@@ -1950,10 +1950,10 @@ test.describe("on a phone", () => {
       "League 0.18s 0s ease-in-out",
       "West 0.18s 0s ease-in-out",
     ]);
-    const fillStarts = fades
+    const [leagueFrame, westFrame] = fades
       .filter(({ property }) => property === "background-color")
-      .map(({ at }) => at);
-    expect(Math.abs(fillStarts[0] - fillStarts[1])).toBeLessThan(5);
+      .map(({ frame }) => frame);
+    expect(westFrame).toBe(leagueFrame);
     const letterFades = fades
       .filter(({ property }) => property === "color")
       .map(({ name, duration, delay }) => `${name} ${duration} ${delay}`)
