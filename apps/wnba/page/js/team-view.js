@@ -2,7 +2,13 @@ import { countDaysBetween, describeDay, formatClockTime, formatShortDate } from 
 import { renderGameCards } from "#shared/game-cards.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
-import { placeOnRange, rankAmong, renderPlacedRow, renderRankRow } from "#shared/rank-curve.js";
+import {
+  describePlayoffField,
+  describeTeamGames,
+  formatMargin,
+  listFieldRows,
+  listSeasonRankRows,
+} from "#shared/team-numbers.js";
 import { renderTitles } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
 import { readGameDay } from "./days.js";
@@ -10,7 +16,7 @@ import { describeLiveClock, describeStartTime } from "./games-view.js";
 import { findTeamNearestGames } from "./nearest-games.js";
 import { nameTeam, readPlayoffRuns } from "./series.js";
 import { formatMarkColors } from "./sheet-colors.js";
-import { readWinShare, renderPlayerTable } from "./sheet-parts.js";
+import { renderPlayerTable } from "./sheet-parts.js";
 import { renderPlayerButton } from "./player-button.js";
 import { ROUNDS } from "./snapshot.js";
 import { renderStreak } from "./standings-view.js";
@@ -23,7 +29,8 @@ import { TEAMS } from "./teams.js";
 /** @typedef {{ team: string, id: number, firstName: string, lastName: string, games: number, minutes?: number, points: number, rebounds: number, assists: number, fieldGoalShare?: number | null }} Leader */
 /** @typedef {{ label: string, title: string, read: (leader: Leader) => string, isQuiet?: boolean }} LeaderColumn */
 /** @typedef {{ series?: Series[], standings?: StandingsRow[], games?: Game[], nearestGames?: Game[], leaders?: Leader[] }} Season */
-/** @typedef {{ record: string | null, pointsFor: number | null, pointsAgainst: number | null, margin: number | null, home: string | null, road: string | null }} PhaseStats */
+/** @typedef {import("#shared/team-numbers.js").PhaseStats} PhaseStats */
+/** @typedef {import("#shared/team-numbers.js").Measure} Measure */
 
 /**
  * @param {Game} game
@@ -185,24 +192,11 @@ function listTitles(code, run, year) {
   return { before, now: run?.isChampion ? [year] : [] };
 }
 
-/** @param {number} margin */
-function formatMargin(margin) {
-  const shown = margin.toFixed(1);
-  if (Number(shown) === 0) return "0.0";
-  return margin > 0 ? `+${shown}` : shown;
-}
-
-/** @param {boolean[]} results each game's, true for a win */
-function formatRecord(results) {
-  const wins = results.filter(Boolean).length;
-  return `${wins}-${results.length - wins}`;
-}
-
 /** @param {StandingsRow} row */
 const readRegularSeason = (row) => ({
   record: `${row.wins}-${row.losses}`,
-  pointsFor: row.pointsFor ?? null,
-  pointsAgainst: row.pointsAgainst ?? null,
+  scored: row.pointsFor ?? null,
+  allowed: row.pointsAgainst ?? null,
   margin: row.margin ?? null,
   home: row.home ?? null,
   road: row.road ?? null,
@@ -212,118 +206,41 @@ const readRegularSeason = (row) => ({
  * A team's numbers through the playoff games it has finished, or null before its first.
  * @param {Game[]} finished
  * @param {string} team
- * @returns {PhaseStats | null}
  */
-function readPlayoffs(finished, team) {
-  if (!finished.length) return null;
-  const games = finished.map((game) => {
-    const place = findPlace(game, team) ?? "home";
-    const own = game[place].score ?? 0;
-    const theirs = game[OTHER_PLACE[place]].score ?? 0;
-    return { place, own, theirs, isWin: own > theirs };
-  });
-  const results = games.map((game) => game.isWin);
-  const average = (points) => points.reduce((sum, each) => sum + each, 0) / games.length;
-  const pointsFor = average(games.map((game) => game.own));
-  const pointsAgainst = average(games.map((game) => game.theirs));
-  const recordAt = (place) =>
-    formatRecord(games.filter((game) => game.place === place).map((game) => game.isWin));
-  return {
-    record: formatRecord(results),
-    pointsFor,
-    pointsAgainst,
-    margin: pointsFor - pointsAgainst,
-    home: recordAt("home"),
-    road: recordAt("away"),
-  };
-}
-
-/** @param {number[]} values */
-const averageOf = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
-
-/**
- * The playoffs so far, as one side to measure a team against: the points each team scored a game,
- * and how home teams and road teams have done, or null before the first game ends.
- * @param {Game[]} games
- * @returns {PhaseStats | null}
- */
-function readLeaguePlayoffs(games) {
-  const finished = games.filter((game) => game.state === "final");
-  if (!finished.length) return null;
-  const points = averageOf(
-    finished.flatMap((game) => [game.home.score ?? 0, game.away.score ?? 0]),
+const readPlayoffs = (finished, team) =>
+  describeTeamGames(
+    finished.map((game) => {
+      const place = findPlace(game, team) ?? "home";
+      return {
+        own: game[place].score ?? 0,
+        theirs: game[OTHER_PLACE[place]].score ?? 0,
+        isHome: place === "home",
+      };
+    }),
   );
-  const homeWins = finished.filter((game) => (game.home.score ?? 0) > (game.away.score ?? 0));
-  const homeRecord = `${homeWins.length}-${finished.length - homeWins.length}`;
-  const roadRecord = `${finished.length - homeWins.length}-${homeWins.length}`;
-  return {
-    record: null,
-    pointsFor: points,
-    pointsAgainst: points,
-    margin: 0,
-    home: homeRecord,
-    road: roadRecord,
-  };
-}
 
 /**
- * A measure a team's numbers show, as a phase's numbers hold it: a record like 15-7, ranked and
- * placed by the share of its games won, or a number written with `format`.
- * @typedef {{ label: string, key: "pointsFor" | "pointsAgainst" | "margin" | "home" | "road", format?: (value: number) => string, isFewestFirst?: boolean }} Measure
+ * The playoffs so far, as one side to measure a team against.
+ * @param {Game[]} games
  */
+const readLeaguePlayoffs = (games) =>
+  describePlayoffField(
+    games
+      .filter((game) => game.state === "final")
+      .map((game) => ({ home: game.home.score ?? 0, away: game.away.score ?? 0 })),
+  );
+
+/** @param {number} margin */
+const formatPointMargin = (margin) => formatMargin(margin, 1);
 
 /** @type {Measure[]} */
 const MEASURES = [
-  { label: "PPG", key: "pointsFor", format: formatAverage },
-  { label: "Opp PPG", key: "pointsAgainst", format: formatAverage, isFewestFirst: true },
-  { label: "Margin", key: "margin", format: formatMargin },
+  { label: "PPG", key: "scored", format: formatAverage },
+  { label: "Opp PPG", key: "allowed", format: formatAverage, isFewestFirst: true },
+  { label: "Margin", key: "margin", format: formatPointMargin },
   { label: "Home", key: "home" },
   { label: "Road", key: "road" },
 ];
-
-/**
- * @param {PhaseStats} stats
- * @param {Measure} measure
- * @returns {number | null}
- */
-function readMeasure(stats, measure) {
-  const value = stats[measure.key];
-  if (value == null) return null;
-  return measure.format ? Number(value) : readWinShare(String(value));
-}
-
-/**
- * @param {PhaseStats} stats
- * @param {Measure} measure
- * @returns {string | null}
- */
-function showMeasure(stats, measure) {
-  const value = stats[measure.key];
-  if (value == null) return null;
-  return measure.format ? measure.format(Number(value)) : String(value);
-}
-
-/**
- * Every team's number in a measure, leaving out a team without one.
- * @param {PhaseStats[]} teams
- * @param {Measure} measure
- */
-const listMeasure = (teams, measure) =>
-  /** @type {number[]} */ (
-    teams.map((team) => readMeasure(team, measure)).filter((value) => value != null)
-  );
-
-/**
- * The lowest and highest any team reached in a measure, or no wins to all of them for a record.
- * @param {PhaseStats[]} teams
- * @param {Measure} measure
- * @returns {[number, number] | null}
- */
-function readRange(teams, measure) {
-  if (!measure.format) return [0, 1];
-  const values = listMeasure(teams, measure);
-  return values.length > 0 ? [Math.min(...values), Math.max(...values)] : null;
-}
 
 /**
  * The rows of a team's numbers, in its mark color for each theme, as a player's sheet draws hers.
@@ -340,17 +257,7 @@ const renderRanks = (code, rows) =>
  * @param {PhaseStats[]} teams
  */
 function renderSeasonRanks(code, team, teams) {
-  const rows = MEASURES.filter((measure) => readMeasure(team, measure) != null).map((measure) =>
-    renderRankRow({
-      label: measure.label,
-      shown: showMeasure(team, measure) ?? "",
-      stat: rankAmong(listMeasure(teams, measure), readMeasure(team, measure), {
-        isRanked: true,
-        isFewestFirst: measure.isFewestFirst,
-      }),
-      isFewestFirst: measure.isFewestFirst,
-    }),
-  );
+  const rows = listSeasonRankRows(MEASURES, team, teams);
   return rows.length > 0 && renderRanks(code, rows);
 }
 
@@ -364,15 +271,7 @@ function renderSeasonRanks(code, team, teams) {
  * @param {PhaseStats[]} teams every team's regular season
  */
 function renderAgainstField(code, team, field, teams) {
-  const rows = MEASURES.filter((measure) => showMeasure(team, measure) != null).map((measure) => {
-    const range = readRange(teams, measure);
-    /** @param {PhaseStats | null} stats */
-    const place = (stats) => ({
-      shown: (stats && showMeasure(stats, measure)) ?? "",
-      at: stats && placeOnRange(readMeasure(stats, measure), range, measure.isFewestFirst),
-    });
-    return renderPlacedRow({ label: measure.label, own: place(team), other: place(field) });
-  });
+  const rows = listFieldRows(MEASURES, team, field, teams);
   return html`<div class="team-numbers">
     <div class="tape-teams">
       <span class="club">${nameTeam(code)} <span class="team-record tabular">${team.record}</span></span>

@@ -1,6 +1,12 @@
 import { isSameJson } from "#shared/compare.js";
 import { addDays, readEasternDay } from "#shared/days.js";
 import { listClubs, readClubId, readMlbTeamId } from "../../page/js/snapshot.js";
+import {
+  fetchInjuries,
+  indexInjuredPlayers,
+  listInjuredPlayers,
+  nameInjuredKey,
+} from "./injuries.js";
 import { fetchMlbJson } from "./mlb.js";
 import { countSlateFinals } from "./pitcher-updater.js";
 import {
@@ -30,8 +36,10 @@ import { describeError } from "../../../../shared/worker/responses.js";
 // transaction, which MLB lists for the whole league in one request, so each run reads that list
 // once it's old, and reads again only the rosters of the clubs with a transaction it hasn't seen, a
 // few clubs a run, and every club's once a day in case one was missed. Every player's numbers, in
-// the regular season and the postseason, and the hitters MLB ranks, are read as a game ends, and
-// MLB's list of every player, with his facts, once a day. Each player's last games are read, a
+// the regular season and the postseason, and the hitters MLB ranks, are read as a game ends, MLB's
+// list of every player, with his facts, once a day, and ESPN's injury report, which says why each
+// player on the injured list is there, for the whole league once an hour. Each player's last games
+// are read, a
 // batch at a time, as his games add up, and once more as they settle. Each roster and player is
 // saved again only when it changed.
 
@@ -48,13 +56,15 @@ const FEEDS = {
   rosterStats: { maxAgeMs: 6 * HOUR_MS, changesWithGames: true },
   transactions: { maxAgeMs: 30 * MINUTE_MS, changesWithGames: false },
   people: { maxAgeMs: 24 * HOUR_MS, changesWithGames: false },
+  injuries: { maxAgeMs: HOUR_MS, changesWithGames: false },
 };
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
 /**
- * Every player's numbers this season, by id, and his facts, and the hitters MLB ranks. A table MLB
- * hasn't answered is empty.
- * @typedef {import("./players.js").PlayerNumbers & { people: Map<number, any>, qualified: any }} SeasonNumbers
+ * Every player's numbers this season, by id, and his facts, the hitters MLB ranks, and why each
+ * player ESPN's injury report names is out, by nameInjuredKey. A table that hasn't answered is
+ * empty.
+ * @typedef {import("./players.js").PlayerNumbers & { people: Map<number, any>, qualified: any, outPlayers: Map<string, import("./injuries.js").OutReason> }} SeasonNumbers
  */
 /**
  * When each club's roster was read, which clubs have a transaction since, and the transactions
@@ -180,14 +190,15 @@ function createStoreKeeper() {
     readFeed("rosterStats", path, () => fetchJson(context, path));
 
   /**
-   * Every player's numbers and facts, or null when MLB hasn't answered the regular season's. The
-   * postseason's, the ranked hitters', and the facts stand empty while MLB doesn't answer them.
+   * Every player's numbers and facts, and why those on the injured list are there, or null when
+   * MLB hasn't answered the regular season's. The postseason's, the ranked hitters', the facts, and
+   * the injury report stand empty while they don't answer.
    * @param {JobContext} context
    * @param {number} season
    * @returns {Promise<SeasonNumbers | null>}
    */
   async function readSeasonNumbers(context, season) {
-    const [hitting, pitching, postseasonHitting, postseasonPitching, qualified, people] =
+    const [hitting, pitching, postseasonHitting, postseasonPitching, qualified, people, injured] =
       await Promise.allSettled([
         readStats(context, listSeasonStatsRequest(season, "hitting")),
         readStats(context, listSeasonStatsRequest(season, "pitching")),
@@ -195,6 +206,9 @@ function createStoreKeeper() {
         readStats(context, listSeasonStatsRequest(season, "pitching", { gameType: "P" })),
         readStats(context, listSeasonStatsRequest(season, "hitting", { pool: "qualified" })),
         readFeed("people", String(season), () => fetchJson(context, listPeopleRequest(season))),
+        readFeed("injuries", "league", async () =>
+          listInjuredPlayers(await fetchInjuries(context.fetchImpl)),
+        ),
       ]);
     if (hitting.status === "rejected" || pitching.status === "rejected") {
       logFailure("every player's numbers")(
@@ -211,6 +225,7 @@ function createStoreKeeper() {
       postseasonPitching: indexSeasonStats(readAnswer(postseasonPitching)),
       qualified: readAnswer(qualified),
       people: indexPeople(readAnswer(people)),
+      outPlayers: indexInjuredPlayers(readAnswer(injured) ?? []),
     };
   }
 
@@ -306,6 +321,7 @@ function createStoreKeeper() {
           season,
           person,
           lastGames: lastGames.get(`${nameLastGamesPrefix(season)}${id}`) ?? null,
+          out: numbers.outPlayers.get(nameInjuredKey(club, entry.person.fullName ?? "")) ?? null,
         }),
       );
     }

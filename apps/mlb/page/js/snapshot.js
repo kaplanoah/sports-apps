@@ -177,6 +177,10 @@ const STANDINGS_FIELDS = [
   "wildCardRank",
   "leagueRank",
   "clinchIndicator",
+  "runsScored",
+  "runsAllowed",
+  "splitRecords",
+  "type",
 ].join(",");
 
 // The requests filter with `fields=`, so a field MLB renames or drops comes back as nothing.
@@ -1109,8 +1113,30 @@ function listUpcomingGames(games) {
 
 const readRank = (value) => Number(value) || 99;
 
+/**
+ * A club's runs and its records at home and on the road, which its sheet ranks among every club's,
+ * leaving out any MLB didn't answer with.
+ * @param {any} record
+ */
+function readClubNumbers(record) {
+  const splits = record.records?.splitRecords ?? [];
+  /** @param {string} type */
+  const readSplit = (type) => {
+    const split = splits.find((/** @type {any} */ each) => each.type === type);
+    return split ? `${split.wins}-${split.losses}` : null;
+  };
+  const numbers = {
+    rs: isNumber(record.runsScored) ? record.runsScored : null,
+    ra: isNumber(record.runsAllowed) ? record.runsAllowed : null,
+    home: readSplit("home"),
+    road: readSplit("away"),
+  };
+  return Object.fromEntries(Object.entries(numbers).filter(([, value]) => value !== null));
+}
+
 function buildStandingsRow(id, record) {
   return {
+    ...readClubNumbers(record),
     id,
     w: record.wins,
     l: record.losses,

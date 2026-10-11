@@ -22,6 +22,15 @@ export function formatInnings(innings) {
 }
 
 /**
+ * Innings as the outs they hold, as MLB writes them: 5.2 is seventeen.
+ * @param {string | number | null | undefined} innings
+ */
+export const countOuts = (innings) => {
+  const [whole, thirds] = String(innings ?? "0").split(".");
+  return Number(whole) * 3 + Number(thirds ?? 0);
+};
+
+/**
  * @param {any} row
  * @param {StatColumn[1]} reader
  */

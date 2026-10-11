@@ -47,7 +47,7 @@ import { renderTeamSheet } from "./team-view.js";
 import { TEAMS } from "./teams.js";
 import { renderStamp } from "./stamp-view.js";
 import { createSearchTerms, readSearchGame } from "./search-terms.js";
-import { startTeamSheet } from "#shared/team-sheet.js";
+import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { fillSeasonPicker } from "#shared/season-picker.js";
@@ -166,7 +166,7 @@ function wireControls() {
     fillSections: fillRoster,
     sectionsKeeper: { read: readShownRoster, reopen: reopenRoster },
   });
-  startRosterSection();
+  startRosterSection({ showChange: refreshTeamSheet });
   startPlayerSheet();
   startSettings();
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);

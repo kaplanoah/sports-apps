@@ -2,7 +2,7 @@
 // club's games, and a hitter with 3.1 plate appearances for each.
 
 import { session } from "./session.js";
-import { formatInnings } from "./stat-table.js";
+import { countOuts, formatInnings } from "./stat-table.js";
 
 const PLATE_APPEARANCES_PER_GAME = 3.1;
 
@@ -17,6 +17,20 @@ export function countClubGames(club, season) {
   const row = rows.find((each) => each.id === club);
   return row ? row.w + row.l : null;
 }
+
+/**
+ * The plate appearances a hitter needs to qualify, after his club's games.
+ * @param {number} clubGames
+ */
+export const countPlateAppearancesNeeded = (clubGames) =>
+  Math.round(clubGames * PLATE_APPEARANCES_PER_GAME);
+
+/**
+ * Whether a pitcher has pitched an inning for each of his club's games.
+ * @param {string | null | undefined} innings as MLB writes them, like 28.1
+ * @param {number} clubGames
+ */
+export const hasInningsToQualify = (innings, clubGames) => countOuts(innings) >= clubGames * 3;
 
 /**
  * The innings a starter has pitched against those he needs, or that he needs more when either
@@ -39,6 +53,6 @@ export function describeInningsToQualify(subject, innings, clubGames) {
  */
 export function describePlateAppearancesToQualify(plateAppearances, clubGames) {
   if (clubGames == null) return "He hasn't had the plate appearances needed to qualify";
-  const needed = Math.round(clubGames * PLATE_APPEARANCES_PER_GAME);
+  const needed = countPlateAppearancesNeeded(clubGames);
   return `He has ${plateAppearances} of the ${needed} plate appearances needed to qualify`;
 }

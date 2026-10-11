@@ -6,11 +6,13 @@
 // read as text on the sheet, keeping its hue, and black the light gray #e4e4e4. The first choice is
 // the color of the dot's first half, unless that comes out muted once it's lightened, as black,
 // brown, navy, and dark green do, and the club's other color has more color, as the White Sox's,
-// Pirates', Padres', Guardians', Tigers', Brewers', and Athletics' do.
+// Pirates', Padres', Guardians', Tigers', Brewers', and Athletics' do. `espnId` is ESPN's id for the
+// club, which its injury report names clubs by.
 export const TEAMS = {
   ARI: {
     name: "Diamondbacks",
     league: "NL",
+    espnId: 29,
     titles: [2001],
     color: "#A71930",
     color2: "#E3D4AD",
@@ -19,6 +21,7 @@ export const TEAMS = {
   ATL: {
     name: "Braves",
     league: "NL",
+    espnId: 15,
     titles: [1914, 1957, 1995, 2021],
     color: "#CE1141",
     color2: "#13274F",
@@ -27,6 +30,7 @@ export const TEAMS = {
   BAL: {
     name: "Orioles",
     league: "AL",
+    espnId: 1,
     titles: [1966, 1970, 1983],
     color: "#DF4601",
     color2: "#000000",
@@ -35,6 +39,7 @@ export const TEAMS = {
   BOS: {
     name: "Red Sox",
     league: "AL",
+    espnId: 2,
     titles: [1903, 1912, 1915, 1916, 1918, 2004, 2007, 2013, 2018],
     color: "#BD3039",
     color2: "#0C2340",
@@ -43,6 +48,7 @@ export const TEAMS = {
   CHC: {
     name: "Cubs",
     league: "NL",
+    espnId: 16,
     titles: [1907, 1908, 2016],
     color: "#0E3386",
     color2: "#CC3433",
@@ -51,6 +57,7 @@ export const TEAMS = {
   CWS: {
     name: "White Sox",
     league: "AL",
+    espnId: 4,
     titles: [1906, 1917, 2005],
     color: "#27251F",
     color2: "#C4CED4",
@@ -59,6 +66,7 @@ export const TEAMS = {
   CIN: {
     name: "Reds",
     league: "NL",
+    espnId: 17,
     titles: [1919, 1940, 1975, 1976, 1990],
     color: "#C6011F",
     color2: "#000000",
@@ -67,6 +75,7 @@ export const TEAMS = {
   CLE: {
     name: "Guardians",
     league: "AL",
+    espnId: 5,
     titles: [1920, 1948],
     color: "#0C2340",
     color2: "#E31937",
@@ -75,6 +84,7 @@ export const TEAMS = {
   COL: {
     name: "Rockies",
     league: "NL",
+    espnId: 27,
     titles: [],
     firstSeason: 1993,
     color: "#33006F",
@@ -84,6 +94,7 @@ export const TEAMS = {
   DET: {
     name: "Tigers",
     league: "AL",
+    espnId: 6,
     titles: [1935, 1945, 1968, 1984],
     color: "#0C2340",
     color2: "#FA4616",
@@ -92,6 +103,7 @@ export const TEAMS = {
   HOU: {
     name: "Astros",
     league: "AL",
+    espnId: 18,
     titles: [2017, 2022],
     color: "#002D62",
     color2: "#EB6E1F",
@@ -100,6 +112,7 @@ export const TEAMS = {
   KC: {
     name: "Royals",
     league: "AL",
+    espnId: 7,
     titles: [1985, 2015],
     color: "#004687",
     color2: "#BD9B60",
@@ -108,6 +121,7 @@ export const TEAMS = {
   LAA: {
     name: "Angels",
     league: "AL",
+    espnId: 3,
     titles: [2002],
     color: "#BA0021",
     color2: "#003263",
@@ -116,6 +130,7 @@ export const TEAMS = {
   LAD: {
     name: "Dodgers",
     league: "NL",
+    espnId: 19,
     titles: [1955, 1959, 1963, 1965, 1981, 1988, 2020, 2024, 2025],
     color: "#005A9C",
     color2: "#FFFFFF",
@@ -124,6 +139,7 @@ export const TEAMS = {
   MIA: {
     name: "Marlins",
     league: "NL",
+    espnId: 28,
     titles: [1997, 2003],
     color: "#00A3E0",
     color2: "#EF3340",
@@ -132,6 +148,7 @@ export const TEAMS = {
   MIL: {
     name: "Brewers",
     league: "NL",
+    espnId: 8,
     titles: [],
     firstSeason: 1969,
     color: "#12284B",
@@ -141,6 +158,7 @@ export const TEAMS = {
   MIN: {
     name: "Twins",
     league: "AL",
+    espnId: 9,
     titles: [1924, 1987, 1991],
     color: "#002B5C",
     color2: "#D31145",
@@ -149,6 +167,7 @@ export const TEAMS = {
   NYM: {
     name: "Mets",
     league: "NL",
+    espnId: 21,
     titles: [1969, 1986],
     color: "#002D72",
     color2: "#FF5910",
@@ -157,6 +176,7 @@ export const TEAMS = {
   NYY: {
     name: "Yankees",
     league: "AL",
+    espnId: 10,
     titles: [
       1923, 1927, 1928, 1932, 1936, 1937, 1938, 1939, 1941, 1943, 1947, 1949, 1950, 1951, 1952,
       1953, 1956, 1958, 1961, 1962, 1977, 1978, 1996, 1998, 1999, 2000, 2009,
@@ -168,6 +188,7 @@ export const TEAMS = {
   ATH: {
     name: "Athletics",
     league: "AL",
+    espnId: 11,
     titles: [1910, 1911, 1913, 1929, 1930, 1972, 1973, 1974, 1989],
     color: "#003831",
     color2: "#EFB21E",
@@ -176,6 +197,7 @@ export const TEAMS = {
   PHI: {
     name: "Phillies",
     league: "NL",
+    espnId: 22,
     titles: [1980, 2008],
     color: "#E81828",
     color2: "#FFFFFF",
@@ -184,6 +206,7 @@ export const TEAMS = {
   PIT: {
     name: "Pirates",
     league: "NL",
+    espnId: 23,
     titles: [1909, 1925, 1960, 1971, 1979],
     color: "#27251F",
     color2: "#FDB827",
@@ -192,6 +215,7 @@ export const TEAMS = {
   SD: {
     name: "Padres",
     league: "NL",
+    espnId: 25,
     titles: [],
     firstSeason: 1969,
     color: "#2F241D",
@@ -201,6 +225,7 @@ export const TEAMS = {
   SF: {
     name: "Giants",
     league: "NL",
+    espnId: 26,
     titles: [1905, 1921, 1922, 1933, 1954, 2010, 2012, 2014],
     color: "#FD5A1E",
     color2: "#27251F",
@@ -209,6 +234,7 @@ export const TEAMS = {
   SEA: {
     name: "Mariners",
     league: "AL",
+    espnId: 12,
     titles: [],
     firstSeason: 1977,
     color: "#0C2C56",
@@ -218,6 +244,7 @@ export const TEAMS = {
   STL: {
     name: "Cardinals",
     league: "NL",
+    espnId: 24,
     titles: [1926, 1931, 1934, 1942, 1944, 1946, 1964, 1967, 1982, 2006, 2011],
     color: "#C41E3A",
     color2: "#0C2340",
@@ -226,6 +253,7 @@ export const TEAMS = {
   TB: {
     name: "Rays",
     league: "AL",
+    espnId: 30,
     titles: [],
     firstSeason: 1998,
     color: "#092C5C",
@@ -235,6 +263,7 @@ export const TEAMS = {
   TEX: {
     name: "Rangers",
     league: "AL",
+    espnId: 13,
     titles: [2023],
     color: "#003278",
     color2: "#C0111F",
@@ -243,6 +272,7 @@ export const TEAMS = {
   TOR: {
     name: "Blue Jays",
     league: "AL",
+    espnId: 14,
     titles: [1992, 1993],
     color: "#134A8E",
     color2: "#E8291C",
@@ -251,9 +281,15 @@ export const TEAMS = {
   WSH: {
     name: "Nationals",
     league: "NL",
+    espnId: 20,
     titles: [2019],
     color: "#AB0003",
     color2: "#14225A",
     chartColors: ["#f15849", "#728acb"],
   },
 };
+
+const CLUB_BY_ESPN_ID = new Map(Object.entries(TEAMS).map(([club, team]) => [team.espnId, club]));
+
+/** @param {string | number} espnId */
+export const findClubByEspnId = (espnId) => CLUB_BY_ESPN_ID.get(Number(espnId)) ?? null;

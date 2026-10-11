@@ -8,6 +8,13 @@ import { html, joinWithSeparator } from "#shared/html.js";
 import { findNearestGames } from "#shared/nearest-games.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
+import {
+  describePlayoffField,
+  describeTeamGames,
+  formatMargin,
+  listFieldRows,
+  listSeasonRankRows,
+} from "#shared/team-numbers.js";
 import { renderTeamStats, renderTitles } from "#shared/team-sheet.js";
 import { buildBracket, describeTeamStatus } from "./bracket.js";
 import {
@@ -19,7 +26,16 @@ import {
   renderStatusChip,
   renderTeamDot,
 } from "./clubs.js";
-import { describeGameLabel, describeInning, describeStart, nameGameKey } from "./games-view.js";
+import {
+  describeGameLabel,
+  describeInning,
+  describeStart,
+  listSeasonGames,
+  nameGameKey,
+} from "./games-view.js";
+import { renderLeaders } from "./leaders-view.js";
+import { countClubGames } from "./qualifying.js";
+import { findClubRoster } from "./roster-section.js";
 import { nameRound } from "./series-games.js";
 import { session } from "./session.js";
 import { listSlateGames } from "./slate.js";
@@ -28,6 +44,8 @@ import { describeDivisionLead } from "./standings.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
+/** @typedef {import("#shared/team-numbers.js").PhaseStats} PhaseStats */
+/** @typedef {import("#shared/team-numbers.js").Measure} Measure */
 
 const MAGIC_NUMBER_TITLE =
   "Division magic number: combined wins by this team and losses by the club closest behind it that would clinch the division. A dash means clinched.";
@@ -99,12 +117,59 @@ function renderGamesLeft(division) {
   return left > 0 && html`<span class="tabular">${left} left</span>`;
 }
 
+/** @param {number} value */
+const formatRunAverage = (value) => value.toFixed(2);
+
+/** @param {number} value */
+const formatRunMargin = (value) => formatMargin(value, 2);
+
+// Runs a game, runs allowed a game, and the margin between them, then the records at home and on
+// the road. Fewer runs allowed rank first.
+/** @type {Measure[]} */
+const MEASURES = [
+  { label: "R/G", key: "scored", format: formatRunAverage },
+  { label: "RA/G", key: "allowed", format: formatRunAverage, isFewestFirst: true },
+  { label: "Diff/G", key: "margin", format: formatRunMargin },
+  { label: "Home", key: "home" },
+  { label: "Road", key: "road" },
+];
+
+/**
+ * A club's regular season from its standings row, its runs as averages a game.
+ * @param {any} row
+ * @returns {PhaseStats}
+ */
+function readRegularSeason(row) {
+  const games = row.w + row.l;
+  /** @param {number | undefined} runs */
+  const averageRuns = (runs) => (runs == null || !games ? null : runs / games);
+  const margin = row.rs == null || row.ra == null ? undefined : row.rs - row.ra;
+  return {
+    record: `${row.w}-${row.l}`,
+    scored: averageRuns(row.rs),
+    allowed: averageRuns(row.ra),
+    margin: averageRuns(margin),
+    home: row.home ?? null,
+    road: row.road ?? null,
+  };
+}
+
+const listRegularSeasons = () =>
+  Object.values(session.standings?.divisions ?? {})
+    .flat()
+    .map(readRegularSeason);
+
+/** @param {Markup[]} rows */
+const renderRanks = (rows) =>
+  rows.length > 0 && html`<div class="player-ranks team-ranks">${rows}</div>`;
+
 /** @param {ReturnType<typeof findDivision>} division */
 function renderSeason(division) {
   if (!division?.row) return false;
+  const ranks = listSeasonRankRows(MEASURES, readRegularSeason(division.row), listRegularSeasons());
   return renderSheetPart(
     "Season",
-    html`<div class="team-season">${renderTeamStats(listStats(division))}</div>`,
+    html`<div class="team-season">${renderTeamStats(listStats(division))}${renderRanks(ranks)}</div>`,
     renderGamesLeft(division),
   );
 }
@@ -150,6 +215,38 @@ function listTeamSeries(id) {
 
 const hasBye = (id) => (session.state.teams[id]?.seed ?? 99) <= 2;
 
+const listPostseasonFinals = () =>
+  listSeasonGames(session.state?.slate, session.schedule).filter(
+    (game) => game.postseason && game.state === "final" && game.score,
+  );
+
+/**
+ * A club's postseason numbers across from the whole field's, under the two sides' names, or
+ * nothing before its first postseason game ends.
+ * @param {string} id
+ */
+function renderAgainstField(id) {
+  const finals = listPostseasonFinals();
+  const club = describeTeamGames(
+    finals
+      .filter((game) => isPlayedBy(game, id))
+      .map((game) => {
+        const [away, home] = game.score;
+        const isHome = game.home === id;
+        return { own: isHome ? home : away, theirs: isHome ? away : home, isHome };
+      }),
+  );
+  if (!club) return false;
+  const field = describePlayoffField(finals.map(({ score: [away, home] }) => ({ home, away })));
+  return html`<div class="team-numbers">
+    <div class="field-heads">
+      <span class="club">${renderTeamDot(id)}<span>${nameTeam(id)}</span> <span class="team-record tabular">${club.record}</span></span>
+      <span class="field-name">Playoff field</span>
+    </div>
+    ${renderRanks(listFieldRows(MEASURES, club, field, listRegularSeasons()))}
+  </div>`;
+}
+
 /** @param {string} id */
 function renderPlayoffs(id) {
   const status = describeTeamStatus(session.state, id);
@@ -158,6 +255,7 @@ function renderPlayoffs(id) {
     "Playoffs",
     html`<div class="team-season">
       <ul class="team-series">${byeRow}${listTeamSeries(id).map((series) => renderSeriesRow(series, id))}</ul>
+      ${renderAgainstField(id)}
     </div>`,
     renderStatusChip(status),
   );
@@ -234,9 +332,19 @@ function listFacts(id, division) {
 }
 
 /**
+ * The club's leaders, from its roster, for the current season.
+ * @param {string} id
+ */
+function renderClubLeaders(id) {
+  const read = findClubRoster(id);
+  if (!read) return false;
+  return renderLeaders({ ...read, clubGames: countClubGames(id, session.activeYear) });
+}
+
+/**
  * The sheet a club opens: its dot, name, and rank over its division, seed, record, and winning
  * percentage, then the cards of its nearest games, once the field is set its postseason, then its
- * season, and its titles.
+ * season, its leaders, and its titles.
  * @param {string} id
  */
 export function renderTeamSheet(id) {
@@ -245,7 +353,7 @@ export function renderTeamSheet(id) {
     heading: html`${renderTeamDot(id)}<span>${nameTeam(id)}</span>${renderRankTag(id)}`,
     note: joinWithSeparator(listFacts(id, division)),
     body: html`${renderNearestGames(id)}${isInSetField(id) && renderPlayoffs(id)}
-      ${renderSeason(division)}
+      ${renderSeason(division)}${renderClubLeaders(id)}
       ${renderTitles(listTitles(id), html`<span class="tabular">${describeDrought(id)}</span>`)}`,
   };
 }

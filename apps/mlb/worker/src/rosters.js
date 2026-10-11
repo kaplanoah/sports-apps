@@ -15,10 +15,12 @@ const ROSTER_FIELDS = [
   "status",
   "description",
 ].join(",");
-// What a roster's rows show, and what a player's sheet shows beside them.
-const HITTING_COLUMNS = ["plateAppearances", "avg", "homeRuns", "rbi", "ops"];
+// What a roster's rows show, what its club's leaders add, and what a player's sheet shows beside
+// them.
+const ROW_HITTING_COLUMNS = ["plateAppearances", "avg", "homeRuns", "rbi", "ops"];
+const HITTING_COLUMNS = [...ROW_HITTING_COLUMNS, "stolenBases"];
 const PLAYER_HITTING_COLUMNS = [
-  ...HITTING_COLUMNS,
+  ...ROW_HITTING_COLUMNS,
   "gamesPlayed",
   "atBats",
   "hits",
@@ -99,13 +101,16 @@ export const indexSeasonStats = (table) =>
   new Map(readLeagueRows(table).map((row) => [row.player.id, row.stat]));
 
 /**
- * A stay on the injured list as the sheet names it, as "15-day IL".
- * @param {string} status
+ * A player's stay on the injured list as the sheets name it, as "15-day IL", or null while he
+ * isn't on it.
+ * @param {any} entry a player on MLB's roster
  */
-const describeInjury = (status) => {
+export function readInjury(entry) {
+  const status = entry.status?.description ?? "";
+  if (!INJURED.test(status)) return null;
   const days = /(\d+)-Day/.exec(status)?.[1];
   return days ? `${days}-day IL` : "IL";
-};
+}
 
 /**
  * @param {any} entry a player on MLB's roster
@@ -114,13 +119,12 @@ const describeInjury = (status) => {
  */
 function describePlayer(entry, hitting, pitching) {
   const id = entry.person?.id;
-  const status = entry.status?.description ?? "";
   const player = {
     id,
     name: entry.person?.fullName ?? "",
     number: entry.jerseyNumber ?? "",
     position: entry.position?.abbreviation ?? "",
-    injury: INJURED.test(status) ? describeInjury(status) : null,
+    injury: readInjury(entry),
   };
   return {
     ...player,

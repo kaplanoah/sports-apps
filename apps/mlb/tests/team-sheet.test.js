@@ -29,7 +29,9 @@ const listParts = (markup) =>
 
 // The text of one titled part, from its title to the next part's.
 const readPart = (markup, title) =>
-  readText(markup).match(new RegExp(`${title} (.*?)(?= (?:Playoffs|Season|Titles) |$)`))?.[1];
+  readText(markup).match(
+    new RegExp(`${title} (.*?)(?= (?:Playoffs|Season|Leaders|Titles) |$)`),
+  )?.[1];
 
 const row = (id, w, l, fields = {}) => ({
   id,
@@ -79,7 +81,7 @@ test("a division leader in September: its division, seed, record, and percentage
 
   assert.equal(readText(sheet.heading), "Dodgers #3");
   assert.equal(readText(sheet.note), "NL West | 2 seed | 89-61 | .593");
-  assert.deepEqual(listParts(sheet.body), ["Season", "Titles"]);
+  assert.deepEqual(listParts(sheet.body), ["Season", "Leaders", "Titles"]);
   assert.deepEqual(readStats(sheet.body), ["NL West 1st", "Lead +6.0", "M# 7"]);
   assert.match(readPart(sheet.body, "Season"), /^12 left NL West 1st /);
   assert.equal(readPart(sheet.body, "Titles"), "Defending 9 | 2025, 2024, 2020 and 6 more");
@@ -184,7 +186,7 @@ test("once the field is set, a club alive in the postseason shows it first, with
   session.standings = NL_CENTRAL_IN_OCTOBER;
   const sheet = renderTeamSheet("CHC");
 
-  assert.deepEqual(listParts(sheet.body), ["Playoffs", "Season", "Titles"]);
+  assert.deepEqual(listParts(sheet.body), ["Playoffs", "Season", "Leaders", "Titles"]);
   assert.equal(
     readPart(sheet.body, "Playoffs"),
     "Alive NL WC Padres Won 2-1 NLDS Phillies Lead 2-1",

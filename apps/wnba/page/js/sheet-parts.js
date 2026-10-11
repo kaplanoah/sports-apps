@@ -1,5 +1,6 @@
 import { html } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
+import { readWinShare } from "#shared/team-numbers.js";
 import { renderClub } from "./clubs.js";
 
 // The pieces the game sheet's views and a team's sheet share: how two sides of a measure are
@@ -23,18 +24,6 @@ export function findLeader(away, home, { isLowerBetter = false } = {}) {
  * @param {number} most
  */
 export const measureAgainst = (value, most) => (most > 0 ? Math.round((value / most) * 100) : 0);
-
-/**
- * A record like 15-7 as the share of its games won, or null without any.
- * @param {string | null} record
- */
-export function readWinShare(record) {
-  const [wins, losses] = String(record ?? "")
-    .split("-")
-    .map(Number);
-  const games = wins + losses;
-  return games > 0 ? wins / games : null;
-}
 
 /**
  * A row that compares two records, like 15-7, by the share of games each won. A side with no
