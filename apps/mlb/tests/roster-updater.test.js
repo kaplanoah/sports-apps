@@ -9,6 +9,7 @@ import {
   nameHittersKey,
   namePlayerKey,
 } from "../worker/src/players.js";
+import { nameInjuriesRequest } from "../worker/src/injuries.js";
 import { createRosterJob, listTransactionsRequest } from "../worker/src/roster-updater.js";
 import {
   describeRoster,
@@ -22,6 +23,10 @@ import {
 // players' regular seasons, and the day's transactions.
 const FIXTURE = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-08-rosters.json`, "utf8"),
+);
+// ESPN's MLB injury report on the evening of Oct 11, trimmed to what the sheets keep of it.
+const INJURIES = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-11-espn-injuries.json`, "utf8"),
 );
 const MLB_API = "https://statsapi.mlb.com";
 const SEASON = FIXTURE.season;
@@ -72,13 +77,22 @@ const answerGameLogs = (path) => ({
     .filter(Boolean),
 });
 
-/** @param {Record<string, any>} answers */
+/**
+ * MLB's answers, by request, and ESPN's injury report, which a test can refuse or change.
+ * @param {Record<string, any>} answers
+ */
 function createMlbFetch(answers) {
   /** @type {string[]} */
   const requests = [];
   const refused = new Set();
+  const espn = { requests: 0, isRefused: false, report: structuredClone(INJURIES.report) };
   /** @param {string} url */
   const fetchImpl = async (url) => {
+    if (url === nameInjuriesRequest()) {
+      espn.requests += 1;
+      if (espn.isRefused) return new Response("", { status: 503 });
+      return new Response(JSON.stringify(espn.report));
+    }
     const path = url.slice(MLB_API.length);
     requests.push(path);
     if (refused.has(path)) return new Response("", { status: 503 });
@@ -86,7 +100,7 @@ function createMlbFetch(answers) {
     if (!(path in answers)) return new Response("", { status: 503 });
     return new Response(JSON.stringify(answers[path]));
   };
-  return { requests, refused, fetchImpl };
+  return { requests, refused, espn, fetchImpl };
 }
 
 function createJobStorage() {
@@ -160,7 +174,16 @@ function createRun() {
   /** @param {number} finals */
   const endGames = (finals) =>
     docs.write(`seasons/${SEASON}`, { year: SEASON, slate: createSlate(finals) });
-  return { docs, answers, refused: mlb.refused, runJob, wait, takeRequests, endGames };
+  return {
+    docs,
+    answers,
+    refused: mlb.refused,
+    espn: mlb.espn,
+    runJob,
+    wait,
+    takeRequests,
+    endGames,
+  };
 }
 
 /** @param {string[]} requests */
@@ -417,4 +440,83 @@ test("a run reads at most four batches of thirty players' last games", async () 
     run.wait(5);
   }
   assert.ok(Math.max(...batches) === 4, `at most four a run: ${batches}`);
+});
+
+const TREINEN = namePlayerKey(SEASON, 595014);
+const FREEMAN = namePlayerKey(SEASON, 518692);
+
+test("a player on the injured list keeps MLB's stay and why he's there, from ESPN's report: what's wrong, RotoWire's sentence, and when ESPN changed it", async () => {
+  const run = createRun();
+  await fillRosters(run);
+
+  const treinen = run.docs.stored.get(TREINEN);
+  assert.equal(treinen.injury, "15-day IL");
+  assert.deepEqual(treinen.out, {
+    reason: "Right shoulder inflammation",
+    sentence:
+      "President of baseball operations Andrew Friedman said Saturday that Treinen (shoulder) hasn't been ruled out for a return in the postseason, Jon Paul Hoornstra of Newsweek.com reports.",
+    updated: "2026-10-03T18:34:00.000Z",
+  });
+  const freeman = run.docs.stored.get(FREEMAN);
+  assert.equal(freeman.injury, null);
+  assert.equal(freeman.out, null);
+});
+
+test("a player ESPN lists who isn't on MLB's injured list keeps nothing of it, since MLB's roster says who is on the list", async () => {
+  const run = createRun();
+  const dodgers = run.espn.report.injuries.find((/** @type {any} */ team) => team.id === "19");
+  dodgers.injuries.push({
+    status: "Day-To-Day",
+    date: "2026-10-10T12:00Z",
+    shortComment: "Freeman (ankle) is day-to-day.",
+    athlete: { firstName: "Freddie", lastName: "Freeman" },
+    details: { type: "Ankle", side: "Right" },
+  });
+  await fillRosters(run);
+  assert.equal(run.docs.stored.get(FREEMAN).out, null);
+});
+
+test("ESPN's report is read once for the whole league each hour, and one that fails keeps the reasons the last one gave", async () => {
+  const run = createRun();
+  await fillRosters(run);
+  assert.equal(run.espn.requests, 1);
+  for (let minutes = 0; minutes < 60; minutes += 5) {
+    await run.runJob();
+    run.wait(5);
+  }
+  assert.equal(run.espn.requests, 2);
+
+  run.espn.isRefused = true;
+  run.wait(60);
+  await run.runJob();
+  assert.equal(run.espn.requests, 3);
+  assert.equal(run.docs.stored.get(TREINEN).out?.reason, "Right shoulder inflammation");
+  assert.deepEqual(
+    run.docs.writes.filter((key) => key.startsWith("players/")),
+    [],
+    "nothing changed",
+  );
+});
+
+test("a reason ESPN changes saves again only the player it's about", async () => {
+  const run = createRun();
+  await fillRosters(run);
+  const dodgers = run.espn.report.injuries.find((/** @type {any} */ team) => team.id === "19");
+  const treinen = dodgers.injuries.find(
+    (/** @type {any} */ injury) => injury.athlete.lastName === "Treinen",
+  );
+  treinen.shortComment = "Treinen (shoulder) threw a bullpen session Sunday.";
+  treinen.date = "2026-10-11T20:00Z";
+
+  run.wait(60);
+  await run.runJob();
+
+  assert.equal(
+    run.docs.stored.get(TREINEN).out?.sentence,
+    "Treinen (shoulder) threw a bullpen session Sunday.",
+  );
+  assert.deepEqual(
+    run.docs.writes.filter((key) => key.startsWith("players/")),
+    [TREINEN],
+  );
 });

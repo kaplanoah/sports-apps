@@ -85,118 +85,140 @@ async function openGame(page, day, game) {
 }
 
 /**
- * Each view, opened from the last, and what shows once it's drawn.
- * @type {{
+ * @typedef {{
  *   name: string,
  *   open: (page: import("@playwright/test").Page) => Promise<unknown>,
  *   shown: (page: import("@playwright/test").Page) => import("@playwright/test").Locator,
  *   close?: (page: import("@playwright/test").Page) => Promise<unknown>,
- * }[]}
+ * }} View
  */
-const VIEWS = [
-  {
-    name: "Bracket",
-    open: (page) => page.getByRole("tab", { name: "Bracket" }).click(),
-    shown: (page) => page.locator("#bracketWrap .card-note").first(),
-  },
-  {
-    name: "Games",
-    open: (page) => page.getByRole("tab", { name: "Games" }).click(),
-    shown: (page) => page.locator("#seasonGames .game-day.is-today .game-row").first(),
-  },
-  {
-    name: "the Games view's search",
-    open: (page) => page.locator("#seasonGames .go-search").click(),
-    shown: (page) => page.locator("#gameSearch .search-example").first(),
-    close: (page) => page.locator("#gameSearch button.search-cancel").click(),
-  },
-  {
-    name: "a search's games",
-    open: async (page) => {
-      await page.locator("#seasonGames .go-search").click();
-      await page.locator("#gameSearch .search-input").fill("Mets");
-      await page.locator("#gameSearch .search-input").press("Enter");
-    },
-    shown: (page) => page.locator("#gameSearch .game-row").first(),
-    close: (page) => page.locator("#gameSearch button.search-cancel").click(),
-  },
-  {
-    name: "Standings",
-    open: (page) => page.getByRole("tab", { name: "Standings" }).click(),
-    shown: (page) => page.locator("table.st tbody tr").first(),
-  },
-  {
-    name: "a game's sheet",
-    open: (page) => openGame(page, "2026-09-24", /^Game details: Astros at Athletics, Thu, Sep 24/),
-    shown: (page) => page.locator("#gameSheet .starters-open"),
-    close: (page) => page.keyboard.press("Escape"),
-  },
-  {
-    name: "a game's Matchup",
-    open: async (page) => {
-      await openGame(page, "2026-09-24", /^Game details: Astros at Athletics, Thu, Sep 24/);
-      await page.locator("#gameSheet").getByRole("tab", { name: "Matchup" }).click();
-    },
-    shown: (page) => page.locator("#matchupBody .tape-dot").first(),
-    close: (page) => page.keyboard.press("Escape"),
-  },
-  {
-    name: "a final's Highlights",
-    open: async (page) => {
-      await openGame(page, "2026-09-23", /^Game details: Brewers at Phillies, Wed, Sep 23/);
-      await page.locator("#gameSheet").getByRole("tab", { name: "Highlights" }).click();
-    },
-    shown: (page) => page.locator("#highlightsBody .clip-row").first(),
-    close: (page) => page.keyboard.press("Escape"),
-  },
-  {
-    name: "a club's sheet",
-    open: async (page) => {
-      await page.getByRole("tab", { name: "Standings" }).click();
-      await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
-    },
-    shown: (page) => page.locator("#teamSheet .team-stats"),
-    close: (page) => page.keyboard.press("Escape"),
-  },
-  {
-    name: "a club's roster",
-    open: (page) => openRoster(page, "CLE"),
-    shown: (page) => page.locator("#rosterBody .box-table").first(),
-    close: (page) => page.keyboard.press("Escape"),
-  },
-  {
-    name: "a hitter's sheet",
-    open: async (page) => {
-      await openRoster(page, "CLE");
-      await page.locator("#rosterBody").getByRole("button", { name: "Steven Kwan" }).click();
-    },
-    shown: (page) => page.locator("#playerBody .player-curve").first(),
-    close: (page) => page.keyboard.press("Escape"),
-  },
-  {
-    name: "a starter's sheet",
-    open: async (page) => {
-      await openRoster(page, "CLE");
-      await page.locator("#rosterBody").getByRole("button", { name: "Tanner Bibee" }).click();
-    },
-    shown: (page) => page.locator("#playerBody .pitch-usage").first(),
-    close: (page) => page.keyboard.press("Escape"),
-  },
-  {
-    name: "News",
-    open: (page) => page.getByRole("tab", { name: "News" }).click(),
-    shown: (page) => page.locator(".news-more-title").first(),
-  },
-  {
-    name: "settings",
-    open: (page) => openSettings(page),
-    shown: (page) => page.locator("#settingsDialog .appearance-row"),
-    close: (page) => page.keyboard.press("Escape"),
-  },
-];
 
 /**
- * Opens the page in Ball with news, a club's roster and players, and a final's highlights.
+ * Each view, opened from the last, and what shows once it's drawn, in groups that each check
+ * within a test's time.
+ * @type {Record<string, View[]>}
+ */
+const VIEW_GROUPS = {
+  "the page's tabs": [
+    {
+      name: "Bracket",
+      open: (page) => page.getByRole("tab", { name: "Bracket" }).click(),
+      shown: (page) => page.locator("#bracketWrap .card-note").first(),
+    },
+    {
+      name: "Games",
+      open: (page) => page.getByRole("tab", { name: "Games" }).click(),
+      shown: (page) => page.locator("#seasonGames .game-day.is-today .game-row").first(),
+    },
+    {
+      name: "the Games view's search",
+      open: (page) => page.locator("#seasonGames .go-search").click(),
+      shown: (page) => page.locator("#gameSearch .search-example").first(),
+      close: (page) => page.locator("#gameSearch button.search-cancel").click(),
+    },
+    {
+      name: "a search's games",
+      open: async (page) => {
+        await page.locator("#seasonGames .go-search").click();
+        await page.locator("#gameSearch .search-input").fill("Mets");
+        await page.locator("#gameSearch .search-input").press("Enter");
+      },
+      shown: (page) => page.locator("#gameSearch .game-row").first(),
+      close: (page) => page.locator("#gameSearch button.search-cancel").click(),
+    },
+    {
+      name: "Standings",
+      open: (page) => page.getByRole("tab", { name: "Standings" }).click(),
+      shown: (page) => page.locator("table.st tbody tr").first(),
+    },
+    {
+      name: "News",
+      open: (page) => page.getByRole("tab", { name: "News" }).click(),
+      shown: (page) => page.locator(".news-more-title").first(),
+    },
+    {
+      name: "settings",
+      open: (page) => openSettings(page),
+      shown: (page) => page.locator("#settingsDialog .appearance-row"),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+  ],
+  "a game's sheets": [
+    {
+      name: "a game's sheet",
+      open: (page) =>
+        openGame(page, "2026-09-24", /^Game details: Astros at Athletics, Thu, Sep 24/),
+      shown: (page) => page.locator("#gameSheet .meetings li").first(),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
+      name: "a game's Matchup",
+      open: async (page) => {
+        await openGame(page, "2026-09-24", /^Game details: Astros at Athletics, Thu, Sep 24/);
+        await page.locator("#gameSheet").getByRole("tab", { name: "Matchup" }).click();
+      },
+      shown: (page) => page.locator("#matchupBody .tape-dot").first(),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
+      name: "a final's Highlights",
+      open: async (page) => {
+        await openGame(page, "2026-09-23", /^Game details: Brewers at Phillies, Wed, Sep 23/);
+        await page.locator("#gameSheet").getByRole("tab", { name: "Highlights" }).click();
+      },
+      shown: (page) => page.locator("#highlightsBody .clip-row").first(),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+  ],
+  "a club's and a player's sheets": [
+    {
+      name: "a club's sheet",
+      open: async (page) => {
+        await page.getByRole("tab", { name: "Standings" }).click();
+        await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
+      },
+      shown: (page) => page.locator("#teamSheet .leader-stat").first(),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
+      name: "a club's roster",
+      open: (page) => openRoster(page, "CLE"),
+      shown: (page) => page.locator("#rosterBody .box-table").first(),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
+      name: "a hitter's sheet",
+      open: async (page) => {
+        await openRoster(page, "CLE");
+        await page.locator("#rosterBody").getByRole("button", { name: "Steven Kwan" }).click();
+      },
+      shown: (page) => page.locator("#playerBody .player-curve").first(),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
+      name: "the sheet of a player on the injured list",
+      open: async (page) => {
+        await openRoster(page, "LAD");
+        await page.locator("#rosterBody").getByRole("button", { name: "Blake Treinen" }).click();
+      },
+      shown: (page) => page.locator("#playerBody .out-sentence"),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
+      name: "a starter's sheet",
+      open: async (page) => {
+        await openRoster(page, "CLE");
+        await page.locator("#rosterBody").getByRole("button", { name: "Tanner Bibee" }).click();
+      },
+      shown: (page) => page.locator("#playerBody .pitch-usage").first(),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+  ],
+};
+
+/**
+ * Opens the page in Ball with news, a club's roster and players, a final's highlights, and the
+ * season's whole schedule.
  * @param {import("@playwright/test").Page} page
  */
 async function openWithEverything(page) {
@@ -206,16 +228,18 @@ async function openWithEverything(page) {
     store: { ...ROSTER_DOCS, ...PLAYER_DOCS, ...NEWS_DOCS },
     pitchers: { ...PITCHER_SIDES, ...MATCHUP_STARTERS },
     highlights: SEP_23_HIGHLIGHTS,
+    isWholeSeason: true,
   });
 }
 
 /**
  * Opens each view in turn, checks it once it's drawn, and closes it.
  * @param {import("@playwright/test").Page} page
- * @param {(view: (typeof VIEWS)[number]) => Promise<void>} checkView
+ * @param {View[]} views
+ * @param {(view: View) => Promise<void>} checkView
  */
-async function checkEachView(page, checkView) {
-  for (const view of VIEWS) {
+async function checkEachView(page, views, checkView) {
+  for (const view of views) {
     await view.open(page);
     await expect(view.shown(page)).toBeVisible();
     await checkView(view);
@@ -232,27 +256,29 @@ const SCREENS = {
 };
 
 for (const [screen, viewport] of Object.entries(SCREENS)) {
-  test(`on ${screen}, every view lays out the same in Night Game as in Ball, which change only colors`, async ({
-    page,
-  }) => {
-    await page.setViewportSize(viewport);
-    await openWithEverything(page);
-    await checkEachView(page, async (view) => {
-      expect(await listThemeLayoutChanges(page), view.name).toEqual([]);
+  for (const [group, views] of Object.entries(VIEW_GROUPS)) {
+    test(`on ${screen}, ${group} lay out the same in Night Game as in Ball, which change only colors`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await openWithEverything(page);
+      await checkEachView(page, views, async (view) => {
+        expect(await listThemeLayoutChanges(page), view.name).toEqual([]);
+      });
     });
-  });
 
-  test(`on ${screen}, every view's text stands out from what's behind it as WCAG's AA level asks, in Ball and Night Game`, async ({
-    page,
-  }) => {
-    await page.setViewportSize(viewport);
-    await openWithEverything(page);
-    await checkEachView(page, async (view) => {
-      for (const theme of /** @type {const} */ (["light", "dark"])) {
-        await showTheme(page, theme);
-        expect(await listLowContrastText(page), `${view.name} in ${theme}`).toEqual([]);
-      }
-      await showTheme(page, "light");
+    test(`on ${screen}, the text of ${group} stands out from what's behind it as WCAG's AA level asks, in Ball and Night Game`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await openWithEverything(page);
+      await checkEachView(page, views, async (view) => {
+        for (const theme of /** @type {const} */ (["light", "dark"])) {
+          await showTheme(page, theme);
+          expect(await listLowContrastText(page), `${view.name} in ${theme}`).toEqual([]);
+        }
+        await showTheme(page, "light");
+      });
     });
-  });
+  }
 }

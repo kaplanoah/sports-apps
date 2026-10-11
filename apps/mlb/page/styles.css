@@ -95,6 +95,8 @@
   --all-star-light: rgba(255, 255, 255, 0.4);
   --all-star-shift: -3px;
   --out: #6b645c;
+  /* A source's credit under what it said, as pale as WCAG's AA level lets text be on a card. */
+  --credit-ink: color-mix(in srgb, var(--ink-dim) 84%, var(--card));
   --focus-ring: var(--now);
   --gate-heading-font: "Chivo Mono", "JetBrains Mono", monospace;
   --gate-code-font: "Chivo Mono", "JetBrains Mono", monospace;
@@ -185,6 +187,7 @@
   --all-star-shadow: rgba(0, 0, 0, 0.138);
   --all-star-light: rgba(241, 234, 212, 0.13);
   --out: #998b7d;
+  --credit-ink: var(--ink-dim);
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-ink: #fff;
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
@@ -1448,6 +1451,37 @@ body.kbd .rank-item .grip:focus {
 .game-faceoff .game-row {
   border-bottom: 0;
 }
+/* A game's season series: each meeting's day, its winner and score, and where it was played. */
+.meetings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--divider);
+}
+.meetings li {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--divider);
+  font-size: var(--size-glance);
+  color: var(--ink-dim);
+}
+.meeting-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.meeting-result .club {
+  color: var(--ink);
+}
+.meeting-score {
+  font-size: var(--size-read);
+  font-weight: 500;
+  color: var(--ink);
+}
 .starters-open {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
@@ -1572,6 +1606,21 @@ table.st.line-score td.team .club {
   margin-left: auto;
   color: var(--now);
 }
+/* A club's leaders, a table for hitting and one for pitching, each row's stat before its leader's
+   name, a half step over the roster's rows. */
+.leaders {
+  display: grid;
+  gap: 4px;
+}
+.leaders table.st td {
+  font-size: 13.5px;
+}
+.leader-stat {
+  display: inline-block;
+  min-width: 4ch;
+  margin-right: 8px;
+  color: var(--ink-dim);
+}
 /* A player's name in a roster, which opens his sheet. The button only clears the browser's own
    look, so the name keeps the type of the row it sits in. */
 .player-open {
@@ -1638,6 +1687,39 @@ body.kbd .player-open:focus {
   padding: 12px 0;
   border: 1px solid var(--card-border);
   border-radius: var(--radius-chip);
+}
+/* A player on the injured list has a box as his sheet's first part, outlined and cornered as his
+   totals are: his stay on a chip, then what's wrong, both in the color of what's happening now,
+   then RotoWire's sentence and, just under it, where it's from. */
+.out-box {
+  padding: 12px 12px 10.5px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-chip);
+  background: var(--card);
+}
+.out-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: var(--size-read);
+  font-weight: 500;
+  color: var(--now);
+}
+.status-chip.injured {
+  background: var(--now-line);
+  color: var(--now-ink);
+}
+.out-sentence {
+  margin: 7px 0 0;
+  font-size: var(--size-glance);
+  line-height: 1.4;
+  color: var(--ink);
+}
+.out-source {
+  margin: 4.5px 0 0;
+  font-size: var(--size-small);
+  color: var(--credit-ink);
 }
 .total {
   display: grid;
@@ -1735,6 +1817,63 @@ body.kbd .player-open:focus {
   line-height: 1.35;
   text-align: center;
   text-wrap: balance;
+  color: var(--ink-dim);
+}
+/* A club's numbers rank like a player's: its regular season on curves of every club's, and its
+   postseason as dots on lines across the same ranges, the playoff field's dot and number beside
+   its own, under the two sides' names. */
+.team-season .team-ranks {
+  margin-top: 6px;
+}
+.placed-line {
+  position: relative;
+  height: 1px;
+  background: color-mix(in srgb, var(--ink-dim) 55%, transparent);
+}
+.placed-line > span {
+  position: absolute;
+  inset: 0 3px;
+}
+.placed-line i {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+}
+.placed-line .own {
+  background: var(--accent);
+}
+.placed-line .other {
+  background: color-mix(in srgb, var(--ink-dim) 55%, var(--sheet));
+}
+.placed-other {
+  padding-left: 18px;
+  font-size: var(--size-glance);
+  text-align: right;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.team-numbers {
+  display: grid;
+  gap: 14px;
+  margin-top: 10px;
+}
+.field-heads {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: var(--size-glance);
+}
+.field-heads .club {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+}
+.field-heads .team-record,
+.field-name {
   color: var(--ink-dim);
 }
 .matchup-body {

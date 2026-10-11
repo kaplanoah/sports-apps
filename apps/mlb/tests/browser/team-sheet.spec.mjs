@@ -182,7 +182,7 @@ test("a club's name in a game's sheet opens its sheet over it, whose back button
   await expectShown(gameSheet);
 });
 
-test("a club's row in the standings opens its sheet, with its nearest games, race, and titles, and its close button closes it", async ({
+test("a club's row in the standings opens its sheet, with its nearest games, race, leaders, and titles, and its close button closes it", async ({
   page,
 }) => {
   await openApp(page);
@@ -191,7 +191,11 @@ test("a club's row in the standings opens its sheet, with its nearest games, rac
   const sheet = page.locator("#teamSheet");
 
   await expect(sheet.locator("#teamTitle")).toHaveText(/Mariners/);
-  await expect(sheet.locator(".sheet-part h3")).toHaveText(["Season", "Titles"]);
+  await expect(sheet.locator("#teamBody .sheet-part h3")).toHaveText([
+    "Season",
+    "Leaders",
+    "Titles",
+  ]);
   await expect(sheet.locator(".team-stat .team-label").first()).toHaveText("AL West");
   await expect(sheet.locator(".game-card h3")).toHaveText(["Last game", "Next game"]);
   await expect(sheet.locator(".team-titles")).toHaveText("None yet");
@@ -536,4 +540,44 @@ test("a roster that didn't load says so over Try again, and reads again as the p
     document.dispatchEvent(new Event("visibilitychange"));
   });
   await expect(sheet.locator("#rosterBody .box-name").first()).toHaveText("Jo Adell");
+});
+
+test("a club's leaders show under its season once its roster is read, and a tap anywhere on a leader's row opens his sheet over the club's", async ({
+  page,
+}) => {
+  await openApp(page, { store: { ...ROSTER_DOCS, ...PLAYER_DOCS }, pitchers: PITCHER_SIDES });
+  await page.getByRole("tab", { name: "Standings" }).click();
+  await page.locator('.div-grid tr[data-team="LAD"] .team-open').click();
+  const sheet = page.locator("#teamSheet");
+  const leaders = sheet.locator(".leaders");
+  await expect(leaders.locator(".leader-stat")).toHaveText([
+    "AVG",
+    "OPS",
+    "HR",
+    "RBI",
+    "SB",
+    "ERA",
+    "K",
+    "IP",
+    "SV",
+  ]);
+  await expect(sheet.locator("#teamBody .sheet-part h3")).toHaveText([
+    "Season",
+    "Leaders",
+    "Titles",
+  ]);
+
+  const row = leaders.locator("tr").filter({ hasText: "Tanner Scott" });
+  await row.scrollIntoViewIfNeeded();
+  const saves = await row.locator("td.tabular").boundingBox();
+  if (!saves) throw new Error("Scott's row isn't shown");
+  const landsOn = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.dataset.player ?? null,
+    { x: saves.x + saves.width / 2, y: saves.y + saves.height / 2 },
+  );
+  expect(landsOn).toBe(await row.locator("button.player-open").getAttribute("data-player"));
+  await page.mouse.click(saves.x + saves.width / 2, saves.y + saves.height / 2);
+  await expect(page.locator("#playerSheet #playerTitle")).toHaveText("Tanner Scott");
+  await page.locator("#playerSheet").getByRole("button", { name: "Back" }).click();
+  await expect(sheet.locator("#teamTitle")).toContainText("Dodgers");
 });

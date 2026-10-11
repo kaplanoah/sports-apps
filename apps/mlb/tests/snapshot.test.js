@@ -1441,3 +1441,30 @@ test("a regular season game's records are each club's as MLB lists them with it,
   const postponed = games.find((game) => game.id === "823042" && game.state === "off");
   assert.equal(postponed.records, undefined);
 });
+
+test("each club's standings row keeps its runs scored and allowed and its records at home and on the road, and leaves out any MLB didn't answer with", () => {
+  const responses = structuredClone(EVENING.responses);
+  const rays = responses.standings.records
+    .flatMap((/** @type {any} */ division) => division.teamRecords)
+    .find((/** @type {any} */ record) => record.team.id === 139);
+  Object.assign(rays, {
+    runsScored: 736,
+    runsAllowed: 650,
+    records: {
+      splitRecords: [
+        { type: "home", wins: 55, losses: 26 },
+        { type: "away", wins: 43, losses: 38 },
+        { type: "night", wins: 60, losses: 40 },
+      ],
+    },
+  });
+  const { divisions } = buildSnapshot({ ...EVENING, responses }).standings;
+  const [tampa, yankees] = divisions["AL East"];
+
+  assert.deepEqual(
+    { rs: tampa.rs, ra: tampa.ra, home: tampa.home, road: tampa.road },
+    { rs: 736, ra: 650, home: "55-26", road: "43-38" },
+  );
+  assert.equal(yankees.id, "NYY");
+  for (const field of ["rs", "ra", "home", "road"]) assert.ok(!(field in yankees), field);
+});
