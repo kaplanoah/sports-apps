@@ -183,12 +183,16 @@ jobs:
       - *install-modules
       - name: Repeat each browser spec this pull request changes
         shell: bash
+        # The image's user doesn't own the checkout, so git trusts it only once it's named safe, and
+        # a failed diff fails the step rather than reading as no spec changed.
         run: |
-          mapfile -t specs < <(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs')
-          if [ "${#specs[@]}" -eq 0 ]; then
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          changed=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs')
+          if [ -z "$changed" ]; then
             echo "No browser spec changed."
             exit 0
           fi
+          mapfile -t specs <<< "$changed"
           npm run test:browser -- --repeat-each=10 --retries=0 --pass-with-no-tests \
             --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
