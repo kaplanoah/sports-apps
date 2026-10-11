@@ -400,7 +400,7 @@ test("a season the store hasn't filled, or a store that can't be read, has the s
   );
 });
 
-test("each season's list of players names everyone on its rosters, with her team and number and the parts her sheet shows", async () => {
+test("each season's list of players names everyone on its rosters, with her team and number", async () => {
   const { docs, runJob } = createRun();
   await runJob();
 
@@ -414,24 +414,13 @@ test("each season's list of players names everyone on its rosters, with her team
     index.players.map((/** @type {any} */ player) => `${player.team}:${player.id}`).sort(),
     rostered.sort(),
   );
-  const stewart = index.players.find((/** @type {any} */ player) => player.id === STEWART);
   assert.deepEqual(
-    {
-      team: stewart.team,
-      number: stewart.number,
-      name: `${stewart.firstName} ${stewart.lastName}`,
-    },
-    { team: "NYL", number: "30", name: "Breanna Stewart" },
+    index.players.find((/** @type {any} */ player) => player.id === STEWART),
+    { id: STEWART, team: "NYL", number: "30", firstName: "Breanna", lastName: "Stewart" },
   );
-  for (const id of [STEWART, FIEBICH, SABALLY, BALOGUN]) {
-    const listed = index.players.find((/** @type {any} */ player) => player.id === id);
-    const { body } = await askForPlayer(`id=${id}&team=NYL&season=2026`, { docs });
-    assert.equal(listed.hasLastGame, !!body.lastGame);
-    assert.equal(listed.hasRegularSeason, !!body.regularSeason);
-  }
 });
 
-test("a season's list of players waits for every roster and its stats, and a past season gets its own as it's filled", async () => {
+test("a season's list of players waits for every roster, and a past season gets its own as it's filled", async () => {
   const answers = listAnswers();
   delete answers[nameLeagueRosterRequest("NYL", 2026)];
   const { docs, runJob } = createRun({ answers });

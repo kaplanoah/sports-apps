@@ -1,9 +1,5 @@
-import { describeRegularSeason } from "./player.js";
-
 // Every player on a team's roster in a season, as the page's search finds her: her name, team, and
-// number, and which parts of her sheet have something to show, so a search lists only the
-// headings her sheet shows. The player job builds it from the rosters and numbers it keeps, and
-// saves it beside them.
+// number. The player job builds it from the rosters it keeps, and saves it beside them.
 
 /** @param {number} season */
 export const namePlayerIndexKey = (season) => `player-index/${season}`;
@@ -15,8 +11,6 @@ export const namePlayerIndexKey = (season) => `player-index/${season}`;
  * @property {string} number
  * @property {string} firstName
  * @property {string} lastName
- * @property {boolean} hasLastGame
- * @property {boolean} hasRegularSeason
  */
 
 /**
@@ -29,27 +23,19 @@ const compareNames = (first, second) =>
   first.id.localeCompare(second.id);
 
 /**
- * @param {object} kept
- * @param {number} kept.season
- * @param {{ team: string, players: any[] }[]} kept.rosters every team's roster
- * @param {Map<string, import("./player.js").PlayerNumbers>} kept.numbers each player's numbers, by id
- * @param {import("./player.js").Ranks} kept.ranks
+ * @param {number} season
+ * @param {{ team: string, players: any[] }[]} rosters every team's roster
  */
-export function describePlayerIndex({ season, rosters, numbers, ranks }) {
+export function describePlayerIndex(season, rosters) {
   /** @type {IndexedPlayer[]} */
   const players = rosters.flatMap(({ team, players: rostered }) =>
-    rostered.map((player) => {
-      const hers = numbers.get(player.id) ?? null;
-      return {
-        id: player.id,
-        team,
-        number: player.number,
-        firstName: player.firstName,
-        lastName: player.lastName,
-        hasLastGame: !!hers?.lastGame,
-        hasRegularSeason: !!describeRegularSeason(hers?.totals ?? null, ranks),
-      };
-    }),
+    rostered.map((player) => ({
+      id: player.id,
+      team,
+      number: player.number,
+      firstName: player.firstName,
+      lastName: player.lastName,
+    })),
   );
   return { season, players: players.sort(compareNames) };
 }
