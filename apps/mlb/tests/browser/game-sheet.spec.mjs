@@ -767,6 +767,56 @@ const readNumberLineMiddles = (sheet) =>
     }),
   );
 
+test("where an unranked starter near the innings would rank is a hairline in his club's color through each curve, 4px above it and 3.5px past its foot, with no dot", async ({
+  page,
+}) => {
+  const sheet = await openMatchup(page, { ...PITCHERS, 2: { ...PITCHERS[2], ranks: null } });
+  const lines = sheet.locator(".tape .player-curve i.home.provisional");
+  await expect(lines).toHaveCount(4);
+  await expect(sheet.locator(".tape-number.home .tape-rank").first()).toHaveText(
+    /^would be \d+(st|nd|rd|th)$/,
+  );
+  const rankLines = await sheet.locator(".tape-number.home .tape-rank").evaluateAll((ranks) =>
+    ranks.map((rank) => {
+      const range = document.createRange();
+      range.selectNodeContents(rank);
+      return new Set([...range.getClientRects()].map((line) => Math.round(line.bottom))).size;
+    }),
+  );
+  expect(rankLines).toEqual([1, 1, 1, 1]);
+
+  const shape = await lines.first().evaluate((element) => {
+    const curve = /** @type {HTMLElement} */ (element.parentElement);
+    const box = element.getBoundingClientRect();
+    const curveBox = curve.getBoundingClientRect();
+    const place = (parseFloat(element.style.top) / 100) * curveBox.height + curveBox.top;
+    const left = (parseFloat(element.style.left) / 100) * curveBox.width + curveBox.left;
+    return {
+      width: box.width,
+      above: place - box.top,
+      past: box.bottom - curveBox.bottom,
+      middle: box.left + box.width / 2 - left,
+      color: getComputedStyle(element).backgroundColor,
+      side: getComputedStyle(element).getPropertyValue("--side").trim(),
+      dots: curve.querySelectorAll("b.home").length,
+    };
+  });
+  expect(shape.width).toBeCloseTo(0.5, 1);
+  expect(shape.above).toBeCloseTo(4, 1);
+  expect(shape.past).toBeCloseTo(3.5, 1);
+  expect(shape.middle).toBeCloseTo(0, 1);
+  expect(shape.dots).toBe(0);
+  const paint = await sheet.evaluate((_, color) => {
+    const probe = document.createElement("span");
+    probe.style.color = color;
+    document.body.append(probe);
+    const painted = getComputedStyle(probe).color;
+    probe.remove();
+    return painted;
+  }, shape.side);
+  expect(shape.color).toBe(paint);
+});
+
 test("an unranked starter's numbers sit level with the label and the ranked starter's", async ({
   page,
 }) => {

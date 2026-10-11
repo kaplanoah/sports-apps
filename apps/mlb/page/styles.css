@@ -1654,6 +1654,13 @@ body.kbd .player-open:focus {
   margin-left: -0.75px;
   background: var(--accent);
 }
+/* Where a player not yet ranked would rank is a hairline with no dot, reaching 4px above the curve
+   and 3.5px under its foot. */
+.player-curve i.provisional {
+  bottom: -3.5px;
+  width: 0.5px;
+  margin: -4px 0 0 -0.25px;
+}
 .player-curve b {
   position: absolute;
   width: 7px;
@@ -1813,6 +1820,7 @@ body.kbd .player-open:focus {
   position: absolute;
   top: calc(100% + 1px);
   font-size: var(--size-small);
+  white-space: nowrap;
   color: var(--ink-dim);
 }
 .tape-number.home .tape-rank {

@@ -12,7 +12,12 @@ import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { nameTeam, renderTeamDot } from "./clubs.js";
 import { renderPitchMix } from "./pitch-mix.js";
-import { describeInningsToQualify, describePlateAppearancesToQualify } from "./qualifying.js";
+import {
+  describeInningsToQualify,
+  describePlateAppearancesToQualify,
+  measureInningsProgress,
+  measurePlateAppearancesProgress,
+} from "./qualifying.js";
 import { formatInnings } from "./stat-table.js";
 
 /**
@@ -181,6 +186,22 @@ const renderFewestNote = (labels) =>
   html`<p class="player-rank-note">${labels.join(" and ")} ranked by fewest</p>`;
 
 /**
+ * A hitter's rates as the ranked hitters' list keeps them, from his season's line, for a hitter
+ * the list doesn't hold. Only his rates: a count grows with his plate appearances, so where a
+ * hitter short of them would rank in one says nothing.
+ * @param {any} hitting
+ * @returns {Record<string, number>}
+ */
+const readHitterRates = (hitting) => ({
+  avg: Number(hitting.avg),
+  obp: Number(hitting.obp),
+  slg: Number(hitting.slg),
+  ops: Number(hitting.ops),
+  walkRate: hitting.plateAppearances ? hitting.baseOnBalls / hitting.plateAppearances : 0,
+  strikeoutRate: hitting.plateAppearances ? hitting.strikeOuts / hitting.plateAppearances : 0,
+});
+
+/**
  * A hitter's season: his totals, then each number the ranked hitters are ranked in.
  * @param {Player} player
  * @param {any} hitters the store's ranked hitters, or null while they load
@@ -191,14 +212,16 @@ function renderHitting(player, hitters, clubGames) {
   const ranked = hitters?.hitters ?? [];
   const isRanked = ranked.some((/** @type {any} */ hitter) => hitter.id === player.id);
   const own = ranked.find((/** @type {any} */ hitter) => hitter.id === player.id);
+  const numbers = own ?? readHitterRates(hitting);
+  const progress = measurePlateAppearancesProgress(hitting.plateAppearances, clubGames);
   const rows = HITTER_RANKS.map(({ label, key, write, isFewestFirst }) =>
     renderRankRow({
       label,
       shown: write(hitting),
       stat: rankAmong(
         ranked.map((/** @type {any} */ hitter) => hitter[key]),
-        own?.[key] ?? null,
-        { isRanked, isFewestFirst },
+        hitters ? (numbers[key] ?? null) : null,
+        { isRanked, isFewestFirst, progress },
       ),
       isFewestFirst,
     }),
@@ -236,6 +259,7 @@ function renderHitting(player, hitters, clubGames) {
 function renderStarterRanks(player, starters, side, clubGames) {
   const pool = starters?.starters ?? [];
   const isRanked = pool.some((/** @type {any} */ starter) => starter.id === player.id);
+  const progress = measureInningsProgress(player.pitching.inningsPitched, clubGames);
   const rows = STARTER_RANKS.flatMap(({ label, key, write, isFewestFirst }) => {
     const value = side?.line?.[key] == null ? null : Number(side.line[key]);
     if (value == null || Number.isNaN(value)) return [];
@@ -246,7 +270,7 @@ function renderStarterRanks(player, starters, side, clubGames) {
       renderRankRow({
         label,
         shown: write(value),
-        stat: rankAmong(values, value, { isRanked, isFewestFirst }),
+        stat: rankAmong(values, value, { isRanked, isFewestFirst, progress }),
         isFewestFirst,
       }),
     ];

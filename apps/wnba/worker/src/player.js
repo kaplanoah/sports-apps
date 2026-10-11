@@ -258,8 +258,25 @@ const countAhead = (values, value, stat) =>
     : values.filter((each) => each > value + SAME_NUMBER).length;
 
 /**
+ * How far she is toward the rule for a stat, as a share of what it asks this far into the season,
+ * to two places: of the games or the season's total, whichever she's nearer, or for a percentage
+ * of the shots made.
+ * @param {Record<string, number>} her
+ * @param {RankedStat} stat
+ * @param {number} seasonGames
+ */
+function measureProgress(her, stat, seasonGames) {
+  const countShare =
+    stat.count != null && stat.needed != null
+      ? stat.count(her) / prorate(seasonGames, stat.needed)
+      : 0;
+  const gamesShare = stat.isShare ? 0 : her.GP / prorate(seasonGames, LEADER_GAMES);
+  return Math.floor(Math.max(countShare, gamesShare) * 100) / 100;
+}
+
+/**
  * Her number in a stat, and, among the players who meet the rule, her place and every number, from
- * the lowest, for the page to draw how they spread.
+ * the lowest, for the page to draw how they spread, with how far she is toward the rule.
  * @param {Record<string, number>} her
  * @param {Ranks} ranks
  * @param {RankedStat} stat
@@ -269,7 +286,14 @@ function rankStat(her, ranks, stat) {
   const values = ranks.values[stat.key] ?? [];
   const isRanked = value != null && meetsRule(her, stat, ranks.seasonGames);
   const rank = isRanked ? 1 + countAhead(values, value, stat) : null;
-  return { key: stat.key, value, rank, count: values.length, values: values.map(roundForCurve) };
+  return {
+    key: stat.key,
+    value,
+    rank,
+    count: values.length,
+    values: values.map(roundForCurve),
+    progress: measureProgress(her, stat, ranks.seasonGames),
+  };
 }
 
 /**

@@ -3,8 +3,9 @@
 // several players' marks on one curve, as MLB's pitching matchup shows its two starters, or a number
 // beside another to measure it against, each a dot on a line across a range, as a WNBA team's sheet
 // shows its playoffs against the playoff field's. A stat where fewer is better runs from the most to
-// the fewest, so a better rank always sits further right. Each app colors the curve, the line, and
-// the marks from its own stylesheet.
+// the fewest, so a better rank always sits further right. A player not yet ranked, but a quarter of
+// the way to what qualifying takes, shows where he would rank, marked with a line and no dot. Each
+// app colors the curve, the line, and the marks from its own stylesheet.
 
 import { html } from "./html.js";
 import { formatOrdinal } from "./ordinal.js";
@@ -14,12 +15,19 @@ const CURVE_WIDTH = 100;
 const CURVE_HEIGHT = 20;
 const CURVE_HEADROOM = 2;
 const CURVE_POINTS = 48;
+const NEARLY_RANKED_SHARE = 0.25;
 
 /**
  * A player's rank in a stat, among every ranked player's number in it. A player without a rank
- * has `rank` null.
- * @typedef {{ value: number | null, rank: number | null, count: number, values: number[] }} RankedStat
+ * has `rank` null, and `wouldRank` where he would rank once he's nearly qualified.
+ * @typedef {{ value: number | null, rank: number | null, wouldRank?: number | null, count: number, values: number[] }} RankedStat
  */
+
+/**
+ * Whether a player is far enough toward qualifying to show where he would rank.
+ * @param {number | null | undefined} progress his share of what qualifying takes
+ */
+export const isNearlyRanked = (progress) => progress != null && progress >= NEARLY_RANKED_SHARE;
 
 /**
  * How wide each player's number spreads on the curve, by Silverman's rule of thumb.
@@ -85,18 +93,25 @@ export function drawSpread(values, value, isFewestFirst = false) {
 }
 
 /**
- * A curve of every ranked player's numbers in a stat, with a mark for each number given, any class
- * it has naming whose it is.
+ * A number marked on a curve: whose it is, if a class names it, and whether it's where a player
+ * not yet ranked would rank, a line with no dot.
+ * @typedef {{ value: number, className?: string, isProvisional?: boolean }} CurveMark
+ */
+
+/**
+ * A curve of every ranked player's numbers in a stat, with a mark for each number given.
  * @param {number[]} values from the lowest
- * @param {{ value: number, className?: string }[]} marks
+ * @param {CurveMark[]} marks
  * @param {boolean} [isFewestFirst]
  */
 export function renderSpreadCurve(values, marks, isFewestFirst = false) {
   const { area, edge, place } = drawCurve(values, isFewestFirst);
-  const renderMark = (/** @type {{ value: number, className?: string }} */ mark) => {
+  const renderMark = (/** @type {CurveMark} */ mark) => {
     const { left, top } = place(mark.value);
     const style = `left: ${left.toFixed(1)}%; top: ${top.toFixed(1)}%`;
-    const owner = mark.className ? html` class="${mark.className}"` : "";
+    const classes = [mark.className, mark.isProvisional && "provisional"].filter(Boolean).join(" ");
+    const owner = classes ? html` class="${classes}"` : "";
+    if (mark.isProvisional) return html`<i${owner} style="${style}"></i>`;
     return html`<i${owner} style="${style}"></i><b${owner} style="${style}"></b>`;
   };
   return html`<span class="player-curve" aria-hidden="true">
@@ -113,14 +128,29 @@ export function renderSpreadCurve(values, marks, isFewestFirst = false) {
  * @param {boolean} [isFewestFirst]
  */
 function renderCurve(stat, isFewestFirst) {
-  if (stat.rank == null || stat.value == null || !stat.values.length)
+  const isMarked = stat.rank != null || stat.wouldRank != null;
+  if (!isMarked || stat.value == null || !stat.values.length)
     return html`<span class="player-curve"></span>`;
-  return renderSpreadCurve(stat.values, [{ value: stat.value }], isFewestFirst);
+  const mark = { value: stat.value, isProvisional: stat.rank == null };
+  return renderSpreadCurve(stat.values, [mark], isFewestFirst);
+}
+
+/**
+ * Where a player not yet ranked would rank, as his rank's place is written.
+ * @param {number} rank
+ */
+export const renderWouldRank = (rank) =>
+  html`would be <span class="player-rank-place">${formatOrdinal(rank)}</span>`;
+
+/** @param {RankedStat} stat */
+function renderRankText(stat) {
+  if (stat.rank != null)
+    return html`<span class="player-rank-place">${formatOrdinal(stat.rank)}</span> of ${stat.count}`;
+  return stat.wouldRank != null && renderWouldRank(stat.wouldRank);
 }
 
 /** @param {RankedStat} stat */
-const renderRank = (stat) =>
-  html`<span class="player-rank">${stat.rank != null && html`<span class="player-rank-place">${formatOrdinal(stat.rank)}</span> of ${stat.count}`}</span>`;
+const renderRank = (stat) => html`<span class="player-rank">${renderRankText(stat)}</span>`;
 
 /**
  * One ranked stat's row: its label, the player's number as the sheet writes it, the curve, and
@@ -136,18 +166,21 @@ export const renderRankRow = ({ label, shown, stat, isFewestFirst = false }) =>
 
 /**
  * A player's rank in a stat among every ranked player's number in it, counting only those strictly
- * better, so tied players share one, or none when the player isn't ranked.
+ * better, so tied players share one, or none when the player isn't ranked, with where he would
+ * rank once he's nearly qualified.
  * @param {number[]} values every ranked player's
  * @param {number | null} value the player's
- * @param {{ isRanked: boolean, isFewestFirst?: boolean }} options
+ * @param {{ isRanked: boolean, isFewestFirst?: boolean, progress?: number | null }} options his
+ *   progress is his share of what qualifying takes
  * @returns {RankedStat}
  */
-export function rankAmong(values, value, { isRanked, isFewestFirst = false }) {
+export function rankAmong(values, value, { isRanked, isFewestFirst = false, progress = null }) {
   const sorted = [...values].sort((first, second) => first - second);
-  if (!isRanked || value == null)
-    return { value, rank: null, count: sorted.length, values: sorted };
-  const better = sorted.filter((each) => (isFewestFirst ? each < value : each > value)).length;
-  return { value, rank: better + 1, count: sorted.length, values: sorted };
+  const unranked = { value, rank: null, count: sorted.length, values: sorted };
+  if (value == null) return unranked;
+  const place = 1 + sorted.filter((each) => (isFewestFirst ? each < value : each > value)).length;
+  if (isRanked) return { ...unranked, rank: place };
+  return isNearlyRanked(progress) ? { ...unranked, wouldRank: place } : unranked;
 }
 
 /**
