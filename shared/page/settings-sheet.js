@@ -1,11 +1,14 @@
 // The settings panel behind the page's settings button, and which release of the page this is.
-// Phones show it over the whole screen, which a swipe down closes, wider screens as a modal.
+// Phones show it over the whole screen, which a swipe down closes, wider screens as a modal. It
+// stays open off the screen only as long as a view keeps its place.
 // The page supplies the button (#settingsBtn) and the dialog (#settingsDialog), with its
 // .sheet-top, its close button (#settingsCloseBtn), and a place for the release (#versionNote).
 
 import { joinWithSeparator, setHtml } from "./html.js";
+import { START_AFTER_AWAY_MS } from "./long-away.js";
 import { loadRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
+import { keepDialogFor } from "./sheet-memory.js";
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const findDialog = () =>
@@ -54,5 +57,6 @@ export function startSettingsSheet({ isOwnGesture } = {}) {
   const dialog = findDialog();
   findElement("settingsBtn").addEventListener("click", () => openSheet(dialog));
   wireSheet(dialog, { closeButton: findElement("settingsCloseBtn"), isOwnGesture });
+  keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();
 }

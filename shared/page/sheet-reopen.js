@@ -2,7 +2,9 @@
 // page puts them back open before its first paint (show-last-drawn.js), and once its modules
 // load, each sheet's code shows again what it showed, beside the one it was opened from. A sheet
 // with sections, like a game's Game and Highlights, also lists which pills it offered and where
-// its shown section was scrolled, which the page puts back before its code loads.
+// its shown section was scrolled, which the page puts back before its code loads. Each also lists
+// when its dialog closes off the screen (sheet-memory.js), which the page checks before putting it
+// back.
 
 import {
   copySheet,
@@ -14,6 +16,7 @@ import {
   readSubject,
   restoreStack,
 } from "./sheet.js";
+import { findForgetAt, readHeldGame, restoreHeldGame } from "./sheet-memory.js";
 
 /**
  * A sheet's shown section, by its id, the pills the sheet offered, by theirs, and where the
@@ -21,10 +24,11 @@ import {
  * @typedef {{ id: string, tabs: string[], top: number }} ShownSection
  */
 /**
- * A sheet showing, or a copy of one, by its sheet's id, and the key it was opened with.
- * @typedef {{ id: string, scrollTop: number, section: ShownSection | null, subject: unknown, showing: string | null, backLabel: string | null }} OpenSheet
+ * A sheet showing, or a copy of one, by its sheet's id, and the key it was opened with, with the
+ * game it holds open and when its dialog closes, or null while that game hasn't shown its end.
+ * @typedef {{ id: string, scrollTop: number, section: ShownSection | null, subject: unknown, showing: string | null, backLabel: string | null, heldGame: import("./sheet-memory.js").HeldGame | null, forgetAt: number | null }} OpenSheet
  */
-/** @typedef {{ sheet: HTMLElement, subject: unknown, showing: unknown, scrollTop: unknown }} SavedSheet */
+/** @typedef {{ sheet: HTMLElement, subject: unknown, showing: unknown, scrollTop: unknown, heldGame: unknown }} SavedSheet */
 
 /** @param {HTMLElement} sheet */
 function readBackLabel(sheet) {
@@ -53,28 +57,39 @@ function describeShownSection(sheet) {
 
 /**
  * @param {HTMLElement} sheet
+ * @param {number | null} forgetAt
  * @returns {OpenSheet}
  */
-const describeOpenSheet = (sheet) => ({
+const describeOpenSheet = (sheet, forgetAt) => ({
   id: findOriginal(sheet).id,
   scrollTop: sheet.scrollTop,
   section: describeShownSection(sheet),
   subject: readSubject(sheet),
   showing: sheet.getAttribute("data-showing"),
   backLabel: readBackLabel(sheet),
+  heldGame: readHeldGame(sheet),
+  forgetAt,
 });
 
-/** @param {{ dialog: HTMLDialogElement, sheets: HTMLElement[], shown: number }} open */
-const listShownSheets = ({ dialog, sheets, shown }) =>
-  sheets.length ? sheets.slice(0, shown + 1) : [dialog];
+/**
+ * @param {{ dialog: HTMLDialogElement, sheets: HTMLElement[], shown: number }} open
+ * @param {number} leftAt
+ */
+function describeShownSheets({ dialog, sheets, shown }, leftAt) {
+  const shownSheets = sheets.length ? sheets.slice(0, shown + 1) : [dialog];
+  const forgetAt = findForgetAt(dialog, shownSheets[shownSheets.length - 1], leftAt);
+  return shownSheets.map((sheet) => describeOpenSheet(sheet, forgetAt));
+}
 
 /**
  * The sheets showing, each dialog's in the order they opened up to the one it shows, with where
- * each is scrolled, what it shows, and what its back button calls the one before it.
+ * each is scrolled, what it shows, what its back button calls the one before it, and when its
+ * dialog closes for a page that left the screen at `leftAt`.
+ * @param {number} [leftAt]
  * @returns {OpenSheet[]}
  */
-export const listOpenSheets = () =>
-  listOpenDialogs().flatMap(listShownSheets).map(describeOpenSheet);
+export const listOpenSheets = (leftAt = Date.now()) =>
+  listOpenDialogs().flatMap((open) => describeShownSheets(open, leftAt));
 
 /**
  * Each sheet in each open dialog's row, in order, and whether it's the one its dialog shows.
@@ -89,7 +104,8 @@ export const listSheetsInOpenDialogs = () =>
 
 // What an earlier release saved may not fit the sheet as it is now.
 /** @param {SavedSheet} saved */
-function reopenSheet({ sheet, subject }) {
+function reopenSheet({ sheet, subject, heldGame }) {
+  restoreHeldGame(sheet, heldGame);
   const keeper = readSheetParts(sheet)?.keeper;
   if (!keeper) return true;
   try {
@@ -149,13 +165,16 @@ function groupByDialog(saved) {
   const isTaken = new Set(listOpenDialogs().map(({ dialog }) => dialog));
   /** @type {Map<HTMLDialogElement, SavedSheet[]>} */
   const groups = new Map();
-  for (const { id, subject, showing, scrollTop } of /** @type {OpenSheet[]} */ (
+  for (const { id, subject, showing, scrollTop, heldGame } of /** @type {OpenSheet[]} */ (
     Array.isArray(saved) ? saved.filter(isOpenSheet) : []
   )) {
     const sheet = document.getElementById(id);
     const dialog = sheet?.closest("dialog");
     if (!sheet || !dialog?.open || isTaken.has(dialog)) continue;
-    groups.set(dialog, [...(groups.get(dialog) ?? []), { sheet, subject, showing, scrollTop }]);
+    groups.set(dialog, [
+      ...(groups.get(dialog) ?? []),
+      { sheet, subject, showing, scrollTop, heldGame },
+    ]);
   }
   return groups;
 }

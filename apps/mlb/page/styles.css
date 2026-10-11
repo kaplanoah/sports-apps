@@ -104,6 +104,7 @@
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
   --switch-knob: var(--ink);
   --page-gutter: 18px;
+  --header-gap: 13px;
   --pager-chosen-edge: transparent;
   --held-bar-fade: 18px;
   --held-bar-line: transparent;
@@ -193,7 +194,7 @@ header.top {
   flex-wrap: wrap;
   border-bottom: 2px solid color-mix(in srgb, var(--card-border) 60%, var(--bg));
   padding-bottom: 14px;
-  margin-bottom: 13px;
+  margin-bottom: var(--header-gap);
 }
 header.top h1 {
   font-size: 1.15rem;
@@ -517,6 +518,24 @@ table.st .seed-cell {
 /* Games: the season's days under a strip of them, each day's games under a heading that holds
    under the strip while they pass, as a list's section headers do on iPhone, until the next day's
    takes its place. Today's heading is gold, as today is in the strip. */
+/* The month's capitals start 15px under the header's line. */
+.day-view {
+  margin-top: calc(5px - var(--header-gap));
+}
+/* The search's field, which opens in the strip's place, sits 11px under the header's line. */
+.search-view {
+  margin-top: calc(11px - var(--header-gap));
+}
+/* Search's and Today's capitals sit level with the month's, half a pixel lower than the shared rule
+   sets them, and their icons move with them. */
+.go-today > span,
+.go-search > span {
+  translate: 0 -0.5px;
+}
+.go-today svg,
+.go-search svg {
+  translate: none;
+}
 /* Chivo Mono reads heavier, so the strip's month and dates, and the search's lead and its Games
    heading, sit a weight under the shared 600. */
 .strip-month,
