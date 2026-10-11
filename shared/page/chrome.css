@@ -1,10 +1,10 @@
 /*
  * The chrome every app's page shares: the settings button, the tabs (a floating tinted bar on
- * phones), the settings dialog (the whole screen on phones) and the lines at its foot, a
- * sideways bracket's round dots (pinned above the tab bar on phones), the bar and settings box that
- * ask a phone's browser to add the page to the Home Screen, the note a slow load shows, the header's
- * line while the page catches up and the sweep through its lines once it has, the spokes a pull
- * to refresh shows. Diagnostics, at the very end of settings, are diagnostics.css's. Apps link it
+ * phones), the settings dialog (the whole screen on phones), its Appearance choices, and the lines
+ * at its foot, a sideways bracket's round dots (pinned above the tab bar on phones), the bar and
+ * settings box that ask a phone's browser to add the page to the Home Screen, the note a slow load
+ * shows, the header's line while the page catches up and the sweep through its lines once it has,
+ * the spokes a pull to refresh shows. Diagnostics, at the very end of settings, are diagnostics.css's. Apps link it
  * before their own styles.css, which lays out the rest of the page and may refine these rules.
  *
  * An app's :root defines these tokens:
@@ -469,6 +469,67 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-dim);
+}
+
+/* Settings: the appearance choices show the home-screen icon each one offers. System shows
+   both, the light look's on the left half and the dark look's on the right. */
+.appearance-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+.appearance-choices {
+  display: flex;
+  gap: 18px;
+}
+.appearance-choice {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  font-size: var(--size-setting-note);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.appearance-choice input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.appearance-icon {
+  position: relative;
+  display: block;
+  width: 60px;
+  height: 60px;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--card-border);
+}
+.appearance-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.appearance-icon-auto img + img {
+  clip-path: inset(0 0 0 50%);
+}
+.appearance-choice:has(input:checked) {
+  color: var(--ink);
+}
+.appearance-choice:has(input:checked) .appearance-icon {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--accent);
+}
+body.kbd .appearance-choice:has(input:focus) .appearance-icon {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 6px;
 }
 .control-label {
   display: flex;

@@ -1,6 +1,6 @@
 import { beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { composeState, session } from "../page/js/session.js";
 import { renderDivisionBlock, renderFieldBlock, renderNextCell } from "../page/js/standings.js";
 import { describeTeamStatus, findSeries, nameSeries } from "../page/js/bracket.js";
@@ -10,6 +10,7 @@ import { keepRanking, keepSeenAt } from "../page/js/kept-on-device.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
 import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
 import { listSlateGames } from "../page/js/slate.js";
+import { LOOKS } from "../page/js/looks.js";
 import { html } from "../../../shared/page/html.js";
 import { renderUpdates as renderUpdateBox } from "../../../shared/page/updates.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
@@ -1945,4 +1946,32 @@ test("games list: a game away from its home club's own ballpark names the city i
   }).map((row) => row.label);
   assert.equal(labels.filter((label) => label === "In London").length, 1);
   assert.equal(labels.filter(Boolean).length, 1);
+});
+
+test("each appearance choice shows the home-screen icon it offers, and the page has each one", () => {
+  const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
+  const choices = Object.fromEntries(
+    [...page.matchAll(/<label class="appearance-choice">([\s\S]*?)<\/label>/g)].map(
+      ([, choice]) => [
+        choice.match(/<span>([^<]+)<\/span>\s*$/)[1],
+        [...choice.matchAll(/<img src="([^"]+)"/g)].map(([, source]) => source),
+      ],
+    ),
+  );
+  assert.deepEqual(choices, {
+    System: ["icon-light-180.png", "icon-180.png"],
+    Ball: ["icon-light-180.png"],
+    "Night Game": ["icon-180.png"],
+  });
+  for (const source of Object.values(choices).flat())
+    assert.ok(existsSync(`${import.meta.dirname}/../page/${source}`), source);
+});
+
+test("each look offers icons the page has, and Ball's is Night Game's ball on cream", () => {
+  const folder = `${import.meta.dirname}/../page/`;
+  for (const { tabIcon, homeScreenIcon } of Object.values(LOOKS))
+    for (const icon of [tabIcon, homeScreenIcon]) assert.ok(existsSync(folder + icon), icon);
+  const night = readFileSync(folder + "icon.svg", "utf8");
+  const ball = readFileSync(folder + "icon-light.svg", "utf8");
+  assert.equal(ball, night.replace('fill="#173524"', 'fill="#e3dac6"'));
 });

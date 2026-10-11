@@ -199,14 +199,24 @@ test("both starters are marked on one curve of every qualified starter's number,
   assert.ok(speed.marks.away > speed.marks.home);
 });
 
-test("each starter's marks take his club's color, the away club taking its other one when the two look alike", () => {
+test("each starter's marks take his club's color in each theme, the away club taking its other one when the two look alike", () => {
   const readColors = (away, home) =>
     renderLoaded({ ...AT_ATHLETICS, away, home }, [
       { pitcher: BLUBAUGH },
       { pitcher: SPRINGS },
     ]).match(/<div class="tape" style="([^"]*)">/)[1];
-  assert.equal(readColors("HOU", "CIN"), "--away: #608eca; --home: #fb4c4c");
-  assert.equal(readColors("DET", "SF"), "--away: #738eb1; --home: #fd5a1e");
+  assert.equal(
+    readColors("HOU", "CIN"),
+    "--away-dark: #608eca; --home-dark: #fb4c4c; --away-light: #002d62; --home-light: #c6011f",
+  );
+  assert.equal(
+    readColors("DET", "SF"),
+    "--away-dark: #738eb1; --home-dark: #fd5a1e; --away-light: #0c2340; --home-light: #c63f04",
+  );
+  assert.equal(
+    readColors("NYY", "LAD"),
+    "--away-dark: #ffffff; --home-dark: #4690d6; --away-light: #6f6e6e; --home-light: #005a9c",
+  );
 });
 
 test("two numbers that read the same mark neither starter as ahead", () => {

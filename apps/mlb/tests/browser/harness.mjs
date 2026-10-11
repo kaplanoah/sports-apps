@@ -228,6 +228,62 @@ const SCHEDULE_DOCS = (() => {
 export const SEASON_2025 = buildSeasonRecord(buildFixtureSnapshot(FINAL_2025_FIXTURE));
 
 // The first game still to come, Astros at Athletics, with both clubs' starters named.
+// Every qualified starter's number in each measure, as the Worker sends it with a starter's side.
+const QUALIFIED_SPREAD = /** @type {any} */ (Object.values(PITCHER_SIDES)[0]).starters.values;
+
+// What the Worker answers for Astros at Athletics' starters, Blubaugh and Springs.
+const describeStarter = (id, [firstName, lastName], hand, line, ranks, pitches) => ({
+  id,
+  firstName,
+  lastName,
+  hand,
+  age: 27,
+  line,
+  ranks,
+  starters: { count: 46, values: QUALIFIED_SPREAD },
+  pitches,
+  starts: [
+    { date: "2026-09-19", opp: "SEA", home: true, ip: "5.2", runs: 2, k: 6 },
+    { date: "2026-09-13", opp: "TEX", home: false, ip: "6.0", runs: 0, k: 8 },
+  ],
+});
+export const MATCHUP_STARTERS = {
+  1: describeStarter(
+    1,
+    ["AJ", "Blubaugh"],
+    "R",
+    { starts: 28, era: "3.66", k9: 9.1, bb9: 3.4, speed: 95.4 },
+    {
+      era: { rank: 17, of: 46 },
+      k9: { rank: 3, of: 46 },
+      bb9: { rank: 33, of: 46 },
+      speed: { rank: 10, of: 46 },
+    },
+    [
+      { code: "FF", name: "Four-seam FB", share: 0.52, mph: 95.4 },
+      { code: "SL", name: "Slider", share: 0.3, mph: 86.1 },
+      { code: "CH", name: "Changeup", share: 0.17, mph: 87.0 },
+      { code: "CS", name: "Slow Curve", share: 0.01, mph: 74.0 },
+    ],
+  ),
+  2: describeStarter(
+    2,
+    ["Jeffrey", "Springs"],
+    "L",
+    { starts: 24, ip: "128.2", era: "4.02", k9: 7.7, bb9: 2.9, speed: 90.8 },
+    {
+      era: { rank: 29, of: 46 },
+      k9: { rank: 26, of: 46 },
+      bb9: { rank: 20, of: 46 },
+      speed: { rank: 43, of: 46 },
+    },
+    [
+      { code: "FF", name: "Four-seam FB", share: 0.4, mph: 90.8 },
+      { code: "CH", name: "Changeup", share: 0.35, mph: 79.5 },
+    ],
+  ),
+};
+
 export function buildSnapshotWithStarters() {
   const fixture = structuredClone(EVENING_FIXTURE);
   const game = fixture.responses.schedule.dates
@@ -419,6 +475,21 @@ export const keepFromEarlierVisit = (page, key, value) =>
     },
     [key, JSON.stringify(value)],
   );
+
+/**
+ * Reads the color a token of the page's theme names, as the page draws it.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} token
+ */
+export const readColor = (page, token) =>
+  page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
 
 /**
  * What the page kept on the device under `key`.

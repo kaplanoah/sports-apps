@@ -13,6 +13,7 @@ import {
   SEASON_2025,
   chooseSeason,
   matchPath,
+  readColor,
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-row.mjs";
@@ -253,7 +254,7 @@ test("a club in the ranking stays a handle to drag, not a way to its sheet", asy
   await expect(page.locator("#teamSheet")).toBeHidden();
 });
 
-test("a club's sheet title is its dot and name, in the page's own type, not in capitals, over gold part titles and green labels", async ({
+test("a club's sheet title is its dot and name, in the page's own type, not in capitals, over highlighted part titles and dim labels", async ({
   page,
 }) => {
   await openApp(page);
@@ -266,11 +267,11 @@ test("a club's sheet title is its dot and name, in the page's own type, not in c
   await expect(title).toHaveCSS("text-transform", "none");
   await expect(page.locator("#teamSheet .sheet-part h3").first()).toHaveCSS(
     "color",
-    "rgb(244, 193, 92)",
+    await readColor(page, "--highlight"),
   );
   await expect(page.locator("#teamSheet .team-stat .team-label").first()).toHaveCSS(
     "color",
-    "rgb(127, 168, 143)",
+    await readColor(page, "--ink-dim"),
   );
 });
 
@@ -290,11 +291,11 @@ test("a club's name under the pointer shifts its color a little toward the accen
   await openApp(page);
   await page.getByRole("tab", { name: "Standings" }).click();
   const name = page.locator('.div-grid tr[data-team="SEA"] .team-open').locator(".team-name");
-  const readColor = () => name.evaluate((element) => getComputedStyle(element).color);
-  const before = await readColor();
+  const readNameColor = () => name.evaluate((element) => getComputedStyle(element).color);
+  const before = await readNameColor();
   await name.hover();
 
-  await expect.poll(readColor).not.toBe(before);
+  await expect.poll(readNameColor).not.toBe(before);
   await expect(name).toHaveCSS("text-decoration-line", "none");
 });
 

@@ -1,12 +1,14 @@
 // `titles` are the seasons the franchise won the World Series, under any name or city, which a
 // tracked season's champion adds to (see listTitles in clubs.js). `firstSeason` is only needed
 // while a club has never won. `color` and `color2` are the halves of the club's dot. `chartColors`
-// are what the pitching matchup marks the club's starter in, first choice then other, as
-// shared/team-colors.js picks them: each of the club's own two colors made just light enough to
+// are what the pitching matchup marks the club's starter in on Night Game, first choice then other,
+// as shared/team-colors.js picks them: each of the club's own two colors made just light enough to
 // read as text on the sheet, keeping its hue, and black the light gray #e4e4e4. The first choice is
 // the color of the dot's first half, unless that comes out muted once it's lightened, as black,
 // brown, navy, and dark green do, and the club's other color has more color, as the White Sox's,
-// Pirates', Padres', Guardians', Tigers', Brewers', and Athletics' do.
+// Pirates', Padres', Guardians', Tigers', Brewers', and Athletics' do. `lightChartColors` are the
+// same on Ball: each of the club's own two colors, made just dark enough to read as text on the
+// page where it's too light to, keeping its hue, and white the gray #6f6e6e, first choice first.
 export const TEAMS = {
   ARI: {
     name: "Diamondbacks",
@@ -15,6 +17,7 @@ export const TEAMS = {
     color: "#A71930",
     color2: "#E3D4AD",
     chartColors: ["#e95d65", "#e3d4ad"],
+    lightChartColors: ["#a71930", "#7b6d4a"],
   },
   ATL: {
     name: "Braves",
@@ -23,6 +26,7 @@ export const TEAMS = {
     color: "#CE1141",
     color2: "#13274F",
     chartColors: ["#fa4a63", "#738cbc"],
+    lightChartColors: ["#ce1141", "#13274f"],
   },
   BAL: {
     name: "Orioles",
@@ -31,6 +35,7 @@ export const TEAMS = {
     color: "#DF4601",
     color2: "#000000",
     chartColors: ["#f25923", "#e4e4e4"],
+    lightChartColors: ["#c73e01", "#000000"],
   },
   BOS: {
     name: "Red Sox",
@@ -39,6 +44,7 @@ export const TEAMS = {
     color: "#BD3039",
     color2: "#0C2340",
     chartColors: ["#eb5c5e", "#738eb1"],
+    lightChartColors: ["#bd3039", "#0c2340"],
   },
   CHC: {
     name: "Cubs",
@@ -47,6 +53,7 @@ export const TEAMS = {
     color: "#0E3386",
     color2: "#CC3433",
     chartColors: ["#5c8ae4", "#f05851"],
+    lightChartColors: ["#0e3386", "#cc3433"],
   },
   CWS: {
     name: "White Sox",
@@ -55,6 +62,7 @@ export const TEAMS = {
     color: "#27251F",
     color2: "#C4CED4",
     chartColors: ["#c4ced4", "#e4e4e4"],
+    lightChartColors: ["#27251f", "#696e71"],
   },
   CIN: {
     name: "Reds",
@@ -63,6 +71,7 @@ export const TEAMS = {
     color: "#C6011F",
     color2: "#000000",
     chartColors: ["#fb4c4c", "#e4e4e4"],
+    lightChartColors: ["#c6011f", "#000000"],
   },
   CLE: {
     name: "Guardians",
@@ -71,6 +80,7 @@ export const TEAMS = {
     color: "#0C2340",
     color2: "#E31937",
     chartColors: ["#ff4551", "#738eb1"],
+    lightChartColors: ["#0c2340", "#dc0832"],
   },
   COL: {
     name: "Rockies",
@@ -80,6 +90,7 @@ export const TEAMS = {
     color: "#33006F",
     color2: "#C4CED4",
     chartColors: ["#957ae6", "#c4ced4"],
+    lightChartColors: ["#33006f", "#696e71"],
   },
   DET: {
     name: "Tigers",
@@ -88,6 +99,7 @@ export const TEAMS = {
     color: "#0C2340",
     color2: "#FA4616",
     chartColors: ["#fe4a1b", "#738eb1"],
+    lightChartColors: ["#0c2340", "#cf3303"],
   },
   HOU: {
     name: "Astros",
@@ -96,6 +108,7 @@ export const TEAMS = {
     color: "#002D62",
     color2: "#EB6E1F",
     chartColors: ["#608eca", "#eb6e1f"],
+    lightChartColors: ["#002d62", "#b74f04"],
   },
   KC: {
     name: "Royals",
@@ -104,6 +117,7 @@ export const TEAMS = {
     color: "#004687",
     color2: "#BD9B60",
     chartColors: ["#528fd6", "#bd9b60"],
+    lightChartColors: ["#004687", "#89692e"],
   },
   LAA: {
     name: "Angels",
@@ -112,6 +126,7 @@ export const TEAMS = {
     color: "#BA0021",
     color2: "#003263",
     chartColors: ["#f65152", "#5f8fc7"],
+    lightChartColors: ["#ba0021", "#003263"],
   },
   LAD: {
     name: "Dodgers",
@@ -120,6 +135,7 @@ export const TEAMS = {
     color: "#005A9C",
     color2: "#FFFFFF",
     chartColors: ["#4690d6", "#ffffff"],
+    lightChartColors: ["#005a9c", "#6f6e6e"],
   },
   MIA: {
     name: "Marlins",
@@ -128,6 +144,7 @@ export const TEAMS = {
     color: "#00A3E0",
     color2: "#EF3340",
     chartColors: ["#00a3e0", "#ff454d"],
+    lightChartColors: ["#0376a4", "#da142f"],
   },
   MIL: {
     name: "Brewers",
@@ -137,6 +154,7 @@ export const TEAMS = {
     color: "#12284B",
     color2: "#FFC52F",
     chartColors: ["#ffc52f", "#728db7"],
+    lightChartColors: ["#12284b", "#8b6903"],
   },
   MIN: {
     name: "Twins",
@@ -145,6 +163,7 @@ export const TEAMS = {
     color: "#002B5C",
     color2: "#D31145",
     chartColors: ["#628ec6", "#fc4765"],
+    lightChartColors: ["#002b5c", "#d31145"],
   },
   NYM: {
     name: "Mets",
@@ -153,6 +172,7 @@ export const TEAMS = {
     color: "#002D72",
     color2: "#FF5910",
     chartColors: ["#5c8cd9", "#ff5910"],
+    lightChartColors: ["#002d72", "#c64000"],
   },
   NYY: {
     name: "Yankees",
@@ -164,6 +184,7 @@ export const TEAMS = {
     color: "#003087",
     color2: "#FFFFFF",
     chartColors: ["#568ae9", "#ffffff"],
+    lightChartColors: ["#003087", "#6f6e6e"],
   },
   ATH: {
     name: "Athletics",
@@ -172,6 +193,7 @@ export const TEAMS = {
     color: "#003831",
     color2: "#EFB21E",
     chartColors: ["#efb21e", "#63958c"],
+    lightChartColors: ["#003831", "#8e6803"],
   },
   PHI: {
     name: "Phillies",
@@ -180,6 +202,7 @@ export const TEAMS = {
     color: "#E81828",
     color2: "#FFFFFF",
     chartColors: ["#ff4645", "#ffffff"],
+    lightChartColors: ["#de0120", "#6f6e6e"],
   },
   PIT: {
     name: "Pirates",
@@ -188,6 +211,7 @@ export const TEAMS = {
     color: "#27251F",
     color2: "#FDB827",
     chartColors: ["#fdb827", "#e4e4e4"],
+    lightChartColors: ["#27251f", "#916606"],
   },
   SD: {
     name: "Padres",
@@ -197,6 +221,7 @@ export const TEAMS = {
     color: "#2F241D",
     color2: "#FFC425",
     chartColors: ["#ffc425", "#978980"],
+    lightChartColors: ["#2f241d", "#8b6906"],
   },
   SF: {
     name: "Giants",
@@ -205,6 +230,7 @@ export const TEAMS = {
     color: "#FD5A1E",
     color2: "#27251F",
     chartColors: ["#fd5a1e", "#e4e4e4"],
+    lightChartColors: ["#c63f04", "#27251f"],
   },
   SEA: {
     name: "Mariners",
@@ -214,6 +240,7 @@ export const TEAMS = {
     color: "#0C2C56",
     color2: "#005C5C",
     chartColors: ["#6a8ebf", "#4e9897"],
+    lightChartColors: ["#0c2c56", "#005c5c"],
   },
   STL: {
     name: "Cardinals",
@@ -222,6 +249,7 @@ export const TEAMS = {
     color: "#C41E3A",
     color2: "#0C2340",
     chartColors: ["#f45260", "#738eb1"],
+    lightChartColors: ["#c41e3a", "#0c2340"],
   },
   TB: {
     name: "Rays",
@@ -231,6 +259,7 @@ export const TEAMS = {
     color: "#092C5C",
     color2: "#8FBCE6",
     chartColors: ["#678ec5", "#8fbce6"],
+    lightChartColors: ["#092c5c", "#477298"],
   },
   TEX: {
     name: "Rangers",
@@ -239,6 +268,7 @@ export const TEAMS = {
     color: "#003278",
     color2: "#C0111F",
     chartColors: ["#5a8dda", "#f6524d"],
+    lightChartColors: ["#003278", "#c0111f"],
   },
   TOR: {
     name: "Blue Jays",
@@ -247,6 +277,7 @@ export const TEAMS = {
     color: "#134A8E",
     color2: "#E8291C",
     chartColors: ["#578ed7", "#ff4736"],
+    lightChartColors: ["#134a8e", "#db1409"],
   },
   WSH: {
     name: "Nationals",
@@ -255,5 +286,6 @@ export const TEAMS = {
     color: "#AB0003",
     color2: "#14225A",
     chartColors: ["#f15849", "#728acb"],
+    lightChartColors: ["#ab0003", "#14225a"],
   },
 };

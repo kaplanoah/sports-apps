@@ -1,3 +1,4 @@
-import { followSavedTheme } from "./appearance.js";
+import { followSavedTheme } from "#shared/appearance.js";
+import { LOOKS } from "./looks.js";
 
-followSavedTheme();
+followSavedTheme(LOOKS);
