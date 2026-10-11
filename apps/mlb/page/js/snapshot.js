@@ -325,6 +325,11 @@ export const CHECKED_FIELDS = [
   "language",
   "isNational",
   "homeAway",
+  // A club's runs and its records home and away, which only its sheet's curves need, are left out
+  // of them while MLB doesn't send them.
+  "runsScored",
+  "runsAllowed",
+  "splitRecords",
   // A game MLB names no ballpark for is found by its home club's city.
   "venue",
   "location",

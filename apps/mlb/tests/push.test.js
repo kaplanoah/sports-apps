@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as MLBSnapshot from "../page/js/snapshot.js";
 import worker from "../worker/src/index.js";
+import { nameInjuriesRequest } from "../worker/src/injuries.js";
 import { NEWS_FEEDS } from "../worker/src/news-feeds.js";
 import { SeasonStore } from "../worker/src/store.js";
 import { decodeBase64Url } from "../../../shared/worker/web-push.js";
@@ -29,9 +30,10 @@ function createPushStore({ pushStatus = 201 } = {}) {
   const context = createDurableObjectContext();
   const harness = { snapshot: SNAPSHOT, pushStatus, isPushServiceAnswering: true, pushes: [] };
   const clock = { now: NOW };
-  // MLB, whose pitchers the store also keeps, and the news outlets aren't what these tests follow.
+  // MLB, whose pitchers the store also keeps, ESPN's injury report, and the news outlets aren't
+  // what these tests follow.
   const fetchImpl = async (url, init) => {
-    if (url.startsWith(MLBSnapshot.MLB_API) || isNewsFeed(url))
+    if (url.startsWith(MLBSnapshot.MLB_API) || url === nameInjuriesRequest() || isNewsFeed(url))
       return new Response(null, { status: 404 });
     harness.pushes.push({ url, init });
     if (!harness.isPushServiceAnswering)
