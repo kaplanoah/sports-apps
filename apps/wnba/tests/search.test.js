@@ -9,9 +9,11 @@ import {
   findSearchGames,
   readSearch,
 } from "#shared/game-search.js";
-import { listExamples, listSuggestions } from "#shared/search-suggestions.js";
+import { findPages } from "#shared/page-search.js";
+import { listExamples, listOtherReadings, listSuggestions } from "#shared/search-suggestions.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import { listSeasonGames } from "../page/js/games-view.js";
+import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 
@@ -182,4 +184,82 @@ test("the examples before typing and the suggestions as you type each find games
     "Dream in September",
     "Dream in October",
   ]);
+});
+
+// A few players as the store's list of the season's players has them.
+const INDEX = {
+  players: [
+    { id: "1627668", team: "NYL", number: "30", firstName: "Breanna", lastName: "Stewart" },
+    { id: "1628932", team: "LVA", number: "22", firstName: "A\u2019ja", lastName: "Wilson" },
+  ],
+};
+
+/**
+ * The page's teams, players, and places, with settings showing all but the Season picker, as on a
+ * page whose store keeps one season.
+ * @param {string} text
+ */
+function listPages(text) {
+  const pages = listSearchPages({
+    index: INDEX,
+    isSettingShown: (key) => key !== "settings:season",
+  });
+  const { rows, gameText } = findPages(text, {
+    dictionary: CONTEXT.dictionary,
+    pages,
+    isTyping: false,
+  });
+  return {
+    rows: rows.map((row) => {
+      if (row.kind === "place") return row.place.name.join(" ");
+      if (row.kind === "player") return `${row.player.firstName} ${row.player.lastName}`;
+      return row.kind === "team" ? row.team.fullName : `${row.team.fullName} Roster`;
+    }),
+    gameText,
+    others: listOtherReadings(text, CONTEXT).map(
+      (reading) => `${reading.text} (${reading.detail})`,
+    ),
+  };
+}
+
+test("a team's name lists its sheet and its Roster, by any name a search of games knows it by", () => {
+  for (const text of ["Liberty", "NYL", "libs", "New York Liberty"])
+    assert.deepEqual(listPages(text).rows, ["New York Liberty", "New York Liberty Roster"], text);
+  assert.deepEqual(listPages("Aces roster").rows, ["Las Vegas Aces Roster"]);
+});
+
+test("a player's name lists her sheet, by her name without its accents or apostrophe", () => {
+  assert.deepEqual(listPages("Stewart"), {
+    rows: ["Breanna Stewart"],
+    gameText: null,
+    others: [],
+  });
+  assert.deepEqual(listPages("aja wilson").rows, ["A\u2019ja Wilson"]);
+});
+
+test("New York reads as the Liberty, with the games played in New York its other reading", () => {
+  const newYork = listPages("New York");
+  assert.deepEqual(newYork.rows, ["New York Liberty", "New York Liberty Roster"]);
+  assert.deepEqual(newYork.others, ["Games in New York (26 games)"]);
+});
+
+test("the Standings lists and settings are found by their words, and only the settings shown", () => {
+  assert.deepEqual(listPages("standings").rows, [
+    "Standings League",
+    "Standings East",
+    "Standings West",
+  ]);
+  assert.deepEqual(listPages("east").rows, ["Standings East"]);
+  assert.equal(listPages("east").gameText, "east");
+  assert.deepEqual(listPages("dark mode").rows, ["Settings Appearance"]);
+  assert.deepEqual(listPages("athletic").rows, ["Settings Include content from The Athletic"]);
+  assert.deepEqual(listPages("season").rows, []);
+});
+
+test("the examples are three searches for games, then a player and a team's Roster", () => {
+  const { examples } = listSearchPages({ index: INDEX, isSettingShown: () => true });
+  assert.deepEqual(
+    [...listExamples(CONTEXT, 5 - examples.length), ...examples],
+    ["Dream at Valkyries", "Aces in New York", "Games this weekend", "Stewart", "Aces roster"],
+  );
 });

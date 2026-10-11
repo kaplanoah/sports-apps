@@ -579,12 +579,12 @@ table.st .seed-cell {
 .go-search svg {
   translate: none;
 }
-/* Chivo Mono reads heavier, so the strip's month and dates, and the search's lead and its Games
-   heading, sit a weight under the shared 600. */
+/* Chivo Mono reads heavier, so the strip's month and dates, and the search's lead, under the
+   field or over the games, sit a weight under the shared 600. */
 .strip-month,
 .cell-number,
 .search-read b,
-.search-head {
+.search-games-line b {
   font-weight: 550;
 }
 /* The list keeps a day's gap above its first day, so a held heading reaches up over it to the
