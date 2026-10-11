@@ -95,3 +95,29 @@ test("the copy a reload draws of a whole season fits in Safari's storage", async
   await expect(page.locator("#seasonGames .listed-day").first()).toBeAttached();
   expect(await measureStoredBytes(page)).toBeLessThan(SAVED_COPY_BYTES);
 });
+
+test("a reload without the season the page last showed keeps the day the page put back, though the store's first answer lists only the days around today", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    localStorage.setItem("lastTab", "games");
+    if (sessionStorage.getItem("dropLastSeen")) localStorage.removeItem("lastSeen");
+  });
+  await openApp(page, { isWholeSeason: true });
+  const days = page.locator("#seasonGames .listed-day");
+  const yesterday = page.locator('#seasonGames .listed-day[data-day="2026-09-23"]');
+  await expect(days.first()).toHaveAttribute("data-day", /^2026-03-/);
+  await page.locator('#seasonGames .day-cell[data-day="2026-09-23"]').click();
+  await expect(yesterday).toBeInViewport();
+  await page.evaluate(() => sessionStorage.setItem("dropLastSeen", "true"));
+
+  await page.reload();
+
+  await expect(days.first()).toHaveAttribute("data-day", /^2026-03-/);
+  await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
+    "data-day",
+    "2026-09-23",
+  );
+  await expect(yesterday).toBeInViewport();
+});

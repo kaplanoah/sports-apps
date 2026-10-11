@@ -519,9 +519,17 @@ function noteAnchor() {
 }
 
 function takeBackAnchor() {
+  if (anchor) placeDay(anchor);
+}
+
+/**
+ * Brings a day back to where its top sat under the list's.
+ * @param {{ day: string, offset: number }} place
+ */
+function placeDay({ day, offset }) {
   const list = findList();
-  const listed = anchor && findListedDay(anchor.day);
-  if (list && listed && anchor) list.scrollTop = listed.offsetTop - anchor.offset;
+  const listed = findListedDay(day);
+  if (list && listed) list.scrollTop = listed.offsetTop - offset;
 }
 
 // Where the list stands at the start day, which a page that loads again after two minutes away
@@ -716,16 +724,21 @@ function dropQuietDayOutOfSight() {
 }
 
 // A list that isn't showing, as on another tab, has no place to keep, so it's placed once it
-// shows: on its start day the first time, unless the page put it back where it was as it loaded
-// again (show-last-drawn.js), and after that on the day it last had at its top.
-/** @param {number | null} putBackTop where the page put the list back as it loaded, if it did */
-function placeList(putBackTop) {
+// shows: on its start day the first time, unless the page put it back on a day it still lists as
+// it loaded again (show-last-drawn.js), and after that on the day it last had at its top. The day
+// goes back rather than the scroll, since the first fill can list other days than the page put
+// back, as a season the page last showed without its whole schedule does.
+/**
+ * @param {{ day: string, offset: number } | null} putBackDay the day the page put back at the
+ *   list's top as it loaded, if it did
+ */
+function placeList(putBackDay) {
   const list = findList();
   if (!shown || !list || !isListShown()) return;
   if (isStartPending) showDay(shown.startDay, "instant");
   else if (isPlaced) takeBackAnchor();
-  else if (putBackTop === null) showDay(shown.startDay, "instant");
-  else list.scrollTop = putBackTop;
+  else if (putBackDay && findListedDay(putBackDay.day)) placeDay(putBackDay);
+  else showDay(shown.startDay, "instant");
   isStartPending = false;
   isPlaced = true;
   noteStartTop();
@@ -746,30 +759,43 @@ export function fillDayStrip(fill) {
     shown = fill;
     return;
   }
-  const putBackTop = readPutBackTop();
+  const putBackDay = readPutBackDay();
   const lastStartDay = shown?.startDay;
   if (isListShown()) noteAnchor();
   const before = dayStripLog.isLogging() ? measureTopDay() : null;
   const drawing = drawFill(fill);
   shown = fill;
   fitEndRoom();
-  placeList(putBackTop);
+  placeList(putBackDay);
   if (dayStripLog.isLogging()) noteFill(drawing, before, measureTopDay());
   if (lastStartDay) followStartDay(lastStartDay);
 }
 
 /**
- * Where the page put the list back as it loaded, before the list's first fill, or null when it
- * didn't or put it back on its start day, as after a long time away, where the fill places it.
+ * The day the page put back at the list's top as it loaded, before the list's first fill, or null
+ * when it didn't or put it back on its start day, as after a long time away, where the fill places
+ * it.
  */
-function readPutBackTop() {
+function readPutBackDay() {
   const putBack = !shown && isListShown() ? findList() : null;
   if (!putBack) return null;
   if (putBack.dataset.putBackStart === "true") {
     startFollowingStart();
     return null;
   }
-  return Number(putBack.dataset.putBackTop ?? putBack.scrollTop);
+  return findDayAt(putBack, Number(putBack.dataset.putBackTop ?? putBack.scrollTop));
+}
+
+/**
+ * The first day still showing under `top` in the list, and how far its top sits under it.
+ * @param {HTMLElement} list
+ * @param {number} top
+ */
+function findDayAt(list, top) {
+  const listed = /** @type {HTMLElement[]} */ ([...list.children]);
+  const found = listed.find((each) => each.offsetTop + each.offsetHeight > top) ?? listed.at(-1);
+  const day = found?.dataset.day;
+  return day ? { day, offset: found.offsetTop - top } : null;
 }
 
 function startFollowingStart() {
