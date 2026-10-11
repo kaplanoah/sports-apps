@@ -132,6 +132,12 @@ const VIEWS = [
     close: (page) => page.keyboard.press("Escape"),
   },
   {
+    name: "a game's season series",
+    open: (page) => openGame(page, "2026-09-24", /^Game details: Astros at Athletics, Thu, Sep 24/),
+    shown: (page) => page.locator("#gameSheet .meetings li").first(),
+    close: (page) => page.keyboard.press("Escape"),
+  },
+  {
     name: "a game's Matchup",
     open: async (page) => {
       await openGame(page, "2026-09-24", /^Game details: Astros at Athletics, Thu, Sep 24/);
@@ -159,6 +165,15 @@ const VIEWS = [
     close: (page) => page.keyboard.press("Escape"),
   },
   {
+    name: "a club's leaders",
+    open: async (page) => {
+      await page.getByRole("tab", { name: "Standings" }).click();
+      await page.locator('.div-grid tr[data-team="LAD"] .team-open').click();
+    },
+    shown: (page) => page.locator("#teamSheet .leader-stat").first(),
+    close: (page) => page.keyboard.press("Escape"),
+  },
+  {
     name: "a club's roster",
     open: (page) => openRoster(page, "CLE"),
     shown: (page) => page.locator("#rosterBody .box-table").first(),
@@ -171,6 +186,15 @@ const VIEWS = [
       await page.locator("#rosterBody").getByRole("button", { name: "Steven Kwan" }).click();
     },
     shown: (page) => page.locator("#playerBody .player-curve").first(),
+    close: (page) => page.keyboard.press("Escape"),
+  },
+  {
+    name: "the sheet of a player on the injured list",
+    open: async (page) => {
+      await openRoster(page, "LAD");
+      await page.locator("#rosterBody").getByRole("button", { name: "Blake Treinen" }).click();
+    },
+    shown: (page) => page.locator("#playerBody .out-sentence"),
     close: (page) => page.keyboard.press("Escape"),
   },
   {
@@ -196,7 +220,8 @@ const VIEWS = [
 ];
 
 /**
- * Opens the page in Ball with news, a club's roster and players, and a final's highlights.
+ * Opens the page in Ball with news, a club's roster and players, a final's highlights, and the
+ * season's whole schedule.
  * @param {import("@playwright/test").Page} page
  */
 async function openWithEverything(page) {
@@ -206,6 +231,7 @@ async function openWithEverything(page) {
     store: { ...ROSTER_DOCS, ...PLAYER_DOCS, ...NEWS_DOCS },
     pitchers: { ...PITCHER_SIDES, ...MATCHUP_STARTERS },
     highlights: SEP_23_HIGHLIGHTS,
+    isWholeSeason: true,
   });
 }
 

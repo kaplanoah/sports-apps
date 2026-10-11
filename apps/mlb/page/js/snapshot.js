@@ -1117,6 +1117,7 @@ const readRank = (value) => Number(value) || 99;
  * A club's runs and its records at home and on the road, which its sheet ranks among every club's,
  * leaving out any MLB didn't answer with.
  * @param {any} record
+ * @returns {Record<string, any>}
  */
 function readClubNumbers(record) {
   const splits = record.records?.splitRecords ?? [];
@@ -1135,8 +1136,7 @@ function readClubNumbers(record) {
 }
 
 function buildStandingsRow(id, record) {
-  return {
-    ...readClubNumbers(record),
+  const row = {
     id,
     w: record.wins,
     l: record.losses,
@@ -1152,6 +1152,7 @@ function buildStandingsRow(id, record) {
     wcrank: record.divisionLeader ? null : record.wildCardRank || null,
     rank: readRank(record.divisionRank),
   };
+  return Object.assign(row, readClubNumbers(record));
 }
 
 export const SEASON_GAMES = 162;

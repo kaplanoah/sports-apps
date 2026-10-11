@@ -1441,3 +1441,41 @@ test("a reload on a final's Highlights shows them where they were scrolled befor
   await expect.poll(() => reads.count).toBe(1);
   await expect.poll(() => section.evaluate((element) => element.scrollTop)).toBe(300);
 });
+
+test("a game still to come lists its clubs' meetings so far under its starters, under who leads the season series, each winner a way to his club's sheet", async ({
+  page,
+}) => {
+  await openApp(page, {
+    snapshots: { 2026: buildSnapshotWithStarters() },
+    pitchers: MATCHUP_STARTERS,
+    isWholeSeason: true,
+  });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page.getByRole("button", { name: ASTROS_AT_ATHLETICS }).click();
+  const sheet = page.locator("#gameSheet");
+  const series = sheet.locator(".sheet-part", {
+    has: page.locator("h3", { hasText: "Season series" }),
+  });
+
+  await expect(series.locator(".sheet-part-head span")).toHaveText("Athletics lead 5-4");
+  await expect(series.locator(".meetings li")).toHaveCount(9);
+  const [starters, part] = await Promise.all(
+    [sheet.locator(".starters-open"), series].map((each) => each.boundingBox()),
+  );
+  expect(part.y).toBeGreaterThan(starters.y + starters.height);
+  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listLowContrastText(page)).toEqual([]);
+  expect(await listStrayPeriods(page)).toEqual([]);
+
+  const winner = series.locator(".meeting-result .team-open").first();
+  const box = await winner.boundingBox();
+  if (!box) throw new Error("The first meeting's winner isn't shown");
+  const landsOn = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.closest(".team-open")?.getAttribute("data-team"),
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  );
+  const team = await winner.getAttribute("data-team");
+  expect(landsOn).toBe(team);
+  await winner.click();
+  await expect(page.locator("#teamSheet")).toBeVisible();
+});

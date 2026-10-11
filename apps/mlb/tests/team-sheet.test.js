@@ -2,6 +2,7 @@ import { beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { session } from "../page/js/session.js";
 import { keepRanking } from "../page/js/kept-on-device.js";
+import { reopenRoster } from "../page/js/roster-section.js";
 import { renderTeamSheet } from "../page/js/team-view.js";
 import { TEAMS } from "../page/js/teams.js";
 import { stripTags } from "../../../tests/text.js";
@@ -405,4 +406,180 @@ test("a club's cards take a doubleheader's games in game order, and skip a postp
 test("a club with no games on the slate, as in a past season, shows no cards", () => {
   session.state = { ...session.state, slate: null };
   assert.doesNotMatch(renderTeamSheet("HOU").body.text, /game-cards/);
+});
+
+/** @param {string} label */
+const readRankRow = (markup, label) =>
+  readText(
+    markup.text.match(
+      new RegExp(`<span class="player-rank-label">${label}</span>([\\s\\S]*?)</div>`),
+    )?.[1] ?? "",
+  );
+
+const NL_WEST_FINAL = {
+  divisions: {
+    "NL West": [
+      row("LAD", 100, 62, {
+        gb: "-",
+        elim: "-",
+        lead: true,
+        clinched: true,
+        rs: 801,
+        ra: 600,
+        home: "51-30",
+        road: "49-32",
+      }),
+      row("SD", 91, 71, {
+        gb: "9.0",
+        elim: "E",
+        wcgb: "+3.0",
+        wce: "-",
+        wcrank: "1",
+        rs: 700,
+        ra: 650,
+        home: "50-31",
+        road: "41-40",
+      }),
+      row("COL", 50, 112, {
+        gb: "50.0",
+        elim: "E",
+        wcgb: "40.0",
+        wce: "E",
+        rs: 600,
+        ra: 900,
+        home: "30-51",
+        road: "20-61",
+      }),
+    ],
+  },
+};
+
+test("a club's season ranks its runs and runs allowed a game, its margin a game, and its records at home and on the road among every club's, each on a curve", () => {
+  session.standings = NL_WEST_FINAL;
+  const { body } = renderTeamSheet("SD");
+
+  assert.deepEqual(
+    [...body.text.matchAll(/<span class="player-rank-label">(.*?)<\/span>/g)].map(
+      ([, label]) => label,
+    ),
+    ["R/G", "RA/G", "Diff/G", "Home", "Road"],
+  );
+  assert.equal(readRankRow(body, "R/G"), "4.32 2nd of 3");
+  assert.equal(readRankRow(body, "RA/G"), "4.01 2nd of 3");
+  assert.equal(readRankRow(body, "Diff/G"), "+0.31 2nd of 3");
+  assert.equal(readRankRow(body, "Home"), "50-31 2nd of 3");
+  assert.equal(readRankRow(body, "Road"), "41-40 2nd of 3");
+  assert.equal((body.text.match(/class="player-curve"/g) ?? []).length, 5);
+});
+
+test("a club whose standings row has no runs, as a season saved before the store kept them, shows no curves", () => {
+  session.standings = NL_WEST_IN_SEPTEMBER;
+  assert.doesNotMatch(renderTeamSheet("LAD").body.text, /team-ranks/);
+});
+
+test("a club's postseason sets its numbers across from the playoff field's, each a dot on the regular season's range", () => {
+  session.state = { ...session.state, projected: false, slate: null };
+  session.standings = NL_WEST_FINAL;
+  /** @param {string} away @param {string} home @param {[number, number]} score */
+  const final = (away, home, score, date) => ({
+    date,
+    id: date,
+    away,
+    home,
+    state: "final",
+    score,
+    postseason: true,
+    series: "NL_DS1",
+    start: `${date}T20:00:00Z`,
+  });
+  session.schedule = [
+    final("ATL", "LAD", [3, 5], "2026-10-03"),
+    final("ATL", "LAD", [3, 2], "2026-10-04"),
+    final("LAD", "ATL", [3, 1], "2026-10-06"),
+    final("SD", "MIL", [2, 3], "2026-10-03"),
+    { ...final("LAD", "ATL", [0, 0], "2026-10-07"), state: "live" },
+  ];
+  const { body } = renderTeamSheet("LAD");
+  session.schedule = null;
+
+  assert.equal(
+    readText(body.text.match(/<div class="field-heads">[\s\S]*?<\/div>/)?.[0] ?? ""),
+    "Dodgers 2-1 Playoff field",
+  );
+  const rows = [
+    ...body.text.matchAll(
+      /<span class="player-rank-label">(.*?)<\/span>\s*<span class="player-rank-value tabular">(.*?)<\/span>[\s\S]*?<span class="placed-other tabular">(.*?)<\/span>/g,
+    ),
+  ].map(([, label, own, field]) => `${label} ${own} ${field}`);
+  assert.deepEqual(rows, [
+    "R/G 3.33 2.75",
+    "RA/G 2.33 2.75",
+    "Diff/G +1.00 0.00",
+    "Home 1-1 2-2",
+    "Road 1-0 2-2",
+  ]);
+  assert.equal((body.text.match(/<i class="own"/g) ?? []).length, 5);
+});
+
+test("a club's leaders show on its sheet once its roster is read, and not for a season the store keeps no rosters for", () => {
+  session.standings = NL_WEST_FINAL;
+  reopenRoster({
+    club: "SD",
+    roster: {
+      club: "SD",
+      season: 2026,
+      players: [
+        {
+          id: 1,
+          name: "Manny Machado",
+          number: "13",
+          position: "3B",
+          injury: null,
+          hitting: {
+            plateAppearances: 650,
+            avg: ".275",
+            homeRuns: 27,
+            rbi: 95,
+            ops: ".800",
+            stolenBases: 13,
+          },
+        },
+        {
+          id: 2,
+          name: "Robert Suarez",
+          number: "75",
+          position: "P",
+          injury: null,
+          pitching: {
+            gamesPlayed: 70,
+            gamesStarted: 0,
+            era: "2.50",
+            wins: 4,
+            losses: 3,
+            inningsPitched: "68.1",
+            strikeOuts: 70,
+            saves: 40,
+          },
+        },
+      ],
+    },
+  });
+  const rows = [
+    ...renderTeamSheet("SD").body.text.matchAll(
+      /<span class="leader-stat">(.*?)<\/span>.*?>([^<]+)<\/button>/g,
+    ),
+  ].map(([, stat, name]) => `${stat} ${name}`);
+  assert.deepEqual(rows, [
+    "AVG Manny Machado",
+    "OPS Manny Machado",
+    "HR Manny Machado",
+    "RBI Manny Machado",
+    "SB Manny Machado",
+    "K Robert Suarez",
+    "IP Robert Suarez",
+    "SV Robert Suarez",
+  ]);
+
+  session.activeYear = 2025;
+  assert.ok(!listParts(renderTeamSheet("SD").body).includes("Leaders"));
 });

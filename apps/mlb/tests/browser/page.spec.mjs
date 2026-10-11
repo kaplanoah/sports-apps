@@ -1807,6 +1807,20 @@ const NEWS_DOCS = {
   },
 };
 
+/**
+ * Leaves the club's sheet for the sheet of Blake Treinen, on the Dodgers' injured list, from their
+ * roster.
+ * @param {import("@playwright/test").Page} page
+ */
+async function openInjuredPlayer(page) {
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#teamSheet")).toBeHidden();
+  await page.locator('.div-grid tr[data-team="LAD"] .team-open').click();
+  await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
+  await page.locator("#rosterBody").getByRole("button", { name: "Blake Treinen" }).click();
+  await expect(page.locator("#playerBody .out-sentence")).toBeVisible();
+}
+
 for (const { screen, viewport } of [
   { screen: "a wide screen", viewport: { width: 1280, height: 900 } },
   { screen: "a phone", viewport: { width: 390, height: 844 } },
@@ -1851,7 +1865,7 @@ for (const { screen, viewport } of [
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
-      await expect(page.locator("#teamSheet .team-stats")).toBeVisible();
+      await expect(page.locator("#teamSheet .leader-stat").first()).toBeVisible();
       expect(await listOffScaleText(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
@@ -1869,6 +1883,10 @@ for (const { screen, viewport } of [
         await page.locator("#playerSheet").getByRole("button", { name: "Back" }).click();
         await expect(page.locator("#playerSheet")).toBeHidden();
       }
+      await openInjuredPlayer(page);
+      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listLowContrastText(page)).toEqual([]);
+      expect(await listStrayPeriods(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator("#teamSheet")).toBeHidden();
       await page.getByRole("tab", { name: "News" }).click();
@@ -1910,7 +1928,7 @@ for (const { screen, viewport } of [
       await expect(page.locator("table.st tbody tr").first()).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);
       await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
-      await expect(page.locator("#teamSheet .team-stats")).toBeVisible();
+      await expect(page.locator("#teamSheet .leader-stat").first()).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);
       await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
       await expect(page.locator("#rosterBody .box-table").first()).toBeVisible();
@@ -1922,6 +1940,8 @@ for (const { screen, viewport } of [
         await page.locator("#playerSheet").getByRole("button", { name: "Back" }).click();
         await expect(page.locator("#playerSheet")).toBeHidden();
       }
+      await openInjuredPlayer(page);
+      expect(await listTapsOffButtons(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator("#teamSheet")).toBeHidden();
       await page.getByRole("tab", { name: "News" }).click();
