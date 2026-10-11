@@ -21,11 +21,11 @@ import {
 import { measureSpeedRange, renderPendingPitchMix, renderPitchMix } from "./pitch-mix.js";
 import { fetchPitcher, fetchRotation } from "./pitcher-fetch.js";
 import { renderPlayerButton } from "./player-button.js";
-import { describeInningsToQualify } from "./qualifying.js";
+import { describeInningsToQualify, measureInningsProgress } from "./qualifying.js";
 import { formatInnings } from "./stat-table.js";
 import { TEAMS } from "./teams.js";
 import { formatOrdinal } from "#shared/ordinal.js";
-import { renderSpreadCurve } from "#shared/rank-curve.js";
+import { rankAmong, renderSpreadCurve, renderWouldRank } from "#shared/rank-curve.js";
 import { pickSideColors } from "#shared/team-colors.js";
 
 const SIDES = ["away", "home"];
@@ -118,14 +118,16 @@ function findStandings(sides, measure) {
 }
 
 /**
- * Each starter's marks and dots take his club's color, the two picked to read apart.
+ * Each starter's marks and dots take his club's color, the two picked to read apart, in each
+ * theme's own colors.
  * @param {any[]} sides
  */
 function formatSideColors(sides) {
-  const [away, home] = sides.map((side) => TEAMS[side.club]?.chartColors);
+  const [away, home] = sides.map((side) => TEAMS[side.club]);
   if (!away || !home) return "";
-  const colors = pickSideColors(away, home);
-  return `--away: ${colors.away}; --home: ${colors.home}`;
+  const dark = pickSideColors(away.chartColors, home.chartColors);
+  const light = pickSideColors(away.lightChartColors, home.lightChartColors);
+  return `--away-dark: ${dark.away}; --home-dark: ${dark.home}; --away-light: ${light.away}; --home-light: ${light.home}`;
 }
 
 const renderPendingNumber = (side) =>
@@ -135,54 +137,103 @@ const renderPendingNumber = (side) =>
   </span>`;
 
 /**
+ * A starter's rank in a measure, written under his number: his rank, or where he would rank once
+ * he's nearly qualified, or nothing.
+ * @param {any} side
+ * @param {(typeof TAPE)[number]} measure
+ * @param {number | null} wouldRank
+ */
+function renderRank(side, measure, wouldRank) {
+  const rank = side.pitcher.ranks?.[measure.key];
+  if (rank) return html`<span class="tape-rank">${formatOrdinal(rank.rank)}</span>`;
+  return wouldRank != null && html`<span class="tape-rank">${renderWouldRank(wouldRank)}</span>`;
+}
+
+/**
  * A starter's number in a measure under his side of the face-off, over his rank, bolder when it
  * ranks higher than the other starter's and dimmed when it ranks lower.
  * @param {any} side
  * @param {(typeof TAPE)[number]} measure
  * @param {"better" | "worse" | "unranked" | null} standing
+ * @param {number | null} wouldRank
  */
-function renderNumber(side, measure, standing) {
+function renderNumber(side, measure, standing, wouldRank) {
   if (isLoadingPitcher(side)) return renderPendingNumber(side);
   const line = side.pitcher?.line;
   if (line?.[measure.key] == null) return html`<span class="tape-number ${side.key}"></span>`;
-  const rank = side.pitcher.ranks?.[measure.key];
   const classes = ["tape-number", side.key, standing].filter(Boolean).join(" ");
   return html`<span class="${classes}">
     <span class="tape-number-line"><span class="tape-dot"></span><span class="tabular">${measure.format(line)}</span></span>
-    ${rank && html`<span class="tape-rank">${formatOrdinal(rank.rank)}</span>`}
+    ${renderRank(side, measure, wouldRank)}
   </span>`;
 }
 
 /**
- * Every qualified starter's number in a measure, smoothed into a curve, with a mark for each
- * ranked starter.
+ * Every qualified starter's number in a measure, from the lowest, or null before either side's
+ * numbers load.
  * @param {any[]} sides
  * @param {(typeof TAPE)[number]} measure
+ * @returns {number[] | null}
  */
-function renderCurve(sides, measure) {
-  const values = sides.find((side) => side.pitcher?.starters?.values)?.pitcher.starters.values[
-    measure.key
-  ];
+const findSpread = (sides, measure) =>
+  sides.find((side) => side.pitcher?.starters?.values)?.pitcher.starters.values[measure.key] ??
+  null;
+
+/**
+ * Where a starter not ranked would rank in a measure, once he's nearly qualified, or null.
+ * @param {any} side
+ * @param {(typeof TAPE)[number]} measure
+ * @param {number[] | null} values
+ * @param {number | null} progress his share of the innings qualifying takes
+ */
+function findWouldRank(side, measure, values, progress) {
+  const value = side.pitcher?.line?.[measure.key];
+  if (side.pitcher?.ranks || !values?.length || value == null) return null;
+  const { isFewestFirst } = measure;
+  return (
+    rankAmong(values, Number(value), { isRanked: false, isFewestFirst, progress }).wouldRank ?? null
+  );
+}
+
+/**
+ * Every qualified starter's number in a measure, smoothed into a curve, with a mark for each
+ * ranked starter, and a line where a starter would rank once he's nearly qualified.
+ * @param {any[]} sides
+ * @param {(typeof TAPE)[number]} measure
+ * @param {number[] | null} values
+ * @param {(number | null)[]} wouldRanks
+ */
+function renderCurve(sides, measure, values, wouldRanks) {
   if (!values?.length) return html`<span class="player-curve"></span>`;
-  const marks = sides
-    .filter((side) => side.pitcher?.ranks?.[measure.key] && side.pitcher.line[measure.key] != null)
-    .map((side) => ({ value: Number(side.pitcher.line[measure.key]), className: side.key }));
+  const isMarked = (/** @type {any} */ side, /** @type {number} */ index) =>
+    side.pitcher?.line?.[measure.key] != null &&
+    (Boolean(side.pitcher.ranks?.[measure.key]) || wouldRanks[index] != null);
+  const marks = sides.filter(isMarked).map((side) => ({
+    value: Number(side.pitcher.line[measure.key]),
+    className: side.key,
+    isProvisional: !side.pitcher.ranks?.[measure.key],
+  }));
   return renderSpreadCurve(values, marks, measure.isFewestFirst);
 }
 
 /**
  * @param {any[]} sides
  * @param {(typeof TAPE)[number]} measure
+ * @param {(number | null)[]} progresses each starter's share of the innings qualifying takes
  */
-function renderMeasure(sides, measure) {
+function renderMeasure(sides, measure, progresses) {
   const [away, home] = findStandings(sides, measure);
+  const values = findSpread(sides, measure);
+  const wouldRanks = sides.map((side, index) =>
+    findWouldRank(side, measure, values, progresses[index]),
+  );
   return html`<div class="tape-measure">
     <div class="tape-numbers">
-      ${renderNumber(sides[0], measure, away)}
+      ${renderNumber(sides[0], measure, away, wouldRanks[0])}
       <span class="tape-label">${measure.label}</span>
-      ${renderNumber(sides[1], measure, home)}
+      ${renderNumber(sides[1], measure, home, wouldRanks[1])}
     </div>
-    ${renderCurve(sides, measure)}
+    ${renderCurve(sides, measure, values, wouldRanks)}
   </div>`;
 }
 
@@ -215,8 +266,13 @@ function renderTape(sides, countClubGames) {
   const notes = isLoaded
     ? renderTapeNotes(sides, countClubGames)
     : html`<p class="tape-note">${renderPlaceholder("Rank among qualified starters")}</p>`;
+  const progresses = sides.map((side) =>
+    isUnranked(side)
+      ? measureInningsProgress(side.pitcher.line.ip, countClubGames(side.club))
+      : null,
+  );
   return html`<div class="tape" style="${formatSideColors(sides)}">
-    ${TAPE.map((measure) => renderMeasure(sides, measure))}
+    ${TAPE.map((measure) => renderMeasure(sides, measure, progresses))}
     ${notes}
   </div>`;
 }

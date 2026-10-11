@@ -1,6 +1,7 @@
-// Picks the theme before the first paint, so Walnut never flashes Maple. It loads as a plain
-// script in each page's head; js/appearance.js keeps the theme, and the icons and bar color that
-// go with it, current. A device keeps the choice as JSON, or, if it kept one earlier, as its name.
+// Picks the theme before the first paint, so a dark look never flashes the light one. It loads as
+// a plain script in each page's head; appearance.js keeps the theme, and the icons and bar color
+// that go with it, current. A device keeps the choice as JSON, or, if it kept one earlier, as its
+// name.
 try {
   const stored = localStorage.getItem("appearance") ?? "";
   let choice;

@@ -199,14 +199,24 @@ test("both starters are marked on one curve of every qualified starter's number,
   assert.ok(speed.marks.away > speed.marks.home);
 });
 
-test("each starter's marks take his club's color, the away club taking its other one when the two look alike", () => {
+test("each starter's marks take his club's color in each theme, the away club taking its other one when the two look alike", () => {
   const readColors = (away, home) =>
     renderLoaded({ ...AT_ATHLETICS, away, home }, [
       { pitcher: BLUBAUGH },
       { pitcher: SPRINGS },
     ]).match(/<div class="tape" style="([^"]*)">/)[1];
-  assert.equal(readColors("HOU", "CIN"), "--away: #608eca; --home: #fb4c4c");
-  assert.equal(readColors("DET", "SF"), "--away: #738eb1; --home: #fd5a1e");
+  assert.equal(
+    readColors("HOU", "CIN"),
+    "--away-dark: #608eca; --home-dark: #fb4c4c; --away-light: #002d62; --home-light: #c6011f",
+  );
+  assert.equal(
+    readColors("DET", "SF"),
+    "--away-dark: #738eb1; --home-dark: #fd5a1e; --away-light: #0c2340; --home-light: #c63f04",
+  );
+  assert.equal(
+    readColors("NYY", "LAD"),
+    "--away-dark: #ffffff; --home-dark: #4690d6; --away-light: #6f6e6e; --home-light: #005a9c",
+  );
 });
 
 test("two numbers that read the same mark neither starter as ahead", () => {
@@ -244,8 +254,40 @@ test("a club with no starts to go by says so", () => {
   assert.doesNotMatch(astros, /class="rotation"/);
 });
 
-test("a starter outside the qualified starters has his numbers marked unranked, with no rank or mark, and a line saying why, and neither is marked ahead", () => {
+/**
+ * Where each provisional line sits on a measure's curve, by side.
+ * @param {string} markup
+ */
+const readProvisionalMarks = (markup) =>
+  markup
+    .split('<div class="tape-measure">')
+    .slice(1)
+    .map((measure) =>
+      Object.fromEntries(
+        [...measure.matchAll(/<i class="(away|home) provisional" style="left: ([\d.]+)%/g)].map(
+          ([, side, left]) => [side, Number(left)],
+        ),
+      ),
+    );
+
+test("a starter outside the qualified starters but a quarter of the way to their innings shows where he would rank, with a line on each curve and no dot, and neither is marked ahead", () => {
   const markup = renderStarters(BLUBAUGH, { ...SPRINGS, ranks: null });
+  const tape = readTape(markup);
+  assert.deepEqual(
+    tape.map((measure) => measure.home.rank),
+    ["would be 4th", "would be 5th", "would be 3rd", "would be 5th"],
+  );
+  assert.ok(tape.every(({ home }) => home.standing === "unranked"));
+  assert.deepEqual(tape[0].away, { value: "3.66", rank: "17th", standing: null });
+  assert.ok(tape.every(({ marks }) => marks.away !== undefined && marks.home === undefined));
+  const lines = readProvisionalMarks(markup);
+  assert.ok(lines.every((line) => line.home > 0 && line.away === undefined));
+  assert.ok(markup.includes('would be <span class="player-rank-place">4th</span>'));
+});
+
+test("a starter outside the qualified starters and short of a quarter of their innings has his numbers marked unranked, with no rank or mark, and a line saying why, and neither is marked ahead", () => {
+  const short = { ...SPRINGS, ranks: null, line: { ...SPRINGS.line, ip: "39.1" } };
+  const markup = renderStarters(BLUBAUGH, short);
   const tape = readTape(markup);
   assert.deepEqual(
     tape.map((measure) => measure.home),
@@ -253,9 +295,10 @@ test("a starter outside the qualified starters has his numbers marked unranked, 
   );
   assert.deepEqual(tape[0].away, { value: "3.66", rank: "17th", standing: null });
   assert.ok(tape.every(({ marks }) => marks.away !== undefined && marks.home === undefined));
+  assert.ok(readProvisionalMarks(markup).every((line) => line.home === undefined));
   assert.deepEqual(readClass(markup, "tape-note"), [
     "Rank among qualified starters",
-    "Springs has pitched 128 2/3 of the 158 innings needed to qualify",
+    "Springs has pitched 39 1/3 of the 158 innings needed to qualify",
   ]);
 });
 

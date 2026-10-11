@@ -38,7 +38,8 @@ import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { fillStamp } from "#shared/stamp.js";
 import { chooseTitleYear, showTitleYear } from "#shared/title-year.js";
 import { createWorkerStore } from "#shared/worker-store.js";
-import { startAppearance } from "./appearance.js";
+import { startAppearance } from "#shared/appearance.js";
+import { LOOKS } from "./looks.js";
 import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
 import { refreshGameSheet, startGameSheet } from "./game-sheet.js";
@@ -228,7 +229,7 @@ function catchUp(awayMs) {
 
 async function boot() {
   startDiagnostics();
-  startAppearance();
+  startAppearance(LOOKS);
   watchReturns({ catchUp, pause: () => session.db.pause() });
   trackKeyboardFocus();
   startPageTabs();

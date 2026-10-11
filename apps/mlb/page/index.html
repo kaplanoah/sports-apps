@@ -4,12 +4,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <script src="shared/release-guard.js"></script>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="icon-180.png" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" id="tabIcon" />
+  <link rel="apple-touch-icon" href="icon-180.png" id="homeScreenIcon" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="MLB" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#0d1f16" />
+  <meta name="theme-color" content="#0d1f16" id="themeColor" />
   <title>MLB</title>
   <meta
     name="description"
@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="shared/news.css" />
   <link rel="stylesheet" href="shared/highlights.css" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="shared/pick-theme.js"></script>
   <script src="shared/open-last-tab.js"></script>
   <script src="shared/show-last-drawn.js"></script>
   <script src="shared/slow-load.js"></script>
@@ -201,6 +202,36 @@
             <select id="yearSel" class="select-field" aria-label="Season" data-last-drawn></select>
           </label>
           <div class="control-row" id="notifyRow" hidden data-last-drawn></div>
+          <div class="control-row appearance-row">
+            <span class="control-label">
+              <span id="appearanceTitle">Appearance</span>
+              <span class="control-note" id="appearanceNote" role="status"></span>
+            </span>
+            <div class="appearance-choices" role="radiogroup" aria-labelledby="appearanceTitle">
+              <label class="appearance-choice">
+                <input type="radio" name="appearance" value="auto" />
+                <span class="appearance-icon appearance-icon-auto" aria-hidden="true">
+                  <img src="icon-light-180.png" alt="" />
+                  <img src="icon-180.png" alt="" />
+                </span>
+                <span>System</span>
+              </label>
+              <label class="appearance-choice">
+                <input type="radio" name="appearance" value="light" />
+                <span class="appearance-icon" aria-hidden="true">
+                  <img src="icon-light-180.png" alt="" />
+                </span>
+                <span>Ball</span>
+              </label>
+              <label class="appearance-choice">
+                <input type="radio" name="appearance" value="dark" />
+                <span class="appearance-icon" aria-hidden="true">
+                  <img src="icon-180.png" alt="" />
+                </span>
+                <span>Night Game</span>
+              </label>
+            </div>
+          </div>
         </div>
         <div class="settings-news" role="group" aria-labelledby="newsSettingsTitle">
           <h3 class="settings-group-label" id="newsSettingsTitle">News</h3>

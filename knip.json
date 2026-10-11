@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "apps/*/page/js/app.js",
-    "apps/*/page/js/pick-theme.js",
+    "shared/page/pick-theme.js",
     "apps/*/page/js/gate-theme.js",
     "apps/*/worker/src/index.js",
     "worker/*.mjs",

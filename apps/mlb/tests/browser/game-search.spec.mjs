@@ -167,7 +167,7 @@ test("the field takes MLB's card fill and edge, and Cancel its gold", async ({ p
     const colors = {
       fill: getComputedStyle(field).backgroundColor === resolve("--card"),
       edge: getComputedStyle(field).boxShadow.includes(resolve("--card-border")),
-      cancel: getComputedStyle(cancel).color === resolve("--gold"),
+      cancel: getComputedStyle(cancel).color === resolve("--highlight"),
       corners: getComputedStyle(field).borderRadius,
     };
     probe.remove();

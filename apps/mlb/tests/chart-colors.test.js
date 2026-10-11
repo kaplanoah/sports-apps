@@ -12,11 +12,18 @@ const CONTRAST_ROOM = 0.1;
 // How far apart two hues may be and still read as the same color.
 const SAME_HUE_DEGREES = 3;
 const BLACK_STAND_IN = "#e4e4e4";
+const WHITE_STAND_IN = "#6f6e6e";
 // A lightened color with less chroma than this, in OKLCH, reads as gray more than as the club's.
 const MUTED_CHROMA = 0.075;
 
-/** @param {string} token */
-const readRootToken = (token) => STYLES.match(new RegExp(`${token}: (#[0-9a-f]{6});`))[1];
+// Ball's colors are the page's own, and Night Game's redefine them where it's chosen.
+const NIGHT_GAME_BLOCK = STYLES.slice(STYLES.indexOf(':root[data-theme="dark"] {'));
+
+/**
+ * @param {string} block
+ * @param {string} token
+ */
+const readToken = (block, token) => block.match(new RegExp(`${token}: (#[0-9a-f]{6});`))[1];
 
 /** @param {string} hex */
 function measureLuminance(hex) {
@@ -56,22 +63,60 @@ function measureHueGap(first, second) {
 /** @param {string} hex */
 const isNearBlack = (hex) => measureLuminance(hex) < 0.02;
 
-test("every club's two chart colors read as text on the sheet and the page", () => {
-  const surfaces = [readRootToken("--card"), readRootToken("--bg")];
+/** @param {string} hex */
+const isNearWhite = (hex) => measureLuminance(hex) > 0.9;
+
+// Each theme's colors for a club's starter, and the page and card they read on.
+const THEMES = {
+  "Night Game": {
+    readColors: (club) => club.chartColors,
+    surfaces: [readToken(NIGHT_GAME_BLOCK, "--card"), readToken(NIGHT_GAME_BLOCK, "--bg")],
+  },
+  Ball: {
+    readColors: (club) => club.lightChartColors,
+    surfaces: [readToken(STYLES, "--card"), readToken(STYLES, "--bg")],
+  },
+};
+
+test("every club's two chart colors read as text on the sheet and the page, in each theme", () => {
+  for (const [theme, { readColors, surfaces }] of Object.entries(THEMES))
+    for (const [code, club] of Object.entries(TEAMS))
+      for (const color of readColors(club))
+        for (const surface of surfaces) {
+          const contrast = measureContrast(color, surface);
+          assert.ok(
+            contrast >= SMALLEST_CONTRAST,
+            `${theme}: ${code}'s ${color} on ${surface} is ${contrast.toFixed(2)} to 1`,
+          );
+        }
+});
+
+test("each Ball chart color is one of the club's own colors, or its hue made only as dark as reading needs, or gray for white, first color first", () => {
+  const surface = readToken(STYLES, "--bg");
   for (const [code, club] of Object.entries(TEAMS)) {
-    for (const color of club.chartColors)
-      for (const surface of surfaces) {
-        const contrast = measureContrast(color, surface);
-        assert.ok(
-          contrast >= SMALLEST_CONTRAST,
-          `${code}'s ${color} on ${surface} is ${contrast.toFixed(2)} to 1`,
-        );
+    const own = [club.color, club.color2];
+    club.lightChartColors.forEach((color, index) => {
+      const from = own[index];
+      if (from.toLowerCase() === color) return;
+      if (color === WHITE_STAND_IN) {
+        assert.ok(isNearWhite(from), `${code}'s ${from} isn't white for ${color} to stand in for`);
+        return;
       }
+      assert.ok(
+        measureHueGap(from, color) <= SAME_HUE_DEGREES,
+        `${code}'s ${color} loses ${from}'s hue`,
+      );
+      const contrast = measureContrast(color, surface);
+      assert.ok(
+        contrast <= SMALLEST_CONTRAST + CONTRAST_ROOM,
+        `${code}'s ${color} goes past what reading needs, at ${contrast.toFixed(2)} to 1`,
+      );
+    });
   }
 });
 
-test("each chart color is one of the club's own colors, or its hue made only as light as reading needs, or light gray for black", () => {
-  const surface = readRootToken("--card");
+test("each Night Game chart color is one of the club's own colors, or its hue made only as light as reading needs, or light gray for black", () => {
+  const surface = readToken(NIGHT_GAME_BLOCK, "--card");
   for (const [code, club] of Object.entries(TEAMS)) {
     const own = [club.color, club.color2];
     for (const color of club.chartColors) {

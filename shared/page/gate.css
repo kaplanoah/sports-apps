@@ -23,6 +23,11 @@ body.gate-page {
   border: 1px solid var(--card-border);
   border-radius: 14px;
 }
+/* A gate with an icon for each theme shows the one of the theme showing. */
+:root[data-theme="dark"] .gate-icon-light,
+:root:not([data-theme="dark"]) .gate-icon-dark {
+  display: none;
+}
 .gate-title {
   margin: 4px 0 6px;
   font-family: var(--gate-heading-font);

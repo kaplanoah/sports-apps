@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   drawSpread,
+  isNearlyRanked,
   placeOnRange,
   rankAmong,
   renderPlacedRow,
   renderRankRow,
+  renderSpreadCurve,
 } from "../shared/page/rank-curve.js";
 
 test("the curve spreads across from the lowest number to the highest, its peak at the top, with the player's mark on it", () => {
@@ -98,4 +100,54 @@ test("a placed row shows the label, the number, a line with the other's dot unde
   );
   assert.doesNotMatch(unplaced, /class="own"/);
   assert.match(unplaced, /class="other"/);
+});
+
+test("a player not yet ranked has where he would rank once he's a quarter of the way to qualifying, and not before", () => {
+  const values = [0.25, 0.3, 0.3, 0.28];
+  assert.equal(isNearlyRanked(0.25), true);
+  assert.equal(isNearlyRanked(0.24), false);
+  assert.equal(isNearlyRanked(null), false);
+  assert.deepEqual(rankAmong(values, 0.29, { isRanked: false, progress: 0.25 }), {
+    value: 0.29,
+    rank: null,
+    wouldRank: 3,
+    count: 4,
+    values: [0.25, 0.28, 0.3, 0.3],
+  });
+  assert.equal(rankAmong(values, 0.29, { isRanked: false, progress: 0.24 }).wouldRank, undefined);
+  assert.equal(
+    rankAmong(values, 0.26, { isRanked: false, isFewestFirst: true, progress: 1 }).wouldRank,
+    2,
+  );
+  assert.equal(rankAmong(values, 0.3, { isRanked: true, progress: 0.5 }).wouldRank, undefined);
+  assert.equal(rankAmong(values, null, { isRanked: false, progress: 0.5 }).wouldRank, undefined);
+});
+
+test("where a player would rank shows as a line on the curve with no dot, and the rank written as would be", () => {
+  const row = String(
+    renderRankRow({
+      label: "AVG",
+      shown: ".290",
+      stat: rankAmong([0.25, 0.3], 0.29, { isRanked: false, progress: 0.5 }),
+    }),
+  );
+  assert.match(row, /<i class="provisional" style="left: [\d.]+%; top: [\d.]+%"><\/i>/);
+  assert.doesNotMatch(row, /<b /);
+  assert.match(
+    row,
+    /<span class="player-rank">would be <span class="player-rank-place">2nd<\/span><\/span>/,
+  );
+  const curve = String(
+    renderSpreadCurve(
+      [1, 2, 3],
+      [
+        { value: 2, className: "home", isProvisional: true },
+        { value: 3, className: "away" },
+      ],
+    ),
+  );
+  assert.match(
+    curve,
+    /<i class="home provisional" [^>]*><\/i><i class="away" [^>]*><\/i><b class="away"/,
+  );
 });

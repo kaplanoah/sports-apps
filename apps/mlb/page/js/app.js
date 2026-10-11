@@ -51,6 +51,8 @@ import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { fillSeasonPicker } from "#shared/season-picker.js";
+import { startAppearance } from "#shared/appearance.js";
+import { LOOKS } from "./looks.js";
 import { SNAPSHOT_VERSION } from "./snapshot.js";
 
 const CLOCK_REFRESH_MS = 60 * 1000;
@@ -169,6 +171,7 @@ function wireControls() {
   startRosterSection({ showChange: refreshTeamSheet });
   startPlayerSheet();
   startSettings();
+  startAppearance(LOOKS);
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);
   startHomeScreen();
   const picker = findYearPicker();
