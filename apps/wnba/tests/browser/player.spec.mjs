@@ -125,15 +125,93 @@ test("each of her facts is centered under its label", async ({ page }) => {
   expect(Math.abs(label - value)).toBeLessThan(1);
 });
 
-test("a player out while her team still plays says so beside her name, and one who hasn't played says she has no games yet", async ({
-  page,
-}) => {
-  await openApp(page);
-  const sheet = await openFromRoster(page, "Elizabeth Balogun");
+test.describe("a player who is out", () => {
+  test.use({ timezoneId: "America/New_York" });
 
-  await expect(sheet.locator("#playerTitle")).toHaveText("Elizabeth BalogunOut");
-  await expect(sheet.locator(".sheet-message")).toHaveText("No games yet this season");
-  await expect(sheet.locator(".player-dnp").first()).toHaveText("DNP");
+  /**
+   * Where the Out box sits: from the band over it, the sheet's sides, and the part under it.
+   * @param {import("@playwright/test").Locator} sheet
+   */
+  const measureOutBox = (sheet) =>
+    sheet.evaluate((element) => {
+      const box = /** @type {HTMLElement} */ (element.querySelector(".out-box"));
+      const band = /** @type {HTMLElement} */ (element.querySelector(".sheet-top"));
+      const content = /** @type {HTMLElement} */ (element.querySelector(".sheet-content"));
+      const [boxRect, bandRect, sheetRect] = [box, band, content].map((part) =>
+        part.getBoundingClientRect(),
+      );
+      const nextRect = /** @type {HTMLElement} */ (box.nextElementSibling).getBoundingClientRect();
+      return {
+        above: boxRect.top - bandRect.bottom,
+        left: boxRect.left - sheetRect.left,
+        right: sheetRect.right - boxRect.right,
+        below: nextRect.top - boxRect.bottom,
+      };
+    });
+
+  for (const viewport of [PHONE, { width: 1280, height: 900 }])
+    test(`at ${viewport.width}px wide, her sheet opens on a box saying why, her chip leading it and RotoWire's sentence under it with the day ESPN changed it, 11.5px from the band, the sheet's sides, and what's under it`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await openApp(page);
+      const sheet = await openFromRoster(page, "Elizabeth Balogun");
+      const box = sheet.locator(".out-box");
+
+      await expect(sheet.locator("#playerTitle")).toHaveText("Elizabeth Balogun");
+      await expect(box.locator(".out-line")).toHaveText("OutNot injury related");
+      await expect(box.locator(".out-sentence")).toHaveText(
+        "Balogun (not with team) is out for Wednesday's game against the Dream.",
+      );
+      await expect(box.locator(".out-source")).toHaveText("RotoWire•Sep 22");
+      await expect(box.locator("+ .sheet-message")).toHaveText("No games yet this season");
+      await expect(sheet.locator(".player-dnp").first()).toHaveText("DNP");
+      expect(await measureOutBox(sheet)).toEqual({
+        above: 11.5,
+        left: 11.5,
+        right: 11.5,
+        below: 11.5,
+      });
+      await expect(box).toHaveCSS("padding", "10px 9.5px 8px");
+      await expect(box).toHaveCSS("row-gap", "6px");
+      await expect(box.locator(".foul-chip")).toHaveCSS("margin-right", "7px");
+      await expect(box.locator(".out-words")).toHaveCSS("top", "-1px");
+      await expect(box.locator(".out-line")).toHaveCSS("font-size", "15px");
+      await expect(box.locator(".out-sentence")).toHaveCSS("font-size", "14.5px");
+      await expect(box.locator(".out-source")).toHaveCSS("font-size", "13px");
+      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listLowContrastText(page)).toEqual([]);
+      expect(await listStrayPeriods(page)).toEqual([]);
+    });
+
+  test("the box's border is Maple's or Walnut's own, and its wash the chip's orange", async ({
+    page,
+  }) => {
+    await openApp(page);
+    const box = (await openFromRoster(page, "Elizabeth Balogun")).locator(".out-box");
+
+    await expect(box).toHaveCSS("border-top-color", "rgb(230, 200, 159)");
+    await expect(box).toHaveCSS(
+      "background-color",
+      /^color\(srgb 0\.635\d* 0\.227\d* 0\.039\d* \/ 0\.065\)$/,
+    );
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(box).toHaveCSS("border-top-color", "rgb(86, 61, 42)");
+    await expect(box).toHaveCSS(
+      "background-color",
+      /^color\(srgb 0\.941\d* 0\.478\d* 0\.227\d* \/ 0\.065\)$/,
+    );
+  });
+
+  test("one out for the season has Rest of season after her reason, past an en dash, and no sentence when RotoWire says only that she's out", async ({
+    page,
+  }) => {
+    await openApp(page);
+    const box = (await openFromRoster(page, "Satou Sabally")).locator(".out-box");
+
+    await expect(box.locator(".out-line")).toHaveText("OutConcussion\u2013Rest of season");
+    await expect(box.locator(".out-sentence, .out-source")).toHaveCount(0);
+  });
 });
 
 test("a player short of the WNBA's rule shows her numbers without a rank, and says why", async ({

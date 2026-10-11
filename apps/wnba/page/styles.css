@@ -187,6 +187,10 @@
   --size-read-condensed: 1.03125rem;
   /* Today's note when it has no games, a half step under a sentence. */
   --size-empty-day: 0.96875rem;
+  /* A player's Out box sets why she is out a step over a short fact, so it leads, and RotoWire's
+     sentence on it half a pixel over one. */
+  --size-out-reason: 0.9375rem;
+  --size-out-sentence: 0.90625rem;
   --gate-heading-font: var(--heading);
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
@@ -210,6 +214,8 @@
   --updates-head: var(--structure);
   --sheet-part-head: var(--structure);
   --game-card-edge: var(--edge);
+  /* A player's Out box takes the floor's edge a little lighter, richer, and toward the orange. */
+  --out-box-edge: #e6c89f;
   --game-card-live: var(--now);
   --game-card-won: var(--result);
   --game-card-team-font: var(--team-name);
@@ -252,6 +258,7 @@
   --logos-for-light: none;
   --logos-for-dark: inline;
   --won-row-wash: 12%;
+  --out-box-edge: #563d2a;
   color-scheme: dark;
 }
 
@@ -2516,6 +2523,50 @@ body.kbd .player-open:focus {
   font-size: var(--size-glance);
   font-weight: 500;
   color: var(--ink);
+}
+
+/* A player who is out has a box as her sheet's first part, outlined like the team sheet's game
+   cards and washed in the chip's orange, --out-box-space from the band, the sheet's sides, and the
+   part under it, the sheet's sides being 18px from its text. Her Out chip leads the box's first
+   line, its words a pixel up, so they sit centered on the chip, then RotoWire's sentence and where
+   it's from under it. Its reason and sentence set their own sizes, matched by eye. */
+.out-box {
+  --out-box-space: 11.5px;
+  display: grid;
+  gap: 6px;
+  margin: calc(var(--out-box-space) - var(--part-space-first)) calc(var(--out-box-space) - 18px)
+    calc(var(--out-box-space) - var(--part-space-above));
+  padding: 10px 9.5px 8px;
+  border: 1px solid var(--out-box-edge);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--now) 6.5%, transparent);
+}
+.out-line {
+  margin: 0;
+  font-size: var(--size-out-reason);
+  font-weight: 500;
+  color: var(--now);
+}
+.out-line .foul-chip {
+  margin: 0 7px 0 0;
+}
+.out-words {
+  position: relative;
+  top: -1px;
+}
+.out-dash {
+  margin-inline: 0.3em;
+}
+.out-sentence {
+  margin: 0;
+  font-size: var(--size-out-sentence);
+  line-height: 1.35;
+  color: var(--ink);
+}
+.out-source {
+  margin: 0;
+  font-size: var(--size-small);
+  color: var(--ink-dim);
 }
 
 /* Her last game's four numbers center on the sheet by themselves, their line running as far past

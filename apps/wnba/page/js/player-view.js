@@ -1,9 +1,9 @@
 // A player's sheet, which a tap on her name opens wherever it shows: her name and team, her facts,
-// then her last game beside her season's averages, her playoff games with her points in each, and
-// where her regular season's averages rank in the WNBA, each on a small curve of how every ranked
-// player's numbers spread.
+// then, while she is out and her team still plays, a box saying why, then her last game beside her
+// season's averages, her playoff games with her points in each, and where her regular season's
+// averages rank in the WNBA, each on a small curve of how every ranked player's numbers spread.
 
-import { describeDay, readCalendarDate } from "#shared/days.js";
+import { describeDay, formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
 import { renderRankRow } from "#shared/rank-curve.js";
@@ -17,6 +17,7 @@ import { readTeamPlayoffs, renderChip, renderFinishedGame, renderNextGame } from
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
 /** @typedef {import("./roster-view.js").RosterPlayer} RosterPlayer */
+/** @typedef {import("./roster-view.js").OutReason} OutReason */
 /** @typedef {import("./team-view.js").Season} Season */
 /**
  * @typedef {object} PlayerGame
@@ -81,6 +82,9 @@ const RANKED_STATS = [
 ];
 
 const OUT_CHIP = html`<span class="foul-chip"><span class="foul-chip-words">Out</span></span>`;
+// Who wrote the sentence ESPN carries on a player who is out.
+const OUT_SOURCE = "RotoWire";
+const REST_OF_SEASON = "Rest of season";
 
 /**
  * A position as the league writes it, like G-F, in words.
@@ -103,13 +107,12 @@ function formatStat(value, isShare = false) {
 }
 
 /**
- * Her dot and name, and Out beside it while she is out and her team still plays.
+ * Her dot and name.
  * @param {PlayerSubject} subject
  * @param {Player | null} player
- * @param {boolean} showsOut
  */
-export const renderPlayerHeading = (subject, player, showsOut) =>
-  html`${renderDot(subject.team)}<span>${player ? `${player.firstName} ${player.lastName}` : subject.name}</span>${showsOut && player?.facts?.isOut && OUT_CHIP}`;
+export const renderPlayerHeading = (subject, player) =>
+  html`${renderDot(subject.team)}<span>${player ? `${player.firstName} ${player.lastName}` : subject.name}</span>`;
 
 /**
  * Her team, her number, and her college, or her country for a player who skipped college, or just
@@ -159,6 +162,32 @@ export function renderPlayerFacts(player, isLoading) {
     </dl>`
   );
 }
+
+/**
+ * Why she is out, and Rest of season after an en dash when it's for the season.
+ * @param {OutReason} out
+ */
+function renderOutWords({ reason, isForSeason }) {
+  const words = [reason, isForSeason && REST_OF_SEASON].filter(Boolean);
+  return html`${words.map((word, index) => html`${index > 0 && html`<span class="out-dash">\u2013</span>`}${word}`)}`;
+}
+
+/**
+ * Her Out chip and why she is out, then RotoWire's sentence on it, with the day ESPN last changed
+ * it, when it says more.
+ * @param {OutReason} out
+ */
+const renderOutBox = (out) =>
+  html`<section class="out-box">
+    <p class="out-line">${OUT_CHIP}<span class="out-words">${renderOutWords(out)}</span></p>
+    ${
+      out.sentence &&
+      html`<p class="out-sentence" data-quoted>${out.sentence}</p>
+      <p class="out-source">${joinWithSeparator(
+        [OUT_SOURCE, out.updated && formatShortDate(new Date(out.updated))].filter(Boolean),
+      )}</p>`
+    }
+  </section>`;
 
 /**
  * How her last game ended: its day and the score, or just whether her team won while the league's
@@ -356,14 +385,17 @@ const renderPending = () =>
 
 /**
  * The sheet's parts under her name, or stand-ins while they load, or why they didn't.
- * @param {{ player: Player | null, isLoading: boolean, season: Season | null, isPastSeason: boolean, now: number }} shown
+ * @param {{ player: Player | null, isLoading: boolean, season: Season | null, isPastSeason: boolean, showsOut: boolean, now: number }} shown
+ *   `showsOut` says whether she shows as out, as she does only while her team still plays
  */
-export function renderPlayerBody({ player, isLoading, season, isPastSeason, now }) {
+export function renderPlayerBody({ player, isLoading, season, isPastSeason, showsOut, now }) {
   if (!player && isLoading) return renderPending();
   if (!player) return renderRetryBlock("Couldn't load her numbers");
   const hasPlayed = !!(player.lastGame || player.regularSeason);
   const noGames = isPastSeason ? "No games this season" : "No games yet this season";
-  return html`${hasPlayed ? renderLastGame(player, now) : renderSheetMessage(noGames)}
+  const out = showsOut && player.facts?.out;
+  return html`${out && renderOutBox(out)}
+  ${hasPlayed ? renderLastGame(player, now) : renderSheetMessage(noGames)}
   ${renderPlayoffs(player, season, now)}
   ${player.regularSeason && renderRegularSeason(player.team, player.regularSeason, isPastSeason)}`;
 }

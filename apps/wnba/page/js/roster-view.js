@@ -10,7 +10,8 @@ import { renderRetryBlock } from "#shared/retry.js";
 import { renderPlayerButton } from "./player-button.js";
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
-/** @typedef {{ id: string, number: string | null, firstName: string, lastName: string, position: string | null, height: string | null, age: number | null, college: string | null, country: string | null, isOut: boolean, debut: number | null }} RosterPlayer */
+/** @typedef {{ reason: string | null, isForSeason: boolean, sentence: string | null, updated: string | null }} OutReason */
+/** @typedef {{ id: string, number: string | null, firstName: string, lastName: string, position: string | null, height: string | null, age: number | null, college: string | null, country: string | null, out: OutReason | null, debut: number | null }} RosterPlayer */
 /** @typedef {{ id: number, team: string, firstName: string, lastName: string, games: number, minutes: number, points: number, rebounds: number, assists: number }} Averages */
 /** @typedef {RosterPlayer & { averages: Averages | null }} RosterRow */
 /** @typedef {{ team: string, season: number, coach: string | null, players: RosterPlayer[] }} Roster */
@@ -262,7 +263,7 @@ const renderPinnedRow = (row, team, showsOut) =>
       ${renderPlayerButton(
         { ...row, team },
         html`<span class="roster-first">${row.firstName}</span>
-          <span class="roster-last">${row.lastName}${showsOut && row.isOut && OUT_CHIP}</span>`,
+          <span class="roster-last">${row.lastName}${showsOut && row.out && OUT_CHIP}</span>`,
       )}
     </th>
   </tr>`;

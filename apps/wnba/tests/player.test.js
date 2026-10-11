@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { TEAMS } from "../page/js/teams.js";
 import {
   createPlayerServer,
   describeRanks,
@@ -10,9 +9,9 @@ import {
   nameTeamGameLogRequest,
   nameTotalsRequest,
 } from "../worker/src/player.js";
+import { nameInjuriesRequest } from "../worker/src/injuries.js";
 import {
   createRosterServer,
-  nameEspnRosterRequest,
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../worker/src/roster.js";
@@ -26,6 +25,9 @@ const PLAYERS = JSON.parse(
 );
 const ROSTERS = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-06-league-rosters.json`, "utf8"),
+);
+const INJURIES = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-11-espn-injuries.json`, "utf8"),
 );
 const NOW = Date.parse(ROSTERS.recordedAt);
 const STEWART = "1627668";
@@ -66,8 +68,7 @@ function listAnswers() {
     answers[nameLeagueRosterRequest(team, Number(season))] = roster;
     answers[namePlayerListRequest(Number(season))] = ROSTERS.playerList;
   }
-  for (const [team, roster] of Object.entries(ROSTERS.espnRosters))
-    answers[nameEspnRosterRequest(TEAMS[team].espnId)] = roster;
+  answers[nameInjuriesRequest()] = INJURIES.report;
   return answers;
 }
 
