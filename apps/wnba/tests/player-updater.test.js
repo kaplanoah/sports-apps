@@ -12,6 +12,7 @@ import {
   nameTeamGameLogRequest,
   nameTotalsRequest,
 } from "../worker/src/player.js";
+import { namePlayerIndexKey } from "../worker/src/player-index.js";
 import { createPlayerJob } from "../worker/src/player-updater.js";
 import { addTurnovers, joinGameLogs } from "./player-fixtures.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
@@ -399,6 +400,48 @@ test("a season the store hasn't filled, or a store that can't be read, has the s
   );
 });
 
+test("each season's list of players names everyone on its rosters, with her team and number and the parts her sheet shows", async () => {
+  const { docs, runJob } = createRun();
+  await runJob();
+
+  const index = docs.stored.get(namePlayerIndexKey(2026));
+  const rostered = Object.keys(TEAMS).flatMap((team) =>
+    docs.stored
+      .get(`rosters/2026-${team}`)
+      .players.map((/** @type {any} */ player) => `${team}:${player.id}`),
+  );
+  assert.deepEqual(
+    index.players.map((/** @type {any} */ player) => `${player.team}:${player.id}`).sort(),
+    rostered.sort(),
+  );
+  const stewart = index.players.find((/** @type {any} */ player) => player.id === STEWART);
+  assert.deepEqual(
+    {
+      team: stewart.team,
+      number: stewart.number,
+      name: `${stewart.firstName} ${stewart.lastName}`,
+    },
+    { team: "NYL", number: "30", name: "Breanna Stewart" },
+  );
+  for (const id of [STEWART, FIEBICH, SABALLY, BALOGUN]) {
+    const listed = index.players.find((/** @type {any} */ player) => player.id === id);
+    const { body } = await askForPlayer(`id=${id}&team=NYL&season=2026`, { docs });
+    assert.equal(listed.hasLastGame, !!body.lastGame);
+    assert.equal(listed.hasRegularSeason, !!body.regularSeason);
+  }
+});
+
+test("a season's list of players waits for every roster and its stats, and a past season gets its own as it's filled", async () => {
+  const answers = listAnswers();
+  delete answers[nameLeagueRosterRequest("NYL", 2026)];
+  const { docs, runJob } = createRun({ answers });
+  await runJob();
+
+  assert.equal(docs.stored.get(namePlayerIndexKey(2026)), undefined);
+  const past = docs.stored.get(namePlayerIndexKey(2025));
+  assert.ok(past.players.some((/** @type {any} */ player) => player.id === IONESCU));
+});
+
 test("stats the league hasn't answered leave the rosters saved, and the sheets reading the league until it does", async () => {
   const answers = listAnswers();
   delete answers[nameTotalsRequest(2026)];
@@ -456,8 +499,14 @@ test("each run saves its status: the requests it made by feed, what it saved, an
     playerList: 2,
     out: 1,
   });
-  assert.deepEqual(Object.keys(first.saved).sort(), ["players", "ranks", "rosters"]);
+  assert.deepEqual(Object.keys(first.saved).sort(), [
+    "player-index",
+    "players",
+    "ranks",
+    "rosters",
+  ]);
   assert.equal(first.saved.ranks, 2);
+  assert.equal(first.saved["player-index"], 2);
   assert.deepEqual(first.pastSeason, { season: 2025, isWhole: true });
   assert.equal(first.lastFailure, null);
   assert.equal(first.leagueReads, 0);
