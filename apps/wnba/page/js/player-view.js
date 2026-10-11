@@ -6,7 +6,7 @@
 import { describeDay, formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
-import { renderRankRow } from "#shared/rank-curve.js";
+import { rankAmong, renderRankRow } from "#shared/rank-curve.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTeamDetail } from "#shared/team-sheet.js";
@@ -41,7 +41,7 @@ import { readTeamPlayoffs, renderChip, renderFinishedGame, renderNextGame } from
  * @property {number} freeThrowsMade
  * @property {number} freeThrowsAttempted
  */
-/** @typedef {{ key: string, value: number | null, rank: number | null, count: number, values: number[] }} RankedStat */
+/** @typedef {{ key: string, value: number | null, rank: number | null, count: number, values: number[], progress?: number }} RankedStat */
 /**
  * @typedef {object} RegularSeason
  * @property {number} games
@@ -354,6 +354,23 @@ export function describeRankNote(season, isPastSeason) {
 }
 
 /**
+ * A stat she isn't ranked in, with where she would rank once she's nearly met the rule for it.
+ * @param {RankedStat} stat
+ * @param {boolean | undefined} isFewestFirst
+ */
+const addWouldRank = (stat, isFewestFirst) =>
+  stat.rank != null
+    ? stat
+    : {
+        ...stat,
+        ...rankAmong(stat.values, stat.value, {
+          isRanked: false,
+          isFewestFirst,
+          progress: stat.progress,
+        }),
+      };
+
+/**
  * @param {string} team
  * @param {RegularSeason} season
  * @param {boolean} isPastSeason
@@ -362,7 +379,12 @@ function renderRegularSeason(team, season, isPastSeason) {
   const shown = RANKED_STATS.filter(({ key }) => season.stats.some((each) => each.key === key));
   const rows = shown.map(({ key, label, isShare, isFewestFirst }) => {
     const stat = /** @type {RankedStat} */ (season.stats.find((each) => each.key === key));
-    return renderRankRow({ label, shown: formatStat(stat.value, isShare), stat, isFewestFirst });
+    return renderRankRow({
+      label,
+      shown: formatStat(stat.value, isShare),
+      stat: addWouldRank(stat, isFewestFirst),
+      isFewestFirst,
+    });
   });
   const isRankedInTurnovers = season.stats.some(
     (stat) => stat.key === "turnovers" && stat.rank != null,

@@ -190,6 +190,31 @@ test("a player short of the rule's games has no rank, but where she made enough 
   );
 });
 
+test("each stat says how far she is toward the rule for it: the games or the season's total, whichever is nearer, or for a percentage the shots made", async () => {
+  const { body } = await askForPlayer(listAnswers(), `id=${FIEBICH}&team=NYL&season=2026`);
+  const progress = Object.fromEntries(
+    body.regularSeason.stats.map((/** @type {any} */ stat) => [stat.key, stat.progress]),
+  );
+  assert.deepEqual(progress, {
+    points: 0.67,
+    rebounds: 0.67,
+    assists: 0.67,
+    steals: 0.67,
+    blocks: 0.67,
+    turnovers: 0.67,
+    fieldGoalShare: 0.54,
+    threeShare: 1.16,
+    freeThrowShare: 0.52,
+  });
+
+  const fiebich = readTable(PLAYERS.totals[2026], "LeagueDashPlayerStats").find(
+    (row) => String(row.PLAYER_ID) === FIEBICH,
+  );
+  const ranks = describeRanks(PLAYERS.totals[2026], PLAYERS.teamGames["2026:Regular Season"]);
+  const scorer = describeRegularSeason({ ...fiebich, GP: 10, PTS: 400 }, ranks);
+  assert.equal(scorer?.stats.find((stat) => stat.key === "points")?.progress, 0.76);
+});
+
 test("part way through a season the rule asks for its share of the games the most played team has played", () => {
   const teamGames = structuredClone(PLAYERS.teamGames["2026:Regular Season"]);
   const table = teamGames.resultSets[0];

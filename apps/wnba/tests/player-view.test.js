@@ -292,6 +292,32 @@ test("a stat she isn't ranked in shows her number alone, and the note says why",
   assert.match(describeRankNote(player.regularSeason, false), /She's played 1 game\.$/);
 });
 
+test("a stat she isn't ranked in, once she's a quarter of the way to the rule for it, shows where she would rank, as a line on its curve with no dot", () => {
+  const player = createPlayer();
+  player.regularSeason.games = 21;
+  player.regularSeason.stats[0] = describeStat({ rank: null, value: 21, progress: 0.25 });
+  const render = () =>
+    renderPlayerBody({
+      player,
+      isLoading: false,
+      season: SEASON,
+      isPastSeason: false,
+      showsOut: true,
+      now: NOW,
+    });
+  const body = render();
+  assert.match(readText(body), /Pts 21\.0 would be 2nd /);
+  assert.match(
+    String(body.text),
+    /<i class="provisional" style="left: [\d.]+%; top: [\d.]+%"><\/i>/,
+  );
+  assert.equal(String(body.text).match(/player-curve-area/g)?.length, 2);
+
+  player.regularSeason.stats[0] = describeStat({ rank: null, value: 21, progress: 0.24 });
+  assert.match(readText(render()), /Pts 21\.0 3P%/);
+  assert.doesNotMatch(String(render().text), /provisional/);
+});
+
 test("a player who played enough games but made too few shots for a percentage is told which, by name", () => {
   const { regularSeason } = createPlayer();
   regularSeason.stats[1] = describeStat({ key: "threeShare", value: 0.125, rank: null });
