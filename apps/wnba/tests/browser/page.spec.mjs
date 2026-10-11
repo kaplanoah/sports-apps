@@ -18,6 +18,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText, measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import {
   listFillFades,
   noteNameFades,
@@ -701,26 +702,12 @@ test("No games today is 15.5px, centered beside today's date, its capitals a tou
   const note = page.locator("#seasonGames .no-games .empty-note");
   await expect(note).toHaveText("No games today");
   await expect(note).toHaveCSS("font-size", "15.5px");
-  // A zero-height box set inline after a text has its top on the text's baseline, and the
-  // capitals' middle sits half a capital above it. Chromium's builds set a baseline up to a pixel
-  // apart, so the note's lead over the number is checked loosely.
-  const readCapitalsMiddle = (selector) =>
-    page.evaluate((target) => {
-      const text = /** @type {HTMLElement} */ (document.querySelector(target));
-      const style = getComputedStyle(text);
-      const context = document.createElement("canvas").getContext("2d");
-      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-      const capitalHeight = context.measureText("H").actualBoundingBoxAscent;
-      const probe = document.createElement("span");
-      probe.style.cssText = "display: inline-block; width: 0; height: 0";
-      text.append(probe);
-      const baseline = probe.getBoundingClientRect().top;
-      probe.remove();
-      return baseline - capitalHeight / 2;
-    }, selector);
-
-  const noteMiddle = await readCapitalsMiddle("#seasonGames .no-games .empty-note");
-  const numberMiddle = await readCapitalsMiddle("#seasonGames .no-games .day-number");
+  // Chromium's builds set a baseline up to a pixel apart, so the note's lead over the number is
+  // checked loosely.
+  const { middle: noteMiddle } = await readCapitals(note);
+  const { middle: numberMiddle } = await readCapitals(
+    page.locator("#seasonGames .no-games .day-number"),
+  );
   expect(numberMiddle - noteMiddle).toBeGreaterThan(2.4);
   expect(numberMiddle - noteMiddle).toBeLessThan(5);
   const [textMiddle, columnMiddle] = await note.evaluate((element) => {
