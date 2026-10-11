@@ -8,6 +8,7 @@ import {
   chooseSeason,
   EVENING_FIXTURE,
   matchPath,
+  readColor,
   readKept,
   SEASON_2025,
   buildSeasonRecord,
@@ -191,7 +192,7 @@ test("each day's heading is a band of the page's color, ending in a line, its ca
   await expect(heading).toHaveCSS("box-shadow", /0px 1px 0px 0px$/);
   await expect(
     page.locator('#seasonGames .listed-day[data-day="2026-09-24"] .day-heading'),
-  ).toHaveCSS("color", "rgb(244, 193, 92)");
+  ).toHaveCSS("color", await readColor(page, "--highlight"));
 });
 
 test("a day far from the list's top stands in for its games at the height they take once drawn, so the page holds only the games near the screen", async ({
@@ -345,10 +346,10 @@ test("a postseason game today names its round and the series, away wins first, o
   await expect(labels).toHaveText(["NL WC 0-1", "AL WC 1-0", "AL WC 1-1", "NL WC 2-0"]);
   await expect(labels.first()).toHaveCSS("text-transform", "uppercase");
   await expect(labels.first()).toHaveCSS("color", await readColor(page, "--ink-dim"));
-  await expect(labels.last()).toHaveCSS("color", await readColor(page, "--gold"));
+  await expect(labels.last()).toHaveCSS("color", await readColor(page, "--highlight"));
   await expect(labels.last().locator(".series-count")).toHaveCSS(
     "color",
-    await readColor(page, "--gold"),
+    await readColor(page, "--highlight"),
   );
 
   const row = await page.locator("#seasonGames .game-day.is-today .game-row").first().boundingBox();
@@ -401,7 +402,7 @@ test("a clinched club's race letter is gold at the facts' own weight", async ({ 
   await openApp(page);
   await page.getByRole("tab", { name: "Games" }).click();
   const race = page.locator("#seasonGames .game-day.is-today .race.clinched").first();
-  await expect(race).toHaveCSS("color", await readColor(page, "--gold"));
+  await expect(race).toHaveCSS("color", await readColor(page, "--highlight"));
   await expect(race).toHaveCSS("font-weight", "400");
 });
 
@@ -525,10 +526,6 @@ const PHONE = { width: 390, height: 844 };
 const WIDE_SCREEN = { width: 1800, height: 900 };
 const LAPTOP = { width: 1280, height: 800 };
 
-const CREAM = "rgb(241, 234, 212)";
-const TAUPE = "rgb(153, 139, 125)";
-const GOLD = "rgb(244, 193, 92)";
-
 test("the Games tab bolds each winner, and shows a club that's out as any other", async ({
   page,
 }) => {
@@ -547,12 +544,12 @@ test("the Games tab bolds each winner, and shows a club that's out as any other"
   const loserOut = findSide("Nationals", "Tigers", "home");
 
   await expect(winnerStillIn).toHaveCSS("font-weight", "550");
-  await expect(winnerStillIn).toHaveCSS("color", CREAM);
+  await expect(winnerStillIn).toHaveCSS("color", await readColor(page, "--ink"));
   await expect(loserStillIn).toHaveCSS("font-weight", "400");
-  await expect(loserStillIn).toHaveCSS("color", CREAM);
+  await expect(loserStillIn).toHaveCSS("color", await readColor(page, "--ink"));
   await expect(winnerOut).toHaveCSS("font-weight", "550");
-  await expect(winnerOut).toHaveCSS("color", CREAM);
-  await expect(loserOut.locator(".team-name")).toHaveCSS("color", CREAM);
+  await expect(winnerOut).toHaveCSS("color", await readColor(page, "--ink"));
+  await expect(loserOut.locator(".team-name")).toHaveCSS("color", await readColor(page, "--ink"));
   await expect(loserOut.locator(".dot")).toHaveCSS("opacity", "1");
 });
 
@@ -568,7 +565,7 @@ test("the bracket shows an eliminated club in taupe, without a line through its 
     .locator(".matchup-row.eliminated .team-name")
     .filter({ hasText: "Mariners" })
     .first();
-  await expect(eliminated).toHaveCSS("color", TAUPE);
+  await expect(eliminated).toHaveCSS("color", await readColor(page, "--out"));
   await expect(eliminated).toHaveCSS("text-decoration-line", "none");
   expect(await listLowContrastText(page)).toEqual([]);
 });
@@ -780,7 +777,7 @@ test("under a card whose game is under way, the score, inning, and outs show ins
 
   const batting = notes.filter({ hasText: /^3-2 Top 4th$/ });
   await expect(batting).toHaveCount(1);
-  await expect(batting).toHaveCSS("color", await readColor(page, "--copper-ink"));
+  await expect(batting).toHaveCSS("color", await readColor(page, "--now"));
   await expect(batting).toHaveCSS("font-style", "normal");
   await expect(batting.getByRole("img", { name: "1 out" })).toBeVisible();
   await expect(batting.locator(".out-light")).toHaveCount(2);
@@ -800,7 +797,7 @@ test("under a card whose game is under way, the score, inning, and outs show ins
   await expect(betweenHalves.locator(".out-light")).toHaveCount(0);
   const delayed = notes.filter({ hasText: /^1-1 Delayed: Rain$/ });
   await expect(delayed).toHaveCount(1);
-  await expect(delayed).toHaveCSS("color", await readColor(page, "--gold"));
+  await expect(delayed).toHaveCSS("color", await readColor(page, "--highlight"));
   await expect(delayed.locator(".out-light")).toHaveCount(0);
   await expect(notes.filter({ hasText: /^Today\u20227:08\sPM$/ })).toHaveCount(1);
 });
@@ -823,7 +820,7 @@ test("in the half hour before first pitch, a card counts down the minutes on the
 
   const countdown = notes.filter({ hasText: /^First pitch in 18 min$/ });
   await expect(countdown).toHaveCount(1);
-  await expect(countdown).toHaveCSS("color", await readColor(page, "--copper-ink"));
+  await expect(countdown).toHaveCSS("color", await readColor(page, "--now"));
   await expect(notes.filter({ hasText: /^Today\u20229:02\sPM$/ })).toHaveCount(3);
 
   await page.clock.runFor(60 * 1000);
@@ -838,17 +835,6 @@ test("redrawing the bracket each minute keeps keyboard focus on it", async ({ pa
   await page.clock.runFor(60 * 1000);
   await expect(bracket).toBeFocused();
 });
-
-const readColor = (page, token) =>
-  page.evaluate((name) => {
-    const probe = document.createElement("span");
-    probe.style.color = `var(${name})`;
-    document.body.append(probe);
-    const color = getComputedStyle(probe).color;
-    probe.remove();
-    return color;
-  }, token);
-
 test("on a phone, the World Series card scrolls all the way to the middle of the screen", async ({
   page,
 }) => {
@@ -1087,7 +1073,7 @@ test("on a wide screen, the AL and NL face each other across the World Series", 
   expect(alcs.y).toBe(worldSeries.y);
   await expect(
     bracket.locator(".series.world .bestof span").filter({ hasText: "World Series" }),
-  ).toHaveCSS("color", GOLD);
+  ).toHaveCSS("color", await readColor(page, "--highlight"));
 
   const divisions = bracket.locator(".box").filter({ hasText: "Division Series" });
   const upperDivision = await divisions.nth(0).boundingBox();
@@ -1230,11 +1216,11 @@ test("the standings show each club's game under way, and a delay in gold", async
 
   const leading = cells.filter({ hasText: /^Up 3 @ NYY in the 6th$/ });
   await expect(leading).not.toHaveCount(0);
-  await expect(leading.first()).toHaveCSS("color", await readColor(page, "--copper-ink"));
+  await expect(leading.first()).toHaveCSS("color", await readColor(page, "--now"));
   await expect(cells.filter({ hasText: /^Down 3 vs TB in the 6th$/ })).not.toHaveCount(0);
   const delayed = cells.filter({ hasText: /^Down 1 vs CLE \u2014 Delayed: Rain$/ });
   await expect(delayed).not.toHaveCount(0);
-  await expect(delayed.first()).toHaveCSS("color", GOLD);
+  await expect(delayed.first()).toHaveCSS("color", await readColor(page, "--highlight"));
 });
 
 test("the leagues' standings sit side by side only when a game under way fits", async ({

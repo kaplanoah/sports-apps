@@ -20,7 +20,7 @@ test("the page is a whole document with what an iPhone needs to save it as an ap
   for (const tag of [
     'content="width=device-width, initial-scale=1, viewport-fit=cover"',
     '<link rel="manifest" href="manifest.webmanifest" />',
-    '<link rel="apple-touch-icon" href="icon-180.png" />',
+    '<link rel="apple-touch-icon" href="icon-180.png" id="homeScreenIcon" />',
     '<meta name="apple-mobile-web-app-title" content="MLB" />',
   ])
     assert.ok(page.includes(tag), tag);

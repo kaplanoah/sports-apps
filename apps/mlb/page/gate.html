@@ -3,21 +3,26 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="icon-180.png" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" id="tabIcon" />
+  <link rel="apple-touch-icon" href="icon-180.png" id="homeScreenIcon" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="MLB" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#0d1f16" />
+  <meta name="theme-color" content="#0d1f16" id="themeColor" />
   <title>MLB</title>
   <link rel="preload" href="fonts/chivo-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="shared/type.css" />
   <link rel="stylesheet" href="shared/gate.css" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="shared/pick-theme.js"></script>
+  <script type="importmap">
+    { "imports": { "#shared/": "./shared/" } }
+  </script>
 
   <body class="gate-page">
     <main class="gate">
-      <img class="gate-icon" src="icon-180.png" alt="" />
+      <img class="gate-icon gate-icon-dark" src="icon-180.png" alt="" />
+      <img class="gate-icon gate-icon-light" src="icon-light-180.png" alt="" />
       <h1 class="gate-title">Enter your access code</h1>
       <form class="gate-form" id="gateForm" novalidate>
         <input
@@ -41,4 +46,5 @@
   </body>
 
   <script type="module" src="shared/gate.js"></script>
+  <script type="module" src="js/gate-theme.js"></script>
 </html>

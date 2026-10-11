@@ -4,7 +4,7 @@ import {
   openApp,
   BOX_SCORES,
   PLAYER_DOCS,
-  PITCHER_SIDES,
+  MATCHUP_STARTERS,
   BROADCASTS_FIXTURE,
   buildFixtureSnapshot,
   buildSnapshotWithStarters,
@@ -28,62 +28,6 @@ const NEXT_DAY_GAMES = "#seasonGames .listed-day:has(.is-today) + .listed-day .g
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-// Every qualified starter's number in each measure, as the Worker sends it with a starter's side.
-const QUALIFIED_SPREAD = /** @type {any} */ (Object.values(PITCHER_SIDES)[0]).starters.values;
-
-// What the Worker answers for Astros at Athletics' starters, Blubaugh and Springs.
-const describePitcher = (id, [firstName, lastName], hand, line, ranks, pitches) => ({
-  id,
-  firstName,
-  lastName,
-  hand,
-  age: 27,
-  line,
-  ranks,
-  starters: { count: 46, values: QUALIFIED_SPREAD },
-  pitches,
-  starts: [
-    { date: "2026-09-19", opp: "SEA", home: true, ip: "5.2", runs: 2, k: 6 },
-    { date: "2026-09-13", opp: "TEX", home: false, ip: "6.0", runs: 0, k: 8 },
-  ],
-});
-const PITCHERS = {
-  1: describePitcher(
-    1,
-    ["AJ", "Blubaugh"],
-    "R",
-    { starts: 28, era: "3.66", k9: 9.1, bb9: 3.4, speed: 95.4 },
-    {
-      era: { rank: 17, of: 46 },
-      k9: { rank: 3, of: 46 },
-      bb9: { rank: 33, of: 46 },
-      speed: { rank: 10, of: 46 },
-    },
-    [
-      { code: "FF", name: "Four-seam FB", share: 0.52, mph: 95.4 },
-      { code: "SL", name: "Slider", share: 0.3, mph: 86.1 },
-      { code: "CH", name: "Changeup", share: 0.17, mph: 87.0 },
-      { code: "CS", name: "Slow Curve", share: 0.01, mph: 74.0 },
-    ],
-  ),
-  2: describePitcher(
-    2,
-    ["Jeffrey", "Springs"],
-    "L",
-    { starts: 24, ip: "128.2", era: "4.02", k9: 7.7, bb9: 2.9, speed: 90.8 },
-    {
-      era: { rank: 29, of: 46 },
-      k9: { rank: 26, of: 46 },
-      bb9: { rank: 20, of: 46 },
-      speed: { rank: 43, of: 46 },
-    },
-    [
-      { code: "FF", name: "Four-seam FB", share: 0.4, mph: 90.8 },
-      { code: "CH", name: "Changeup", share: 0.35, mph: 79.5 },
-    ],
-  ),
-};
-
 const ASTROS_AT_ATHLETICS = "Game details: Astros at Athletics, Thu, Sep 24";
 const BLUBAUGH_VS_SPRINGS = "Pitching matchup: Blubaugh vs Springs";
 
@@ -92,7 +36,11 @@ const BLUBAUGH_VS_SPRINGS = "Pitching matchup: Blubaugh vs Springs";
  * @param {Record<number, object>} [pitchers]
  * @param {object} [snapshot]
  */
-async function showGames(page, pitchers = PITCHERS, snapshot = buildSnapshotWithStarters()) {
+async function showGames(
+  page,
+  pitchers = MATCHUP_STARTERS,
+  snapshot = buildSnapshotWithStarters(),
+) {
   await openApp(page, { snapshots: { 2026: snapshot }, pitchers });
   await page.getByRole("tab", { name: "Games" }).click();
 }
@@ -102,7 +50,7 @@ async function showGames(page, pitchers = PITCHERS, snapshot = buildSnapshotWith
  * @param {Record<number, object>} [pitchers]
  * @param {object} [snapshot]
  */
-async function openGame(page, pitchers = PITCHERS, snapshot = buildSnapshotWithStarters()) {
+async function openGame(page, pitchers = MATCHUP_STARTERS, snapshot = buildSnapshotWithStarters()) {
   await showGames(page, pitchers, snapshot);
   await page.getByRole("button", { name: ASTROS_AT_ATHLETICS }).click();
   return page.locator("#gameSheet");
@@ -122,7 +70,11 @@ async function showSection(sheet, name) {
  * @param {Record<number, object>} [pitchers]
  * @param {object} [snapshot]
  */
-async function openMatchup(page, pitchers = PITCHERS, snapshot = buildSnapshotWithStarters()) {
+async function openMatchup(
+  page,
+  pitchers = MATCHUP_STARTERS,
+  snapshot = buildSnapshotWithStarters(),
+) {
   const sheet = await openGame(page, pitchers, snapshot);
   await showSection(sheet, "Matchup");
   return sheet;
@@ -159,6 +111,7 @@ test("tapping a game opens its sheet on Game: its row, then its starters on one 
 test("a game still to come shows where it's on between its row and its starters, each logo in its version for a dark sheet", async ({
   page,
 }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
   await openApp(page, {
     now: BROADCASTS_FIXTURE.now,
     snapshots: { 2026: buildFixtureSnapshot(BROADCASTS_FIXTURE) },
@@ -183,6 +136,25 @@ test("a game still to come shows where it's on between its row and its starters,
   expect(starters.y).toBeGreaterThanOrEqual(where.y + where.height);
   const fs1 = await line.getByRole("img", { name: "FS1" }).boundingBox();
   expect(fs1.height).toBeCloseTo(13 * 1.12, 0);
+});
+
+test("in Ball, where a game is on shows each logo in its version for a light sheet", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openApp(page, {
+    now: BROADCASTS_FIXTURE.now,
+    snapshots: { 2026: buildFixtureSnapshot(BROADCASTS_FIXTURE) },
+  });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page
+    .locator("#seasonGames .game-day.is-today")
+    .getByRole("button", { name: /^Game details: Brewers at Padres/ })
+    .click();
+  const line = page.locator("#gameSheet").getByRole("group", { name: "Where to watch" });
+  await expect(line.locator(".for-light")).toHaveAttribute("alt", "FOX One");
+  await expect(line.locator(".for-light")).toBeVisible();
+  await expect(line.locator(".for-dark")).toBeHidden();
 });
 
 test("a tap on the starters slides to Matchup, with them face to face, and the close button closes it", async ({
@@ -294,7 +266,7 @@ test("a starter named after the sheet opened shows on its starters line and in i
   });
   const app = await openApp(page, {
     snapshots: { 2026: setStarters(named, [blubaugh, { id: springs.id }]) },
-    pitchers: PITCHERS,
+    pitchers: MATCHUP_STARTERS,
   });
   await page.getByRole("tab", { name: "Games" }).click();
   await page.getByRole("button", { name: ASTROS_AT_ATHLETICS }).click();
@@ -507,7 +479,7 @@ test("a starter the Worker can't describe says so under his club, beside the oth
   page,
 }) => {
   /** @type {Record<number, object>} */
-  const pitchers = { 1: PITCHERS[1] };
+  const pitchers = { 1: MATCHUP_STARTERS[1] };
   const sheet = await openMatchup(page, pitchers);
   await expect(sheet.locator(".pitch-mix")).toHaveCount(1);
   const retry = sheet.locator(".pitcher-id.home .retry-side");
@@ -517,7 +489,7 @@ test("a starter the Worker can't describe says so under his club, beside the oth
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
-  pitchers[2] = PITCHERS[2];
+  pitchers[2] = MATCHUP_STARTERS[2];
   const release = await holdPitchers(page);
   const button = retry.getByRole("button", { name: "Try again" });
   expect(await isTapOnTarget(button)).toBe(true);
@@ -533,7 +505,7 @@ test("a starter the Worker can't describe says so under his club, beside the oth
 test("a starter's Couldn't load sits 11px under his club and a pixel right of the button's center, 3.5px over it, and the button 14px over the stats", async ({
   page,
 }) => {
-  const sheet = await openMatchup(page, { 1: PITCHERS[1] });
+  const sheet = await openMatchup(page, { 1: MATCHUP_STARTERS[1] });
   const gaps = await sheet.locator("#matchupBody").evaluate((body) => {
     const box = (selector) =>
       /** @type {Element} */ (body.querySelector(selector)).getBoundingClientRect();
@@ -565,7 +537,7 @@ test("with neither starter's numbers loaded, the Matchup says why once, and read
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
-  Object.assign(pitchers, PITCHERS);
+  Object.assign(pitchers, MATCHUP_STARTERS);
   await page.evaluate(() => dispatchEvent(new Event("online")));
   await expect(sheet.locator(".pitch-mix")).toHaveCount(2);
   await expect(block).toHaveCount(0);
@@ -742,7 +714,7 @@ test("beside a starter who isn't ranked, both numbers are white, and only the un
   page,
 }) => {
   const era = await readEraColors(
-    await openMatchup(page, { ...PITCHERS, 2: { ...PITCHERS[2], ranks: null } }),
+    await openMatchup(page, { ...MATCHUP_STARTERS, 2: { ...MATCHUP_STARTERS[2], ranks: null } }),
   );
   expect(era.away).toEqual({ color: era.ink, weight: "400", isDotDimmed: false });
   expect(era.home).toEqual({ color: era.ink, weight: "400", isDotDimmed: true });
@@ -770,7 +742,10 @@ const readNumberLineMiddles = (sheet) =>
 test("where an unranked starter near the innings would rank is a hairline in his club's color through each curve, 4px above it and 3.5px past its foot, with no dot", async ({
   page,
 }) => {
-  const sheet = await openMatchup(page, { ...PITCHERS, 2: { ...PITCHERS[2], ranks: null } });
+  const sheet = await openMatchup(page, {
+    ...MATCHUP_STARTERS,
+    2: { ...MATCHUP_STARTERS[2], ranks: null },
+  });
   const lines = sheet.locator(".tape .player-curve i.home.provisional");
   await expect(lines).toHaveCount(4);
   await expect(sheet.locator(".tape-number.home .tape-rank").first()).toHaveText(
@@ -820,7 +795,10 @@ test("where an unranked starter near the innings would rank is a hairline in his
 test("an unranked starter's numbers sit level with the label and the ranked starter's", async ({
   page,
 }) => {
-  const sheet = await openMatchup(page, { ...PITCHERS, 2: { ...PITCHERS[2], ranks: null } });
+  const sheet = await openMatchup(page, {
+    ...MATCHUP_STARTERS,
+    2: { ...MATCHUP_STARTERS[2], ranks: null },
+  });
   for (const middles of await readNumberLineMiddles(sheet)) {
     expect(middles.home).toBe(middles.away);
     expect(Math.abs(middles.label - middles.away)).toBeLessThanOrEqual(1);
@@ -833,7 +811,10 @@ test("an unranked starter's note sets his innings against his club's games, a st
   const athletics = Object.values(buildSnapshotWithStarters().standings.divisions)
     .flat()
     .find((/** @type {any} */ row) => row.id === "ATH");
-  const sheet = await openMatchup(page, { ...PITCHERS, 2: { ...PITCHERS[2], ranks: null } });
+  const sheet = await openMatchup(page, {
+    ...MATCHUP_STARTERS,
+    2: { ...MATCHUP_STARTERS[2], ranks: null },
+  });
   const notes = sheet.locator(".tape-note");
 
   await expect(notes).toHaveText([
