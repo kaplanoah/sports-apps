@@ -159,6 +159,7 @@ test("tapping a game opens its sheet on Game: its row, then its starters on one 
 test("a game still to come shows where it's on between its row and its starters, each logo in its version for a dark sheet", async ({
   page,
 }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
   await openApp(page, {
     now: BROADCASTS_FIXTURE.now,
     snapshots: { 2026: buildFixtureSnapshot(BROADCASTS_FIXTURE) },
@@ -183,6 +184,25 @@ test("a game still to come shows where it's on between its row and its starters,
   expect(starters.y).toBeGreaterThanOrEqual(where.y + where.height);
   const fs1 = await line.getByRole("img", { name: "FS1" }).boundingBox();
   expect(fs1.height).toBeCloseTo(13 * 1.12, 0);
+});
+
+test("in Ball, where a game is on shows each logo in its version for a light sheet", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openApp(page, {
+    now: BROADCASTS_FIXTURE.now,
+    snapshots: { 2026: buildFixtureSnapshot(BROADCASTS_FIXTURE) },
+  });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page
+    .locator("#seasonGames .game-day.is-today")
+    .getByRole("button", { name: /^Game details: Brewers at Padres/ })
+    .click();
+  const line = page.locator("#gameSheet").getByRole("group", { name: "Where to watch" });
+  await expect(line.locator(".for-light")).toHaveAttribute("alt", "FOX One");
+  await expect(line.locator(".for-light")).toBeVisible();
+  await expect(line.locator(".for-dark")).toBeHidden();
 });
 
 test("a tap on the starters slides to Matchup, with them face to face, and the close button closes it", async ({

@@ -1,4 +1,4 @@
-import { test, expect, openLockedApp } from "./harness.mjs";
+import { test, expect, openLockedApp, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -26,7 +26,7 @@ test("the gate's text keeps to the type scale", async ({ page }) => {
   expect(await listStrayPeriods(page)).toEqual([]);
 });
 
-test("the page asks for its code in baseball's gold and copper, and the right one opens the app for good", async ({
+test("the page asks for its code in the theme's accent, and the right one opens the app for good", async ({
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBALL" });
@@ -34,14 +34,14 @@ test("the page asks for its code in baseball's gold and copper, and the right on
   await expect(page.getByRole("tab", { name: "Standings" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Open" })).toHaveCSS(
     "background-color",
-    "rgb(244, 193, 92)",
+    await readColor(page, "--accent"),
   );
 
   await sendCode(page, "curveball");
   await expect(page.getByRole("alert")).toHaveText(
     "That code isn't right. Check it and try again.",
   );
-  await expect(page.getByRole("alert")).toHaveCSS("color", "rgb(205, 149, 102)");
+  await expect(page.getByRole("alert")).toHaveCSS("color", await readColor(page, "--now"));
 
   await sendCode(page, "fast ball");
   await expect(page.getByRole("tab", { name: "Standings" })).toBeVisible();
@@ -49,4 +49,57 @@ test("the page asks for its code in baseball's gold and copper, and the right on
   await page.reload();
   await expect(page.getByRole("tab", { name: "Standings" })).toBeVisible();
   await expect(findGate(page)).toHaveCount(0);
+});
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {"light" | "dark"} theme
+ */
+async function expectGateIcons(page, theme) {
+  const isDark = theme === "dark";
+  await expect(page.locator(".gate-icon:visible")).toHaveAttribute(
+    "src",
+    isDark ? "icon-180.png" : "icon-light-180.png",
+  );
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+    "href",
+    isDark ? "icon.svg" : "icon-light.svg",
+  );
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+    "href",
+    isDark ? "icon-180.png" : "icon-light-180.png",
+  );
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
+    "content",
+    isDark ? "#0d1f16" : "#f5f1e6",
+  );
+}
+
+test("the gate's icon, tab icon, and bar follow the phone's theme", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openLockedApp(page, { accessCode: "FASTBALL" });
+  await expectGateIcons(page, "light");
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expectGateIcons(page, "dark");
+});
+
+test("the gate's icons and bar follow the theme picked in settings", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.addInitScript(() => localStorage.setItem("appearance", JSON.stringify("light")));
+  await openLockedApp(page, { accessCode: "FASTBALL" });
+  await expectGateIcons(page, "light");
+});
+
+test("the gate's text stands out from what's behind it as WCAG's AA level asks, in Ball and Night Game", async ({
+  page,
+}) => {
+  for (const theme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme: theme });
+    await openLockedApp(page, { accessCode: "FASTBALL" });
+    await expect(findGate(page)).toBeVisible();
+    await sendCode(page, "curveball");
+    await expect(page.getByRole("alert")).toBeVisible();
+    expect(await listLowContrastText(page), theme).toEqual([]);
+  }
 });

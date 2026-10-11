@@ -63,74 +63,80 @@
   --size-small: 0.8125rem;
   --size-setting: 0.96875rem;
   --size-setting-note: 0.875rem;
-  --bg: #0d1f16;
-  --card: #132a1f;
+  --bg: #f5f1e6;
+  --card: #fffdf8;
   --sheet: var(--card);
   --sheet-shadow: none;
   --sheet-band: var(--sheet);
   --sheet-band-line: transparent;
   --sheet-gap: 0px;
-  --card-border: #2a4536;
-  --ink: #f1ead4;
-  --ink-dim: #7fa88f;
+  --card-border: #ddd5c6;
+  --ink: #1e1b18;
+  --ink-dim: #625a52;
   --catch-up-fade: 0.75;
   --ink-mid: color-mix(in srgb, var(--ink-dim) 55%, var(--ink));
   --ink-hover: color-mix(in srgb, var(--ink) 75%, var(--accent));
-  --divider: #1e3a2b;
-  --gold: #f4c15c;
-  --gold-ink: #12200f;
-  --copper: #c17a4f;
-  --copper-ink: #cd9566;
-  --al: #7fb0c8;
-  --nl: #e0a2a2;
-  --all-star-shadow: rgba(0, 0, 0, 0.138);
-  --all-star-light: rgba(241, 234, 212, 0.13);
+  --divider: #ebe4d6;
+  /* Each color's job: --highlight sets text apart, like a heading or a clinch, --accent fills what's
+     chosen, --now marks what's happening now, with --now-line for its lines and fills and
+     --now-ink for text on them. */
+  --highlight: var(--ink);
+  --accent: #bf3623;
+  --accent-ink: #fff;
+  --now: #bf3623;
+  --now-line: #bf3623;
+  --now-ink: #fffdf8;
+  --al: #2b5f86;
+  --nl: #bf3623;
+  /* A league's letters on its own tint, deeper so they still read on it. */
+  --al-tag: #24506f;
+  --nl-tag: #9e2a1c;
+  --all-star-shadow: rgba(0, 0, 0, 0.12);
+  --all-star-light: rgba(255, 255, 255, 0.4);
   --all-star-shift: -3px;
-  --out: #998b7d;
-  --accent: var(--gold);
-  --accent-ink: var(--gold-ink);
-  --focus-ring: var(--copper-ink);
+  --out: #6b645c;
+  --focus-ring: var(--now);
   --gate-heading-font: "Chivo Mono", "JetBrains Mono", monospace;
   --gate-code-font: "Chivo Mono", "JetBrains Mono", monospace;
-  --gate-problem: var(--copper-ink);
+  --gate-problem: var(--now);
   --radius-card: 6px;
   --radius-chip: 3px;
   --radius-control: 6px;
   --radius-sheet: 12px;
-  --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23625a52' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-tint: var(--card);
   --tab-bar-edge: var(--card-border);
-  --tab-bar-ink: #fff;
-  --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
-  --switch-knob: var(--ink);
+  --tab-bar-ink: var(--ink);
+  --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 9%, transparent);
+  --switch-knob: #fffdf8;
   --page-gutter: 18px;
   --header-gap: 13px;
   --pager-chosen-edge: transparent;
   --held-bar-fade: 18px;
   --held-bar-line: transparent;
   --pager-label: var(--ink-dim);
-  --updates-head: var(--gold);
-  --sheet-part-head: var(--gold);
+  --updates-head: var(--highlight);
+  --sheet-part-head: var(--highlight);
   --network-logo-height: 13px;
   --network-gap: 16px;
   --network-name-offset: 0.5px;
-  --logos-for-light: none;
-  --logos-for-dark: inline;
+  --logos-for-light: inline;
+  --logos-for-dark: none;
   --game-card-edge: var(--card-border);
-  --game-card-live: var(--copper-ink);
-  --game-card-won: var(--gold);
+  --game-card-live: var(--now);
+  --game-card-won: var(--highlight);
   --game-card-team-font: inherit;
   --game-row-height: 82.5px;
-  --strip-month: var(--gold);
-  --strip-today: var(--gold);
-  --strip-chosen: var(--gold);
-  --strip-chosen-ink: var(--gold-ink);
+  --strip-month: var(--highlight);
+  --strip-today: var(--highlight);
+  --strip-chosen: var(--accent);
+  --strip-chosen-ink: var(--accent-ink);
   --strip-chosen-edge: transparent;
-  --strip-action: var(--gold);
+  --strip-action: var(--highlight);
   --raised: var(--card);
   --edge: var(--card-border);
-  --action: var(--gold);
-  --structure: var(--gold);
+  --action: var(--highlight);
+  --structure: var(--highlight);
   --text: "Chivo Mono", "JetBrains Mono", monospace;
   --search-face: "Chivo Mono Search", "JetBrains Mono", monospace;
   --select-face: "Chivo Mono Select", "JetBrains Mono", monospace;
@@ -142,15 +148,52 @@
   --game-status-offset: 20.5px;
   --game-if-necessary-offset: 26.5px;
   /* Pitch colors run by family: fastballs warm, breaking balls blue, changeups pink. */
-  --pitch-four-seam: var(--gold);
-  --pitch-sinker: var(--copper);
-  --pitch-cutter: color-mix(in srgb, var(--gold) 50%, var(--copper));
+  --pitch-four-seam: #bf3623;
+  --pitch-sinker: #c4741f;
+  --pitch-cutter: color-mix(in srgb, var(--pitch-four-seam) 50%, var(--pitch-sinker));
   --pitch-slider: var(--al);
   --pitch-sweeper: color-mix(in srgb, var(--al) 55%, var(--ink));
   --pitch-curve: color-mix(in srgb, var(--al) 55%, var(--card-border));
-  --pitch-changeup: var(--nl);
-  --pitch-splitter: color-mix(in srgb, var(--nl) 55%, var(--card-border));
+  --pitch-changeup: #b8507a;
+  --pitch-splitter: color-mix(in srgb, var(--pitch-changeup) 55%, var(--card-border));
   --pitch-other: var(--ink-dim);
+  color-scheme: light;
+}
+/* Ball above, the ball's leather and stitching, and Night Game here, the field under the lights,
+   following the phone's setting unless the viewer picks one (shared/page/appearance.js). */
+:root[data-theme="dark"] {
+  --bg: #0d1f16;
+  --card: #132a1f;
+  --card-border: #2a4536;
+  --ink: #f1ead4;
+  --ink-dim: #7fa88f;
+  --divider: #1e3a2b;
+  --gold: #f4c15c;
+  --gold-ink: #12200f;
+  --copper: #c17a4f;
+  --copper-ink: #cd9566;
+  --highlight: var(--gold);
+  --accent: var(--gold);
+  --accent-ink: var(--gold-ink);
+  --now: var(--copper-ink);
+  --now-line: var(--copper);
+  --now-ink: var(--gold-ink);
+  --al: #7fb0c8;
+  --nl: #e0a2a2;
+  --al-tag: var(--al);
+  --nl-tag: var(--nl);
+  --all-star-shadow: rgba(0, 0, 0, 0.138);
+  --all-star-light: rgba(241, 234, 212, 0.13);
+  --out: #998b7d;
+  --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --tab-bar-ink: #fff;
+  --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
+  --switch-knob: var(--ink);
+  --logos-for-light: none;
+  --logos-for-dark: inline;
+  --pitch-four-seam: var(--gold);
+  --pitch-sinker: var(--copper);
+  --pitch-changeup: var(--nl);
   color-scheme: dark;
 }
 * {
@@ -252,7 +295,7 @@ header.top h1 {
   min-width: 0;
 }
 .stamp-err {
-  color: var(--copper-ink);
+  color: var(--now);
 }
 
 .stand-head {
@@ -427,11 +470,11 @@ table.st tr.eliminated td.next-cell {
 }
 table.st tr.alive td.next-cell.live,
 table.st tr.eliminated td.next-cell.live {
-  color: var(--copper-ink);
+  color: var(--now);
 }
 table.st tr.alive td.next-cell.delayed,
 table.st tr.eliminated td.next-cell.delayed {
-  color: var(--gold);
+  color: var(--highlight);
 }
 table.st tr.cut td,
 table.st tr.group-end td {
@@ -447,7 +490,7 @@ table.st tr.cutline td {
   border: 0;
   background-image: repeating-linear-gradient(
     to right,
-    color-mix(in srgb, var(--copper) 70%, transparent) 0 1px,
+    color-mix(in srgb, var(--now-line) 70%, transparent) 0 1px,
     transparent 1px 3px
   );
   background-repeat: no-repeat;
@@ -468,10 +511,10 @@ table.st .seed-cell {
   font-variant-numeric: tabular-nums;
 }
 .elim-num.clinched {
-  color: var(--gold);
+  color: var(--highlight);
 }
 .elim-num.live {
-  color: var(--copper-ink);
+  color: var(--now);
 }
 .league-tag,
 .status-chip,
@@ -499,11 +542,11 @@ table.st .seed-cell {
   text-indent: 0.07em;
 }
 .clinch-tag {
-  color: var(--gold);
-  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  color: var(--highlight);
+  border: 1px solid color-mix(in srgb, var(--highlight) 45%, transparent);
 }
 .magic-tag {
-  color: var(--copper-ink);
+  color: var(--now);
   border: 0;
   padding: 0;
   height: auto;
@@ -568,7 +611,7 @@ table.st .seed-cell {
   }
 }
 .game-day.is-today .day-heading {
-  color: var(--gold);
+  color: var(--highlight);
 }
 .empty-note {
   margin: 0;
@@ -650,11 +693,11 @@ table.st .seed-cell {
   top: 1px;
 }
 .race.clinched {
-  color: var(--gold);
+  color: var(--highlight);
   font-weight: 400;
 }
 .race.racing {
-  color: var(--copper-ink);
+  color: var(--now);
 }
 .game-middle {
   min-width: 4.5em;
@@ -699,13 +742,13 @@ table.st .seed-cell {
 }
 .series-label.decided,
 .series-label.decided .series-count {
-  color: var(--gold);
+  color: var(--highlight);
 }
 .game-row.live .game-status {
-  color: var(--copper-ink);
+  color: var(--now);
 }
 .game-row.delayed .game-status {
-  color: var(--gold);
+  color: var(--highlight);
 }
 .game-score .lost {
   color: var(--ink-dim);
@@ -804,13 +847,13 @@ table.st .seed-cell {
   font-weight: 550;
   flex: none;
   background: transparent;
-  border: 1px solid var(--copper);
-  color: var(--copper-ink);
+  border: 1px solid var(--now-line);
+  color: var(--now);
   line-height: 13px;
 }
 .rank-tag.solid {
-  background: var(--copper);
-  color: var(--gold-ink);
+  background: var(--now-line);
+  color: var(--now-ink);
 }
 
 /* Card part heights add up to CARD.height in bracket-view.js: 1 + 24 + 32 + 32 + 1 = 90px. */
@@ -888,7 +931,7 @@ table.st .seed-cell {
   color: var(--ink);
 }
 .series.world .bestof span:first-child {
-  color: var(--gold);
+  color: var(--highlight);
 }
 .tree-scroll.stacked {
   scroll-snap-type: x proximity;
@@ -927,10 +970,10 @@ table.st .seed-cell {
   color: var(--ink-dim);
 }
 .card-note.live {
-  color: var(--copper-ink);
+  color: var(--now);
 }
 .card-note.delayed {
-  color: var(--gold);
+  color: var(--highlight);
 }
 .card-note.live {
   font-style: normal;
@@ -949,7 +992,7 @@ table.st .seed-cell {
   font-size: var(--size-small);
   font-style: normal;
   font-weight: 550;
-  color: var(--gold);
+  color: var(--highlight);
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -996,7 +1039,7 @@ table.st .seed-cell {
   inset: 0;
 }
 .matchup-row.winner {
-  background: color-mix(in srgb, var(--gold) 8%, transparent);
+  background: color-mix(in srgb, var(--highlight) 8%, transparent);
 }
 .matchup-row.eliminated .team-name {
   color: var(--out);
@@ -1067,8 +1110,8 @@ table.st td.team .team-name {
    in a dark box to look centered. */
 .nscore.lead {
   padding: 2.75px 6px 1.25px;
-  background: var(--gold);
-  color: var(--gold-ink);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* The rank numbers sit in their own column so they stay put while rows move. Each number takes
@@ -1098,7 +1141,7 @@ table.st td.team .team-name {
   justify-content: flex-end;
   font-size: 1.05rem;
   font-weight: 550;
-  color: var(--copper-ink);
+  color: var(--now);
 }
 .rank-numbers li + li {
   border-top: 1px solid transparent;
@@ -1259,8 +1302,8 @@ body.kbd .rank-item .grip:focus {
   color: color-mix(in srgb, var(--out) 65%, var(--ink));
 }
 .status-chip.champ {
-  background: var(--gold);
-  color: var(--gold-ink);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .home-screen-icon {
   background-image: url(icon-180.png);
@@ -1479,7 +1522,7 @@ table.st.line-score {
   color: var(--ink-dim);
 }
 .box-decision {
-  color: var(--gold);
+  color: var(--highlight);
 }
 table.st tr.box-sub td.team {
   padding-left: 22px;
@@ -1527,7 +1570,7 @@ table.st.line-score td.team .club {
 }
 .injured-status {
   margin-left: auto;
-  color: var(--copper-ink);
+  color: var(--now);
 }
 /* A player's name in a roster, which opens his sheet. The button only clears the browser's own
    look, so the name keeps the type of the row it sits in. */
@@ -1901,7 +1944,7 @@ body.kbd .player-open:focus {
   gap: 11px;
 }
 .start-now {
-  color: var(--copper-ink);
+  color: var(--now);
 }
 .recent-starts li > :last-child {
   color: var(--ink-mid);
@@ -1939,7 +1982,7 @@ body.kbd .player-open:focus {
   text-align: right;
 }
 .rotation li.rested > :last-child {
-  color: var(--gold);
+  color: var(--highlight);
 }
 /* The chart scales with its width, which on the narrowest phone is still about 320px. pitch-mix.js
    hands it the line's edge and dot as shares of that width, so the bar above the line ends where it
@@ -2070,11 +2113,11 @@ body.kbd .player-open:focus {
 
 .league-tag.AL {
   background: color-mix(in srgb, var(--al) 20%, transparent);
-  color: var(--al);
+  color: var(--al-tag);
 }
 .league-tag.NL {
   background: color-mix(in srgb, var(--nl) 20%, transparent);
-  color: var(--nl);
+  color: var(--nl-tag);
 }
 
 @media (max-width: 779px) {
@@ -2209,7 +2252,7 @@ body.kbd .player-open:focus {
 .read-arrow {
   width: 14px;
   height: 14px;
-  color: var(--gold);
+  color: var(--highlight);
 }
 .read-check {
   width: 14px;
@@ -2244,14 +2287,14 @@ body.kbd .player-open:focus {
 .retry-button .retry-icon {
   width: 14px;
   height: 14px;
-  color: var(--gold);
+  color: var(--highlight);
 }
 .retry-button.filled {
   height: 32px;
   padding: 0 16px;
-  background: var(--gold);
+  background: var(--accent);
   box-shadow: none;
-  color: var(--gold-ink);
+  color: var(--accent-ink);
 }
 .retry-button.filled .retry-icon {
   color: inherit;
@@ -2379,7 +2422,7 @@ body.kbd .player-open:focus {
   white-space: nowrap;
 }
 .series-result.won {
-  color: var(--gold);
+  color: var(--highlight);
 }
 .series-result.lost,
 .series-result.upcoming {
