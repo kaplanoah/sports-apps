@@ -461,6 +461,29 @@ test("each team's side of the lead chart and the team stats takes its color, on 
   }
 });
 
+test("a side whose color is too light to read as text writes its name and lead on the lead chart in its darker shade, and keeps its color for its dot", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  const app = await openApp(page);
+  await app.changeSeason(finishValkyriesAtWings);
+  const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
+  const chart = sheet.locator(".lead-chart");
+  await expect(chart.locator(".lead-peak.home")).toBeVisible();
+
+  const [color, nameColor] = [TEAMS.SEA.chartColors.light[0], TEAMS.SEA.nameColors.light];
+  await sheet
+    .locator("#gameBody")
+    .evaluate(
+      (body, [side, name]) =>
+        body.setAttribute("style", `--home-light: ${side}; --home-name-light: ${name};`),
+      [color, nameColor],
+    );
+  await expect(chart.locator(".lead-side.home")).toHaveCSS("color", formatRgb(nameColor));
+  await expect(chart.locator(".lead-peak-label.home")).toHaveCSS("color", formatRgb(nameColor));
+  await expect(chart.locator(".lead-peak.home")).toHaveCSS("fill", formatRgb(color));
+});
+
 test("the side behind on a measure gets a paler bar of its own team's hue, on each theme", async ({
   page,
 }) => {

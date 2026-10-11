@@ -5,7 +5,10 @@
 // less, by eye. `chartColors` are what the game sheet draws the team's side of its charts and bars
 // in, on each theme, first choice then other, each its color made just dark or light enough for
 // the team's name to read in it. The first choice is the color that best tells the team apart,
-// which is usually its dot's top. `markColors` mark a player on the curves of her sheet, on each theme: the color its first chart color comes from, made only as dark or light as a mark needs to stand out, so it stays as near the team's own as it can. `titles` are the seasons the franchise won the WNBA Finals
+// which is usually its dot's top. A first choice too gray or too dark to tell apart at a mark's
+// size, like the Storm's green and the Tempo's bordeaux, is made stronger, and on Maple lighter, at
+// its own hue; where that takes it lighter than text needs, `nameColors` keeps the shade of it the
+// team's name and numbers read in. `markColors` mark a player on the curves of her sheet, on each theme: the color its first chart color comes from, made only as dark or light as a mark needs to stand out, so it stays as near the team's own as it can. `titles` are the seasons the franchise won the WNBA Finals
 // before the current one, which the page counts from its bracket, and `titlesAs` names the team
 // the franchise was when it won them, if it has since moved.
 export const TEAMS = {
@@ -162,7 +165,8 @@ export const TEAMS = {
     color: "#2c5235",
     color2: "#fee11a",
     dotSplit: 52,
-    chartColors: { light: ["#2c5235", "#6a5d01"], dark: ["#6b9473", "#fee11a"] },
+    chartColors: { light: ["#02823b", "#6a5d01"], dark: ["#599968", "#fee11a"] },
+    nameColors: { light: "#016d31" },
     markColors: { light: "#2c5235", dark: "#4d7455" },
     titles: [2004, 2010, 2018, 2020],
   },
@@ -174,7 +178,7 @@ export const TEAMS = {
     color: "#441e36",
     color2: "#b3c7e7",
     dotSplit: 51,
-    chartColors: { light: ["#441e36", "#4c5d79"], dark: ["#ab7d98", "#b3c7e7"] },
+    chartColors: { light: ["#772d5e", "#4c5d79"], dark: ["#ab7d98", "#b3c7e7"] },
     markColors: { light: "#441e36", dark: "#8a5e78" },
     titles: [],
   },

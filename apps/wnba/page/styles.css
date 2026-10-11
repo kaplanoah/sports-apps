@@ -747,13 +747,16 @@ header.top h1 {
 /* The game sheet: the two teams across the score in its band, then the game's parts, each under a
    teal title, with --part-space-first between the band and the first title,
    --part-space-above each later title, and --part-space-below it. Each team's side of a chart or
-   bar is in its color for the theme, which js/sheet-colors.js hands the sheet, and the side
+   bar is in its color for the theme, which js/sheet-colors.js hands the sheet, with its name and
+   numbers in a darker shade of it where the color is too light to read as text, and the side
    behind on a measure gets a paler bar of the same hue, faded toward a gray as light as the
    sheet, since fading it toward the tan track or the cream sheet would turn blue gray and green
    olive. */
 .game-sheet-body {
   --away: var(--away-light, var(--ink-dim));
   --home: var(--home-light, var(--ink-dim));
+  --away-name: var(--away-name-light, var(--away));
+  --home-name: var(--home-name-light, var(--home));
   --part-space-first: 20px;
   --part-space-above: 24px;
   --part-space-below: 14px;
@@ -775,12 +778,16 @@ header.top h1 {
 :root[data-theme="dark"] .game-sheet-body {
   --away: var(--away-dark, var(--ink-dim));
   --home: var(--home-dark, var(--ink-dim));
+  --away-name: var(--away-name-dark, var(--away));
+  --home-name: var(--home-name-dark, var(--home));
 }
 .game-sheet-body :is(.tape-side, .lead-chart *).away {
   --side: var(--away);
+  --side-name: var(--away-name);
 }
 .game-sheet-body :is(.tape-side, .lead-chart *).home {
   --side: var(--home);
+  --side-name: var(--home-name);
 }
 .game-sheet-body .tape-bar i {
   background: color-mix(in oklch, var(--side) 47%, oklch(from var(--sheet) l 0 none));
@@ -1060,7 +1067,7 @@ header.top h1 {
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--side);
+  color: var(--side-name);
 }
 .lead-reach,
 .lead-peak-label,
@@ -1088,7 +1095,7 @@ header.top h1 {
   );
   font-family: var(--numbers);
   font-weight: 600;
-  color: var(--side);
+  color: var(--side-name);
 }
 .lead-peak-label.away {
   translate: -50% calc(-100% - 6px);
