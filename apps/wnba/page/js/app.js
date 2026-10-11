@@ -11,12 +11,7 @@ import {
 } from "#shared/news.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
-import {
-  fillDayStrip,
-  showStartDay,
-  startDayStrip,
-  startOverDayStrip,
-} from "#shared/day-strip.js";
+import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import {
   focusGameSearch,
   openGameSearch,
