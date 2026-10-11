@@ -7,7 +7,7 @@ import { html } from "#shared/html.js";
 export const RELEASE_NOTES = [
   {
     at: "2026-10-11T19:25:00Z",
-    text: "If a player is out, for example because of an injury, their player page shows why they're out",
+    text: "If a player is out, for example because of an injury or pregnancy, their player page shows why they're out",
   },
   {
     at: "2026-10-11T00:40:00Z",

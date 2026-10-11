@@ -84,7 +84,9 @@ const RANKED_STATS = [
 const OUT_CHIP = html`<span class="foul-chip"><span class="foul-chip-words">Out</span></span>`;
 // Who wrote the sentence ESPN carries on a player who is out.
 const OUT_SOURCE = "RotoWire";
-const REST_OF_SEASON = "Rest of season";
+// In sentence case, so the words take a capital only where they lead.
+const REST_OF_SEASON = "rest of season";
+const REST_OF_SEASON_ALONE = "Rest of season";
 
 /**
  * A position as the league writes it, like G-F, in words.
@@ -164,12 +166,13 @@ export function renderPlayerFacts(player, isLoading) {
 }
 
 /**
- * Why she is out, and Rest of season after an en dash when it's for the season.
+ * Why she is out, and rest of season after an en dash when it's for the season.
  * @param {OutReason} out
  */
 function renderOutWords({ reason, isForSeason }) {
-  const words = [reason, isForSeason && REST_OF_SEASON].filter(Boolean);
-  return html`${words.map((word, index) => html`${index > 0 && html`<span class="out-dash">\u2013</span>`}${word}`)}`;
+  if (!isForSeason) return reason;
+  if (!reason) return REST_OF_SEASON_ALONE;
+  return html`${reason}<span class="out-dash">\u2013</span>${REST_OF_SEASON}`;
 }
 
 /**
