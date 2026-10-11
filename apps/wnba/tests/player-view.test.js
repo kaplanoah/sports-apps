@@ -146,7 +146,7 @@ test("a player who is out has a box first saying why, with RotoWire's sentence a
   assert.doesNotMatch(renderBody(createPlayer()), /^Out|RotoWire/);
 });
 
-test("a player out for the season has Rest of season after her reason, past an en dash, and a box without RotoWire's sentence has no source", () => {
+test("a player out for the season has rest of season after her reason, past an en dash, a capital only when it stands alone, and a box without RotoWire's sentence has no source", () => {
   const player = createOutPlayer({ reason: "Concussion", isForSeason: true, sentence: null });
   const markup = String(
     renderPlayerBody({
@@ -160,9 +160,9 @@ test("a player out for the season has Rest of season after her reason, past an e
   );
   assert.match(
     markup,
-    /<span class="out-words">Concussion<span class="out-dash">\u2013<\/span>Rest of season<\/span>/,
+    /<span class="out-words">Concussion<span class="out-dash">\u2013<\/span>rest of season<\/span>/,
   );
-  assert.match(renderBody(player), /^Out Concussion \u2013 ?Rest of season Last game /);
+  assert.match(renderBody(player), /^Out Concussion \u2013 ?rest of season Last game /);
   assert.match(
     renderBody(createOutPlayer({ reason: null, isForSeason: true, sentence: null })),
     /^Out Rest of season Last game /,
