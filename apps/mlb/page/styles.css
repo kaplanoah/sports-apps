@@ -95,6 +95,8 @@
   --all-star-light: rgba(255, 255, 255, 0.4);
   --all-star-shift: -3px;
   --out: #6b645c;
+  /* A source's credit under what it said, as pale as WCAG's AA level lets text be on a card. */
+  --credit-ink: color-mix(in srgb, var(--ink-dim) 84%, var(--card));
   --focus-ring: var(--now);
   --gate-heading-font: "Chivo Mono", "JetBrains Mono", monospace;
   --gate-code-font: "Chivo Mono", "JetBrains Mono", monospace;
@@ -185,6 +187,7 @@
   --all-star-shadow: rgba(0, 0, 0, 0.138);
   --all-star-light: rgba(241, 234, 212, 0.13);
   --out: #998b7d;
+  --credit-ink: var(--ink-dim);
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-ink: #fff;
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
@@ -1716,7 +1719,7 @@ body.kbd .player-open:focus {
 .out-source {
   margin: 4.5px 0 0;
   font-size: var(--size-small);
-  color: var(--ink-dim);
+  color: var(--credit-ink);
 }
 .total {
   display: grid;
