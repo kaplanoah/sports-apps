@@ -29,7 +29,7 @@ export const readFilledNames = async (tabList) =>
 
 /**
  * Starts noting each fade of a name's fill or letters, and returns a way to read them: for each,
- * the name, what fades, its duration, delay, and easing, and when it started.
+ * the name, what fades, its duration, delay, and easing, and the frame it started in.
  * @param {import("@playwright/test").Locator} tabList
  * @returns {Promise<() => Promise<NameFade[]>>}
  */
@@ -37,6 +37,14 @@ export async function noteNameFades(tabList) {
   const key = `nameFades${Math.random().toString(36).slice(2)}`;
   await tabList.evaluate((list, key) => {
     const fades = /** @type {object[]} */ ([]);
+    // Fades that start together are announced in the same frame, but each event's time includes
+    // the work of the listeners before it, which a slow machine stretches past a frame's length.
+    let frame = 0;
+    const countFrames = () => {
+      frame += 1;
+      requestAnimationFrame(countFrames);
+    };
+    requestAnimationFrame(countFrames);
     list.addEventListener("transitionrun", (fade) => {
       const event = /** @type {TransitionEvent} */ (fade);
       const tab = /** @type {HTMLElement} */ (event.target);
@@ -49,7 +57,7 @@ export async function noteNameFades(tabList) {
         duration: readAt(style.transitionDuration),
         delay: readAt(style.transitionDelay),
         easing: readAt(style.transitionTimingFunction),
-        at: event.timeStamp,
+        frame,
       });
     });
     Object.assign(window, { [key]: fades });
@@ -64,7 +72,7 @@ export async function noteNameFades(tabList) {
  * @property {string} duration
  * @property {string} delay
  * @property {string} easing
- * @property {number} at
+ * @property {number} frame
  */
 
 /**
