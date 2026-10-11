@@ -27,6 +27,7 @@ import {
   listTouchHoverRules,
 } from "../../../../tests/browser/tap-states.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readStripEdges } from "../../../../tests/browser/day-strip-edges.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -123,6 +124,22 @@ test("the Games tab lists the whole season under a strip of its days, opening on
   await expect(
     page.locator('#seasonGames .listed-day[data-day="2026-09-26"] .day-heading'),
   ).toHaveText("Sat, Sep 26");
+});
+
+test("the Games list's month starts 15px under the header's line, with Search's and Today's capitals level with its", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+
+  const headerBottom = await page
+    .locator("header.top")
+    .evaluate((header) => header.getBoundingClientRect().bottom);
+  const month = await readCapitals(page.locator("#seasonGames .strip-month"));
+  expect(month.top - headerBottom).toBeCloseTo(15, 0);
+  for (const action of ["go-search", "go-today"]) {
+    const { top } = await readCapitals(page.locator(`#seasonGames .${action} > span`));
+    expect(Math.abs(top - month.top), action).toBeLessThan(0.25);
+  }
 });
 
 test("a reload keeps the whole season in the Games list while the store catches up, never dropping to the slate's few days", async ({

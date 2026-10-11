@@ -1,5 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { readPillNames } from "../../../../tests/browser/pill-names.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -228,55 +229,43 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
   });
 }
 
-test("the Games list's month starts 16px under the header's line, level with Today and its icon, the weekdays' capitals 16.5px under its, its days 46px wide and 2px apart, a weekday 2px over its date, and the bar ends in a line once a day scrolls under it", async ({
+test("the Games list's month starts 14.5px under the header's line, level with Today and its icon, the weekdays' capitals 16.5px under its, its days 46px wide and 2px apart, a weekday 2px over its date, and the bar ends in a line once a day scrolls under it", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE);
   await openApp(page, { isWholeSeason: true });
   await page.getByRole("tab", { name: "Games" }).click();
   await expect(page.locator("#seasonGames .day-cell.is-chosen")).toBeVisible();
-  const sizes = await page.evaluate(() => {
+  const month = await readCapitals(page.locator("#seasonGames .strip-month"));
+  const today = await readCapitals(page.locator("#seasonGames .go-today span"));
+  const weekday = await readCapitals(
+    page.locator('#seasonGames .day-cell[data-day="2026-09-29"] .cell-name'),
+  );
+  const boxes = await page.evaluate(() => {
     const readBox = (/** @type {string} */ selector) =>
       /** @type {Element} */ (document.querySelector(selector)).getBoundingClientRect();
-    // A zero-height box set inline after a text has its top on the text's baseline.
-    const readCapitals = (/** @type {string} */ selector) => {
-      const text = /** @type {HTMLElement} */ (document.querySelector(selector));
-      const style = getComputedStyle(text);
-      const context = /** @type {CanvasRenderingContext2D} */ (
-        document.createElement("canvas").getContext("2d")
-      );
-      // Measured large and scaled down, since a canvas rounds its text's bounds to whole pixels.
-      context.font = `${style.fontWeight} 1000px ${style.fontFamily}`;
-      const capHeight =
-        (context.measureText("H").actualBoundingBoxAscent * parseFloat(style.fontSize)) / 1000;
-      const probe = document.createElement("span");
-      probe.style.cssText = "display: inline-block; width: 0; height: 0";
-      text.append(probe);
-      const baseline = probe.getBoundingClientRect().top;
-      probe.remove();
-      return { top: baseline - capHeight, middle: baseline - capHeight / 2, bottom: baseline };
-    };
-    const header = readBox("header.top");
-    const month = readCapitals("#seasonGames .strip-month");
-    const today = readCapitals("#seasonGames .go-today span");
-    const weekday = readCapitals('#seasonGames .day-cell[data-day="2026-09-29"] .cell-name');
     const icon = readBox("#seasonGames .go-today svg");
     const cells = [...document.querySelectorAll("#seasonGames .day-cell")].slice(0, 2);
     const [first, second] = cells.map((cell) => cell.getBoundingClientRect());
     const name = readBox('#seasonGames .day-cell[data-day="2026-09-29"] .cell-name');
     const number = readBox('#seasonGames .day-cell[data-day="2026-09-29"] .cell-number');
     return {
-      above: month.top - header.bottom,
-      monthToWeekdays: weekday.top - month.bottom,
-      todayFromMonth: today.middle - month.middle,
-      iconFromMonth: (icon.top + icon.bottom) / 2 - month.middle,
+      headerBottom: readBox("header.top").bottom,
+      iconMiddle: (icon.top + icon.bottom) / 2,
       width: first.width,
       gap: second.left - first.right,
       nameToNumber: number.top - name.bottom,
     };
   });
-  const { above, monthToWeekdays, todayFromMonth, iconFromMonth, ...steps } = sizes;
-  expect(above).toBeCloseTo(16, 0);
+  const { headerBottom, iconMiddle, ...steps } = boxes;
+  const sizes = {
+    above: month.top - headerBottom,
+    monthToWeekdays: weekday.top - month.bottom,
+    todayFromMonth: today.middle - month.middle,
+    iconFromMonth: iconMiddle - month.middle,
+  };
+  const { above, monthToWeekdays, todayFromMonth, iconFromMonth } = sizes;
+  expect(above).toBeCloseTo(14.5, 0);
   expect(monthToWeekdays).toBeCloseTo(16.5, 0);
   expect(todayFromMonth).toBeCloseTo(0, 0);
   expect(iconFromMonth).toBeCloseTo(0, 0);
