@@ -18,7 +18,7 @@ test("the page is a whole document with what an iPhone needs to save it as an ap
   const page = await response.text();
   assert.ok(page.startsWith("<!doctype html>\n"));
   for (const tag of [
-    'content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"',
+    'content="width=device-width, initial-scale=1, viewport-fit=cover"',
     '<link rel="manifest" href="manifest.webmanifest" />',
     '<link rel="apple-touch-icon" href="icon-180.png" />',
     '<meta name="apple-mobile-web-app-title" content="MLB" />',

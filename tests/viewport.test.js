@@ -16,10 +16,13 @@ const listPages = (app) => {
 const readViewport = (markup) =>
   markup.match(/<meta\s+name="viewport"\s+content="([^"]*)"/)?.[1].split(/,\s*/) ?? [];
 
-// An iPhone zooms into a field under 16px when it's tapped, unless the page can't scale past 1;
-// Safari still lets a pinch zoom.
-test("no app's page zooms on its own when a field is tapped", () => {
+// A Home Screen app keeps an iPhone from pinching past a maximum-scale, so the fields set 16px,
+// which it doesn't zoom into on a tap, rather than capping the scale.
+test("every app's page lets a pinch zoom it", () => {
   for (const app of listApps())
-    for (const { name, markup } of listPages(app))
-      assert.ok(readViewport(markup).includes("maximum-scale=1"), name);
+    for (const { name, markup } of listPages(app)) {
+      const viewport = readViewport(markup);
+      assert.ok(viewport.includes("width=device-width"), name);
+      assert.ok(!viewport.some((setting) => /^(maximum-scale|user-scalable)=/.test(setting)), name);
+    }
 });

@@ -24,6 +24,8 @@
  *                                              phone keeps its own
  *   --select-arrow                             a url() of a select field's down arrow, in --ink-dim, if
  *                                              the app has one
+ *   --select-face                              a select field's face, drawn at --size-field as big as
+ *                                              the page's text at --size-glance
  *   --tab-bar-tint                             the tab bar's fill
  *   --tab-bar-edge                             the tab bar's edge
  *   --tab-bar-ink                              the tab bar's icons and labels
@@ -484,7 +486,8 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
 }
 .select-field {
   font: inherit;
-  font-size: var(--size-glance);
+  font-family: var(--select-face);
+  font-size: var(--size-field);
   color: var(--ink);
   background: var(--bg) var(--select-arrow) no-repeat right 10px center / 10px 6px;
   border: 1px solid var(--card-border);

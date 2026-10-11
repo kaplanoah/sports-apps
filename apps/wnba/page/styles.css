@@ -33,6 +33,15 @@
   font-display: swap;
   src: url(fonts/barlow-400.woff2) format("woff2");
 }
+/* The Season picker sets 16px, which an iPhone doesn't zoom into when it's tapped, so this draws
+   Barlow smaller to look as it does at --size-glance's 14px (14 / 16). */
+@font-face {
+  font-family: "Barlow Select";
+  font-weight: 400;
+  font-display: swap;
+  size-adjust: 87.5%;
+  src: url(fonts/barlow-400.woff2) format("woff2");
+}
 @font-face {
   font-family: "Barlow";
   font-weight: 500;
@@ -182,6 +191,8 @@
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --text: "Barlow", system-ui, sans-serif;
+  --search-face: var(--text);
+  --select-face: "Barlow Select", system-ui, sans-serif;
   --page-gutter: 16px;
   --header-gap: 14px;
   --pager-label: var(--ink);

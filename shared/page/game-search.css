@@ -10,7 +10,8 @@
  *   --action       Cancel and the field's caret, where to tap
  *   --structure    the Games heading under the suggestions
  *   --ink-hover    an example or suggestion under the mouse
- *   --text         the field's and the suggestions' face
+ *   --text         the suggestions' face
+ *   --search-face  the field's face, drawn at --size-field as big as --text at --size-read
  */
 
 .search-view[hidden],
@@ -59,8 +60,8 @@
   border: 0;
   outline: none;
   background: none;
-  font-family: var(--text);
-  font-size: var(--size-read);
+  font-family: var(--search-face);
+  font-size: var(--size-field);
   color: var(--ink);
   caret-color: var(--action);
   appearance: none;

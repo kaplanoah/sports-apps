@@ -19,7 +19,7 @@ import {
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listOffScaleText, measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import {
   listTapFlashes,
@@ -1407,6 +1407,16 @@ const buildEmptySeasonSnapshot = (season, springStart) => ({
   log: [],
   standings: { divisions: {} },
   slate: null,
+});
+
+test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-glance", async ({
+  page,
+}) => {
+  await openApp(page);
+  const picker = page.locator("#yearSel");
+  await expect(picker).toHaveCSS("font-size", "16px");
+  const widths = await measureFieldFace(picker, "--size-glance");
+  expect(widths.field).toBeCloseTo(widths.step, 0);
 });
 
 test("the page shows the season the store says is current", async ({ page }) => {
