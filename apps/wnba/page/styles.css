@@ -378,6 +378,10 @@ header.top h1 {
 .day-view {
   margin-top: calc(4px - var(--header-gap));
 }
+/* The search's field, which opens in the strip's place, sits 10.5px under the header's line. */
+.search-view {
+  margin-top: calc(10.5px - var(--header-gap));
+}
 .game-day.is-today .day-number {
   color: var(--strip-today);
 }

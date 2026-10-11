@@ -134,6 +134,20 @@ test("the examples sit where the WNBA's do: 4.5px under the field, their words 3
   expect(place).toEqual({ gap: 4.5, words: 39.5, lineLeft: 39, lineRight: 0.5, lift: 1.5 });
 });
 
+test("the field sits 11px under the header's line", async ({ page }) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await expect(findInput(page)).toBeFocused();
+
+  const space = await page.evaluate(() => {
+    const header = /** @type {Element} */ (document.querySelector("header.top"));
+    const field = /** @type {Element} */ (document.querySelector("#gameSearch .search-field"));
+    return field.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+  });
+
+  expect(space).toBeCloseTo(11, 1);
+});
+
 test("the field takes MLB's card fill and edge, and Cancel its gold", async ({ page }) => {
   await openSeasonGames(page);
   await tapSearch(page);

@@ -142,6 +142,20 @@ test("the examples sit 4.5px under the field, their words 39.5px in, their lines
   expect(place).toEqual({ gap: 4.5, words: 39.5, lineLeft: 39, lineRight: 0.5, lift: 1.5 });
 });
 
+test("the field sits 10.5px under the header's line", async ({ page }) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await expect(findInput(page)).toBeFocused();
+
+  const space = await page.evaluate(() => {
+    const header = /** @type {Element} */ (document.querySelector("header.top"));
+    const field = /** @type {Element} */ (document.querySelector("#gameSearch .search-field"));
+    return field.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+  });
+
+  expect(space).toBeCloseTo(10.5, 1);
+});
+
 test("an example tapped runs its search and puts the keyboard away", async ({ page }) => {
   await openSeasonGames(page);
   await tapSearch(page);

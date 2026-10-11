@@ -522,6 +522,10 @@ table.st .seed-cell {
 .day-view {
   margin-top: calc(5px - var(--header-gap));
 }
+/* The search's field, which opens in the strip's place, sits 11px under the header's line. */
+.search-view {
+  margin-top: calc(11px - var(--header-gap));
+}
 /* Search's and Today's capitals sit level with the month's, half a pixel lower than the shared rule
    sets them, and their icons move with them. */
 .go-today > span,
