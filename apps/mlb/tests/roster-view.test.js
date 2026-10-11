@@ -101,10 +101,11 @@ test("a two-way player is with both the hitters and the pitchers, and the injure
   );
 });
 
-test("a roster still loading holds its shape, and one that didn't load says so over Try again", () => {
+test("a roster still loading holds its shape, and one that didn't load says why over Try again", () => {
   assert.match(String(renderRoster(null, { isLoading: true })), /class="placeholder/);
-  const failed = String(renderRoster(null, { isLoading: false }));
+  const failed = String(renderRoster(null, { isLoading: false, failure: "offline" }));
   assert.match(failed, /class="retry-block"/);
-  assert.match(failed, /<p class="retry-title">Couldn&#39;t load the roster<\/p>/);
+  assert.match(failed, /<p class="retry-title">Couldn&#39;t connect to the internet<\/p>/);
+  assert.match(failed, /<p class="retry-next">Will load roster when back online<\/p>/);
   assert.match(failed, /class="retry-button filled" data-retry/);
 });

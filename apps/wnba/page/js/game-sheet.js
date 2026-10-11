@@ -11,7 +11,7 @@ import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";
 import { renderNetworks } from "#shared/network-logos.js";
-import { renderRetryBlock, watchRetries } from "#shared/retry.js";
+import { classifyReadFailure, renderRetryBlock, watchRetries } from "#shared/retry.js";
 import { wireSheetSections } from "#shared/sheet-sections.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
 import { letGoOfGame, noteShownGame } from "#shared/sheet-memory.js";
@@ -137,7 +137,7 @@ function renderDetails(opened, game) {
   }
   if (opened.error?.status === 404)
     return renderSheetMessage("The league hasn't posted a box score for this game yet");
-  if (opened.error) return renderRetryBlock("Couldn't load the box score");
+  if (opened.error) return renderRetryBlock("box score", classifyReadFailure(opened.error));
   return opened.details
     ? renderBoxScore(opened.details, opened)
     : renderPendingBoxScore(teams, opened);

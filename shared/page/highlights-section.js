@@ -6,7 +6,7 @@
 import { watchClipTaps } from "./clip-player.js";
 import { renderHighlights, renderPendingHighlights } from "./highlights-view.js";
 import { setHtml } from "./html.js";
-import { renderRetryBlock } from "./retry.js";
+import { classifyReadFailure, renderRetryBlock } from "./retry.js";
 
 /** @typedef {import("./highlights-view.js").Highlights} Highlights */
 /** @typedef {import("./highlights-view.js").Clip} Clip */
@@ -28,7 +28,7 @@ export function createHighlightsSection(body, describePlay) {
     if (!shown) return;
     const { highlights, error } = shown;
     if (highlights) setHtml(body, renderHighlights(highlights, { describePlay, now: Date.now() }));
-    else if (error) setHtml(body, renderRetryBlock("Couldn't load the highlights"));
+    else if (error) setHtml(body, renderRetryBlock("highlights", classifyReadFailure(error)));
     else setHtml(body, renderPendingHighlights());
     body.setAttribute("aria-busy", String(!highlights && !error));
   }

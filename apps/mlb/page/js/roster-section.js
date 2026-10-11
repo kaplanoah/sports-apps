@@ -5,13 +5,14 @@
 // it again while it reads again.
 
 import { html, setHtml } from "#shared/html.js";
-import { watchRetries } from "#shared/retry.js";
+import { classifyReadFailure, watchRetries } from "#shared/retry.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 import { renderRoster } from "./roster-view.js";
 import { session } from "./session.js";
 
 /** @typedef {import("./roster-view.js").Roster} Roster */
-/** @typedef {{ at: number, roster: Roster | null, isLoading: boolean }} RosterRead */
+/** @typedef {import("#shared/retry.js").ReadFailure} ReadFailure */
+/** @typedef {{ at: number, roster: Roster | null, isLoading: boolean, failure: ReadFailure | null }} RosterRead */
 
 const FETCH_TIMEOUT_MS = 15 * 1000;
 // A roster changes with a transaction, and its numbers after each game.
@@ -39,14 +40,15 @@ const isFresh = (read) =>
   read.isLoading || Date.now() - read.at < (read.roster ? READ_AGAIN_MS : RETRY_MS);
 
 /**
- * Keeps what a read found, or what the last one did when it failed or found none.
+ * Keeps what a read found, or what the last one did when it failed or found none, and why.
  * @param {string} club
  * @param {RosterRead} read
  * @param {Roster | null} found
+ * @param {ReadFailure | null} failure
  */
-function keepRead(club, read, found) {
+function keepRead(club, read, found, failure) {
   if (reads.get(club) !== read) return;
-  reads.set(club, { ...read, isLoading: false, roster: found ?? read.roster });
+  reads.set(club, { ...read, isLoading: false, roster: found ?? read.roster, failure });
   if (shownClub === club) renderSection();
 }
 
@@ -58,11 +60,12 @@ function readRoster(club) {
   const kept = reads.get(club);
   if (kept && isFresh(kept)) return kept;
   /** @type {RosterRead} */
-  const read = { at: Date.now(), roster: kept?.roster ?? null, isLoading: true };
+  const read = { at: Date.now(), roster: kept?.roster ?? null, isLoading: true, failure: null };
   reads.set(club, read);
   fetchRoster(club).then(
-    (body) => keepRead(club, read, body.data),
-    () => keepRead(club, read, null),
+    // A store that keeps no roster for the club answered, though not with what the page needs.
+    (body) => keepRead(club, read, body.data, body.data ? null : "server"),
+    (error) => keepRead(club, read, null, classifyReadFailure(error)),
   );
   return read;
 }
@@ -76,8 +79,8 @@ function renderSection() {
     setHtml(body, html`<p class="sheet-message">Rosters show for the current season only</p>`);
     return;
   }
-  const { roster, isLoading } = readRoster(shownClub);
-  setHtml(body, renderRoster(roster, { isLoading }));
+  const { roster, isLoading, failure } = readRoster(shownClub);
+  setHtml(body, renderRoster(roster, { isLoading, failure }));
 }
 
 // A read that failed is dropped, so the section shows its placeholders while it reads again.
@@ -120,5 +123,5 @@ export function readShownRoster() {
 export function reopenRoster(saved) {
   if (!isSavedRoster(saved)) return;
   const { club, roster } = /** @type {{ club: string, roster: Roster }} */ (saved);
-  if (!reads.has(club)) reads.set(club, { at: 0, roster, isLoading: false });
+  if (!reads.has(club)) reads.set(club, { at: 0, roster, isLoading: false, failure: null });
 }

@@ -150,11 +150,11 @@ const renderPendingRoster = () =>
 
 /**
  * @param {Roster | null} roster the store's, or null while it hasn't answered
- * @param {{ isLoading: boolean }} state
+ * @param {{ isLoading: boolean, failure?: import("#shared/retry.js").ReadFailure | null }} state
  */
-export function renderRoster(roster, { isLoading }) {
+export function renderRoster(roster, { isLoading, failure }) {
   if (!roster) {
-    return isLoading ? renderPendingRoster() : renderRetryBlock("Couldn't load the roster");
+    return isLoading ? renderPendingRoster() : renderRetryBlock("roster", failure ?? "unreachable");
   }
   const active = roster.players.filter((player) => !player.injury);
   const pitchers = active.filter(isPitcher);

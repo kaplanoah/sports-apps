@@ -25,7 +25,7 @@ import { formatInnings } from "./stat-table.js";
  * starter, the qualified starters and his side of a pitching matchup. `isUnkept` says the store
  * keeps no sheet for him, as for a player on no club's roster. `clubGames` counts his club's games,
  * which a starter needs as many innings as to qualify.
- * @typedef {{ player: Player | null, hitters: any, starters: any, side: any, isUnkept: boolean, isLoading: boolean, clubGames?: number | null }} ShownPlayer
+ * @typedef {{ player: Player | null, hitters: any, starters: any, side: any, isUnkept: boolean, isLoading: boolean, failure?: import("#shared/retry.js").ReadFailure | null, clubGames?: number | null }} ShownPlayer
  */
 
 /**
@@ -365,7 +365,7 @@ export function renderPlayerBody(shown) {
   if (!player && isLoading) return renderPending();
   if (!player && shown.isUnkept)
     return html`<p class="sheet-message">His numbers show while he's on a club's roster</p>`;
-  if (!player) return renderRetryBlock("Couldn't load his numbers");
+  if (!player) return renderRetryBlock("his numbers", shown.failure ?? "unreachable");
   const isTwoWay = Boolean(player.hitting && player.pitching && player.position !== "P");
   const hitting =
     player.hitting && player.position !== "P"

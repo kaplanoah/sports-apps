@@ -80,6 +80,12 @@ test("an error without a message of its own names the Worker's status", async ()
 test("an answer that isn't JSON, or isn't the one asked for, is unexpected", async () => {
   startWorker({ body: "<html>" }, { body: { id: "2" } });
 
-  await assert.rejects(fetchFromWorker("garbled", RULES), { message: "unexpected answer" });
-  await assert.rejects(fetchFromWorker("other", RULES), { message: "unexpected answer" });
+  await assert.rejects(fetchFromWorker("garbled", RULES), {
+    message: "unexpected answer",
+    status: 200,
+  });
+  await assert.rejects(fetchFromWorker("other", RULES), {
+    message: "unexpected answer",
+    status: 200,
+  });
 });

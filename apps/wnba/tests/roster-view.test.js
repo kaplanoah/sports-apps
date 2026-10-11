@@ -41,13 +41,14 @@ const LIBERTY = describeRoster({
   now: Date.parse(ROSTERS.recordedAt),
 });
 
-/** @param {{ sort?: any, isLoading?: boolean, roster?: any, showsOut?: boolean }} [options] */
+/** @param {{ sort?: any, isLoading?: boolean, roster?: any, failure?: any, showsOut?: boolean }} [options] */
 const renderText = ({
   sort = DEFAULT_SORT,
   isLoading = false,
   roster = LIBERTY,
+  failure = null,
   showsOut = true,
-} = {}) => renderRoster({ roster, averages: AVERAGES, sort, isLoading, showsOut }).text;
+} = {}) => renderRoster({ roster, averages: AVERAGES, sort, isLoading, failure, showsOut }).text;
 
 // A line of facts as it reads, each separator a bar.
 /** @param {Markup} markup */
@@ -167,12 +168,13 @@ test("the sorted column says which way it sorts", () => {
   assert.doesNotMatch(markup, /class="roster-player" aria-sort/);
 });
 
-test("while the roster loads, stand-ins hold its shape, and a roster that didn't load says so over Try again", () => {
+test("while the roster loads, stand-ins hold its shape, and a roster that didn't load says why over Try again", () => {
   const loading = renderText({ roster: null, isLoading: true });
   assert.match(loading, /class="placeholder"/);
   assert.doesNotMatch(loading, /<dt>Head coach/);
-  const failed = renderText({ roster: null, isLoading: false });
-  assert.match(failed, /<p class="retry-title">Couldn&#39;t load the roster<\/p>/);
+  const failed = renderText({ roster: null, isLoading: false, failure: "unreachable" });
+  assert.match(failed, /<p class="retry-title">Couldn&#39;t connect to the server<\/p>/);
+  assert.match(failed, /<p class="retry-next">Try again to load roster<\/p>/);
   assert.match(failed, /class="retry-button filled" data-retry/);
 });
 

@@ -773,7 +773,8 @@ test("a box score the Worker can't load says so over Try again, which holds the 
   await page.route(matchPath("/box-score"), refuse);
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
   const block = sheet.locator("#gameBody .retry-block");
-  await expect(block.locator(".retry-title")).toHaveText("Couldn't load the box score");
+  await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
+  await expect(block.locator(".retry-next")).toHaveText("Try again to load box score");
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);

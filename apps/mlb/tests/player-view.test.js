@@ -192,8 +192,12 @@ test("a sheet still loading holds its shape, and one that didn't load says so", 
     side: null,
     isUnkept: false,
     isLoading: false,
+    failure: "server",
   });
-  assert.equal(readText(failed), "Couldn't load his numbers Try again");
+  assert.equal(
+    readText(failed),
+    "The server had a problem Try again to load his numbers Try again",
+  );
   assert.match(String(failed), /class="retry-block"/);
   assert.match(String(failed), /class="retry-button filled" data-retry/);
 });

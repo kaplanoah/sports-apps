@@ -297,7 +297,8 @@ test("her sheet that didn't load says so over Try again, which holds its shape a
   await roster.getByRole("button", { name: "Breanna Stewart" }).click();
   const sheet = page.locator("#playerSheet");
   const block = sheet.locator("#playerBody .retry-block");
-  await expect(block.locator(".retry-title")).toHaveText("Couldn't load her numbers");
+  await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
+  await expect(block.locator(".retry-next")).toHaveText("Try again to load her numbers");
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);

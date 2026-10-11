@@ -6,7 +6,7 @@
 // reads them again.
 
 import { setHtml } from "#shared/html.js";
-import { watchRetries } from "#shared/retry.js";
+import { classifyReadFailure, watchRetries } from "#shared/retry.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 import {
@@ -21,7 +21,8 @@ import { TEAMS } from "./teams.js";
 
 /** @typedef {import("./player-view.js").Player} Player */
 /** @typedef {import("./player-view.js").PlayerSubject} PlayerSubject */
-/** @typedef {{ at: number, player: Player | null, isLoading: boolean }} PlayerRead */
+/** @typedef {import("#shared/retry.js").ReadFailure} ReadFailure */
+/** @typedef {{ at: number, player: Player | null, isLoading: boolean, failure: ReadFailure | null }} PlayerRead */
 
 const FETCH_TIMEOUT_MS = 15 * 1000;
 // Her numbers change after each game.
@@ -63,14 +64,15 @@ const isFresh = (read) =>
   read.isLoading || Date.now() - read.at < (read.player ? READ_AGAIN_MS : RETRY_MS);
 
 /**
- * Keeps what a read found, or what the last one did when it failed.
+ * Keeps what a read found, or what the last one did when it failed, and why it did.
  * @param {string} key
  * @param {PlayerRead} read
  * @param {Player | null} player
+ * @param {ReadFailure | null} failure
  */
-function keepRead(key, read, player) {
+function keepRead(key, read, player, failure) {
   if (reads.get(key) !== read) return;
-  reads.set(key, { ...read, isLoading: false, player: player ?? read.player });
+  reads.set(key, { ...read, isLoading: false, player: player ?? read.player, failure });
   renderSheet();
 }
 
@@ -84,11 +86,11 @@ function readPlayer(subject, year) {
   const kept = reads.get(key);
   if (kept && isFresh(kept)) return kept;
   /** @type {PlayerRead} */
-  const read = { at: Date.now(), player: kept?.player ?? null, isLoading: true };
+  const read = { at: Date.now(), player: kept?.player ?? null, isLoading: true, failure: null };
   reads.set(key, read);
   fetchPlayer(subject, year).then(
-    (player) => keepRead(key, read, player),
-    () => keepRead(key, read, null),
+    (player) => keepRead(key, read, player, null),
+    (error) => keepRead(key, read, null, classifyReadFailure(error)),
   );
   return read;
 }
@@ -96,7 +98,7 @@ function readPlayer(subject, year) {
 function renderSheet() {
   const subject = shownPlayer;
   if (!subject) return;
-  const { player, isLoading } = readPlayer(subject, session.year);
+  const { player, isLoading, failure } = readPlayer(subject, session.year);
   const showsOut = !isPastSeason() && isStillPlaying(session.season?.series ?? [], subject.team);
   setHtml(findElement("playerTitle"), renderPlayerHeading(subject, player));
   setHtml(findElement("playerNote"), describePlayerNote(subject, player));
@@ -106,6 +108,7 @@ function renderSheet() {
     renderPlayerBody({
       player,
       isLoading,
+      failure,
       season: session.season,
       isPastSeason: isPastSeason(),
       showsOut,
@@ -150,7 +153,12 @@ function keepSavedPlayer(subject, { year, player }) {
   if (typeof year !== "number" || !player || typeof player !== "object") return;
   const key = nameRead(subject, year);
   if (!reads.has(key))
-    reads.set(key, { at: 0, player: /** @type {Player} */ (player), isLoading: false });
+    reads.set(key, {
+      at: 0,
+      player: /** @type {Player} */ (player),
+      isLoading: false,
+      failure: null,
+    });
 }
 
 /** @param {Partial<PlayerSubject> & { year?: unknown, player?: unknown } | null} saved */

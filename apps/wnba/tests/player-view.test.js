@@ -97,9 +97,20 @@ function createPlayer(changes = {}) {
 }
 
 /** @param {any} player */
-const renderBody = (player, { isLoading = false, isPastSeason = false, showsOut = true } = {}) =>
+const renderBody = (
+  player,
+  { isLoading = false, failure = null, isPastSeason = false, showsOut = true } = {},
+) =>
   readText(
-    renderPlayerBody({ player, isLoading, season: SEASON, isPastSeason, showsOut, now: NOW }),
+    renderPlayerBody({
+      player,
+      isLoading,
+      failure,
+      season: SEASON,
+      isPastSeason,
+      showsOut,
+      now: NOW,
+    }),
   );
 
 /** @param {any} [out] */
@@ -324,7 +335,10 @@ test("while her numbers load the sheet holds their shape, and says so when they 
     ),
     /placeholder/,
   );
-  assert.equal(renderBody(null), "Couldn't load her numbers Try again");
+  assert.equal(
+    renderBody(null, { failure: "offline" }),
+    "Couldn't connect to the internet Will load her numbers when back online Try again",
+  );
   assert.match(
     renderPlayerBody({
       player: null,

@@ -24,7 +24,8 @@ async function requestFromWorker(path, { timeoutMs, isExpected }) {
     throw Object.assign(new Error(body?.error || `The Worker answered ${response.status}`), {
       status: response.status,
     });
-  if (!body || !isExpected(body)) throw new Error("unexpected answer");
+  if (!body || !isExpected(body))
+    throw Object.assign(new Error("unexpected answer"), { status: response.status });
   return body;
 }
 
@@ -39,7 +40,7 @@ function forgetRead(path, promise) {
 /**
  * The Worker's answer for a path relative to the page, or the one read or under way for it in the
  * last `reuseMs`. A read that fails is forgotten, so the next one tries again; when the Worker
- * answered with an error, the failure carries its `status`.
+ * answered, with an error or with what the read didn't expect, the failure carries its `status`.
  * @param {string} path
  * @param {ReadRules & { reuseMs: number }} options
  * @returns {Promise<any>}

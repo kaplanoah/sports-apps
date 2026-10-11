@@ -234,7 +234,7 @@ test("a club with no starts to go by says so", () => {
   const stillTbd = { ...AT_ATHLETICS, starters: [] };
   const markup = renderLoaded(stillTbd, [
     { rotation: { club: "HOU", date: TONIGHT, starters: [] } },
-    { failed: true },
+    { failure: "unreachable" },
   ]);
   const astros = markup.slice(
     0,
@@ -337,7 +337,7 @@ test("both starters' speed lines share one scale, from the slowest pitch either 
 });
 
 test("a starter whose numbers didn't load says so under his club, with Try again, and the other's still show", () => {
-  const markup = renderLoaded(AT_ATHLETICS, [{ pitcher: BLUBAUGH }, { failed: true }]);
+  const markup = renderLoaded(AT_ATHLETICS, [{ pitcher: BLUBAUGH }, { failure: "unreachable" }]);
   const springs = markup.slice(markup.indexOf('<div class="pitcher-id home">'));
   assert.deepEqual(readClass(springs, "retry-side"), ["Couldn't load Try again"]);
   assert.equal(countMatches(markup, /class="retry-side"/g), 1);
@@ -355,18 +355,20 @@ test("a starter whose numbers didn't load still shows the first name the game ke
       { id: 2, name: "Springs", firstName: "Jeffrey" },
     ],
   };
-  const failed = renderLoaded(withFirstNames, [{ pitcher: BLUBAUGH }, { failed: true }]);
+  const failed = renderLoaded(withFirstNames, [{ pitcher: BLUBAUGH }, { failure: "unreachable" }]);
   assert.deepEqual(readClass(failed, "pitcher-first"), ["AJ", "Jeffrey"]);
   assert.match(failed, /data-player-name="Jeffrey Springs"/);
   const loading = renderLoaded(withFirstNames, [{ pitcher: BLUBAUGH }, {}]);
   assert.deepEqual(readClass(loading, "pitcher-first"), ["AJ", "Jeffrey"]);
 });
 
-test("with neither starter's numbers loaded, the section says so once, centered over Try again", () => {
-  const markup = renderLoaded(AT_ATHLETICS, [{ failed: true }, { failed: true }]);
-  assert.deepEqual(readClass(markup, "retry-title scout-note"), [
-    "Couldn't load the starters' numbers",
+test("with neither starter's numbers loaded, the section says why once, centered over Try again", () => {
+  const markup = renderLoaded(AT_ATHLETICS, [
+    { failure: "unreachable" },
+    { failure: "unreachable" },
   ]);
+  assert.deepEqual(readClass(markup, "retry-title"), ["Couldn't connect to the server"]);
+  assert.deepEqual(readClass(markup, "retry-next"), ["Try again to load starters' numbers"]);
   assert.equal(countMatches(markup, /data-retry/g), 1);
   assert.match(markup, /class="retry-button filled"/);
   assert.doesNotMatch(markup, /retry-side|<section class="scout">/);
@@ -376,7 +378,7 @@ test("a club whose last starters didn't load says so with Try again, beside the 
   const stillTbd = { ...AT_ATHLETICS, starters: [] };
   const markup = renderLoaded(stillTbd, [
     { rotation: { club: "HOU", date: TONIGHT, starters: [] } },
-    { failed: true },
+    { failure: "unreachable" },
   ]);
   const athletics = markup.slice(markup.lastIndexOf('<section class="scout">'));
   assert.deepEqual(readClass(athletics, "retry-message scout-note"), [
@@ -388,9 +390,10 @@ test("a club whose last starters didn't load says so with Try again, beside the 
 
 test("with neither club's last starters loaded, the section says so once", () => {
   const stillTbd = { ...AT_ATHLETICS, starters: [] };
-  const markup = renderLoaded(stillTbd, [{ failed: true }, { failed: true }]);
-  assert.deepEqual(readClass(markup, "retry-title scout-note"), [
-    "Couldn't load who started lately",
+  const markup = renderLoaded(stillTbd, [{ failure: "offline" }, { failure: "offline" }]);
+  assert.deepEqual(readClass(markup, "retry-title"), ["Couldn't connect to the internet"]);
+  assert.deepEqual(readClass(markup, "retry-next"), [
+    "Will load who started lately when back online",
   ]);
   assert.equal(countMatches(markup, /data-retry/g), 1);
 });
@@ -401,8 +404,9 @@ test("a lone named starter whose numbers didn't load leaves the section saying s
     state: "final",
     starters: [{ id: 1, name: "Blubaugh" }, null],
   };
-  const markup = renderLoaded(oneNamed, [{ failed: true }, {}]);
-  assert.deepEqual(readClass(markup, "retry-title scout-note"), ["Couldn't load his numbers"]);
+  const markup = renderLoaded(oneNamed, [{ failure: "server" }, {}]);
+  assert.deepEqual(readClass(markup, "retry-title"), ["The server had a problem"]);
+  assert.deepEqual(readClass(markup, "retry-next"), ["Try again to load his numbers"]);
 });
 
 test("a starter named after the sheet read its sides takes his side's place, and the other side stays as it loaded", () => {
