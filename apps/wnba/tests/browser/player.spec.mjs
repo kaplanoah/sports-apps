@@ -149,8 +149,20 @@ test.describe("a player who is out", () => {
       };
     });
 
+  /**
+   * How far RotoWire's sentence is under her reason, and where it's from under the sentence.
+   * @param {import("@playwright/test").Locator} box
+   */
+  const measureOutLines = (box) =>
+    box.evaluate((element) => {
+      const [line, sentence, source] = [".out-line", ".out-sentence", ".out-source"].map((name) =>
+        /** @type {HTMLElement} */ (element.querySelector(name)).getBoundingClientRect(),
+      );
+      return { sentence: sentence.top - line.bottom, source: source.top - sentence.bottom };
+    });
+
   for (const viewport of [PHONE, { width: 1280, height: 900 }])
-    test(`at ${viewport.width}px wide, her sheet opens on a box saying why, her chip leading it and RotoWire's sentence under it with the day ESPN changed it, 11.5px from the band, the sheet's sides, and what's under it`, async ({
+    test(`at ${viewport.width}px wide, her sheet opens on a box saying why, her chip leading it and RotoWire's sentence 6px under it and the day ESPN changed it 4px under that, 11.5px from the band, the sheet's sides, and what's under it`, async ({
       page,
     }) => {
       await page.setViewportSize(viewport);
@@ -173,7 +185,7 @@ test.describe("a player who is out", () => {
         below: 11.5,
       });
       await expect(box).toHaveCSS("padding", "10px 9.5px 8px");
-      await expect(box).toHaveCSS("row-gap", "6px");
+      expect(await measureOutLines(box)).toEqual({ sentence: 6, source: 4 });
       await expect(box.locator(".foul-chip")).toHaveCSS("margin-right", "7px");
       await expect(box.locator(".out-words")).toHaveCSS("top", "-1px");
       await expect(box.locator(".out-line")).toHaveCSS("font-size", "15px");
@@ -203,13 +215,13 @@ test.describe("a player who is out", () => {
     );
   });
 
-  test("one out for the season has Rest of season after her reason, past an en dash, and no sentence when RotoWire says only that she's out", async ({
+  test("one out for the season has rest of season after her reason, past an en dash, and no sentence when RotoWire says only that she's out", async ({
     page,
   }) => {
     await openApp(page);
     const box = (await openFromRoster(page, "Satou Sabally")).locator(".out-box");
 
-    await expect(box.locator(".out-line")).toHaveText("OutConcussion\u2013Rest of season");
+    await expect(box.locator(".out-line")).toHaveText("OutConcussion\u2013rest of season");
     await expect(box.locator(".out-sentence, .out-source")).toHaveCount(0);
   });
 });
