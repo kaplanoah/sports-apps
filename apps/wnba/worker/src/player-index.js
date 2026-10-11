@@ -1,17 +1,7 @@
 // Every player on a team's roster in a season, as the page's search finds her: her name, team, and
 // number. The player job builds it from the rosters it keeps, and saves it beside them.
 
-/** @param {number} season */
-export const namePlayerIndexKey = (season) => `player-index/${season}`;
-
-/**
- * @typedef {object} IndexedPlayer
- * @property {string} id
- * @property {string} team
- * @property {string} number
- * @property {string} firstName
- * @property {string} lastName
- */
+/** @typedef {import("../../page/js/search-pages.js").IndexedPlayer} IndexedPlayer */
 
 /**
  * @param {IndexedPlayer} first

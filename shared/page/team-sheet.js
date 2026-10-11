@@ -50,18 +50,25 @@ function renderSheet() {
   league.fillSections?.(shownTeam);
 }
 
-/** @param {string} team */
-function showTeam(team) {
+/**
+ * @param {string} team
+ * @param {string} section the key of the section to show, or "" for the first
+ */
+function showTeam(team, section) {
   shownTeam = team;
   areAllTitlesShown = false;
   renderSheet();
   sections?.showFirstSection();
+  if (section) sections?.showSection(section, true);
 }
 
-/** @param {string} team */
-function openTeamSheet(team) {
+/**
+ * @param {string} team
+ * @param {string} [section] the key of the section to open on, as a search's Roster row asks
+ */
+function openTeamSheet(team, section = "") {
   if (!league?.isTeam(team)) return;
-  openSheet(findSheet(), { key: team, show: () => showTeam(team) });
+  openSheet(findSheet(), { key: team, show: () => showTeam(team, section) });
 }
 
 const readShownTeam = () =>
@@ -95,7 +102,7 @@ function openFromTap(event) {
   const button = /** @type {HTMLElement | null} */ (
     /** @type {Element} */ (event.target).closest(".team-open")
   );
-  if (button?.dataset.team) openTeamSheet(button.dataset.team);
+  if (button?.dataset.team) openTeamSheet(button.dataset.team, button.dataset.teamSection);
 }
 
 /** @param {Event} event */

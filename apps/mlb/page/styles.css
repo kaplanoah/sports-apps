@@ -136,9 +136,9 @@
   --raised: var(--card);
   --edge: var(--card-border);
   --action: var(--highlight);
-  --structure: var(--highlight);
   --text: "Chivo Mono", "JetBrains Mono", monospace;
   --search-face: "Chivo Mono Search", "JetBrains Mono", monospace;
+  --search-words-lift: 0px;
   --select-face: "Chivo Mono Select", "JetBrains Mono", monospace;
   --strip-edge-inset: 0.5px;
   --day-gap: 18px;

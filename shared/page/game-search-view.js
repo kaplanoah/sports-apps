@@ -325,15 +325,19 @@ function readWhileTyping(text, suggestions, context) {
 
 /**
  * The pages the words ask for, and the words left for the search of games, or null when they ask
- * for no games.
+ * for no games. A half-typed word may start a player's name or a place's, so the words as typed go
+ * first, and the words as the line reads them only when those find no page.
  * @param {string} text
+ * @param {string} readText the words as the line reads them while they're typed
  * @param {import("./game-search.js").SearchContext} context
  * @returns {{ pages: SearchPages | null, rows: PageRow[], gameText: string | null }}
  */
-function readPages(text, context) {
+function readPages(text, readText, context) {
   const pages = league?.readPages?.() ?? null;
-  if (!pages) return { pages, rows: [], gameText: text };
-  return { pages, ...findPages(text, { dictionary: context.dictionary, pages, isTyping }) };
+  if (!pages) return { pages, rows: [], gameText: readText };
+  const search = { dictionary: context.dictionary, pages, isTyping };
+  const typed = findPages(text, search);
+  return { pages, ...(typed.rows.length ? typed : findPages(readText, search)) };
 }
 
 /**
@@ -366,7 +370,11 @@ function draw() {
     return;
   }
   const suggestions = isTyping ? listSuggestions(query, context) : [];
-  const { pages, rows, gameText } = readPages(readWhileTyping(text, suggestions, context), context);
+  const { pages, rows, gameText } = readPages(
+    text,
+    readWhileTyping(text, suggestions, context),
+    context,
+  );
   const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];
   const search = gameText === null ? null : readSearch(gameText, context);
   const found = search && findSearchGames(search, context);

@@ -12,6 +12,12 @@ import { TEAMS } from "./teams.js";
  * @typedef {{ id: string, team: string, number: string, firstName: string, lastName: string }} IndexedPlayer
  */
 
+/**
+ * Where the store keeps a season's list of players.
+ * @param {number} season
+ */
+export const namePlayerIndexKey = (season) => `player-index/${season}`;
+
 const SECTION = { key: "roster", name: "Roster" };
 const EXAMPLES = ["Stewart", "Aces roster"];
 

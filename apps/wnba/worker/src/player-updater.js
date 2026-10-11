@@ -19,7 +19,8 @@ import {
   nameTotalsRequest,
 } from "./player.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
-import { describePlayerIndex, namePlayerIndexKey } from "./player-index.js";
+import { namePlayerIndexKey } from "../../page/js/search-pages.js";
+import { describePlayerIndex } from "./player-index.js";
 import {
   describeRoster,
   nameLeagueRosterRequest,
