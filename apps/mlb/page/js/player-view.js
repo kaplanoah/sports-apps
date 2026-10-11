@@ -1,9 +1,9 @@
 // A player's sheet: his name over his club and number, and where he was born, his facts in a row
 // in the sheet's top, then, while he's on the injured list, a box with his stay and why, then his
-// postseason while he has one, then his regular season: a hitter's
-// totals over each number MLB's ranked hitters are ranked in, and a starter's over each number MLB's
-// qualified starters are, with what he throws, or a reliever's totals alone, each followed by his
-// last few games. A two-way player shows both, his pitching under its own title.
+// postseason while he has one, then his regular season: a hitter's totals over each number MLB's
+// ranked hitters are ranked in, and a starter's over each number MLB's qualified starters are, with
+// what he throws, or a reliever's totals alone, each followed by his last few games. A two-way
+// player shows both, his pitching under its own title.
 
 import { formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html, joinWithSeparator } from "#shared/html.js";
