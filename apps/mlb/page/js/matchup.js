@@ -118,14 +118,16 @@ function findStandings(sides, measure) {
 }
 
 /**
- * Each starter's marks and dots take his club's color, the two picked to read apart.
+ * Each starter's marks and dots take his club's color, the two picked to read apart, in each
+ * theme's own colors.
  * @param {any[]} sides
  */
 function formatSideColors(sides) {
-  const [away, home] = sides.map((side) => TEAMS[side.club]?.chartColors);
+  const [away, home] = sides.map((side) => TEAMS[side.club]);
   if (!away || !home) return "";
-  const colors = pickSideColors(away, home);
-  return `--away: ${colors.away}; --home: ${colors.home}`;
+  const dark = pickSideColors(away.chartColors, home.chartColors);
+  const light = pickSideColors(away.lightChartColors, home.lightChartColors);
+  return `--away-dark: ${dark.away}; --home-dark: ${dark.home}; --away-light: ${light.away}; --home-light: ${light.home}`;
 }
 
 const renderPendingNumber = (side) =>

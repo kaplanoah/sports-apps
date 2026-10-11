@@ -4,6 +4,7 @@ import {
   openApp,
   openSettings,
   buildSnapshotWithStarters,
+  MATCHUP_STARTERS,
   PITCHER_SIDES,
   PLAYER_DOCS,
   RECORDED_HIGHLIGHTS,
@@ -136,7 +137,7 @@ const VIEWS = [
       await openGame(page, "2026-09-24", /^Game details: Astros at Athletics, Thu, Sep 24/);
       await page.locator("#gameSheet").getByRole("tab", { name: "Matchup" }).click();
     },
-    shown: (page) => page.locator("#matchupBody .faceoff"),
+    shown: (page) => page.locator("#matchupBody .tape-dot").first(),
     close: (page) => page.keyboard.press("Escape"),
   },
   {
@@ -203,7 +204,7 @@ async function openWithEverything(page) {
   await openApp(page, {
     snapshots: { 2026: buildSnapshotWithStarters() },
     store: { ...ROSTER_DOCS, ...PLAYER_DOCS, ...NEWS_DOCS },
-    pitchers: PITCHER_SIDES,
+    pitchers: { ...PITCHER_SIDES, ...MATCHUP_STARTERS },
     highlights: SEP_23_HIGHLIGHTS,
   });
 }

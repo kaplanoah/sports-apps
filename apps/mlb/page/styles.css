@@ -1801,10 +1801,16 @@ body.kbd .player-open:focus {
   border-block: 1px solid var(--divider);
 }
 .matchup-body .tape .away {
-  --side: var(--away, var(--ink-dim));
+  --side: var(--away-light, var(--ink-dim));
 }
 .matchup-body .tape .home {
-  --side: var(--home, var(--ink-dim));
+  --side: var(--home-light, var(--ink-dim));
+}
+:root[data-theme="dark"] .matchup-body .tape .away {
+  --side: var(--away-dark, var(--ink-dim));
+}
+:root[data-theme="dark"] .matchup-body .tape .home {
+  --side: var(--home-dark, var(--ink-dim));
 }
 .tape-measure {
   display: grid;
