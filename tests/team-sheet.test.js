@@ -164,6 +164,13 @@ test("a team's numbers leave out any it has none for, and show nothing when it h
   assert.equal(renderTeamStats([["GB", null]]), false);
 });
 
+test("a team's numbers sit three to a row unless the caller asks for another count", () => {
+  const readColumns = (/** @type {any} */ stats) =>
+    String(stats).match(/--team-stat-columns: (\d+)/)?.[1];
+  assert.equal(readColumns(renderTeamStats([["PCT", ".574"]])), "3");
+  assert.equal(readColumns(renderTeamStats([["PCT", ".574"]], 5)), "5");
+});
+
 test("a team's line of facts follows its label", () => {
   assert.equal(stripTags(renderTeamDetail("Titles", html`<b>2</b> 2009`)), "Titles2 2009");
 });

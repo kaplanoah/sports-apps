@@ -117,6 +117,20 @@ test("a hitter's season shows his totals, then each ranked number with his rank 
   );
 });
 
+test("a player's totals sit in a club's Season box, five to a row", () => {
+  const markup = String(
+    renderPlayerBody({
+      player: describeRostered(114, "CLE", "Steven Kwan"),
+      hitters: HITTERS,
+      starters: null,
+      side: null,
+      isUnkept: false,
+      isLoading: false,
+    }),
+  );
+  assert.match(markup, /<div class="team-stats" style="--team-stat-columns: 5">/);
+});
+
 test("his postseason shows over his season, as one line", () => {
   const text = renderText(describeRostered(114, "CLE", "Steven Kwan"));
   assert.match(text, /^Postseason 3 games 2-13 • \.154 AVG • 2 R • 1 RBI • 1 BB • 1 K Season/);

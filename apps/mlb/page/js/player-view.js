@@ -11,6 +11,7 @@ import { renderPlaceholder } from "#shared/placeholder.js";
 import { rankAmong, renderRankRow } from "#shared/rank-curve.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
+import { renderTeamStats } from "#shared/team-sheet.js";
 import { nameTeam, renderTeamDot } from "./clubs.js";
 import { renderPitchMix } from "./pitch-mix.js";
 import {
@@ -132,16 +133,10 @@ export function renderPlayerFacts(player, isLoading) {
 }
 
 /**
- * A row of totals, each label over its number, in an outlined box.
- * @param {[string, string | number][]} totals
+ * A row of totals, each label over its number, in the box a club's sheet shows its season in.
+ * @param {[string, import("#shared/html.js").Markup | string | number][]} totals
  */
-const renderTotals = (totals) =>
-  html`<div class="totals">
-    ${totals.map(
-      ([label, value]) =>
-        html`<div class="total"><span class="team-label">${label}</span><b class="tabular">${value}</b></div>`,
-    )}
-  </div>`;
+const renderTotals = (totals) => html`${renderTeamStats(totals, 5)}`;
 
 /** @param {any} hitting */
 const describeHittingLine = (hitting) =>
@@ -400,7 +395,7 @@ function renderOutBox({ injury, out }) {
 const renderPending = () =>
   renderSheetPart(
     "Season",
-    html`<div class="totals">${renderPlaceholder("H R RBI BB K 000 00 00 00 00")}</div>`,
+    renderTotals(["H", "R", "RBI", "BB", "K"].map((label) => [label, renderPlaceholder("000")])),
   );
 
 /**
