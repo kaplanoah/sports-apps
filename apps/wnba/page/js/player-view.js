@@ -388,12 +388,20 @@ const renderPending = () =>
 
 /**
  * The sheet's parts under her name, or stand-ins while they load, or why they didn't.
- * @param {{ player: Player | null, isLoading: boolean, season: Season | null, isPastSeason: boolean, showsOut: boolean, now: number }} shown
+ * @param {{ player: Player | null, isLoading: boolean, failure?: import("#shared/retry.js").ReadFailure | null, season: Season | null, isPastSeason: boolean, showsOut: boolean, now: number }} shown
  *   `showsOut` says whether she shows as out, as she does only while her team still plays
  */
-export function renderPlayerBody({ player, isLoading, season, isPastSeason, showsOut, now }) {
+export function renderPlayerBody({
+  player,
+  isLoading,
+  failure,
+  season,
+  isPastSeason,
+  showsOut,
+  now,
+}) {
   if (!player && isLoading) return renderPending();
-  if (!player) return renderRetryBlock("Couldn't load her numbers");
+  if (!player) return renderRetryBlock("her numbers", failure ?? "unreachable");
   const hasPlayed = !!(player.lastGame || player.regularSeason);
   const noGames = isPastSeason ? "No games this season" : "No games yet this season";
   const out = showsOut && player.facts?.out;

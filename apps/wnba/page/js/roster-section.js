@@ -7,7 +7,7 @@
 // shows, so a reload draws it again while it reads again.
 
 import { setHtml } from "#shared/html.js";
-import { watchRetries } from "#shared/retry.js";
+import { classifyReadFailure, watchRetries } from "#shared/retry.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 import { chooseSort, DEFAULT_SORT, describeRosterNote, renderRoster } from "./roster-view.js";
 import { isStillPlaying } from "./series.js";
@@ -16,7 +16,8 @@ import { isPastSeason, session } from "./session.js";
 /** @typedef {import("./roster-view.js").Roster} Roster */
 /** @typedef {import("./roster-view.js").Averages} Averages */
 /** @typedef {import("./roster-view.js").RosterSort} RosterSort */
-/** @typedef {{ at: number, roster: Roster | null, averages: Averages[], isLoading: boolean }} RosterRead */
+/** @typedef {import("#shared/retry.js").ReadFailure} ReadFailure */
+/** @typedef {{ at: number, roster: Roster | null, averages: Averages[], isLoading: boolean, failure: ReadFailure | null }} RosterRead */
 /** @typedef {{ team: string, year: number, roster: Roster, averages: Averages[], sort: RosterSort }} SavedRoster */
 
 const FETCH_TIMEOUT_MS = 15 * 1000;
@@ -69,6 +70,7 @@ function keepRead(team, year, read, [roster, averages]) {
     ...read,
     isLoading: false,
     roster: roster.status === "fulfilled" ? roster.value : read.roster,
+    failure: roster.status === "rejected" ? classifyReadFailure(roster.reason) : null,
     averages:
       averages.status === "fulfilled" ? (averages.value.data?.players ?? []) : read.averages,
   });
@@ -94,6 +96,7 @@ function readRoster(team, year) {
     roster: kept?.roster ?? null,
     averages: kept?.averages ?? [],
     isLoading: true,
+    failure: null,
   };
   reads.set(key, read);
   Promise.allSettled([fetchRoster(team, year), fetchAverages(year)]).then((results) =>
@@ -104,11 +107,14 @@ function readRoster(team, year) {
 
 function renderSection() {
   if (!shownTeam) return;
-  const { roster, averages, isLoading } = readRoster(shownTeam, session.year);
+  const { roster, averages, isLoading, failure } = readRoster(shownTeam, session.year);
   const team = shownTeam;
   const showsOut = !isPastSeason() && isStillPlaying(session.season?.series ?? [], team);
   setHtml(findElement("rosterNote"), describeRosterNote(roster, session.year));
-  setHtml(findElement("rosterBody"), renderRoster({ roster, averages, sort, isLoading, showsOut }));
+  setHtml(
+    findElement("rosterBody"),
+    renderRoster({ roster, averages, sort, isLoading, failure, showsOut }),
+  );
 }
 
 // A read that failed is dropped, so the section shows its placeholders while it reads again.
@@ -170,7 +176,7 @@ export function reopenRoster(saved) {
   if (!isSavedRoster(saved)) return;
   const { team, year, roster, averages, sort: savedSort } = /** @type {SavedRoster} */ (saved);
   const key = `${team}:${year}`;
-  if (!reads.has(key)) reads.set(key, { at: 0, roster, averages, isLoading: false });
+  if (!reads.has(key)) reads.set(key, { at: 0, roster, averages, isLoading: false, failure: null });
   sortedTeam = team;
   sort = savedSort;
 }

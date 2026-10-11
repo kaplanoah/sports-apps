@@ -1,12 +1,13 @@
 /*
  * What a sheet shows where a read of its Worker failed, as retry.js builds it: in place of a whole
- * sheet or section, a .retry-block of an icon, why, and a filled Try again button, centered; in
- * place of one part, a .retry-note of why, after a warning icon, over an outlined one. Each message
- * keeps the size of the text it stands in for.
+ * sheet or section, a .retry-block of an icon, why, what comes next, and a filled Try again
+ * button, centered; in place of one part, a .retry-note of why, after a warning icon, over an
+ * outlined one, its message keeping the size of the text it stands in for.
  * Apps link it after sheet.css, before their own styles.css, which draws .retry-button and its
- * .filled form the way the app's other buttons look, and sets the block's message weight.
+ * .filled form the way the app's other buttons look, and sets the block's title weight.
  *
- * Beside chrome.css's --ink and --ink-dim, and type.css's --size-read, it reads no tokens of its own.
+ * Beside chrome.css's --ink and --ink-dim, and type.css's --size-glance, it reads no tokens of its
+ * own.
  */
 
 .retry-button {
@@ -24,24 +25,27 @@
 .retry-block {
   display: grid;
   justify-items: center;
-  gap: 10px;
   padding: 48px 0 12px;
   text-align: center;
 }
 .retry-art {
-  width: 34px;
-  height: 34px;
+  width: 22px;
+  height: 22px;
   color: var(--ink-dim);
 }
 .retry-title {
-  margin: 0;
-  font-size: var(--size-read);
-}
-.retry-block .retry-title {
+  margin: 10px 0 0;
+  font-size: var(--size-glance);
   color: var(--ink);
 }
+.retry-next {
+  margin: 3px 0 0;
+  font-size: var(--size-glance);
+  color: var(--ink-dim);
+  text-wrap: balance;
+}
 .retry-block .retry-button {
-  margin-top: 6px;
+  margin-top: 14px;
 }
 
 .retry-note {

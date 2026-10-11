@@ -551,14 +551,15 @@ test("a starter's Couldn't load sits 11px under his club and a pixel right of th
   expect(gaps).toEqual({ above: 11, between: 3.5, below: 14, right: 1 });
 });
 
-test("with neither starter's numbers loaded, the Matchup says so once, and reads them again as the phone comes back online", async ({
+test("with neither starter's numbers loaded, the Matchup says why once, and reads them again as the phone comes back online", async ({
   page,
 }) => {
   /** @type {Record<number, object>} */
   const pitchers = {};
   const sheet = await openMatchup(page, pitchers);
   const block = sheet.locator("#matchupBody .retry-block");
-  await expect(block.locator(".retry-title")).toHaveText("Couldn't load the starters' numbers");
+  await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
+  await expect(block.locator(".retry-next")).toHaveText("Try again to load starters' numbers");
   await expect(sheet.locator(".retry-side")).toHaveCount(0);
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);

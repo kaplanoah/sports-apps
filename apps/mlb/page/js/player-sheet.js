@@ -6,7 +6,7 @@
 // sheet keeps what it read with him, so a reload draws it again while it reads again.
 
 import { setHtml } from "#shared/html.js";
-import { watchRetries } from "#shared/retry.js";
+import { classifyReadFailure, watchRetries } from "#shared/retry.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 import { TEAMS } from "./teams.js";
@@ -95,12 +95,17 @@ async function readRankedAmong(player, year, read) {
 async function loadPlayer(id, year, read) {
   const key = nameRead(id, year);
   // The store answers null for a player it keeps no sheet for, apart from a read that failed.
-  const player = await fetchDoc(`players/${year}-${id}`).catch(() => undefined);
+  /** @type {import("#shared/retry.js").ReadFailure | null} */
+  let failure = null;
+  const player = await fetchDoc(`players/${year}-${id}`).catch((error) => {
+    failure = classifyReadFailure(error);
+    return undefined;
+  });
   const found = player ?? read.player;
   const ranked = found ? await readRankedAmong(found, year, read) : {};
   if (reads.get(key) !== read) return;
   const isUnkept = player === null;
-  reads.set(key, { ...read, ...ranked, player: found, isUnkept, isLoading: false });
+  reads.set(key, { ...read, ...ranked, player: found, isUnkept, isLoading: false, failure });
   if (shownPlayer?.id === id) renderSheet();
 }
 
@@ -122,6 +127,7 @@ function readPlayer(id, year) {
     side: kept?.side ?? null,
     isUnkept: false,
     isLoading: true,
+    failure: null,
   };
   reads.set(key, read);
   loadPlayer(id, year, read);
@@ -178,7 +184,16 @@ function reopenPlayer(saved) {
   const { id, club, name, number = "", year, player, hitters, starters, side } = saved;
   const key = nameRead(id, year);
   if (typeof year === "number" && player && !reads.has(key))
-    reads.set(key, { at: 0, player, hitters, starters, side, isUnkept: false, isLoading: false });
+    reads.set(key, {
+      at: 0,
+      player,
+      hitters,
+      starters,
+      side,
+      isUnkept: false,
+      isLoading: false,
+      failure: null,
+    });
   showPlayer({ id, club, name, number });
   return true;
 }

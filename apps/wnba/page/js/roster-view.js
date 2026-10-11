@@ -328,12 +328,12 @@ const renderCoach = (coach) =>
 /**
  * The roster's table and its head coach, or stand-ins for them while they load, or why they
  * didn't.
- * @param {{ roster: Roster | null, averages: Averages[], sort: RosterSort, isLoading: boolean, showsOut: boolean }} shown
+ * @param {{ roster: Roster | null, averages: Averages[], sort: RosterSort, isLoading: boolean, failure?: import("#shared/retry.js").ReadFailure | null, showsOut: boolean }} shown
  *   `showsOut` says whether a player out shows so, as she does only while her team still plays
  */
-export function renderRoster({ roster, averages, sort, isLoading, showsOut }) {
+export function renderRoster({ roster, averages, sort, isLoading, failure, showsOut }) {
   if (!roster && isLoading) return renderPendingTables(sort);
-  if (!roster) return renderRetryBlock("Couldn't load the roster");
+  if (!roster) return renderRetryBlock("roster", failure ?? "unreachable");
   const rows = sortRows(matchAverages(roster.players, averages), sort);
   return html`${renderTables({
     pinnedRows: rows.map((row) => renderPinnedRow(row, roster.team, showsOut)),

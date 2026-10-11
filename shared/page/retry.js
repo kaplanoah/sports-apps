@@ -1,7 +1,7 @@
-// What a sheet shows where a read of its Worker failed, with a Try again button, as retry.css
-// draws it: a whole sheet or section that didn't load holds a centered block, and one part of it a
-// note in that part's place. A tap on Try again, the phone coming back online, or the page coming
-// back reads again, so the part shows its placeholders until the read answers.
+// What a sheet shows where a read of its Worker failed, as retry.css draws it: a whole sheet or
+// section that didn't load holds a centered block saying why and what comes next, and one part of
+// it a note in that part's place. A tap on Try again, the phone coming back online, or the page
+// coming back reads again, so the part shows its placeholders until the read answers.
 
 import { html } from "./html.js";
 import { watchTimeAway } from "./resume.js";
@@ -13,10 +13,17 @@ const ARROW = html`<svg class="retry-icon" viewBox="0 0 256 256" fill="currentCo
   />
 </svg>`;
 
-// Phosphor's cloud-slash, at its Light weight.
-const CLOUD_SLASH = html`<svg class="retry-art" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+// Phosphor's cell-signal-slash, at its Light weight.
+const CELL_SIGNAL_SLASH = html`<svg class="retry-art" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
   <path
-    d="M52.44,36A6,6,0,0,0,43.56,44l40.18,44.2c-.45.87-.9,1.75-1.32,2.64A62,62,0,1,0,72,214h88a85.23,85.23,0,0,0,32.35-6.3L203.56,220a6,6,0,0,0,8.88-8.08ZM160,202H72a50,50,0,1,1,5.9-99.64A86.25,86.25,0,0,0,74,128a6,6,0,0,0,12,0,73.92,73.92,0,0,1,6.44-30.2l91.22,100.34A73.65,73.65,0,0,1,160,202Zm86-74a85.85,85.85,0,0,1-21.85,57.27,6,6,0,0,1-4.47,2,6,6,0,0,1-4.47-10,74,74,0,0,0-99-108.92,6,6,0,1,1-7.11-9.67A86,86,0,0,1,246,128Z"
+    d="M86,152v48a6,6,0,0,1-12,0V152a6,6,0,0,1,12,0ZM40,186a6,6,0,0,0-6,6v8a6,6,0,0,0,12,0v-8A6,6,0,0,0,40,186Zm172.44,26L52.44,36A6,6,0,0,0,43.56,44L114,121.52V200a6,6,0,0,0,12,0V134.72l28,30.8V200a6,6,0,0,0,12,0V178.72L203.56,220a6,6,0,0,0,8.88-8.08ZM160,121.63a6,6,0,0,0,6-6V72a6,6,0,0,0-12,0v43.63A6,6,0,0,0,160,121.63Zm40,44a6,6,0,0,0,6-6V32a6,6,0,0,0-12,0V159.63A6,6,0,0,0,200,165.63Z"
+  />
+</svg>`;
+
+// Phosphor's plugs, at its Light weight.
+const PLUGS = html`<svg class="retry-art" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+  <path
+    d="M148.24,139.76a6,6,0,0,0-8.48,0L120,159.51,96.49,136l19.75-19.76a6,6,0,0,0-8.48-8.48L88,127.51,68.24,107.76a6,6,0,0,0-8.48,8.48L67.51,124,42.79,148.73a30,30,0,0,0,0,42.42l6.78,6.79L19.76,227.76a6,6,0,1,0,8.48,8.48l29.82-29.81,6.79,6.78a30,30,0,0,0,42.42,0L132,188.49l7.76,7.75a6,6,0,0,0,8.48-8.48L128.49,168l19.75-19.76A6,6,0,0,0,148.24,139.76Zm-49.45,65a18,18,0,0,1-25.46,0L51.27,182.67a18,18,0,0,1,0-25.46L76,132.49,123.51,180Zm137.45-185a6,6,0,0,0-8.48,0L197.94,49.57l-6.79-6.78a30,30,0,0,0-42.42,0L124,67.51l-7.76-7.75a6,6,0,0,0-8.48,8.48l80,80a6,6,0,0,0,8.48-8.48L188.49,132l24.72-24.73a30,30,0,0,0,0-42.42l-6.78-6.79,29.81-29.82A6,6,0,0,0,236.24,19.76Zm-31.51,79L180,123.51,132.49,76l24.72-24.73a18,18,0,0,1,25.46,0l22.06,22.06a18,18,0,0,1,0,25.46Z"
   />
 </svg>`;
 
@@ -41,18 +48,54 @@ export const renderRetryButton = ({ isFilled = false } = {}) =>
 export const renderRetryMessage = (message, className) =>
   html`<p class="${["retry-message", className].filter(Boolean).join(" ")}">${WARNING}<span>${message}</span></p>`;
 
+/** @typedef {"offline" | "unreachable" | "server"} ReadFailure */
+
 /**
- * In place of a whole sheet or section that didn't load: an icon, why, and a filled button,
- * centered.
- * @param {string} message
- * @param {string} [className] the class of the text it stands in for, so it keeps that text's size
+ * Why a read of the Worker failed: the phone is offline, the server is out of reach, or the server
+ * answered with a problem, as a failure carrying the answer's status says.
+ * @param {unknown} error
+ * @returns {ReadFailure}
  */
-export const renderRetryBlock = (message, className) =>
-  html`<div class="retry-block">
-    ${CLOUD_SLASH}
-    <p class="${["retry-title", className].filter(Boolean).join(" ")}">${message}</p>
+export function classifyReadFailure(error) {
+  if (navigator.onLine === false) return "offline";
+  return typeof (/** @type {any} */ (error)?.status) === "number" ? "server" : "unreachable";
+}
+
+// A read that failed offline reads again as the phone comes back online; any other waits for a tap.
+/** @type {Record<ReadFailure, { icon: import("./html.js").Markup, title: string, next: (subject: string) => string }>} */
+const FAILURES = {
+  offline: {
+    icon: CELL_SIGNAL_SLASH,
+    title: "Couldn't connect to the internet",
+    next: (subject) => `Will load ${subject} when back online`,
+  },
+  unreachable: {
+    icon: PLUGS,
+    title: "Couldn't connect to the server",
+    next: (subject) => `Try again to load ${subject}`,
+  },
+  server: {
+    icon: PLUGS,
+    title: "The server had a problem",
+    next: (subject) => `Try again to load ${subject}`,
+  },
+};
+
+/**
+ * In place of a whole sheet or section that didn't load: an icon and why, what comes next, and a
+ * filled button, centered.
+ * @param {string} subject what didn't load, as the line under why names it, like "roster"
+ * @param {ReadFailure} failure
+ */
+export function renderRetryBlock(subject, failure) {
+  const { icon, title, next } = FAILURES[failure];
+  return html`<div class="retry-block">
+    ${icon}
+    <p class="retry-title">${title}</p>
+    <p class="retry-next">${next(subject)}</p>
     ${renderRetryButton({ isFilled: true })}
   </div>`;
+}
 
 /**
  * In place of one part that didn't load: why, with the button under it.

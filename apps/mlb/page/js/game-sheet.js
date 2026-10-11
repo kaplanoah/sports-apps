@@ -295,9 +295,9 @@ async function showGame(game, sides, boxScore = null) {
 // Each side that didn't load shows its placeholders again while it reads again.
 async function retryFailedSides() {
   const opened = shown;
-  const failed = opened?.sides.filter((side) => side.failed) ?? [];
+  const failed = opened?.sides.filter((side) => side.failure) ?? [];
   if (!opened || failed.length === 0) return;
-  for (const side of failed) side.failed = false;
+  for (const side of failed) side.failure = null;
   renderSheet();
   await loadSides(opened, failed, readCurrentGame(opened.game));
 }

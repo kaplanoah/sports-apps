@@ -497,7 +497,8 @@ test("a player's sheet that didn't load says so over Try again, which shows his 
   await sheet.getByRole("button", { name: "Steven Kwan" }).click();
   const playerSheet = page.locator("#playerSheet");
   const block = playerSheet.locator("#playerBody .retry-block");
-  await expect(block.locator(".retry-title")).toHaveText("Couldn't load his numbers");
+  await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
+  await expect(block.locator(".retry-next")).toHaveText("Try again to load his numbers");
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
@@ -520,7 +521,8 @@ test("a roster that didn't load says so over Try again, and reads again as the p
   const sheet = page.locator("#teamSheet");
   await sheet.getByRole("tab", { name: "Roster" }).click();
   const block = sheet.locator("#rosterBody .retry-block");
-  await expect(block.locator(".retry-title")).toHaveText("Couldn't load the roster");
+  await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
+  await expect(block.locator(".retry-next")).toHaveText("Try again to load roster");
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);

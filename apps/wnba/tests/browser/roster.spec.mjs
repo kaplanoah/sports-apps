@@ -561,7 +561,8 @@ test("a roster that didn't load says so over Try again, which holds its shape as
   await teamSheet.getByRole("tab", { name: "Roster" }).click();
   const section = page.locator("#rosterSection");
   const block = section.locator(".retry-block");
-  await expect(block.locator(".retry-title")).toHaveText("Couldn't load the roster");
+  await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
+  await expect(block.locator(".retry-next")).toHaveText("Try again to load roster");
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
@@ -571,6 +572,74 @@ test("a roster that didn't load says so over Try again, which holds its shape as
   await block.getByRole("button", { name: "Try again" }).click();
   await expect(section.locator(".placeholder").first()).toBeVisible();
   release();
+  await expect(section.locator(".roster-coach")).toBeVisible();
+  await expect(block).toHaveCount(0);
+});
+
+test("a roster that didn't load sets its icon, why, what comes next, and Try again at their own spacing", async ({
+  page,
+}) => {
+  await openApp(page);
+  await page.route(matchPath("/roster"), (route) =>
+    route.fulfill({ status: 502, json: { error: "test" } }),
+  );
+  const teamSheet = await openLibertySheet(page);
+  await teamSheet.getByRole("tab", { name: "Roster" }).click();
+  const block = page.locator("#rosterSection .retry-block");
+  await expect(block.locator(".retry-next")).toBeVisible();
+  const layout = await block.evaluate((element) => {
+    /** @param {string} selector */
+    const box = (selector) =>
+      /** @type {Element} */ (element.querySelector(selector)).getBoundingClientRect();
+    const [art, title, next, button] = [
+      ".retry-art",
+      ".retry-title",
+      ".retry-next",
+      ".retry-button",
+    ].map(box);
+    return {
+      icon: [art.width, art.height],
+      underIcon: title.top - art.bottom,
+      underTitle: next.top - title.bottom,
+      overButton: button.top - next.bottom,
+      sizes: [".retry-title", ".retry-next"].map(
+        (selector) =>
+          getComputedStyle(/** @type {Element} */ (element.querySelector(selector))).fontSize,
+      ),
+    };
+  });
+  expect(layout).toEqual({
+    icon: [22, 22],
+    underIcon: 10,
+    underTitle: 3,
+    overButton: 14,
+    sizes: ["14px", "14px"],
+  });
+});
+
+test("a roster read offline says so with a crossed-out signal, and loads once the phone is back online", async ({
+  page,
+  context,
+}) => {
+  await openApp(page);
+  // The test's routes answer even offline, so the roster's read fails as an offline phone's does.
+  /** @param {import("@playwright/test").Route} route */
+  const disconnect = (route) => route.abort("internetdisconnected");
+  await page.route(matchPath("/roster"), disconnect);
+  await context.setOffline(true);
+  const teamSheet = await openLibertySheet(page);
+  await teamSheet.getByRole("tab", { name: "Roster" }).click();
+  const section = page.locator("#rosterSection");
+  const block = section.locator(".retry-block");
+  await expect(block.locator(".retry-title")).toHaveText("Couldn't connect to the internet");
+  await expect(block.locator(".retry-next")).toHaveText("Will load roster when back online");
+  await expect(block.locator(".retry-art path")).toHaveAttribute("d", /^M86,152v48/);
+  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listLowContrastText(page)).toEqual([]);
+  expect(await listStrayPeriods(page)).toEqual([]);
+
+  await page.unroute(matchPath("/roster"), disconnect);
+  await context.setOffline(false);
   await expect(section.locator(".roster-coach")).toBeVisible();
   await expect(block).toHaveCount(0);
 });
