@@ -787,13 +787,13 @@ function readPutBackDay() {
 }
 
 /**
- * The last day whose top is at or above `top` in the list, and how far its top sits under it.
+ * The first day still showing under `top` in the list, and how far its top sits under it.
  * @param {HTMLElement} list
  * @param {number} top
  */
 function findDayAt(list, top) {
   const listed = /** @type {HTMLElement[]} */ ([...list.children]);
-  const found = listed.findLast((each) => each.offsetTop <= top) ?? listed[0];
+  const found = listed.find((each) => each.offsetTop + each.offsetHeight > top) ?? listed.at(-1);
   const day = found?.dataset.day;
   return day ? { day, offset: found.offsetTop - top } : null;
 }
