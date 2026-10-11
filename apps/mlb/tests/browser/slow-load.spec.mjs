@@ -1,5 +1,6 @@
 import { test, expect, openApp, EVENING_FIXTURE, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -82,4 +83,15 @@ test("a reload shows the bracket the page last drew before its code arrives", as
   await page.clock.runFor(4000);
   await expect(page.locator("#loadNote")).toHaveCount(0);
   release();
+});
+
+test("the copy a reload draws of a whole season fits in Safari's storage", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
+  await openApp(page, { isWholeSeason: true });
+  await expect(page.locator("#seasonGames .listed-day").first()).toBeAttached();
+
+  await page.reload();
+
+  await expect(page.locator("#seasonGames .listed-day").first()).toBeAttached();
+  expect(await measureStoredBytes(page)).toBeLessThan(SAVED_COPY_BYTES);
 });

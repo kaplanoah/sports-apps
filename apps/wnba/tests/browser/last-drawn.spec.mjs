@@ -1,5 +1,6 @@
 import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -93,6 +94,44 @@ test.describe("on a phone", () => {
     await expect(today).toBeInViewport();
     await expect(earlier).not.toBeInViewport();
     release();
+  });
+
+  test("the copy a reload draws of a whole season fits in Safari's storage", async ({ page }) => {
+    await storeBeforeLoad(page, { lastTab: "games" });
+    await openApp(page, { isWholeSeason: true });
+    await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+
+    await page.reload();
+
+    await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+    expect(await measureStoredBytes(page)).toBeLessThan(SAVED_COPY_BYTES);
+  });
+
+  test("a reload after a save that didn't fit opens on today, not on the copy it couldn't replace", async ({
+    page,
+  }) => {
+    await storeBeforeLoad(page, { lastTab: "games" });
+    await openApp(page, { isWholeSeason: true });
+    const today = page.locator("#seasonGames .game-day.is-today");
+    const earlier = page.locator('#seasonGames .listed-day[data-day="2026-09-20"]');
+    await page.locator('#seasonGames .day-cell[data-day="2026-09-20"]').click();
+    await expect(earlier).toBeInViewport();
+    await page.reload();
+    await expect(earlier).toBeInViewport();
+    await page.evaluate(() => {
+      const { setItem } = Storage.prototype;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === "lastDrawn") throw new DOMException("Full", "QuotaExceededError");
+        setItem.call(this, key, value);
+      };
+    });
+    await page.locator("#seasonGames .go-today").click();
+    await expect(today).toBeInViewport();
+
+    await page.reload();
+
+    await expect(today).toBeInViewport();
+    await expect(earlier).not.toBeInViewport();
   });
 
   test("a reload after a night away follows the Games list's start day to today once the store says the game it opened on has ended", async ({

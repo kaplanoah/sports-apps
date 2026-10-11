@@ -110,9 +110,14 @@ test.describe("with reduced motion", () => {
       findList(page).evaluate((list, to) => list.scrollTo({ top: to, behavior: "instant" }), top);
 
     for (const passed of ["2026-08-10", "2026-10-04"]) {
+      await scrollList(
+        await findDay(page, passed).evaluate(
+          (listed) => /** @type {HTMLElement} */ (listed).offsetTop,
+        ),
+      );
+      await expect(findDay(page, passed).locator(".game-row").first()).toBeAttached();
       const { textBottom, next } = await findList(page).evaluate((list, shown) => {
         const listed = /** @type {HTMLElement} */ (list.querySelector(`[data-day="${shown}"]`));
-        list.scrollTo({ top: listed.offsetTop, behavior: "instant" });
         const listTop = list.getBoundingClientRect().top;
         const walker = document.createTreeWalker(listed, NodeFilter.SHOW_TEXT);
         const range = document.createRange();
@@ -134,6 +139,32 @@ test.describe("with reduced motion", () => {
       await expect(chosen).toHaveAttribute("data-day", next);
       await scrollList(Math.floor(textBottom) - 1);
       await expect(chosen).toHaveAttribute("data-day", passed);
+    }
+  });
+
+  test("a day far from the list's top stands in for its games, and scrolling draws each day whole before it shows", async ({
+    page,
+  }) => {
+    await openSeasonGames(page);
+    await expectDayAtTop(page, "2026-09-30");
+    await expect(findDay(page, "2026-06-10").locator(".game-list")).toHaveClass(/is-stand-in/);
+    expect(await page.locator("#seasonGames .game-row").count()).toBeLessThan(100);
+    await findList(page).evaluate((list) => list.scrollTo({ top: 0, behavior: "instant" }));
+
+    for (let step = 0; step < 20; step += 1) {
+      await findList(page).evaluate((list) => list.scrollBy(0, list.clientHeight));
+      await expect
+        .poll(() =>
+          findList(page).evaluate((list) => {
+            const top = list.getBoundingClientRect().top;
+            const bottom = top + list.clientHeight;
+            return [...list.querySelectorAll(".game-list.is-stand-in")].filter((standIn) => {
+              const box = standIn.getBoundingClientRect();
+              return box.bottom > top && box.top < bottom;
+            }).length;
+          }),
+        )
+        .toBe(0);
     }
   });
 
@@ -414,8 +445,9 @@ test.describe("with reduced motion", () => {
     });
 
     await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q1 8:00");
-    await expect(findDay(page, "2026-09-20").locator('[data-game="added"]')).toHaveCount(1);
     await expectDayAtTop(page, "2026-09-30");
+    await findCell(page, "2026-09-20").click();
+    await expect(findDay(page, "2026-09-20").locator('[data-game="added"]')).toBeInViewport();
   });
 
   test("a game on a new day keeps each day after it in its own place, rather than writing each one over with the day before's games", async ({

@@ -305,5 +305,6 @@ export function listSeasonDays(season, schedule, now) {
     today,
     openDay: findLiveDay(games),
     emptyNote: "No games scheduled yet",
+    standsIn: true,
   });
 }

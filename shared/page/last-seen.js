@@ -108,7 +108,18 @@ function saveItem(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* the next load waits for the store instead */
+    dropItem(key);
+  }
+}
+
+// A copy the page couldn't replace, as when storage is full, shows what the page showed long ago,
+// so it goes, and the next load waits for the store instead.
+/** @param {string} key */
+function dropItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* storage that refuses access holds no copy to show */
   }
 }
 

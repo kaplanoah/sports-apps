@@ -374,14 +374,9 @@ header.top h1 {
   font-size: var(--size-read);
 }
 /* The season's games sit under a strip of its days, whose month's capitals start 16px under the
-   header's line. Each day's card draws only near the screen, at the height its games take inside
-   its edge. Today's date is orange, as it is in the strip. */
+   header's line. Today's date is orange, as it is in the strip. */
 .day-view {
   margin-top: calc(5.5px - var(--header-gap));
-}
-.day-list .game-day .game-list {
-  content-visibility: auto;
-  contain-intrinsic-size: auto calc(var(--games) * var(--game-row-height));
 }
 .game-day.is-today .day-number {
   color: var(--strip-today);
