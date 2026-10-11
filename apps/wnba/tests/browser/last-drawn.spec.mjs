@@ -134,6 +134,31 @@ test.describe("on a phone", () => {
     await expect(earlier).not.toBeInViewport();
   });
 
+  test("a reload without the season the page last showed keeps the day the page put back, though the store's first answer lists only the playoffs' days", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("lastTab", "games");
+      if (sessionStorage.getItem("dropLastSeen")) localStorage.removeItem("lastSeen");
+    });
+    await openApp(page, { isWholeSeason: true });
+    const today = page.locator("#seasonGames .game-day.is-today");
+    await expect(today).toBeInViewport();
+    await page.evaluate(() => sessionStorage.setItem("dropLastSeen", "true"));
+
+    await page.reload();
+
+    await expect(page.locator("#seasonGames .listed-day").first()).toHaveAttribute(
+      "data-day",
+      /^2026-05-/,
+    );
+    await expect(today).toBeInViewport();
+    await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
+      "data-day",
+      "2026-09-30",
+    );
+  });
+
   test("a reload after a night away follows the Games list's start day to today once the store says the game it opened on has ended", async ({
     page,
   }) => {

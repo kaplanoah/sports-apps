@@ -1,7 +1,7 @@
 import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listOffScaleText, measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 
 // The Games view's search, over the whole season, on a phone. Today is Wednesday, September 30.
@@ -84,6 +84,15 @@ async function leaveForTwoMinutes(page) {
   });
   await page.clock.runFor(2 * 60_000);
 }
+
+test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-read", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await expect(findInput(page)).toHaveCSS("font-size", "16px");
+  const widths = await measureFieldFace(findInput(page), "--size-read");
+  expect(widths.field).toBeCloseTo(widths.step, 0);
+});
 
 test("Search beside Today opens an empty field ready to type, with the season's list hidden and examples under it", async ({
   page,
