@@ -134,7 +134,6 @@ function saveLastSeen(readShown, savedAt) {
   if (!shown) return;
   saveItem(LAST_SEEN_KEY, shown);
   saveItem(LAST_DRAWN_KEY, readDrawnParts(savedAt));
-  noteShownEndsSeen(savedAt);
   saveItem(OPEN_SHEETS_KEY, listOpenSheets(savedAt));
   keepImages(listDrawnImages());
 }
@@ -146,6 +145,10 @@ export function keepLastSeen(readShown) {
   /** @type {number | null} */
   let hiddenAt = null;
   const readLeftAt = () => hiddenAt ?? Date.now();
+  // Only what the page drew before it first left the screen was seen.
+  const noteEndsSeenUntilLeft = () => {
+    if (hiddenAt === null) noteShownEndsSeen(Date.now());
+  };
   // A page that unloads while hidden says it's hidden once more, but has been away since it was
   // first hidden.
   document.addEventListener("visibilitychange", () => {
@@ -154,9 +157,13 @@ export function keepLastSeen(readShown) {
       noteShownEndsSeen(Date.now());
       hiddenAt = null;
     } else {
+      noteEndsSeenUntilLeft();
       hiddenAt = readLeftAt();
       saveLastSeen(readShown, hiddenAt);
     }
   });
-  addEventListener("pagehide", () => saveLastSeen(readShown, readLeftAt()));
+  addEventListener("pagehide", () => {
+    noteEndsSeenUntilLeft();
+    saveLastSeen(readShown, readLeftAt());
+  });
 }

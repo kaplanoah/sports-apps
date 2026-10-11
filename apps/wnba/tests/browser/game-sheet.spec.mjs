@@ -1059,6 +1059,26 @@ test("a live game's sheet stays open however long the page is away, until an hou
   expect(await comeBackTo(page, "#sheetDialog")).toBe(false);
 });
 
+test("a live game's sheet whose final came while the page was off the screen opens again on a reload however long after", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await app.changeSeason(startValkyriesAtWings);
+  const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
+  await expect(sheet.locator(".faceoff .score")).toHaveText(/74\s*72/);
+  await setHidden(page, true);
+  await app.changeSeason(finishValkyriesAtWings);
+  await expect(sheet.locator(".faceoff .score")).toHaveText(/100\s*108/);
+  await passTime(page, 2 * 60 * MINUTE_MS);
+  const release = await holdPageCode(page);
+
+  await page.reload({ waitUntil: "commit" });
+
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator(".faceoff .score")).toHaveText(/100\s*108/);
+  release();
+});
+
 test.describe("on a phone", () => {
   test.use({
     viewport: { width: 390, height: 844 },
