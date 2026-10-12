@@ -2016,6 +2016,11 @@ body.kbd .player-open:focus {
 .matchup-body .tape .player-curve > span {
   inset-inline: calc(7px / 2);
 }
+/* Each stat sits 22px under the curve above it with the tape's gap, further than that curve sits
+   from its own rank, so each curve reads with the stat over it. */
+.matchup-body .tape .tape-measure + .tape-measure {
+  margin-top: 11.5px;
+}
 /* The notes stand apart from the curves, 19.5px under the last one with the tape's gap. */
 .matchup-body .tape .tape-measure + .tape-note {
   margin-top: 9px;
