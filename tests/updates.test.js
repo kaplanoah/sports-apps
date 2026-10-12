@@ -7,6 +7,7 @@ import {
   listFreshNotes,
   listNotesToShow,
   renderUpdates,
+  startFirstLookClocks,
   startNoteClocks,
 } from "../shared/page/updates.js";
 import { normalizeSpaces } from "./text.js";
@@ -180,13 +181,24 @@ test("a device's first look shows each note out for less than two weeks", () => 
     { at: "2026-09-10T17:00:00Z", text: "News" },
   ];
   const firstLook = at("2026-10-02T17:00:00Z");
-  const clocks = startNoteClocks(notes, null, firstLook);
+  const clocks = startFirstLookClocks(notes, 0, firstLook);
 
   assert.deepEqual(listNoteTexts(notes, clocks, firstLook), ["Channels"]);
   assert.deepEqual(listNoteTexts(notes, clocks, at("2026-10-01T17:00:00Z") + 14 * DAY - 1), [
     "Channels",
   ]);
   assert.deepEqual(listNoteTexts(notes, clocks, at("2026-10-01T17:00:00Z") + 14 * DAY), []);
+});
+
+test("a device's first look counts a note out by the box's last dismissal as dismissed", () => {
+  const notes = [
+    { at: "2026-10-03T17:00:00Z", text: "Search" },
+    { at: "2026-10-01T17:00:00Z", text: "Channels" },
+  ];
+  const firstLook = at("2026-10-04T17:00:00Z");
+  const clocks = startFirstLookClocks(notes, at("2026-10-01T17:00:00Z"), firstLook);
+
+  assert.deepEqual(listNoteTexts(notes, clocks, firstLook), ["Search"]);
 });
 
 test("a note out while the device was away shows for two weeks from when it first shows", () => {
@@ -224,18 +236,18 @@ test("the device keeps when each note it shows stops showing, and its dismissal"
   const firstLook = at("2026-10-02T17:00:00Z");
 
   assert.deepEqual(
-    listNotesToShow(notes, firstLook).map((note) => note.text),
+    listNotesToShow(notes, 0, firstLook).map((note) => note.text),
     ["Channels"],
   );
   const awayNotes = [{ at: "2026-11-01T17:00:00Z", text: "Search" }, ...notes];
   const back = at("2026-12-01T17:00:00Z");
   assert.deepEqual(
-    listNotesToShow(awayNotes, back).map((note) => note.text),
+    listNotesToShow(awayNotes, 0, back).map((note) => note.text),
     ["Search"],
   );
 
   dismissNotes(awayNotes, back + DAY);
-  assert.deepEqual(listNotesToShow(awayNotes, back + DAY), []);
+  assert.deepEqual(listNotesToShow(awayNotes, 0, back + DAY), []);
 });
 
 test("the box lists the newest three release notes and how many more", () => {

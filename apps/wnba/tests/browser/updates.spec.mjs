@@ -240,16 +240,31 @@ test.describe("on a phone, with a release note out", () => {
     expect(await notes.locator(".more").evaluate(readTextLeft)).toBe(noteLeft);
   });
 
+  test("a phone that dismissed the box before it kept its notes' times still hides the notes out by then", async ({
+    page,
+  }) => {
+    await serveReleaseNote(page, [CHANNELS_NOTE, { at: "2026-09-28T15:00:00Z", text: "Rosters" }]);
+    await page.addInitScript(() =>
+      localStorage.setItem("updatesSeenAt", String(Date.parse("2026-09-29T00:00:00Z"))),
+    );
+    await openApp(page, { isShowingUpdates: true });
+
+    await expect(page.locator("#updates .updates-notes .what")).toHaveText([
+      "Tap a game, then Channels.",
+    ]);
+  });
+
   test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {
     await serveReleaseNote(page);
-    await openApp(page);
-    await expect(page.locator("#updates .updates-notes .what")).toHaveCount(1);
+    await openApp(page, { isShowingUpdates: true });
+    const notes = page.locator("#updates .updates-notes");
+    await expect(notes.locator(".what")).toHaveCount(1);
 
     await keepInOtherTab(page, "releaseNotesShownUntil", {
       [CHANNELS_NOTE.at]: Date.parse("2026-09-30T21:00:00Z"),
     });
 
-    await expect(page.locator("#updates")).toBeHidden();
+    await expect(notes).toHaveCount(0);
   });
 });
 

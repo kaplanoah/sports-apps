@@ -121,8 +121,10 @@ export function watchDismissals(onChange) {
 
 export function drawUpdates() {
   const isShown = isTouchDevice() && !isPastSeason();
+  // Read before listing the finals, which keep a new device's start, so the start hides no notes.
+  const dismissedAt = seenAt.read() ?? 0;
   showUpdates(findPanel(), isShown ? listFreshUpdates() : [], {
     dismiss: dismissUpdates,
-    notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
+    notes: isShown ? listNotesToShow(RELEASE_NOTES, dismissedAt) : [],
   });
 }
