@@ -19,6 +19,7 @@ import {
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -790,6 +791,53 @@ test("where an unranked starter near the innings would rank is a hairline in his
     return painted;
   }, shape.side);
   expect(shape.color).toBe(paint);
+});
+
+test("a starter's dot at either end of a curve sits right under his number's dot", async ({
+  page,
+}) => {
+  const [blubaugh, springs] = [MATCHUP_STARTERS[1], MATCHUP_STARTERS[2]];
+  const spread = blubaugh.starters.values;
+  const sheet = await openMatchup(page, {
+    1: { ...blubaugh, line: { ...blubaugh.line, k9: spread.k9[0] } },
+    2: { ...springs, line: { ...springs.line, era: spread.era[0].toFixed(2) } },
+  });
+  const offsets = await sheet.locator(".tape-measure").evaluateAll((measures) =>
+    measures.slice(0, 2).map((measure, index) => {
+      const side = index === 0 ? "home" : "away";
+      /** @param {string} selector */
+      const readCenter = (selector) => {
+        const box = /** @type {Element} */ (
+          measure.querySelector(selector)
+        ).getBoundingClientRect();
+        return box.left + box.width / 2;
+      };
+      return readCenter(`.player-curve b.${side}`) - readCenter(`.tape-number.${side} .tape-dot`);
+    }),
+  );
+  expect(offsets[0]).toBeCloseTo(0, 1);
+  expect(offsets[1]).toBeCloseTo(0, 1);
+});
+
+test("a rank, his own or where he would rank, is the dim color throughout and sits 4px clear of the curve under it", async ({
+  page,
+}) => {
+  const sheet = await openMatchup(page, {
+    ...MATCHUP_STARTERS,
+    2: { ...MATCHUP_STARTERS[2], ranks: null },
+  });
+  await expect(sheet.locator(".tape-number.home .tape-rank").first()).toHaveText(/^would be /);
+  expect(await checkRanksAreDim(sheet, ".tape-rank")).toEqual(Array(8).fill(true));
+  const clearances = await sheet.locator(".tape-measure").evaluateAll((measures) =>
+    measures.flatMap((measure) => {
+      const curve = /** @type {Element} */ (measure.querySelector(".player-curve"));
+      return [...measure.querySelectorAll(".tape-rank")].map(
+        (rank) => curve.getBoundingClientRect().top - rank.getBoundingClientRect().bottom,
+      );
+    }),
+  );
+  expect(clearances).toHaveLength(8);
+  for (const clearance of clearances) expect(clearance).toBeCloseTo(4, 0);
 });
 
 test("an unranked starter's numbers sit level with the label and the ranked starter's", async ({

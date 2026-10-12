@@ -20,6 +20,7 @@ import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -447,7 +448,7 @@ test("a tap anywhere on a roster's row opens its player's sheet over the club's,
   await expect(playerSheet).toBeHidden();
 });
 
-test("a starter's sheet ranks him among the qualified starters and shows what he throws", async ({
+test("a starter's sheet ranks him among the qualified starters, each rank all in the dim color, and shows what he throws", async ({
   page,
 }) => {
   const sheet = await openRoster(page, "CLE");
@@ -460,6 +461,7 @@ test("a starter's sheet ranks him among the qualified starters and shows what he
     "Velo",
   ]);
   await expect(playerSheet.locator(".pitch-mix")).toBeVisible();
+  expect(await checkRanksAreDim(playerSheet, ".player-rank")).toEqual(Array(4).fill(true));
 });
 
 test("a reload shows the open player's sheet as it was while the page reads him again", async ({

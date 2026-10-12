@@ -54,7 +54,7 @@ test("a row shows the label, the number as written, the curve, and the rank, or 
   assert.match(ranked, /player-rank-label">AVG</);
   assert.match(ranked, /player-rank-value tabular">\.282</);
   assert.match(ranked, /<svg/);
-  assert.match(ranked, /player-rank-place">1st<\/span> of 2/);
+  assert.match(ranked, /<span class="player-rank">1st of 2<\/span>/);
   const unranked = String(
     renderRankRow({
       label: "AVG",
@@ -62,7 +62,7 @@ test("a row shows the label, the number as written, the curve, and the rank, or 
       stat: rankAmong([0.25], 0.3, { isRanked: false }),
     }),
   );
-  assert.doesNotMatch(unranked, /<svg|player-rank-place/);
+  assert.doesNotMatch(unranked, /<svg|\d of /);
 });
 
 test("a number's place on a range is its share of it, the fewest on the right when fewer ranks first, held at either end, and nowhere without a range", () => {
@@ -133,10 +133,7 @@ test("where a player would rank shows as a line on the curve with no dot, and th
   );
   assert.match(row, /<i class="provisional" style="left: [\d.]+%; top: [\d.]+%"><\/i>/);
   assert.doesNotMatch(row, /<b /);
-  assert.match(
-    row,
-    /<span class="player-rank">would be <span class="player-rank-place">2nd<\/span><\/span>/,
-  );
+  assert.match(row, /<span class="player-rank">would be 2nd<\/span>/);
   const curve = String(
     renderSpreadCurve(
       [1, 2, 3],
@@ -150,4 +147,19 @@ test("where a player would rank shows as a line on the curve with no dot, and th
     curve,
     /<i class="home provisional" [^>]*><\/i><i class="away" [^>]*><\/i><b class="away"/,
   );
+});
+
+test("a number past either end of the curve, as a number written rounded can be, sits at that end, inside the box that holds the marks", () => {
+  const curve = String(
+    renderSpreadCurve(
+      [6.1, 9.4, 12.98],
+      [
+        { value: 13.0, className: "home" },
+        { value: 6.0, className: "away" },
+      ],
+    ),
+  );
+  assert.match(curve, /<i class="home" style="left: 100\.0%;/);
+  assert.match(curve, /<i class="away" style="left: 0\.0%;/);
+  assert.match(curve, /<\/svg>\s*<span><i class="home"/);
 });
