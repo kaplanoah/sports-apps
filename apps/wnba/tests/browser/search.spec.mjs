@@ -23,6 +23,10 @@ const PLAYER_INDEX = {
   ],
 };
 
+// Phosphor's film-strip at its Regular weight.
+const FILM_STRIP =
+  "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,88h80v80H40Zm96-16V56h32V72Zm-16,0H88V56h32Zm0,112v16H88V184Zm16,0h32v16H136Zm0-16V88h80v80Zm80-96H184V56h32ZM72,56V72H40V56ZM40,184H72v16H40Zm176,16H184V184h32v16Z";
+
 /** @param {import("@playwright/test").Page} page */
 const findSearch = (page) => page.locator("#gameSearch");
 /** @param {import("@playwright/test").Page} page */
@@ -416,7 +420,7 @@ test("a standings list's words find it, and its row opens Standings on that list
   );
 });
 
-test("highlights with a team finds its latest final, and its row opens that game's sheet on its Highlights", async ({
+test("highlights with a team finds its latest final, marked with a film strip, and its row opens that game's sheet on its Highlights", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -425,6 +429,7 @@ test("highlights with a team finds its latest final, and its row opens that game
   await sendSearch(page, "Liberty highlights");
 
   await expect(findRows(page)).toHaveText(["HighlightsLynx at Liberty\u2022Yesterday"]);
+  await expect(findRows(page).locator(".search-mark path")).toHaveAttribute("d", FILM_STRIP);
   await expect(findGamesLine(page)).toHaveCount(0);
 
   await findRows(page).tap();
