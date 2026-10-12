@@ -160,7 +160,9 @@ jobs:
 
   # A browser spec a pull request adds or changes runs ten times over, with no retry, so a test
   # that passes only some of the time fails on the pull request that brings it, rather than on
-  # later ones. The merge commit's first parent is the base branch. Ten runs of every spec a large
+  # later ones. Only a test the pull request wrote or edited fails it: any other that failed goes
+  # to the issue Flaky browser tests from the check job (worker/judge-burn-in.mjs). The merge
+  # commit's first parent is the base branch. Ten runs of every spec a large
   # pull request changes take longer than one machine's limit, so they're split across machines
   # too, and a machine whose share holds no test passes. It runs in Playwright's own image, as the
   # webkit job does, so the at-rest specs repeat in WebKit too, where they've failed most.
@@ -182,9 +184,12 @@ jobs:
       - *restore-modules
       - *install-modules
       - name: Repeat each browser spec this pull request changes
+        id: repeat
         shell: bash
         # The image's user doesn't own the checkout, so git trusts it only once it's named safe, and
-        # a failed diff fails the step rather than reading as no spec changed.
+        # a failed diff fails the step rather than reading as no spec changed. Every test runs all
+        # ten times, however many fail, and the next step decides which failures fail the pull
+        # request, so a failed test doesn't fail this one.
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           changed=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs')
@@ -192,9 +197,19 @@ jobs:
             echo "No browser spec changed."
             exit 0
           fi
+          echo "ran=true" >> "$GITHUB_OUTPUT"
           mapfile -t specs <<< "$changed"
-          npm run test:browser -- --repeat-each=10 --retries=0 --pass-with-no-tests \
-            --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}"
+          npm run test:browser -- --repeat-each=10 --retries=0 --max-failures=0 --pass-with-no-tests \
+            --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}" || true
+      - name: Fail only on a test this pull request wrote or edited
+        if: steps.repeat.outputs.ran == 'true'
+        shell: bash
+        run: git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
+        with:
+          name: burn-in-flaky-${{ matrix.shard }}
+          path: test-results/burn-in-flaky.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()
         with:
@@ -338,7 +353,7 @@ jobs:
             The PR branch is checked out in the working directory. Read the diff with `gh pr diff`,
             and read any surrounding code you need to judge it.
 
-            Report only these four kinds of finding:
+            Report only these five kinds of finding:
 
             1. Bugs: logic errors, unhandled edge cases, and broken assumptions that would make the
                code behave wrongly.
@@ -349,6 +364,10 @@ jobs:
                would notice and the existing tests would still pass if that change were reverted.
                Never ask for tests of refactors, renames, comments, docs, styling, or
                configuration.
+            5. Browser tests that would pass only some of the time: one that reads or measures the
+               page right after an action without first waiting, with expect or expect.poll, for
+               what that action shows; one that depends on how fast the machine is; or one that
+               measures while a press, hover, transition, or scroll it started may still be going.
 
             This may not be the first review of this PR. Read the comments already on it with
             `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments --paginate`,
@@ -427,13 +446,24 @@ jobs:
         with:
           pattern: browser-report-*
           path: browser-reports/
-      - name: Name each test its retry passed in the issue Flaky browser tests
-        if: ${{ always() && github.event_name == 'pull_request' && hashFiles('browser-reports/**/report.json') != '' }}
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        with:
+          pattern: burn-in-flaky-*
+          path: burn-in-flaky/
+      # A test new to the issue starts the routine that fixes flaky tests, through its API trigger.
+      - name: Name each test its retry passed, or burn-in found failing, in the issue Flaky browser tests
+        if: ${{ always() && github.event_name == 'pull_request' && (hashFiles('browser-reports/**/report.json') != '' || hashFiles('burn-in-flaky/**/burn-in-flaky.json') != '') }}
         continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FLAKY_ROUTINE_URL: ${{ secrets.FLAKY_ROUTINE_URL }}
+          FLAKY_ROUTINE_TOKEN: ${{ secrets.FLAKY_ROUTINE_TOKEN }}
         run: |
-          shopt -s globstar
-          node worker/report-flaky-tests.mjs --retried browser-reports/**/report.json
+          shopt -s globstar nullglob
+          listed=()
+          for file in burn-in-flaky/**/burn-in-flaky.json; do listed+=(--listed "$file"); done
+          node worker/report-flaky-tests.mjs --retried "${listed[@]}" browser-reports/**/report.json
