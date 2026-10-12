@@ -128,6 +128,15 @@ test("a word it can't use is named on the line", () => {
   );
 });
 
+test("a search for a stat's leaders, which search can't read, finds no games", () => {
+  assert.deepEqual(search("highest three point"), {
+    games: [],
+    line: "No results | 'highest', 'three', and 'point' unrecognized, skipped",
+    empty: "Check the spelling or try a new search",
+  });
+  assert.deepEqual(listPages("highest 3p%").rows, []);
+});
+
 test("every team has its arena's city and its conference from the standings, and a playoff round its league name", () => {
   assert.ok(TERMS.teams.every((team) => team.homeCity && team.conference));
   assert.deepEqual(
