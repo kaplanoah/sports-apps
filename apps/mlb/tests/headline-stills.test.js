@@ -94,21 +94,28 @@ test("each still goes to Claude once: a game read again asks only about a still 
   });
 });
 
-test("a still Claude couldn't answer for counts as clean and is asked about on the game's next read", async () => {
+test("when Claude doesn't answer for a still, the read fails, keeping the answers it gave, and the next asks only about that still", async () => {
   const claude = { isDown: true };
-  const fake = createClaude(() => (claude.isDown ? "overloaded" : "yes"));
+  const fake = createClaude((still) => (still === STILL && claude.isDown ? "overloaded" : "yes"));
   const context = createContext({ fetchImpl: fake.fetchImpl });
 
-  assert.deepEqual([...(await findHeadlineStills(context, "849826", [STILL]))], []);
+  await assert.rejects(
+    findHeadlineStills(context, "849826", [STILL, OTHER_STILL]),
+    /didn't answer for 1 of game 849826's stills/,
+  );
+  assert.deepEqual(context.stored.get("headline-stills:849826"), { [OTHER_STILL]: true });
+
   claude.isDown = false;
-  assert.deepEqual([...(await findHeadlineStills(context, "849826", [STILL]))], [STILL]);
-  assert.equal(fake.requests.length, 2);
+  const found = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
+  assert.deepEqual([...found], [STILL, OTHER_STILL]);
+  assert.equal(fake.requests.length, 3);
 });
 
-test("without the Worker's API key, no still goes to Claude and each counts as clean", async () => {
+test("without the Worker's API key, no still goes to Claude, each counts as clean, and none is kept", async () => {
   const claude = createClaude(() => "yes");
   const context = createContext({ apiKey: "", fetchImpl: claude.fetchImpl });
 
   assert.deepEqual([...(await findHeadlineStills(context, "849826", [STILL]))], []);
   assert.equal(claude.requests.length, 0);
+  assert.equal(context.stored.size, 0);
 });

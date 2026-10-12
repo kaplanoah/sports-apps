@@ -5,8 +5,8 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 // Which of MLB's stills for a game's plays have a headline laid over them, like "WAVE IT
 // GOODBYE!", which the sheet shows in place of the moment. Claude looks at each still once, and
 // the store keeps its answers for the game, so a game read again asks only about a still that's
-// new. Without the Worker's API key, or when Claude doesn't answer, a still counts as clean and is
-// asked about on the game's next read.
+// new. When Claude doesn't answer for a still, the game's read fails, keeping the answers it got,
+// so the store's job reads it again soon. Without the Worker's API key, each still counts as clean.
 
 export const STILL_MODEL = "claude-haiku-5-5";
 const MAX_ANSWER_TOKENS = 1024;
@@ -51,18 +51,18 @@ export async function hasHeadline({ apiKey, fetchImpl, still }) {
 }
 
 /**
- * Asks Claude about each still it hasn't seen, and leaves out a still it couldn't answer for.
- * @param {JobContext} context
+ * Asks Claude about each still, and leaves out a still it couldn't answer for.
+ * @param {object} options
+ * @param {string} options.apiKey
+ * @param {typeof fetch} options.fetchImpl
  * @param {string} id the game's
  * @param {string[]} stills
  * @returns {Promise<Record<string, boolean>>}
  */
-async function checkStills(context, id, stills) {
-  const apiKey = context.env.ANTHROPIC_API_KEY;
-  if (!apiKey || stills.length === 0) return {};
+async function checkStills({ apiKey, fetchImpl }, id, stills) {
   const answers = await Promise.all(
     stills.map((still) =>
-      hasHeadline({ apiKey, fetchImpl: context.fetchImpl, still }).catch((error) => {
+      hasHeadline({ apiKey, fetchImpl, still }).catch((error) => {
         console.error(
           `Checking a still of game ${id} for a headline failed: ${describeError(error)}`,
         );
@@ -77,26 +77,29 @@ async function checkStills(context, id, stills) {
 
 /**
  * The game's stills that have a headline on them, asking Claude only about the ones it hasn't
- * seen, and keeping the answers for the game's stills of now.
+ * seen, and keeping the answers for the game's stills of now. Throws when Claude didn't answer for
+ * every still, once the answers it gave are kept.
  * @param {JobContext} context
  * @param {string} id the game's
  * @param {string[]} stills
  * @returns {Promise<Set<string>>}
  */
 export async function findHeadlineStills(context, id, stills) {
+  const apiKey = context.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return new Set();
   const key = nameChecksKey(id);
   /** @type {Record<string, boolean>} */
   const kept = (await context.storage.get(key)) ?? {};
-  const fresh = await checkStills(
-    context,
-    id,
-    stills.filter((still) => !Object.hasOwn(kept, still)),
-  );
+  const unchecked = stills.filter((still) => !Object.hasOwn(kept, still));
+  const fresh = await checkStills({ apiKey, fetchImpl: context.fetchImpl }, id, unchecked);
   const checks = Object.fromEntries(
     stills
       .filter((still) => Object.hasOwn(kept, still) || Object.hasOwn(fresh, still))
       .map((still) => [still, fresh[still] ?? kept[still]]),
   );
   if (!isSameJson(kept, checks)) await context.storage.put(key, checks);
+  const unanswered = stills.length - Object.keys(checks).length;
+  if (unanswered > 0)
+    throw new Error(`Claude didn't answer for ${unanswered} of game ${id}'s stills`);
   return new Set(stills.filter((still) => checks[still]));
 }

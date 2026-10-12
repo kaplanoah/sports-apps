@@ -55,10 +55,12 @@ const findPlay = (highlights, title) =>
   highlights.plays.find((/** @type {any} */ play) => play.title === title);
 
 /**
- * MLB as recorded, and Claude, finding a headline on each still in `withHeadlines`.
+ * MLB as recorded, and Claude, finding a headline on each still in `withHeadlines`, unless it's
+ * down.
  * @param {Set<string>} [withHeadlines]
  */
 function createMlbFetch(withHeadlines = new Set()) {
+  const claude = { isDown: false };
   /** @type {string[]} */
   const requests = [];
   /** @type {string[]} */
@@ -71,6 +73,7 @@ function createMlbFetch(withHeadlines = new Set()) {
     if (url === CLAUDE_URL) {
       const still = JSON.parse(init.body).messages[0].content[0].source.url;
       stillsAsked.push(still);
+      if (claude.isDown) return new Response("{}", { status: 529 });
       const text = withHeadlines.has(still) ? "yes" : "no";
       return new Response(JSON.stringify({ content: [{ type: "text", text }] }));
     }
@@ -85,7 +88,7 @@ function createMlbFetch(withHeadlines = new Set()) {
           : null;
     return answer ? new Response(JSON.stringify(answer)) : new Response("", { status: 404 });
   };
-  return { requests, stillsAsked, fetchImpl: /** @type {any} */ (fetchImpl) };
+  return { claude, requests, stillsAsked, fetchImpl: /** @type {any} */ (fetchImpl) };
 }
 
 test("a game's plays come in the order they happened, each with its inning, and a play that scored with the score after it", () => {
@@ -268,8 +271,8 @@ test("the route turns away an id that isn't MLB's", async () => {
  * @param {Record<string, string>} env
  */
 function createJobRun(mlb, env) {
-  const now = Date.parse(EVENING.now);
-  const slate = buildSnapshot(EVENING.responses, { season: EVENING.season, now }).slate;
+  const clock = { now: Date.parse(EVENING.now) };
+  const slate = buildSnapshot(EVENING.responses, { season: EVENING.season, now: clock.now }).slate;
   const stored = new Map(
     Object.entries({
       "live/current": { season: EVENING.season },
@@ -294,7 +297,7 @@ function createJobRun(mlb, env) {
     },
     env,
     fetchImpl: mlb.fetchImpl,
-    now: () => now,
+    now: () => clock.now,
   });
   const job = createHighlightsUpdater();
   return {
@@ -302,6 +305,9 @@ function createJobRun(mlb, env) {
     runJob: () => job.run(context),
     forgetReads: () => {
       for (const key of storage.keys()) if (key.startsWith("highlight-reads:")) storage.delete(key);
+    },
+    wait: (/** @type {number} */ minutes) => {
+      clock.now += minutes * 60 * 1000;
     },
   };
 }
@@ -342,4 +348,23 @@ test("the store's job asks Claude about each still once, and saves the moment fo
   await runJob();
   assert.equal(mlb.requests.length, 2 * firstReads);
   assert.equal(mlb.stillsAsked.length, stills.length);
+});
+
+test("a game the store's job couldn't check every still of saves nothing, and is read again ten minutes later", async () => {
+  const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
+  const mlb = createMlbFetch(new Set([contreras.still]));
+  const { stored, runJob, wait } = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
+  mlb.claude.isDown = true;
+
+  await runJob();
+  assert.equal(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), undefined);
+
+  mlb.claude.isDown = false;
+  wait(10);
+  await runJob();
+  assert.equal(
+    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), "William Contreras' solo home run")
+      .still,
+    contreras.frames?.replace("%", "0000003"),
+  );
 });
