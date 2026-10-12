@@ -2629,6 +2629,10 @@ table.player-game td {
   height: 18px;
   margin-left: 7px;
 }
+.player-curve > span {
+  position: absolute;
+  inset: 0;
+}
 .player-curve svg {
   display: block;
   width: 100%;
@@ -2675,10 +2679,6 @@ table.player-game td {
   color: var(--ink-dim);
   text-align: right;
   white-space: nowrap;
-}
-.player-rank-place {
-  font-weight: 500;
-  color: var(--ink);
 }
 /* A team's numbers rank like a player's, its regular season on curves of every team's and its
    playoffs as dots on a line across the same ranges, with the playoff field's number at the row's
