@@ -4,6 +4,7 @@ import {
   ISSUE_TITLE,
   addToTable,
   listFailedTests,
+  mergeFailedTests,
   postReport,
   readTable,
   renderTable,
@@ -222,31 +223,44 @@ test("an issue's body without a table reads as an empty table", () => {
  * @param {{ number: number, title: string, body?: string, pull_request?: object }[]} issues
  */
 function createFakeGitHub(issues) {
-  /** @type {{ method: string, path: string, body: any }[]} */
+  /** @type {{ method: string, path: string, body: any, headers: any }[]} */
   const written = [];
   /** @type {typeof fetch} */
   const fetchImpl = async (url, init) => {
     const { pathname } = new URL(String(url));
     const method = init?.method ?? "GET";
     if (method === "GET") return Response.json(issues);
-    written.push({ method, path: pathname, body: JSON.parse(String(init?.body)) });
+    written.push({
+      method,
+      path: pathname,
+      body: JSON.parse(String(init?.body)),
+      headers: init?.headers,
+    });
     return Response.json({ number: 7 });
   };
   return { fetchImpl, written };
 }
 
+const ROUTINE_URL = "https://api.anthropic.com/v1/claude_code/routines/trig_example/fire";
+const WITH_ROUTINE = {
+  GH_TOKEN: "token",
+  FLAKY_ROUTINE_URL: ROUTINE_URL,
+  FLAKY_ROUTINE_TOKEN: "routine-token",
+};
+
 /**
  * @param {ReturnType<typeof createFakeGitHub>} github
  * @param {import("../worker/report-flaky-tests.mjs").TestRuns[]} failed
+ * @param {NodeJS.ProcessEnv} [env]
  */
-const post = (github, failed) =>
+const post = (github, failed, env = { GH_TOKEN: "token" }) =>
   postReport({
     repository: REPOSITORY,
     failed,
     runUrl: RUN_URL,
     now: new Date("2026-10-10T07:40:00Z"),
     fetchImpl: github.fetchImpl,
-    env: { GH_TOKEN: "token" },
+    env,
   });
 
 test("a run with failures opens the issue, with its table, when none is open", async () => {
@@ -332,4 +346,81 @@ test("a run with no failures keeps the issue open while a row is under a week ol
 
   assert.equal(github.written.length, 1);
   assert.equal(github.written[0].body.state, undefined);
+});
+
+test("lists of failed tests add up each test's runs and failures, the most failed first", () => {
+  const once = { name: AT_REST, runs: 10, failures: 1, message: "Error: first" };
+  const again = { name: AT_REST, runs: 3, failures: 2, message: "Error: second" };
+  const other = { name: LAST_DRAWN, runs: 10, failures: 2, message: "" };
+  assert.deepEqual(mergeFailedTests([[once, other], [again]]), [
+    { name: AT_REST, runs: 13, failures: 3, message: "Error: first" },
+    other,
+  ]);
+});
+
+test("a test new to the table starts the fix routine through its API trigger, naming the test", async () => {
+  const body = renderTable([tableRow({ name: AT_REST })]);
+  const github = createFakeGitHub([{ number: 5, title: ISSUE_TITLE, body }]);
+
+  await post(github, listFailedTests([nightReport]), WITH_ROUTINE);
+
+  const fired = github.written.filter(({ path }) => path.endsWith("/fire"));
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].path, new URL(ROUTINE_URL).pathname);
+  assert.equal(fired[0].headers.authorization, "Bearer routine-token");
+  assert.equal(fired[0].headers["anthropic-version"], "2023-06-01");
+  assert.match(fired[0].body.text, /last-drawn\.spec\.mjs:58/);
+  assert.doesNotMatch(fired[0].body.text, /at-rest/);
+});
+
+test("the first flaky test, which opens the issue, starts the fix routine too", async () => {
+  const github = createFakeGitHub([]);
+
+  await post(github, listFailedTests([nightReport]), WITH_ROUTINE);
+
+  assert.equal(github.written.filter(({ path }) => path.endsWith("/fire")).length, 1);
+});
+
+test("a run with no test new to the table starts no routine", async () => {
+  const body = renderTable([tableRow({ name: AT_REST }), tableRow({ name: LAST_DRAWN })]);
+  const github = createFakeGitHub([{ number: 5, title: ISSUE_TITLE, body }]);
+
+  await post(github, listFailedTests([nightReport]), WITH_ROUTINE);
+
+  assert.equal(github.written.filter(({ path }) => path.endsWith("/fire")).length, 0);
+});
+
+test("a fix routine that doesn't answer leaves the report done, and says so", async () => {
+  const body = renderTable([tableRow({ name: AT_REST })]);
+  const github = createFakeGitHub([{ number: 5, title: ISSUE_TITLE, body }]);
+  /** @type {typeof fetch} */
+  const fetchImpl = async (url, init) => {
+    if (String(url) === ROUTINE_URL) throw new Error("The operation was aborted due to timeout");
+    return github.fetchImpl(url, init);
+  };
+
+  const logged = await postReport({
+    repository: REPOSITORY,
+    failed: listFailedTests([nightReport]),
+    runUrl: RUN_URL,
+    now: new Date("2026-10-10T07:40:00Z"),
+    fetchImpl,
+    env: WITH_ROUTINE,
+  });
+
+  assert.match(logged, /Updated #5: .*The fix routine didn't answer: The operation was aborted/);
+  assert.deepEqual(
+    github.written.map(({ method, path }) => [method, path]),
+    [
+      ["PATCH", `/repos/${REPOSITORY}/issues/5`],
+      ["POST", `/repos/${REPOSITORY}/issues/5/comments`],
+    ],
+  );
+});
+
+test("without the routine's trigger set, a new test starts no routine", async () => {
+  const github = createFakeGitHub([]);
+
+  assert.match(await post(github, listFailedTests([nightReport])), /No fix routine is set up/);
+  assert.equal(github.written.filter(({ path }) => path.endsWith("/fire")).length, 0);
 });
