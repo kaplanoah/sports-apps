@@ -390,6 +390,34 @@ test("a run with no test new to the table starts no routine", async () => {
   assert.equal(github.written.filter(({ path }) => path.endsWith("/fire")).length, 0);
 });
 
+test("a fix routine that doesn't answer leaves the report done, and says so", async () => {
+  const body = renderTable([tableRow({ name: AT_REST })]);
+  const github = createFakeGitHub([{ number: 5, title: ISSUE_TITLE, body }]);
+  /** @type {typeof fetch} */
+  const fetchImpl = async (url, init) => {
+    if (String(url) === ROUTINE_URL) throw new Error("The operation was aborted due to timeout");
+    return github.fetchImpl(url, init);
+  };
+
+  const logged = await postReport({
+    repository: REPOSITORY,
+    failed: listFailedTests([nightReport]),
+    runUrl: RUN_URL,
+    now: new Date("2026-10-10T07:40:00Z"),
+    fetchImpl,
+    env: WITH_ROUTINE,
+  });
+
+  assert.match(logged, /Updated #5: .*The fix routine didn't answer: The operation was aborted/);
+  assert.deepEqual(
+    github.written.map(({ method, path }) => [method, path]),
+    [
+      ["PATCH", `/repos/${REPOSITORY}/issues/5`],
+      ["POST", `/repos/${REPOSITORY}/issues/5/comments`],
+    ],
+  );
+});
+
 test("without the routine's trigger set, a new test starts no routine", async () => {
   const github = createFakeGitHub([]);
 

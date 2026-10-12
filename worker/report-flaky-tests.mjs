@@ -204,17 +204,24 @@ export const renderNewTests = (added, runUrl) =>
  */
 export async function startFixRoutine({ added, runUrl, fetchImpl, env }) {
   if (!env.FLAKY_ROUTINE_URL || !env.FLAKY_ROUTINE_TOKEN) return "No fix routine is set up.";
-  const response = await fetchImpl(env.FLAKY_ROUTINE_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env.FLAKY_ROUTINE_TOKEN}`,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ text: renderNewTests(added, runUrl) }),
-    signal: AbortSignal.timeout(ROUTINE_TIMEOUT_MS),
-  });
-  return response.ok ? "Started the fix routine." : `The fix routine answered ${response.status}.`;
+  // The issue already names the test, so a routine that doesn't answer never fails the report.
+  try {
+    const response = await fetchImpl(env.FLAKY_ROUTINE_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.FLAKY_ROUTINE_TOKEN}`,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ text: renderNewTests(added, runUrl) }),
+      signal: AbortSignal.timeout(ROUTINE_TIMEOUT_MS),
+    });
+    return response.ok
+      ? "Started the fix routine."
+      : `The fix routine answered ${response.status}.`;
+  } catch (error) {
+    return `The fix routine didn't answer: ${error instanceof Error ? error.message : error}.`;
+  }
 }
 
 /**
