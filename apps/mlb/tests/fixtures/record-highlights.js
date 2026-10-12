@@ -4,8 +4,8 @@ import { MLB_API } from "../../page/js/snapshot.js";
 import { nameContentRequest, namePlaysRequest } from "../../worker/src/highlights.js";
 
 // Records what a final's Highlights section reads from MLB for the games named: each game's
-// content, trimmed to its clips and its recap story, with each clip's stills cut to the sizes
-// near the ones the Worker picks, and the game's plays. Run with NODE_USE_ENV_PROXY=1 behind a
+// content, trimmed to its clips and its recap story, with each still, the story's photo too, cut
+// to the sizes near the ones the Worker picks, and the game's plays. Run with NODE_USE_ENV_PROXY=1 behind a
 // proxy.
 
 const STILL_WIDTHS = new Set([480, 640, 960, 1280]);
@@ -16,16 +16,19 @@ async function fetchJson(request) {
   return response.json();
 }
 
+const trimImage = (image) => ({
+  title: image?.title,
+  cuts: (image?.cuts ?? [])
+    .filter((cut) => STILL_WIDTHS.has(cut.width))
+    .map(({ width, src }) => ({ width, src })),
+});
+
 const trimItem = (item) => ({
   headline: item.headline,
   description: item.description,
   duration: item.duration,
   guid: item.guid,
-  image: {
-    cuts: (item.image?.cuts ?? [])
-      .filter((cut) => STILL_WIDTHS.has(cut.width))
-      .map(({ width, src }) => ({ width, src })),
-  },
+  image: trimImage(item.image),
   playbacks: (item.playbacks ?? []).map(({ name, url }) => ({ name, url })),
   keywordsAll: (item.keywordsAll ?? [])
     .filter((keyword) => keyword.type === "taxonomy")
@@ -39,6 +42,7 @@ const trimContent = ({ editorial, highlights }) => ({
         headline: editorial?.recap?.mlb?.headline,
         slug: editorial?.recap?.mlb?.slug,
         body: editorial?.recap?.mlb?.body,
+        image: trimImage(editorial?.recap?.mlb?.image),
       },
     },
   },
