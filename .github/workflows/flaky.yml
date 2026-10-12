@@ -63,12 +63,15 @@ jobs:
           options=(--repeat-each="$REPEAT" --retries=0 --max-failures=0)
           if [ -n "$PROJECT" ]; then options+=(--project="$PROJECT"); fi
           npm run test:browser -- "${options[@]}" "${tests[@]}"
-      # Only the nightly run of main reports, since a run by hand may test a branch.
+      # Only the nightly run of main reports, since a run by hand may test a branch. A test new to
+      # the issue starts the routine that fixes flaky tests, through its API trigger.
       - name: Name each test that failed in the open issue
         if: ${{ !cancelled() && github.event_name == 'schedule' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FLAKY_ROUTINE_URL: ${{ secrets.FLAKY_ROUTINE_URL }}
+          FLAKY_ROUTINE_TOKEN: ${{ secrets.FLAKY_ROUTINE_TOKEN }}
         run: node worker/report-flaky-tests.mjs test-results/report.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()

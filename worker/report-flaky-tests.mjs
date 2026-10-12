@@ -1,9 +1,10 @@
 // Keeps one open issue that names each browser test that failed only some of the time, so it's
 // found and fixed rather than retried past on pull requests. Main's nightly runs (with no retry,
-// .github/workflows/flaky.yml) and pull requests' runs (where a retry passed) both report to it.
-// The issue's body is one table, one row a test, that each report adds its runs to; a comment
-// names each test new to it; a row goes once its test hasn't failed for a week, and the issue
-// closes once no row is left.
+// .github/workflows/flaky.yml), pull requests' runs (where a retry passed), and burn-in's runs of
+// tests a pull request didn't write or edit (worker/judge-burn-in.mjs) all report to it. The
+// issue's body is one table, one row a test, that each report adds its runs to; a comment names
+// each test new to it, and starts the routine that fixes the table's top test; a row goes once its
+// test hasn't failed for a week, and the issue closes once no row is left.
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -13,6 +14,7 @@ export const ISSUE_TITLE = "Flaky browser tests";
 
 const DAYS_KEPT = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const ROUTINE_TIMEOUT_MS = 10000;
 const FAILED_STATUSES = new Set(["failed", "timedOut"]);
 const STATE_PATTERN = /<!-- flaky-tests (.*?) -->/s;
 
@@ -24,7 +26,8 @@ const ESCAPE = String.fromCharCode(27);
 const COLOR_CODE = new RegExp(`${ESCAPE}\\[[0-9;]*m`, "g");
 
 /** @param {string | undefined} message */
-const readFirstLine = (message) => (message ?? "").replace(COLOR_CODE, "").trim().split("\n")[0];
+export const readFirstLine = (message) =>
+  (message ?? "").replace(COLOR_CODE, "").trim().split("\n")[0];
 
 /**
  * Each test in a Playwright JSON report, with the titles of the describe blocks around it.
@@ -86,6 +89,29 @@ export function listFailedTests(reports, { isRetried = false } = {}) {
   return [...byName.values()]
     .filter((counted) => counted.failures > 0)
     .sort((a, b) => b.failures - a.failures || a.name.localeCompare(b.name));
+}
+
+/**
+ * The tests of several lists of failed tests, each test's runs and failures added up, the most
+ * failed first.
+ * @param {TestRuns[][]} lists
+ * @returns {TestRuns[]}
+ */
+export function mergeFailedTests(lists) {
+  /** @type {Map<string, TestRuns>} */
+  const byName = new Map();
+  for (const test of lists.flat()) {
+    const counted = byName.get(test.name);
+    byName.set(test.name, {
+      name: test.name,
+      runs: (counted?.runs ?? 0) + test.runs,
+      failures: (counted?.failures ?? 0) + test.failures,
+      message: counted?.message || test.message,
+    });
+  }
+  return [...byName.values()].sort(
+    (a, b) => b.failures - a.failures || a.name.localeCompare(b.name),
+  );
 }
 
 /**
@@ -166,6 +192,32 @@ export const renderNewTests = (added, runUrl) =>
   ].join("\n");
 
 /**
+ * Starts the routine that fixes the table's top flaky test, so a test new to the table is fixed
+ * the day it's found rather than at the routine's next scheduled run. It runs only where the
+ * routine's API trigger is set: its URL and token, which Actions keeps as secrets.
+ * @param {object} options
+ * @param {TestRuns[]} options.added the tests new to the table
+ * @param {string} options.runUrl
+ * @param {typeof fetch} options.fetchImpl
+ * @param {NodeJS.ProcessEnv} options.env
+ * @returns {Promise<string>} what it did, for the log
+ */
+export async function startFixRoutine({ added, runUrl, fetchImpl, env }) {
+  if (!env.FLAKY_ROUTINE_URL || !env.FLAKY_ROUTINE_TOKEN) return "No fix routine is set up.";
+  const response = await fetchImpl(env.FLAKY_ROUTINE_URL, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.FLAKY_ROUTINE_TOKEN}`,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ text: renderNewTests(added, runUrl) }),
+    signal: AbortSignal.timeout(ROUTINE_TIMEOUT_MS),
+  });
+  return response.ok ? "Started the fix routine." : `The fix routine answered ${response.status}.`;
+}
+
+/**
  * Adds a run's failed tests to the open issue, opening one if there's none, and closes it once its
  * table is empty.
  * @param {object} options
@@ -196,7 +248,8 @@ export async function postReport({
   const body = renderTable(updated);
   if (!open) {
     const created = await github("/issues", { method: "POST", body: { title: ISSUE_TITLE, body } });
-    return `Opened #${created.number} naming ${failed.length} tests.`;
+    const started = await startFixRoutine({ added: failed, runUrl, fetchImpl, env });
+    return `Opened #${created.number} naming ${failed.length} tests. ${started}`;
   }
 
   const known = new Set(table.map((row) => row.name));
@@ -209,22 +262,32 @@ export async function postReport({
     return `Closed #${open.number}: no browser test has failed for ${DAYS_KEPT} days.`;
   }
   await github(`/issues/${open.number}`, { method: "PATCH", body: { body } });
-  if (added.length) {
-    await github(`/issues/${open.number}/comments`, {
-      method: "POST",
-      body: { body: renderNewTests(added, runUrl) },
-    });
+  if (!added.length) {
+    return `Updated #${open.number}: ${failed.length} tests failed, none new.`;
   }
-  return `Updated #${open.number}: ${failed.length} tests failed, ${added.length} new.`;
+  await github(`/issues/${open.number}/comments`, {
+    method: "POST",
+    body: { body: renderNewTests(added, runUrl) },
+  });
+  const started = await startFixRoutine({ added, runUrl, fetchImpl, env });
+  return `Updated #${open.number}: ${failed.length} tests failed, ${added.length} new. ${started}`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals } = parseArgs({
-    options: { retried: { type: "boolean", default: false } },
+    options: {
+      retried: { type: "boolean", default: false },
+      listed: { type: "string", multiple: true, default: [] },
+    },
     allowPositionals: true,
   });
   const reports = positionals.map((path) => JSON.parse(readFileSync(path, "utf8")));
-  const failed = listFailedTests(reports, { isRetried: values.retried });
+  // --listed names lists of failed tests already sorted out, like burn-in's.
+  const listed = values.listed.map((path) => JSON.parse(readFileSync(path, "utf8")));
+  const failed = mergeFailedTests([
+    listFailedTests(reports, { isRetried: values.retried }),
+    ...listed,
+  ]);
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, `found=${failed.length > 0}\n`);
   }

@@ -32,6 +32,12 @@ test("the nightly run of the browser tests runs every test however many fail", (
   assert.match(readRepoFile(".github/workflows/flaky.yml"), /--max-failures=0\b/);
 });
 
+test("the nightly run's report can start the routine that fixes flaky tests", () => {
+  const workflow = readRepoFile(".github/workflows/flaky.yml");
+  assert.match(workflow, /FLAKY_ROUTINE_URL: \$\{\{ secrets\.FLAKY_ROUTINE_URL \}\}/);
+  assert.match(workflow, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
+});
+
 /** @returns {string[]} the workflow's jobs, by the names they're keyed under */
 const listJobs = () => {
   const jobs = readRepoFile(".github/workflows/ci.yml").split(/^jobs:$/m)[1] ?? "";
