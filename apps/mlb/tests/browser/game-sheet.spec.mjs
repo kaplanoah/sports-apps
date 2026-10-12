@@ -841,6 +841,33 @@ test("a rank, his own or where he would rank, is the dim color throughout and si
   for (const clearance of clearances) expect(clearance).toBeCloseTo(4, 0);
 });
 
+test("each stat sits 22px under the curve above it, further than that curve's foot from its own rank", async ({
+  page,
+}) => {
+  const sheet = await openMatchup(page);
+  const spaces = await sheet.locator(".tape-measure").evaluateAll((measures) =>
+    measures.slice(1).map((measure, index) => {
+      const above = measures[index];
+      const curve = /** @type {Element} */ (
+        above.querySelector(".player-curve")
+      ).getBoundingClientRect();
+      const rank = /** @type {Element} */ (
+        above.querySelector(".tape-rank")
+      ).getBoundingClientRect();
+      return {
+        between: Math.round((measure.getBoundingClientRect().top - curve.bottom) * 10) / 10,
+        isNearerOwnRank:
+          curve.bottom - rank.bottom <
+          /** @type {Element} */ (
+            measure.querySelector(".tape-number-line")
+          ).getBoundingClientRect().top -
+            curve.bottom,
+      };
+    }),
+  );
+  expect(spaces).toEqual(Array(3).fill({ between: 22, isNearerOwnRank: true }));
+});
+
 test("an unranked starter's numbers sit level with the label and the ranked starter's", async ({
   page,
 }) => {
