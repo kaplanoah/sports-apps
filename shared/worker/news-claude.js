@@ -1,12 +1,9 @@
-import { abortAfter } from "./timeout.js";
+import { requestClaude } from "./claude.js";
 
-// Asking Claude, with the Worker's own API key, for an answer that is a JSON array. The prompt
-// stays the same from call to call, so it's kept in Claude's cache for an hour, which the news
-// reads more often than that by day.
+// Asking Claude for an answer that is a JSON array. The prompt stays the same from call to call,
+// so it's kept in Claude's cache for an hour, which the news reads more often than that by day.
 
 export const NEWS_MODEL = "claude-opus-5-5";
-const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-const API_VERSION = "2023-06-01";
 const MAX_ANSWER_TOKENS = 8192;
 // A batch of stories takes Claude up to a minute; a call twice that long has stalled.
 const CLAUDE_TIMEOUT_MS = 120e3;
@@ -32,29 +29,17 @@ export function readJsonArray(text) {
  * @param {string} options.content this call's stories
  * @returns {Promise<{ answers: any[], usage: Record<string, number> }>}
  */
-export const askClaude = ({ apiKey, fetchImpl, prompt, content }) =>
-  abortAfter(CLAUDE_TIMEOUT_MS, async (signal) => {
-    const response = await fetchImpl(MESSAGES_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": API_VERSION,
-      },
-      body: JSON.stringify({
-        model: NEWS_MODEL,
-        max_tokens: MAX_ANSWER_TOKENS,
-        system: [{ type: "text", text: prompt, cache_control: { type: "ephemeral", ttl: "1h" } }],
-        messages: [{ role: "user", content }],
-      }),
-      signal,
-    });
-    const answer = await response.json().catch(() => null);
-    if (!response.ok)
-      throw new Error(`Claude answered ${response.status}: ${answer?.error?.message ?? ""}`);
-    const text = (answer?.content ?? [])
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-    return { answers: readJsonArray(text), usage: answer?.usage ?? {} };
+export async function askClaude({ apiKey, fetchImpl, prompt, content }) {
+  const { text, usage } = await requestClaude({
+    apiKey,
+    fetchImpl,
+    timeoutMs: CLAUDE_TIMEOUT_MS,
+    request: {
+      model: NEWS_MODEL,
+      max_tokens: MAX_ANSWER_TOKENS,
+      system: [{ type: "text", text: prompt, cache_control: { type: "ephemeral", ttl: "1h" } }],
+      messages: [{ role: "user", content }],
+    },
   });
+  return { answers: readJsonArray(text), usage };
+}
