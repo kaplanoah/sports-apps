@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const SKIPPED_FILES = new Set([
   "LICENSE",
+  ".claude/hooks/one-command.mjs",
   ".claude/settings.json",
   ".git-blame-ignore-revs",
   ".github/dependabot.yml",

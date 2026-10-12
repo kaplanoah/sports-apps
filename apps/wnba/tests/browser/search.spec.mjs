@@ -383,6 +383,14 @@ test("a search that finds nothing says so, and a word it can't use is named", as
   await sendSearch(page, "Liberty fireworks");
 
   await expect(findLine(page)).toHaveText("Liberty•52 games•'fireworks' unrecognized, skipped");
+
+  await sendSearch(page, "highest 3p%");
+
+  await expect(findLine(page)).toHaveText("No results•'highest' and '3p' unrecognized, skipped");
+  await expect(page.locator("#gameSearch .empty-note")).toHaveText(
+    "Check the spelling or try a new search",
+  );
+  await expect(page.locator("#gameSearch .listed-day")).toHaveCount(0);
 });
 
 test("a team's row opens its sheet, and its Roster row the sheet on its Roster", async ({

@@ -16,5 +16,18 @@
       "Bash(node worker/rollback.mjs)",
       "Bash(git push -f origin * *:beta)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/one-command.mjs\""
+          }
+        ]
+      }
+    ]
   }
 }

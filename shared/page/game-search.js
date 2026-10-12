@@ -750,6 +750,15 @@ export function readSearch(text, context) {
 }
 
 /**
+ * Whether a search could use none of its words, as one about players' stats can't, so it asks for
+ * nothing a game has.
+ * @param {Search} search
+ */
+const isUnread = (search) =>
+  search.skipped.length > 0 &&
+  JSON.stringify({ ...search, skipped: [] }) === JSON.stringify(createEmptySearch());
+
+/**
  * Whether a game has a team in it, or one of the teams one word names.
  * @param {SearchGame} game
  * @param {string[]} codes
@@ -977,6 +986,7 @@ function pickGames({ which, count }, games) {
  * @param {SearchContext} context
  */
 export function findSearchGames(search, context) {
+  if (isUnread(search)) return { games: [], timeUnset: [], leftOut: [] };
   const fitting = context.games.filter((game) => fitsAllButTime(search, context, game));
   const found = fitting.filter(
     (game) => hasTeamsAsked(search, game) && fitsTime(search, game) !== false,
@@ -1122,6 +1132,8 @@ function describeSkipped(skipped) {
  * @returns {{ lead: string, facts: string[] }}
  */
 export function describeSearch(search, found, context) {
+  if (isUnread(search))
+    return { lead: "No results", facts: [/** @type {string} */ (describeSkipped(search.skipped))] };
   const starters = describeStarters(search);
   const teams = describeTeams(search, context);
   const conditions = listConditionLabels(search, context);
@@ -1160,6 +1172,7 @@ function describeWhen(search) {
  * @param {SearchContext} context
  */
 export function describeNoGames(search, context) {
+  if (isUnread(search)) return "Check the spelling or try a new search";
   const asked = readTeamsAsked(search);
   const sides = { home: " home", away: " away" };
   const teams =
