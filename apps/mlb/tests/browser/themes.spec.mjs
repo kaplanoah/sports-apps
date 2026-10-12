@@ -4,6 +4,7 @@ import {
   openApp,
   openSettings,
   buildSnapshotWithStarters,
+  LIVE_BOX_SCORE,
   MATCHUP_STARTERS,
   PITCHER_SIDES,
   PLAYER_DOCS,
@@ -161,6 +162,12 @@ const VIEW_GROUPS = {
       close: (page) => page.keyboard.press("Escape"),
     },
     {
+      name: "a live game's Runs so far",
+      open: (page) => openGame(page, "2026-09-24", /^Game details: Rays at Yankees, Thu, Sep 24/),
+      shown: (page) => page.locator("#gameSheet .runs-field"),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
       name: "a final's Highlights",
       open: async (page) => {
         await openGame(page, "2026-09-23", /^Game details: Brewers at Phillies, Wed, Sep 23/);
@@ -216,9 +223,12 @@ const VIEW_GROUPS = {
   ],
 };
 
+// Rays at Yankees, being played that evening, with someone on base.
+const LIVE_BOX_SCORES = { 823493: { ...LIVE_BOX_SCORE, id: "823493" } };
+
 /**
- * Opens the page in Ball with news, a club's roster and players, a final's highlights, and the
- * season's whole schedule.
+ * Opens the page in Ball with news, a club's roster and players, a live game's box score, a
+ * final's highlights, and the season's whole schedule.
  * @param {import("@playwright/test").Page} page
  */
 async function openWithEverything(page) {
@@ -228,6 +238,7 @@ async function openWithEverything(page) {
     store: { ...ROSTER_DOCS, ...PLAYER_DOCS, ...NEWS_DOCS },
     pitchers: { ...PITCHER_SIDES, ...MATCHUP_STARTERS },
     highlights: SEP_23_HIGHLIGHTS,
+    boxScores: LIVE_BOX_SCORES,
     isWholeSeason: true,
   });
 }

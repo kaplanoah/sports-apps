@@ -60,6 +60,12 @@ export const BOX_SCORES = Object.fromEntries(
     describeBoxScore(id, feed),
   ]),
 );
+// What the Worker answers for NLCS Game 1's box score as it stood with one out in the top of the
+// 3rd, with its runs so far, who's on base, and who's up.
+export const LIVE_BOX_SCORE = describeBoxScore(
+  "849809",
+  loadFixture("2026-10-11-plays").feeds["849809"],
+);
 const HIGHLIGHTS_FIXTURE = loadFixture("2026-10-07-highlights");
 // What the Worker answers for the highlights of two of those games, Brewers at Padres and Rays at
 // Yankees.

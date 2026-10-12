@@ -1,12 +1,17 @@
 // The Updates box: each playoff game finished since this device last dismissed it, with where its
-// series stood after it, each opening the game's sheet, and the release notes out since then.
+// series stood after it, each opening the game's sheet, and the release notes it still shows.
 // Nobody signs in, and people share the page's address, so each device keeps its own dismissal,
 // and only phones and tablets show the box, only for the current season.
 
 import { countDaysBetween, readEasternDay } from "#shared/days.js";
 import { isTouchDevice } from "#shared/device.js";
 import { createViewerChoice } from "#shared/device-storage.js";
-import { listFreshNotes, showUpdates } from "#shared/updates.js";
+import {
+  dismissNotes,
+  listNotesToShow,
+  showUpdates,
+  watchNoteDismissals,
+} from "#shared/updates.js";
 import { renderTeamName } from "./clubs.js";
 import { readGameDay } from "./days.js";
 import { renderGameOpenButton } from "./games-view.js";
@@ -97,15 +102,11 @@ export function listFreshUpdates() {
   return wins.filter((win) => win.at > freshAfter);
 }
 
-/** The release notes out since this device last dismissed the box. */
-const listFreshReleaseNotes = () =>
-  listFreshNotes(RELEASE_NOTES, readOrStartSeenAt(listPlayoffWins(session.season)));
-
-// The newest update's time is the Worker's, and a note's is the one it was given, so the
-// dismissal doesn't depend on this device's clock.
+// The newest update's time is the Worker's, so the dismissal doesn't depend on this device's clock.
 function dismissUpdates() {
-  const times = [...listFreshUpdates(), ...listFreshReleaseNotes()].map((item) => item.at);
+  const times = listFreshUpdates().map((win) => win.at);
   if (times.length) seenAt.keep(Math.max(...times));
+  dismissNotes(RELEASE_NOTES);
   drawUpdates();
 }
 
@@ -113,12 +114,15 @@ function dismissUpdates() {
  * Calls `onChange` whenever another tab dismisses the box.
  * @param {() => void} onChange
  */
-export const watchDismissals = (onChange) => seenAt.watch(onChange);
+export function watchDismissals(onChange) {
+  seenAt.watch(onChange);
+  watchNoteDismissals(onChange);
+}
 
 export function drawUpdates() {
   const isShown = isTouchDevice() && !isPastSeason();
   showUpdates(findPanel(), isShown ? listFreshUpdates() : [], {
     dismiss: dismissUpdates,
-    notes: isShown ? listFreshReleaseNotes() : [],
+    notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
   });
 }
