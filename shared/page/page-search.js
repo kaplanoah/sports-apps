@@ -1,8 +1,9 @@
 // Reading a search's words into the pages they ask for, beside the games they find: a team's sheet
 // and its section, like a WNBA team's Roster, a player's sheet, and the league's places, like the
-// Standings lists and settings, and a game's part, like a WNBA final's Highlights. A team's name
-// lists its sheet and its section, and the section's name beside it lists the section alone. A game
-// part's name lists the part of the latest final the rest of the words find, or of the season's. A player's name lists her sheet, and finds no games,
+// Standings lists and settings, and a game's parts, like a final's Highlights or MLB's Matchup. A
+// team's name lists its sheet and its section, and the section's name beside it lists the section
+// alone. A game part's name lists the part of the game the rest of the words find, or the season's:
+// the latest final for a final's part, or the next game for one before it. A player's name lists her sheet, and finds no games,
 // since nobody knows yet which games she'll play. A place's words list it, and leave the games to
 // any of them that a search of games reads, as "East" finds the East's standings and its games.
 // Words that ask for anything else, like a second team, a day, or "at", ask for games, and list no
@@ -20,26 +21,26 @@ import { readTokens, splitWords } from "./search-words.js";
  * @typedef {{ key: string, name: string[], words: string[], icon: "bracket" | "standings" | "news" | "settings" }} PagePlace
  */
 /**
- * A part of a finished game's sheet a search can open, by its key and name, and the words that
- * find it.
- * @typedef {{ key: string, name: string, words: string[] }} GamePart
+ * A part of a game's sheet a search can open, by its key and name, the words that find it, and
+ * which game it opens: the latest final, or the next game, the one under way or the first to come.
+ * @typedef {{ key: string, name: string, words: string[], game: "latest-final" | "next" }} GamePart
  */
 /**
  * What a league hands a search's pages: its teams and players, the section a team's sheet opens on
- * beside its first, by its key and name, its places, the part of a final's sheet it can open, and
+ * beside its first, by its key and name, its places, the parts of a game's sheet it can open, and
  * pages to offer as examples.
  * @typedef {object} SearchPages
  * @property {PageTeam[]} teams
  * @property {PagePlayer[]} players
  * @property {{ key: string, name: string } | null} section
  * @property {PagePlace[]} places
- * @property {GamePart | null} gamePart
+ * @property {GamePart[]} gameParts
  * @property {string[]} examples
  */
 /**
  * A page a search lists: a team's sheet or its section, a player's sheet, a place, or a game's
- * part, of the latest final the words left for a search of games find, or of the season's when
- * none are left.
+ * part, of the game the words left for a search of games find, or of the season's when none are
+ * left.
  * @typedef {{ kind: "team" | "section", team: PageTeam } | { kind: "player", team: PageTeam, player: PagePlayer } | { kind: "place", place: PagePlace } | { kind: "game-part", part: GamePart, gameText: string | null }} PageRow
  */
 
@@ -58,20 +59,33 @@ const isWordOf = (typed, word, isPartial) =>
   (typed.endsWith("s") && typed.slice(0, -1) === word) ||
   (isPartial && typed.length >= SHORTEST_PREFIX && word.startsWith(typed));
 
+// Words after a last name that a fan may leave off.
+const NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
+
 /**
- * The words a player can be named by: her whole name, her last name, or her first.
+ * The words a player can be named by: her whole name, her last name, or her first, each with or
+ * without a suffix after her last name, like "Jr.".
  * @param {PagePlayer} player
  */
 function listPlayerNames(player) {
   const first = splitWords(player.firstName);
   const last = splitWords(player.lastName);
-  return [[...first, ...last], last, first].filter((name) => name.length > 0);
+  const hasSuffix = last.length > 1 && NAME_SUFFIXES.has(last[last.length - 1]);
+  const lasts = hasSuffix ? [last, last.slice(0, -1)] : [last];
+  return [...lasts.map((each) => [...first, ...each]), ...lasts, first].filter(
+    (name) => name.length > 0,
+  );
 }
 
 /**
+ * A word of a search, and whether a search of games knows it, as it knows "east" or "NL".
+ * @typedef {{ word: string, isKnown: boolean }} ReadWord
+ */
+
+/**
  * How many words from `start` name the player, as her whole name, last name, or first, or 0. While
- * words are typed, the last may be the start of her name.
- * @param {string[]} words
+ * words are typed, the last may be the start of her name, unless a search of games knows it whole.
+ * @param {ReadWord[]} words
  * @param {number} start
  * @param {PagePlayer} player
  * @param {boolean} isTyping
@@ -79,30 +93,41 @@ function listPlayerNames(player) {
 function measurePlayerAt(words, start, player, isTyping) {
   for (const name of listPlayerNames(player)) {
     if (start + name.length > words.length) continue;
-    const isNamed = name.every((part, offset) =>
-      isWordOf(
-        words[start + offset],
-        part,
-        isTyping && start + offset === words.length - 1 && offset === name.length - 1,
-      ),
-    );
+    const isNamed = name.every((part, offset) => {
+      const { word, isKnown } = words[start + offset];
+      const isLast = start + offset === words.length - 1 && offset === name.length - 1;
+      return isWordOf(word, part, isTyping && isLast && !isKnown);
+    });
     if (isNamed) return name.length;
   }
   return 0;
 }
 
 /**
+ * Whether only words a search of games doesn't know, like "stats", sit beside a name's.
+ * @param {ReadWord[]} words
+ * @param {number} start
+ * @param {number} length
+ */
+const isRestUnknown = (words, start, length) =>
+  words.every((each, index) => (index >= start && index < start + length) || !each.isKnown);
+
+/**
  * The players the words name, keeping only those named by the most words, so a whole name finds
- * her alone rather than everyone who shares her first name.
- * @param {string[]} words
+ * her alone rather than everyone who shares her first name. Words a search of games knows beside a
+ * name ask for something else, as "NL East" does, so they name no player.
+ * @param {import("./search-words.js").Token[]} tokens
  * @param {PagePlayer[]} players
  * @param {boolean} isTyping
  */
-function findPlayers(words, players, isTyping) {
+function findPlayers(tokens, players, isTyping) {
+  const words = tokens.flatMap((token) =>
+    token.words.map((word) => ({ word, isKnown: token.meanings.length > 0 })),
+  );
   const found = players.flatMap((player) => {
     for (let start = 0; start < words.length; start += 1) {
       const length = measurePlayerAt(words, start, player, isTyping);
-      if (length) return [{ player, length }];
+      if (length && isRestUnknown(words, start, length)) return [{ player, length }];
     }
     return [];
   });
@@ -128,12 +153,17 @@ const isEveryWordOf = (typed, words) => {
 const findPlaces = (typed, places) => places.filter((place) => isEveryWordOf(typed, place.words));
 
 /**
- * The latest final of the games, which come in order of start, or null when none has ended.
+ * The game of the games, which come in order of start, that a game's part opens, or null when
+ * there is none: the latest final, or the next game, the one under way or the first to come.
  * @template {{ state: string }} Game
  * @param {Game[]} games
+ * @param {GamePart} part
  * @returns {Game | null}
  */
-export const findLatestFinal = (games) => games.findLast((game) => game.state === "final") ?? null;
+export const findPartGame = (games, part) =>
+  (part.game === "latest-final"
+    ? games.findLast((game) => game.state === "final")
+    : games.find((game) => game.state !== "final")) ?? null;
 
 /**
  * @param {import("./search-words.js").Token} token
@@ -172,6 +202,25 @@ function listTeamRows(team, typed, pages) {
 }
 
 /**
+ * The game's part the words name, and the tokens that name it: each word but a team's is one of
+ * the part's words, or one a search of games passes over, as "matchup" is, and one at least is the
+ * part's.
+ * @param {import("./search-words.js").Token[]} tokens
+ * @param {GamePart[]} parts
+ */
+function findGamePart(tokens, parts) {
+  const others = tokens.filter((token) => !hasKind(token, "team"));
+  for (const part of parts) {
+    const named = others.filter((token) => isEveryWordOf(token.words, part.words));
+    const isRestPassedOver = others.every(
+      (token) => named.includes(token) || hasKind(token, "filler"),
+    );
+    if (named.length && isRestPassedOver) return { part, named };
+  }
+  return null;
+}
+
+/**
  * The pages a search's words ask for, and the words left for its search of games, or null when
  * the words ask for no games.
  * @param {string} text
@@ -185,15 +234,15 @@ export function findPages(text, { dictionary, pages, isTyping }) {
     (token) => !hasKind(token, "team") && !hasKind(token, "filler"),
   );
   const otherWords = otherTokens.flatMap((token) => token.words);
-  const part = pages.gamePart;
-  if (part && otherWords.length && isEveryWordOf(otherWords, part.words)) {
-    const gameText = leaveGameText(tokens, otherTokens);
-    return { rows: [{ kind: "game-part", part, gameText }], gameText: null };
+  const found = findGamePart(tokens, pages.gameParts);
+  if (found) {
+    const gameText = leaveGameText(tokens, found.named);
+    return { rows: [{ kind: "game-part", part: found.part, gameText }], gameText: null };
   }
   if (teamTokens.length) return findTeamPages(teamTokens, otherWords, { text, tokens, pages });
   if (!otherWords.length) return findPassedOverPlaces(tokens, text, pages);
   const teams = new Map(pages.teams.map((team) => [team.code, team]));
-  const players = findPlayers(otherWords, pages.players, isTyping).flatMap((player) => {
+  const players = findPlayers(otherTokens, pages.players, isTyping).flatMap((player) => {
     const team = teams.get(player.team);
     return team ? [/** @type {PageRow} */ ({ kind: "player", team, player })] : [];
   });

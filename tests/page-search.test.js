@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSearchDictionary } from "../shared/page/game-search.js";
-import { findLatestFinal, findPages } from "../shared/page/page-search.js";
+import { findPages, findPartGame } from "../shared/page/page-search.js";
 
 // A small league: the Hawks of Riverton and the Foxes of Hillside, in the East, with a few of their
 // players, its standings, and its settings.
@@ -66,7 +66,14 @@ const PAGES = {
       icon: "settings",
     },
   ],
-  gamePart: { key: "highlights", name: "Highlights", words: ["highlights", "recap"] },
+  gameParts: [
+    {
+      key: "highlights",
+      name: "Highlights",
+      words: ["highlights", "recap"],
+      game: "latest-final",
+    },
+  ],
   examples: [],
 };
 
@@ -162,13 +169,19 @@ test("a game part's name lists it for the latest final the rest of the words fin
   assert.deepEqual(listRows("high", true).rows, ["highlights of the season"]);
 });
 
-test("the latest final is the last game that has ended", () => {
+test("a final's part opens the last game that has ended, and a part before one the next game", () => {
   const games = [
     { id: "a", state: "final" },
     { id: "b", state: "final" },
     { id: "c", state: "live" },
     { id: "d", state: "pre" },
   ];
-  assert.equal(findLatestFinal(games)?.id, "b");
-  assert.equal(findLatestFinal(games.slice(2)), null);
+  /** @type {import("../shared/page/page-search.js").GamePart} */
+  const final = { key: "highlights", name: "Highlights", words: [], game: "latest-final" };
+  /** @type {import("../shared/page/page-search.js").GamePart} */
+  const next = { key: "matchup", name: "Matchup", words: [], game: "next" };
+  assert.equal(findPartGame(games, final)?.id, "b");
+  assert.equal(findPartGame(games.slice(2), final), null);
+  assert.equal(findPartGame(games, next)?.id, "c");
+  assert.equal(findPartGame(games.slice(0, 2), next), null);
 });

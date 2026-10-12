@@ -19,11 +19,15 @@ import { TEAMS } from "./teams.js";
 export const namePlayerIndexKey = (season) => `player-index/${season}`;
 
 const SECTION = { key: "roster", name: "Roster" };
-const GAME_PART = {
-  key: "highlights",
-  name: "Highlights",
-  words: ["highlights", "recap", "clips", "video"],
-};
+/** @type {import("#shared/page-search.js").GamePart[]} */
+const GAME_PARTS = [
+  {
+    key: "highlights",
+    name: "Highlights",
+    words: ["highlights", "recap", "clips", "video"],
+    game: "latest-final",
+  },
+];
 const EXAMPLES = ["Stewart", "Aces roster"];
 
 /** @type {PagePlace[]} */
@@ -116,7 +120,7 @@ export function listSearchPages({ index, isSettingShown }) {
     })),
     section: SECTION,
     places: [...TABS, ...STANDINGS, ...listSettings(isSettingShown)],
-    gamePart: GAME_PART,
+    gameParts: GAME_PARTS,
     examples: EXAMPLES,
   };
 }
