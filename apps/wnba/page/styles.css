@@ -2649,20 +2649,20 @@ table.player-game td {
   vector-effect: non-scaling-stroke;
 }
 /* Each line is a border, which Safari draws a whole number of screen pixels wide wherever it falls:
-   4 on a phone, and the hairline 1. A box half a pixel wide draws 1 pixel at some places and 2 at
+   5 on a phone, and the hairline 2. A box half a pixel wide draws 1 pixel at some places and 2 at
    others. */
 .player-curve i {
   position: absolute;
   bottom: 0;
   width: 0;
-  border-left: 1.4px solid var(--team);
+  border-left: 1.7333px solid var(--team);
   translate: -50% 0;
 }
 /* Where a player not yet ranked would rank is a hairline with no dot, reaching 4px above the curve
    and 3.5px under its foot. */
 .player-curve i.provisional {
   bottom: -3.5px;
-  border-left-width: 0.4px;
+  border-left-width: 0.7333px;
   margin-top: -4px;
 }
 .player-curve b {
