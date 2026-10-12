@@ -55,3 +55,30 @@ test("the check job needs every other job but caches", () => {
   const others = listJobs().filter((job) => !["check", "caches"].includes(job));
   assert.deepEqual(readCheckNeeds()?.toSorted(), others.toSorted());
 });
+
+/**
+ * One job of ci.yml, from its key to the next job.
+ * @param {string} job
+ */
+const readJob = (job) =>
+  readRepoFile(".github/workflows/ci.yml").match(
+    new RegExp(`^ {2}${job}:\\n(?:(?: {4}.*)?\\n)*`, "m"),
+  )?.[0] ?? "";
+
+test("burn-in runs every test ten times however many fail, and fails only on a test the pull request wrote or edited", () => {
+  const burnIn = readJob("burn-in");
+  assert.match(burnIn, /--repeat-each=10 --retries=0 --max-failures=0/);
+  assert.match(
+    burnIn,
+    /git diff -U0 --no-renames HEAD\^1 HEAD .*\| node worker\/judge-burn-in\.mjs/,
+  );
+  assert.match(burnIn, /name: burn-in-flaky-/);
+});
+
+test("the check job names each test burn-in found failing in the issue, and can start the fix routine", () => {
+  const check = readJob("check");
+  assert.match(check, /pattern: burn-in-flaky-\*/);
+  assert.match(check, /--retried "\$\{listed\[@\]\}"/);
+  assert.match(check, /FLAKY_ROUTINE_URL: \$\{\{ secrets\.FLAKY_ROUTINE_URL \}\}/);
+  assert.match(check, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
+});
