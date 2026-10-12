@@ -1,6 +1,7 @@
 import { readEasternDay } from "#shared/days.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
+import { namePlayerIndexKey } from "./search-pages.js";
 import { session } from "./session.js";
 import { SNAPSHOT_VERSION, nameScheduleKey } from "./snapshot.js";
 
@@ -14,6 +15,9 @@ let reader = null;
 /** @type {number | null} */
 let scheduleYear = null;
 let unwatchSchedule = () => {};
+/** @type {number | null} */
+let playerIndexYear = null;
+let unwatchPlayerIndex = () => {};
 
 /**
  * Follows every game of the season shown, which the store keeps apart from its record, and redraws
@@ -31,6 +35,29 @@ function followSchedule(year, showChange) {
       if (year !== scheduleYear) return;
       const schedule = snapshot.exists ? snapshot.data() : null;
       session.schedule = isReadableSeason(schedule, SNAPSHOT_VERSION) ? schedule : null;
+      showChange();
+    },
+    () => {},
+  );
+}
+
+/**
+ * Follows the list of players the store keeps for the season shown, for search, which redraws with
+ * `showChange` as it changes. A list the page can't read is left out, as is one for a season the
+ * page has moved on from.
+ * @param {number} year
+ * @param {() => void} showChange
+ */
+function followPlayerIndex(year, showChange) {
+  if (year === playerIndexYear) return;
+  playerIndexYear = year;
+  unwatchPlayerIndex();
+  session.playerIndex = null;
+  unwatchPlayerIndex = session.db.doc(namePlayerIndexKey(year)).onSnapshot(
+    (/** @type {any} */ snapshot) => {
+      if (year !== playerIndexYear) return;
+      const index = snapshot.exists ? snapshot.data() : null;
+      session.playerIndex = Array.isArray(index?.players) ? index : null;
       showChange();
     },
     () => {},
@@ -58,6 +85,7 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
       if (year !== session.year) session.schedule = null;
       Object.assign(session, { year, season, problem: "" });
       followSchedule(year, showChange);
+      followPlayerIndex(year, showChange);
     },
     showChange,
     showStatus: (status) => {

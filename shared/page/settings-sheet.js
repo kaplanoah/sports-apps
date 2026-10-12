@@ -48,6 +48,15 @@ async function showRelease() {
 }
 
 /**
+ * Opens settings, scrolled to `row` when a search names one of its settings.
+ * @param {Element | null} [row]
+ */
+export function openSettings(row = null) {
+  openSheet(findDialog());
+  row?.scrollIntoView({ block: "center" });
+}
+
+/**
  * Wires the settings button, the dialog's ways to close, and the sheet's swipe, and shows the
  * release. A touch that starts on a target `isOwnGesture` claims, like a drag handle or a picker,
  * never moves the sheet.
@@ -55,7 +64,7 @@ async function showRelease() {
  */
 export function startSettingsSheet({ isOwnGesture } = {}) {
   const dialog = findDialog();
-  findElement("settingsBtn").addEventListener("click", () => openSheet(dialog));
+  findElement("settingsBtn").addEventListener("click", () => openSettings());
   wireSheet(dialog, { closeButton: findElement("settingsCloseBtn"), isOwnGesture });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();

@@ -11,15 +11,9 @@ import {
 } from "#shared/news.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
+import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import {
-  fillDayStrip,
-  showStartDay,
-  showStartDayOnReturn,
-  startDayStrip,
-  startOverDayStrip,
-} from "#shared/day-strip.js";
-import {
-  closeGameSearch,
+  focusGameSearch,
   openGameSearch,
   refreshGameSearch,
   startGameSearch,
@@ -27,13 +21,21 @@ import {
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
+import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
-import { setTabStart, startPageTabs } from "#shared/page-tabs.js";
+import {
+  openPageTab,
+  readShownTab,
+  readTabBefore,
+  setTabEnter,
+  setTabStart,
+  startPageTabs,
+} from "#shared/page-tabs.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
 import { fillSeasonPicker } from "#shared/season-picker.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { startServiceWorker } from "#shared/service-worker.js";
-import { startSettingsSheet } from "#shared/settings-sheet.js";
+import { openSettings, startSettingsSheet } from "#shared/settings-sheet.js";
 import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { fillStamp } from "#shared/stamp.js";
 import { chooseTitleYear, showTitleYear } from "#shared/title-year.js";
@@ -42,7 +44,7 @@ import { startAppearance } from "#shared/appearance.js";
 import { LOOKS } from "./looks.js";
 import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
-import { refreshGameSheet, startGameSheet } from "./game-sheet.js";
+import { openGameSection, refreshGameSheet, startGameSheet } from "./game-sheet.js";
 import { renderDot } from "./clubs.js";
 import { listFoundGameDays, listListedGames, listSeasonDays } from "./games-view.js";
 import { NEWS_LEAGUE } from "./news-league.js";
@@ -53,7 +55,8 @@ import { isPastSeason, session } from "./session.js";
 import { SNAPSHOT_VERSION } from "./snapshot.js";
 import { isPlayoffsOver } from "./series.js";
 import { describeStampProblem, renderStampLines } from "./stamp.js";
-import { drawStandings, startStandings } from "./standings-view.js";
+import { drawStandings, showStandingsList, startStandings } from "./standings-view.js";
+import { listSearchPages } from "./search-pages.js";
 import { createSearchTerms, readSearchGame } from "./search-terms.js";
 import { renderTeamSheet } from "./team-view.js";
 import { TEAMS } from "./teams.js";
@@ -179,11 +182,54 @@ async function showNewCurrentYear() {
   fillSeasonList(await listSeasonYears());
 }
 
-// As on iPhone, choosing the Games tab while it shows goes back to where it starts: today, closing
-// a search that's open.
+// As on iPhone, choosing the Games tab while it shows goes back to where it starts: today.
 function returnGamesToToday() {
-  if (!closeGameSearch()) showStartDay();
+  showStartDay();
   return true;
+}
+
+// Search opens with the keyboard up from the tap on its tab, or as it was left, while it's open.
+function enterSearch() {
+  if (findElement("gameSearch").hidden) openGameSearch();
+}
+
+// As on iPhone, choosing search while it shows brings the keyboard up in its field.
+function focusSearch() {
+  focusGameSearch();
+  return true;
+}
+
+// A search that closes while it shows goes back to the tab before it.
+function leaveSearch() {
+  if (readShownTab() === "search") openPageTab(readTabBefore() ?? "games");
+}
+
+/** @param {string} key */
+const findSettingRow = (key) =>
+  /** @type {HTMLElement | null} */ (document.querySelector(`[data-setting="${key}"]`));
+
+// Settings itself always shows, and a setting only while its row does.
+/** @param {string} key */
+const isSettingShown = (key) => {
+  const row = findSettingRow(key);
+  return key === "settings" || (!!row && !row.closest("[hidden]"));
+};
+
+const readSearchPages = () => listSearchPages({ index: session.playerIndex, isSettingShown });
+
+/**
+ * Opens a place a search lists: a tab, one of the Standings tab's lists, a game's section, or
+ * settings at one of its rows.
+ * @param {string} key
+ */
+function openSearchPlace(key) {
+  const [place, detail] = key.split(":");
+  if (place === "tab") openPageTab(detail);
+  else if (place === "standings") {
+    openPageTab("standings");
+    showStandingsList(detail);
+  } else if (place === "highlights") openGameSection(detail, "highlights");
+  else openSettings(findSettingRow(key));
 }
 
 // The season a search reads, its words read again only for another season or schedule.
@@ -232,14 +278,20 @@ async function boot() {
   startAppearance(LOOKS);
   watchReturns({ catchUp, pause: () => session.db.pause() });
   trackKeyboardFocus();
+  watchPresses([".team-line .team-open"]);
   startPageTabs();
   setTabStart("games", returnGamesToToday);
-  startDayStrip(findElement("seasonGames"), { search: openGameSearch });
+  setTabStart("search", focusSearch);
+  setTabEnter("search", enterSearch);
+  startDayStrip(findElement("seasonGames"));
   startGameSearch(findElement("gameSearch"), {
     readSeason: readSearchSeason,
     listDays: listSearchDays,
     renderTeamMark: renderDot,
-    close: showStartDayOnReturn,
+    close: leaveSearch,
+    readPages: readSearchPages,
+    openPlace: openSearchPlace,
+    placeholder: "Teams, players, and games",
   });
   startGameSheet();
   startTeamSheet({

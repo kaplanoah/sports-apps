@@ -166,6 +166,24 @@
       </div>
       <span class="tab-pill" aria-hidden="true"></span>
     </div>
+    <button
+      type="button"
+      role="tab"
+      id="tab-search"
+      class="search-tab"
+      data-tab="search"
+      aria-controls="view-search"
+      aria-selected="false"
+      aria-label="Search"
+      tabindex="-1"
+    >
+      <span class="tab-icon" aria-hidden="true"
+        ><svg viewBox="0 0 256 256" fill="currentColor">
+          <path
+            d="M228.24,219.76l-51.38-51.38a86.15,86.15,0,1,0-8.48,8.48l51.38,51.38a6,6,0,0,0,8.48-8.48ZM38,112a74,74,0,1,1,74,74A74.09,74.09,0,0,1,38,112Z"
+          /></svg></span
+      ><span class="tab-label" data-label="Search">Search</span>
+    </button>
   </nav>
   <div class="edge-fade" aria-hidden="true"></div>
 
@@ -178,6 +196,10 @@
   </section>
 
   <section id="view-games" role="tabpanel" aria-labelledby="tab-games" class="view">
+    <div id="seasonGames" class="day-view" data-last-drawn></div>
+  </section>
+
+  <section id="view-search" role="tabpanel" aria-labelledby="tab-search" class="view">
     <div
       id="gameSearch"
       class="day-view search-view"
@@ -185,7 +207,6 @@
       data-last-drawn
       data-start-hidden
     ></div>
-    <div id="seasonGames" class="day-view" data-last-drawn></div>
   </section>
 
   <section id="view-standings" role="tabpanel" aria-labelledby="tab-standings" class="view">
@@ -215,14 +236,20 @@
         </div>
       </div>
       <div class="settings-controls grouped">
-        <label class="control-row" hidden>
+        <label class="control-row" data-setting="settings:season" hidden>
           <span>Season</span>
           <select id="seasonPicker" class="select-field" aria-label="Season"></select>
         </label>
-        <div class="control-row" id="notifyRow" hidden data-last-drawn></div>
+        <div
+          class="control-row"
+          id="notifyRow"
+          data-setting="settings:notifications"
+          hidden
+          data-last-drawn
+        ></div>
         <div class="settings-group" role="group" aria-labelledby="newsSettingsTitle">
           <h3 class="settings-group-label" id="newsSettingsTitle">News</h3>
-          <div class="control-row">
+          <div class="control-row" data-setting="settings:team-outlets">
             <span class="control-label">
               <span id="teamOutletsTitle">Include dedicated Liberty sources</span>
               <span class="control-note">Beat writers at The IX, NY Post, and more</span>
@@ -238,7 +265,7 @@
               <span class="switch-knob" aria-hidden="true"></span>
             </button>
           </div>
-          <div class="control-row">
+          <div class="control-row" data-setting="settings:paywalled">
             <span class="control-label">
               <span id="paywalledTitle">Include content from The Athletic</span>
               <span class="control-note">Most stories need a subscription</span>
@@ -255,7 +282,7 @@
             </button>
           </div>
         </div>
-        <div class="control-row appearance-row">
+        <div class="control-row appearance-row" data-setting="settings:appearance">
           <span class="control-label">
             <span id="appearanceTitle">Appearance</span>
             <span class="control-note" id="appearanceNote" role="status"></span>
@@ -286,14 +313,19 @@
           </div>
         </div>
       </div>
-      <div class="home-screen-tip" id="homeScreenTip" hidden></div>
+      <div
+        class="home-screen-tip"
+        id="homeScreenTip"
+        data-setting="settings:home-screen"
+        hidden
+      ></div>
       <footer class="settings-footer">
         <p class="settings-version" id="versionNote" hidden data-last-drawn></p>
         <p class="settings-version">Includes data from NBA.com</p>
         <p class="settings-version">&copy; 2026 Noah Kaplan</p>
       </footer>
       <section class="diagnostics-area" aria-labelledby="diagnosticsTitle">
-        <div class="control-row">
+        <div class="control-row" data-setting="settings:diagnostics">
           <span class="control-label">
             <span id="diagnosticsTitle">Diagnostics</span>
           </span>

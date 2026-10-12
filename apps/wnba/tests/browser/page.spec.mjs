@@ -66,6 +66,7 @@ test("the page opens on the bracket the Worker saved, and each tab shows its vie
     "Games",
     "Standings",
     "News",
+    "Search",
   ]);
 });
 

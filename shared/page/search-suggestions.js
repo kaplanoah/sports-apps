@@ -1,13 +1,15 @@
 // What a search offers as it's typed, and before anything is. The word being typed is finished
 // first, a team before a place or a date, and the team that plays soonest before another that starts
 // the same; after a joining word like "in" or "at", the words that can follow it; then whole
-// searches built on a team it already names, which fit where the season stands: its next game while
-// it has one, its playoffs while they're on, and its last game once it's done. Nothing is offered
-// that would find no games. Runs in the page and in Node, so it uses no DOM.
+// searches built on a team it already names, two at most, which fit where the season stands: its
+// next game while it has one, its playoffs while they're on, and its last game once it's done. A
+// team's name that is also a place, like "New York", has the games played there as its other
+// reading. Nothing is offered that would find no games. Runs in the page and in Node, so it uses no
+// DOM.
 
 import { readMonthDays } from "./search-dates.js";
 import { countGames, findSearchGames, isGameInPlace, readSearch } from "./game-search.js";
-import { splitWords } from "./search-words.js";
+import { readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
 /** @typedef {import("./search-words.js").Meaning} Meaning */
@@ -19,9 +21,11 @@ import { splitWords } from "./search-words.js";
 /** @typedef {{ text: string, meaning: Meaning | null }} Candidate */
 
 const SUGGESTION_COUNT = 4;
+// Whole searches sit over the pages and games a search finds, so only a couple show.
+const WHOLE_SEARCH_COUNT = 2;
 // After "in", a couple of places, then the months, so both kinds show.
 const PLACE_COUNT = 2;
-const EXAMPLE_COUNT = 5;
+export const EXAMPLE_COUNT = 5;
 
 // The kinds of word a typed one can finish into, in the order they're offered.
 const FINISHED_KINDS = [
@@ -374,13 +378,16 @@ function describeRow(meaning, { search, found }) {
 function listUseful(candidates, text, context) {
   const seen = new Set([readWords(text)]);
   const useful = [];
+  let wholeSearches = 0;
   for (const candidate of candidates) {
     const key = readWords(candidate.text);
-    if (seen.has(key)) continue;
+    const isWholeSearch = !candidate.meaning;
+    if (seen.has(key) || (isWholeSearch && wholeSearches === WHOLE_SEARCH_COUNT)) continue;
     seen.add(key);
     const result = findGames(candidate.text, context);
-    if (result.found.games.length)
-      useful.push({ text: candidate.text, ...describeRow(candidate.meaning, result) });
+    if (!result.found.games.length) continue;
+    useful.push({ text: candidate.text, ...describeRow(candidate.meaning, result) });
+    if (isWholeSearch) wholeSearches += 1;
     if (useful.length === SUGGESTION_COUNT) break;
   }
   return useful;
@@ -407,10 +414,48 @@ export function listSuggestions(text, context) {
 }
 
 /**
- * The league's example searches that find a game, to offer before anything is typed.
+ * The league's example searches that find a game, to offer before anything is typed, as many as
+ * there's `room` for.
  * @param {SearchContext} context
+ * @param {number} [room]
  */
-export const listExamples = (context) =>
+export const listExamples = (context, room = EXAMPLE_COUNT) =>
   context.terms.examples
     .filter((example) => findGames(example, context).found.games.length)
-    .slice(0, EXAMPLE_COUNT);
+    .slice(0, room);
+
+/**
+ * A search's word as another reading writes it: a team by its name, and anything else as typed.
+ * @param {import("./search-words.js").Token} token
+ */
+function writeToken(token) {
+  const teams = token.meanings.filter((meaning) => meaning.kind === "team");
+  return teams.length === 1 && token.meanings.length === 1
+    ? (teams[0].display ?? token.text)
+    : token.text;
+}
+
+/**
+ * The other way to read a search whose words name a team that is also a place, as "New York"
+ * names the Liberty, or the games played in New York: the same search with the place for the
+ * team, when it finds games.
+ * @param {string} text
+ * @param {SearchContext} context
+ * @returns {Suggestion[]}
+ */
+export function listOtherReadings(text, context) {
+  const tokens = readTokens(text, context.dictionary);
+  return tokens.flatMap((token, index) => {
+    const place = token.meanings.find((meaning) => meaning.kind === "place");
+    const isTeam = token.meanings.some((meaning) => meaning.kind === "team");
+    const isAfterIn = tokens[index - 1]?.meanings.some((meaning) => meaning.kind === "in");
+    if (!place || !isTeam || isAfterIn) return [];
+    const words = tokens
+      .map((each, at) => (at === index ? `in ${place.display}` : writeToken(each)))
+      .join(" ");
+    const reading = words.startsWith("in ") ? `Games ${words}` : words;
+    const { found } = findGames(reading, context);
+    if (!found.games.length) return [];
+    return [{ text: reading, mark: { kind: "search" }, detail: countGames(found.games.length) }];
+  });
+}

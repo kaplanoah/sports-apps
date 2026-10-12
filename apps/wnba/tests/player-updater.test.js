@@ -12,6 +12,7 @@ import {
   nameTeamGameLogRequest,
   nameTotalsRequest,
 } from "../worker/src/player.js";
+import { namePlayerIndexKey } from "../page/js/search-pages.js";
 import { createPlayerJob } from "../worker/src/player-updater.js";
 import { addTurnovers, joinGameLogs } from "./player-fixtures.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
@@ -399,6 +400,59 @@ test("a season the store hasn't filled, or a store that can't be read, has the s
   );
 });
 
+test("each season's list of players names everyone on its rosters, with her team and number", async () => {
+  const { docs, runJob } = createRun();
+  await runJob();
+
+  const index = docs.stored.get(namePlayerIndexKey(2026));
+  const rostered = Object.keys(TEAMS).flatMap((team) =>
+    docs.stored
+      .get(`rosters/2026-${team}`)
+      .players.map((/** @type {any} */ player) => `${team}:${player.id}`),
+  );
+  assert.deepEqual(
+    index.players.map((/** @type {any} */ player) => `${player.team}:${player.id}`).sort(),
+    rostered.sort(),
+  );
+  assert.deepEqual(
+    index.players.find((/** @type {any} */ player) => player.id === STEWART),
+    { id: STEWART, team: "NYL", number: "30", firstName: "Breanna", lastName: "Stewart" },
+  );
+});
+
+test("a season's list of players waits for every roster, and a past season gets its own as it's filled", async () => {
+  const answers = listAnswers();
+  delete answers[nameLeagueRosterRequest("NYL", 2026)];
+  const { docs, runJob } = createRun({ answers });
+  await runJob();
+
+  assert.equal(docs.stored.get(namePlayerIndexKey(2026)), undefined);
+  const past = docs.stored.get(namePlayerIndexKey(2025));
+  assert.ok(past.players.some((/** @type {any} */ player) => player.id === IONESCU));
+});
+
+test("a past season filled before the store kept its list of players gets one from its saved rosters, reading nothing from the league", async () => {
+  const { docs, storage, league, runJob } = createRun();
+  await runJob();
+  const index = docs.stored.get(namePlayerIndexKey(2025));
+  docs.stored.delete(namePlayerIndexKey(2025));
+  // What the release before the list of players wrote once every past season was filled.
+  await storage.put("allFilled", `2026 ${await storage.get("filled:2025")}`);
+  const pastReads = league.requests.filter((url) => /Season=2025/.test(url)).length;
+
+  await createPlayerJob().run({
+    docs,
+    storage,
+    loadSnapshot: async () => null,
+    env: {},
+    fetchImpl: league.fetchImpl,
+    now: () => NOW + 5 * MINUTE_MS,
+  });
+
+  assert.deepEqual(docs.stored.get(namePlayerIndexKey(2025)), index);
+  assert.equal(league.requests.filter((url) => /Season=2025/.test(url)).length, pastReads);
+});
+
 test("stats the league hasn't answered leave the rosters saved, and the sheets reading the league until it does", async () => {
   const answers = listAnswers();
   delete answers[nameTotalsRequest(2026)];
@@ -456,8 +510,14 @@ test("each run saves its status: the requests it made by feed, what it saved, an
     playerList: 2,
     out: 1,
   });
-  assert.deepEqual(Object.keys(first.saved).sort(), ["players", "ranks", "rosters"]);
+  assert.deepEqual(Object.keys(first.saved).sort(), [
+    "player-index",
+    "players",
+    "ranks",
+    "rosters",
+  ]);
   assert.equal(first.saved.ranks, 2);
+  assert.equal(first.saved["player-index"], 2);
   assert.deepEqual(first.pastSeason, { season: 2025, isWhole: true });
   assert.equal(first.lastFailure, null);
   assert.equal(first.leagueReads, 0);

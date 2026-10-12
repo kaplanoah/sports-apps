@@ -189,7 +189,7 @@ test("an example tapped runs its search and puts the keyboard away", async ({ pa
   await expect(page.locator("#gameSearch .listed-day")).toHaveCount(6);
 });
 
-test("while words are typed, suggestions sit over the games from today, and one tapped runs its search", async ({
+test("while words are typed, suggestions, two whole searches at most, sit over the line saying what the search read, right over the games from today, and one tapped runs its search", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -201,9 +201,9 @@ test("while words are typed, suggestions sit over the games from today, and one 
     "Mets",
     "Mets next game",
     "Mets at home",
-    "Mets vs Nationals",
   ]);
-  await expect(findLine(page)).toHaveText("Mets\u2022162 games");
+  await expect(page.locator("#gameSearch .search-games-line")).toHaveText("Mets\u2022162 games");
+  await expect(findLine(page)).toBeHidden();
   await expect(page.locator("#gameSearch .listed-day").first()).toHaveAttribute(
     "data-day",
     "2026-09-24",

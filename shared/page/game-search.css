@@ -1,17 +1,19 @@
 /*
- * The Games view's search, as game-search-view.js draws it in a .search-view beside the season's
- * .day-view, whose layout it shares, and which it takes the place of while it's open. Apps link it
- * after day-strip.css, before their own styles.css.
+ * A season's search, as game-search-view.js draws it in a .search-view, sharing a .day-view's
+ * layout: in the Games view beside the season's .day-view, which it takes the place of while it's
+ * open, or in a view of its own. Apps link it after day-strip.css, before their own styles.css.
  *
  * Beside type.css's sizes, chrome.css's --ink, --ink-dim, --divider, and --radius-control, and
  * day-strip.css's --reach-left and --reach-right, an app's :root defines these tokens:
  *   --raised       the field's fill, as a card's
  *   --edge         the line inside the field's edge
  *   --action       Cancel and the field's caret, where to tap
- *   --structure    the Games heading under the suggestions
- *   --ink-hover    an example or suggestion under the mouse
- *   --text         the suggestions' face
+ *   --ink-hover    an example, a row, or the line over the games under the mouse
+ * and a pressed row tints in chrome.css's --ink.
+ *   --text         the rows' face
  *   --search-face  the field's face, drawn at --size-field as big as --text at --size-read
+ *   --search-words-lift  the room under a row's words that looks them centered in the row, in
+ *                  the --text face
  */
 
 .search-view[hidden],
@@ -25,6 +27,15 @@
 }
 .search-bar.is-empty {
   padding-bottom: 0;
+}
+/* While rows sit over the games, the first one's text starts 18px under the field, about as far as
+   the first example's does when the search opens: 2.2px of the bar, then the rows. */
+.search-bar.has-rows {
+  padding-bottom: 2.2px;
+}
+.search-bar.has-rows + .search-list,
+.search-bar.has-rows + .search-list > .search-suggestions:first-child {
+  padding-top: 0;
 }
 .search-row {
   display: flex;
@@ -205,9 +216,11 @@
   width: 12px;
   height: 12px;
 }
+/* A row's words sit as far over its middle as the font needs to look centered. */
 .search-words {
   flex: 1;
   min-width: 0;
+  padding-bottom: var(--search-words-lift);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -220,18 +233,59 @@
   font-size: var(--size-glance);
   color: var(--ink-dim);
 }
-.search-head {
-  margin: 14px 0 2px;
-  font-size: var(--size-small);
+/* A row that opens a page ends in a caret, and a row that runs a search doesn't. */
+.search-caret {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-dim);
+}
+/* The line saying how the search read its words, right over the games, opening them whole. A press
+   tints it from the line above to 0.5px past the first game's top border, its words 14px under that
+   line and the games 39px under it. */
+.search-games-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 40.5px;
+  margin: 0 0 -1.5px;
+  padding: 14px 0 9.5px;
+  border: 0;
+  background: none;
+  font-family: var(--text);
+  font-size: var(--size-glance);
+  color: var(--ink-dim);
+  text-align: left;
+  cursor: pointer;
+}
+.search-games-words {
+  flex: 1;
+  min-width: 0;
+}
+.search-games-line b {
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--structure);
+  color: var(--ink);
+}
+
+/* While a press holds a row (press.js), it tints at once, and fades as the press lets go. */
+.search-example,
+.search-suggestion,
+.search-games-line {
+  transition: box-shadow 0.15s;
+}
+.search-example.is-pressed,
+.search-suggestion.is-pressed,
+.search-games-line.is-pressed {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 7%, transparent);
+  transition: none;
 }
 
 @media (hover: hover) {
   .search-example:hover,
   .search-suggestion:hover .search-words,
+  .search-games-line:hover .search-games-words,
   .search-cancel:hover {
     color: var(--ink-hover);
   }

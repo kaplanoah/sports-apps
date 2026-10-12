@@ -131,6 +131,10 @@
     --row-highlight: color-mix(in srgb, var(--ink) 5%, transparent);
   }
 }
+.updates-list li:has(> .game-open.is-pressed) {
+  --row-highlight: color-mix(in srgb, var(--ink) 7%, transparent);
+  transition: none;
+}
 .updates-list li:has(> .game-open) > :not(.game-open) {
   z-index: 1;
   pointer-events: none;

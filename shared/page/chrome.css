@@ -104,8 +104,10 @@ nav.tabs {
 .edge-fade {
   display: none;
 }
-/* Only the tabs themselves: the tabs' row can hold other buttons too. */
-.tab-list button {
+/* Only the tabs themselves, and search, a tab beside them: the tabs' row can hold other buttons
+   too. */
+.tab-list button,
+nav.tabs .search-tab {
   font: inherit;
   font-size: var(--size-glance);
   text-transform: uppercase;
@@ -117,7 +119,8 @@ nav.tabs {
   border-radius: var(--radius-control);
   cursor: pointer;
 }
-.tab-list button.active {
+.tab-list button.active,
+nav.tabs .search-tab.active {
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
@@ -840,6 +843,49 @@ body:has(> .home-screen-bar:not([hidden])) {
     background: var(--tab-bar-tint);
     box-shadow: inset 0 0 0 1px var(--tab-bar-edge);
   }
+  /* Search sits beside the bar, as iOS 26 sets it apart: a circle the bar's height and tint, 8px
+     from its end, which the bar ends short of. While it's chosen, its icon takes the accent, and the
+     bar's own pill hides. */
+  nav.tabs:has(.search-tab) .tab-bar {
+    right: calc(21px + var(--tab-bar-height) + 8px);
+  }
+  nav.tabs .search-tab {
+    position: fixed;
+    z-index: 20;
+    right: 21px;
+    bottom: var(--tab-bar-bottom);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--tab-bar-height);
+    height: var(--tab-bar-height);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--tab-bar-tint);
+    box-shadow:
+      inset 0 0 0 1px var(--tab-bar-edge),
+      0 10px 28px -10px rgba(0, 0, 0, 0.55);
+    color: var(--tab-bar-ink);
+  }
+  nav.tabs .search-tab.active {
+    background: var(--tab-bar-tint);
+    color: var(--accent);
+  }
+  .search-tab .tab-label {
+    display: none;
+  }
+  .search-tab .tab-icon,
+  .search-tab .tab-icon svg {
+    width: 25px;
+    height: 25px;
+    margin: 0;
+  }
+  .tab-bar.is-unselected .tab-pill {
+    visibility: hidden;
+    transition: none;
+  }
+
   /* The labels sit over the pill, in equal slots 9px in from the bar's ends. */
   .tab-list {
     position: absolute;
@@ -944,7 +990,8 @@ body:has(> .home-screen-bar:not([hidden])) {
     pointer-events: none;
   }
   @media (prefers-contrast: more) {
-    .tab-backing {
+    .tab-backing,
+    nav.tabs .search-tab {
       background: var(--tab-bar-tint);
       box-shadow: inset 0 0 0 1px var(--tab-bar-ink);
     }

@@ -228,3 +228,11 @@ export function drawStandings(season) {
     ),
   );
 }
+
+/**
+ * Shows one of the tab's lists, as a search's row for it asks.
+ * @param {string} key
+ */
+export function showStandingsList(key) {
+  standingsPager?.switchToList(key);
+}

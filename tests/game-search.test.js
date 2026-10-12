@@ -8,7 +8,11 @@ import {
   findSearchGames,
   readSearch,
 } from "../shared/page/game-search.js";
-import { listExamples, listSuggestions } from "../shared/page/search-suggestions.js";
+import {
+  listExamples,
+  listOtherReadings,
+  listSuggestions,
+} from "../shared/page/search-suggestions.js";
 import { isOneEditApart, normalizeText } from "../shared/page/search-words.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "./time-zone.js";
 
@@ -299,19 +303,14 @@ test("a word being typed is finished first, the team playing soonest before anot
     "Hornets HOR",
     "Hornets next game search",
     "Hornets at home search",
-    "Hornets vs Foxes search",
+    "home search",
   ]);
   assert.deepEqual(suggest("H").slice(0, 2), ["Hornets HOR", "Hornets next game search"]);
   assert.equal(suggest("Hil")[0], "Hillside FOX");
 });
 
-test("a whole search fits where the season stands, and nothing is offered that would find no games", () => {
-  assert.deepEqual(suggest("Hawks "), [
-    "Hawks next game search",
-    "Hawks playoffs search",
-    "Hawks at home search",
-    "Hawks vs Owls search",
-  ]);
+test("a whole search fits where the season stands, two at most, and nothing is offered that would find no games", () => {
+  assert.deepEqual(suggest("Hawks "), ["Hawks next game search", "Hawks playoffs search"]);
   const finals = GAMES.map((game) => ({
     ...game,
     state: /** @type {const} */ ("final"),
@@ -343,4 +342,22 @@ test("after in, the places with the most of a team's games, then the season's mo
 
 test("the examples offered before typing are those that find a game", () => {
   assert.deepEqual(listExamples(createContext()), ["Hawks next game", "Foxes at Owls"]);
+});
+
+test("a team's name that is also a place has the games played there as its other reading", () => {
+  const context = createContext();
+  assert.deepEqual(listOtherReadings("Riverton", context), [
+    { text: "Games in Riverton", mark: { kind: "search" }, detail: "4 games" },
+  ]);
+  assert.deepEqual(
+    listOtherReadings("Owls riverton", context).map((reading) => reading.text),
+    ["Owls in Riverton"],
+  );
+  assert.deepEqual(listOtherReadings("in Riverton", context), []);
+  assert.deepEqual(listOtherReadings("Hawks", context), []);
+  assert.deepEqual(listOtherReadings("Hornets riverton", context), []);
+});
+
+test("the examples fit the room they're given, the first that find a game first", () => {
+  assert.deepEqual(listExamples(createContext(), 1), ["Hawks next game"]);
 });

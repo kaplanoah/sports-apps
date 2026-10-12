@@ -55,11 +55,18 @@
   color: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transition: box-shadow 0.15s;
 }
 @media (hover: hover) {
   .game-card-button:hover {
     background: color-mix(in srgb, var(--ink) 5%, transparent);
   }
+}
+/* While a press holds it (press.js), the card tints over any hover, at once, and fades as the
+   press lets go. */
+.game-card-button.is-pressed {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 7%, transparent);
+  transition: none;
 }
 .game-card-button:focus-visible {
   outline: 2px solid var(--focus-ring);

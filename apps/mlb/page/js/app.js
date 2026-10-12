@@ -16,6 +16,7 @@ import {
 import { closeGameSearch, openGameSearch, startGameSearch } from "#shared/game-search-view.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
+import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
 import {
   drawNews as drawNewsList,
@@ -257,6 +258,7 @@ async function boot() {
   startDiagnostics();
   watchReturns({ isBusy: () => session.isReordering, catchUp, pause: () => session.db.pause() });
   trackKeyboardFocus();
+  watchPresses();
   wireControls();
   session.db = createWorkerStore();
   showJobStatuses(session.db, ["news", "pitchers"]);

@@ -11,6 +11,9 @@ export const session = {
   // Every game of the season shown, which the Games view lists, null when the store has none.
   /** @type {{ games: any[] } | null} */
   schedule: null,
+  // Every player on a team's roster in the season shown, for search, null when the store has none.
+  /** @type {{ players: import("./search-pages.js").IndexedPlayer[] } | null} */
+  playerIndex: null,
   // The news cards, null when the store has none, and undefined until the store or the page's
   // last showing says.
   /** @type {{ cards: import("#shared/news-picks.js").NewsCard[] } | null | undefined} */
