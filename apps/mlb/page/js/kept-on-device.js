@@ -1,6 +1,7 @@
 // What this device keeps for each season: its ranking, and when it last dismissed the Updates box.
 
 import { createViewerChoice } from "#shared/device-storage.js";
+import { watchNoteDismissals } from "#shared/updates.js";
 
 const isPlainObject = (value) => !!value && typeof value === "object" && !Array.isArray(value);
 
@@ -53,4 +54,5 @@ export const keepSeenAt = (year, at) =>
 export function watchKeptChoices(onChange) {
   rankings.watch(onChange);
   seenAtBySeason.watch(onChange);
+  watchNoteDismissals(onChange);
 }

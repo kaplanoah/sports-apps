@@ -109,6 +109,9 @@
   color: var(--ink-dim);
   padding-left: 92px;
 }
+.updates-notes .updates-list .more {
+  padding-left: 0;
+}
 /* An update about one game opens it with a button over the whole line, like a game's row, under
    game-row.css's .game-open. The text sits above it and lets taps through, but for a team's name
    under a mouse, which opens the team's sheet. */

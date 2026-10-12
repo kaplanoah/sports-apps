@@ -4,7 +4,7 @@ import { describeEntry, describeUpdate } from "./entry-text.js";
 import { readCalendarDate } from "#shared/days.js";
 import { isTouchDevice } from "#shared/device.js";
 import { html } from "#shared/html.js";
-import { listFreshNotes, showUpdates } from "#shared/updates.js";
+import { dismissNotes, listNotesToShow, showUpdates } from "#shared/updates.js";
 import { keepSeenAt, readSeenAt } from "./kept-on-device.js";
 import { RELEASE_NOTES } from "./release-notes.js";
 import { session, readSeasonYear } from "./session.js";
@@ -40,8 +40,6 @@ const FIRST_VISIT_SPAN_MS = 24 * 60 * 60 * 1000;
 const readActiveSeenAt = () => readSeenAt(session.activeYear);
 
 const isCurrentSeason = () => session.activeYear === readSeasonYear();
-
-const listFreshReleaseNotes = () => listFreshNotes(RELEASE_NOTES, readActiveSeenAt());
 
 // Until its first dismissal, the box lists the day of updates up to the newest, not the whole
 // season, which a new store notices all at once.
@@ -130,18 +128,16 @@ export function renderUpdates() {
   const updates = isShown ? listUpdates() : [];
   showUpdates(/** @type {HTMLElement} */ (document.getElementById("updates")), updates, {
     dismiss: dismissUpdates,
-    notes: isShown ? listFreshReleaseNotes() : [],
+    notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
     today: readCalendarDate(readMlbDay(Date.now())),
   });
 }
 
-// Updates are stamped by the Worker's clock, and a note by the time it was given, so the dismissal
-// goes by the newest of them, not by this device's clock, which can be off.
+// Updates are stamped by the Worker's clock, so the dismissal goes by the newest of them, not by
+// this device's clock, which can be off.
 function dismissUpdates() {
-  const newest = Math.max(
-    ...listFreshUpdates().flatMap((group) => group.map(readNoticedAt)),
-    ...listFreshReleaseNotes().map((note) => note.at),
-  );
-  keepSeenAt(session.activeYear, newest);
+  const noticed = listFreshUpdates().flatMap((group) => group.map(readNoticedAt));
+  if (noticed.length) keepSeenAt(session.activeYear, Math.max(...noticed));
+  dismissNotes(RELEASE_NOTES);
   renderUpdates();
 }

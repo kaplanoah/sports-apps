@@ -16,16 +16,20 @@ function finishDreamAtMystics(season) {
   return season;
 }
 
+const CHANNELS_NOTE = { at: "2026-09-30T20:55:00Z", text: "Tap a game, then <b>Channels</b>." };
+
 /**
- * Serves the page a release note in place of the app's own, out an hour before the harness's now.
+ * Serves the page release notes in place of the app's own, by default one out an hour before the
+ * harness's now.
  * @param {import("@playwright/test").Page} page
+ * @param {{ at: string, text: string }[]} [notes]
  */
-const serveReleaseNote = (page) =>
+const serveReleaseNote = (page, notes = [CHANNELS_NOTE]) =>
   page.route("**/js/release-notes.js", (route) =>
     route.fulfill({
       contentType: "text/javascript",
       body: `import { html } from "#shared/html.js";
-export const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: html\`Tap a game, then <b>Channels</b>.\` }];`,
+export const RELEASE_NOTES = [${notes.map((note) => `{ at: "${note.at}", text: html\`${note.text}\` }`).join(", ")}];`,
     }),
   );
 
@@ -206,6 +210,46 @@ test.describe("on a phone, with a release note out", () => {
     await page.reload();
     await expect(page.locator(".series").first()).toBeVisible();
     await expect(updates).toBeHidden();
+  });
+
+  test("a new phone lists the notes from the last two weeks, from before the latest finals too, the newest three and how many more under them", async ({
+    page,
+  }) => {
+    await serveReleaseNote(page, [
+      CHANNELS_NOTE,
+      { at: "2026-09-28T15:00:00Z", text: "Rosters" },
+      { at: "2026-09-27T15:00:00Z", text: "News" },
+      { at: "2026-09-20T15:00:00Z", text: "Scores" },
+      { at: "2026-09-10T15:00:00Z", text: "Brackets" },
+    ]);
+    await openApp(page, { isShowingUpdates: true });
+    const notes = page.locator("#updates .updates-notes");
+
+    await expect(notes.locator(".what")).toHaveText([
+      "Tap a game, then Channels.",
+      "Rosters",
+      "News",
+    ]);
+    await expect(notes.locator(".more")).toHaveText("and 1 more");
+    const readTextLeft = (element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().left;
+    };
+    const noteLeft = await notes.locator(".what").first().evaluate(readTextLeft);
+    expect(await notes.locator(".more").evaluate(readTextLeft)).toBe(noteLeft);
+  });
+
+  test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {
+    await serveReleaseNote(page);
+    await openApp(page);
+    await expect(page.locator("#updates .updates-notes .what")).toHaveCount(1);
+
+    await keepInOtherTab(page, "releaseNotesShownUntil", {
+      [CHANNELS_NOTE.at]: Date.parse("2026-09-30T21:00:00Z"),
+    });
+
+    await expect(page.locator("#updates")).toBeHidden();
   });
 });
 
