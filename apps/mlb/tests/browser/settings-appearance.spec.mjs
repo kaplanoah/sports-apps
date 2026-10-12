@@ -1,0 +1,115 @@
+import { test, expect, openApp, openSettings } from "./harness.mjs";
+import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+
+test.use({ contextOptions: { reducedMotion: "reduce" } });
+
+const readBackground = (page) =>
+  page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+const BALL = "rgb(245, 241, 230)";
+const NIGHT_GAME = "rgb(13, 31, 22)";
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {"light" | "dark"} theme
+ */
+async function expectTheme(page, theme) {
+  const isDark = theme === "dark";
+  await expect.poll(() => readBackground(page)).toBe(isDark ? NIGHT_GAME : BALL);
+  await expect(page.locator("#homeScreenIcon")).toHaveAttribute(
+    "href",
+    isDark ? "icon-180.png" : "icon-light-180.png",
+  );
+  await expect(page.locator("#tabIcon")).toHaveAttribute(
+    "href",
+    isDark ? "icon.svg" : "icon-light.svg",
+  );
+  await expect(page.locator("#themeColor")).toHaveAttribute(
+    "content",
+    isDark ? "#0d1f16" : "#f5f1e6",
+  );
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {string} choice
+ */
+async function chooseAppearance(page, choice) {
+  await openSettings(page);
+  await page
+    .getByRole("radiogroup", { name: "Appearance" })
+    .getByRole("radio", { name: choice, exact: true })
+    .check();
+  await page.keyboard.press("Escape");
+}
+
+test("on System, the page and its icons follow the phone's dark or light setting", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await openApp(page);
+  await expect(page.locator('input[name="appearance"][value="auto"]')).toBeChecked();
+  await expectTheme(page, "dark");
+  await page.emulateMedia({ colorScheme: "light" });
+  await expectTheme(page, "light");
+});
+
+test("choosing Night Game or Ball overrides the phone, and the choice stays after a reload", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openApp(page);
+  await chooseAppearance(page, "Night Game");
+  await expectTheme(page, "dark");
+  await page.reload();
+  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("dark");
+  await expectTheme(page, "dark");
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await chooseAppearance(page, "Ball");
+  await expectTheme(page, "light");
+  await chooseAppearance(page, "System");
+  await expectTheme(page, "dark");
+});
+
+test("a look chosen in another tab shows in this one", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openApp(page);
+  await expectTheme(page, "light");
+
+  await keepInOtherTab(page, "appearance", "dark");
+
+  await expectTheme(page, "dark");
+  await openSettings(page);
+  await expect(page.getByRole("radio", { name: "Night Game" })).toBeChecked();
+});
+
+test("changing the appearance says how to match the home-screen icon", async ({ page }) => {
+  await openApp(page);
+  await openSettings(page);
+  const note = page.locator("#appearanceNote");
+  await expect(note).toBeHidden();
+  await page.getByRole("radio", { name: "Night Game" }).check();
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(/Apple sets a home-screen icon only when the page is added/);
+});
+
+test("Appearance sits under Notifications, above the News switches, each choice showing the icon it offers", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSettings(page);
+  const appearance = page.locator("#settingsDialog .appearance-row");
+  const news = page.locator("#settingsDialog .settings-news");
+  const [appearanceBox, newsBox] = await Promise.all([
+    appearance.boundingBox(),
+    news.boundingBox(),
+  ]);
+  expect(appearanceBox.y + appearanceBox.height).toBeLessThanOrEqual(newsBox.y);
+  await expect(appearance.locator(".appearance-choice")).toHaveText([
+    "System",
+    "Ball",
+    "Night Game",
+  ]);
+  for (const icon of await appearance.locator(".appearance-icon").all())
+    expect(await icon.boundingBox()).toMatchObject({ width: 60, height: 60 });
+});

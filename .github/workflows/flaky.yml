@@ -51,6 +51,7 @@ jobs:
           key: node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
       - if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
+      # Every test runs to the end, however many fail, so the issue names each flaky one.
       - name: Run the browser tests over and over
         shell: bash
         env:
@@ -59,7 +60,7 @@ jobs:
           REPEAT: ${{ inputs.repeat || '3' }}
         run: |
           read -ra tests <<< "$TESTS"
-          options=(--repeat-each="$REPEAT" --retries=0)
+          options=(--repeat-each="$REPEAT" --retries=0 --max-failures=0)
           if [ -n "$PROJECT" ]; then options+=(--project="$PROJECT"); fi
           npm run test:browser -- "${options[@]}" "${tests[@]}"
       # Only the nightly run of main reports, since a run by hand may test a branch.
