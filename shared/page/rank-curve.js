@@ -5,8 +5,9 @@
 // shows its playoffs against the playoff field's. A stat where fewer is better runs from the most to
 // the fewest, so a better rank always sits further right. A player not yet ranked, but a quarter of
 // the way to what qualifying takes, shows where he would rank, marked with a line and no dot, which
-// stops at the curve's end when his number is past it. Each app colors the curve, the line, and the
-// marks from its own stylesheet.
+// stops at the curve's end when his number is past it. The marks sit in a box over the curve, so an
+// app can draw them a little inside its ends. Each app colors the curve, the line, and the marks
+// from its own stylesheet.
 
 import { html } from "./html.js";
 import { formatOrdinal } from "./ordinal.js";
@@ -124,7 +125,7 @@ export function renderSpreadCurve(values, marks, isFewestFirst = false) {
       <path class="player-curve-area" d="${area}"></path>
       <path class="player-curve-edge" d="${edge}"></path>
     </svg>
-    ${marks.map(renderMark)}
+    <span>${marks.map(renderMark)}</span>
   </span>`;
 }
 
@@ -144,18 +145,16 @@ function renderCurve(stat, isFewestFirst) {
  * Where a player not yet ranked would rank, as his rank's place is written.
  * @param {number} rank
  */
-export const renderWouldRank = (rank) =>
-  html`would be <span class="player-rank-place">${formatOrdinal(rank)}</span>`;
+export const describeWouldRank = (rank) => `would be ${formatOrdinal(rank)}`;
 
 /** @param {RankedStat} stat */
-function renderRankText(stat) {
-  if (stat.rank != null)
-    return html`<span class="player-rank-place">${formatOrdinal(stat.rank)}</span> of ${stat.count}`;
-  return stat.wouldRank != null && renderWouldRank(stat.wouldRank);
+function describeRank(stat) {
+  if (stat.rank != null) return `${formatOrdinal(stat.rank)} of ${stat.count}`;
+  return stat.wouldRank != null && describeWouldRank(stat.wouldRank);
 }
 
 /** @param {RankedStat} stat */
-const renderRank = (stat) => html`<span class="player-rank">${renderRankText(stat)}</span>`;
+const renderRank = (stat) => html`<span class="player-rank">${describeRank(stat)}</span>`;
 
 /**
  * One ranked stat's row: its label, the player's number as the sheet writes it, the curve, and

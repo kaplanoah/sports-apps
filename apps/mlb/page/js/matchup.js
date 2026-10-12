@@ -25,7 +25,7 @@ import { describeInningsToQualify, measureInningsProgress } from "./qualifying.j
 import { formatInnings } from "./stat-table.js";
 import { TEAMS } from "./teams.js";
 import { formatOrdinal } from "#shared/ordinal.js";
-import { rankAmong, renderSpreadCurve, renderWouldRank } from "#shared/rank-curve.js";
+import { describeWouldRank, rankAmong, renderSpreadCurve } from "#shared/rank-curve.js";
 import { pickSideColors } from "#shared/team-colors.js";
 
 const SIDES = ["away", "home"];
@@ -146,7 +146,7 @@ const renderPendingNumber = (side) =>
 function renderRank(side, measure, wouldRank) {
   const rank = side.pitcher.ranks?.[measure.key];
   if (rank) return html`<span class="tape-rank">${formatOrdinal(rank.rank)}</span>`;
-  return wouldRank != null && html`<span class="tape-rank">${renderWouldRank(wouldRank)}</span>`;
+  return wouldRank != null && html`<span class="tape-rank">${describeWouldRank(wouldRank)}</span>`;
 }
 
 /**

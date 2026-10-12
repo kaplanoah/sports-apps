@@ -1743,6 +1743,10 @@ body.kbd .player-open:focus {
   position: relative;
   height: 18px;
 }
+.player-curve > span {
+  position: absolute;
+  inset: 0;
+}
 .player-curve svg {
   display: block;
   width: 100%;
@@ -1789,10 +1793,6 @@ body.kbd .player-open:focus {
   text-align: right;
   white-space: nowrap;
   color: var(--ink-dim);
-}
-.player-rank-place {
-  font-weight: 500;
-  color: var(--ink);
 }
 .player-rank-notes {
   display: grid;
@@ -1928,7 +1928,8 @@ body.kbd .player-open:focus {
 /* Each measure's two numbers sit under their starters, each over his rank with a dot in his club's
    color: the one that ranks higher bolder, the one that ranks lower dimmed with its dot, and an
    unranked one's dot dimmed. Each starter's mark on the curve under them takes the same color,
-   which js/matchup.js hands the tape. The numbers sit a little lower than the measure's name
+   which js/matchup.js hands the tape. The marks sit half a dot inside the curve's ends, so a dot
+   at either end sits under the number's. The numbers sit a little lower than the measure's name
    without moving it or the curve. */
 .matchup-body .tape {
   gap: 10.5px;
@@ -1955,10 +1956,10 @@ body.kbd .player-open:focus {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   column-gap: 8px;
-  padding-block: 7.5px;
+  padding-block: 7.5px 19px;
 }
-/* A rank hangs under its number, over the curve's low edge, so a number sits at the same height
-   with a rank or without one. */
+/* A rank hangs under its number, 4px clear of the curve, so a number sits at the same height with
+   a rank or without one. */
 .tape-number {
   position: relative;
   display: grid;
@@ -2012,8 +2013,8 @@ body.kbd .player-open:focus {
 .matchup-body .tape .tape-label {
   font-size: 0.84375rem;
 }
-.matchup-body .tape .player-curve {
-  height: 24px;
+.matchup-body .tape .player-curve > span {
+  inset-inline: calc(7px / 2);
 }
 /* The notes stand apart from the curves, 19.5px under the last one with the tape's gap. */
 .matchup-body .tape .tape-measure + .tape-note {
