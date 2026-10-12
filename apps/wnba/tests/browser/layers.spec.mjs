@@ -13,7 +13,7 @@ const BUDGETS = {
   Games: 14,
   Standings: 12,
   News: 9,
-  Search: 10,
+  Search: 13,
   "Team sheet, Team": 19,
   // The roster's numbers and names stay put as one table rather than two cells a player, each a
   // layer of its own.
