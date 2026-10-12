@@ -242,7 +242,7 @@ test("a player short of the WNBA's rule shows her numbers without a rank, but wh
   expect(await listStrayPeriods(page)).toEqual([]);
 });
 
-test("where a player short of the rule would rank is a hairline in her mark color through the curve, 4px above it and 3.5px past its foot, with no dot", async ({
+test("where a player short of the rule would rank is a hairline one screen pixel wide in her mark color through the curve, 4px above it and 3.5px past its foot, with no dot", async ({
   page,
 }) => {
   await openApp(page);
@@ -258,14 +258,15 @@ test("where a player short of the rule would rank is a hairline in her mark colo
     const place = (parseFloat(element.style.top) / 100) * curveBox.height + curveBox.top;
     return {
       width: box.width,
+      pixel: 1 / window.devicePixelRatio,
       above: place - box.top,
       past: box.bottom - curveBox.bottom,
-      color: getComputedStyle(element).backgroundColor,
+      color: getComputedStyle(element).borderLeftColor,
       team: getComputedStyle(curve).getPropertyValue("--team").trim(),
       dots: curve.querySelectorAll("b").length,
     };
   });
-  expect(shape.width).toBeCloseTo(0.5, 1);
+  expect(shape.width).toBe(shape.pixel);
   expect(shape.above).toBeCloseTo(4, 1);
   expect(shape.past).toBeCloseTo(3.5, 1);
   expect(shape.dots).toBe(0);

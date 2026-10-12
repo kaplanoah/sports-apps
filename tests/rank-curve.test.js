@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
+import { readDeclarations, readRule } from "./css-rules.js";
 import {
   drawSpread,
   isNearlyRanked,
@@ -28,6 +30,44 @@ test("a fewest-first curve runs from the most to the fewest, so the mark sits fu
   assert.ok(drawSpread(values, 0.5, true).left > drawSpread(values, 4, true).left);
   assert.equal(fewest.edge.split(" L").length, most.edge.split(" L").length);
   assert.notEqual(fewest.edge, most.edge);
+});
+
+test("a mark for a number past either end of the curve stops at that end, on the curve there", () => {
+  const values = [60, 70, 70, 90];
+  assert.deepEqual(drawSpread(values, 100).left, 100);
+  assert.deepEqual(drawSpread(values, 100).top, drawSpread(values, 90).top);
+  assert.deepEqual(drawSpread(values, 40).left, 0);
+  assert.deepEqual(drawSpread(values, 40).top, drawSpread(values, 60).top);
+  assert.deepEqual(drawSpread(values, 40, true).left, 100);
+  assert.match(
+    String(renderSpreadCurve(values, [{ value: 100, isProvisional: true }])),
+    /left: 100\.0%/,
+  );
+});
+
+test("each app draws a curve's lines as borders, which Safari keeps a whole number of screen pixels wide wherever they fall", () => {
+  const apps = new URL("../apps/", import.meta.url);
+  for (const app of readdirSync(apps)) {
+    const path = new URL(`${app}/page/styles.css`, apps).pathname;
+    const lines = readDeclarations(path).filter((declaration) =>
+      /\.player-curve (i\b|:is\([^)]*\bi\b)/.test(readRule(declaration)),
+    );
+    const widths = lines.filter(({ property }) => property === "width");
+    assert.deepEqual(
+      widths.map(({ value }) => value),
+      ["0"],
+      path,
+    );
+    assert.ok(
+      lines.some(({ property }) => property.startsWith("border-left")),
+      path,
+    );
+    assert.deepEqual(
+      lines.filter(({ property }) => property.startsWith("background")),
+      [],
+      path,
+    );
+  }
 });
 
 test("a rank counts only the players strictly better, so tied players share one, and the fewest can rank first", () => {
@@ -149,17 +189,18 @@ test("where a player would rank shows as a line on the curve with no dot, and th
   );
 });
 
-test("a number past either end of the curve, as a number written rounded can be, sits at that end, inside the box that holds the marks", () => {
+test("a curve's marks sit in a box of their own over it, which an app can draw inside the curve's ends", () => {
   const curve = String(
     renderSpreadCurve(
-      [6.1, 9.4, 12.98],
+      [1, 2, 3],
       [
-        { value: 13.0, className: "home" },
-        { value: 6.0, className: "away" },
+        { value: 3, className: "home" },
+        { value: 1, className: "away" },
       ],
     ),
   );
-  assert.match(curve, /<i class="home" style="left: 100\.0%;/);
-  assert.match(curve, /<i class="away" style="left: 0\.0%;/);
-  assert.match(curve, /<\/svg>\s*<span><i class="home"/);
+  assert.match(
+    curve,
+    /<\/svg>\s*<span><i class="home" [^>]*><\/i><b class="home" [^>]*><\/b><i class="away"/,
+  );
 });

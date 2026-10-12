@@ -4,9 +4,10 @@
 // beside another to measure it against, each a dot on a line across a range, as a WNBA team's sheet
 // shows its playoffs against the playoff field's. A stat where fewer is better runs from the most to
 // the fewest, so a better rank always sits further right. A player not yet ranked, but a quarter of
-// the way to what qualifying takes, shows where he would rank, marked with a line and no dot. The
-// marks sit in a box over the curve, so an app can draw them a little inside its ends. Each app
-// colors the curve, the line, and the marks from its own stylesheet.
+// the way to what qualifying takes, shows where he would rank, marked with a line and no dot, which
+// stops at the curve's end when his number is past it. The marks sit in a box over the curve, so an
+// app can draw them a little inside its ends. Each app colors the curve, the line, and the marks
+// from its own stylesheet.
 
 import { html } from "./html.js";
 import { formatOrdinal } from "./ordinal.js";
@@ -43,7 +44,8 @@ function measureBandwidth(values) {
 /**
  * The shape of every ranked player's numbers in a stat, smoothed, across the drawing from the
  * lowest to the highest, or the other way round when the fewest ranks first, and where a number
- * sits on it, as a share of the drawing from 0 to 100.
+ * sits on it, as a share of the drawing from 0 to 100, a number past either end sitting at that
+ * end.
  * @param {number[]} values from the lowest
  * @param {boolean} isFewestFirst
  */
@@ -74,12 +76,12 @@ function drawCurve(values, isFewestFirst) {
   return {
     area: `M0,${CURVE_HEIGHT} L${line} L${CURVE_WIDTH},${CURVE_HEIGHT} Z`,
     edge: `M${line}`,
-    /** @param {number} value held at either end, since a number written rounded can pass it */
+    /** @param {number} value */
     place: (value) => {
-      const share = Math.min(1, Math.max(0, (value - low) / (high - low)));
+      const onCurve = Math.min(high, Math.max(low, value));
       return {
-        left: high > low ? placeShare(share) * 100 : 50,
-        top: (placeHeight(measureDensity(value)) / CURVE_HEIGHT) * 100,
+        left: high > low ? placeShare((onCurve - low) / (high - low)) * 100 : 50,
+        top: (placeHeight(measureDensity(onCurve)) / CURVE_HEIGHT) * 100,
       };
     },
   };
