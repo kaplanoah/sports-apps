@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { html } from "../shared/page/html.js";
-import { listFreshNotes, renderUpdates } from "../shared/page/updates.js";
+import {
+  dismissNotes,
+  endNoteClocks,
+  listFreshNotes,
+  listNotesToShow,
+  renderUpdates,
+  startNoteClocks,
+} from "../shared/page/updates.js";
 import { normalizeSpaces } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
@@ -157,15 +164,88 @@ test("a box with only release notes heads them New in the app, beside its dismis
   assert.doesNotMatch(markup.text, /updates-section|class="when"/);
 });
 
-test("a release note shows from its time until the box is dismissed after it, or two weeks pass", () => {
-  const notes = [{ at: "2026-10-01T17:00:00Z", text: "Channels" }];
-  const day = 24 * 60 * 60 * 1000;
-  const listTexts = (seenAt, now) => listFreshNotes(notes, seenAt, now).map((note) => note.text);
+const DAY = 24 * 60 * 60 * 1000;
 
-  assert.deepEqual(listTexts(0, at("2026-10-01T18:00:00Z")), ["Channels"]);
-  assert.deepEqual(listTexts(at("2026-10-01T16:00:00Z"), at("2026-10-01T18:00:00Z")), ["Channels"]);
-  assert.deepEqual(listTexts(at("2026-10-01T17:00:00Z"), at("2026-10-01T18:00:00Z")), []);
-  assert.deepEqual(listTexts(0, at("2026-10-01T16:00:00Z")), [], "not out yet");
-  assert.deepEqual(listTexts(0, at("2026-10-01T17:00:00Z") + 14 * day - 1), ["Channels"]);
-  assert.deepEqual(listTexts(0, at("2026-10-01T17:00:00Z") + 14 * day), []);
+/**
+ * @param {import("../shared/page/updates.js").ReleaseNote[]} notes
+ * @param {import("../shared/page/updates.js").NoteClocks | null} clocks
+ * @param {number} now
+ */
+const listNoteTexts = (notes, clocks, now) =>
+  listFreshNotes(notes, clocks, now).map((note) => note.text);
+
+test("a device's first look shows each note out for less than two weeks", () => {
+  const notes = [
+    { at: "2026-10-01T17:00:00Z", text: "Channels" },
+    { at: "2026-09-10T17:00:00Z", text: "News" },
+  ];
+  const firstLook = at("2026-10-02T17:00:00Z");
+  const clocks = startNoteClocks(notes, null, firstLook);
+
+  assert.deepEqual(listNoteTexts(notes, clocks, firstLook), ["Channels"]);
+  assert.deepEqual(listNoteTexts(notes, clocks, at("2026-10-01T17:00:00Z") + 14 * DAY - 1), [
+    "Channels",
+  ]);
+  assert.deepEqual(listNoteTexts(notes, clocks, at("2026-10-01T17:00:00Z") + 14 * DAY), []);
+});
+
+test("a note out while the device was away shows for two weeks from when it first shows", () => {
+  const notes = [{ at: "2026-10-01T17:00:00Z", text: "Channels" }];
+  const back = at("2026-12-01T17:00:00Z");
+  const clocks = startNoteClocks(notes, {}, back);
+
+  assert.deepEqual(listNoteTexts(notes, clocks, back), ["Channels"]);
+  assert.deepEqual(listNoteTexts(notes, clocks, back + 14 * DAY - 1), ["Channels"]);
+  assert.deepEqual(listNoteTexts(notes, clocks, back + 14 * DAY), []);
+});
+
+test("a note shows from its time, and a dismissal ends every note out by then", () => {
+  const notes = [
+    { at: "2026-10-03T17:00:00Z", text: "Search" },
+    { at: "2026-10-01T17:00:00Z", text: "Channels" },
+  ];
+  const beforeSearch = at("2026-10-02T17:00:00Z");
+  const clocks = startNoteClocks(notes, {}, beforeSearch);
+
+  assert.deepEqual(Object.keys(clocks), ["2026-10-01T17:00:00Z"], "not out yet");
+  assert.deepEqual(listNoteTexts(notes, clocks, beforeSearch), ["Channels"]);
+
+  const dismissed = endNoteClocks(notes, clocks, beforeSearch);
+  assert.deepEqual(listNoteTexts(notes, dismissed, beforeSearch), []);
+  const afterSearch = at("2026-10-04T17:00:00Z");
+  assert.deepEqual(
+    listNoteTexts(notes, startNoteClocks(notes, dismissed, afterSearch), afterSearch),
+    ["Search"],
+  );
+});
+
+test("the device keeps when each note it shows stops showing, and its dismissal", () => {
+  const notes = [{ at: "2026-10-01T17:00:00Z", text: "Channels" }];
+  const firstLook = at("2026-10-02T17:00:00Z");
+
+  assert.deepEqual(
+    listNotesToShow(notes, firstLook).map((note) => note.text),
+    ["Channels"],
+  );
+  const awayNotes = [{ at: "2026-11-01T17:00:00Z", text: "Search" }, ...notes];
+  const back = at("2026-12-01T17:00:00Z");
+  assert.deepEqual(
+    listNotesToShow(awayNotes, back).map((note) => note.text),
+    ["Search"],
+  );
+
+  dismissNotes(awayNotes, back + DAY);
+  assert.deepEqual(listNotesToShow(awayNotes, back + DAY), []);
+});
+
+test("the box lists the newest three release notes and how many more", () => {
+  const notes = ["Search", "Highlights", "Rosters", "News", "Channels"].map((text, index) => ({
+    at: at("2026-10-01T17:00:00Z") - index * DAY,
+    text,
+  }));
+  const markup = renderUpdates([], notes, NOW);
+
+  assert.deepEqual(readCells(markup, "what"), ["Search", "Highlights", "Rosters"]);
+  assert.match(markup.text, /<li class="more">and 2 more<\/li>/);
+  assert.doesNotMatch(renderUpdates([], notes.slice(0, 3), NOW).text, /class="more"/);
 });
