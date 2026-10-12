@@ -2599,12 +2599,12 @@ table.player-game td {
    spread, with her place on it in her team's mark color for the theme, which js/sheet-colors.js
    hands it. */
 .player-ranks {
-  --team: var(--mark-light, var(--ink-dim));
+  --rank-mark: var(--mark-light, var(--ink-dim));
   display: grid;
   gap: 12px;
 }
 :root[data-theme="dark"] .player-ranks {
-  --team: var(--mark-dark, var(--ink-dim));
+  --rank-mark: var(--mark-dark, var(--ink-dim));
 }
 .player-rank-row {
   display: grid;
@@ -2625,54 +2625,7 @@ table.player-game td {
   font-weight: 600;
 }
 .player-curve {
-  position: relative;
-  height: 18px;
   margin-left: 7px;
-}
-.player-curve > span {
-  position: absolute;
-  inset: 0;
-}
-.player-curve svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.player-curve-area {
-  fill: color-mix(in srgb, var(--ink-dim) 16%, transparent);
-}
-.player-curve-edge {
-  fill: none;
-  stroke: color-mix(in srgb, var(--ink-dim) 55%, transparent);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-/* Each line is a border, which Safari draws a whole number of screen pixels wide wherever it falls:
-   5 on a phone, and the hairline 2. A box half a pixel wide draws 1 pixel at some places and 2 at
-   others. */
-.player-curve i {
-  position: absolute;
-  bottom: 0;
-  width: 0;
-  border-left: 1.7333px solid var(--team);
-  translate: -50% 0;
-}
-/* Where a player not yet ranked would rank is a hairline with no dot, reaching 4px above the curve
-   and 3.5px under its foot. */
-.player-curve i.provisional {
-  bottom: -3.5px;
-  border-left-width: 0.7333px;
-  margin-top: -4px;
-}
-.player-curve b {
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  translate: -50% -50%;
-  border-radius: 50%;
-  background: var(--team);
-  box-shadow: 0 0 0 2px var(--sheet);
 }
 .player-rank {
   font-size: var(--size-glance);
@@ -2710,7 +2663,7 @@ table.player-game td {
   border-radius: 50%;
 }
 .placed-line .own {
-  background: var(--team);
+  background: var(--rank-mark);
 }
 .placed-line .other {
   background: color-mix(in srgb, var(--ink-dim) 45%, var(--sheet));
