@@ -4,7 +4,8 @@
  * listens for it, so the button reaches over the whole row. Safari never lets a table's row hold
  * what reaches over it, so the cell around the button does: the button reaches past both sides of
  * its .row-button-cell, and the .row-button-clip around the table, as wide as the table, cuts it
- * off at the table's sides. Apps link it after team-sheet.css, before their own styles.css.
+ * off at the table's sides. A press tints the row in chrome.css's --ink. Apps link it after
+ * team-sheet.css, before their own styles.css.
  */
 
 .row-button-clip {
@@ -13,6 +14,15 @@
 }
 .row-button-cell {
   position: relative;
+}
+/* While a press holds the button (press.js), its row's cells tint, at once, over any color of their
+   own, and fade as the press lets go. */
+tr:has(> .row-button-cell) > td {
+  transition: box-shadow 0.15s;
+}
+tr:has(> .row-button-cell .is-pressed) > td {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 10%, transparent);
+  transition: none;
 }
 .row-button-cell button::after {
   content: "";

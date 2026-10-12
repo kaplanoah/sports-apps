@@ -21,6 +21,7 @@ import {
 import { html, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { findLatestFinal, findPages } from "./page-search.js";
+import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
 import {
   EXAMPLE_COUNT,
@@ -542,9 +543,10 @@ function followTap(event) {
   const target = /** @type {Element} */ (event.target);
   const chosen = /** @type {HTMLElement | null} */ (target.closest("[data-search]"));
   const place = /** @type {HTMLElement | null} */ (target.closest("[data-place]"));
-  if (chosen) runSearch(chosen.dataset.search ?? "");
-  else if (place) league?.openPlace?.(place.dataset.place ?? "");
-  else if (target.closest(".search-games-line")) showGamesOnly();
+  const gamesLine = target.closest(".search-games-line");
+  if (chosen) runAfterPress(chosen, () => runSearch(chosen.dataset.search ?? ""));
+  else if (place) runAfterPress(place, () => league?.openPlace?.(place.dataset.place ?? ""));
+  else if (gamesLine) runAfterPress(gamesLine, showGamesOnly);
   else if (target.closest(".search-cancel")) closeGameSearch();
   else if (target.closest(".search-clear")) {
     writeQuery("");

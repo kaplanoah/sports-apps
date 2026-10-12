@@ -21,6 +21,7 @@ import {
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
+import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
 import {
   openPageTab,
@@ -277,6 +278,7 @@ async function boot() {
   startAppearance(LOOKS);
   watchReturns({ catchUp, pause: () => session.db.pause() });
   trackKeyboardFocus();
+  watchPresses([".team-line .team-open"]);
   startPageTabs();
   setTabStart("games", returnGamesToToday);
   setTabStart("search", focusSearch);

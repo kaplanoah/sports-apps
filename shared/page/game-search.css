@@ -9,6 +9,7 @@
  *   --edge         the line inside the field's edge
  *   --action       Cancel and the field's caret, where to tap
  *   --ink-hover    an example, a row, or the line over the games under the mouse
+ * and a pressed row tints in chrome.css's --ink.
  *   --text         the rows' face
  *   --search-face  the field's face, drawn at --size-field as big as --text at --size-read
  *   --search-words-lift  the room under a row's words that looks them centered in the row, in
@@ -253,6 +254,19 @@
 .search-games-line b {
   font-weight: 600;
   color: var(--ink);
+}
+
+/* While a press holds a row (press.js), it tints at once, and fades as the press lets go. */
+.search-example,
+.search-suggestion,
+.search-games-line {
+  transition: box-shadow 0.15s;
+}
+.search-example.is-pressed,
+.search-suggestion.is-pressed,
+.search-games-line.is-pressed {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 10%, transparent);
+  transition: none;
 }
 
 @media (hover: hover) {
