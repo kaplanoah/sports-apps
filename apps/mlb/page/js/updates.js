@@ -128,7 +128,7 @@ export function renderUpdates() {
   const updates = isShown ? listUpdates() : [];
   showUpdates(/** @type {HTMLElement} */ (document.getElementById("updates")), updates, {
     dismiss: dismissUpdates,
-    notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
+    notes: isShown ? listNotesToShow(RELEASE_NOTES, readActiveSeenAt()) : [],
     today: readCalendarDate(readMlbDay(Date.now())),
   });
 }
