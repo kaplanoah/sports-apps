@@ -304,11 +304,13 @@ const placeGameParts = (rows, context) =>
   });
 
 /**
- * The line saying how the search read its words, right over the games, which a tap opens whole.
+ * The line saying how the search read its words, right over the games, which a tap opens whole,
+ * with the words as it read them, a half-typed team's finished.
  * @param {{ lead: string, facts: string[] }} read
+ * @param {string} readText
  */
-const renderGamesLine = (read) =>
-  html`<button type="button" class="search-games-line">
+const renderGamesLine = (read, readText) =>
+  html`<button type="button" class="search-games-line" data-games="${readText}">
     <span class="search-games-words">${renderRead(read)}</span>${CARET}
   </button>`;
 
@@ -378,6 +380,16 @@ function readWhileTyping(text, suggestions, context) {
 }
 
 /**
+ * The suggestions less a team whose page shows under them, since its page's row stands for it.
+ * @param {Suggestion[]} suggestions
+ * @param {ShownRow[]} rows
+ */
+function dropTeamsShown(suggestions, rows) {
+  const shown = new Set(rows.flatMap((row) => (row.kind === "team" ? [row.team.code] : [])));
+  return suggestions.filter(({ mark }) => mark.kind !== "team" || !shown.has(mark.code));
+}
+
+/**
  * The pages the words ask for, and the words left for the search of games, or null when they ask
  * for no games. A half-typed word may start a player's name or a place's, so the words as typed go
  * first, and the words as the line reads them only when those find no page.
@@ -423,13 +435,11 @@ function draw() {
     placeOnce(nameShown("", false), context.today);
     return;
   }
-  const suggestions = isTyping ? listSuggestions(query, context) : [];
-  const {
-    pages,
-    rows: pageRows,
-    gameText,
-  } = readPages(text, readWhileTyping(text, suggestions, context), context);
+  const typed = isTyping ? listSuggestions(query, context) : [];
+  const readText = readWhileTyping(text, typed, context);
+  const { pages, rows: pageRows, gameText } = readPages(text, readText, context);
   const rows = placeGameParts(pageRows, context);
+  const suggestions = dropTeamsShown(typed, rows);
   const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];
   const search = gameText === null ? null : readSearch(gameText, context);
   const found = search && findSearchGames(search, context);
@@ -453,7 +463,7 @@ function draw() {
     }${others.length > 0 && renderSuggestions(others, "")}${
       read &&
       shownGames.length > 0 &&
-      html`${renderGamesLine(read)}${renderDays(league.listDays(shownGames, Date.now()))}`
+      html`${renderGamesLine(read, readText)}${renderDays(league.listDays(shownGames, Date.now()))}`
     }`,
   );
   placeOnce(nameShown(text, true), context.today);
@@ -490,8 +500,13 @@ function runSearch(text) {
   draw();
 }
 
-// A tap on the line over the games shows them whole, as a search of games alone does.
-function showGamesOnly() {
+/**
+ * A tap on the line over the games shows them whole, as a search of games alone does, with the
+ * words the line read in the field.
+ * @param {string} text
+ */
+function showGamesOnly(text) {
+  writeQuery(text);
   isTyping = false;
   isGamesOnly = true;
   findInput()?.blur();
@@ -543,10 +558,10 @@ function followTap(event) {
   const target = /** @type {Element} */ (event.target);
   const chosen = /** @type {HTMLElement | null} */ (target.closest("[data-search]"));
   const place = /** @type {HTMLElement | null} */ (target.closest("[data-place]"));
-  const gamesLine = target.closest(".search-games-line");
+  const gamesLine = /** @type {HTMLElement | null} */ (target.closest(".search-games-line"));
   if (chosen) runAfterPress(chosen, () => runSearch(chosen.dataset.search ?? ""));
   else if (place) runAfterPress(place, () => league?.openPlace?.(place.dataset.place ?? ""));
-  else if (gamesLine) runAfterPress(gamesLine, showGamesOnly);
+  else if (gamesLine) runAfterPress(gamesLine, () => showGamesOnly(gamesLine.dataset.games ?? ""));
   else if (target.closest(".search-cancel")) closeGameSearch();
   else if (target.closest(".search-clear")) {
     writeQuery("");

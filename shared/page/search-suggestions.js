@@ -1,10 +1,11 @@
 // What a search offers as it's typed, and before anything is. The word being typed is finished
 // first, a team before a place or a date, and the team that plays soonest before another that starts
 // the same; after a joining word like "in" or "at", the words that can follow it; then whole
-// searches built on a team it already names, which fit where the season stands: its next game while
-// it has one, its playoffs while they're on, and its last game once it's done. A team's name that
-// is also a place, like "New York", has the games played there as its other reading. Nothing is
-// offered that would find no games. Runs in the page and in Node, so it uses no DOM.
+// searches built on a team it already names, two at most, which fit where the season stands: its
+// next game while it has one, its playoffs while they're on, and its last game once it's done. A
+// team's name that is also a place, like "New York", has the games played there as its other
+// reading. Nothing is offered that would find no games. Runs in the page and in Node, so it uses no
+// DOM.
 
 import { readMonthDays } from "./search-dates.js";
 import { countGames, findSearchGames, isGameInPlace, readSearch } from "./game-search.js";
@@ -20,6 +21,8 @@ import { readTokens, splitWords } from "./search-words.js";
 /** @typedef {{ text: string, meaning: Meaning | null }} Candidate */
 
 const SUGGESTION_COUNT = 4;
+// Whole searches sit over the pages and games a search finds, so only a couple show.
+const WHOLE_SEARCH_COUNT = 2;
 // After "in", a couple of places, then the months, so both kinds show.
 const PLACE_COUNT = 2;
 export const EXAMPLE_COUNT = 5;
@@ -375,13 +378,16 @@ function describeRow(meaning, { search, found }) {
 function listUseful(candidates, text, context) {
   const seen = new Set([readWords(text)]);
   const useful = [];
+  let wholeSearches = 0;
   for (const candidate of candidates) {
     const key = readWords(candidate.text);
-    if (seen.has(key)) continue;
+    const isWholeSearch = !candidate.meaning;
+    if (seen.has(key) || (isWholeSearch && wholeSearches === WHOLE_SEARCH_COUNT)) continue;
     seen.add(key);
     const result = findGames(candidate.text, context);
-    if (result.found.games.length)
-      useful.push({ text: candidate.text, ...describeRow(candidate.meaning, result) });
+    if (!result.found.games.length) continue;
+    useful.push({ text: candidate.text, ...describeRow(candidate.meaning, result) });
+    if (isWholeSearch) wholeSearches += 1;
     if (useful.length === SUGGESTION_COUNT) break;
   }
   return useful;

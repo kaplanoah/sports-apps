@@ -234,7 +234,7 @@ test("an example tapped runs its search and puts the keyboard away", async ({ pa
   await expect(page.locator("#gameSearch .listed-day")).toHaveCount(2);
 });
 
-test("while words are typed, suggestions, then the team's pages, then its games line sit over its games from today, and a suggestion tapped runs its search", async ({
+test("while words are typed, two whole searches, then the team's pages in place of its name, then its games line sit over its games from today, and a suggestion tapped runs its search", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -243,10 +243,8 @@ test("while words are typed, suggestions, then the team's pages, then its games 
   await findInput(page).pressSequentially("Lib");
 
   await expect(findRows(page)).toHaveText([
-    "Liberty",
     "Liberty next game",
     "Liberty playoffs",
-    "Liberty at home",
     "New York Liberty",
     "RosterNew York Liberty",
   ]);
@@ -289,6 +287,27 @@ test("a sent team shows its pages over its games line, which opens its games alo
   await expect(findRows(page).first()).toHaveText("Liberty next game");
   await expect(findRows(page).filter({ hasText: "New York Liberty" })).toHaveCount(2);
   await expect(findGamesLine(page)).toBeVisible();
+});
+
+test("the games line, as tall as a row, opens the games it read with its words in the field, a half-typed team's finished", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await findInput(page).pressSequentially("Lib");
+  await expect(findGamesLine(page)).toHaveText("Liberty•52 games");
+
+  const [line, row] = await Promise.all([
+    findGamesLine(page).boundingBox(),
+    findRows(page).first().boundingBox(),
+  ]);
+  expect(line?.height).toBe(row?.height);
+
+  await findGamesLine(page).tap();
+
+  await expect(findInput(page)).toHaveValue("Liberty");
+  await expect(findLine(page)).toHaveText("Liberty•52 games");
+  await expect.poll(() => readTopDay(page)).toBe("2026-10-04");
 });
 
 test("words that ask only for games go straight to them, and one whose games are all past rests at its end", async ({

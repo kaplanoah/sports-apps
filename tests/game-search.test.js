@@ -303,19 +303,14 @@ test("a word being typed is finished first, the team playing soonest before anot
     "Hornets HOR",
     "Hornets next game search",
     "Hornets at home search",
-    "Hornets vs Foxes search",
+    "home search",
   ]);
   assert.deepEqual(suggest("H").slice(0, 2), ["Hornets HOR", "Hornets next game search"]);
   assert.equal(suggest("Hil")[0], "Hillside FOX");
 });
 
-test("a whole search fits where the season stands, and nothing is offered that would find no games", () => {
-  assert.deepEqual(suggest("Hawks "), [
-    "Hawks next game search",
-    "Hawks playoffs search",
-    "Hawks at home search",
-    "Hawks vs Owls search",
-  ]);
+test("a whole search fits where the season stands, two at most, and nothing is offered that would find no games", () => {
+  assert.deepEqual(suggest("Hawks "), ["Hawks next game search", "Hawks playoffs search"]);
   const finals = GAMES.map((game) => ({
     ...game,
     state: /** @type {const} */ ("final"),

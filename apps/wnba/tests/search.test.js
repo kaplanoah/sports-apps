@@ -156,7 +156,7 @@ test("an arena city no place covers becomes a place of its own", () => {
   assert.ok(terms.places.some((place) => place.name === "Rogers Arena" && place.isArena));
 });
 
-test("the examples before typing and the suggestions as you type each find games", () => {
+test("the examples before typing and the suggestions as you type each find games, with two whole searches at most", () => {
   assert.deepEqual(listExamples(CONTEXT), [
     "Dream at Valkyries",
     "Aces in New York",
@@ -166,12 +166,7 @@ test("the examples before typing and the suggestions as you type each find games
   ]);
   const texts = (/** @type {string} */ text) =>
     listSuggestions(text, CONTEXT).map((row) => row.text);
-  assert.deepEqual(texts("Lib"), [
-    "Liberty",
-    "Liberty next game",
-    "Liberty playoffs",
-    "Liberty at home",
-  ]);
+  assert.deepEqual(texts("Lib"), ["Liberty", "Liberty next game", "Liberty playoffs"]);
   assert.deepEqual(texts("Liberty th"), [
     "Liberty this week",
     "Liberty this weekend",

@@ -231,13 +231,16 @@
   height: 14px;
   color: var(--ink-dim);
 }
-/* The line saying how the search read its words, right over the games, opening them whole. */
+/* The line saying how the search read its words, right over the games, opening them whole. It's as
+   tall as a suggestion's row, so a press tints as much of it, with its words where a line of their
+   own height would set them. */
 .search-games-line {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  margin: 14px 0 8px;
+  height: 44px;
+  margin: 0.5px 0 -5.5px;
   padding: 0;
   border: 0;
   background: none;
