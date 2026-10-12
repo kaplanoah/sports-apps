@@ -4,6 +4,7 @@ import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -226,7 +227,7 @@ test.describe("a player who is out", () => {
   });
 });
 
-test("a player short of the WNBA's rule shows her numbers without a rank, but where she would rank, and says why", async ({
+test("a player short of the WNBA's rule shows her numbers without a rank, but where she would rank, all in the dim color, and says why", async ({
   page,
 }) => {
   await openApp(page);
@@ -234,6 +235,7 @@ test("a player short of the WNBA's rule shows her numbers without a rank, but wh
 
   await expect(sheet.locator(".player-rank", { hasText: " of " })).toHaveText(["7th of 76"]);
   await expect(sheet.locator(".player-rank", { hasText: "would be" })).toHaveCount(7);
+  expect(await checkRanksAreDim(sheet, ".player-rank")).toEqual(Array(8).fill(true));
   await expect(sheet.locator(".player-rank-note")).toHaveText(
     "The WNBA only ranks players who've played 31 games or, for shooting percentages, made a certain number of shots. She's played 21 games.",
   );
@@ -255,15 +257,13 @@ test("where a player short of the rule would rank is a hairline in her mark colo
     const curveBox = curve.getBoundingClientRect();
     const place = (parseFloat(element.style.top) / 100) * curveBox.height + curveBox.top;
     return {
-      width: box.width,
       above: place - box.top,
       past: box.bottom - curveBox.bottom,
-      color: getComputedStyle(element).backgroundColor,
+      color: getComputedStyle(element).borderLeftColor,
       team: getComputedStyle(curve).getPropertyValue("--team").trim(),
       dots: curve.querySelectorAll("b").length,
     };
   });
-  expect(shape.width).toBeCloseTo(0.5, 1);
   expect(shape.above).toBeCloseTo(4, 1);
   expect(shape.past).toBeCloseTo(3.5, 1);
   expect(shape.dots).toBe(0);

@@ -282,7 +282,7 @@ test("a starter outside the qualified starters but a quarter of the way to their
   assert.ok(tape.every(({ marks }) => marks.away !== undefined && marks.home === undefined));
   const lines = readProvisionalMarks(markup);
   assert.ok(lines.every((line) => line.home > 0 && line.away === undefined));
-  assert.ok(markup.includes('would be <span class="player-rank-place">4th</span>'));
+  assert.ok(markup.includes('<span class="tape-rank">would be 4th</span>'));
 });
 
 test("a starter outside the qualified starters and short of a quarter of their innings has his numbers marked unranked, with no rank or mark, and a line saying why, and neither is marked ahead", () => {

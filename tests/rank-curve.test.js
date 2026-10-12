@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
+import { readDeclarations, readRule } from "./css-rules.js";
 import {
   drawSpread,
   isNearlyRanked,
@@ -30,6 +32,64 @@ test("a fewest-first curve runs from the most to the fewest, so the mark sits fu
   assert.notEqual(fewest.edge, most.edge);
 });
 
+test("a mark for a number past either end of the curve stops at that end, on the curve there", () => {
+  const values = [60, 70, 70, 90];
+  assert.deepEqual(drawSpread(values, 100).left, 100);
+  assert.deepEqual(drawSpread(values, 100).top, drawSpread(values, 90).top);
+  assert.deepEqual(drawSpread(values, 40).left, 0);
+  assert.deepEqual(drawSpread(values, 40).top, drawSpread(values, 60).top);
+  assert.deepEqual(drawSpread(values, 40, true).left, 100);
+  assert.match(
+    String(renderSpreadCurve(values, [{ value: 100, isProvisional: true }])),
+    /left: 100\.0%/,
+  );
+});
+
+test("each app draws a curve's lines as borders, which Safari keeps a whole number of screen pixels wide wherever they fall", () => {
+  const apps = new URL("../apps/", import.meta.url);
+  for (const app of readdirSync(apps)) {
+    const path = new URL(`${app}/page/styles.css`, apps).pathname;
+    const lines = readDeclarations(path).filter((declaration) =>
+      /\.player-curve (i\b|:is\([^)]*\bi\b)/.test(readRule(declaration)),
+    );
+    const widths = lines.filter(({ property }) => property === "width");
+    assert.deepEqual(
+      widths.map(({ value }) => value),
+      ["0"],
+      path,
+    );
+    assert.ok(
+      lines.some(({ property }) => property.startsWith("border-left")),
+      path,
+    );
+    assert.deepEqual(
+      lines.filter(({ property }) => property.startsWith("background")),
+      [],
+      path,
+    );
+  }
+});
+
+test("on a phone, each app's ranked line is 5 screen pixels wide and its would-be hairline 2", () => {
+  // Safari rounds a border's width down to whole screen pixels, 3 to a point on an iPhone.
+  const countPhonePixels = (/** @type {string} */ width) => Math.floor(parseFloat(width) * 3);
+  const apps = new URL("../apps/", import.meta.url);
+  for (const app of readdirSync(apps)) {
+    const path = new URL(`${app}/page/styles.css`, apps).pathname;
+    const declarations = readDeclarations(path);
+    /** @param {string} rule @param {string} property */
+    const readWidth = (rule, property) =>
+      declarations.find((each) => readRule(each) === rule && each.property === property)?.value ??
+      "";
+    assert.equal(countPhonePixels(readWidth(".player-curve i", "border-left")), 5, path);
+    assert.equal(
+      countPhonePixels(readWidth(".player-curve i.provisional", "border-left-width")),
+      2,
+      path,
+    );
+  }
+});
+
 test("a rank counts only the players strictly better, so tied players share one, and the fewest can rank first", () => {
   const values = [0.25, 0.3, 0.3, 0.28];
   assert.deepEqual(rankAmong(values, 0.3, { isRanked: true }), {
@@ -54,7 +114,7 @@ test("a row shows the label, the number as written, the curve, and the rank, or 
   assert.match(ranked, /player-rank-label">AVG</);
   assert.match(ranked, /player-rank-value tabular">\.282</);
   assert.match(ranked, /<svg/);
-  assert.match(ranked, /player-rank-place">1st<\/span> of 2/);
+  assert.match(ranked, /<span class="player-rank">1st of 2<\/span>/);
   const unranked = String(
     renderRankRow({
       label: "AVG",
@@ -62,7 +122,7 @@ test("a row shows the label, the number as written, the curve, and the rank, or 
       stat: rankAmong([0.25], 0.3, { isRanked: false }),
     }),
   );
-  assert.doesNotMatch(unranked, /<svg|player-rank-place/);
+  assert.doesNotMatch(unranked, /<svg|\d of /);
 });
 
 test("a number's place on a range is its share of it, the fewest on the right when fewer ranks first, held at either end, and nowhere without a range", () => {
@@ -133,10 +193,7 @@ test("where a player would rank shows as a line on the curve with no dot, and th
   );
   assert.match(row, /<i class="provisional" style="left: [\d.]+%; top: [\d.]+%"><\/i>/);
   assert.doesNotMatch(row, /<b /);
-  assert.match(
-    row,
-    /<span class="player-rank">would be <span class="player-rank-place">2nd<\/span><\/span>/,
-  );
+  assert.match(row, /<span class="player-rank">would be 2nd<\/span>/);
   const curve = String(
     renderSpreadCurve(
       [1, 2, 3],
@@ -149,5 +206,21 @@ test("where a player would rank shows as a line on the curve with no dot, and th
   assert.match(
     curve,
     /<i class="home provisional" [^>]*><\/i><i class="away" [^>]*><\/i><b class="away"/,
+  );
+});
+
+test("a curve's marks sit in a box of their own over it, which an app can draw inside the curve's ends", () => {
+  const curve = String(
+    renderSpreadCurve(
+      [1, 2, 3],
+      [
+        { value: 3, className: "home" },
+        { value: 1, className: "away" },
+      ],
+    ),
+  );
+  assert.match(
+    curve,
+    /<\/svg>\s*<span><i class="home" [^>]*><\/i><b class="home" [^>]*><\/b><i class="away"/,
   );
 });

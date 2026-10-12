@@ -2642,6 +2642,10 @@ table.player-game td {
   height: 18px;
   margin-left: 7px;
 }
+.player-curve > span {
+  position: absolute;
+  inset: 0;
+}
 .player-curve svg {
   display: block;
   width: 100%;
@@ -2657,18 +2661,21 @@ table.player-game td {
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
+/* Each line is a border, which Safari draws a whole number of screen pixels wide wherever it falls:
+   5 on a phone, and the hairline 2. A box half a pixel wide draws 1 pixel at some places and 2 at
+   others. */
 .player-curve i {
   position: absolute;
   bottom: 0;
-  width: 1.5px;
+  width: 0;
+  border-left: 1.7333px solid var(--team);
   translate: -50% 0;
-  background: var(--team);
 }
 /* Where a player not yet ranked would rank is a hairline with no dot, reaching 4px above the curve
    and 3.5px under its foot. */
 .player-curve i.provisional {
   bottom: -3.5px;
-  width: 0.5px;
+  border-left-width: 0.7333px;
   margin-top: -4px;
 }
 .player-curve b {
@@ -2685,10 +2692,6 @@ table.player-game td {
   color: var(--ink-dim);
   text-align: right;
   white-space: nowrap;
-}
-.player-rank-place {
-  font-weight: 500;
-  color: var(--ink);
 }
 /* A team's numbers rank like a player's, its regular season on curves of every team's and its
    playoffs as dots on a line across the same ranges, with the playoff field's number at the row's
