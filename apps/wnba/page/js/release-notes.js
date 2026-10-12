@@ -6,12 +6,12 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
-    at: "2026-10-11T19:25:00Z",
-    text: "If a player is out, for example because of an injury or pregnancy, their player page shows why they're out",
+    at: "2026-10-12T21:05:00Z",
+    text: html`Search for teams, players, games, and highlights, with the <b>Search</b> button at the bottom. (Includes the old game search, which works the same as before.)`,
   },
   {
-    at: "2026-10-11T00:40:00Z",
-    text: html`Freeform search for games. Tap <b>Search</b> on the games page and type a team, city, date range, or things like "games this weekend" or "Aces in New York".`,
+    at: "2026-10-11T19:25:00Z",
+    text: "If a player is out, for example because of an injury or pregnancy, their player page shows why they're out",
   },
   {
     at: "2026-10-10T19:49:00Z",
