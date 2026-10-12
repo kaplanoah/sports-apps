@@ -8,6 +8,7 @@ import {
   BROADCASTS_FIXTURE,
   buildFixtureSnapshot,
   buildSnapshotWithStarters,
+  LIVE_BOX_SCORE,
   swipeSheetDown,
   matchPath,
 } from "./harness.mjs";
@@ -19,6 +20,7 @@ import {
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
@@ -1567,4 +1569,71 @@ test("a game still to come lists its clubs' meetings so far under its starters, 
   expect(landsOn).toBe(team);
   await winner.click();
   await expect(page.locator("#teamSheet")).toBeVisible();
+});
+
+test("a live game's Runs so far set each runner's name by his base on the field, 2nd's centered over it, and space the part as the design does", async ({
+  page,
+}) => {
+  const raysAtYankees = "823493";
+  const runners = [
+    { base: "1B", name: "Betts", reached: "Single" },
+    { base: "2B", name: "Freeman", reached: "Walk" },
+    { base: "3B", name: "Ohtani", reached: "Double" },
+  ];
+  const boxScore = { ...LIVE_BOX_SCORE, id: raysAtYankees };
+  await openApp(page, {
+    snapshots: { 2026: buildSnapshotWithStarters() },
+    boxScores: { [raysAtYankees]: { ...boxScore, bases: { ...boxScore.bases, runners } } },
+  });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page.getByRole("button", { name: /^Game details: Rays at Yankees, Thu, Sep 24/ }).click();
+  const part = page.locator("#gameBody .sheet-part", { has: page.locator(".runs-club") });
+  await expect(part.locator("h3")).toHaveText("Runs so far");
+  await expect(part.locator(".runs-runner")).toHaveText([
+    /Betts\s*singled/,
+    /Freeman\s*walked/,
+    /Ohtani\s*doubled/,
+  ]);
+
+  const layout = await part.evaluate((element) => {
+    const measure = (/** @type {string} */ selector, /** @type {Element} */ scope = element) =>
+      /** @type {Element} */ (scope.querySelector(selector)).getBoundingClientRect();
+    const [first, second, third] = [...element.querySelectorAll(".runs-base.taken")].map((base) =>
+      base.getBoundingClientRect(),
+    );
+    const innings = /** @type {Element} */ (element.nextElementSibling);
+    const middle = (/** @type {DOMRect} */ box) => (box.left + box.right) / 2;
+    const now = measure(".runs-now-head");
+    const up = measure(".runs-up");
+    return {
+      baseSide: first.width / Math.SQRT2,
+      secondOffCenter: middle(measure(".on-2B .runs-runner-name")) - middle(second),
+      nowOffCenter: middle(now) - middle(measure(".runs-field")),
+      firstGap: measure(".on-1B b").left - first.right,
+      thirdGap: third.left - measure(".on-3B b").right,
+      aboveNow: measure(".runs-now").top - measure(".runs-club:last-of-type").bottom,
+      belowNow: measure(".on-2B .runs-runner-name").top - now.bottom,
+      aboveUp: up.top - measure(".runs-home-dirt").bottom,
+      aboveInnings: measure(".sheet-part-head", innings).top - up.bottom,
+      belowInnings: measure(".box-wrap", innings).top - measure(".sheet-part-head", innings).bottom,
+    };
+  });
+  const expected = {
+    baseSide: 9.2,
+    secondOffCenter: 0,
+    nowOffCenter: 0,
+    firstGap: 6,
+    thirdGap: 6,
+    aboveNow: 14,
+    belowNow: 22,
+    aboveUp: 8,
+    aboveInnings: 20,
+    belowInnings: 2,
+  };
+  for (const [name, value] of Object.entries(expected))
+    expect(layout[name], name).toBeCloseTo(value, 0);
+  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listLowContrastText(page)).toEqual([]);
+  expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listTapsOffButtons(page)).toEqual([]);
 });

@@ -17,14 +17,17 @@ const SETTLE_MS = 10 * MINUTE_MS;
 const RETRY_MS = 10 * MINUTE_MS;
 // A game whose box score hasn't settled this long after its first read is let go.
 const GIVE_UP_MS = 2 * 60 * MINUTE_MS;
+// Raised whenever a box score keeps more of MLB's feed, so each final kept before is read again.
+const BOX_SCORE_VERSION = 2;
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
-/** @typedef {{ firstReadAt: number, readAt: number, isDone: boolean }} GameRead */
+/** @typedef {{ firstReadAt: number, readAt: number, isDone: boolean, version: number }} GameRead */
 
 /** @param {number} season */
 const nameReadsKey = (season) => `final-reads:${season}`;
 
-// A season before the current one whose every final is read is never looked through again.
+// A season before the current one whose every final is read is never looked through again, until
+// a box score keeps more.
 /** @param {number} season */
 const nameKeptKey = (season) => `finals-kept:${season}`;
 
@@ -58,10 +61,19 @@ async function listScheduledFinals(docs, season) {
 const keepFirstOfEach = (games) => [...new Map(games.map((game) => [game.id, game])).values()];
 
 /**
+ * A game's last read, unless it was made before its box score kept what it keeps now.
+ * @param {GameRead | undefined} read
+ */
+const findCurrentRead = (read) => (read?.version === BOX_SCORE_VERSION ? read : undefined);
+
+/**
  * @param {GameRead | undefined} read
  * @param {number} now
  */
-const isDue = (read, now) => !read || (!read.isDone && now - read.readAt >= RETRY_MS);
+function isDue(read, now) {
+  const current = findCurrentRead(read);
+  return !current || (!current.isDone && now - current.readAt >= RETRY_MS);
+}
 
 /**
  * When a read can no longer miss the game's last plays.
@@ -82,9 +94,10 @@ async function keepGame(context, game, read) {
   if (boxScore && !isSameJson(await context.docs.read(key), boxScore))
     await context.docs.write(key, boxScore);
   const now = context.now();
-  const firstReadAt = read?.firstReadAt ?? now;
+  const firstReadAt = findCurrentRead(read)?.firstReadAt ?? now;
   const isSettled = boxScore?.state === "final" && now >= findSettledTime(game);
-  return { firstReadAt, readAt: now, isDone: isSettled || now - firstReadAt >= GIVE_UP_MS };
+  const isDone = isSettled || now - firstReadAt >= GIVE_UP_MS;
+  return { firstReadAt, readAt: now, isDone, version: BOX_SCORE_VERSION };
 }
 
 /**
@@ -107,7 +120,8 @@ async function keepSeasonGames(context, season, finals, limit) {
   const due = finals.filter((game) => isDue(reads[game.id], now)).slice(0, limit);
   for (const game of due) reads[game.id] = await keepGame(context, game, reads[game.id]);
   if (!isSameJson(stored, reads)) await context.storage.put(readsKey, reads);
-  return { readCount: due.length, isDone: finals.every((game) => reads[game.id]?.isDone) };
+  const isDone = finals.every((game) => findCurrentRead(reads[game.id])?.isDone);
+  return { readCount: due.length, isDone };
 }
 
 /**
@@ -122,7 +136,7 @@ async function listPastSeasons(context, current) {
     .filter((year) => year < current)
     .sort((first, second) => second - first);
   const kept = await Promise.all(years.map((year) => context.storage.get(nameKeptKey(year))));
-  return years.filter((_, index) => !kept[index]);
+  return years.filter((_, index) => kept[index] !== BOX_SCORE_VERSION);
 }
 
 /**
@@ -152,7 +166,7 @@ async function keepFinishedGames(context) {
     if (!left) return;
     const finals = await listScheduledFinals(context.docs, year);
     const { readCount, isDone } = await keepSeasonGames(context, year, finals, left);
-    if (isDone && finals.length) await context.storage.put(nameKeptKey(year), true);
+    if (isDone && finals.length) await context.storage.put(nameKeptKey(year), BOX_SCORE_VERSION);
     left -= readCount;
   }
 }

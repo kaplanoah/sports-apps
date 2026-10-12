@@ -20,8 +20,19 @@ const GUARDIANS_AT_WHITE_SOX = "849833";
 const RAYS_AT_YANKEES = "849838";
 const TOMORROWS_GUARDIANS_AT_WHITE_SOX = "849832";
 
+// MLB's live feed for NLCS Game 1 as it stood with one out in the top of the 3rd, and for ALDS
+// Game 4 once it was final, trimmed to what the box score reads, plays and all.
+const PLAYS = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-11-plays.json`, "utf8"),
+);
+const DODGERS_AT_BREWERS = "849809";
+const GUARDIANS_AT_WHITE_SOX_FINAL = "849832";
+
 /** @param {string} id */
 const describeGame = (id) => describeBoxScore(id, GAMES.feeds[id]);
+
+/** @param {string} id */
+const readPlaysFeed = (id) => structuredClone(PLAYS.feeds[id]);
 
 /** @param {{ isDown?: boolean }} [options] */
 function createMlbFetch({ isDown = false } = {}) {
@@ -113,6 +124,94 @@ test("a game being played has no runs yet for the half inning still to come", ()
   const boxScore = describeGame(GUARDIANS_AT_WHITE_SOX);
   assert.equal(boxScore.state, "live");
   assert.deepEqual(boxScore.innings.at(-1), { away: 2, home: null });
+});
+
+test("a game being played has each run-scoring play so far, and who's on base, how each got there, and who's up", () => {
+  const boxScore = describeBoxScore(DODGERS_AT_BREWERS, readPlaysFeed(DODGERS_AT_BREWERS));
+
+  assert.deepEqual(boxScore.scoring, [
+    { side: "away", inning: 2, event: "Single", player: "Pages", rbi: 1, runs: 1 },
+  ]);
+  assert.deepEqual(boxScore.bases, {
+    half: "top",
+    inning: 3,
+    outs: 1,
+    runners: [{ base: "1B", name: "Betts", reached: "Single" }],
+    batter: "Smith",
+    pitcher: "Misiorowski",
+  });
+});
+
+test("a final has every run-scoring play in the order they came, each with its batter's runs batted in, and no one on base", () => {
+  const boxScore = describeBoxScore(
+    GUARDIANS_AT_WHITE_SOX_FINAL,
+    readPlaysFeed(GUARDIANS_AT_WHITE_SOX_FINAL),
+  );
+
+  const play = (side, inning, event, player, rbi, runs = rbi) => ({
+    side,
+    inning,
+    event,
+    player,
+    rbi,
+    runs,
+  });
+  assert.deepEqual(boxScore.scoring, [
+    play("home", 3, "Walk", "Murakami", 1),
+    play("home", 3, "Sac Fly", "Antonacci", 1),
+    play("away", 5, "Home Run", "Bailey", 1),
+    play("away", 5, "Home Run", "Ram\u00edrez", 2),
+    play("home", 5, "Hit By Pitch", "Antonacci", 1),
+    play("home", 5, "Sac Fly", "Doyle", 1),
+    play("away", 6, "Double", "Bazzana", 1),
+    play("away", 6, "Single", "Bailey", 1),
+    play("away", 6, "Single", "Ram\u00edrez", 1),
+    play("away", 6, "Single", "DeLauter", 1),
+    play("away", 6, "Single", "Adell", 2),
+    play("home", 9, "Home Run", "Vargas", 1),
+  ]);
+  assert.equal(boxScore.bases, null);
+});
+
+test("a run scored on something during a play other than its result, like a wild pitch, is the runner's, with no runs batted in", () => {
+  const feed = readPlaysFeed(GUARDIANS_AT_WHITE_SOX_FINAL);
+  const walk = feed.liveData.plays.allPlays.find(
+    (/** @type {any} */ play) => play.about.isScoringPlay && play.result.event === "Walk",
+  );
+  const scorer = walk.runners.find((/** @type {any} */ runner) => runner.movement.end === "score");
+  scorer.details.event = "Wild Pitch";
+
+  const [first] = describeBoxScore(GUARDIANS_AT_WHITE_SOX_FINAL, feed).scoring;
+
+  assert.deepEqual(first, {
+    side: "home",
+    inning: 3,
+    event: "Wild Pitch",
+    player: "Montgomery",
+    rbi: 0,
+    runs: 1,
+  });
+});
+
+test("a runner whose way on the half inning's plays don't say, like a pinch runner, is on his base without it", () => {
+  const feed = readPlaysFeed(DODGERS_AT_BREWERS);
+  const { linescore } = feed.liveData;
+  linescore.offense.first.id = linescore.offense.batter.id;
+
+  const { runners } = describeBoxScore(DODGERS_AT_BREWERS, feed).bases;
+
+  assert.deepEqual(runners, [{ base: "1B", name: "Smith", reached: null }]);
+});
+
+test("between halves of an inning no one is on base", () => {
+  const feed = readPlaysFeed(DODGERS_AT_BREWERS);
+  feed.liveData.linescore.inningState = "Middle";
+
+  assert.equal(describeBoxScore(DODGERS_AT_BREWERS, feed).bases, null);
+});
+
+test("a feed without plays says nothing of how the runs scored", () => {
+  assert.equal(describeGame(GUARDIANS_AT_WHITE_SOX).scoring, null);
 });
 
 test("before first pitch, a club's posted lineup has each batter's season so far, and there are no innings or pitchers", () => {
