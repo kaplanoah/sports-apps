@@ -2,10 +2,11 @@ import { fetchMlbJson } from "./mlb.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
 
 // One game's box score for the Game section of its sheet, read from MLB's live feed in one request
-// trimmed to what the sheet shows: each club's runs by inning, its runs, hits, and errors, and each
-// batter and pitcher who got in. Before first pitch, once a club posts its lineup, its batters are
-// that lineup, each with his season so far. The store keeps each game's (game-details-updater.js),
-// so the route reads MLB only for a game the store hasn't kept yet.
+// trimmed to what the sheet shows: each club's runs by inning, its runs, hits, and errors, each
+// batter and pitcher who got in, each run-scoring play, and, while a half inning is under way,
+// who's on base and how each got there, and who's up. Before first pitch, once a club posts its
+// lineup, its batters are that lineup, each with his season so far. The store keeps each game's
+// (game-details-updater.js), so the route reads MLB only for a game the store hasn't kept yet.
 
 /** @typedef {(key: string) => Promise<any>} ReadDoc */
 
@@ -18,6 +19,7 @@ const FEED_FIELDS = [
   "abstractGameState",
   "players",
   "boxscoreName",
+  "lastName",
   "liveData",
   "linescore",
   "innings",
@@ -47,10 +49,42 @@ const FEED_FIELDS = [
   "seasonStats",
   "avg",
   "homeRuns",
+  "plays",
+  "allPlays",
+  "about",
+  "inning",
+  "halfInning",
+  "isScoringPlay",
+  "result",
+  "event",
+  "matchup",
+  "batter",
+  "pitcher",
+  "runners",
+  "movement",
+  "start",
+  "end",
+  "isOut",
+  "details",
+  "runner",
+  "id",
+  "inningState",
+  "currentInning",
+  "outs",
+  "offense",
+  "defense",
+  "first",
+  "second",
+  "third",
 ].join(",");
 const STATES = { Preview: "pre", Live: "live", Final: "final" };
 // A pitcher's note reads like "(W, 4-2)" or "(S, 3)"; the sheet shows only the decision.
 const DECISIONS = new Set(["W", "L", "S"]);
+const SIDES_BATTING = { top: "away", bottom: "home" };
+// MLB's linescore names the half being played; between halves it's "Middle" or "End".
+const HALVES_UNDER_WAY = { Top: "top", Bottom: "bottom" };
+const BASES = /** @type {const} */ (["first", "second", "third"]);
+const BASE_CODES = { first: "1B", second: "2B", third: "3B" };
 
 // Where the store keeps each game's box score.
 export const GAME_DETAILS_COLLECTION = "games";
@@ -160,6 +194,103 @@ const describeTotals = (side) => ({
 });
 
 /**
+ * The runners who scored on a play, grouped by what scored them: the play itself, like a single,
+ * or something else during it, like a wild pitch.
+ * @param {any} play
+ */
+function groupRunsByEvent(play) {
+  /** @type {Map<string, any[]>} */
+  const groups = new Map();
+  for (const runner of play.runners ?? []) {
+    if (runner.movement?.end !== "score" || runner.movement?.isOut) continue;
+    const event = runner.details?.event ?? play.result?.event ?? "";
+    groups.set(event, [...(groups.get(event) ?? []), runner]);
+  }
+  return groups;
+}
+
+/**
+ * Each way a play scored runs: what scored them, who's credited, the batter for the play's own
+ * result or the runner for anything else, the batter's runs batted in, and how many scored.
+ * @param {any} play
+ * @param {(id: number) => string} lastNameOf
+ */
+function describeScoringPlay(play, lastNameOf) {
+  const side = SIDES_BATTING[play.about?.halfInning];
+  const inning = play.about?.inning;
+  return [...groupRunsByEvent(play)].map(([event, runners]) => {
+    const isPlayResult = event === play.result?.event;
+    const player = isPlayResult ? play.matchup?.batter?.id : runners[0].details?.runner?.id;
+    return {
+      side,
+      inning,
+      event,
+      player: lastNameOf(player),
+      rbi: isPlayResult ? (play.result?.rbi ?? 0) : 0,
+      runs: runners.length,
+    };
+  });
+}
+
+/**
+ * Every run-scoring play in the order they came, or null when the feed has no plays to read.
+ * @param {any} plays MLB's plays for the game
+ * @param {(id: number) => string} lastNameOf
+ */
+function describeScoring(plays, lastNameOf) {
+  if (!plays?.allPlays) return null;
+  return plays.allPlays
+    .filter((/** @type {any} */ play) => play.about?.isScoringPlay)
+    .flatMap((/** @type {any} */ play) => describeScoringPlay(play, lastNameOf));
+}
+
+/**
+ * What put each batter who reached base in the half inning on it, by his id.
+ * @param {any[]} halfPlays
+ */
+function listWaysOn(halfPlays) {
+  /** @type {Map<number, string>} */
+  const waysOn = new Map();
+  for (const play of halfPlays)
+    for (const runner of play.runners ?? []) {
+      const { start, end, isOut } = runner.movement ?? {};
+      const id = runner.details?.runner?.id;
+      if (start == null && end && end !== "score" && !isOut && id != null)
+        waysOn.set(id, runner.details?.event ?? play.result?.event);
+    }
+  return waysOn;
+}
+
+/**
+ * While a half inning is under way, who's on each base and what put him on it, how many are out,
+ * and who's up against whom; otherwise null.
+ * @param {any} linescore MLB's line score for the game
+ * @param {any} plays MLB's plays for the game
+ * @param {(id: number) => string} lastNameOf
+ */
+function describeBases(linescore, plays, lastNameOf) {
+  const half = HALVES_UNDER_WAY[linescore?.inningState];
+  const inning = linescore?.currentInning;
+  if (!half || !inning) return null;
+  const halfPlays = (plays?.allPlays ?? []).filter(
+    (/** @type {any} */ play) => play.about?.inning === inning && play.about?.halfInning === half,
+  );
+  const waysOn = listWaysOn(halfPlays);
+  const runners = BASES.filter((base) => linescore.offense?.[base]?.id != null).map((base) => {
+    const id = linescore.offense[base].id;
+    return { base: BASE_CODES[base], name: lastNameOf(id), reached: waysOn.get(id) ?? null };
+  });
+  return {
+    half,
+    inning,
+    outs: linescore.outs ?? 0,
+    runners,
+    batter: lastNameOf(linescore.offense?.batter?.id),
+    pitcher: lastNameOf(linescore.defense?.pitcher?.id),
+  };
+}
+
+/**
  * @param {string} id
  * @param {any} feed MLB's live feed for the game, trimmed to FEED_FIELDS
  */
@@ -167,7 +298,10 @@ export function describeBoxScore(id, feed) {
   const state = STATES[feed?.gameData?.status?.abstractGameState] ?? "pre";
   const players = feed?.gameData?.players ?? {};
   const nameOf = (/** @type {number} */ playerId) => players[`ID${playerId}`]?.boxscoreName ?? "";
+  const lastNameOf = (/** @type {number} */ playerId) =>
+    players[`ID${playerId}`]?.lastName ?? nameOf(playerId);
   const linescore = feed?.liveData?.linescore ?? {};
+  const plays = feed?.liveData?.plays;
   const teams = feed?.liveData?.boxscore?.teams ?? {};
   const hasStarted = state !== "pre";
   return {
@@ -183,6 +317,8 @@ export function describeBoxScore(id, feed) {
     },
     away: describeClub(teams.away ?? {}, nameOf, hasStarted),
     home: describeClub(teams.home ?? {}, nameOf, hasStarted),
+    scoring: hasStarted ? describeScoring(plays, lastNameOf) : null,
+    bases: state === "live" ? describeBases(linescore, plays, lastNameOf) : null,
   };
 }
 

@@ -1,9 +1,11 @@
 // The Game section's box score, below the game's row and its starters: before first pitch, each
-// club's lineup once it's posted, with each batter's season so far; once the game starts, its runs
-// by inning, then each club's batters and pitchers.
+// club's lineup once it's posted, with each batter's season so far; once the game starts, how each
+// club has scored and who's on base (runs-view.js), its runs by inning, then each club's batters
+// and pitchers.
 
 import { html } from "#shared/html.js";
 import { renderPlainClub, renderTeamDot } from "./clubs.js";
+import { renderRuns } from "./runs-view.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderPlayerCell, renderStatCells, renderStatTable } from "./stat-table.js";
 
@@ -191,5 +193,5 @@ const renderLineups = (game, boxScore) =>
 export function renderBoxScore(game, boxScore) {
   if (!boxScore) return html``;
   if (boxScore.state === "pre") return html`${renderLineups(game, boxScore)}`;
-  return html`${renderInnings(game, boxScore)}${renderClubs(game, boxScore)}`;
+  return html`${renderRuns(game, boxScore)}${renderInnings(game, boxScore)}${renderClubs(game, boxScore)}`;
 }

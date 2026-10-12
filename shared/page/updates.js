@@ -9,6 +9,7 @@ import {
   formatWeekday,
   nameDay,
 } from "./days.js";
+import { createViewerChoice } from "./device-storage.js";
 import { easeClosed, stopEasing } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
 
@@ -32,8 +33,10 @@ const DISMISS_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hi
  * @typedef {{ at: string, text: string | Markup }} ReleaseNote
  */
 /** @typedef {{ at: number, text: string | Markup }} Note a release note to show */
+/** @typedef {Record<string, number>} NoteClocks when each release note stops showing, by its `at` */
 
 const MAX_SHOWN = 12;
+const MAX_NOTES_SHOWN = 3;
 const NOTE_SHOWN_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** @param {Update} update */
@@ -84,16 +87,122 @@ function formatTimeColumn(updates, today) {
 }
 
 /**
- * The release notes still to show: each out since the last dismissal, for its first two weeks.
+ * @param {ReleaseNote} note
+ * @param {number} now
+ */
+const isOut = (note, now) => Date.parse(note.at) <= now;
+
+// A note shows for two weeks from when this device first showed it, so a viewer back from time
+// away still sees it.
+/**
+ * @param {ReleaseNote} note
+ * @param {NoteClocks} clocks
+ * @param {number} now
+ */
+const readShownUntil = (note, clocks, now) => clocks[note.at] ?? now + NOTE_SHOWN_MS;
+
+/**
  * @param {ReleaseNote[]} notes
- * @param {number} seenAt
- * @param {number} [now]
+ * @param {number} now
+ * @param {(note: ReleaseNote) => number} readUntil
+ * @returns {NoteClocks}
+ */
+const mapOutNotes = (notes, now, readUntil) =>
+  Object.fromEntries(
+    notes.filter((note) => isOut(note, now)).map((note) => [note.at, readUntil(note)]),
+  );
+
+// A device's first look counts the notes already out from when they went out, as a viewer new to
+// the app has nothing to catch up on, and a note out by the box's last dismissal as dismissed.
+/**
+ * @param {ReleaseNote[]} notes
+ * @param {number} dismissedAt when this device last dismissed the box, or 0
+ * @param {number} now
+ */
+export function startFirstLookClocks(notes, dismissedAt, now) {
+  return mapOutNotes(notes, now, (note) => {
+    const outAt = Date.parse(note.at);
+    return outAt <= dismissedAt ? outAt : outAt + NOTE_SHOWN_MS;
+  });
+}
+
+/**
+ * When each note out by now stops showing, starting the two weeks of any this device hasn't shown.
+ * @param {ReleaseNote[]} notes
+ * @param {NoteClocks} clocks
+ * @param {number} now
+ */
+export const startNoteClocks = (notes, clocks, now) =>
+  mapOutNotes(notes, now, (note) => readShownUntil(note, clocks, now));
+
+/**
+ * The clocks after a dismissal, which ends every note's showing.
+ * @param {ReleaseNote[]} notes
+ * @param {NoteClocks} clocks
+ * @param {number} now
+ */
+export const endNoteClocks = (notes, clocks, now) =>
+  mapOutNotes(notes, now, (note) => Math.min(readShownUntil(note, clocks, now), now));
+
+/**
+ * The release notes still to show, in the order the app lists them.
+ * @param {ReleaseNote[]} notes
+ * @param {NoteClocks} clocks
+ * @param {number} now
  * @returns {Note[]}
  */
-export const listFreshNotes = (notes, seenAt, now = Date.now()) =>
+export const listFreshNotes = (notes, clocks, now) =>
   notes
-    .map((note) => ({ at: Date.parse(note.at), text: note.text }))
-    .filter((note) => note.at > seenAt && note.at <= now && now - note.at < NOTE_SHOWN_MS);
+    .filter((note) => isOut(note, now) && readShownUntil(note, clocks, now) > now)
+    .map((note) => ({ at: Date.parse(note.at), text: note.text }));
+
+/**
+ * @param {unknown} stored
+ * @returns {NoteClocks | null}
+ */
+function readNoteClocks(stored) {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return null;
+  return Object.fromEntries(
+    Object.entries(stored).filter(([, until]) => typeof until === "number"),
+  );
+}
+
+const noteClocks = createViewerChoice("releaseNotesShownUntil", readNoteClocks);
+
+/**
+ * @param {ReleaseNote[]} notes
+ * @param {NoteClocks} clocks
+ * @param {number} now
+ */
+const hasUnstartedNote = (notes, clocks, now) =>
+  notes.some((note) => isOut(note, now) && !(note.at in clocks));
+
+/**
+ * The release notes this device still shows, starting the two weeks of any it shows for the first
+ * time.
+ * @param {ReleaseNote[]} notes newest first
+ * @param {number} dismissedAt when this device last dismissed the box, or 0
+ * @param {number} [now]
+ */
+export function listNotesToShow(notes, dismissedAt, now = Date.now()) {
+  const kept = noteClocks.read();
+  const clocks = startNoteClocks(notes, kept ?? startFirstLookClocks(notes, dismissedAt, now), now);
+  if (!kept || hasUnstartedNote(notes, kept, now)) noteClocks.keep(clocks);
+  return listFreshNotes(notes, clocks, now);
+}
+
+/**
+ * @param {ReleaseNote[]} notes
+ * @param {number} [now]
+ */
+export const dismissNotes = (notes, now = Date.now()) =>
+  noteClocks.keep(endNoteClocks(notes, noteClocks.read() ?? {}, now));
+
+/**
+ * Calls `onChange` whenever another tab dismisses the release notes.
+ * @param {() => void} onChange
+ */
+export const watchNoteDismissals = (onChange) => noteClocks.watch(onChange);
 
 // Only the box's first heading carries its dismiss button, which closes all of it.
 /**
@@ -105,6 +214,9 @@ const renderHead = (title, isFirst) =>
     <span class="updates-count">${title}</span>
     ${isFirst && html`<button type="button" class="updates-x" id="dismissUpdates" aria-label="Dismiss updates" title="Dismiss">${DISMISS_ICON}</button>`}
   </div>`;
+
+/** @param {number} extra */
+const renderMore = (extra) => extra > 0 && html`<li class="more">and ${extra} more</li>`;
 
 /**
  * How many updates there are and since when, the newest dozen, and how many more.
@@ -125,21 +237,25 @@ function renderUpdateList(updates, today) {
         (update, index) =>
           html`<li><span class="when">${times[index]}</span><span class="what">${update.text}</span>${update.action}</li>`,
       )}
-      ${extra > 0 && html`<li class="more">and ${extra} more</li>`}
+      ${renderMore(extra)}
     </ul>`;
 }
 
 /**
- * @param {Note[]} notes
+ * The newest few release notes, and how many more.
+ * @param {Note[]} notes newest first
  * @param {boolean} isFirst
  */
-const renderNoteList = (notes, isFirst) =>
-  html`<div class="${isFirst ? "updates-notes" : "updates-notes updates-section"}">
+function renderNoteList(notes, isFirst) {
+  const shown = notes.slice(0, MAX_NOTES_SHOWN);
+  return html`<div class="${isFirst ? "updates-notes" : "updates-notes updates-section"}">
     ${renderHead("New in the app", isFirst)}
     <ul class="updates-list">
-      ${notes.map((note) => html`<li><span class="what">${note.text}</span></li>`)}
+      ${shown.map((note) => html`<li><span class="what">${note.text}</span></li>`)}
+      ${renderMore(notes.length - shown.length)}
     </ul>
   </div>`;
+}
 
 /**
  * The box's markup: the updates, newest first, and under them the release notes.

@@ -64,8 +64,9 @@ function createMlbFetch({ isDown }) {
   return { requests, fetchImpl };
 }
 
-function createJobStorage() {
-  const stored = new Map();
+/** @param {Record<string, any>} [initial] */
+function createJobStorage(initial = {}) {
+  const stored = new Map(Object.entries(initial));
   return {
     get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
     put: async (/** @type {string} */ key, /** @type {any} */ value) => {
@@ -99,10 +100,11 @@ function createDocs(initial) {
 
 /**
  * A store whose current season has `slate`, and the job that keeps its finals' box scores, run as
- * the store runs it, `minutesAfter` the evening's last update.
- * @param {{ slate?: any, minutesAfter?: number, stored?: Record<string, any> }} [options]
+ * the store runs it, `minutesAfter` the evening's last update, with what the job kept in its own
+ * storage from runs before.
+ * @param {{ slate?: any, minutesAfter?: number, stored?: Record<string, any>, kept?: Record<string, any> }} [options]
  */
-function createRun({ slate = SLATE, minutesAfter = 0, stored = {} } = {}) {
+function createRun({ slate = SLATE, minutesAfter = 0, stored = {}, kept = {} } = {}) {
   const docs = createDocs({
     "live/current": { season: EVENING.season },
     [`seasons/${EVENING.season}`]: { year: EVENING.season, slate },
@@ -111,7 +113,7 @@ function createRun({ slate = SLATE, minutesAfter = 0, stored = {} } = {}) {
   const outage = { isDown: false };
   const mlb = createMlbFetch({ isDown: () => outage.isDown });
   const clock = { now: NOW + minutesAfter * MINUTE_MS };
-  const storage = createJobStorage();
+  const storage = createJobStorage(kept);
   const job = createGameDetailsJob();
   const runJob = () =>
     job.run({
@@ -326,4 +328,22 @@ test("a past season isn't done while a read that failed waits to be tried again"
   run.outage.isDown = false;
   run.wait(10);
   assert.deepEqual(await listRunReads(run, 1), [["2001"]]);
+});
+
+test("finals whose box scores were kept before they kept each run-scoring play are read once more, this season's and each past one's", async () => {
+  const doneRead = { firstReadAt: 0, readAt: 0, isDone: true };
+  const run = createRun({
+    slate: keepSlateGames([DODGERS_AT_BRAVES]),
+    stored: {
+      "seasons/2025": { year: 2025 },
+      ...createScheduleMonth(2025, "2025-09", [{ id: "2001", day: 1 }]),
+    },
+    kept: {
+      [`final-reads:${EVENING.season}`]: { [DODGERS_AT_BRAVES]: doneRead },
+      "final-reads:2025": { 2001: doneRead },
+      "finals-kept:2025": true,
+    },
+  });
+
+  assert.deepEqual(await listRunReads(run, 2), [[DODGERS_AT_BRAVES, "2001"], []]);
 });

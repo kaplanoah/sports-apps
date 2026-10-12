@@ -102,9 +102,9 @@ test.describe("on a phone", () => {
 
     await page.getByRole("button", { name: "Dismiss updates" }).click();
     await expect(updates).toBeHidden();
-    expect(await readKept(page, "updatesSeenAt")).toEqual({
-      2026: Date.parse("2026-09-24T23:00:00Z"),
-    });
+    expect(await readKept(page, "updatesSeenAt")).toBeNull();
+    const [shownUntil] = Object.values(await readKept(page, "releaseNotesShownUntil"));
+    expect(shownUntil).toBeLessThanOrEqual(await page.evaluate(() => Date.now()));
     await page.reload();
     await expect(page.locator("#bracketWrap")).toBeVisible();
     await expect(updates).toBeHidden();
@@ -166,6 +166,38 @@ test.describe("on a phone", () => {
     await expect(page.locator("#updates .when")).toHaveCount(2);
 
     await keepInOtherTab(page, "updatesSeenAt", { 2026: Date.parse("2026-09-25T00:40:00Z") });
+
+    await expect(page.locator("#updates")).toBeHidden();
+  });
+
+  test("a phone that dismissed the box before it kept its notes' times still hides the notes out by then", async ({
+    page,
+  }) => {
+    await page.route("**/js/release-notes.js", (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: 'export const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: "Something new." }, { at: "2026-09-24T18:00:00Z", text: "Something older." }];',
+      }),
+    );
+    await keepSeenAtFromEarlierVisit(page);
+    await openApp(page);
+
+    await expect(page.locator("#updates .what")).toHaveText(["Something new."]);
+  });
+
+  test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {
+    await page.route("**/js/release-notes.js", (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: 'export const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: "Something new." }];',
+      }),
+    );
+    await openApp(page);
+    await expect(page.locator("#updates .what")).toHaveText("Something new.");
+
+    await keepInOtherTab(page, "releaseNotesShownUntil", {
+      "2026-09-24T23:00:00Z": Date.parse("2026-09-25T00:00:00Z"),
+    });
 
     await expect(page.locator("#updates")).toBeHidden();
   });
