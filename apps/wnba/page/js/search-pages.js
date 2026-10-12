@@ -1,7 +1,7 @@
 // What the WNBA's search finds besides games: each team's sheet and its Roster, each player on a
-// team's roster in the season shown, from the list of players the store keeps for the season, the
-// Standings tab's lists, and settings and each setting the page shows. Runs in the page and in
-// Node, so it uses no DOM.
+// team's roster in the season shown, from the list of players the store keeps for the season, a
+// final's Highlights, the Bracket and News tabs, the Standings tab's lists, and settings and each
+// setting the page shows. Runs in the page and in Node, so it uses no DOM.
 
 import { TEAMS } from "./teams.js";
 
@@ -19,7 +19,18 @@ import { TEAMS } from "./teams.js";
 export const namePlayerIndexKey = (season) => `player-index/${season}`;
 
 const SECTION = { key: "roster", name: "Roster" };
+const GAME_PART = {
+  key: "highlights",
+  name: "Highlights",
+  words: ["highlights", "recap", "clips", "video"],
+};
 const EXAMPLES = ["Stewart", "Aces roster"];
+
+/** @type {PagePlace[]} */
+const TABS = [
+  { key: "tab:bracket", name: ["Bracket"], words: ["bracket", "playoffs"], icon: "bracket" },
+  { key: "tab:news", name: ["News"], words: ["news", "stories", "headlines"], icon: "news" },
+];
 
 /** @type {PagePlace[]} */
 const STANDINGS = [
@@ -104,7 +115,8 @@ export function listSearchPages({ index, isSettingShown }) {
       number,
     })),
     section: SECTION,
-    places: [...STANDINGS, ...listSettings(isSettingShown)],
+    places: [...TABS, ...STANDINGS, ...listSettings(isSettingShown)],
+    gamePart: GAME_PART,
     examples: EXAMPLES,
   };
 }

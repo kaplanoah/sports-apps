@@ -235,14 +235,20 @@
         </div>
       </div>
       <div class="settings-controls grouped">
-        <label class="control-row" hidden>
+        <label class="control-row" data-setting="settings:season" hidden>
           <span>Season</span>
           <select id="seasonPicker" class="select-field" aria-label="Season"></select>
         </label>
-        <div class="control-row" id="notifyRow" hidden data-last-drawn></div>
+        <div
+          class="control-row"
+          id="notifyRow"
+          data-setting="settings:notifications"
+          hidden
+          data-last-drawn
+        ></div>
         <div class="settings-group" role="group" aria-labelledby="newsSettingsTitle">
           <h3 class="settings-group-label" id="newsSettingsTitle">News</h3>
-          <div class="control-row">
+          <div class="control-row" data-setting="settings:team-outlets">
             <span class="control-label">
               <span id="teamOutletsTitle">Include dedicated Liberty sources</span>
               <span class="control-note">Beat writers at The IX, NY Post, and more</span>
@@ -258,7 +264,7 @@
               <span class="switch-knob" aria-hidden="true"></span>
             </button>
           </div>
-          <div class="control-row">
+          <div class="control-row" data-setting="settings:paywalled">
             <span class="control-label">
               <span id="paywalledTitle">Include content from The Athletic</span>
               <span class="control-note">Most stories need a subscription</span>
@@ -275,7 +281,7 @@
             </button>
           </div>
         </div>
-        <div class="control-row appearance-row">
+        <div class="control-row appearance-row" data-setting="settings:appearance">
           <span class="control-label">
             <span id="appearanceTitle">Appearance</span>
             <span class="control-note" id="appearanceNote" role="status"></span>
@@ -306,14 +312,19 @@
           </div>
         </div>
       </div>
-      <div class="home-screen-tip" id="homeScreenTip" hidden></div>
+      <div
+        class="home-screen-tip"
+        id="homeScreenTip"
+        data-setting="settings:home-screen"
+        hidden
+      ></div>
       <footer class="settings-footer">
         <p class="settings-version" id="versionNote" hidden data-last-drawn></p>
         <p class="settings-version">Includes data from NBA.com</p>
         <p class="settings-version">&copy; 2026 Noah Kaplan</p>
       </footer>
       <section class="diagnostics-area" aria-labelledby="diagnosticsTitle">
-        <div class="control-row">
+        <div class="control-row" data-setting="settings:diagnostics">
           <span class="control-label">
             <span id="diagnosticsTitle">Diagnostics</span>
           </span>

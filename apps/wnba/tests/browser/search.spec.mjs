@@ -246,7 +246,7 @@ test("while words are typed, suggestions, then the team's pages, then its games 
   await expect(findLine(page)).toHaveText("Liberty•Next game");
 });
 
-test("a sent team shows its pages over its games line, which opens its games alone on the first from today, and a tap on the field brings the pages back", async ({
+test("a sent team shows its pages over its games line, which opens its games alone on the first from today, and a tap on the field brings back what typing showed", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -267,7 +267,9 @@ test("a sent team shows its pages over its games line, which opens its games alo
 
   await findInput(page).tap();
 
-  await expect(findRows(page)).toHaveText(["New York Liberty", "RosterNew York Liberty"]);
+  await expect(findRows(page).first()).toHaveText("Liberty next game");
+  await expect(findRows(page).filter({ hasText: "New York Liberty" })).toHaveCount(2);
+  await expect(findGamesLine(page)).toBeVisible();
 });
 
 test("words that ask only for games go straight to them, and one whose games are all past rests at its end", async ({
@@ -325,9 +327,7 @@ test("a team's row opens its sheet, and its Roster row the sheet on its Roster",
   await tapSearch(page);
   await sendSearch(page, "Liberty");
 
-  await findRows(page)
-    .filter({ hasText: /^New York Liberty$/ })
-    .tap();
+  await findSearch(page).getByRole("button", { name: "New York Liberty", exact: true }).tap();
 
   await expect(page.locator("#teamTitle")).toHaveText("New York Liberty");
   await expectShown(page.locator("#teamSection"));
@@ -376,6 +376,37 @@ test("a standings list's words find it, and its row opens Standings on that list
     "aria-selected",
     "true",
   );
+});
+
+test("highlights with a team finds its latest final, and its row opens that game's sheet on its Highlights", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await sendSearch(page, "Liberty highlights");
+
+  await expect(findRows(page)).toHaveText(["HighlightsLynx at Liberty\u2022Yesterday"]);
+  await expect(findGamesLine(page)).toHaveCount(0);
+
+  await findRows(page).tap();
+
+  await expect(page.locator("#gameSheet")).toBeVisible();
+  await expect(page.locator("#gameTabHighlights")).toHaveAttribute("aria-selected", "true");
+});
+
+test("the Bracket tab's words find it, and its row opens it", async ({ page }) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await sendSearch(page, "bracket");
+
+  await expect(findRows(page)).toHaveText(["Bracket"]);
+
+  await findRows(page).tap();
+
+  await expect(page.locator("#view-bracket")).toBeVisible();
+  await expect(page.locator("#tab-bracket")).toHaveAttribute("aria-selected", "true");
 });
 
 test("a setting's words find it, and its row opens settings with the setting in sight", async ({
@@ -545,6 +576,10 @@ test("every search state keeps to the type scale and its periods, and every tap 
 
   await sendSearch(page, "settings");
   await expect(findRows(page).first()).toBeVisible();
+  await expectReadable();
+
+  await sendSearch(page, "highlights");
+  await expect(findRows(page)).toHaveCount(1);
   await expectReadable();
 
   await sendSearch(page, "Liberty in March");

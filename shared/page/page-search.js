@@ -1,7 +1,8 @@
 // Reading a search's words into the pages they ask for, beside the games they find: a team's sheet
 // and its section, like a WNBA team's Roster, a player's sheet, and the league's places, like the
-// Standings lists and settings. A team's name lists its sheet and its section, and the section's
-// name beside it lists the section alone. A player's name lists her sheet, and finds no games,
+// Standings lists and settings, and a game's part, like a WNBA final's Highlights. A team's name
+// lists its sheet and its section, and the section's name beside it lists the section alone. A game
+// part's name lists the part of the latest final the rest of the words find, or of the season's. A player's name lists her sheet, and finds no games,
 // since nobody knows yet which games she'll play. A place's words list it, and leave the games to
 // any of them that a search of games reads, as "East" finds the East's standings and its games.
 // Words that ask for anything else, like a second team, a day, or "at", ask for games, and list no
@@ -16,21 +17,30 @@ import { readTokens, splitWords } from "./search-words.js";
 /**
  * A place in the app a search can open, the words of its row, the words that find it, and the
  * icon of the button it's otherwise opened from.
- * @typedef {{ key: string, name: string[], words: string[], icon: "standings" | "settings" }} PagePlace
+ * @typedef {{ key: string, name: string[], words: string[], icon: "bracket" | "standings" | "news" | "settings" }} PagePlace
+ */
+/**
+ * A part of a finished game's sheet a search can open, by its key and name, and the words that
+ * find it.
+ * @typedef {{ key: string, name: string, words: string[] }} GamePart
  */
 /**
  * What a league hands a search's pages: its teams and players, the section a team's sheet opens on
- * beside its first, by its key and name, its places, and pages to offer as examples.
+ * beside its first, by its key and name, its places, the part of a final's sheet it can open, and
+ * pages to offer as examples.
  * @typedef {object} SearchPages
  * @property {PageTeam[]} teams
  * @property {PagePlayer[]} players
  * @property {{ key: string, name: string } | null} section
  * @property {PagePlace[]} places
+ * @property {GamePart | null} gamePart
  * @property {string[]} examples
  */
 /**
- * A page a search lists: a team's sheet or its section, a player's sheet, or a place.
- * @typedef {{ kind: "team" | "section", team: PageTeam } | { kind: "player", team: PageTeam, player: PagePlayer } | { kind: "place", place: PagePlace }} PageRow
+ * A page a search lists: a team's sheet or its section, a player's sheet, a place, or a game's
+ * part, of the latest final the words left for a search of games find, or of the season's when
+ * none are left.
+ * @typedef {{ kind: "team" | "section", team: PageTeam } | { kind: "player", team: PageTeam, player: PagePlayer } | { kind: "place", place: PagePlace } | { kind: "game-part", part: GamePart, gameText: string | null }} PageRow
  */
 
 // A word this short only finds a name or a place once it's whole, or it would find too many.
@@ -101,15 +111,29 @@ function findPlayers(words, players, isTyping) {
 }
 
 /**
- * The places every one of the typed words finds, each perhaps only the start of one of its words.
+ * Whether every one of the typed words is one of the words, each perhaps only the start of one.
+ * @param {string[]} typed
+ * @param {string[]} words
+ */
+const isEveryWordOf = (typed, words) => {
+  const parts = words.flatMap(splitWords);
+  return typed.every((word) => parts.some((part) => isWordOf(word, part, true)));
+};
+
+/**
+ * The places every one of the typed words finds.
  * @param {string[]} typed
  * @param {PagePlace[]} places
  */
-const findPlaces = (typed, places) =>
-  places.filter((place) => {
-    const words = place.words.flatMap(splitWords);
-    return typed.every((word) => words.some((part) => isWordOf(word, part, true)));
-  });
+const findPlaces = (typed, places) => places.filter((place) => isEveryWordOf(typed, place.words));
+
+/**
+ * The latest final of the games, which come in order of start, or null when none has ended.
+ * @template {{ state: string }} Game
+ * @param {Game[]} games
+ * @returns {Game | null}
+ */
+export const findLatestFinal = (games) => games.findLast((game) => game.state === "final") ?? null;
 
 /**
  * @param {import("./search-words.js").Token} token
@@ -161,8 +185,13 @@ export function findPages(text, { dictionary, pages, isTyping }) {
     (token) => !hasKind(token, "team") && !hasKind(token, "filler"),
   );
   const otherWords = otherTokens.flatMap((token) => token.words);
+  const part = pages.gamePart;
+  if (part && otherWords.length && isEveryWordOf(otherWords, part.words)) {
+    const gameText = leaveGameText(tokens, otherTokens);
+    return { rows: [{ kind: "game-part", part, gameText }], gameText: null };
+  }
   if (teamTokens.length) return findTeamPages(teamTokens, otherWords, { text, tokens, pages });
-  if (!otherWords.length) return { rows: [], gameText: text };
+  if (!otherWords.length) return findPassedOverPlaces(tokens, text, pages);
   const teams = new Map(pages.teams.map((team) => [team.code, team]));
   const players = findPlayers(otherWords, pages.players, isTyping).flatMap((player) => {
     const team = teams.get(player.team);
@@ -175,6 +204,21 @@ export function findPages(text, { dictionary, pages, isTyping }) {
     rows: places.map((place) => ({ kind: "place", place })),
     gameText: leaveGameText(tokens, otherTokens),
   };
+}
+
+/**
+ * The places that words a search of games passes over find, as "season" finds the Season picker,
+ * leaving no words for games, or, when they find none, the words left for games.
+ * @param {import("./search-words.js").Token[]} tokens
+ * @param {string} text
+ * @param {SearchPages} pages
+ * @returns {{ rows: PageRow[], gameText: string | null }}
+ */
+function findPassedOverPlaces(tokens, text, pages) {
+  const words = tokens.flatMap((token) => token.words);
+  const places = words.length ? findPlaces(words, pages.places) : [];
+  if (!places.length) return { rows: [], gameText: text };
+  return { rows: places.map((place) => ({ kind: "place", place })), gameText: null };
 }
 
 /**

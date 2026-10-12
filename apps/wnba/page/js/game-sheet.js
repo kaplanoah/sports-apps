@@ -356,18 +356,29 @@ function retryDetails() {
   refreshDetails();
 }
 
-/** @param {string} id */
-function openGameSheet(id) {
+/**
+ * @param {string} id
+ * @param {string} [section] the section to open on, or its first
+ */
+function openGameSheet(id, section) {
   if (!findGame(id)) return;
   openSheet(findSheet(), {
     key: id,
     show: () => {
       highlights?.forget();
       showGame(id);
-      sections?.showFirstSection();
+      if (section) sections?.showSection(section, true);
+      else sections?.showFirstSection();
     },
   });
 }
+
+/**
+ * Opens a game's sheet on one of its sections, as a search does.
+ * @param {string} id
+ * @param {string} section
+ */
+export const openGameSection = (id, section) => openGameSheet(id, section);
 
 /**
  * Redraws the open sheet from the season as the store has it now. A game that started since the

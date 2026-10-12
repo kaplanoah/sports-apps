@@ -9,6 +9,7 @@
 // search as it was, and two minutes away closes it. A league hands it its season's games and words,
 // how it draws a day's games, a team's dot, and what the search does as it closes.
 
+import { describeDay, readCalendarDate } from "./days.js";
 import {
   createSearchContext,
   createSearchDictionary,
@@ -19,7 +20,7 @@ import {
 } from "./game-search.js";
 import { html, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
-import { findPages } from "./page-search.js";
+import { findLatestFinal, findPages } from "./page-search.js";
 import { watchTimeAway } from "./resume.js";
 import {
   EXAMPLE_COUNT,
@@ -34,6 +35,11 @@ import {
 /** @typedef {import("./search-suggestions.js").Suggestion} Suggestion */
 /** @typedef {import("./page-search.js").SearchPages} SearchPages */
 /** @typedef {import("./page-search.js").PageRow} PageRow */
+/** @typedef {import("./page-search.js").GamePart} GamePart */
+/**
+ * A page's row as the search shows it, a game's part on the final it opens.
+ * @typedef {Exclude<PageRow, { kind: "game-part" }> | { kind: "game", part: GamePart, game: SearchGame }} ShownRow
+ */
 /**
  * What a league hands its search.
  * @typedef {object} SearchLeague
@@ -50,16 +56,19 @@ import {
  */
 
 // Phosphor's magnifying-glass at its Light weight in the field, as the page's controls are, and at
-// its Regular weight, calendar-blank, and map-pin beside a suggestion's words, trend-up and
-// sliders-horizontal beside a place's, as the Standings tab and the settings button show them, and
-// x-circle at its Fill weight to clear the field, as iOS does.
+// its Regular weight, calendar-blank, and map-pin beside a suggestion's words, trophy, trend-up,
+// newspaper, and sliders-horizontal beside a place's, as the tabs and the settings button show them,
+// play-circle beside a game's part, and x-circle at its Fill weight to clear the field, as iOS does.
 const FIELD_GLASS = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228.24,219.76l-51.38-51.38a86.15,86.15,0,1,0-8.48,8.48l51.38,51.38a6,6,0,0,0,8.48-8.48ZM38,112a74,74,0,1,1,74,74A74.09,74.09,0,0,1,38,112Z"/></svg>`;
 const MARKS = {
   search: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`,
   date: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z"/></svg>`,
   place: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,64a40,40,0,1,0,40,40A40,40,0,0,0,128,64Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,128Zm0-112a88.1,88.1,0,0,0-88,88c0,31.4,14.51,64.68,42,96.25a254.19,254.19,0,0,0,41.45,38.3,8,8,0,0,0,9.18,0A254.19,254.19,0,0,0,174,200.25c27.45-31.57,42-64.85,42-96.25A88.1,88.1,0,0,0,128,16Zm0,206c-16.53-13-72-60.75-72-118a72,72,0,0,1,144,0C200,161.23,144.53,209,128,222Z"/></svg>`,
+  bracket: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg>`,
   standings: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,56v64a8,8,0,0,1-16,0V75.31l-82.34,82.35a8,8,0,0,1-11.32,0L96,123.31,29.66,189.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0L136,140.69,212.69,64H168a8,8,0,0,1,0-16h64A8,8,0,0,1,240,56Z"/></svg>`,
+  news: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M88,112a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H96A8,8,0,0,1,88,112Zm8,40h80a8,8,0,0,0,0-16H96a8,8,0,0,0,0,16ZM232,64V184a24,24,0,0,1-24,24H32A24,24,0,0,1,8,184.11V88a8,8,0,0,1,16,0v96a8,8,0,0,0,16,0V64A16,16,0,0,1,56,48H216A16,16,0,0,1,232,64Zm-16,0H56V184a23.84,23.84,0,0,1-1.37,8H208a8,8,0,0,0,8-8Z"/></svg>`,
   settings: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"/></svg>`,
+  video: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm48.24-94.78-64-40A8,8,0,0,0,100,88v80a8,8,0,0,0,12.24,6.78l64-40a8,8,0,0,0,0-13.56ZM116,153.57V102.43L156.91,128Z"/></svg>`,
 };
 // Phosphor's caret-right at its Regular weight, at the end of a row that opens a page.
 const CARET = html`<svg class="search-caret" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>`;
@@ -191,12 +200,26 @@ const renderSuggestions = (suggestions, typed) =>
   </ul>`;
 
 /**
- * What a page's row says, and what it says at its end.
- * @param {PageRow} row
- * @param {SearchPages} pages
+ * A final's teams and day, as "Lynx at Liberty" on "Yesterday".
+ * @param {SearchGame} game
+ * @param {import("./game-search.js").SearchContext} context
  */
-function describePageRow(row, pages) {
+const describeFinal = (game, context) =>
+  joinWithSeparator([
+    [game.away, game.home].map((code) => context.teamsByCode.get(code ?? "")?.name).join(" at "),
+    describeDay(readCalendarDate(game.day), Date.now()),
+  ]);
+
+/**
+ * What a page's row says, and what it says at its end.
+ * @param {ShownRow} row
+ * @param {SearchPages} pages
+ * @param {import("./game-search.js").SearchContext} context
+ */
+function describePageRow(row, pages, context) {
   if (row.kind === "place") return { words: joinWithSeparator(row.place.name), detail: "" };
+  if (row.kind === "game")
+    return { words: row.part.name, detail: describeFinal(row.game, context) };
   if (!("player" in row)) {
     if (row.kind === "team") return { words: row.team.fullName, detail: "" };
     return { words: pages.section?.name ?? "", detail: row.team.fullName };
@@ -209,14 +232,17 @@ function describePageRow(row, pages) {
 }
 
 /**
- * What a page's row opens: a place, as the league opens it, or a button the team's and player's
- * sheets open from, a player's over her team's sheet, on its section that lists her.
- * @param {PageRow} row
+ * What a page's row opens: a place or a final's part, as the league opens it, or a button the
+ * team's and player's sheets open from, a player's over her team's sheet, on its section that lists
+ * her.
+ * @param {ShownRow} row
  * @param {SearchPages} pages
  */
 function renderPageButton(row, pages) {
   if (row.kind === "place")
     return html`type="button" class="search-suggestion" data-place="${row.place.key}"`;
+  if (row.kind === "game")
+    return html`type="button" class="search-suggestion" data-place="${row.part.key}:${row.game.id}"`;
   const section = row.kind === "team" ? "" : (pages.section?.key ?? "");
   const opens = html`type="button" class="search-suggestion team-open" data-team="${row.team.code}" data-team-section="${section}"`;
   if (!("player" in row)) return opens;
@@ -225,13 +251,24 @@ function renderPageButton(row, pages) {
 }
 
 /**
- * A row that opens a page, marked with its team's dot, or a place's icon.
- * @param {PageRow} row
- * @param {SearchPages} pages
+ * A row's mark: a team's dot, or a place's or a game's part's icon.
+ * @param {ShownRow} row
  */
-function renderPageRow(row, pages) {
-  const { words, detail } = describePageRow(row, pages);
-  const mark = row.kind === "place" ? MARKS[row.place.icon] : league?.renderTeamMark(row.team.code);
+function renderRowMark(row) {
+  if (row.kind === "place") return MARKS[row.place.icon];
+  if (row.kind === "game") return MARKS.video;
+  return league?.renderTeamMark(row.team.code);
+}
+
+/**
+ * A row that opens a page, marked with its team's dot, or a place's or a game's part's icon.
+ * @param {ShownRow} row
+ * @param {SearchPages} pages
+ * @param {import("./game-search.js").SearchContext} context
+ */
+function renderPageRow(row, pages, context) {
+  const { words, detail } = describePageRow(row, pages, context);
+  const mark = renderRowMark(row);
   return html`<li>
     <button ${renderPageButton(row, pages)}>
       <span class="search-mark">${mark}</span><span class="search-words">${words}</span
@@ -241,13 +278,32 @@ function renderPageRow(row, pages) {
 }
 
 /**
- * @param {PageRow[]} rows
+ * @param {ShownRow[]} rows
  * @param {SearchPages} pages
+ * @param {import("./game-search.js").SearchContext} context
  */
-const renderPageRows = (rows, pages) =>
+const renderPageRows = (rows, pages, context) =>
   html`<ul class="search-suggestions">
-    ${rows.map((row) => renderPageRow(row, pages))}
+    ${rows.map((row) => renderPageRow(row, pages, context))}
   </ul>`;
+
+/**
+ * The rows to show, each game's part on the latest final the words left for it find, and left out
+ * when none has ended.
+ * @param {PageRow[]} rows
+ * @param {import("./game-search.js").SearchContext} context
+ * @returns {ShownRow[]}
+ */
+const placeGameParts = (rows, context) =>
+  rows.flatMap((row) => {
+    if (row.kind !== "game-part") return [/** @type {ShownRow} */ (row)];
+    const games =
+      row.gameText === null
+        ? context.games
+        : findSearchGames(readSearch(row.gameText, context), context).games;
+    const game = findLatestFinal(games);
+    return game ? [/** @type {ShownRow} */ ({ kind: "game", part: row.part, game })] : [];
+  });
 
 /**
  * The line saying how the search read its words, right over the games, which a tap opens whole.
@@ -370,11 +426,12 @@ function draw() {
     return;
   }
   const suggestions = isTyping ? listSuggestions(query, context) : [];
-  const { pages, rows, gameText } = readPages(
-    text,
-    readWhileTyping(text, suggestions, context),
-    context,
-  );
+  const {
+    pages,
+    rows: pageRows,
+    gameText,
+  } = readPages(text, readWhileTyping(text, suggestions, context), context);
+  const rows = placeGameParts(pageRows, context);
   const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];
   const search = gameText === null ? null : readSearch(gameText, context);
   const found = search && findSearchGames(search, context);
@@ -394,7 +451,7 @@ function draw() {
   setHtml(
     list,
     html`${suggestions.length > 0 && renderSuggestions(suggestions, query)}${
-      pages && rows.length > 0 && renderPageRows(rows, pages)
+      pages && rows.length > 0 && renderPageRows(rows, pages, context)
     }${others.length > 0 && renderSuggestions(others, "")}${
       read &&
       shownGames.length > 0 &&

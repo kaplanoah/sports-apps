@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSearchDictionary } from "../shared/page/game-search.js";
-import { findPages } from "../shared/page/page-search.js";
+import { findLatestFinal, findPages } from "../shared/page/page-search.js";
 
 // A small league: the Hawks of Riverton and the Foxes of Hillside, in the East, with a few of their
 // players, its standings, and its settings.
@@ -66,6 +66,7 @@ const PAGES = {
       icon: "settings",
     },
   ],
+  gamePart: { key: "highlights", name: "Highlights", words: ["highlights", "recap"] },
   examples: [],
 };
 
@@ -82,6 +83,7 @@ function listRows(text, isTyping = false) {
     rows: rows.map((row) => {
       if (row.kind === "place") return `place ${row.place.key}`;
       if (row.kind === "player") return `player ${row.team.code} ${row.player.lastName}`;
+      if (row.kind === "game-part") return `${row.part.key} of ${row.gameText ?? "the season"}`;
       return `${row.kind} ${row.team.code}`;
     }),
     gameText,
@@ -145,4 +147,28 @@ test("a place leaves the games to the words a search of games reads, and none wh
   assert.equal(listRows("standings").gameText, null);
   assert.equal(listRows("the settings").gameText, null);
   assert.equal(listRows("east").gameText, "east");
+});
+
+test("a game part's name lists it for the latest final the rest of the words find, and no games", () => {
+  assert.deepEqual(listRows("highlights"), { rows: ["highlights of the season"], gameText: null });
+  assert.deepEqual(listRows("Hawks highlights"), {
+    rows: ["highlights of hawks"],
+    gameText: null,
+  });
+  assert.deepEqual(listRows("Hawks Foxes recap"), {
+    rows: ["highlights of hawks foxes"],
+    gameText: null,
+  });
+  assert.deepEqual(listRows("high", true).rows, ["highlights of the season"]);
+});
+
+test("the latest final is the last game that has ended", () => {
+  const games = [
+    { id: "a", state: "final" },
+    { id: "b", state: "final" },
+    { id: "c", state: "live" },
+    { id: "d", state: "pre" },
+  ];
+  assert.equal(findLatestFinal(games)?.id, "b");
+  assert.equal(findLatestFinal(games.slice(2)), null);
 });

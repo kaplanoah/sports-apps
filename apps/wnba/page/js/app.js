@@ -43,7 +43,7 @@ import { startAppearance } from "#shared/appearance.js";
 import { LOOKS } from "./looks.js";
 import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
-import { refreshGameSheet, startGameSheet } from "./game-sheet.js";
+import { openGameSection, refreshGameSheet, startGameSheet } from "./game-sheet.js";
 import { renderDot } from "./clubs.js";
 import { listFoundGameDays, listListedGames, listSeasonDays } from "./games-view.js";
 import { NEWS_LEAGUE } from "./news-league.js";
@@ -203,19 +203,9 @@ function leaveSearch() {
   if (readShownTab() === "search") openPageTab(readTabBefore() ?? "games");
 }
 
-// Each setting a search can open, by the element in its row.
-const SETTING_ELEMENTS = {
-  "settings:season": "seasonPicker",
-  "settings:notifications": "notifyRow",
-  "settings:team-outlets": "teamOutletsSwitch",
-  "settings:paywalled": "paywalledSwitch",
-  "settings:appearance": "appearanceTitle",
-  "settings:diagnostics": "diagnosticsSwitch",
-};
-
 /** @param {string} key */
 const findSettingRow = (key) =>
-  document.getElementById(SETTING_ELEMENTS[key] ?? "")?.closest(".control-row") ?? null;
+  /** @type {HTMLElement | null} */ (document.querySelector(`[data-setting="${key}"]`));
 
 // Settings itself always shows, and a setting only while its row does.
 /** @param {string} key */
@@ -227,15 +217,18 @@ const isSettingShown = (key) => {
 const readSearchPages = () => listSearchPages({ index: session.playerIndex, isSettingShown });
 
 /**
- * Opens a place a search lists: one of the Standings tab's lists, or settings at one of its rows.
+ * Opens a place a search lists: a tab, one of the Standings tab's lists, a game's section, or
+ * settings at one of its rows.
  * @param {string} key
  */
 function openSearchPlace(key) {
-  const [place, list] = key.split(":");
-  if (place === "standings") {
+  const [place, detail] = key.split(":");
+  if (place === "tab") openPageTab(detail);
+  else if (place === "standings") {
     openPageTab("standings");
-    showStandingsList(list);
-  } else openSettings(findSettingRow(key));
+    showStandingsList(detail);
+  } else if (place === "highlights") openGameSection(detail, "highlights");
+  else openSettings(findSettingRow(key));
 }
 
 // The season a search reads, its words read again only for another season or schedule.

@@ -213,6 +213,7 @@ function listPages(text) {
     rows: rows.map((row) => {
       if (row.kind === "place") return row.place.name.join(" ");
       if (row.kind === "player") return `${row.player.firstName} ${row.player.lastName}`;
+      if (row.kind === "game-part") return `${row.part.name} of ${row.gameText ?? "the season"}`;
       return row.kind === "team" ? row.team.fullName : `${row.team.fullName} Roster`;
     }),
     gameText,
@@ -256,10 +257,133 @@ test("the Standings lists and settings are found by their words, and only the se
   assert.deepEqual(listPages("season").rows, []);
 });
 
+test("a word a search of games passes over, as season, still finds its setting, and no games", () => {
+  const pages = listSearchPages({ index: INDEX, isSettingShown: () => true });
+  const found = findPages("season", { dictionary: CONTEXT.dictionary, pages, isTyping: false });
+  assert.deepEqual(
+    found.rows.map((row) => (row.kind === "place" ? row.place.key : row.kind)),
+    ["settings:season"],
+  );
+  assert.equal(found.gameText, null);
+});
+
+test("the Bracket and News tabs are found by their words, the Bracket beside the playoffs' games", () => {
+  assert.deepEqual(listPages("bracket"), { rows: ["Bracket"], gameText: null, others: [] });
+  assert.deepEqual(listPages("playoffs").rows, ["Bracket"]);
+  assert.equal(listPages("playoffs").gameText, "playoffs");
+  assert.deepEqual(listPages("news").rows, [
+    "News",
+    "Settings Include dedicated Liberty sources",
+    "Settings Include content from The Athletic",
+  ]);
+});
+
+test("Highlights are found for the latest final of the season, or of the games the other words find", () => {
+  assert.deepEqual(listPages("highlights").rows, ["Highlights of the season"]);
+  assert.deepEqual(listPages("Liberty highlights").rows, ["Highlights of liberty"]);
+  assert.deepEqual(listPages("Liberty Lynx recap").rows, ["Highlights of liberty lynx"]);
+  assert.equal(listPages("highlights").gameText, null);
+});
+
 test("the examples are three searches for games, then a player and a team's Roster", () => {
   const { examples } = listSearchPages({ index: INDEX, isSettingShown: () => true });
   assert.deepEqual(
     [...listExamples(CONTEXT, 5 - examples.length), ...examples],
     ["Dream at Valkyries", "Aces in New York", "Games this weekend", "Stewart", "Aces roster"],
   );
+});
+
+// Every tab, sheet, sheet section, and setting the page has, and what search does with it: the
+// search that lists a row opening it, the search of games that finds it, or why search leaves it
+// out. A new one fails the test below until it's here, so it's made searchable, or left out on
+// purpose.
+const COVERAGE = {
+  "tab:bracket": { search: "bracket", opens: "tab:bracket" },
+  "tab:games": { leftOut: "Typing games already searches every game" },
+  "tab:standings": { search: "standings", opens: "standings:league" },
+  "tab:news": { search: "news", opens: "tab:news" },
+  "tab:search": { leftOut: "It's the search itself" },
+  "dialog:settingsDialog": { search: "settings", opens: "settings" },
+  "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
+  "sheet:gameSheet": { games: "Liberty at Lynx" },
+  "section:game": { games: "Liberty at Lynx" },
+  "section:highlights": { search: "highlights", opens: "highlights" },
+  "sheet:teamSheet": { search: "Liberty", opens: "team" },
+  "section:team": { search: "Liberty", opens: "team" },
+  "section:roster": { search: "Liberty roster", opens: "roster" },
+  "sheet:playerSheet": { search: "Stewart", opens: "player" },
+  "settings:season": { search: "season", opens: "settings:season" },
+  "settings:notifications": { search: "notifications", opens: "settings:notifications" },
+  "settings:team-outlets": { search: "dedicated sources", opens: "settings:team-outlets" },
+  "settings:paywalled": { search: "the athletic", opens: "settings:paywalled" },
+  "settings:appearance": { search: "dark mode", opens: "settings:appearance" },
+  "settings:home-screen": {
+    leftOut: "Shows only in a phone's browser, whose bar at the top also asks to add the page",
+  },
+  "settings:diagnostics": { search: "diagnostics", opens: "settings:diagnostics" },
+};
+
+/** The page's tabs, dialogs, sheets, sheet sections, and settings, as its markup names them. */
+function listPagePlaces() {
+  const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
+  const tabBar = page.slice(page.indexOf('<nav class="tabs">'), page.indexOf("</nav>"));
+  const sheets = page.slice(page.indexOf('<dialog id="sheetDialog"'));
+  const listMatches = (/** @type {string} */ text, /** @type {RegExp} */ pattern) =>
+    [...text.matchAll(pattern)].map(([, key]) => key);
+  return [
+    ...listMatches(tabBar, /data-tab="([^"]+)"/g).map((key) => `tab:${key}`),
+    ...listMatches(page, /<dialog id="([^"]+)"/g).map((id) => `dialog:${id}`),
+    ...listMatches(sheets, /<section\s+id="([^"]+)"\s+class="sheet-page[\s"]/g).map(
+      (id) => `sheet:${id}`,
+    ),
+    ...listMatches(sheets, /data-tab="([^"]+)"/g).map((key) => `section:${key}`),
+    ...listMatches(page, /data-setting="([^"]+)"/g),
+  ];
+}
+
+/**
+ * What a search's row opens, by the key a place has, or the kind of sheet or section.
+ * @param {import("#shared/page-search.js").PageRow} row
+ */
+function nameOpened(row) {
+  if (row.kind === "place") return row.place.key;
+  if (row.kind === "game-part") return row.part.key;
+  if (row.kind === "section") return "roster";
+  return row.kind;
+}
+
+test("every tab, sheet, section, and setting says what search does with it", () => {
+  assert.deepEqual(
+    listPagePlaces().sort(),
+    Object.keys(COVERAGE).sort(),
+    "Make each new place searchable in search-pages.js, or say why not, in COVERAGE",
+  );
+});
+
+test("every setting's row names the place a search opens", () => {
+  const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
+  const rows = [...page.matchAll(/<\w+\s+class="control-row[^>]*>/g)].map(([row]) => row);
+  assert.deepEqual(
+    rows.filter((row) => !row.includes("data-setting=")),
+    [],
+  );
+});
+
+test("each place search opens is listed by its search, and each game by a search of games", () => {
+  const pages = listSearchPages({ index: INDEX, isSettingShown: () => true });
+  for (const [place, coverage] of Object.entries(COVERAGE)) {
+    if ("search" in coverage) {
+      const { rows } = findPages(coverage.search, {
+        dictionary: CONTEXT.dictionary,
+        pages,
+        isTyping: false,
+      });
+      assert.ok(rows.map(nameOpened).includes(coverage.opens), place);
+    }
+    if ("games" in coverage)
+      assert.ok(
+        findSearchGames(readSearch(coverage.games, CONTEXT), CONTEXT).games.length > 0,
+        place,
+      );
+  }
 });
