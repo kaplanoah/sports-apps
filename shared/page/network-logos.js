@@ -36,14 +36,14 @@ const CHANNELS = [
   { name: "CNBC", file: "cnbc.svg", names: [], hasDarkVersion: true, scale: 1.24, nudge: 0.04 },
   { name: "ESPN", file: "espn.svg", names: [], scale: 0.81, nudge: -0.02 },
   { name: "ESPN2", file: "espn2.svg", names: [], scale: 0.81, nudge: -0.02 },
-  { name: "FOX", file: "fox.svg", names: [], hasDarkVersion: true, scale: 0.84, nudge: 0.02 },
+  { name: "FOX", file: "fox.svg", names: [], hasDarkVersion: true, scale: 0.84, nudge: -0.04 },
   {
     name: "FOX One",
     file: "fox-one.svg",
     names: [],
     hasDarkVersion: true,
     scale: 0.86,
-    nudge: -0.02,
+    nudge: -0.04,
   },
   { name: "FS1", file: "fs1.svg", names: [], scale: 1.12 },
   {

@@ -100,6 +100,14 @@ test("a logo whose weight sits low is nudged up, one whose weight sits high is n
   assert.match(renderNetworksLine(["NBC"]), /style="--logo-scale: [\d.]+; --logo-nudge: [\d.]+"/);
 });
 
+test("FOX and FOX One, which share a wordmark, sit at one height in the line", () => {
+  const [fox, foxOne] = listLogos(["FOX", "FOX One"]);
+  assert.deepEqual([fox.nudge, foxOne.nudge], [-0.04, -0.04]);
+  const line = renderNetworksLine(["FOX", "FOX One"]);
+  assert.match(line, /alt="FOX" style="--logo-scale: 0\.84; --logo-nudge: -0\.04"/);
+  assert.match(line, /alt="FOX One" style="--logo-scale: 0\.86; --logo-nudge: -0\.04"/);
+});
+
 test("a game with no channels listed yet says to check back", () => {
   assert.equal(
     renderNetworksLine([]),
