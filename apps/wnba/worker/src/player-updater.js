@@ -114,12 +114,12 @@ const nameFilledKey = (season) => `filled:${season}`;
 const FILLED_COLUMNS = [
   ...new Set([...TOTALS_COLUMNS, ...GAME_LOG_COLUMNS, ...TEAM_GAME_COLUMNS]),
 ].join(" ");
-// Says every past season was filled with these columns while this one was current, so a run lists
-// the store's seasons again only once the store moves on, which makes the current season a past
-// one, or the sheets come to read another column.
+// Says every past season was filled with these columns, and has its list of players, while this
+// one was current, so a run lists the store's seasons again only once the store moves on, which
+// makes the current season a past one, or the sheets come to read another column.
 const ALL_FILLED_KEY = "allFilled";
 /** @param {number} current */
-const describeAllFilled = (current) => `${current} ${FILLED_COLUMNS}`;
+const describeAllFilled = (current) => `${current} ${FILLED_COLUMNS} player-index`;
 
 /**
  * How many of a season's games the store has seen end.
@@ -342,6 +342,21 @@ function createStoreKeeper() {
   }
 
   /**
+   * Saves a filled season's list of players from the rosters the store keeps, when it has none, so
+   * a season filled before the store kept the list gets one without reading the league again.
+   * @param {RunContext} context
+   * @param {number} season
+   */
+  async function indexKeptRosters(context, season) {
+    if (await context.docs.read(namePlayerIndexKey(season))) return;
+    const rosters = await Promise.all(
+      TEAM_KEYS.map((team) => context.docs.read(nameRosterKey(season, team))),
+    );
+    if (rosters.every(Boolean))
+      await saveDoc(context, namePlayerIndexKey(season), describePlayerIndex(season, rosters));
+  }
+
+  /**
    * Fills the newest past season the store keeps that it hasn't filled.
    * @param {RunContext} context
    * @param {number} current
@@ -350,7 +365,10 @@ function createStoreKeeper() {
     const allFilled = describeAllFilled(current);
     if ((await context.storage.get(ALL_FILLED_KEY)) === allFilled) return;
     for (const season of await listPastSeasons(context.docs, current)) {
-      if ((await context.storage.get(nameFilledKey(season))) === FILLED_COLUMNS) continue;
+      if ((await context.storage.get(nameFilledKey(season))) === FILLED_COLUMNS) {
+        await indexKeptRosters(context, season);
+        continue;
+      }
       const isWhole = await updateSeason(context, season, null);
       context.log.pastSeason = { season, isWhole };
       if (isWhole) await context.storage.put(nameFilledKey(season), FILLED_COLUMNS);
