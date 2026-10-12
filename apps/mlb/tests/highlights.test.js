@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   createHighlightsServer,
   describeHighlights,
+  listStillsToCheck,
   nameContentRequest,
   nameHighlightsKey,
   namePlaysRequest,
@@ -19,17 +20,63 @@ const EVENING = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-07-evening.json`, "utf8"),
 );
 const MLB_API = "https://statsapi.mlb.com";
+const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 const BREWERS_AT_PADRES = "849826";
 const RAYS_AT_YANKEES = "849838";
 
-/** @param {string} id */
-const describeRecorded = (id) => describeHighlights(id, RECORDED.content[id], RECORDED.plays[id]);
+/**
+ * @param {string} id
+ * @param {Set<string>} [withHeadlines]
+ */
+const describeRecorded = (id, withHeadlines) =>
+  describeHighlights(id, RECORDED.content[id], RECORDED.plays[id], withHeadlines);
 
-function createMlbFetch() {
+/**
+ * MLB's own still for the game's clip with the title, and its frames' address.
+ * @param {string} id
+ * @param {string} title
+ */
+function findRecordedClip(id, title) {
+  const item = RECORDED.content[id].highlights.highlights.items.find(
+    (/** @type {any} */ candidate) => candidate.headline.trim() === title,
+  );
+  const still = item.image.cuts.find((/** @type {any} */ cut) => cut.width === 480).src;
+  const frames = item.playbacks.find(
+    (/** @type {any} */ playback) => playback.name === "trickplay",
+  );
+  return { still, frames: frames?.url ?? null };
+}
+
+/**
+ * @param {any} highlights
+ * @param {string} title
+ */
+const findPlay = (highlights, title) =>
+  highlights.plays.find((/** @type {any} */ play) => play.title === title);
+
+/**
+ * MLB as recorded, and Claude, finding a headline on each still in `withHeadlines`, unless it's
+ * down.
+ * @param {Set<string>} [withHeadlines]
+ */
+function createMlbFetch(withHeadlines = new Set()) {
+  const claude = { isDown: false };
   /** @type {string[]} */
   const requests = [];
-  /** @param {string} url */
-  const fetchImpl = async (url) => {
+  /** @type {string[]} */
+  const stillsAsked = [];
+  /**
+   * @param {string} url
+   * @param {any} [init]
+   */
+  const fetchImpl = async (url, init) => {
+    if (url === CLAUDE_URL) {
+      const still = JSON.parse(init.body).messages[0].content[0].source.url;
+      stillsAsked.push(still);
+      if (claude.isDown) return new Response("{}", { status: 529 });
+      const text = withHeadlines.has(still) ? "yes" : "no";
+      return new Response(JSON.stringify({ content: [{ type: "text", text }] }));
+    }
     const path = url.slice(MLB_API.length);
     requests.push(path);
     const id = /\/game\/(\d+)\//.exec(path)?.[1] ?? "";
@@ -41,7 +88,7 @@ function createMlbFetch() {
           : null;
     return answer ? new Response(JSON.stringify(answer)) : new Response("", { status: 404 });
   };
-  return { requests, fetchImpl };
+  return { claude, requests, stillsAsked, fetchImpl: /** @type {any} */ (fetchImpl) };
 }
 
 test("a game's plays come in the order they happened, each with its inning, and a play that scored with the score after it", () => {
@@ -78,12 +125,81 @@ test("a game's clips that aren't its plays, like interviews and the condensed ga
   assert.ok(!titles.some((title) => /Condensed Game|talk|ABS challenge|first pitch/i.test(title)));
 });
 
-test("each clip has a still sized for its place and MLB's video the phone plays", () => {
-  const { recap, plays } = describeRecorded(BREWERS_AT_PADRES);
+test("each play's clip has MLB's still sized for its place and MLB's video the phone plays", () => {
+  const { plays } = describeRecorded(BREWERS_AT_PADRES);
 
-  assert.match(recap?.still ?? "", /\/w_960,h_540,/);
   assert.match(plays[0].still ?? "", /\/w_480,h_270,/);
   assert.match(plays[0].video, /^https:\/\/mlb-cuts-diamond\.mlb\.com\/.+_1280x720_59_4000K\.mp4$/);
+});
+
+test("the recap's still is the frame from the middle of its video, in place of MLB's title card", () => {
+  const { recap } = describeRecorded(BREWERS_AT_PADRES);
+
+  assert.equal(recap?.length, 181);
+  assert.match(
+    recap?.still ?? "",
+    /^https:\/\/mlb-cuts-diamond\.mlb\.com\/.+_320x180\/05s\.0000018\.jpg$/,
+  );
+});
+
+test("a recap without frames from its video shows MLB.com's photo of the game", () => {
+  const content = structuredClone(RECORDED.content[BREWERS_AT_PADRES]);
+  const recapItem = content.highlights.highlights.items.find((/** @type {any} */ item) =>
+    /Game 3 Highlights/.test(item.headline),
+  );
+  recapItem.playbacks = recapItem.playbacks.filter(
+    (/** @type {any} */ playback) => playback.name !== "trickplay",
+  );
+
+  const { recap } = describeHighlights(
+    BREWERS_AT_PADRES,
+    content,
+    RECORDED.plays[BREWERS_AT_PADRES],
+  );
+
+  assert.equal(
+    recap?.still,
+    content.editorial.recap.mlb.image.cuts.find((/** @type {any} */ cut) => cut.width === 960).src,
+  );
+});
+
+test("a play whose still has a headline on it shows the frame from the middle of its video", () => {
+  const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
+  const highlights = describeRecorded(BREWERS_AT_PADRES, new Set([contreras.still]));
+
+  assert.equal(
+    findPlay(highlights, "William Contreras' solo home run").still,
+    contreras.frames?.replace("%", "0000003"),
+  );
+  assert.match(findPlay(highlights, "Jackson Merrill's sliding catch").still, /\/w_480,h_270,/);
+});
+
+test("a play whose still has a headline and whose clip has no frames shows MLB.com's photo of the game", () => {
+  const fried = findRecordedClip(RAYS_AT_YANKEES, "Max Fried strikes out Junior Caminero");
+  const highlights = describeRecorded(RAYS_AT_YANKEES, new Set([fried.still]));
+
+  assert.equal(fried.frames, null);
+  assert.equal(
+    findPlay(highlights, "Max Fried strikes out Junior Caminero").still,
+    RECORDED.content[RAYS_AT_YANKEES].editorial.recap.mlb.image.cuts.find(
+      (/** @type {any} */ cut) => cut.width === 480,
+    ).src,
+  );
+});
+
+test("each play's still goes to Claude but Getty's and the AP's photos, which never carry a headline", () => {
+  const stills = listStillsToCheck(
+    RECORDED.content[BREWERS_AT_PADRES],
+    RECORDED.plays[BREWERS_AT_PADRES],
+  );
+
+  assert.equal(stills.length, 7);
+  assert.ok(
+    stills.includes(findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run").still),
+  );
+  assert.ok(
+    !stills.includes(findRecordedClip(BREWERS_AT_PADRES, "Manny Machado's RBI single").still),
+  );
 });
 
 test("a game's recap video and MLB.com's story lead its highlights", () => {
@@ -149,40 +265,58 @@ test("the route turns away an id that isn't MLB's", async () => {
   assert.equal(response.status, 400);
 });
 
-test("the store's job reads each of the slate's finals in two requests, and saves its highlights", async () => {
-  const now = Date.parse(EVENING.now);
-  const slate = buildSnapshot(EVENING.responses, { season: EVENING.season, now }).slate;
+/**
+ * The store's job over the evening's slate, with its own storage and documents.
+ * @param {ReturnType<typeof createMlbFetch>} mlb
+ * @param {Record<string, string>} env
+ */
+function createJobRun(mlb, env) {
+  const clock = { now: Date.parse(EVENING.now) };
+  const slate = buildSnapshot(EVENING.responses, { season: EVENING.season, now: clock.now }).slate;
   const stored = new Map(
     Object.entries({
       "live/current": { season: EVENING.season },
       [`seasons/${EVENING.season}`]: { year: EVENING.season, slate },
     }),
   );
-  const docs = {
-    read: async (/** @type {string} */ key) => stored.get(key) ?? null,
-    list: async () => [],
-    write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-      stored.set(key, doc);
+  /** @type {Map<string, any>} */
+  const storage = new Map();
+  const context = /** @type {any} */ ({
+    docs: {
+      read: async (/** @type {string} */ key) => stored.get(key) ?? null,
+      list: async () => [],
+      write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
+        stored.set(key, doc);
+      },
+    },
+    storage: {
+      get: async (/** @type {string} */ key) => structuredClone(storage.get(key)),
+      put: async (/** @type {string} */ key, /** @type {any} */ value) => {
+        storage.set(key, structuredClone(value));
+      },
+    },
+    env,
+    fetchImpl: mlb.fetchImpl,
+    now: () => clock.now,
+  });
+  const job = createHighlightsUpdater();
+  return {
+    stored,
+    runJob: () => job.run(context),
+    forgetReads: () => {
+      for (const key of storage.keys()) if (key.startsWith("highlight-reads:")) storage.delete(key);
+    },
+    wait: (/** @type {number} */ minutes) => {
+      clock.now += minutes * 60 * 1000;
     },
   };
-  const storage = new Map();
-  const mlb = createMlbFetch();
-  const job = createHighlightsUpdater();
+}
 
-  await job.run(
-    /** @type {any} */ ({
-      docs,
-      storage: {
-        get: async (/** @type {string} */ key) => storage.get(key),
-        put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-          storage.set(key, value);
-        },
-      },
-      env: {},
-      fetchImpl: mlb.fetchImpl,
-      now: () => now,
-    }),
-  );
+test("the store's job reads each of the slate's finals in two requests, and saves its highlights", async () => {
+  const mlb = createMlbFetch();
+  const { stored, runJob } = createJobRun(mlb, {});
+
+  await runJob();
 
   const games = new Set(mlb.requests.map((path) => /\/game\/(\d+)\//.exec(path)?.[1]));
   assert.equal(mlb.requests.length, 2 * games.size);
@@ -190,5 +324,47 @@ test("the store's job reads each of the slate's finals in two requests, and save
   assert.deepEqual(
     stored.get(nameHighlightsKey(BREWERS_AT_PADRES)),
     describeRecorded(BREWERS_AT_PADRES),
+  );
+});
+
+test("the store's job asks Claude about each still once, and saves the moment for one with a headline", async () => {
+  const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
+  const mlb = createMlbFetch(new Set([contreras.still]));
+  const { stored, runJob, forgetReads } = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
+
+  await runJob();
+
+  const games = [...new Set(mlb.requests.map((path) => /\/game\/(\d+)\//.exec(path)?.[1] ?? ""))];
+  const stills = games.flatMap((id) => listStillsToCheck(RECORDED.content[id], RECORDED.plays[id]));
+  assert.deepEqual(mlb.stillsAsked.toSorted(), stills.toSorted());
+  assert.equal(
+    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), "William Contreras' solo home run")
+      .still,
+    contreras.frames?.replace("%", "0000003"),
+  );
+
+  const firstReads = mlb.requests.length;
+  forgetReads();
+  await runJob();
+  assert.equal(mlb.requests.length, 2 * firstReads);
+  assert.equal(mlb.stillsAsked.length, stills.length);
+});
+
+test("a game the store's job couldn't check every still of saves nothing, and is read again ten minutes later", async () => {
+  const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
+  const mlb = createMlbFetch(new Set([contreras.still]));
+  const { stored, runJob, wait } = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
+  mlb.claude.isDown = true;
+
+  await runJob();
+  assert.equal(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), undefined);
+
+  mlb.claude.isDown = false;
+  wait(10);
+  await runJob();
+  assert.equal(
+    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), "William Contreras' solo home run")
+      .still,
+    contreras.frames?.replace("%", "0000003"),
   );
 });

@@ -40,7 +40,8 @@ function createDocs() {
 }
 
 /**
- * The job over `games`, newest first, whose league answers each read with `answer(id)`.
+ * The job over `games`, newest first, whose league answers each read with `answer(id)`, and
+ * reads them as of its edition, which a test can raise between runs.
  * @param {any[]} games
  * @param {{ answer?: (id: string) => any }} [options]
  */
@@ -48,21 +49,27 @@ function createRun(games, { answer = (id) => ({ id, plays: [] }) } = {}) {
   const docs = createDocs();
   const storage = createStorage();
   const clock = { now: NOW };
+  const league = { edition: /** @type {number | undefined} */ (undefined) };
   /** @type {string[]} */
   const reads = [];
-  const job = createHighlightsJob({
-    listFinals: async () => ({ season: 2026, games }),
-    findEnd: (game) => game.end,
-    readHighlights: async (_context, game) => {
-      reads.push(game.id);
-      return answer(game.id);
-    },
-    nameKey: (id) => `highlights/${id}`,
-  });
+  const createJob = () =>
+    createHighlightsJob({
+      listFinals: async () => ({ season: 2026, games }),
+      findEnd: (game) => game.end,
+      readHighlights: async (_context, game) => {
+        reads.push(game.id);
+        return answer(game.id);
+      },
+      nameKey: (id) => `highlights/${id}`,
+      edition: league.edition,
+    });
   const context = /** @type {any} */ ({ docs, storage, env: {}, now: () => clock.now });
   return {
     docs,
-    runJob: () => job.run(context),
+    runJob: () => createJob().run(context),
+    raiseEdition: (/** @type {number} */ edition) => {
+      league.edition = edition;
+    },
     wait: (/** @type {number} */ minutes) => {
       clock.now += minutes * MINUTE_MS;
     },
@@ -158,4 +165,52 @@ test("a game the league has no such game for saves nothing", async () => {
   await runJob();
   assert.deepEqual(takeReads(), ["1"]);
   assert.deepEqual(docs.writes, []);
+});
+
+test("a league that raises its edition reads each final it kept once more, newest first, and then never", async () => {
+  const games = ["5", "4", "3", "2", "1"].map((id, index) => endGame(id, 20 + index));
+  const { runJob, wait, takeReads, raiseEdition } = createRun(games);
+  await runJob();
+  wait(2);
+  await runJob();
+  takeReads();
+
+  raiseEdition(1);
+  wait(60);
+  await runJob();
+  assert.deepEqual(takeReads(), ["5", "4", "3", "2"]);
+  wait(2);
+  await runJob();
+  assert.deepEqual(takeReads(), ["1"]);
+  wait(24 * 60);
+  await runJob();
+  assert.deepEqual(takeReads(), []);
+});
+
+test("a read as of a raised edition that fails is tried again ten minutes later", async () => {
+  const outage = { isDown: false };
+  const { runJob, wait, takeReads, raiseEdition } = createRun([endGame("1", 30)], {
+    answer: (id) => {
+      if (outage.isDown) throw new Error("MLB is down");
+      return { id, plays: [] };
+    },
+  });
+  await runJob();
+  takeReads();
+
+  raiseEdition(1);
+  outage.isDown = true;
+  wait(60);
+  await runJob();
+  assert.deepEqual(takeReads(), ["1"]);
+  outage.isDown = false;
+  wait(2);
+  await runJob();
+  assert.deepEqual(takeReads(), []);
+  wait(8);
+  await runJob();
+  assert.deepEqual(takeReads(), ["1"]);
+  wait(24 * 60);
+  await runJob();
+  assert.deepEqual(takeReads(), []);
 });
