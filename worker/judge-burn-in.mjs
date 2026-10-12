@@ -131,8 +131,8 @@ export function sortBurnInFailures(report, editedTests) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const reportPath = process.argv[2];
   if (!existsSync(reportPath)) {
-    console.log("Burn-in ran no tests.");
-    process.exit(0);
+    console.log(`::error::Burn-in's run broke before writing its report, ${reportPath}.`);
+    process.exit(1);
   }
   const editedTests = listEditedTests(readChangedLines(readFileSync(0, "utf8")), (path) =>
     existsSync(path) ? readFileSync(path, "utf8") : null,
