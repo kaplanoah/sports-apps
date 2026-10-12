@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
+import { readDeclarations, readRule } from "./css-rules.js";
 import {
   drawSpread,
   isNearlyRanked,
@@ -28,6 +30,44 @@ test("a fewest-first curve runs from the most to the fewest, so the mark sits fu
   assert.ok(drawSpread(values, 0.5, true).left > drawSpread(values, 4, true).left);
   assert.equal(fewest.edge.split(" L").length, most.edge.split(" L").length);
   assert.notEqual(fewest.edge, most.edge);
+});
+
+test("a mark for a number past either end of the curve stops at that end, on the curve there", () => {
+  const values = [60, 70, 70, 90];
+  assert.deepEqual(drawSpread(values, 100).left, 100);
+  assert.deepEqual(drawSpread(values, 100).top, drawSpread(values, 90).top);
+  assert.deepEqual(drawSpread(values, 40).left, 0);
+  assert.deepEqual(drawSpread(values, 40).top, drawSpread(values, 60).top);
+  assert.deepEqual(drawSpread(values, 40, true).left, 100);
+  assert.match(
+    String(renderSpreadCurve(values, [{ value: 100, isProvisional: true }])),
+    /left: 100\.0%/,
+  );
+});
+
+test("each app draws a curve's lines as borders, which Safari keeps a whole number of screen pixels wide wherever they fall", () => {
+  const apps = new URL("../apps/", import.meta.url);
+  for (const app of readdirSync(apps)) {
+    const path = new URL(`${app}/page/styles.css`, apps).pathname;
+    const lines = readDeclarations(path).filter((declaration) =>
+      /\.player-curve (i\b|:is\([^)]*\bi\b)/.test(readRule(declaration)),
+    );
+    const widths = lines.filter(({ property }) => property === "width");
+    assert.deepEqual(
+      widths.map(({ value }) => value),
+      ["0"],
+      path,
+    );
+    assert.ok(
+      lines.some(({ property }) => property.startsWith("border-left")),
+      path,
+    );
+    assert.deepEqual(
+      lines.filter(({ property }) => property.startsWith("background")),
+      [],
+      path,
+    );
+  }
 });
 
 test("a rank counts only the players strictly better, so tied players share one, and the fewest can rank first", () => {

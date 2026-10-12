@@ -739,7 +739,7 @@ const readNumberLineMiddles = (sheet) =>
     }),
   );
 
-test("where an unranked starter near the innings would rank is a hairline in his club's color through each curve, 4px above it and 3.5px past its foot, with no dot", async ({
+test("where an unranked starter near the innings would rank is a hairline one screen pixel wide in his club's color through each curve, 4px above it and 3.5px past its foot, with no dot", async ({
   page,
 }) => {
   const sheet = await openMatchup(page, {
@@ -768,18 +768,19 @@ test("where an unranked starter near the innings would rank is a hairline in his
     const left = (parseFloat(element.style.left) / 100) * curveBox.width + curveBox.left;
     return {
       width: box.width,
+      pixel: 1 / window.devicePixelRatio,
       above: place - box.top,
       past: box.bottom - curveBox.bottom,
       middle: box.left + box.width / 2 - left,
-      color: getComputedStyle(element).backgroundColor,
+      color: getComputedStyle(element).borderLeftColor,
       side: getComputedStyle(element).getPropertyValue("--side").trim(),
       dots: curve.querySelectorAll("b.home").length,
     };
   });
-  expect(shape.width).toBeCloseTo(0.5, 1);
+  expect(shape.width).toBe(shape.pixel);
   expect(shape.above).toBeCloseTo(4, 1);
   expect(shape.past).toBeCloseTo(3.5, 1);
-  expect(shape.middle).toBeCloseTo(0, 1);
+  expect(Math.abs(shape.middle)).toBeLessThanOrEqual(shape.pixel / 2);
   expect(shape.dots).toBe(0);
   const paint = await sheet.evaluate((_, color) => {
     const probe = document.createElement("span");
