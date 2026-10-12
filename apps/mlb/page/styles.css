@@ -1759,21 +1759,21 @@ body.kbd .player-open:focus {
   vector-effect: non-scaling-stroke;
 }
 /* Each line is a border, which Safari draws a whole number of screen pixels wide wherever it falls:
-   4 on a phone, and the hairline 1. A box half a pixel wide draws 1 pixel at some places and 2 at
+   5 on a phone, and the hairline 2. A box half a pixel wide draws 1 pixel at some places and 2 at
    others. */
 .player-curve i {
   position: absolute;
   bottom: 0;
   width: 0;
-  margin-left: -0.7px;
-  border-left: 1.4px solid var(--accent);
+  margin-left: -0.8667px;
+  border-left: 1.7333px solid var(--accent);
 }
 /* Where a player not yet ranked would rank is a hairline with no dot, reaching 4px above the curve
    and 3.5px under its foot. */
 .player-curve i.provisional {
   bottom: -3.5px;
-  border-left-width: 0.4px;
-  margin: -4px 0 0 -0.2px;
+  border-left-width: 0.7333px;
+  margin: -4px 0 0 -0.3667px;
 }
 .player-curve b {
   position: absolute;

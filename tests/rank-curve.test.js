@@ -70,6 +70,26 @@ test("each app draws a curve's lines as borders, which Safari keeps a whole numb
   }
 });
 
+test("on a phone, each app's ranked line is 5 screen pixels wide and its would-be hairline 2", () => {
+  // Safari rounds a border's width down to whole screen pixels, 3 to a point on an iPhone.
+  const countPhonePixels = (/** @type {string} */ width) => Math.floor(parseFloat(width) * 3);
+  const apps = new URL("../apps/", import.meta.url);
+  for (const app of readdirSync(apps)) {
+    const path = new URL(`${app}/page/styles.css`, apps).pathname;
+    const declarations = readDeclarations(path);
+    /** @param {string} rule @param {string} property */
+    const readWidth = (rule, property) =>
+      declarations.find((each) => readRule(each) === rule && each.property === property)?.value ??
+      "";
+    assert.equal(countPhonePixels(readWidth(".player-curve i", "border-left")), 5, path);
+    assert.equal(
+      countPhonePixels(readWidth(".player-curve i.provisional", "border-left-width")),
+      2,
+      path,
+    );
+  }
+});
+
 test("a rank counts only the players strictly better, so tied players share one, and the fewest can rank first", () => {
   const values = [0.25, 0.3, 0.3, 0.28];
   assert.deepEqual(rankAmong(values, 0.3, { isRanked: true }), {
