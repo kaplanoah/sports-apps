@@ -543,6 +543,25 @@ test("a reload shows the search as it was before the page's code arrives, and th
   release();
 });
 
+test("a search put back from an earlier release names its field as this one does", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
+  await findInput(page).evaluate((input) => {
+    input.setAttribute("placeholder", "Search games");
+    input.setAttribute("aria-label", "Search games");
+  });
+  await setHidden(page, true);
+
+  await page.reload();
+  await page.waitForLoadState("domcontentloaded");
+
+  await expect(findInput(page)).toHaveAttribute("placeholder", "Teams, players, and games");
+  await expect(findInput(page)).toHaveAttribute("aria-label", "Teams, players, and games");
+});
+
 test("every search state keeps to the type scale and its periods, and every tap lands on a button", async ({
   page,
 }) => {

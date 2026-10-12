@@ -98,8 +98,7 @@ const findList = () =>
 const findRead = () =>
   /** @type {HTMLElement | null} */ (view?.querySelector(".search-read") ?? null);
 
-/** @param {string} placeholder */
-const renderShell = (placeholder) =>
+const renderShell = () =>
   html`<div class="day-bar search-bar is-empty">
       <form class="search-row" role="search">
         <label class="search-field"
@@ -107,8 +106,6 @@ const renderShell = (placeholder) =>
             type="search"
             class="search-input"
             value=""
-            placeholder="${placeholder}"
-            aria-label="${placeholder}"
             enterkeyhint="search"
             autocomplete="off"
             autocorrect="off"
@@ -581,6 +578,16 @@ function sendSearch(event) {
 }
 
 /**
+ * Names the field by what it finds, as a field put back from an earlier release may not.
+ * @param {string} placeholder
+ */
+function nameField(placeholder) {
+  const input = findInput();
+  input?.setAttribute("placeholder", placeholder);
+  input?.setAttribute("aria-label", placeholder);
+}
+
+/**
  * Wires the search in `element`, which the page may already have put back as it was shown before a
  * reload (show-last-drawn.js), then takes it over, keeping where its list was scrolled.
  * @param {HTMLElement} element
@@ -589,7 +596,8 @@ function sendSearch(event) {
 export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
-  if (!findInput()) setHtml(element, renderShell(searchLeague.placeholder ?? "Search games"));
+  if (!findInput()) setHtml(element, renderShell());
+  nameField(searchLeague.placeholder ?? "Search games");
   placedFor = element.hidden
     ? null
     : nameShown(readQuery().trim(), !!element.querySelector(".search-games-line"));
