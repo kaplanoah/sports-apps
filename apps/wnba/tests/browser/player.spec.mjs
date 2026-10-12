@@ -5,6 +5,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
+import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -106,6 +107,21 @@ test("her mark on each curve is her team's mark color for the theme", async ({ p
   await expect(mark).toHaveCSS("background-color", "rgb(68, 146, 116)");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(mark).toHaveCSS("background-color", "rgb(135, 213, 181)");
+});
+
+test("her dot on each curve is ringed in the sheet's color, as MLB's are, in Maple and Walnut", async ({
+  page,
+}) => {
+  await openApp(page);
+  const sheet = await openFromRoster(page, "Breanna Stewart");
+  const dots = sheet.locator(".player-curve b");
+  for (const theme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const rings = await readDotRings(dots);
+    expect(rings).toHaveLength(8);
+    for (const { ring, expected } of rings) expect(ring, theme).toBe(expected);
+  }
 });
 
 test("each of her facts is centered under its label", async ({ page }) => {
@@ -260,7 +276,7 @@ test("where a player short of the rule would rank is a hairline in her mark colo
       above: place - box.top,
       past: box.bottom - curveBox.bottom,
       color: getComputedStyle(element).borderLeftColor,
-      team: getComputedStyle(curve).getPropertyValue("--team").trim(),
+      team: getComputedStyle(curve).getPropertyValue("--rank-mark").trim(),
       dots: curve.querySelectorAll("b").length,
     };
   });

@@ -20,6 +20,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
+import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -815,6 +816,21 @@ test("a starter's dot at either end of a curve sits right under his number's dot
   );
   expect(offsets[0]).toBeCloseTo(0, 1);
   expect(offsets[1]).toBeCloseTo(0, 1);
+});
+
+test("each starter's dot on a curve is ringed in the sheet's color, so two that meet stay apart, in Night Game and Ball", async ({
+  page,
+}) => {
+  const sheet = await openMatchup(page);
+  const dots = sheet.locator(".tape .player-curve b");
+  await expect(dots.first()).toBeVisible();
+  for (const theme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const rings = await readDotRings(dots);
+    expect(rings.length).toBeGreaterThan(0);
+    for (const { ring, expected } of rings) expect(ring, theme).toBe(expected);
+  }
 });
 
 test("a rank, his own or where he would rank, is the dim color throughout and sits 4px clear of the curve under it", async ({

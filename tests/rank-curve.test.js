@@ -45,49 +45,50 @@ test("a mark for a number past either end of the curve stops at that end, on the
   );
 });
 
-test("each app draws a curve's lines as borders, which Safari keeps a whole number of screen pixels wide wherever they fall", () => {
+const CURVE_STYLES = new URL("../shared/page/rank-curve.css", import.meta.url).pathname;
+
+/** @param {import("./css-rules.js").Declaration[]} declarations */
+const findLineRules = (declarations) =>
+  declarations.filter((declaration) =>
+    /\.player-curve (i\b|:is\([^)]*\bi\b)/.test(readRule(declaration)),
+  );
+
+test("a curve's lines are borders, which Safari keeps a whole number of screen pixels wide wherever they fall", () => {
+  const lines = findLineRules(readDeclarations(CURVE_STYLES));
+  assert.deepEqual(
+    lines.filter(({ property }) => property === "width").map(({ value }) => value),
+    ["0"],
+  );
+  assert.ok(lines.some(({ property }) => property.startsWith("border-left")));
+  assert.deepEqual(
+    lines.filter(({ property }) => property.startsWith("background")),
+    [],
+  );
+});
+
+test("no app sizes or fills a curve's lines itself, only their color through --rank-mark", () => {
   const apps = new URL("../apps/", import.meta.url);
   for (const app of readdirSync(apps)) {
     const path = new URL(`${app}/page/styles.css`, apps).pathname;
-    const lines = readDeclarations(path).filter((declaration) =>
-      /\.player-curve (i\b|:is\([^)]*\bi\b)/.test(readRule(declaration)),
-    );
-    const widths = lines.filter(({ property }) => property === "width");
     assert.deepEqual(
-      widths.map(({ value }) => value),
-      ["0"],
-      path,
-    );
-    assert.ok(
-      lines.some(({ property }) => property.startsWith("border-left")),
-      path,
-    );
-    assert.deepEqual(
-      lines.filter(({ property }) => property.startsWith("background")),
+      findLineRules(readDeclarations(path))
+        .map(({ property }) => property)
+        .filter((property) => property !== "--rank-mark"),
       [],
       path,
     );
   }
 });
 
-test("on a phone, each app's ranked line is 5 screen pixels wide and its would-be hairline 2", () => {
+test("on a phone, a ranked line is 5 screen pixels wide and a would-be hairline 2", () => {
   // Safari rounds a border's width down to whole screen pixels, 3 to a point on an iPhone.
   const countPhonePixels = (/** @type {string} */ width) => Math.floor(parseFloat(width) * 3);
-  const apps = new URL("../apps/", import.meta.url);
-  for (const app of readdirSync(apps)) {
-    const path = new URL(`${app}/page/styles.css`, apps).pathname;
-    const declarations = readDeclarations(path);
-    /** @param {string} rule @param {string} property */
-    const readWidth = (rule, property) =>
-      declarations.find((each) => readRule(each) === rule && each.property === property)?.value ??
-      "";
-    assert.equal(countPhonePixels(readWidth(".player-curve i", "border-left")), 5, path);
-    assert.equal(
-      countPhonePixels(readWidth(".player-curve i.provisional", "border-left-width")),
-      2,
-      path,
-    );
-  }
+  const declarations = readDeclarations(CURVE_STYLES);
+  /** @param {string} rule @param {string} property */
+  const readWidth = (rule, property) =>
+    declarations.find((each) => readRule(each) === rule && each.property === property)?.value ?? "";
+  assert.equal(countPhonePixels(readWidth(".player-curve i", "border-left")), 5);
+  assert.equal(countPhonePixels(readWidth(".player-curve i.provisional", "border-left-width")), 2);
 });
 
 test("a rank counts only the players strictly better, so tied players share one, and the fewest can rank first", () => {

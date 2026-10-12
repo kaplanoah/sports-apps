@@ -6,8 +6,8 @@
 // the fewest, so a better rank always sits further right. A player not yet ranked, but a quarter of
 // the way to what qualifying takes, shows where he would rank, marked with a line and no dot, which
 // stops at the curve's end when his number is past it. The marks sit in a box over the curve, so an
-// app can draw them a little inside its ends. Each app colors the curve, the line, and the marks
-// from its own stylesheet.
+// app can draw them a little inside its ends. rank-curve.css draws the curve and its marks, in the
+// mark color each app sets, and each app colors a line's dots from its own stylesheet.
 
 import { html } from "./html.js";
 import { formatOrdinal } from "./ordinal.js";
