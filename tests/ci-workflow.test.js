@@ -26,6 +26,12 @@ for (const workflow of ["ci.yml", "flaky.yml"]) {
   });
 }
 
+// The config stops CI's runs after a few failures, but the nightly run names every test that
+// failed in the issue Flaky browser tests.
+test("the nightly run of the browser tests runs every test however many fail", () => {
+  assert.match(readRepoFile(".github/workflows/flaky.yml"), /--max-failures=0\b/);
+});
+
 /** @returns {string[]} the workflow's jobs, by the names they're keyed under */
 const listJobs = () => {
   const jobs = readRepoFile(".github/workflows/ci.yml").split(/^jobs:$/m)[1] ?? "";
