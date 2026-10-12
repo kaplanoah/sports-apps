@@ -293,7 +293,7 @@ test("a sent team shows its pages over its games line, which opens its games alo
   await expect(findGamesLine(page)).toBeVisible();
 });
 
-test("the games line, as tall as a row, opens the games it read with its words in the field, a half-typed team's finished", async ({
+test("while typing, the rows start just under the field, and the games line, reaching from the line above to just past the first game's border, opens the games it read with its words in the field, a half-typed team's finished", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -301,17 +301,40 @@ test("the games line, as tall as a row, opens the games it read with its words i
   await findInput(page).pressSequentially("Lib");
   await expect(findGamesLine(page)).toHaveText("Liberty•52 games");
 
-  const [line, row] = await Promise.all([
-    findGamesLine(page).boundingBox(),
-    findRows(page).first().boundingBox(),
-  ]);
-  expect(line?.height).toBe(row?.height);
+  const edges = await page.evaluate(() => {
+    const readBox = (/** @type {string} */ selector) =>
+      /** @type {Element} */ (document.querySelector(selector)).getBoundingClientRect();
+    const line = readBox("#gameSearch .search-games-line");
+    const rows = [...document.querySelectorAll("#gameSearch .search-suggestions li")];
+    return {
+      firstRow:
+        readBox("#gameSearch .search-suggestion").top - readBox("#gameSearch .search-input").bottom,
+      lineTop: line.top - /** @type {Element} */ (rows.at(-1)).getBoundingClientRect().bottom,
+      lineBottom: line.bottom - readBox("#gameSearch .listed-day").top,
+    };
+  });
+  expect(edges.firstRow).toBeCloseTo(2.2, 1);
+  expect(edges.lineTop).toBeCloseTo(0, 1);
+  expect(edges.lineBottom).toBeCloseTo(1.5, 1);
 
   await findGamesLine(page).tap();
 
   await expect(findInput(page)).toHaveValue("Liberty");
   await expect(findLine(page)).toHaveText("Liberty•52 games");
   await expect.poll(() => readTopDay(page)).toBe("2026-10-04");
+});
+
+test("the Search key finishes a half-typed team, as the line read it while typing", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await sendSearch(page, "Lib");
+
+  await expect(findInput(page)).toHaveValue("Liberty");
+  await expect(findRows(page)).toHaveText(["New York Liberty", "RosterNew York Liberty"]);
+  await expect(findGamesLine(page)).toHaveText("Liberty\u202252 games");
 });
 
 test("words that ask only for games go straight to them, and one whose games are all past rests at its end", async ({

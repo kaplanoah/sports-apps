@@ -370,13 +370,31 @@ function listFromToday(games, today) {
  * @param {import("./game-search.js").SearchContext} context
  */
 function readWhileTyping(text, suggestions, context) {
+  if (!isTyping || !isLastWordHalfTyped(text, context)) return text;
   const last = text.split(/\s+/).at(-1) ?? "";
-  const isHalfTyped = readSearch(text, context).skipped.includes(last.toLowerCase());
-  if (!isTyping || !isHalfTyped) return text;
-  const [first] = suggestions;
+  return finishTeam(text, suggestions) ?? text.slice(0, text.length - last.length).trim();
+}
+
+/**
+ * Whether the last word is one the search can't read yet, as a word still being typed is.
+ * @param {string} text
+ * @param {import("./game-search.js").SearchContext} context
+ */
+function isLastWordHalfTyped(text, context) {
+  const last = text.split(/\s+/).at(-1) ?? "";
+  return readSearch(text, context).skipped.includes(last.toLowerCase());
+}
+
+/**
+ * The words with a half-typed team finished, as the first suggestion finishes it, or null when the
+ * first suggestion doesn't finish one.
+ * @param {string} text
+ * @param {Suggestion[]} suggestions
+ */
+function finishTeam(text, [first]) {
   const isTeamFinished =
     first?.mark.kind === "team" && first.text.toLowerCase().startsWith(text.toLowerCase());
-  return isTeamFinished ? first.text : text.slice(0, text.length - last.length).trim();
+  return isTeamFinished ? first.text : null;
 }
 
 /**
@@ -430,6 +448,7 @@ function draw() {
   const text = query.trim();
   findBar()?.classList.toggle("is-empty", !text);
   if (!text) {
+    findBar()?.classList.remove("has-rows");
     setHtml(readLine, html``);
     setHtml(list, renderExamples(listShownExamples(context)));
     placeOnce(nameShown("", false), context.today);
@@ -446,6 +465,7 @@ function draw() {
   const read = search && found && describeSearch(search, found, context);
   const isOverGames =
     !isGamesOnly && (suggestions.length > 0 || rows.length > 0 || others.length > 0);
+  findBar()?.classList.toggle("has-rows", isOverGames);
   setHtml(readLine, isOverGames || !read ? html`` : renderRead(read));
   if (!isOverGames) {
     const games = found?.games.length
@@ -591,7 +611,21 @@ function followFocus(event) {
 /** @param {Event} event */
 function sendSearch(event) {
   event.preventDefault();
-  runSearch(readQuery());
+  runSearch(readSentWords(readQuery()));
+}
+
+/**
+ * The words the Search key sends: a half-typed last word finished when it starts a team, as the
+ * line read it while typing, and otherwise the words as typed.
+ * @param {string} query
+ */
+function readSentWords(query) {
+  const season = league?.readSeason();
+  if (!season) return query;
+  const context = createContext(season);
+  const text = query.trim();
+  if (!isLastWordHalfTyped(text, context)) return query;
+  return finishTeam(text, listSuggestions(query, context)) ?? query;
 }
 
 /**
