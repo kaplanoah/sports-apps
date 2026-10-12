@@ -117,6 +117,20 @@ test("a hitter's season shows his totals, then each ranked number with his rank 
   );
 });
 
+test("a player's totals sit in a club's Season box, five to a row", () => {
+  const markup = String(
+    renderPlayerBody({
+      player: describeRostered(114, "CLE", "Steven Kwan"),
+      hitters: HITTERS,
+      starters: null,
+      side: null,
+      isUnkept: false,
+      isLoading: false,
+    }),
+  );
+  assert.match(markup, /<div class="team-stats" style="--team-stat-columns: 5">/);
+});
+
 test("his postseason shows over his season, as one line", () => {
   const text = renderText(describeRostered(114, "CLE", "Steven Kwan"));
   assert.match(text, /^Postseason 3 games 2-13 • \.154 AVG • 2 R • 1 RBI • 1 BB • 1 K Season/);
@@ -240,4 +254,83 @@ test("a player the store keeps no sheet for says his numbers show while he's on 
     }),
   );
   assert.equal(text, "His numbers show while he's on a club's roster");
+});
+
+const TREINEN_OUT = {
+  reason: "Right shoulder inflammation",
+  sentence:
+    "President of baseball operations Andrew Friedman said Saturday that Treinen (shoulder) hasn't been ruled out for a return in the postseason, Jon Paul Hoornstra of Newsweek.com reports.",
+  updated: "2026-10-03T18:34:00.000Z",
+};
+
+/** @param {any} [out] what ESPN's report says of him */
+function describeTreinen(out = TREINEN_OUT) {
+  const entry = answers[listRosterRequest(119, season)].roster.find(
+    (/** @type {any} */ each) => each.person.fullName === "Blake Treinen",
+  );
+  return describePlayer({
+    ...NUMBERS,
+    entry,
+    club: "LAD",
+    season,
+    person: PEOPLE.get(entry.person.id),
+    out,
+  });
+}
+
+test("a player on the injured list opens on a box with his stay, what's wrong, RotoWire's sentence on it, and the day ESPN changed it, before his season", () => {
+  const markup = String(
+    renderPlayerBody({
+      player: describeTreinen(),
+      hitters: HITTERS,
+      starters: null,
+      side: null,
+      isUnkept: false,
+      isLoading: false,
+    }),
+  );
+
+  assert.match(markup, /^<section class="out-box">/);
+  assert.equal(
+    readText(markup.slice(0, markup.indexOf("</section>"))),
+    `15-day IL Right shoulder inflammation ${TREINEN_OUT.sentence} RotoWire • Oct 3`,
+  );
+  assert.match(markup, /<p class="out-sentence" data-quoted>/);
+  assert.ok(markup.indexOf("out-box") < markup.indexOf("<h3>Season</h3>"));
+});
+
+test("a player on the injured list ESPN says nothing of shows his stay alone, and one off it shows no box", () => {
+  const unexplained = describeTreinen(null);
+  assert.equal(unexplained.injury, "15-day IL");
+  const markup = String(
+    renderPlayerBody({
+      player: unexplained,
+      hitters: HITTERS,
+      starters: null,
+      side: null,
+      isUnkept: false,
+      isLoading: false,
+    }),
+  );
+  assert.equal(readText(markup.slice(0, markup.indexOf("</section>"))), "15-day IL");
+  assert.doesNotMatch(markup, /out-sentence/);
+
+  const kwan = describeRostered(114, "CLE", "Steven Kwan");
+  assert.equal(kwan.injury, null);
+  assert.equal(kwan.out, null);
+  assert.doesNotMatch(renderText(kwan), /IL/);
+});
+
+test("a player on the injured list without a game this season still shows his box, over the note that he has none", () => {
+  const player = {
+    ...describeTreinen(),
+    hitting: null,
+    pitching: null,
+    postseasonHitting: null,
+    postseasonPitching: null,
+  };
+  assert.equal(
+    renderText(player),
+    `15-day IL Right shoulder inflammation ${TREINEN_OUT.sentence} RotoWire • Oct 3 No games yet this season`,
+  );
 });

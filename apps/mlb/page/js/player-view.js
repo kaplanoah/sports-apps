@@ -1,8 +1,9 @@
 // A player's sheet: his name over his club and number, and where he was born, his facts in a row
-// in the sheet's top, then his postseason while he has one, then his regular season: a hitter's
-// totals over each number MLB's ranked hitters are ranked in, and a starter's over each number MLB's
-// qualified starters are, with what he throws, or a reliever's totals alone, each followed by his
-// last few games. A two-way player shows both, his pitching under its own title.
+// in the sheet's top, then, while he's on the injured list, a box with his stay and why, then his
+// postseason while he has one, then his regular season: a hitter's totals over each number MLB's
+// ranked hitters are ranked in, and a starter's over each number MLB's qualified starters are, with
+// what he throws, or a reliever's totals alone, each followed by his last few games. A two-way
+// player shows both, his pitching under its own title.
 
 import { formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html, joinWithSeparator } from "#shared/html.js";
@@ -10,6 +11,7 @@ import { renderPlaceholder } from "#shared/placeholder.js";
 import { rankAmong, renderRankRow } from "#shared/rank-curve.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
+import { renderTeamStats } from "#shared/team-sheet.js";
 import { nameTeam, renderTeamDot } from "./clubs.js";
 import { renderPitchMix } from "./pitch-mix.js";
 import {
@@ -22,8 +24,9 @@ import { formatInnings } from "./stat-table.js";
 
 /**
  * A player as the store keeps him.
- * @typedef {{ id: number, season: number, club: string, name: string, number: string, position: string, facts: PlayerFacts | null, hitting: any, pitching: any, postseasonHitting: any, postseasonPitching: any, lastGames?: { hitting: any[], pitching: any[] } | null }} Player
+ * @typedef {{ id: number, season: number, club: string, name: string, number: string, position: string, facts: PlayerFacts | null, injury?: string | null, out?: OutReason | null, hitting: any, pitching: any, postseasonHitting: any, postseasonPitching: any, lastGames?: { hitting: any[], pitching: any[] } | null }} Player
  * @typedef {{ bats: string | null, throws: string | null, age: number | null, height: string | null, weight: number | null, debut: number | null, birthplace: string | null }} PlayerFacts
+ * @typedef {{ reason: string | null, sentence: string | null, updated: string | null }} OutReason
  */
 /**
  * What the sheet shows of him, and what it ranks him among: the hitters MLB ranks, and for a
@@ -130,16 +133,10 @@ export function renderPlayerFacts(player, isLoading) {
 }
 
 /**
- * A row of totals, each label over its number, in an outlined box.
- * @param {[string, string | number][]} totals
+ * A row of totals, each label over its number, in the box a club's sheet shows its season in.
+ * @param {[string, import("#shared/html.js").Markup | string | number][]} totals
  */
-const renderTotals = (totals) =>
-  html`<div class="totals">
-    ${totals.map(
-      ([label, value]) =>
-        html`<div class="total"><span class="team-label">${label}</span><b class="tabular">${value}</b></div>`,
-    )}
-  </div>`;
+const renderTotals = (totals) => html`${renderTeamStats(totals, 5)}`;
 
 /** @param {any} hitting */
 const describeHittingLine = (hitting) =>
@@ -374,10 +371,31 @@ function renderPitching(player, { starters, side, clubGames = null }, title) {
   )}${pitches}${renderLastGames("Last starts", games, describePitchingGame)}`;
 }
 
+const OUT_SOURCE = "RotoWire";
+
+/**
+ * His stay on the injured list and why he's there, then RotoWire's sentence on it, with the day
+ * ESPN last changed it, or nothing while he isn't on the list.
+ * @param {Player} player
+ */
+function renderOutBox({ injury, out }) {
+  if (!injury) return html``;
+  return html`<section class="out-box">
+    <p class="out-line"><span class="status-chip injured">${injury}</span>${out?.reason && html`<span class="out-words">${out.reason}</span>`}</p>
+    ${
+      out?.sentence &&
+      html`<p class="out-sentence" data-quoted>${out.sentence}</p>
+      <p class="out-source">${joinWithSeparator(
+        [OUT_SOURCE, out.updated && formatShortDate(new Date(out.updated))].filter(Boolean),
+      )}</p>`
+    }
+  </section>`;
+}
+
 const renderPending = () =>
   renderSheetPart(
     "Season",
-    html`<div class="totals">${renderPlaceholder("H R RBI BB K 000 00 00 00 00")}</div>`,
+    renderTotals(["H", "R", "RBI", "BB", "K"].map((label) => [label, renderPlaceholder("000")])),
   );
 
 /**
@@ -404,6 +422,6 @@ export function renderPlayerBody(shown) {
     !player.postseasonHitting &&
     !player.postseasonPitching
   )
-    return html`<p class="sheet-message">No games yet this season</p>`;
-  return html`${renderPostseason(player)}${hitting}${pitching}`;
+    return html`${renderOutBox(player)}<p class="sheet-message">No games yet this season</p>`;
+  return html`${renderOutBox(player)}${renderPostseason(player)}${hitting}${pitching}`;
 }

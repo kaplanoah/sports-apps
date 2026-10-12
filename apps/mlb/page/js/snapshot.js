@@ -177,6 +177,10 @@ const STANDINGS_FIELDS = [
   "wildCardRank",
   "leagueRank",
   "clinchIndicator",
+  "runsScored",
+  "runsAllowed",
+  "splitRecords",
+  "type",
 ].join(",");
 
 // The requests filter with `fields=`, so a field MLB renames or drops comes back as nothing.
@@ -321,6 +325,11 @@ export const CHECKED_FIELDS = [
   "language",
   "isNational",
   "homeAway",
+  // A club's runs and its records home and away, which only its sheet's curves need, are left out
+  // of them while MLB doesn't send them.
+  "runsScored",
+  "runsAllowed",
+  "splitRecords",
   // A game MLB names no ballpark for is found by its home club's city.
   "venue",
   "location",
@@ -1109,8 +1118,30 @@ function listUpcomingGames(games) {
 
 const readRank = (value) => Number(value) || 99;
 
+/**
+ * A club's runs and its records at home and on the road, which its sheet ranks among every club's,
+ * leaving out any MLB didn't answer with.
+ * @param {any} record
+ * @returns {Record<string, any>}
+ */
+function readClubNumbers(record) {
+  const splits = record.records?.splitRecords ?? [];
+  /** @param {string} type */
+  const readSplit = (type) => {
+    const split = splits.find((/** @type {any} */ each) => each.type === type);
+    return split ? `${split.wins}-${split.losses}` : null;
+  };
+  const numbers = {
+    rs: isNumber(record.runsScored) ? record.runsScored : null,
+    ra: isNumber(record.runsAllowed) ? record.runsAllowed : null,
+    home: readSplit("home"),
+    road: readSplit("away"),
+  };
+  return Object.fromEntries(Object.entries(numbers).filter(([, value]) => value !== null));
+}
+
 function buildStandingsRow(id, record) {
-  return {
+  const row = {
     id,
     w: record.wins,
     l: record.losses,
@@ -1126,6 +1157,7 @@ function buildStandingsRow(id, record) {
     wcrank: record.divisionLeader ? null : record.wildCardRank || null,
     rank: readRank(record.divisionRank),
   };
+  return Object.assign(row, readClubNumbers(record));
 }
 
 export const SEASON_GAMES = 162;

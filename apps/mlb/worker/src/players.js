@@ -1,11 +1,12 @@
 import { addDays } from "#shared/days.js";
 import { readClubId } from "../../page/js/snapshot.js";
 import { readLeagueRows } from "./pitchers.js";
-import { trimHitting, trimPitching, trimStats } from "./rosters.js";
+import { readInjury, trimHitting, trimPitching, trimStats } from "./rosters.js";
 
-// What each player's sheet shows: his facts, from MLB's list of every player this season, and his
-// regular season and postseason so far, at the plate and on the mound, from every player's numbers;
-// and the numbers of every hitter MLB ranks, which a hitter's sheet ranks him among. The store keeps
+// What each player's sheet shows: his facts, from MLB's list of every player this season, his stay
+// on the injured list, with why from ESPN's injury report (injuries.js), and his regular season and
+// postseason so far, at the plate and on the mound, from every player's numbers; and the numbers of
+// every hitter MLB ranks, which a hitter's sheet ranks him among. The store keeps
 // each player on a club's roster (roster-updater.js), so a sheet reads only the store.
 
 const PEOPLE_FIELDS = [
@@ -160,12 +161,23 @@ const readNumbers = (table, id, trim) => (table.has(id) ? trim(table.get(id)) : 
  */
 
 /**
- * A player's sheet: his facts, and his season at the plate and on the mound, regular and post.
- * @param {PlayerNumbers & { entry: any, club: string, season: number, person: any, lastGames?: any }} sources
- *   `entry` is his line on the club's roster, and `lastGames` what describeLastGames found
+ * A player's sheet: his facts, his stay on the injured list and why, and his season at the plate
+ * and on the mound, regular and post.
+ * @param {PlayerNumbers & { entry: any, club: string, season: number, person: any, lastGames?: any, out?: import("./injuries.js").OutReason | null }} sources
+ *   `entry` is his line on the club's roster, `lastGames` what describeLastGames found, and `out`
+ *   what ESPN's injury report says of him
  */
-export function describePlayer({ entry, club, season, person, lastGames = null, ...numbers }) {
+export function describePlayer({
+  entry,
+  club,
+  season,
+  person,
+  lastGames = null,
+  out = null,
+  ...numbers
+}) {
   const id = entry.person.id;
+  const injury = readInjury(entry);
   return {
     id,
     season,
@@ -174,6 +186,8 @@ export function describePlayer({ entry, club, season, person, lastGames = null, 
     number: entry.jerseyNumber ?? "",
     position: entry.position?.abbreviation ?? "",
     facts: person ? describeFacts(person) : null,
+    injury,
+    out: injury ? out : null,
     hitting: readNumbers(numbers.hitting, id, trimHitting),
     pitching: readNumbers(numbers.pitching, id, trimPitching),
     postseasonHitting: readNumbers(numbers.postseasonHitting, id, trimHitting),

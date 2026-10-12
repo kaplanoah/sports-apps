@@ -1,8 +1,8 @@
 // The Roster section of a club's sheet, beside its Team section: the club's roster, which the store
-// keeps for the current season, read as the sheet shows the club and again once it's old. A roster
-// that didn't load reads again on a tap on Try again, as the phone comes back online or the page
-// comes back, or a minute later. The club's sheet keeps what the section shows, so a reload draws
-// it again while it reads again.
+// keeps for the current season, read as the sheet shows the club and again once it's old, and
+// which the Team section's leaders read too. A roster that didn't load reads again on a tap on Try
+// again, as the phone comes back online or the page comes back, or a minute later. The club's sheet
+// keeps what the section shows, so a reload draws it again while it reads again.
 
 import { html, setHtml } from "#shared/html.js";
 import { classifyReadFailure, watchRetries } from "#shared/retry.js";
@@ -24,6 +24,8 @@ const RETRY_MS = 60 * 1000;
 const reads = new Map();
 /** @type {string | null} */
 let shownClub = null;
+// Draws what the club's sheet shows from a roster just read.
+let showRead = () => renderSection();
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
@@ -49,7 +51,7 @@ const isFresh = (read) =>
 function keepRead(club, read, found, failure) {
   if (reads.get(club) !== read) return;
   reads.set(club, { ...read, isLoading: false, roster: found ?? read.roster, failure });
-  if (shownClub === club) renderSection();
+  if (shownClub === club) showRead();
 }
 
 /**
@@ -92,9 +94,26 @@ function retryRoster() {
   renderSection();
 }
 
-/** Has a tap on Try again, the phone coming back online, or the page coming back read again. */
-export function startRosterSection() {
+/**
+ * The club's roster as its Team section's leaders show it: the section's last read, or one under
+ * way before the section starts it, or null for a season the store keeps no rosters for.
+ * @param {string} club
+ * @returns {RosterRead | null}
+ */
+export function findClubRoster(club) {
+  if (!isCurrentSeason()) return null;
+  return reads.get(club) ?? { at: 0, roster: null, isLoading: true, failure: null };
+}
+
+/**
+ * Has a tap on Try again, in the section or the leaders, the phone coming back online, or the page
+ * coming back read again, and `showChange` draw the club's sheet again from each roster read.
+ * @param {{ showChange: () => void }} handlers
+ */
+export function startRosterSection({ showChange }) {
+  showRead = showChange;
   watchRetries(findElement("rosterBody"), retryRoster);
+  watchRetries(findElement("teamBody"), retryRoster);
 }
 
 /**

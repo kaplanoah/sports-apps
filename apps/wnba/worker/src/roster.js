@@ -1,8 +1,8 @@
 import { TEAMS } from "../../page/js/teams.js";
-import { normalizeName } from "../../page/js/player-names.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
+import { readNameLetters } from "../../../../shared/worker/injury-report.js";
 import { readKeptDoc } from "./store-docs.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
 
@@ -137,7 +137,7 @@ function describePlayer(row, listed, { outByName, ageDay }) {
     age: measureAge(readBirthday(row.BIRTH_DATE), ageDay),
     college: readText(entry?.COLLEGE),
     country: readText(entry?.COUNTRY),
-    out: outByName.get(normalizeName(names)) ?? null,
+    out: outByName.get(readNameLetters(`${names.firstName} ${names.lastName}`)) ?? null,
     debut: Number.isFinite(debut) && debut > 0 ? debut : null,
   };
 }

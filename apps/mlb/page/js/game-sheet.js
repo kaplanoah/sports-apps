@@ -1,8 +1,9 @@
 // The sheet every game opens, from its row, an update about it, or its card on a club's sheet, in
 // sections under pills: Game, the game's row with its score and status as the store updates
 // them, where to watch it, its starters on one line that slides to Matchup, which sets the two face
-// to face (matchup.js), and its box score (box-score-view.js), which the store pushes as it changes,
-// and, once the game is final, Highlights, its recap and each play's clip (highlights-section.js).
+// to face (matchup.js), its season series before first pitch (season-series.js), and its box score
+// (box-score-view.js), which the store pushes as it changes, and, once the game is final,
+// Highlights, its recap and each play's clip (highlights-section.js).
 // Phones show it over the whole screen, wider screens as a modal, like Settings.
 
 import { fetchBoxScore } from "./box-score-fetch.js";
@@ -26,6 +27,7 @@ import { isLoadingSide, listSides, loadSide, renderMatchupBody, updateSides } fr
 import { renderNetworks } from "#shared/network-logos.js";
 import { watchRetries } from "#shared/retry.js";
 import { countClubGames } from "./qualifying.js";
+import { renderSeasonSeries } from "./season-series.js";
 import { describeSeriesAt, isSeriesGame, nameSeriesGame } from "./series-games.js";
 import { session } from "./session.js";
 import { wireSheetSections } from "#shared/sheet-sections.js";
@@ -112,14 +114,19 @@ function renderStarters(sides) {
 const renderWhereToWatch = (game) =>
   game.state === "pre" || game.state === "live" ? renderNetworks(game.networks ?? []) : html``;
 
+// Every game of the season the page has, or null before its schedule has loaded.
+const listKnownGames = () =>
+  session.schedule ? listSeasonGames(session.state?.slate, session.schedule) : null;
+
 /**
- * The Game section: the game's row, where to watch it, its starters, and its box score.
+ * The Game section: the game's row, where to watch it, its starters, its season series before
+ * first pitch, and its box score.
  * @param {MatchupGame} game
  * @param {any[]} sides
  * @param {any} [boxScore]
  */
 export const renderGameBody = (game, sides, boxScore = null) =>
-  html`${renderGameFaceOff(game)}${renderWhereToWatch(game)}${renderStarters(sides)}${renderBoxScore(game, boxScore)}`;
+  html`${renderGameFaceOff(game)}${renderWhereToWatch(game)}${renderStarters(sides)}${renderSeasonSeries(game, listKnownGames())}${renderBoxScore(game, boxScore)}`;
 
 /**
  * How far a box score has come: its game's state, then its plate appearances, then its players,

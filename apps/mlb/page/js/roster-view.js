@@ -7,7 +7,13 @@ import { renderPlaceholder } from "#shared/placeholder.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderPlayerButton } from "./player-button.js";
-import { formatInnings, renderPlayerCell, renderStatCells, renderStatTable } from "./stat-table.js";
+import {
+  countOuts,
+  formatInnings,
+  renderPlayerCell,
+  renderStatCells,
+  renderStatTable,
+} from "./stat-table.js";
 
 /** @typedef {import("./stat-table.js").StatColumn} StatColumn */
 /**
@@ -67,12 +73,6 @@ const isStarter = (player) =>
  */
 const sortByMost = (players, measure) =>
   [...players].sort((first, second) => measure(second) - measure(first));
-
-/** @param {any} innings */
-const countOuts = (innings) => {
-  const [whole, thirds] = String(innings ?? "0").split(".");
-  return Number(whole) * 3 + Number(thirds ?? 0);
-};
 
 /**
  * A player's row, which opens his sheet wherever it's tapped.
