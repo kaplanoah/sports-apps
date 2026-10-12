@@ -129,7 +129,7 @@
   }
 }
 .updates-list li:has(> .game-open.is-pressed) {
-  --row-highlight: color-mix(in srgb, var(--ink) 10%, transparent);
+  --row-highlight: color-mix(in srgb, var(--ink) 7%, transparent);
   transition: none;
 }
 .updates-list li:has(> .game-open) > :not(.game-open) {

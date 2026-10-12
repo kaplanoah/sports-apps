@@ -265,7 +265,7 @@
 .search-example.is-pressed,
 .search-suggestion.is-pressed,
 .search-games-line.is-pressed {
-  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 10%, transparent);
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 7%, transparent);
   transition: none;
 }
 

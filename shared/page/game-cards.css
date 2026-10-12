@@ -65,7 +65,7 @@
 /* While a press holds it (press.js), the card tints over any hover, at once, and fades as the
    press lets go. */
 .game-card-button.is-pressed {
-  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 10%, transparent);
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 7%, transparent);
   transition: none;
 }
 .game-card-button:focus-visible {

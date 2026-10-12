@@ -127,10 +127,10 @@
     --row-highlight: color-mix(in srgb, var(--ink) 5%, transparent);
   }
 }
-/* While a press holds it (press.js), the row tints twice as deep as under a mouse, at once, and
+/* While a press holds it (press.js), the row tints a little deeper than under a mouse, at once, and
    fades as the press lets go. */
 .game-row:has(> .game-open.is-pressed) {
-  --row-highlight: color-mix(in srgb, var(--ink) 10%, transparent);
+  --row-highlight: color-mix(in srgb, var(--ink) 7%, transparent);
   transition: none;
 }
 /* The sides sit above the action and let taps through to it, so a tap anywhere on the row, a
