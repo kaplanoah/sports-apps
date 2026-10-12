@@ -107,6 +107,23 @@ async function leaveForTwoMinutes(page) {
   await page.clock.runFor(2 * 60_000);
 }
 
+/**
+ * Whether Search's icon takes the app's accent, and what its circle draws inside it.
+ * @param {import("@playwright/test").Page} page
+ */
+const readSearchTabLook = (page) =>
+  page.locator("#tab-search").evaluate((tab) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--accent)";
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      isAccent: getComputedStyle(tab).color === accent,
+      inside: getComputedStyle(tab, "::before").content,
+    };
+  });
+
 test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-read", async ({
   page,
 }) => {
@@ -116,7 +133,7 @@ test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks
   expect(widths.field).toBeCloseTo(widths.step, 0);
 });
 
-test("Search beside the tab bar opens its own view, an empty field ready to type with examples under it, and its pill in place of the bar's", async ({
+test("Search beside the tab bar opens its own view, an empty field ready to type with examples under it, its icon in the accent, and hides the bar's pill", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -128,6 +145,7 @@ test("Search beside the tab bar opens its own view, an empty field ready to type
   await expect(page.locator("#tab-search")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#tabBar")).toHaveClass(/is-unselected/);
   await expect(page.locator("#tabBar .tab-pill")).toBeHidden();
+  expect(await readSearchTabLook(page)).toEqual({ isAccent: true, inside: "none" });
   await expect(findInput(page)).toBeFocused();
   await expect(findInput(page)).toHaveValue("");
   await expect(findInput(page)).toHaveAttribute("placeholder", "Teams, players, and games");
@@ -145,6 +163,7 @@ test("Search beside the tab bar opens its own view, an empty field ready to type
   await expect(page.locator("#tabBar")).not.toHaveClass(/is-unselected/);
   await expect(page.locator("#tabBar .tab-pill")).toBeVisible();
   await expect(page.locator("#tab-search")).toHaveAttribute("aria-selected", "false");
+  expect((await readSearchTabLook(page)).isAccent).toBe(false);
 });
 
 test("the Games tab has no Search of its own", async ({ page }) => {

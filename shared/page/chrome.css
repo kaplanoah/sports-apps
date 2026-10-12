@@ -844,7 +844,7 @@ body:has(> .home-screen-bar:not([hidden])) {
     box-shadow: inset 0 0 0 1px var(--tab-bar-edge);
   }
   /* Search sits beside the bar, as iOS 26 sets it apart: a circle the bar's height and tint, 8px
-     from its end, which the bar ends short of. While it's chosen, a pill inside it shows, and the
+     from its end, which the bar ends short of. While it's chosen, its icon takes the accent, and the
      bar's own pill hides. */
   nav.tabs:has(.search-tab) .tab-bar {
     right: calc(21px + var(--tab-bar-height) + 8px);
@@ -867,19 +867,10 @@ body:has(> .home-screen-bar:not([hidden])) {
       inset 0 0 0 1px var(--tab-bar-edge),
       0 10px 28px -10px rgba(0, 0, 0, 0.55);
     color: var(--tab-bar-ink);
-    isolation: isolate;
   }
   nav.tabs .search-tab.active {
     background: var(--tab-bar-tint);
-    color: var(--tab-bar-ink);
-  }
-  nav.tabs .search-tab.active::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    inset: 5px;
-    border-radius: 50%;
-    background: var(--tab-bar-pill);
+    color: var(--accent);
   }
   .search-tab .tab-label {
     display: none;
