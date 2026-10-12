@@ -431,6 +431,28 @@ test("a season's list of players waits for every roster, and a past season gets 
   assert.ok(past.players.some((/** @type {any} */ player) => player.id === IONESCU));
 });
 
+test("a past season filled before the store kept its list of players gets one from its saved rosters, reading nothing from the league", async () => {
+  const { docs, storage, league, runJob } = createRun();
+  await runJob();
+  const index = docs.stored.get(namePlayerIndexKey(2025));
+  docs.stored.delete(namePlayerIndexKey(2025));
+  // What the release before the list of players wrote once every past season was filled.
+  await storage.put("allFilled", `2026 ${await storage.get("filled:2025")}`);
+  const pastReads = league.requests.filter((url) => /Season=2025/.test(url)).length;
+
+  await createPlayerJob().run({
+    docs,
+    storage,
+    loadSnapshot: async () => null,
+    env: {},
+    fetchImpl: league.fetchImpl,
+    now: () => NOW + 5 * MINUTE_MS,
+  });
+
+  assert.deepEqual(docs.stored.get(namePlayerIndexKey(2025)), index);
+  assert.equal(league.requests.filter((url) => /Season=2025/.test(url)).length, pastReads);
+});
+
 test("stats the league hasn't answered leave the rosters saved, and the sheets reading the league until it does", async () => {
   const answers = listAnswers();
   delete answers[nameTotalsRequest(2026)];
