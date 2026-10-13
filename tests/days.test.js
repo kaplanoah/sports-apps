@@ -4,18 +4,27 @@ import { execFileSync } from "node:child_process";
 import {
   addDays,
   countDaysBetween,
+  countDaysInMonth,
   describeDay,
   formatClockTime,
   formatClockTimeWithoutMeridiem,
+  formatDateAndTime,
+  formatMinutesIntoDay,
   formatShortDate,
   formatShortWeekday,
   formatWeekday,
   formatWeekdayAndDate,
   formatWeekdayOrDate,
+  isSameMonth,
   nameDay,
   readCalendarDate,
+  readCalendarYear,
+  readDayOfMonth,
   readEasternDay,
+  readMinutesIntoDay,
   readPlayingDay,
+  readWeekday,
+  shiftMonth,
 } from "../shared/page/days.js";
 import { normalizeSpaces } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
@@ -25,6 +34,10 @@ const readMonthAndDay = (date) => date && [date.getMonth() + 1, date.getDate()];
 
 // 9:00 PM Eastern on Thursday, October 1.
 const THURSDAY_NIGHT = "2026-10-02T01:00:00Z";
+
+// Zones on both sides of UTC, and far enough from it that a date read as midnight UTC is the day
+// before or after.
+const ZONES = ["Pacific/Honolulu", EASTERN, "UTC", "Asia/Tokyo", "Pacific/Kiritimati"];
 
 test("days between count calendar days, whatever the hour, backward as well as forward", () =>
   checkInTimeZone(EASTERN, () => {
@@ -206,4 +219,66 @@ test("a weekday names a day within a week either way, and a date one further off
     assert.equal(formatWeekdayOrDate(thursday, -6), "Thursday");
     assert.equal(formatWeekdayOrDate(thursday, 7), "Oct 1");
     assert.equal(formatWeekdayOrDate(thursday, -7), "Oct 1");
+  }));
+
+test("a date's day of the month, weekday, and month are the same in any zone", () => {
+  for (const zone of ZONES)
+    checkInTimeZone(zone, () => {
+      assert.equal(readDayOfMonth("2026-10-01"), 1, zone);
+      assert.equal(readDayOfMonth("2026-09-30"), 30, zone);
+      assert.equal(readWeekday("2026-10-01"), 4, zone);
+      assert.equal(readWeekday("2026-10-04"), 0, zone);
+      assert.equal(readWeekday("2027-01-02"), 6, zone);
+      assert.ok(isSameMonth("2026-10-01", "2026-10-31"), zone);
+      assert.ok(!isSameMonth("2026-09-30", "2026-10-01"), zone);
+      assert.ok(!isSameMonth("2026-10-01", "2027-10-01"), zone);
+    });
+});
+
+test("a month's length and the months around it cross years and leap days, in any zone", () => {
+  for (const zone of ZONES)
+    checkInTimeZone(zone, () => {
+      assert.equal(countDaysInMonth(9, 2026), 30, zone);
+      assert.equal(countDaysInMonth(10, 2026), 31, zone);
+      assert.equal(countDaysInMonth(2, 2026), 28, zone);
+      assert.equal(countDaysInMonth(2, 2028), 29, zone);
+      assert.deepEqual(shiftMonth("2026-10-31", 1), { month: 11, year: 2026 }, zone);
+      assert.deepEqual(shiftMonth("2026-12-15", 1), { month: 1, year: 2027 }, zone);
+      assert.deepEqual(shiftMonth("2026-01-01", -1), { month: 12, year: 2025 }, zone);
+      assert.deepEqual(shiftMonth("2026-10-01", 0), { month: 10, year: 2026 }, zone);
+    });
+});
+
+test("a moment's minutes into the day are on the viewer's clock, or on the zone asked for", () => {
+  const start = new Date(THURSDAY_NIGHT);
+  const expected = { "America/Los_Angeles": 18 * 60, [EASTERN]: 21 * 60, "Asia/Tokyo": 10 * 60 };
+  for (const [zone, minutes] of Object.entries(expected))
+    checkInTimeZone(zone, () => {
+      assert.equal(readMinutesIntoDay(start), minutes, zone);
+      assert.equal(readMinutesIntoDay(start, EASTERN), 21 * 60, zone);
+      assert.equal(readMinutesIntoDay(new Date("2026-10-01T04:05:00Z"), EASTERN), 5, zone);
+    });
+});
+
+test("a time of day in minutes reads as a clock time, with its minutes only off the hour", () => {
+  for (const zone of ZONES)
+    checkInTimeZone(zone, () => {
+      assert.equal(normalizeSpaces(formatMinutesIntoDay(21 * 60)), "9 PM", zone);
+      assert.equal(normalizeSpaces(formatMinutesIntoDay(19 * 60 + 5)), "7:05 PM", zone);
+      assert.equal(normalizeSpaces(formatMinutesIntoDay(0)), "12 AM", zone);
+    });
+});
+
+test("a moment's date and time name its year only when it isn't now's, by the viewer's calendar", () =>
+  checkInTimeZone("America/Los_Angeles", () => {
+    const newYearsEve = new Date("2027-01-01T05:00:00Z");
+    assert.equal(readCalendarYear(newYearsEve), 2026);
+    assert.equal(
+      normalizeSpaces(formatDateAndTime(newYearsEve, new Date(2026, 11, 31, 22))),
+      "Dec 31, 9:00 PM",
+    );
+    assert.equal(
+      normalizeSpaces(formatDateAndTime(newYearsEve, new Date(2027, 0, 2))),
+      "Dec 31, 2026, 9:00 PM",
+    );
   }));

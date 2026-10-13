@@ -5,10 +5,16 @@
 
 import {
   addDays,
+  countDaysInMonth,
+  formatMinutesIntoDay,
   formatMonth,
   formatShortDate,
   formatWeekdayAndDate,
+  isSameMonth,
   readCalendarDate,
+  readDayOfMonth,
+  readWeekday,
+  shiftMonth,
 } from "./days.js";
 
 /** @typedef {import("./search-words.js").Meaning} Meaning */
@@ -163,9 +169,6 @@ export const CALENDAR_ENTRIES = [
 ];
 
 /** @param {string} day */
-const readWeekday = (day) => readCalendarDate(day).getDay();
-
-/** @param {string} day */
 const formatDay = (day) => formatWeekdayAndDate(readCalendarDate(day));
 
 /**
@@ -176,9 +179,10 @@ const formatDay = (day) => formatWeekdayAndDate(readCalendarDate(day));
  */
 export function formatDays(from, to) {
   if (from === to) return formatDay(from);
-  const [first, last] = [readCalendarDate(from), readCalendarDate(to)];
-  const end = first.getMonth() === last.getMonth() ? String(last.getDate()) : formatShortDate(last);
-  return `${formatShortDate(first)}\u2013${end}`;
+  const end = isSameMonth(from, to)
+    ? String(readDayOfMonth(to))
+    : formatShortDate(readCalendarDate(to));
+  return `${formatShortDate(readCalendarDate(from))}\u2013${end}`;
 }
 
 /**
@@ -202,7 +206,7 @@ const createRange = (from, to, isFromFridayEvening = false) => ({
  * @returns {DayRange}
  */
 export function readMonthDays(month, year, [firstDay, lastDay] = [1, 31]) {
-  const lengthOfMonth = new Date(year, month, 0).getDate();
+  const lengthOfMonth = countDaysInMonth(month, year);
   const pad = (/** @type {number} */ number) => String(number).padStart(2, "0");
   const from = `${year}-${pad(month)}-${pad(firstDay)}`;
   const to = `${year}-${pad(month)}-${pad(Math.min(lastDay, lengthOfMonth))}`;
@@ -242,10 +246,9 @@ const findThisSunday = (today) => findWeekday(0, today);
 export function readNamedRange(name, { today, seasonStart, seasonEnd }) {
   const weekStart = addDays(today, -readWeekday(today));
   const sunday = findThisSunday(today);
-  const month = readCalendarDate(today);
   const monthDays = (/** @type {number} */ shift) => {
-    const date = new Date(month.getFullYear(), month.getMonth() + shift, 1);
-    return readMonthDays(date.getMonth() + 1, date.getFullYear());
+    const { month, year } = shiftMonth(today, shift);
+    return readMonthDays(month, year);
   };
   const ranges = {
     today: () => createRange(today, today),
@@ -307,13 +310,6 @@ export function readClockWord(word, meridiem) {
   return hour24 * 60 + minute;
 }
 
-/** @param {number} minutes */
-function formatClock(minutes) {
-  const date = new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60);
-  const options = minutes % 60 ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric" };
-  return date.toLocaleTimeString([], /** @type {Intl.DateTimeFormatOptions} */ (options));
-}
-
 /**
  * The time of day "after", "before", or "at" a clock time covers.
  * @param {"after" | "before" | "at"} side
@@ -322,9 +318,10 @@ function formatClock(minutes) {
  */
 export function readClockRange(side, minutes) {
   if (side === "after")
-    return { from: minutes, to: MINUTES_PER_DAY, label: `After ${formatClock(minutes)}` };
-  if (side === "before") return { from: 0, to: minutes, label: `Before ${formatClock(minutes)}` };
-  return { from: minutes, to: minutes + 60, label: formatClock(minutes) };
+    return { from: minutes, to: MINUTES_PER_DAY, label: `After ${formatMinutesIntoDay(minutes)}` };
+  if (side === "before")
+    return { from: 0, to: minutes, label: `Before ${formatMinutesIntoDay(minutes)}` };
+  return { from: minutes, to: minutes + 60, label: formatMinutesIntoDay(minutes) };
 }
 
 /**
