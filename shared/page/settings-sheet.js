@@ -36,12 +36,28 @@ async function showRelease() {
 }
 
 /**
- * Opens settings, scrolled to `row` when a search names one of its settings.
- * @param {Element | null} [row]
+ * The row of a setting, by the key a search names it by.
+ * @param {string} key
  */
-export function openSettings(row = null) {
+const findSettingRow = (key) =>
+  /** @type {HTMLElement | null} */ (document.querySelector(`[data-setting="${key}"]`));
+
+/**
+ * Whether a search may list a setting: settings itself always, and a setting while its row shows.
+ * @param {string} key
+ */
+export function isSettingShown(key) {
+  const row = findSettingRow(key);
+  return key === "settings" || (!!row && !row.closest("[hidden]"));
+}
+
+/**
+ * Opens settings, scrolled to the setting a search names by its key.
+ * @param {string | null} [key]
+ */
+export function openSettings(key = null) {
   openSheet(findDialog());
-  row?.scrollIntoView({ block: "center" });
+  if (key) findSettingRow(key)?.scrollIntoView({ block: "center" });
 }
 
 /**
