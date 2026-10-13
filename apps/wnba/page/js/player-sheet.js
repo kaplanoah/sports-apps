@@ -6,8 +6,13 @@
 // reads them again.
 
 import { setHtml } from "#shared/html.js";
-import { classifyReadFailure, watchRetries } from "#shared/retry.js";
+import { watchRetries } from "#shared/retry.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
+import {
+  createSheetReads,
+  SHEET_FETCH_TIMEOUT_MS,
+  SHEET_READ_AGAIN_MS,
+} from "#shared/sheet-reads.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 import {
   describePlayerNote,
@@ -21,18 +26,6 @@ import { TEAMS } from "./teams.js";
 
 /** @typedef {import("./player-view.js").Player} Player */
 /** @typedef {import("./player-view.js").PlayerSubject} PlayerSubject */
-/** @typedef {import("#shared/retry.js").ReadFailure} ReadFailure */
-/** @typedef {{ at: number, player: Player | null, isLoading: boolean, failure: ReadFailure | null }} PlayerRead */
-
-const FETCH_TIMEOUT_MS = 15 * 1000;
-// Her numbers change after each game.
-const READ_AGAIN_MS = 10 * 60 * 1000;
-// A sheet that didn't load reads again a minute later.
-const RETRY_MS = 60 * 1000;
-
-// Each read is kept by her id, team, and season, as 1627668:NYL:2026.
-/** @type {Map<string, PlayerRead>} */
-const reads = new Map();
 /** @type {PlayerSubject | null} */
 let shownPlayer = null;
 
@@ -53,47 +46,28 @@ const fetchPlayer = ({ id, team }, year) =>
   fetchFromWorker(
     `player?id=${encodeURIComponent(id)}&team=${encodeURIComponent(team)}&season=${year}`,
     {
-      reuseMs: READ_AGAIN_MS,
-      timeoutMs: FETCH_TIMEOUT_MS,
+      reuseMs: SHEET_READ_AGAIN_MS,
+      timeoutMs: SHEET_FETCH_TIMEOUT_MS,
       isExpected: (body) => body.id === id && body.team === team && body.season === year,
     },
   );
 
-/** @param {PlayerRead} read */
-const isFresh = (read) =>
-  read.isLoading || Date.now() - read.at < (read.player ? READ_AGAIN_MS : RETRY_MS);
-
-/**
- * Keeps what a read found, or what the last one did when it failed, and why it did.
- * @param {string} key
- * @param {PlayerRead} read
- * @param {Player | null} player
- * @param {ReadFailure | null} failure
- */
-function keepRead(key, read, player, failure) {
-  if (reads.get(key) !== read) return;
-  reads.set(key, { ...read, isLoading: false, player: player ?? read.player, failure });
-  renderSheet();
-}
+// Each read is kept by her id, team, and season, as 1627668:NYL:2026.
+const reads = createSheetReads({
+  empty: { player: /** @type {Player | null} */ (null) },
+  hasFound: (read) => !!read.player,
+  show: () => renderSheet(),
+});
 
 /**
  * Her last read for the season, after starting a new one when there's none or it's old.
  * @param {PlayerSubject} subject
  * @param {number} year
  */
-function readPlayer(subject, year) {
-  const key = nameRead(subject, year);
-  const kept = reads.get(key);
-  if (kept && isFresh(kept)) return kept;
-  /** @type {PlayerRead} */
-  const read = { at: Date.now(), player: kept?.player ?? null, isLoading: true, failure: null };
-  reads.set(key, read);
-  fetchPlayer(subject, year).then(
-    (player) => keepRead(key, read, player, null),
-    (error) => keepRead(key, read, null, classifyReadFailure(error)),
+const readPlayer = (subject, year) =>
+  reads.read(nameRead(subject, year), () =>
+    fetchPlayer(subject, year).then((player) => ({ found: { player } })),
   );
-  return read;
-}
 
 function renderSheet() {
   const subject = shownPlayer;
@@ -119,12 +93,7 @@ function renderSheet() {
 
 // A read that failed is dropped, so the sheet shows its placeholders while it reads again.
 function retryPlayer() {
-  if (!shownPlayer) return;
-  const key = nameRead(shownPlayer, session.year);
-  const read = reads.get(key);
-  if (!read || read.player || read.isLoading) return;
-  reads.delete(key);
-  renderSheet();
+  if (shownPlayer && reads.drop(nameRead(shownPlayer, session.year))) renderSheet();
 }
 
 /** @param {PlayerSubject} subject */
@@ -141,7 +110,7 @@ const readShownPlayer = () =>
   shownPlayer && {
     ...shownPlayer,
     year: session.year,
-    player: reads.get(nameRead(shownPlayer, session.year))?.player ?? null,
+    player: reads.find(nameRead(shownPlayer, session.year))?.player ?? null,
   };
 
 /**
@@ -151,14 +120,7 @@ const readShownPlayer = () =>
  */
 function keepSavedPlayer(subject, { year, player }) {
   if (typeof year !== "number" || !player || typeof player !== "object") return;
-  const key = nameRead(subject, year);
-  if (!reads.has(key))
-    reads.set(key, {
-      at: 0,
-      player: /** @type {Player} */ (player),
-      isLoading: false,
-      failure: null,
-    });
+  reads.keepShown(nameRead(subject, year), { player: /** @type {Player} */ (player) });
 }
 
 /** @param {Partial<PlayerSubject> & { year?: unknown, player?: unknown } | null} saved */

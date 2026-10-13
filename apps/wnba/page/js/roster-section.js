@@ -7,7 +7,12 @@
 // shows, so a reload draws it again while it reads again.
 
 import { setHtml } from "#shared/html.js";
-import { classifyReadFailure, watchRetries } from "#shared/retry.js";
+import { watchRetries } from "#shared/retry.js";
+import {
+  createSheetReads,
+  SHEET_FETCH_TIMEOUT_MS,
+  SHEET_READ_AGAIN_MS,
+} from "#shared/sheet-reads.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 import { chooseSort, DEFAULT_SORT, describeRosterNote, renderRoster } from "./roster-view.js";
 import { isStillPlaying } from "./series.js";
@@ -16,19 +21,8 @@ import { isPastSeason, session } from "./session.js";
 /** @typedef {import("./roster-view.js").Roster} Roster */
 /** @typedef {import("./roster-view.js").Averages} Averages */
 /** @typedef {import("./roster-view.js").RosterSort} RosterSort */
-/** @typedef {import("#shared/retry.js").ReadFailure} ReadFailure */
-/** @typedef {{ at: number, roster: Roster | null, averages: Averages[], isLoading: boolean, failure: ReadFailure | null }} RosterRead */
 /** @typedef {{ team: string, year: number, roster: Roster, averages: Averages[], sort: RosterSort }} SavedRoster */
 
-const FETCH_TIMEOUT_MS = 15 * 1000;
-// A roster changes with a signing or an injury, and the averages after each game.
-const READ_AGAIN_MS = 10 * 60 * 1000;
-// A roster that didn't load is read again a minute later.
-const RETRY_MS = 60 * 1000;
-
-// Each read is kept by its team and season, as NYL:2026.
-/** @type {Map<string, RosterRead>} */
-const reads = new Map();
 /** @type {string | null} */
 let shownTeam = null;
 let sort = DEFAULT_SORT;
@@ -43,67 +37,57 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
  */
 const fetchRoster = (team, year) =>
   fetchFromWorker(`roster?team=${encodeURIComponent(team)}&season=${year}`, {
-    reuseMs: READ_AGAIN_MS,
-    timeoutMs: FETCH_TIMEOUT_MS,
+    reuseMs: SHEET_READ_AGAIN_MS,
+    timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => body.team === team && body.season === year && Array.isArray(body.players),
   });
 
 /** @param {number} year */
 const fetchAverages = (year) =>
   fetchFromWorker(`store/averages/${year}`, {
-    reuseMs: READ_AGAIN_MS,
-    timeoutMs: FETCH_TIMEOUT_MS,
+    reuseMs: SHEET_READ_AGAIN_MS,
+    timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => "data" in body,
   });
 
 /**
- * Keeps what a read found, or what the last one did where it failed.
  * @param {string} team
  * @param {number} year
- * @param {RosterRead} read
- * @param {[PromiseSettledResult<any>, PromiseSettledResult<any>]} results
  */
-function keepRead(team, year, read, [roster, averages]) {
-  const key = `${team}:${year}`;
-  if (reads.get(key) !== read) return;
-  reads.set(key, {
-    ...read,
-    isLoading: false,
-    roster: roster.status === "fulfilled" ? roster.value : read.roster,
-    failure: roster.status === "rejected" ? classifyReadFailure(roster.reason) : null,
-    averages:
-      averages.status === "fulfilled" ? (averages.value.data?.players ?? []) : read.averages,
-  });
-  if (shownTeam === team) renderSection();
-}
+const nameRead = (team, year) => `${team}:${year}`;
 
-/** @param {RosterRead} read */
-const isFresh = (read) =>
-  read.isLoading || Date.now() - read.at < (read.roster ? READ_AGAIN_MS : RETRY_MS);
+// Each read is kept by its team and season, as NYL:2026.
+const reads = createSheetReads({
+  empty: { roster: /** @type {Roster | null} */ (null), averages: /** @type {Averages[]} */ ([]) },
+  hasFound: (read) => !!read.roster,
+  show: (key) => {
+    if (shownTeam && key === nameRead(shownTeam, session.year)) renderSection();
+  },
+});
+
+/**
+ * The team's roster and every player's averages, each kept from the read before when it fails, the
+ * section failing with the roster.
+ * @param {string} team
+ * @param {number} year
+ */
+async function loadRoster(team, year) {
+  const [roster, averages] = await Promise.all([
+    fetchRoster(team, year),
+    fetchAverages(year).then(
+      (body) => body.data?.players ?? [],
+      () => null,
+    ),
+  ]);
+  return { found: { roster, averages } };
+}
 
 /**
  * The team's last read for the season, after starting a new one when it has none or it's old.
  * @param {string} team
  * @param {number} year
  */
-function readRoster(team, year) {
-  const key = `${team}:${year}`;
-  const kept = reads.get(key);
-  if (kept && isFresh(kept)) return kept;
-  /** @type {RosterRead} */
-  const read = {
-    at: Date.now(),
-    roster: kept?.roster ?? null,
-    averages: kept?.averages ?? [],
-    isLoading: true,
-    failure: null,
-  };
-  reads.set(key, read);
-  Promise.allSettled([fetchRoster(team, year), fetchAverages(year)]).then((results) =>
-    keepRead(team, year, read, /** @type {any} */ (results)),
-  );
-  return read;
-}
+const readRoster = (team, year) => reads.read(nameRead(team, year), () => loadRoster(team, year));
 
 function renderSection() {
   if (!shownTeam) return;
@@ -119,12 +103,7 @@ function renderSection() {
 
 // A read that failed is dropped, so the section shows its placeholders while it reads again.
 function retryRoster() {
-  if (!shownTeam) return;
-  const key = `${shownTeam}:${session.year}`;
-  const read = reads.get(key);
-  if (!read || read.roster || read.isLoading) return;
-  reads.delete(key);
-  renderSection();
+  if (shownTeam && reads.drop(nameRead(shownTeam, session.year))) renderSection();
 }
 
 /**
@@ -156,7 +135,7 @@ const isSavedRoster = (saved) =>
  * @returns {SavedRoster | null}
  */
 export function readShownRoster() {
-  const read = shownTeam ? reads.get(`${shownTeam}:${session.year}`) : null;
+  const read = shownTeam ? reads.find(nameRead(shownTeam, session.year)) : null;
   if (!shownTeam || !read?.roster) return null;
   const ids = new Set(read.roster.players.map((player) => player.id));
   return {
@@ -175,8 +154,7 @@ export function readShownRoster() {
 export function reopenRoster(saved) {
   if (!isSavedRoster(saved)) return;
   const { team, year, roster, averages, sort: savedSort } = /** @type {SavedRoster} */ (saved);
-  const key = `${team}:${year}`;
-  if (!reads.has(key)) reads.set(key, { at: 0, roster, averages, isLoading: false, failure: null });
+  reads.keepShown(nameRead(team, year), { roster, averages });
   sortedTeam = team;
   sort = savedSort;
 }
