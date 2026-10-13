@@ -260,6 +260,17 @@ test("a moment's minutes into the day are on the viewer's clock, or on the zone 
     });
 });
 
+test("reading minutes into the day again makes no new formatter, on the viewer's clock or a zone's", (context) => {
+  const start = new Date(THURSDAY_NIGHT);
+  readMinutesIntoDay(start, "America/Chicago");
+  const made = context.mock.method(Intl, "DateTimeFormat");
+  for (let count = 0; count < 3; count += 1) {
+    readMinutesIntoDay(start);
+    readMinutesIntoDay(start, "America/Chicago");
+  }
+  assert.equal(made.mock.callCount(), 0);
+});
+
 test("a time of day in minutes reads as a clock time, with its minutes only off the hour", () => {
   for (const zone of ZONES)
     checkInTimeZone(zone, () => {

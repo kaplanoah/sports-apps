@@ -9,6 +9,7 @@ import { redrawEased } from "#shared/eased-redraw.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import { openGameSearch, startGameSearch, startGameSearchOver } from "#shared/game-search-view.js";
+import { keepLastRead } from "#shared/kept-read.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
 import { watchPresses } from "#shared/press.js";
@@ -175,25 +176,30 @@ function openSearchPlace(key) {
   else openSettings(findSettingRow(key));
 }
 
-// The season a search reads, its words read again only for another season, schedule, or standings.
-/** @type {{ state: any, schedule: any, terms: import("#shared/game-search.js").SearchTerms } | null} */
-let searchTerms = null;
+// A search reads the season on each key press, so its games and words are worked out again only
+// once the season, its schedule, or its standings change.
+const readSearchSeasonFrom = keepLastRead(
+  /**
+   * @param {any} state
+   * @param {any} schedule
+   * @param {any} standings
+   */
+  (state, schedule, standings) => {
+    const listed = listSeasonGames(state.slate, schedule);
+    return {
+      listed,
+      terms: createSearchTerms({ games: listed, divisions: standings?.divisions }),
+      games: listed
+        .map(readSearchGame)
+        .filter((game) => game !== null)
+        .sort((first, second) => first.startMs - second.startMs),
+    };
+  },
+);
 
 function readSearchSeason() {
-  const { state, schedule } = session;
-  if (!state) return null;
-  const games = listListedGames();
-  if (searchTerms?.state !== state || searchTerms?.schedule !== schedule)
-    searchTerms = {
-      state,
-      schedule,
-      terms: createSearchTerms({ games, divisions: session.standings?.divisions }),
-    };
-  const searchGames = games
-    .map(readSearchGame)
-    .filter((game) => game !== null)
-    .sort((first, second) => first.startMs - second.startMs);
-  return { terms: searchTerms.terms, games: searchGames };
+  const { state, schedule, standings } = session;
+  return state ? readSearchSeasonFrom(state, schedule, standings) : null;
 }
 
 /**
@@ -204,7 +210,7 @@ function readSearchSeason() {
 const listSearchDays = (found, now) =>
   listFoundGameDays(
     found.map((game) => game.game),
-    listListedGames(),
+    readSearchSeason()?.listed ?? [],
     now,
   );
 

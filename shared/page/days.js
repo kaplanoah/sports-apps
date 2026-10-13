@@ -107,18 +107,33 @@ export function shiftMonth(date, months) {
  */
 export const readCalendarYear = (moment) => moment.getFullYear();
 
+// Making a formatter takes far longer than using one, and a search reads every game's start on
+// each key press, so each zone's clock is made once.
+/** @type {Map<string, Intl.DateTimeFormat>} */
+const zoneClocks = new Map();
+
+/** @param {string} timeZone */
+function readZoneClock(timeZone) {
+  const kept = zoneClocks.get(timeZone);
+  if (kept) return kept;
+  const clock = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
+    timeZone,
+  });
+  zoneClocks.set(timeZone, clock);
+  return clock;
+}
+
 /**
  * A moment's minutes after midnight on the viewer's clock, or on another zone's.
  * @param {Date} moment
  * @param {string} [timeZone]
  */
 export function readMinutesIntoDay(moment, timeZone) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "numeric",
-    hourCycle: "h23",
-    ...(timeZone && { timeZone }),
-  }).formatToParts(moment);
+  if (!timeZone) return moment.getHours() * 60 + moment.getMinutes();
+  const parts = readZoneClock(timeZone).formatToParts(moment);
   const read = (/** @type {string} */ type) =>
     Number(parts.find((part) => part.type === type)?.value);
   return read("hour") * 60 + read("minute");
