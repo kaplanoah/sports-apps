@@ -309,6 +309,37 @@ test("a search that finds nothing says so", async ({ page }) => {
   await expect(page.locator("#gameSearch .empty-note")).toHaveText("No Mets games in December");
 });
 
+test("a search of most of the season draws the days near the screen whole, and a stand-in as tall as its games for each other until it comes near", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await sendSearch(page, "games");
+
+  const days = page.locator("#gameSearch .listed-day");
+  const first = days.first();
+  await expect(days.last()).toBeAttached();
+  expect(await page.locator("#gameSearch .is-stand-in").count()).toBeGreaterThan(
+    (await days.count()) / 2,
+  );
+  await expect(first.locator(".is-stand-in")).toHaveCount(1);
+  const top = await first.evaluate((day) => /** @type {HTMLElement} */ (day).offsetTop);
+
+  await page.locator("#gameSearch .search-list").evaluate(
+    (list) =>
+      new Promise((resolve) => {
+        list.addEventListener("scroll", resolve, { once: true });
+        list.scrollTop = 0;
+      }),
+  );
+  await page.clock.runFor(100);
+
+  await expect(first.locator(".is-stand-in")).toHaveCount(0);
+  await expect(first.locator(".game-list li").first()).toBeVisible();
+  expect(await first.evaluate((day) => /** @type {HTMLElement} */ (day).offsetTop)).toBe(top);
+});
+
 test("a club's row opens its sheet, and its Roster row the sheet on its Roster", async ({
   page,
 }) => {

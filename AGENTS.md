@@ -381,6 +381,7 @@
   and a tap on Today already there pulsing the date, whose month follows the strip as a finger moves it,
   going back to today after two minutes away (`long-away.js`),
   and, for a league of many games a day, drawing whole only the days within a few screens of what shows and the rest as stand-ins as tall as their games,
+  which days those are in `near-days.js`, as the search's list of games draws them too,
   as each app's Games view shows them, in `day-strip.js`, a search over a season's games and a league's pages,
   in a view of its own, reading what's typed with fixed rules into teams,
   a word two teams share finding either's, places and venues, groups of teams like a conference or a division,

@@ -272,6 +272,17 @@ test("a place a team is named for offers its games there as another reading", as
   await expect(findLine(page)).toHaveText("In New York•26 games");
 });
 
+test("while typing, a word that reads as nothing yet lists no games", async ({ page }) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("zq");
+
+  await expect(page.locator("#gameSearch .empty-note")).toBeAttached();
+  await expect(page.locator("#gameSearch .listed-day")).toHaveCount(0);
+  await expect(findLine(page)).toBeHidden();
+});
+
 test("a search that finds nothing says so, and a word it can't use is named", async ({ page }) => {
   await openSeasonGames(page);
   await tapSearch(page);

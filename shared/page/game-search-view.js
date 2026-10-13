@@ -21,6 +21,7 @@ import {
 } from "./game-search.js";
 import { html, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
+import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { isWebAddress } from "./news-picks.js";
 import { nameStoryDay } from "./news-view.js";
 import { findPages, findPartGame } from "./page-search.js";
@@ -40,6 +41,7 @@ import {
 /** @typedef {import("./page-search.js").SearchPages} SearchPages */
 /** @typedef {import("./page-search.js").PageRow} PageRow */
 /** @typedef {import("./page-search.js").GamePart} GamePart */
+/** @typedef {import("./day-strip.js").ListedDay} ListedDay */
 /**
  * A page's row as the search shows it, a game's part on the game it opens.
  * @typedef {Exclude<PageRow, { kind: "game-part" }> | { kind: "game", part: GamePart, game: SearchGame }} ShownRow
@@ -49,8 +51,8 @@ import {
  * @typedef {object} SearchLeague
  * @property {() => { terms: SearchTerms, games: SearchGame[] } | null} readSeason the season shown,
  *   or null before the page has one
- * @property {(games: SearchGame[], now: number) => { day: string, markup: Markup }[]} listDays the
- *   days of the games found, drawn as the Games view draws them
+ * @property {(games: SearchGame[], now: number) => ListedDay[]} listDays the days of the games
+ *   found, drawn as the Games view draws them, with a stand-in for each when it has them
  * @property {(code: string) => Markup} renderTeamMark a team's dot
  * @property {() => void} close what the view does as the search closes, like going back to the tab
  *   before it
@@ -94,6 +96,12 @@ let isGamesOnly = false;
 // The search and its suggestions the list was last placed for, so a redraw keeps where it is.
 /** @type {string | null} */
 let placedFor = null;
+// The days of the games the list draws, and those near the screen, which it draws whole.
+/** @type {ListedDay[]} */
+let listedDays = [];
+/** @type {Set<string>} */
+let nearDays = new Set();
+let isNearFramePending = false;
 /** @type {WeakMap<SearchTerms, import("./search-words.js").Dictionary>} */
 const dictionaries = new WeakMap();
 
@@ -378,11 +386,63 @@ const renderGamesLine = (read, readText) =>
     <span class="search-games-words">${renderRead(read)}</span>${CARET}
   </button>`;
 
-/**
- * @param {{ day: string, markup: Markup }[]} days
- */
+// Keyed by its date, a day keeps its own node as the list's other parts come and go around it.
+/** @param {ListedDay[]} days */
 const renderDays = (days) =>
-  html`${days.map(({ day, markup }) => html`<div class="listed-day" data-day="${day}">${markup}</div>`)}`;
+  html`${days.map(
+    (listed) =>
+      html`<div class="listed-day" data-day="${listed.day}" data-key="${listed.day}">${chooseDayMarkup(listed, nearDays)}</div>`,
+  )}`;
+
+/** @param {string} day */
+const findListedDay = (day) =>
+  /** @type {HTMLElement | null} */ (
+    findList()?.querySelector(`:scope > .listed-day[data-day="${day}"]`) ?? null
+  );
+
+/**
+ * Keeps the days the list draws, and which of them it draws whole: those around the day a new
+ * search places it on, or, while the same search shows, those it had near the screen.
+ * @param {ListedDay[]} days
+ * @param {string | null} startDay
+ * @param {string} shown
+ */
+function keepListedDays(days, startDay, shown) {
+  if (shown !== placedFor) nearDays = startDay ? listDaysAround(days, startDay) : new Set();
+  listedDays = days;
+}
+
+// A day a draw of the whole list leaves as it is once written on its own (setHtml in html.js), so
+// each is written on its own, whole or as a stand-in.
+/** @param {ListedDay[]} days */
+function writeListedDays(days) {
+  for (const listed of days) {
+    const element = findListedDay(listed.day);
+    if (element) setHtml(element, chooseDayMarkup(listed, nearDays));
+  }
+}
+
+// As the list moves, the days that came near what it shows are drawn whole, and those that left
+// stand in again. A stand-in is as tall as its games, so this moves nothing.
+function drawNearDays() {
+  const list = findList();
+  if (!list || !list.clientHeight || !hasStandIns(listedDays)) return;
+  const before = nearDays;
+  nearDays = measureNearDays(list, listedDays, [list.scrollTop], findListedDay);
+  writeListedDays(listedDays.filter(({ day }) => before.has(day) !== nearDays.has(day)));
+}
+
+/**
+ * The day a new search places the list on: the first from today, or the last when every one is
+ * past, or the first when rows sit over the games.
+ * @param {ListedDay[]} days
+ * @param {string} today
+ * @param {boolean} isOverGames
+ */
+function findStartDay(days, today, isOverGames) {
+  if (isOverGames) return days[0]?.day ?? null;
+  return (days.find(({ day }) => day >= today) ?? days.at(-1))?.day ?? null;
+}
 
 /**
  * The line under the field: what the search is about, in bold, then the rest of what it read.
@@ -419,6 +479,17 @@ function placeList(today, isOverGames) {
 // The bar ends in a line once something has scrolled under it, as the day strip's does.
 function markStuck() {
   findBar()?.classList.toggle("stuck", (findList()?.scrollTop ?? 0) > 0);
+}
+
+// The days near the screen are drawn once a frame, however many scroll events it brings.
+function followScroll() {
+  markStuck();
+  if (isNearFramePending) return;
+  isNearFramePending = true;
+  requestAnimationFrame(() => {
+    isNearFramePending = false;
+    drawNearDays();
+  });
 }
 
 /**
@@ -521,6 +592,7 @@ function draw() {
   if (!text) {
     findBar()?.classList.remove("has-rows");
     setHtml(readLine, html``);
+    listedDays = [];
     setHtml(list, renderExamples(listShownExamples(context)));
     placeOnce(nameShown("", false), context.today);
     return;
@@ -531,33 +603,48 @@ function draw() {
   const rows = placeGameParts(pageRows, context);
   const suggestions = dropTeamsShown(typed, rows);
   const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];
-  const search = gameText === null ? null : readSearch(gameText, context);
+  const search = gameText ? readSearch(gameText, context) : null;
   const found = search && findSearchGames(search, context);
   const read = search && found && describeSearch(search, found, context);
   const isOverGames =
     !isGamesOnly && (suggestions.length > 0 || rows.length > 0 || others.length > 0);
   findBar()?.classList.toggle("has-rows", isOverGames);
   setHtml(readLine, renderReadLine(answer ?? (isOverGames ? null : read)));
+  const shown = nameShown(text, isOverGames);
   if (!isOverGames) {
-    const games = found?.games.length
-      ? renderDays(league.listDays(found.games, Date.now()))
+    const days = found?.games.length ? league.listDays(found.games, Date.now()) : [];
+    keepListedDays(days, findStartDay(days, context.today, false), shown);
+    const games = days.length
+      ? renderDays(days)
       : html`<p class="empty-note">${search && describeNoGames(search, context)}</p>`;
     setHtml(list, games);
-    placeOnce(nameShown(text, false), context.today);
+    showDays(shown, context.today);
     return;
   }
-  const shownGames = found ? listFromToday(found.games, context.today) : [];
+  const shownGames = read && found ? listFromToday(found.games, context.today) : [];
+  const days = shownGames.length ? league.listDays(shownGames, Date.now()) : [];
+  keepListedDays(days, findStartDay(days, context.today, true), shown);
   setHtml(
     list,
     html`${suggestions.length > 0 && renderSuggestions(suggestions, query)}${
       pages && rows.length > 0 && renderPageRows(rows, pages, context)
     }${others.length > 0 && renderSuggestions(others, "")}${
-      read &&
-      shownGames.length > 0 &&
-      html`${renderGamesLine(read, readText)}${renderDays(league.listDays(shownGames, Date.now()))}`
+      days.length > 0 && html`${renderGamesLine(read, readText)}${renderDays(days)}`
     }`,
   );
-  placeOnce(nameShown(text, true), context.today);
+  showDays(shown, context.today);
+}
+
+/**
+ * Brings each day the list draws up to date, places a new search, and draws whole the days it put
+ * near the screen.
+ * @param {string} shown
+ * @param {string} today
+ */
+function showDays(shown, today) {
+  writeListedDays(listedDays);
+  placeOnce(shown, today);
+  drawNearDays();
 }
 
 /**
@@ -721,7 +808,7 @@ export function startGameSearch(element, searchLeague) {
   element.addEventListener("focusin", followFocus);
   element.addEventListener("input", followTyping);
   element.addEventListener("submit", sendSearch);
-  findList()?.addEventListener("scroll", markStuck, { passive: true });
+  findList()?.addEventListener("scroll", followScroll, { passive: true });
   watchTimeAway((awayMs) => {
     if (isAwayLong(awayMs)) closeGameSearch();
   });

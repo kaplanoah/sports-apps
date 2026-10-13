@@ -435,6 +435,7 @@ export function listFoundGameDays(found, allGames, now) {
     gameDays: listGameDays(found, groupSeriesFinals(allGames), today),
     today,
     renderLabel: renderHeadingLabel,
+    standsIn: true,
   });
 }
 

@@ -122,13 +122,30 @@ const renderQuietDay = (day, today, renderLabel) =>
  * @param {{ day: string, count: number, games: Markup }[]} options.gameDays in order
  * @param {string} options.today
  * @param {RenderLabel} [options.renderLabel]
+ * @param {boolean} [options.standsIn] whether a day far from what shows stands in for its games,
+ *   as a season of many games a day does
  * @returns {import("./day-strip.js").ListedDay[]}
  */
-export const listFoundDays = ({ gameDays, today, renderLabel = renderCalendarLabel }) =>
-  gameDays.map((gameDay) => ({
-    day: gameDay.day,
-    markup: renderGameDay(gameDay, today, renderLabel),
-  }));
+export const listFoundDays = ({
+  gameDays,
+  today,
+  renderLabel = renderCalendarLabel,
+  standsIn = false,
+}) => gameDays.map((gameDay) => listGameDay(gameDay, today, renderLabel, standsIn));
+
+/**
+ * A game day as a list draws it, with its stand-in when the league has them.
+ * @param {{ day: string, count: number, games: Markup }} gameDay
+ * @param {string} today
+ * @param {RenderLabel} renderLabel
+ * @param {boolean} standsIn
+ * @returns {import("./day-strip.js").ListedDay}
+ */
+const listGameDay = (gameDay, today, renderLabel, standsIn) => ({
+  day: gameDay.day,
+  markup: renderGameDay(gameDay, today, renderLabel),
+  ...(standsIn && { farMarkup: renderStandIn(gameDay, today, renderLabel) }),
+});
 
 /**
  * Each game day of the season as the day strip lists it, from its first to its last, with a day
@@ -152,12 +169,7 @@ export function listSeasonDays({
   renderLabel = renderCalendarLabel,
   standsIn = false,
 }) {
-  /** @type {import("./day-strip.js").ListedDay[]} */
-  const days = gameDays.map((gameDay) => ({
-    day: gameDay.day,
-    markup: renderGameDay(gameDay, today, renderLabel),
-    ...(standsIn && { farMarkup: renderStandIn(gameDay, today, renderLabel) }),
-  }));
+  const days = gameDays.map((gameDay) => listGameDay(gameDay, today, renderLabel, standsIn));
   const isTodayInSeason = !!days.length && days[0].day < today && today < days.at(-1).day;
   if (isTodayInSeason && !days.some(({ day }) => day === today)) {
     const after = days.findIndex(({ day }) => day > today);

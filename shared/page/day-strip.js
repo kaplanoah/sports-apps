@@ -10,6 +10,7 @@ import {
 import { dayStripLog } from "./day-strip-log.js";
 import { html, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
+import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { watchTimeAway } from "./resume.js";
 import { scrollWithSpring } from "./spring-scroll.js";
 import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
@@ -46,12 +47,6 @@ const CALENDAR_DOT = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hi
 
 // Farther than this many screens, a jump is made at once rather than flown.
 const FLOWN_SCREENS = 3;
-// Days within this many screens of what the list shows, and of a day a tap or Today sends it to,
-// are drawn whole, which is more than a fling reaches before the list's next frame draws its own.
-// Before the list is laid out, as on another tab, the days this many either side of the day it
-// opens on are.
-const NEAR_SCREENS = 3;
-const NEAR_DAY_COUNT = 4;
 // A tap on Today while the list is already there grows the date this much and back, this fast.
 const PULSE_SCALE = 1.04;
 const PULSE_MS = 290;
@@ -177,21 +172,6 @@ function listShownDays(fill) {
 }
 
 /**
- * The days either side of `center` in the list, before it's laid out.
- * @param {ListedDay[]} days
- * @param {string} center
- */
-function listDaysAround(days, center) {
-  const index = days.findIndex(({ day }) => day === center);
-  const around =
-    index < 0 ? [] : days.slice(Math.max(0, index - NEAR_DAY_COUNT), index + NEAR_DAY_COUNT + 1);
-  return new Set(around.map(({ day }) => day));
-}
-
-/** @param {ListedDay[]} days */
-const hasStandIns = (days) => days.some(({ farMarkup }) => farMarkup);
-
-/**
  * The days drawn whole: those within a few screens of what the list shows and of the day a tap or
  * Today sends it to. A league without stand-ins draws every day whole, so the list isn't measured.
  * @param {DayStripFill} fill
@@ -203,27 +183,14 @@ function listNearDays(fill, days) {
   const target = held?.day ?? chosenDay ?? fill.startDay;
   const targetDay = findListedDay(target);
   if (!list || !targetDay || !isListShown()) return listDaysAround(days, target);
-  const reach = NEAR_SCREENS * list.clientHeight;
-  const spans = [list.scrollTop, targetDay.offsetTop].map((top) => [
-    top - reach,
-    top + list.clientHeight + reach,
-  ]);
-  /** @param {string} day */
-  const isNear = (day) => {
-    const listed = findListedDay(day);
-    if (!listed) return false;
-    const bottom = listed.offsetTop + listed.offsetHeight;
-    return spans.some(([from, to]) => bottom > from && listed.offsetTop < to);
-  };
-  return new Set(days.filter(({ day }) => isNear(day)).map(({ day }) => day));
+  return measureNearDays(list, days, [list.scrollTop, targetDay.offsetTop], findListedDay);
 }
 
 /**
  * What the list draws for a day: its games, or its stand-in while it's far from what shows.
  * @param {ListedDay} listed
  */
-const chooseDrawnMarkup = ({ day, markup, farMarkup }) =>
-  farMarkup && !nearDays.has(day) ? farMarkup : markup;
+const chooseDrawnMarkup = (listed) => chooseDayMarkup(listed, nearDays);
 
 // Keyed by its date, a day keeps its own node as days come and go around it, rather than being
 // rewritten with its neighbor's games.
