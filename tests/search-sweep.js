@@ -11,6 +11,7 @@ import { splitWords } from "#shared/search-words.js";
 // - a team's suggestion, read whole, names that team alone;
 // - letters the line reads as the whole search find what the whole search does;
 // - letters past the first word of a name start no player's;
+// - a space between a name's words still shows what its letters found;
 // - a team's name after any name of its city finds what the team's name does.
 
 const SHORTEST_GUESS = 3;
@@ -104,6 +105,10 @@ function listBrokenRules(shown, { head, name, typedName, whole }, context) {
     broken.push(
       `finds ${describeFound(shown)}, but the whole search finds ${describeFound(whole)}`,
     );
+  const isBetweenWords = /\s$/.test(typedName);
+  const isShowingNothing = !shown.suggestions.length && !shown.rows.length && !shown.games.length;
+  if (isBetweenWords && isShowingNothing && whole.games.length)
+    broken.push("shows nothing between its words");
   const isPastFirstWord = /\s\S/.test(typedName);
   if (isPastFirstWord && shown.rows.some((row) => row.kind === "player"))
     broken.push("lists a player");
@@ -134,15 +139,14 @@ export function sweepPhrasings(phrasings, { context, pages }) {
     const isSame = describeFound(whole) === same;
     return [
       ...(isSame ? [] : [`${head}${name}: finds ${describeFound(whole)}, but ${sameAs} ${same}`]),
-      ...Array.from({ length: name.length }, (_, index) => name.slice(0, index + 1))
-        .filter((typedName) => !/\s$/.test(typedName))
-        .flatMap((typedName) =>
+      ...Array.from({ length: name.length }, (_, index) => name.slice(0, index + 1)).flatMap(
+        (typedName) =>
           listBrokenRules(
             show(`${head}${typedName}`, true),
             { head, name, typedName, whole },
             context,
           ).map((rule) => `${head}${typedName} (of ${head}${name}): ${rule}`),
-        ),
+      ),
     ];
   });
 }

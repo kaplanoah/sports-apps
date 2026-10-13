@@ -180,15 +180,17 @@ function listFinishedWords(fragment, kinds, context) {
 }
 
 /**
- * The word being typed, finished, unless it's a joining word already whole, or ends a phrase
- * already whole that nothing longer starts, as "weekend" does "this weekend".
+ * The word being typed, finished, or, after a space, the name its words start, as "los " starts
+ * Los Angeles, unless it's a joining word already whole, or ends a phrase already whole that
+ * nothing longer starts, as "weekend" does "this weekend".
  * @param {string} text
  * @param {SearchContext} context
  * @returns {Candidate[]}
  */
 function listFinishingCandidates(text, context) {
   const typed = listTypedWords(text);
-  if (/\s$/.test(text) || readJoin(typed.at(-1)?.word ?? "", context)) return [];
+  if (readJoin(typed.at(-1)?.word ?? "", context)) return [];
+  const space = /\s$/.test(text) ? " " : "";
   for (const length of [2, 1]) {
     if (typed.length < length) continue;
     const start = typed[typed.length - length];
@@ -196,7 +198,7 @@ function listFinishingCandidates(text, context) {
     const kinds = KINDS_AFTER[before ? readJoin(before.word, context) : ""] ?? FINISHED_KINDS;
     const head = text.slice(0, start.at);
     const fragment = readWords(text.slice(start.at));
-    const finished = listFinishedWords(fragment, kinds, context);
+    const finished = listFinishedWords(`${fragment}${space}`, kinds, context);
     if (finished.length)
       return finished.map(({ written, meaning, isShared }) => ({
         text: `${head}${written}`,
