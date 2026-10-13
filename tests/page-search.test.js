@@ -30,6 +30,7 @@ const TERMS = {
   rounds: [{ round: 3, name: "Finals", words: ["finals"] }],
   kindNames: { cup: "The Cup", allStar: "All-Star Game" },
   examples: [],
+  starters: [{ id: "5", name: "Pell", words: ["pell"] }],
 };
 
 /** @type {import("../shared/page/page-search.js").SearchPages} */
@@ -43,6 +44,8 @@ const PAGES = {
     { id: "2", team: "FOX", firstName: "Lena", lastName: "Stone", number: "12" },
     { id: "3", team: "HAW", firstName: "Jo", lastName: "Quill", number: "3" },
     { id: "4", team: "HAW", firstName: "A’ja", lastName: "Rook", number: "22" },
+    { id: "5", team: "FOX", firstName: "Cy", lastName: "Pell Jr.", number: "40" },
+    { id: "6", team: "FOX", firstName: "Easton", lastName: "Vale", number: "9" },
   ],
   section: { key: "roster", name: "Roster" },
   places: [
@@ -60,6 +63,12 @@ const PAGES = {
     },
     { key: "settings", name: ["Settings"], words: ["settings"], icon: "settings" },
     {
+      key: "settings:hawks-outlet",
+      name: ["Settings", "Include The Hawks Nest"],
+      words: ["settings", "the hawks nest"],
+      icon: "settings",
+    },
+    {
       key: "settings:appearance",
       name: ["Settings", "Appearance"],
       words: ["settings", "appearance", "theme", "dark mode"],
@@ -73,6 +82,7 @@ const PAGES = {
       words: ["highlights", "recap"],
       game: "latest-final",
     },
+    { key: "matchup", name: "Matchup", words: ["matchup", "probables"], game: "next" },
   ],
   examples: [],
 };
@@ -145,7 +155,11 @@ test("a place's words list it, from the start of any of its words, and every pla
   assert.deepEqual(listRows("standings").rows, ["place standings:league", "place standings:east"]);
   assert.deepEqual(listRows("east standings").rows, ["place standings:east"]);
   assert.deepEqual(listRows("eastern conference").rows, ["place standings:east"]);
-  assert.deepEqual(listRows("settings").rows, ["place settings", "place settings:appearance"]);
+  assert.deepEqual(listRows("settings").rows, [
+    "place settings",
+    "place settings:hawks-outlet",
+    "place settings:appearance",
+  ]);
   assert.deepEqual(listRows("dark mode").rows, ["place settings:appearance"]);
   assert.deepEqual(listRows("appear").rows, ["place settings:appearance"]);
 });
@@ -184,4 +198,33 @@ test("a final's part opens the last game that has ended, and a part before one t
   assert.equal(findPartGame(games.slice(2), final), null);
   assert.equal(findPartGame(games, next)?.id, "c");
   assert.equal(findPartGame(games.slice(0, 2), next), null);
+});
+
+test("a suffix after a last name may be left off", () => {
+  assert.deepEqual(listRows("Pell Jr").rows, ["player FOX Pell Jr."]);
+  assert.deepEqual(listRows("Cy Pell").rows, ["player FOX Pell Jr."]);
+});
+
+test("a name a search of games knows, as a starter's, lists his sheet and still finds his starts", () => {
+  assert.deepEqual(listRows("Pell"), { rows: ["player FOX Pell Jr."], gameText: "Pell" });
+  assert.deepEqual(listRows("Quill"), { rows: ["player HAW Quill"], gameText: null });
+});
+
+test("words a search of games knows ask for something else, beside a name or as the start of one", () => {
+  assert.deepEqual(listRows("eastern conference vale").rows, []);
+  assert.deepEqual(listRows("east", true).rows, ["place standings:east"]);
+  assert.deepEqual(listRows("Easto", true).rows, ["player FOX Vale"]);
+});
+
+test("a game's part before it opens the next game, and its name may be one a search of games passes over", () => {
+  assert.deepEqual(listRows("Hawks matchup"), { rows: ["matchup of hawks"], gameText: null });
+  assert.deepEqual(listRows("probables").rows, ["matchup of the season"]);
+  assert.deepEqual(listRows("the Hawks matchup").rows, ["matchup of the hawks"]);
+});
+
+test("a place whose own phrase is the whole search lists first, though its words read as a team", () => {
+  assert.deepEqual(listRows("the hawks nest"), {
+    rows: ["place settings:hawks-outlet"],
+    gameText: "the hawks nest",
+  });
 });

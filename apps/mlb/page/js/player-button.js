@@ -14,4 +14,4 @@ export const renderPlayerButton = (
   club,
   { content = player.name, className = "box-name" } = {},
 ) =>
-  html`<button type="button" class="player-open ${className}" data-player="${String(player.id)}" data-player-club="${club}" data-player-name="${player.name}" data-player-number="${player.number ?? ""}">${content}</button>`;
+  html`<button type="button" class="player-open ${className}" data-player="${String(player.id)}" data-player-team="${club}" data-player-name="${player.name}" data-player-number="${player.number ?? ""}">${content}</button>`;

@@ -9,17 +9,8 @@ import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/page-search.js").SearchPages} SearchPages */
 /** @typedef {import("#shared/page-search.js").PagePlace} PagePlace */
+/** @typedef {import("#shared/page-search.js").PagePlayer} PagePlayer */
 /** @typedef {import("#shared/page-search.js").GamePart} GamePart */
-/**
- * A player as the store's list of the season's players has him.
- * @typedef {{ id: string, team: string, number: string, firstName: string, lastName: string }} IndexedPlayer
- */
-
-/**
- * Where the store keeps a season's list of players.
- * @param {number} season
- */
-export const namePlayerIndexKey = (season) => `player-index/${season}`;
 
 const SECTION = { key: "roster", name: "Roster" };
 /** @type {GamePart[]} */
@@ -139,7 +130,7 @@ const listSettings = (isShown) =>
 
 /**
  * The clubs, players, and places a search can open.
- * @param {{ index: { players: IndexedPlayer[] } | null, isSettingShown: (key: string) => boolean }} shown
+ * @param {{ index: { players: PagePlayer[] } | null, isSettingShown: (key: string) => boolean }} shown
  * @returns {SearchPages}
  */
 export function listSearchPages({ index, isSettingShown }) {

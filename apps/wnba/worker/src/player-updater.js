@@ -19,8 +19,8 @@ import {
   nameTotalsRequest,
 } from "./player.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
-import { namePlayerIndexKey } from "../../page/js/search-pages.js";
-import { describePlayerIndex } from "./player-index.js";
+import { namePlayerIndexKey } from "#shared/page-search.js";
+import { indexRosters } from "./player-index.js";
 import {
   describeRoster,
   nameLeagueRosterRequest,
@@ -337,7 +337,7 @@ function createStoreKeeper() {
     if (stats) await savePlayers(context, season, stats);
     const hasEveryRoster = leagueRosters.every(Boolean);
     if (hasEveryRoster)
-      await saveDoc(context, namePlayerIndexKey(season), describePlayerIndex(season, rosters));
+      await saveDoc(context, namePlayerIndexKey(season), indexRosters(season, rosters));
     return !!stats && !!playerList && hasEveryRoster;
   }
 
@@ -353,7 +353,7 @@ function createStoreKeeper() {
       TEAM_KEYS.map((team) => context.docs.read(nameRosterKey(season, team))),
     );
     if (rosters.every(Boolean))
-      await saveDoc(context, namePlayerIndexKey(season), describePlayerIndex(season, rosters));
+      await saveDoc(context, namePlayerIndexKey(season), indexRosters(season, rosters));
   }
 
   /**

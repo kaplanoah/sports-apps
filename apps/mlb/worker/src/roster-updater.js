@@ -1,4 +1,5 @@
 import { isSameJson } from "#shared/compare.js";
+import { namePlayerIndexKey } from "#shared/page-search.js";
 import { addDays, readEasternDay } from "#shared/days.js";
 import { listClubs, readClubId, readMlbTeamId } from "../../page/js/snapshot.js";
 import {
@@ -8,6 +9,7 @@ import {
   nameInjuredKey,
 } from "./injuries.js";
 import { fetchMlbJson } from "./mlb.js";
+import { indexRosters } from "./player-index.js";
 import { countSlateFinals } from "./pitcher-updater.js";
 import {
   describeHitters,
@@ -31,8 +33,9 @@ import {
 import { SETTLE_MS, createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 
-// Keeps each club's roster and each player on it for the current season, so a club's Roster
-// section and a player's sheet read only the store. A club's roster changes only with a
+// Keeps each club's roster and each player on it for the current season, and the list of every
+// player on one that search finds, so a club's Roster section, a player's sheet, and search read
+// only the store. A club's roster changes only with a
 // transaction, which MLB lists for the whole league in one request, so each run reads that list
 // once it's old, and reads again only the rosters of the clubs with a transaction it hasn't seen, a
 // few clubs a run, and every club's once a day in case one was missed. Every player's numbers, in
@@ -382,7 +385,8 @@ function createStoreKeeper() {
 
   /**
    * Saves each club's roster that has been read, and each player on it, with every player's
-   * numbers as they are now, and the hitters MLB ranks.
+   * numbers as they are now, the hitters MLB ranks, and, once every club's roster has been read,
+   * the season's list of players.
    * @param {JobContext} context
    * @param {number} season
    * @param {SeasonNumbers} numbers
@@ -390,6 +394,7 @@ function createStoreKeeper() {
   async function saveRosters(context, season, numbers) {
     const { hitting, pitching } = numbers;
     const lastGames = await context.storage.list(nameLastGamesPrefix(season));
+    const rosters = [];
     for (const club of listClubs()) {
       const roster = await context.storage.get(nameAnswerKey(season, club));
       if (!roster) continue;
@@ -399,9 +404,16 @@ function createStoreKeeper() {
         describeRoster({ club, season, roster, hitting, pitching }),
       );
       await savePlayers(context, season, club, roster, numbers, lastGames);
+      rosters.push({ club, roster });
     }
     if (numbers.qualified)
       await saveDoc(context, nameHittersKey(season), describeHitters(numbers.qualified));
+    if (rosters.length === listClubs().length)
+      await saveDoc(
+        context,
+        namePlayerIndexKey(season),
+        indexRosters(season, rosters, numbers.people),
+      );
   }
 
   /**

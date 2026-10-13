@@ -3,9 +3,11 @@
 // Standings lists and settings, and a game's parts, like a final's Highlights or MLB's Matchup. A
 // team's name lists its sheet and its section, and the section's name beside it lists the section
 // alone. A game part's name lists the part of the game the rest of the words find, or the season's:
-// the latest final for a final's part, or the next game for one before it. A player's name lists her sheet, and finds no games,
-// since nobody knows yet which games she'll play. A place's words list it, and leave the games to
-// any of them that a search of games reads, as "East" finds the East's standings and its games.
+// the latest final for a final's part, or the next game for one before it. A player's name lists
+// her sheet, and finds no games, since nobody knows yet which games she'll play, unless a search of
+// games knows the name, as MLB's knows a starter's, finding his starts. A place's words list it,
+// and leave the games to any of them that a search of games reads, as "East" finds the East's
+// standings and its games.
 // Words that ask for anything else, like a second team, a day, or "at", ask for games, and list no
 // page. A league hands it its teams, players, and places, and the search's dictionary, so a team is
 // named here by the same words it is in a search of games. Runs in the page and in Node, so it uses
@@ -43,6 +45,31 @@ import { readTokens, splitWords } from "./search-words.js";
  * left.
  * @typedef {{ kind: "team" | "section", team: PageTeam } | { kind: "player", team: PageTeam, player: PagePlayer } | { kind: "place", place: PagePlace } | { kind: "game-part", part: GamePart, gameText: string | null }} PageRow
  */
+
+/**
+ * Where the store keeps the list of a season's players a search finds.
+ * @param {number} season
+ */
+export const namePlayerIndexKey = (season) => `player-index/${season}`;
+
+/**
+ * @param {PagePlayer} first
+ * @param {PagePlayer} second
+ */
+const compareNames = (first, second) =>
+  first.lastName.localeCompare(second.lastName) ||
+  first.firstName.localeCompare(second.firstName) ||
+  first.id.localeCompare(second.id);
+
+/**
+ * A season's list of players as the store keeps it, by name.
+ * @param {number} season
+ * @param {PagePlayer[]} players
+ */
+export const describePlayerIndex = (season, players) => ({
+  season,
+  players: players.toSorted(compareNames),
+});
 
 // A word this short only finds a name or a place once it's whole, or it would find too many.
 const SHORTEST_PREFIX = 3;
@@ -178,7 +205,10 @@ const hasKind = (token, kind) => token.meanings.some((meaning) => meaning.kind =
  * @param {import("./search-words.js").Token[]} taken the tokens that found a page
  */
 function leaveGameText(tokens, taken) {
-  const left = tokens.filter((token) => !taken.includes(token) || token.meanings.length);
+  const left = tokens.filter(
+    (token) =>
+      !taken.includes(token) || token.meanings.some((meaning) => meaning.kind !== "filler"),
+  );
   return left.some((token) => !hasKind(token, "filler"))
     ? left.map((token) => token.text).join(" ")
     : null;
@@ -221,13 +251,45 @@ function findGamePart(tokens, parts) {
 }
 
 /**
+ * The places whose own phrase is every word of the search, as "the athletic" is a setting's, even
+ * where a search of games reads the words as something else, like MLB's Athletics.
+ * @param {string} text
+ * @param {PagePlace[]} places
+ */
+const findPhrasePlaces = (text, places) => {
+  const typed = splitWords(text).join(" ");
+  return places.filter((place) => place.words.some((word) => splitWords(word).join(" ") === typed));
+};
+
+/**
  * The pages a search's words ask for, and the words left for its search of games, or null when
- * the words ask for no games.
+ * the words ask for no games. A place whose own phrase the words are lists first.
  * @param {string} text
  * @param {{ dictionary: import("./search-words.js").Dictionary, pages: SearchPages, isTyping: boolean }} search
  * @returns {{ rows: PageRow[], gameText: string | null }}
  */
-export function findPages(text, { dictionary, pages, isTyping }) {
+export function findPages(text, search) {
+  const phrasePlaces = findPhrasePlaces(text, search.pages.places);
+  const found = findWordPages(text, search);
+  const rest = found.rows.filter(
+    (row) => !(row.kind === "place" && phrasePlaces.includes(row.place)),
+  );
+  return {
+    rows: [
+      ...phrasePlaces.map((place) => /** @type {PageRow} */ ({ kind: "place", place })),
+      ...rest,
+    ],
+    gameText: found.gameText,
+  };
+}
+
+/**
+ * The pages the search's words find, read word by word.
+ * @param {string} text
+ * @param {{ dictionary: import("./search-words.js").Dictionary, pages: SearchPages, isTyping: boolean }} search
+ * @returns {{ rows: PageRow[], gameText: string | null }}
+ */
+function findWordPages(text, { dictionary, pages, isTyping }) {
   const tokens = readTokens(text, dictionary);
   const teamTokens = tokens.filter((token) => hasKind(token, "team"));
   const otherTokens = tokens.filter(
@@ -246,7 +308,10 @@ export function findPages(text, { dictionary, pages, isTyping }) {
     const team = teams.get(player.team);
     return team ? [/** @type {PageRow} */ ({ kind: "player", team, player })] : [];
   });
-  if (players.length) return { rows: players, gameText: null };
+  if (players.length) {
+    const isKnownToGames = otherTokens.some((token) => token.meanings.length > 0);
+    return { rows: players, gameText: isKnownToGames ? text : null };
+  }
   const places = findPlaces(otherWords, pages.places);
   if (!places.length) return { rows: [], gameText: text };
   return {

@@ -84,7 +84,7 @@ test("each row shows the season's numbers for the player's job, innings in third
   assert.deepEqual(readRow(markup, "Cade Smith"), ["1.95", "41", "74", "107"]);
   assert.match(
     markup,
-    /<span class="roster-number tabular">38<\/span\s*><button type="button" class="player-open box-name" data-player="680757" data-player-club="CLE" data-player-name="Steven Kwan" data-player-number="38">Steven Kwan<\/button>/,
+    /<span class="roster-number tabular">38<\/span\s*><button type="button" class="player-open box-name" data-player="680757" data-player-team="CLE" data-player-name="Steven Kwan" data-player-number="38">Steven Kwan<\/button>/,
   );
 });
 

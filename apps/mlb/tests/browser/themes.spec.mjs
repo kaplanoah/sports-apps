@@ -112,15 +112,15 @@ const VIEW_GROUPS = {
       shown: (page) => page.locator("#seasonGames .game-day.is-today .game-row").first(),
     },
     {
-      name: "the Games view's search",
-      open: (page) => page.locator("#seasonGames .go-search").click(),
+      name: "Search",
+      open: (page) => page.locator("#tab-search").click(),
       shown: (page) => page.locator("#gameSearch .search-example").first(),
       close: (page) => page.locator("#gameSearch button.search-cancel").click(),
     },
     {
       name: "a search's games",
       open: async (page) => {
-        await page.locator("#seasonGames .go-search").click();
+        await page.locator("#tab-search").click();
         await page.locator("#gameSearch .search-input").fill("Mets");
         await page.locator("#gameSearch .search-input").press("Enter");
       },

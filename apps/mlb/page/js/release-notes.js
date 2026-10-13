@@ -6,8 +6,8 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
-    at: "2026-10-11T01:46:00Z",
-    text: html`Freeform search for games. Tap <b>Search</b> on the games page and type a team, city, ballpark, pitcher, or things like "games this weekend" or "Mets at Phillies".`,
+    at: "2026-10-13T12:00:00Z",
+    text: html`Search for teams, players, games, and highlights, with the <b>Search</b> button at the bottom. (Includes the old game search, which works the same as before.)`,
   },
   {
     at: "2026-10-10T19:49:00Z",

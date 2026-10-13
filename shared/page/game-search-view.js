@@ -1,5 +1,5 @@
-// A search over a season's games, and, for a league that hands it its pages, its teams and
-// players and their pages too: a field with Cancel, then what the words find. Before anything is
+// A search over a season's games, and the league's teams and players and its other pages too: a
+// field with Cancel, then what the words find. Before anything is
 // typed, quiet examples to tap sit under the field, inside its width. While words are typed,
 // suggestions sit over the pages the words name, like a team's sheet, then a line saying how the
 // search read the words, right over the games it found from today on, which a tap on the line opens
@@ -7,7 +7,8 @@
 // games, the games at once, the line under the field and the list opening on the first from today,
 // as does a tap on the line. A tap on the field goes back to what typing showed. A reload shows the
 // search as it was, and two minutes away closes it. A league hands it its season's games and words,
-// how it draws a day's games, a team's dot, and what the search does as it closes.
+// how it draws a day's games, a team's dot, its pages and how it opens them, and what the search
+// does as it closes.
 
 import { describeDay, readCalendarDate } from "./days.js";
 import {
@@ -49,11 +50,11 @@ import {
  * @property {(games: SearchGame[], now: number) => { day: string, markup: Markup }[]} listDays the
  *   days of the games found, drawn as the Games view draws them
  * @property {(code: string) => Markup} renderTeamMark a team's dot
- * @property {() => void} close what the view does as the search closes, like going back to today
- * @property {() => SearchPages | null} [readPages] the teams and players a search can open, for a
- *   league whose search finds them
- * @property {string} [placeholder] what the empty field says, when it finds more than games
- * @property {(key: string) => void} [openPlace] opens a place a search lists, by its key
+ * @property {() => void} close what the view does as the search closes, like going back to the tab
+ *   before it
+ * @property {() => SearchPages} readPages the teams, players, and places a search can open
+ * @property {string} placeholder what the empty field says
+ * @property {(key: string) => void} openPlace opens a place a search lists, by its key
  */
 
 // Phosphor's magnifying-glass at its Light weight in the field, as the page's controls are, and at
@@ -218,8 +219,7 @@ const describeGame = (game, context) =>
  */
 function describePageRow(row, pages, context) {
   if (row.kind === "place") return { words: joinWithSeparator(row.place.name), detail: "" };
-  if (row.kind === "game")
-    return { words: row.part.name, detail: describeGame(row.game, context) };
+  if (row.kind === "game") return { words: row.part.name, detail: describeGame(row.game, context) };
   if (!("player" in row)) {
     if (row.kind === "team") return { words: row.team.fullName, detail: "" };
     return { words: pages.section?.name ?? "", detail: row.team.fullName };
@@ -247,7 +247,7 @@ function renderPageButton(row, pages) {
   const opens = html`type="button" class="search-suggestion team-open" data-team="${row.team.code}" data-team-section="${section}"`;
   if (!("player" in row)) return opens;
   const { player } = row;
-  return html`${opens} data-player="${player.id}" data-player-team="${player.team}" data-player-name="${player.firstName} ${player.lastName}"`;
+  return html`${opens} data-player="${player.id}" data-player-team="${player.team}" data-player-name="${player.firstName} ${player.lastName}" data-player-number="${player.number}"`;
 }
 
 /**
@@ -419,7 +419,7 @@ function dropTeamsShown(suggestions, rows) {
  * @returns {{ pages: SearchPages | null, rows: PageRow[], gameText: string | null }}
  */
 function readPages(text, readText, context) {
-  const pages = league?.readPages?.() ?? null;
+  const pages = league?.readPages() ?? null;
   if (!pages) return { pages, rows: [], gameText: readText };
   const search = { dictionary: context.dictionary, pages, isTyping };
   const typed = findPages(text, search);
@@ -431,7 +431,7 @@ function readPages(text, readText, context) {
  * @param {import("./game-search.js").SearchContext} context
  */
 function listShownExamples(context) {
-  const pages = league?.readPages?.() ?? null;
+  const pages = league?.readPages() ?? null;
   const pageExamples = (pages?.examples ?? []).filter(
     (example) =>
       findPages(example, { dictionary: context.dictionary, pages, isTyping: false }).rows.length,
@@ -554,12 +554,9 @@ export function focusGameSearch() {
   findInput()?.focus();
 }
 
-/**
- * Closes the search, emptying its field.
- * @returns {boolean} whether it was open
- */
-export function closeGameSearch() {
-  if (!view || view.hidden) return false;
+/** Closes the search, emptying its field. */
+function closeGameSearch() {
+  if (!view || view.hidden) return;
   findInput()?.blur();
   writeQuery("");
   isTyping = false;
@@ -567,7 +564,6 @@ export function closeGameSearch() {
   placedFor = null;
   view.hidden = true;
   league?.close();
-  return true;
 }
 
 /** Draws the search again from the season, as new data or the clock moves on. */
@@ -582,7 +578,7 @@ function followTap(event) {
   const place = /** @type {HTMLElement | null} */ (target.closest("[data-place]"));
   const gamesLine = /** @type {HTMLElement | null} */ (target.closest(".search-games-line"));
   if (chosen) runAfterPress(chosen, () => runSearch(chosen.dataset.search ?? ""));
-  else if (place) runAfterPress(place, () => league?.openPlace?.(place.dataset.place ?? ""));
+  else if (place) runAfterPress(place, () => league?.openPlace(place.dataset.place ?? ""));
   else if (gamesLine) runAfterPress(gamesLine, () => showGamesOnly(gamesLine.dataset.games ?? ""));
   else if (target.closest(".search-cancel")) closeGameSearch();
   else if (target.closest(".search-clear")) {
@@ -650,7 +646,7 @@ export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
   if (!findInput()) setHtml(element, renderShell());
-  nameField(searchLeague.placeholder ?? "Search games");
+  nameField(searchLeague.placeholder);
   placedFor = element.hidden
     ? null
     : nameShown(readQuery().trim(), !!element.querySelector(".search-games-line"));

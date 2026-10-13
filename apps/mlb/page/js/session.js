@@ -23,7 +23,7 @@ export const session = {
   /** @type {any[] | null} */
   schedule: null,
   // Every player on a club's roster this season, for search, null when the store has none.
-  /** @type {{ players: import("./search-pages.js").IndexedPlayer[] } | null} */
+  /** @type {{ players: import("#shared/page-search.js").PagePlayer[] } | null} */
   playerIndex: null,
   // How the store's last update went.
   status: null,

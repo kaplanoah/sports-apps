@@ -127,7 +127,7 @@ test("the Games tab lists the whole season under a strip of its days, opening on
   ).toHaveText("Sat, Sep 26");
 });
 
-test("the Games list's month starts 15px under the header's line, with Search's and Today's capitals level with its", async ({
+test("the Games list's month starts 15px under the header's line, with Today's capitals level with its", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -137,10 +137,8 @@ test("the Games list's month starts 15px under the header's line, with Search's 
     .evaluate((header) => header.getBoundingClientRect().bottom);
   const month = await readCapitals(page.locator("#seasonGames .strip-month"));
   expect(month.top - headerBottom).toBeCloseTo(15, 0);
-  for (const action of ["go-search", "go-today"]) {
-    const { top } = await readCapitals(page.locator(`#seasonGames .${action} > span`));
-    expect(Math.abs(top - month.top), action).toBeLessThan(0.25);
-  }
+  const today = await readCapitals(page.locator("#seasonGames .go-today > span"));
+  expect(Math.abs(today.top - month.top)).toBeLessThan(0.25);
 });
 
 test("a reload keeps the whole season in the Games list while the store catches up, never dropping to the slate's few days", async ({
@@ -1717,13 +1715,13 @@ async function showDay(page, day) {
 }
 
 /**
- * Each state of the Games view's search, shown in turn: its examples, its suggestions as a club's
- * name is typed, and a club's games.
+ * Each state of Search, shown in turn: its examples, its suggestions and pages as a club's name is
+ * typed, and a club's pages and games.
  * @param {import("@playwright/test").Page} page
  */
 const listSearchStates = (page) => [
   async () => {
-    await page.locator("#seasonGames .go-search").click();
+    await page.locator("#tab-search").click();
     await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
   },
   async () => {

@@ -1,7 +1,7 @@
 import { readEasternDay } from "#shared/days.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
-import { namePlayerIndexKey } from "./search-pages.js";
+import { namePlayerIndexKey } from "#shared/page-search.js";
 import { session } from "./session.js";
 import { SNAPSHOT_VERSION, nameScheduleKey } from "./snapshot.js";
 

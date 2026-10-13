@@ -12,7 +12,7 @@ import {
   nameTeamGameLogRequest,
   nameTotalsRequest,
 } from "../worker/src/player.js";
-import { namePlayerIndexKey } from "../page/js/search-pages.js";
+import { namePlayerIndexKey } from "#shared/page-search.js";
 import { createPlayerJob } from "../worker/src/player-updater.js";
 import { addTurnovers, joinGameLogs } from "./player-fixtures.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
