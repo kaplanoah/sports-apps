@@ -52,7 +52,7 @@ import { TEAMS } from "./teams.js";
 import { renderStamp } from "./stamp-view.js";
 import { listSearchPages } from "./search-pages.js";
 import { createSearchTerms, readSearchGame } from "./search-terms.js";
-import { showStandingsBlock } from "./standings.js";
+import { showStandingsPart } from "./standings.js";
 import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
@@ -161,7 +161,7 @@ function openGameAt(id, section) {
 }
 
 /**
- * Opens a place a search lists: a tab, one of the Standings tab's blocks, a game's section, or
+ * Opens a place a search lists: a tab, one of the Standings tab's parts, a game's section, or
  * settings at one of its rows.
  * @param {string} key
  */
@@ -170,7 +170,7 @@ function openSearchPlace(key) {
   if (place === "tab") openPageTab(detail);
   else if (place === "standings") {
     openPageTab("standings");
-    showStandingsBlock(detail);
+    showStandingsPart(detail);
   } else if (place === "highlights" || place === "matchup") openGameAt(detail, place);
   else openSettings(findSettingRow(key));
 }

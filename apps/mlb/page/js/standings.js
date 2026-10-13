@@ -175,7 +175,7 @@ export function renderDivisionBlock(name, rows) {
     const cells = renderRaceCells(row, row.gb, row.elim, isOut);
     return renderStandingsRow(row, cells, { out: isOut });
   };
-  return html`<div class="div-block" data-standings="${name}">
+  return html`<div class="div-block" data-standings="${league}">
     <div class="div-title">
       <span class="${league}">${name}</span><span class="title-right">${renderDivisionTag(rows[0] || {})}</span>
     </div>
@@ -263,7 +263,7 @@ export function renderFieldBlock(league, divisions) {
     renderWildCardRow(row, { cut: index === holders.length - 1 && chasers.length > 0 }),
   )}${chasers.map((row) => renderWildCardRow(row))}`;
   const title = `${league} Playoff Field`;
-  return html`<div class="div-block" data-standings="${league}">
+  return html`<div class="div-block">
     <div class="div-title"><span class="${league}">${title}</span><span class="title-right"></span></div>
     ${renderTable(title, renderFieldHead(), body)}
   </div>`;
@@ -296,10 +296,12 @@ export function renderStandings() {
 }
 
 /**
- * Shows one of the tab's blocks, a league's playoff field or a division, as a search's row for it
- * asks.
- * @param {string} key the block's league or division, as "AL" or "NL East"
+ * Shows one of the tab's parts, as a search's row for it asks: the playoff fields, which lead the
+ * tab, at its top, or a league's divisions, from its first.
+ * @param {string} key "playoffs", or the league, as "AL"
  */
-export function showStandingsBlock(key) {
-  document.querySelector(`[data-standings="${CSS.escape(key)}"]`)?.scrollIntoView({ block: "start" });
+export function showStandingsPart(key) {
+  const firstDivision = document.querySelector(`[data-standings="${CSS.escape(key)}"]`);
+  if (firstDivision) firstDivision.scrollIntoView({ block: "start" });
+  else scrollTo({ top: 0 });
 }

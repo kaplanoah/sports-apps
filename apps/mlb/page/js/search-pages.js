@@ -1,7 +1,7 @@
 // What MLB's search finds besides games: each club's sheet and its Roster, each player on a club's
 // roster this season, from the list of players the store keeps for it, a final's Highlights and the
-// next game's Matchup, the Bracket and News tabs, each league's playoff field and each division on
-// the Standings tab, and settings and each setting the page shows. Runs in the page and in Node, so
+// next game's Matchup, the Bracket and News tabs, the Standings tab's playoff fields and each
+// league's divisions, and settings and each setting the page shows. Runs in the page and in Node, so
 // it uses no DOM.
 
 import { nameClubFully } from "./search-terms.js";
@@ -37,7 +37,7 @@ const GAME_PARTS = [
     game: "next",
   },
 ];
-const EXAMPLES = ["Lindor", "Dodgers roster"];
+const EXAMPLES = ["Yamamoto", "Mets roster"];
 
 /** @type {PagePlace[]} */
 const TABS = [
@@ -51,41 +51,38 @@ const TABS = [
 ];
 
 const LEAGUE_NAMES = { AL: "American League", NL: "National League" };
-const DIVISION_NAMES = ["East", "Central", "West"];
+const DIVISIONS = ["East", "Central", "West"];
 
 /**
- * A block of the Standings tab, by its league or division, its title, and the words that find it.
- * @param {string} block
- * @param {string} title
+ * A part of the Standings tab, by its key and name, and the words that find it.
+ * @param {string} part
+ * @param {string} name
  * @param {string[]} words
  * @returns {PagePlace}
  */
-const describeStandingsBlock = (block, title, words) => ({
-  key: `standings:${block}`,
-  name: ["Standings", title],
+const describeStandingsPart = (part, name, words) => ({
+  key: `standings:${part}`,
+  name: ["Standings", name],
   words: ["standings", "table", ...words],
   icon: "standings",
 });
 
 /** @type {PagePlace[]} */
 const STANDINGS = [
+  describeStandingsPart("playoffs", "Playoffs", [
+    "playoffs",
+    "postseason",
+    "playoff field",
+    "playoff race",
+    "wild card",
+  ]),
   ...Object.entries(LEAGUE_NAMES).map(([league, name]) =>
-    describeStandingsBlock(league, `${league} Playoff Field`, [
+    describeStandingsPart(league, league, [
       league,
       name,
-      "playoff field",
-      "playoff race",
-      "wild card",
+      "divisions",
+      ...DIVISIONS.map((division) => `${league} ${division}`),
     ]),
-  ),
-  ...Object.entries(LEAGUE_NAMES).flatMap(([league, name]) =>
-    DIVISION_NAMES.map((division) =>
-      describeStandingsBlock(`${league} ${division}`, `${league} ${division}`, [
-        `${league} ${division}`,
-        `${name} ${division}`,
-        "division",
-      ]),
-    ),
   ),
 ];
 

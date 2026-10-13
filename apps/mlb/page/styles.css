@@ -344,6 +344,11 @@ header.top h1 {
   border-radius: var(--radius-card);
   overflow: hidden;
 }
+/* A search that opens a league's divisions stops with the first as far under the status bar as the
+   page's header starts. */
+.div-block[data-standings] {
+  scroll-margin-top: calc(17px + env(safe-area-inset-top));
+}
 .div-title {
   font-weight: 450;
   display: flex;
