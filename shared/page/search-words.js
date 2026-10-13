@@ -1,8 +1,8 @@
 // What a search's words mean. Each phrase a search knows, from the calendar, the page, or a league,
 // is matched longest first, and a word can mean more than one thing, like "New York", a team on its
 // own and a place after "in", which the search decides from the words around it. A possessive or a
-// plural reads as its word, and one wrong letter in a longer name is forgiven. Runs in the page and
-// in Node, so it uses no DOM.
+// plural reads as its word, and one wrong letter in a longer name, or in the start of one still being
+// typed, is forgiven. Runs in the page and in Node, so it uses no DOM.
 
 /**
  * What a phrase means, and how a suggestion writes it: by the name of what it means, or, for a
@@ -18,7 +18,7 @@
 
 const LONGEST_PHRASE = 4;
 // Names this long or longer forgive one wrong letter: a short one would match too much.
-const FORGIVING_LENGTH = 5;
+export const FORGIVING_LENGTH = 5;
 const FORGIVEN_KINDS = new Set(["team", "place", "month", "weekday", "round"]);
 
 /**
@@ -110,6 +110,43 @@ function findForgivenMeanings(word, dictionary) {
 }
 
 /**
+ * The starts of a name a word half typed is one letter off, when it isn't how the name starts and
+ * is long enough to forgive.
+ * @param {string} word
+ * @param {string} name
+ */
+function listForgivenStarts(word, name) {
+  if (word.length < FORGIVING_LENGTH || name.startsWith(word)) return [];
+  const starts = [-1, 0, 1].map((extra) => name.slice(0, word.length + extra));
+  return starts.filter((start) => isOneEditApart(word, start));
+}
+
+/**
+ * The phrases a word still being typed starts with one letter wrong, each with its meanings, when
+ * one start of them all is what it means, as "nation" is for "mation" in Nationals and National
+ * League, rather than two, as "bosto" and "housto" are for "hosto", and the word is one of its own
+ * that doesn't already read as one the search knows.
+ * @param {string} word
+ * @param {Dictionary} dictionary
+ * @returns {[string, Meaning[]][]}
+ */
+export function findForgivenStarts(word, dictionary) {
+  if (word.includes(" ") || findWordMeanings(word, dictionary).length) return [];
+  const near = [...dictionary].flatMap(([phrase, meanings]) => {
+    const isForgivenKind = meanings.some((meaning) => FORGIVEN_KINDS.has(meaning.kind));
+    const starts = isForgivenKind ? listForgivenStarts(word, phrase) : [];
+    return starts.length
+      ? [{ entry: /** @type {[string, Meaning[]]} */ ([phrase, meanings]), starts }]
+      : [];
+  });
+  const [first, ...others] = near;
+  const isOneStart = first?.starts.some((start) =>
+    others.every((each) => each.starts.includes(start)),
+  );
+  return isOneStart ? near.map(({ entry }) => entry) : [];
+}
+
+/**
  * What a single word means: as written, as a plural's single, or as a name one letter off.
  * @param {string} word
  * @param {Dictionary} dictionary
@@ -145,7 +182,7 @@ function matchPhrase(words, start, dictionary) {
 export function readTokens(text, dictionary) {
   const words = splitWords(text);
   const tokens = [];
-  for (let start = 0; start < words.length;) {
+  for (let start = 0; start < words.length; ) {
     const { length, meanings } = matchPhrase(words, start, dictionary);
     const phrase = words.slice(start, start + length);
     tokens.push({ text: phrase.join(" "), words: phrase, meanings });
