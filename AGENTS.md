@@ -20,6 +20,11 @@
 - Make every function do one thing well.
   Make orchestration a sequence of named steps.
   Extract and name any non-trivial logic inside blocks or chained conditions.
+- Keep a view's decisions out of the code that draws it.
+  What to show, which item is chosen, the order, and any time limit live in a module the view calls with its state and what it measured,
+  so a Node test reaches them, as `shared/page/search-reading.js` does for what search shows as words are typed.
+- A rule or a limit two places share lives in one place,
+  like the two minutes away that closes a sheet or the search, so the places can't drift apart.
 - Name variables with full words that are reasonable for their types.
   No opaque abbreviations.
 - Default to no comments.
@@ -34,6 +39,12 @@
 - Test text, numbers, and logic in Node, where a test takes milliseconds: render the view's markup or call the function,
   as `apps/mlb/tests/page.test.js` does for the Games list's series labels.
   Write a browser test only for what takes a browser: layout, color, motion, focus, and the page working with its Worker and store.
+- Test what people type the way they type it, never only the words a test's author thought of:
+  in lowercase, a key at a time, every name and the ways fans write it, alone and inside the searches they make,
+  as each app's `tests/search-typing.test.js` types every team and place with the root's `tests/search-sweep.js`.
+- Test what searches, matches, or ranks across a league against all of it, recorded, never a few rows picked by hand,
+  which hide the collisions a whole league has, like a first name that starts a city's,
+  as the sweep reads every player on a roster from `apps/mlb/tests/fixtures/2026-10-13-player-index.json`.
 - In a browser test, wait for what the page shows, with `expect(locator)` or `expect.poll`,
   never for a fixed time or for the network to go quiet; lint rejects `waitForTimeout`, `setTimeout`, and `networkidle`.
   Get past the page's timers and animation frames by moving its fake clock with `page.clock.runFor`,
