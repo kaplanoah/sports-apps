@@ -33,6 +33,28 @@ test("the contrast check measures a color only once its transition ends", async 
   expect(await listLowContrastText(page)).toEqual([]);
 });
 
+test("the contrast check measures text only once a fade-in ends", async ({ page }) => {
+  await page.setContent(`<style>body { background: #fff; color: #333 }</style><p>Rangers</p>`);
+  await page.locator("p").evaluate((text) => {
+    text.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 1000 });
+  });
+
+  expect(await listLowContrastText(page)).toEqual([]);
+});
+
+test("the contrast check does not wait for an animation that never ends", async ({ page }) => {
+  await page.setContent(
+    `<style>
+      body { background: #fff; color: #111 }
+      @keyframes pulse { from { margin-left: 0 } to { margin-left: 4px } }
+      p { animation: pulse 0.5s infinite alternate }
+    </style>
+    <p>Rangers</p>`,
+  );
+
+  expect(await listLowContrastText(page)).toEqual([]);
+});
+
 test("the contrast check still names text that is low at rest", async ({ page }) => {
   await page.setContent(
     `<style>body { background: #fff } p { color: ${LOW_CONTRAST} }</style><p>Rangers</p>`,

@@ -1,9 +1,10 @@
 import { expect } from "@playwright/test";
 
 /**
- * Waits until no row is pressed and no color is mid-transition, so a press a test's own tap left
- * behind, or a tint still fading, is never measured as the page's colors. Each test of a pressed
- * or hovered row's colors measures that state on purpose.
+ * Waits until no row is pressed and no animation that ends is running, a transition or a fade
+ * that eases in what a redraw added, so a press a test's own tap left behind, or a tint still
+ * fading, is never measured as the page's colors. A loop, like a placeholder's pulse, never ends
+ * and is left out. Each test of a pressed or hovered row's colors measures that state on purpose.
  * @param {import("@playwright/test").Page} page
  */
 const waitForSettledColors = (page) =>
@@ -16,7 +17,8 @@ const waitForSettledColors = (page) =>
             .getAnimations()
             .some(
               (animation) =>
-                animation instanceof CSSTransition && animation.playState === "running",
+                animation.playState === "running" &&
+                Number.isFinite(animation.effect?.getComputedTiming().endTime),
             ),
       ),
     )
