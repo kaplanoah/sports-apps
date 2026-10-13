@@ -27,7 +27,8 @@ export default defineConfig({
   // run once five tests have failed rather than spending its whole time limit on them. A test
   // that passed on its retry doesn't count.
   maxFailures: process.env.CI ? 5 : 0,
-  // Each test stands alone, so CI's shards split the tests evenly rather than file by file.
+  // Each test stands alone, so a machine's workers, and burn-in's shards, share out a spec's tests
+  // rather than taking it whole.
   fullyParallel: true,
   // The tests are bound by the CPU, and a browser per core keeps CI's busier than Playwright's
   // default of one per two.

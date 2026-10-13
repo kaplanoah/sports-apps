@@ -65,6 +65,16 @@ const readJob = (job) =>
     new RegExp(`^ {2}${job}:\\n(?:(?: {4}.*)?\\n)*`, "m"),
   )?.[0] ?? "";
 
+test("each browser machine runs its share of the specs, split by how long each takes", () => {
+  const browser = readJob("browser");
+  assert.match(
+    browser,
+    /node worker\/split-browser-specs\.mjs \$\{\{ matrix\.shard \}\} \$\{\{ strategy\.job-total \}\} > "\$RUNNER_TEMP\/browser-specs\.txt"/,
+  );
+  assert.match(browser, /npm run test:browser -- --test-list "\$RUNNER_TEMP\/browser-specs\.txt"/);
+  assert.doesNotMatch(browser, /--shard/);
+});
+
 test("burn-in runs every test ten times however many fail, and fails only on a test the pull request wrote or edited", () => {
   const burnIn = readJob("burn-in");
   assert.match(burnIn, /--repeat-each=10 --retries=0 --max-failures=0/);

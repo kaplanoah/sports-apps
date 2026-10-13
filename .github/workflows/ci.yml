@@ -146,7 +146,10 @@ jobs:
       - &install-browsers
         if: steps.browsers.outputs.cache-hit != 'true'
         run: npx playwright install --only-shell chromium
-      - run: npm run test:browser -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+      # Each machine runs its share of the specs, split by how long each takes, so the machines
+      # finish together.
+      - run: node worker/split-browser-specs.mjs ${{ matrix.shard }} ${{ strategy.job-total }} > "$RUNNER_TEMP/browser-specs.txt"
+      - run: npm run test:browser -- --test-list "$RUNNER_TEMP/browser-specs.txt"
       - &find-flaky
         id: flaky
         if: ${{ !cancelled() && hashFiles('test-results/report.json') != '' }}
