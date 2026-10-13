@@ -61,6 +61,7 @@
   To unroute one of two routes with the same pattern, name its handler too.
 - Before a test changes what the page reads next, wait until the page shows its last read, or the change races the read still on its way.
 - A theme changes only colors, so each view lays out the same in each of an app's themes.
+  A theme may also change a weight where its font keeps its width at every weight, as MLB's Ball sets each play that scored in a game's Runs a step heavier in Chivo Mono, to stand out from the lighter runners who got on before it as much as it does in Night Game.
   The WNBA's `tests/browser/themes.spec.mjs` checks every view in Walnut against Maple,
   on a phone and a wide screen, with the root's `tests/browser/theme-layout.mjs`; a new view joins its list.
 - Sheets look alike.
@@ -115,8 +116,9 @@
   before first pitch its clubs' season series (`page/js/season-series.js`),
   and its box score, or each club's lineup before first pitch (`page/js/game-sheet.js`,
   `matchup.js`, and `box-score-view.js`), over which a game under way has its Runs so far and a final its Runs,
-  a sentence for each club on how it scored, inning by inning,
-  from each run-scoring play in MLB's live feed, and, while a half inning is under way,
+  each half inning that scored under its heading with the score after it, and a line for each change of the score,
+  with the runners who got on since the last one on a lighter line above the play that scored,
+  from each play in MLB's live feed, and, while a half inning is under way,
   a drawing of the field with each runner's name by his base and how he got on,
   and who's up against whom (`page/js/runs-view.js`), and, once it's final,
   its Highlights section, MLB's recap video, MLB.com's story, and the clip of each play,
