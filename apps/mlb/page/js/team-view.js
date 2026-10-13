@@ -14,6 +14,7 @@ import {
   formatMargin,
   listFieldRows,
   listSeasonRankRows,
+  renderFieldLegend,
 } from "#shared/team-numbers.js";
 import { renderTeamStats, renderTitles } from "#shared/team-sheet.js";
 import { buildBracket, describeTeamStatus } from "./bracket.js";
@@ -221,8 +222,9 @@ const listPostseasonFinals = () =>
   );
 
 /**
- * A club's postseason numbers across from the whole field's, under the two sides' names, or
- * nothing before its first postseason game ends.
+ * A club's postseason numbers across from the whole field's, under the two sides' names, with the
+ * legend for a line that reaches past the regular season, or nothing before its first postseason
+ * game ends.
  * @param {string} id
  */
 function renderAgainstField(id) {
@@ -238,12 +240,13 @@ function renderAgainstField(id) {
   );
   if (!club) return false;
   const field = describePlayoffField(finals.map(({ score: [away, home] }) => ({ home, away })));
+  const seasons = listRegularSeasons();
   return html`<div class="team-numbers">
     <div class="field-heads">
       <span class="club">${renderTeamDot(id)}<span>${nameTeam(id)}</span> <span class="team-record tabular">${club.record}</span></span>
       <span class="field-name">Playoff field</span>
     </div>
-    ${renderRanks(listFieldRows(MEASURES, club, field, listRegularSeasons()))}
+    ${renderRanks(listFieldRows(MEASURES, club, field, seasons))}${renderFieldLegend(MEASURES, club, field, seasons)}
   </div>`;
 }
 

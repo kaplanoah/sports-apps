@@ -5,6 +5,7 @@ import {
   openSettings,
   buildFixtureSnapshot,
   buildSnapshotWithStarters,
+  BROADCASTS_FIXTURE,
   EVENING_FIXTURE,
   ON_A_PHONE,
   PITCHER_SIDES,
@@ -21,6 +22,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
+import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -582,4 +584,39 @@ test("a club's leaders show under its season once its roster is read, and a tap 
   await expect(page.locator("#playerSheet #playerTitle")).toHaveText("Tanner Scott");
   await page.locator("#playerSheet").getByRole("button", { name: "Back" }).click();
   await expect(sheet.locator("#teamTitle")).toContainText("Dodgers");
+});
+
+test("a club's playoff lines run dashed past the regular season's range, each a whole gap from the solid line, under a legend 20px below the last line, its two lines 11px apart, and 23px over the Regular season title", async ({
+  page,
+}) => {
+  // The recorded standings carry no runs, so each club scores and allows 4 to 5.45 runs a game,
+  // which the Yankees' and the field's playoff runs reach past.
+  const snapshot = buildFixtureSnapshot(BROADCASTS_FIXTURE);
+  Object.values(snapshot.standings.divisions)
+    .flat()
+    .forEach((row, index) => {
+      const games = row.w + row.l;
+      row.rs = Math.round((4 + index / 20) * games);
+      row.ra = Math.round((5.45 - index / 20) * games);
+    });
+  await openApp(page, { now: BROADCASTS_FIXTURE.now, snapshots: { 2026: snapshot } });
+  await page.getByRole("tab", { name: "Standings" }).click();
+  await page.locator('.div-grid tr[data-team="NYY"] .team-open').click();
+  const sheet = page.locator("#teamSheet");
+  await expect(sheet.locator(".placed-legend")).toHaveText(
+    "Regular season range for all teamsPlayoffs range, beyond regular season range",
+  );
+
+  const layout = await measurePlacedLegend(sheet);
+  expect(layout.above).toBeCloseTo(20, 0);
+  expect(layout.between).toBeCloseTo(11, 0);
+  expect(layout.below).toBeCloseTo(23, 0);
+  expect(layout.dashes.length).toBeGreaterThan(0);
+  for (const dash of layout.dashes) {
+    expect(dash.meets).toBeCloseTo(0, 1);
+    expect(dash.isGapFirst).toBe(true);
+  }
+  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listLowContrastText(page)).toEqual([]);
+  expect(await listStrayPeriods(page)).toEqual([]);
 });

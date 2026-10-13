@@ -1960,18 +1960,19 @@ body.kbd .player-open:focus {
 }
 /* A club's numbers rank like a player's: its regular season on curves of every club's, and its
    postseason as dots on lines across the same ranges, the playoff field's dot and number beside
-   its own, under the two sides' names. */
+   its own, under the two sides' names. A line's legend sits 20px under the last row's numbers and
+   23px over the next part's title. */
 .team-season .team-ranks {
   margin-top: 6px;
 }
 .placed-line {
+  --placed-inset: 3px;
   position: relative;
   height: 1px;
-  background: color-mix(in srgb, var(--ink-dim) 55%, transparent);
 }
 .placed-line > span {
   position: absolute;
-  inset: 0 3px;
+  inset: 0 var(--placed-inset);
 }
 .placed-line i {
   position: absolute;
@@ -1998,6 +1999,9 @@ body.kbd .player-open:focus {
   display: grid;
   gap: 14px;
   margin-top: 10px;
+}
+.team-numbers > .placed-legend {
+  margin: calc(20px - 14px) 0 calc(23px - 20px);
 }
 .field-heads {
   display: flex;

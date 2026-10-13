@@ -1,13 +1,15 @@
 // A player's number in a stat beside where it ranks, on a curve of every ranked player's number in
 // it, smoothed, with the player's mark on it, as a player's sheet shows each ranked stat, or with
 // several players' marks on one curve, as MLB's pitching matchup shows its two starters, or a number
-// beside another to measure it against, each a dot on a line across a range, as a WNBA team's sheet
-// shows its playoffs against the playoff field's. A stat where fewer is better runs from the most to
-// the fewest, so a better rank always sits further right. A player not yet ranked, but a quarter of
-// the way to what qualifying takes, shows where he would rank, marked with a line and no dot, which
-// stops at the curve's end when his number is past it. The marks sit in a box over the curve, so an
-// app can draw them a little inside its ends. rank-curve.css draws the curve and its marks, in the
-// mark color each app sets, and each app colors a line's dots from its own stylesheet.
+// beside another to measure it against, each a dot on a line solid across a range and dashed past
+// it as far as a number reaches, as a team's sheet shows its playoffs against the playoff field's,
+// on the regular season's range. A stat where fewer is better runs from the most to the fewest, so
+// a better rank always sits further right. A player not yet ranked, but a quarter of the way to
+// what qualifying takes, shows where he would rank, marked with a line and no dot, which stops at
+// the curve's end when his number is past it. The marks sit in a box over the curve, so an app can
+// draw them a little inside its ends. rank-curve.css draws the curve and its marks, in the mark
+// color each app sets, and a line's solid and dashed stretches, and each app colors a line's dots
+// from its own stylesheet.
 
 import { html } from "./html.js";
 import { formatOrdinal } from "./ordinal.js";
@@ -214,16 +216,43 @@ export function placeOnRange(value, range, isFewestFirst = false) {
 const renderPlace = (at, whose) =>
   at != null && html`<i class="${whose}" style="left: ${at}%"></i>`;
 
+// A stretch of the line that ends where the line does reaches past the dots' box to its end.
+const LINE_END = "calc(-1 * var(--placed-inset))";
+
+/** @param {number} at from 0 to 100 */
+const roundPlace = (at) => Math.round(at * 10) / 10;
+
+/**
+ * A stretch of a line, from one place on it to another, each from 0 to 100.
+ * @param {string} className
+ * @param {number} from
+ * @param {number} to
+ */
+function renderStretch(className, from, to) {
+  const left = from > 0 ? `${roundPlace(from)}%` : LINE_END;
+  const right = to < 100 ? `${roundPlace(100 - to)}%` : LINE_END;
+  return html`<b class="${className}" style="left: ${left}; right: ${right}"></b>`;
+}
+
+/**
+ * A line solid over the range it measures against, and dashed past either end of it.
+ * @param {[number, number]} range where the range starts and ends on the line, from 0 to 100
+ */
+const renderLine = ([from, to]) =>
+  html`${from > 0 && renderStretch("placed-past toward-start", 0, from)}${renderStretch("placed-range", from, to)}${to < 100 && renderStretch("placed-past toward-end", to, 100)}`;
+
 /**
  * One stat's row of a number measured against another: its label, the number, a line with a dot
- * where each sits, the number's own drawn over the other's, and the other number. The dots sit in
- * a box inside the line, so each app sets how far a dot at either end reaches past it.
- * @param {{ label: string, own: PlacedNumber, other: PlacedNumber }} row
+ * where each sits, the number's own drawn over the other's, and the other number. The line is
+ * solid over the range it measures against and dashed past it, as far as a number reaches. The
+ * dots sit in a box inside the line, so each app sets how far a dot at either end reaches past it.
+ * @param {{ label: string, own: PlacedNumber, other: PlacedNumber, range?: [number, number] }} row
+ *   the range's place on the line, the whole line unless a number reaches past it
  */
-export const renderPlacedRow = ({ label, own, other }) =>
+export const renderPlacedRow = ({ label, own, other, range = [0, 100] }) =>
   html`<div class="player-rank-row">
     <span class="player-rank-label">${label}</span>
     <span class="player-rank-value tabular">${own.shown}</span>
-    <span class="placed-line" aria-hidden="true"><span>${renderPlace(other.at, "other")}${renderPlace(own.at, "own")}</span></span>
+    <span class="placed-line" aria-hidden="true"><span>${renderLine(range)}${renderPlace(other.at, "other")}${renderPlace(own.at, "own")}</span></span>
     <span class="placed-other tabular">${other.shown}</span>
   </div>`;

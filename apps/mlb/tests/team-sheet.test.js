@@ -477,7 +477,7 @@ test("a club whose standings row has no runs, as a season saved before the store
   assert.doesNotMatch(renderTeamSheet("LAD").body.text, /team-ranks/);
 });
 
-test("a club's postseason sets its numbers across from the playoff field's, each a dot on the regular season's range", () => {
+test("a club's postseason sets its numbers across from the playoff field's, each a dot on a line solid over the regular season's range and dashed past it, with the legend under them", () => {
   session.state = { ...session.state, projected: false, slate: null };
   session.standings = NL_WEST_FINAL;
   /** @param {string} away @param {string} home @param {[number, number]} score */
@@ -519,6 +519,14 @@ test("a club's postseason sets its numbers across from the playoff field's, each
     "Road 1-0 2-2",
   ]);
   assert.equal((body.text.match(/<i class="own"/g) ?? []).length, 5);
+  const runs = body.text
+    .split('<div class="player-rank-row">')
+    .find((each) => each.includes(">R/G</span>") && each.includes("placed-line"));
+  assert.match(runs ?? "", /<b class="placed-past toward-start"[^>]*><\/b><b class="placed-range"/);
+  assert.match(
+    readText(body.text.match(/<div class="team-numbers">[\s\S]*?<\/p>/)?.[0] ?? ""),
+    / Road 1-0 2-2 Regular season range for all teams Playoffs range, beyond regular season range$/,
+  );
 });
 
 test("a club's leaders show on its sheet once its roster is read, and not for a season the store keeps no rosters for", () => {
