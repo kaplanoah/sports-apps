@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { listNetworkLogos, NETWORK_LOGOS, renderNetworks } from "../shared/page/network-logos.js";
+import {
+  describeChannel,
+  listNetworkLogos,
+  NETWORK_LOGOS,
+  renderNetworks,
+} from "../shared/page/network-logos.js";
 
 /** @param {string[]} names */
 const listLogos = (names) =>
@@ -113,4 +118,18 @@ test("a game with no channels listed yet says to check back", () => {
     renderNetworksLine([]),
     '<p class="networks networks-pending">Check back for where to watch</p>',
   );
+});
+
+test("a listing names its channel, with every word fans call it, or its own name without a logo", () => {
+  assert.deepEqual(describeChannel("USA Net"), {
+    name: "USA Network",
+    words: ["USA Network", "USA Net", "usa"],
+  });
+  assert.deepEqual(describeChannel("prime video").words, [
+    "Prime Video",
+    "prime",
+    "amazon",
+    "amazon prime",
+  ]);
+  assert.deepEqual(describeChannel("ION"), { name: "ION", words: ["ION"] });
 });

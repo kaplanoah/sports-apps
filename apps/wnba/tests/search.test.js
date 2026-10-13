@@ -16,6 +16,7 @@ import { listSeasonGames } from "../page/js/games-view.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
+import { describeOvertimes } from "../worker/src/overtimes.js";
 
 useTimeZone(EASTERN);
 
@@ -39,7 +40,7 @@ const TERMS = createSearchTerms({ games: SEASON_GAMES, standings: SEASON.standin
 const CONTEXT = createSearchContext({
   terms: TERMS,
   dictionary: createSearchDictionary(TERMS),
-  games: SEASON_GAMES.map(readSearchGame).filter(Boolean),
+  games: SEASON_GAMES.map((game) => readSearchGame(game, null)).filter(Boolean),
   now: NOW,
 });
 
@@ -215,9 +216,11 @@ function listPages(text) {
   });
   return {
     rows: rows.map((row) => {
-      if (row.kind === "place") return row.place.name.join(" ");
+      if (row.kind === "place")
+        return [row.place.name.join(" "), row.detail].filter(Boolean).join(", ");
       if (row.kind === "player") return `${row.player.firstName} ${row.player.lastName}`;
       if (row.kind === "game-part") return `${row.part.name} of ${row.gameText ?? "the season"}`;
+      if (row.kind === "story") return `Story: ${row.story.title}`;
       return row.kind === "team" ? row.team.fullName : `${row.team.fullName} Roster`;
     }),
     gameText,
@@ -271,9 +274,9 @@ test("a word a search of games passes over, as season, still finds its setting, 
   assert.equal(found.gameText, null);
 });
 
-test("the Bracket and News tabs are found by their words, the Bracket beside the playoffs' games", () => {
+test("the Bracket and News tabs are found by their words, the Bracket and the league's standings beside the playoffs' games", () => {
   assert.deepEqual(listPages("bracket"), { rows: ["Bracket"], gameText: null, others: [] });
-  assert.deepEqual(listPages("playoffs").rows, ["Bracket"]);
+  assert.deepEqual(listPages("playoffs").rows, ["Bracket", "Standings League"]);
   assert.equal(listPages("playoffs").gameText, "playoffs");
   assert.deepEqual(listPages("news").rows, [
     "News",
@@ -390,4 +393,160 @@ test("each place search opens is listed by its search, and each game by a search
         place,
       );
   }
+});
+
+// The afternoon's season with where ESPN listed each game, and which finals went to overtime, from
+// the season's recorded team logs.
+const ESPN_SCOREBOARD = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-02-espn-scoreboard.json`, "utf8"),
+);
+const PLAYERS = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-06-players.json`, "utf8"),
+);
+const LISTED = buildSnapshot(
+  { ...AFTERNOON.responses, networks: Object.values(ESPN_SCOREBOARD.answers) },
+  { season: 2026, now: NOW },
+);
+const LISTED_GAMES = listSeasonGames(LISTED, { games: SCHEDULE });
+const OVERTIMES = describeOvertimes(2026, [
+  PLAYERS.teamGames["2026:Regular Season"],
+  PLAYERS.teamGames["2026:Playoffs"],
+]).games;
+const LISTED_TERMS = createSearchTerms({ games: LISTED_GAMES, standings: LISTED.standings });
+const LISTED_CONTEXT = createSearchContext({
+  terms: LISTED_TERMS,
+  dictionary: createSearchDictionary(LISTED_TERMS),
+  games: LISTED_GAMES.map((game) => readSearchGame(game, OVERTIMES)).filter(Boolean),
+  now: NOW,
+});
+
+/**
+ * Each game a search of the listed season finds, as its day and its teams, and the line.
+ * @param {string} text
+ */
+function searchListed(text) {
+  const asked = readSearch(text, LISTED_CONTEXT);
+  const found = findSearchGames(asked, LISTED_CONTEXT);
+  const { lead, facts } = describeSearch(asked, found, LISTED_CONTEXT);
+  return {
+    games: found.games.map((game) => `${game.day} ${game.away ?? "TBD"} at ${game.home ?? "TBD"}`),
+    line: [lead, ...facts].join(" | "),
+  };
+}
+
+test("a channel finds the games ESPN lists on it, by any name fans call it", () => {
+  assert.deepEqual(searchListed("on ESPN"), {
+    games: ["2026-09-30 ATL at WAS", "2026-09-30 GSV at DAL"],
+    line: "On ESPN | 2 games",
+  });
+  assert.deepEqual(searchListed("Fever on USA").games, ["2026-10-01 IND at LVA"]);
+  assert.deepEqual(searchListed("Prime").games, ["2026-09-27 WAS at ATL", "2026-09-29 LVA at IND"]);
+});
+
+test("overtime finds the finals the season's team logs say went past 40 minutes", () => {
+  const { games, line } = searchListed("overtime");
+  assert.equal(games.length, Object.keys(OVERTIMES).length);
+  assert.equal(line, `Overtime | ${games.length} games`);
+  assert.ok(searchListed("Liberty OT").games.length < games.length);
+});
+
+const PLAYERS_OUT = {
+  players: [
+    { id: "1627668", team: "NYL", number: "30", firstName: "Breanna", lastName: "Stewart" },
+    {
+      id: "1628276",
+      team: "NYL",
+      number: "20",
+      firstName: "Satou",
+      lastName: "Sabally",
+      out: { reason: "Concussion", isForSeason: true },
+    },
+    {
+      id: "1629477",
+      team: "ATL",
+      number: "15",
+      firstName: "Allisha",
+      lastName: "Gray",
+      out: { reason: "Left hand", isForSeason: false },
+    },
+  ],
+};
+const STORIES = [
+  {
+    id: "liberty-1",
+    url: "https://example.com/liberty-1",
+    title: "Liberty win Game 2",
+    summary: "",
+    author: "",
+    outlet: "The IX",
+    source: "ix",
+    publishedAt: "2026-09-30T02:00:00Z",
+    photo: null,
+    teams: ["NYL", "MIN"],
+  },
+  {
+    id: "dream-1",
+    url: "https://example.com/dream-1",
+    title: "Dream take Game 1",
+    summary: "",
+    author: "",
+    outlet: "ESPN",
+    source: "espn",
+    publishedAt: "2026-09-29T02:00:00Z",
+    photo: null,
+    teams: ["ATL"],
+  },
+];
+
+/**
+ * What search lists for the season's pages, with players out and the News tab's stories.
+ * @param {string} text
+ */
+function findListedPages(text) {
+  const pages = listSearchPages({
+    index: PLAYERS_OUT,
+    isSettingShown: () => true,
+    standings: LISTED.standings,
+    stories: STORIES,
+  });
+  return findPages(text, { dictionary: LISTED_CONTEXT.dictionary, pages, isTyping: false });
+}
+
+test("who is out lists each player out, and a player named with an injury says she's out", () => {
+  const names = (/** @type {string} */ text) =>
+    findListedPages(text).rows.map((row) =>
+      row.kind === "player" ? row.player.lastName : row.kind,
+    );
+  assert.deepEqual(names("who is out"), ["Gray", "Sabally"]);
+  assert.deepEqual(names("Liberty injuries"), ["Sabally"]);
+  assert.deepEqual(names("Sabally injury"), ["Sabally"]);
+  assert.deepEqual(names("Stewart injury"), ["Stewart"]);
+});
+
+test("every team's row has its record, and its record's words list it over its games", () => {
+  const found = findListedPages("Liberty record");
+  assert.deepEqual(
+    found.rows.map((row) => (row.kind === "team" ? row.team.record : row.kind)),
+    ["26-18", "section"],
+  );
+  assert.equal(found.gameText, "liberty");
+});
+
+test("a team's news lists the News tab for the team and its newest stories", () => {
+  assert.deepEqual(
+    findListedPages("Liberty news").rows.map((row) =>
+      row.kind === "story" ? row.story.title : row.kind === "place" && row.detail,
+    ),
+    ["Liberty", "Liberty win Game 2"],
+  );
+});
+
+test("the playoff picture lists the Bracket and the league's standings beside the playoffs' games", () => {
+  for (const text of ["playoff picture", "seeds", "who clinched"])
+    assert.deepEqual(
+      findListedPages(text).rows.map((row) => (row.kind === "place" ? row.place.key : row.kind)),
+      ["tab:bracket", "standings:league"],
+      text,
+    );
+  assert.equal(findListedPages("playoff picture").gameText, "playoff");
 });

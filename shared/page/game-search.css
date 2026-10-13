@@ -196,6 +196,7 @@
   font-size: var(--size-read);
   color: var(--ink);
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 .search-mark {

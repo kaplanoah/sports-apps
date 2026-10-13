@@ -16,6 +16,10 @@ export const session = {
   // Every player on a team's roster in the season shown, for search, null when the store has none.
   /** @type {{ players: import("#shared/page-search.js").PagePlayer[] } | null} */
   playerIndex: null,
+  // How many overtimes each final of the season shown that went past regulation played, by its id,
+  // for search, null when the store has none.
+  /** @type {Record<string, number> | null} */
+  overtimes: null,
   // The news cards, null when the store has none, and undefined until the store or the page's
   // last showing says.
   /** @type {{ cards: import("#shared/news-picks.js").NewsCard[] } | null | undefined} */

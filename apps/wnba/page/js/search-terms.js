@@ -1,9 +1,10 @@
 // The WNBA's words for a search of its season's games: its teams by name, city, code, and the
-// nicknames fans use, the places its games are played, its playoff rounds, and how to read one of
-// its games. Runs in the page and in Node, so it uses no DOM.
+// nicknames fans use, the places its games are played, its playoff rounds, the channels its games
+// are on, overtime, and how to read one of its games. Runs in the page and in Node, so it uses no
+// DOM.
 
 import { formatCalendarDate, readMinutesIntoDay } from "#shared/days.js";
-import { listVenuePlaces } from "#shared/game-search.js";
+import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
 import { readGameDay } from "./days.js";
 import { ROUNDS } from "./snapshot.js";
 import { TEAMS } from "./teams.js";
@@ -79,6 +80,12 @@ const ROUND_WORDS = {
   3: ["finals", "wnba finals", "the finals", "championship", "final round"],
 };
 
+const OVERTIME = {
+  name: "Overtime",
+  words: ["overtime", "overtimes", "ot", "extra time", "extra period"],
+  games: "overtime games",
+};
+
 // Searches to tap before anything is typed, each offered only when it finds a game.
 const EXAMPLES = [
   "Dream at Valkyries",
@@ -127,6 +134,8 @@ export function createSearchTerms({ games, standings = [] }) {
     })),
     kindNames: { cup: "Commissioner's Cup", allStar: "All-Star Game" },
     examples: EXAMPLES,
+    channels: listSearchChannels(games),
+    pastRegulation: OVERTIME,
   };
 }
 
@@ -158,9 +167,11 @@ function readStartMinutes(game) {
 /**
  * A WNBA game as a search reads it, or null for one without a day.
  * @param {Game} game
+ * @param {Record<string, number> | null} overtimes how many overtimes each final that went past
+ *   regulation played, by its id, as the store keeps them
  * @returns {SearchGame | null}
  */
-export function readSearchGame(game) {
+export function readSearchGame(game, overtimes) {
   const day = readGameDay(game);
   if (!day) return null;
   return {
@@ -178,6 +189,8 @@ export function readSearchGame(game) {
     isIfNeeded: game.isIfNeeded,
     arena: game.arena ?? null,
     isNeutral: !!game.isNeutral,
+    networks: game.networks ?? [],
+    isPastRegulation: !!overtimes?.[game.id],
     game,
   };
 }

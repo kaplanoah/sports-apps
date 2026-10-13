@@ -5,7 +5,7 @@ import { expect, openApp } from "./harness.mjs";
 
 export const ON_A_PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 
-const PLAYER_INDEX = {
+export const PLAYER_INDEX = {
   season: 2026,
   players: [
     { id: "1627668", team: "NYL", number: "30", firstName: "Breanna", lastName: "Stewart" },

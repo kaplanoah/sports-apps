@@ -198,6 +198,25 @@ test("the examples before typing find games, and a starter's name typed is finis
   assert.deepEqual(texts("Ske"), ["Skenes", "Skenes last start"]);
 });
 
+test("extra innings finds the finals that went past the ninth", () => {
+  assert.deepEqual(search("extra innings").games, [
+    "2026-09-27 LAD at SF",
+    "2026-09-30 PHI at ATL",
+  ]);
+  assert.equal(search("extras").line, "Extra innings | 2 games");
+  assert.equal(search("Mets extra innings").empty, "No Mets extra-inning games");
+});
+
+test("a channel finds the games MLB lists on it, by any name it goes by", () => {
+  assert.deepEqual(search("on TBS").games, ["2026-10-10 CWS at CLE", "2026-10-12 TBD at TB"]);
+  assert.deepEqual(search("Dodgers on FOX").games, [
+    "2026-10-11 LAD at MIL",
+    "2026-10-12 LAD at MIL",
+  ]);
+  assert.deepEqual(search("HBO").games, search("on TBS").games);
+  assert.equal(search("on FS1").line, "On FS1 | 1 game");
+});
+
 // A few players as the store's list of the season's players has them.
 const INDEX = {
   players: [
@@ -231,6 +250,7 @@ function listPages(text, isTyping = false) {
       if (row.kind === "place") return row.place.name.join(" ");
       if (row.kind === "player") return `${row.player.firstName} ${row.player.lastName}`;
       if (row.kind === "game-part") return `${row.part.name} of ${row.gameText ?? "the season"}`;
+      if (row.kind === "story") return row.story.title;
       return row.kind === "team" ? row.team.fullName : `${row.team.fullName} Roster`;
     }),
     gameText,
