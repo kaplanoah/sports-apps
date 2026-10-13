@@ -481,8 +481,23 @@ export function createSearchDictionary(terms) {
 }
 
 /**
+ * A league's games as a search reads them, in order of start, leaving out any it can't read, like
+ * one without a day.
+ * @template Game
+ * @param {Game[]} games
+ * @param {(game: Game) => SearchGame | null} readGame
+ * @returns {SearchGame[]}
+ */
+export const listSearchGames = (games, readGame) =>
+  games
+    .map(readGame)
+    .filter((game) => game !== null)
+    .sort((first, second) => first.startMs - second.startMs);
+
+/**
  * What a search needs to know of the season, read once for each drawing.
  * @param {{ terms: SearchTerms, dictionary: import("./search-words.js").Dictionary, games: SearchGame[], now: number }} season
+ *   its games in order of start, as `listSearchGames` lists them
  * @returns {SearchContext}
  */
 export function createSearchContext({ terms, dictionary, games, now }) {

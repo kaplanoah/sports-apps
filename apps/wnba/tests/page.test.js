@@ -773,7 +773,7 @@ test("a team's Playoffs chip names its round, the same on a game day as any othe
     );
   }));
 
-test("a team's sheet shows its nearest games, its playoffs across from the field's with its record by its name, then its regular season ranked among every team's, its leading scorers, and its titles", () =>
+test("a team's sheet shows its nearest games, its playoffs across from the field's with its record by its name and the legend for a line past the regular season, then its regular season ranked among every team's, its leading scorers, and its titles", () =>
   inEastern(() => {
     assert.equal(
       readTeam(SEASON, "ATL").body,
@@ -781,6 +781,7 @@ test("a team's sheet shows its nearest games, its playoffs across from the field
         "Playoffs 1st Rd G1 W vs Mystics 1st Rd 92-77 G2 at Mystics 1st Rd Today 7:00 PM " +
         "Dream 1-0 Playoff field PPG 92.0 87.7 Opp PPG 77.0 87.7 Margin +15.0 0.0 " +
         "Home 1-0 5-1 Road 0-0 1-5 " +
+        "Regular season range for all teams Playoffs range, beyond regular season range " +
         "Regular season 44 games PPG 91.3 3rd of 15 Opp PPG 84.5 4th of 15 Margin +6.9 3rd of 15 " +
         "Home 15-7 3rd of 15 Road 15-7 3rd of 15 Last 10 9-1 Streak W 5 " +
         "Leading scorers Per game Player Pts Reb Ast FG% Min Allisha Gray 19.0 3.5 2.6 46.2 32.6 " +
@@ -909,8 +910,16 @@ test("each playoff number sits on a line across the range of every team's regula
   assert.deepEqual(findPlaces(ATLANTA_SEASON, "ATL", "Road"), { own: 83.3, other: 66.7 });
 });
 
-test("a playoff number past the regular season's range sits at its end, and a record with no games has no dot", () => {
+test("a playoff number past the regular season's range stretches its line to it, dashed past the range, and a record with no games has no dot", () => {
+  const { body } = renderTeamSheet(SEASON, "ATL", { year: 2026, now: NOW });
+  const margin = body.text
+    .split('<div class="player-rank-row">')
+    .find((each) => each.includes(">Margin</span>") && each.includes("placed-line"));
   assert.deepEqual(findPlaces(SEASON, "ATL", "Margin").own, 100);
+  assert.match(
+    margin ?? "",
+    /<b class="placed-range" style="left: calc\(-1 \* var\(--placed-inset\)\); right: [\d.]+%"><\/b><b class="placed-past toward-end" style="left: [\d.]+%; right: calc\(-1 \* var\(--placed-inset\)\)"><\/b>/,
+  );
   assert.deepEqual(findPlaces(SEASON, "ATL", "Road"), { own: null, other: 16.7 });
 });
 
@@ -921,7 +930,7 @@ test("the team's dot is drawn over the field's, so the team's shows where the tw
   ];
   assert.equal(lines.length, 5);
   for (const [, line] of lines.slice(0, 4))
-    assert.match(line, /^<i class="other"[^>]*><\/i><i class="own"/);
+    assert.match(line, /^(?:<b [^>]*><\/b>)+<i class="other"[^>]*><\/i><i class="own"/);
 });
 
 test("a team's regular season ranks it among every team's, fewest points allowed first and its records by their share of games won, tied teams sharing a rank, beside how many games it played", () => {

@@ -8,6 +8,11 @@
 import { setHtml } from "#shared/html.js";
 import { classifyReadFailure, watchRetries } from "#shared/retry.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
+import {
+  createSheetReads,
+  SHEET_FETCH_TIMEOUT_MS,
+  SHEET_READ_AGAIN_MS,
+} from "#shared/sheet-reads.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 import { TEAMS } from "./teams.js";
 import { fetchPitcher } from "./pitcher-fetch.js";
@@ -24,17 +29,9 @@ import { session } from "./session.js";
 /** @typedef {import("./player-view.js").Player} Player */
 /** @typedef {import("./player-view.js").ShownPlayer} ShownPlayer */
 /** @typedef {{ id: number, club: string, name: string, number: string }} PlayerSubject */
-/** @typedef {ShownPlayer & { at: number }} PlayerRead */
+/** @typedef {Omit<ShownPlayer, "isLoading" | "failure">} PlayerFound */
+/** @typedef {import("#shared/sheet-reads.js").SheetRead<PlayerFound>} PlayerRead */
 
-const FETCH_TIMEOUT_MS = 15 * 1000;
-// His numbers, and those he's ranked among, change after each game.
-const READ_AGAIN_MS = 10 * 60 * 1000;
-// A sheet that didn't load reads again a minute later.
-const RETRY_MS = 60 * 1000;
-
-// Each read is kept by his id and season, as 680757:2026.
-/** @type {Map<string, PlayerRead>} */
-const reads = new Map();
 /** @type {PlayerSubject | null} */
 let shownPlayer = null;
 
@@ -53,23 +50,34 @@ const nameRead = (id, year) => `${id}:${year}`;
  */
 const fetchDoc = (path) =>
   fetchFromWorker(`store/${path}`, {
-    reuseMs: READ_AGAIN_MS,
-    timeoutMs: FETCH_TIMEOUT_MS,
+    reuseMs: SHEET_READ_AGAIN_MS,
+    timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => "data" in body,
   }).then((body) => body.data);
 
-/** @param {PlayerRead} read */
-const isFresh = (read) =>
-  read.isLoading || Date.now() - read.at < (read.player ? READ_AGAIN_MS : RETRY_MS);
+// Each read is kept by his id and season, as 680757:2026. One the store keeps no sheet for has
+// found its answer too.
+const reads = createSheetReads({
+  empty: /** @type {PlayerFound} */ ({
+    player: null,
+    hitters: null,
+    starters: null,
+    side: null,
+    isUnkept: false,
+  }),
+  hasFound: (read) => !!read.player || read.isUnkept,
+  show: (key) => {
+    if (shownPlayer && key === nameRead(shownPlayer.id, session.currentSeason)) renderSheet();
+  },
+});
 
 /**
  * What the sheet ranks him among, read once his own numbers say what he is. A read that fails
- * leaves what the last one found.
+ * finds nothing of it, so the sheet keeps what the last one found.
  * @param {Player} player
  * @param {number} year
- * @param {PlayerRead} read
  */
-async function readRankedAmong(player, year, read) {
+async function readRankedAmong(player, year) {
   const isHitter = Boolean(player.hitting) && player.position !== "P";
   const isRotation = isStarter(player.pitching);
   const [hitters, starters, side] = await Promise.allSettled([
@@ -77,23 +85,18 @@ async function readRankedAmong(player, year, read) {
     isRotation ? fetchDoc(`starters/${year}`) : null,
     isRotation ? fetchPitcher(player.id, year) : null,
   ]);
-  /** @param {PromiseSettledResult<any>} result @param {any} kept */
-  const keep = (result, kept) => (result.status === "fulfilled" ? result.value : kept);
-  return {
-    hitters: keep(hitters, read.hitters),
-    starters: keep(starters, read.starters),
-    side: keep(side, read.side),
-  };
+  /** @param {PromiseSettledResult<any>} result */
+  const readFound = (result) => (result.status === "fulfilled" ? result.value : null);
+  return { hitters: readFound(hitters), starters: readFound(starters), side: readFound(side) };
 }
 
 /**
- * Reads him and what he's ranked among, and redraws the sheet if it still shows him.
+ * Reads him and what he's ranked among, by the numbers he had before when his own read fails.
  * @param {number} id
  * @param {number} year
- * @param {PlayerRead} read
+ * @param {PlayerRead} kept
  */
-async function loadPlayer(id, year, read) {
-  const key = nameRead(id, year);
+async function loadPlayer(id, year, kept) {
   // The store answers null for a player it keeps no sheet for, apart from a read that failed.
   /** @type {import("#shared/retry.js").ReadFailure | null} */
   let failure = null;
@@ -101,12 +104,9 @@ async function loadPlayer(id, year, read) {
     failure = classifyReadFailure(error);
     return undefined;
   });
-  const found = player ?? read.player;
-  const ranked = found ? await readRankedAmong(found, year, read) : {};
-  if (reads.get(key) !== read) return;
-  const isUnkept = player === null;
-  reads.set(key, { ...read, ...ranked, player: found, isUnkept, isLoading: false, failure });
-  if (shownPlayer?.id === id) renderSheet();
+  const shown = player ?? kept.player;
+  const ranked = shown ? await readRankedAmong(shown, year) : {};
+  return { found: { ...ranked, player, isUnkept: player === null }, failure };
 }
 
 /**
@@ -114,25 +114,8 @@ async function loadPlayer(id, year, read) {
  * @param {number} id
  * @param {number} year
  */
-function readPlayer(id, year) {
-  const key = nameRead(id, year);
-  const kept = reads.get(key);
-  if (kept && isFresh(kept)) return kept;
-  /** @type {PlayerRead} */
-  const read = {
-    at: Date.now(),
-    player: kept?.player ?? null,
-    hitters: kept?.hitters ?? null,
-    starters: kept?.starters ?? null,
-    side: kept?.side ?? null,
-    isUnkept: false,
-    isLoading: true,
-    failure: null,
-  };
-  reads.set(key, read);
-  loadPlayer(id, year, read);
-  return read;
-}
+const readPlayer = (id, year) =>
+  reads.read(nameRead(id, year), (kept) => loadPlayer(id, year, kept));
 
 function renderSheet() {
   const subject = shownPlayer;
@@ -149,12 +132,7 @@ function renderSheet() {
 
 // A read that failed is dropped, so the sheet shows its placeholders while it reads again.
 function retryPlayer() {
-  if (!shownPlayer) return;
-  const key = nameRead(shownPlayer.id, session.currentSeason);
-  const read = reads.get(key);
-  if (!read || read.player || read.isLoading || read.isUnkept) return;
-  reads.delete(key);
-  renderSheet();
+  if (shownPlayer && reads.drop(nameRead(shownPlayer.id, session.currentSeason))) renderSheet();
 }
 
 /** @param {PlayerSubject} subject */
@@ -167,7 +145,7 @@ function showPlayer(subject) {
 function readShownPlayer() {
   if (!shownPlayer) return null;
   const year = session.currentSeason;
-  const { player, hitters, starters, side } = reads.get(nameRead(shownPlayer.id, year)) ?? {};
+  const { player, hitters, starters, side } = reads.find(nameRead(shownPlayer.id, year)) ?? {};
   return { ...shownPlayer, year, player, hitters, starters, side };
 }
 
@@ -182,18 +160,8 @@ const isSavedSubject = (saved) =>
 function reopenPlayer(saved) {
   if (!isSavedSubject(saved)) return false;
   const { id, club, name, number = "", year, player, hitters, starters, side } = saved;
-  const key = nameRead(id, year);
-  if (typeof year === "number" && player && !reads.has(key))
-    reads.set(key, {
-      at: 0,
-      player,
-      hitters,
-      starters,
-      side,
-      isUnkept: false,
-      isLoading: false,
-      failure: null,
-    });
+  if (typeof year === "number" && player)
+    reads.keepShown(nameRead(id, year), { player, hitters, starters, side });
   showPlayer({ id, club, name, number });
   return true;
 }

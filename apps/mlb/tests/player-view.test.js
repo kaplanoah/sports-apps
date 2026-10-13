@@ -106,7 +106,7 @@ test("a hitter's sheet notes his club and number, and lists his facts in a row",
 
 test("a hitter's season shows his totals, then each ranked number with his rank among the qualified hitters", () => {
   const text = renderText(describeRostered(114, "CLE", "Steven Kwan"));
-  assert.match(text, /Season 637 PA H 152 R 80 RBI 32 BB 85 K 62/);
+  assert.match(text, /Regular season 637 PA H 152 R 80 RBI 32 BB 85 K 62/);
   assert.match(text, /AVG \.282 20th of 135/);
   assert.match(text, /OBP \.382 7th of 135/);
   assert.match(text, /BB% 13\.3% 13th of 135/);
@@ -133,7 +133,10 @@ test("a player's totals sit in a club's Season box, five to a row", () => {
 
 test("his playoffs show over his season, as one line", () => {
   const text = renderText(describeRostered(114, "CLE", "Steven Kwan"));
-  assert.match(text, /^Playoffs 3 games 2-13 • \.154 AVG • 2 R • 1 RBI • 1 BB • 1 K Season/);
+  assert.match(
+    text,
+    /^Playoffs 3 games 2-13 • \.154 AVG • 2 R • 1 RBI • 1 BB • 1 K Regular season/,
+  );
 });
 
 test("a hitter MLB doesn't rank shows where he would rank in each rate, but not in a count, once he has a quarter of the plate appearances he needs, and his plate appearances against them", () => {
@@ -157,7 +160,7 @@ test("a starter's season ranks his numbers among the qualified starters, and sho
     starters: STARTERS,
     side: BIBEE_SIDE,
   });
-  assert.match(text, /Season 33 starts W-L 7-15 IP 188 ERA 4\.36 K 148 BB 55/);
+  assert.match(text, /Regular season 33 starts W-L 7-15 IP 188 ERA 4\.36 K 148 BB 55/);
   assert.match(
     text,
     /ERA 4\.36 2nd of 4 K\/9 7\.1 2nd of 4 BB\/9 2\.6 2nd of 4 Velo 94\.0 2nd of 4/,
@@ -186,13 +189,13 @@ test("a starter outside the qualified starters has his innings set against the o
 
 test("a reliever's season shows his totals alone", () => {
   const text = renderText(describeRostered(114, "CLE", "Cade Smith"));
-  assert.match(text, /Season 69 games ERA 1\.95 SV 41 IP 74 K 107 BB 23 Last games/);
+  assert.match(text, /Regular season 69 games ERA 1\.95 SV 41 IP 74 K 107 BB 23 Last games/);
   assert.doesNotMatch(text, /Rank among/);
 });
 
 test("a two-way player's sheet shows his hitting season, then his pitching under its own title", () => {
   const text = renderText(describeRostered(119, "LAD", "Shohei Ohtani"));
-  assert.match(text, /Season 618 PA .* Pitching 14 starts W-L 8-2 IP 85 2\/3 ERA 1\.79/);
+  assert.match(text, /Regular season 618 PA .* Pitching 14 starts W-L 8-2 IP 85 2\/3 ERA 1\.79/);
 });
 
 test("a sheet still loading holds its shape, and one that didn't load says so", () => {
@@ -296,7 +299,7 @@ test("a player on the injured list opens on a box with his stay, what's wrong, R
     `15-day IL Right shoulder inflammation ${TREINEN_OUT.sentence} RotoWire • Oct 3`,
   );
   assert.match(markup, /<p class="out-sentence" data-quoted>/);
-  assert.ok(markup.indexOf("out-box") < markup.indexOf("<h3>Season</h3>"));
+  assert.ok(markup.indexOf("out-box") < markup.indexOf("<h3>Regular season</h3>"));
 });
 
 test("a player on the injured list ESPN says nothing of shows his stay alone, and one off it shows no box", () => {
