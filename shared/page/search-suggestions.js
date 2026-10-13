@@ -149,7 +149,8 @@ function listFinishedWords(fragment, kinds, context) {
 }
 
 /**
- * The word being typed, finished, unless it's a joining word already whole.
+ * The word being typed, finished, unless it's a joining word already whole, or ends a phrase
+ * already whole that nothing longer starts, as "weekend" does "this weekend".
  * @param {string} text
  * @param {SearchContext} context
  * @returns {Candidate[]}
@@ -163,9 +164,11 @@ function listFinishingCandidates(text, context) {
     const before = typed[typed.length - length - 1];
     const kinds = KINDS_AFTER[before ? readJoin(before.word, context) : ""] ?? FINISHED_KINDS;
     const head = text.slice(0, start.at);
-    const finished = listFinishedWords(readWords(text.slice(start.at)), kinds, context);
+    const fragment = readWords(text.slice(start.at));
+    const finished = listFinishedWords(fragment, kinds, context);
     if (finished.length)
       return finished.map(({ written, meaning }) => ({ text: `${head}${written}`, meaning }));
+    if (context.dictionary.has(fragment)) return [];
   }
   return [];
 }
