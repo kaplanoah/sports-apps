@@ -448,6 +448,27 @@ test("the Bracket tab's words find it, and its row opens it", async ({ page }) =
   await expect(page.locator("#tab-bracket")).toHaveAttribute("aria-selected", "true");
 });
 
+test("every row is 44px under its line, with no room between the suggestions and the pages under them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("athl");
+
+  await expect(page.locator("#gameSearch .search-suggestions")).toHaveCount(2);
+  const rows = await page.locator("#gameSearch .search-suggestions li").evaluateAll((items) =>
+    items.map((item) => {
+      const { top, bottom } = item.getBoundingClientRect();
+      return { top, bottom };
+    }),
+  );
+  for (const [index, { top, bottom }] of rows.entries()) {
+    expect(bottom - top).toBe(45);
+    if (index > 0) expect(top).toBe(rows[index - 1].bottom);
+  }
+});
+
 test("a place's row names the place it's in dimmed, then a dim caret 4px from the words each side, centered on them", async ({
   page,
 }) => {

@@ -31,8 +31,7 @@
 .search-bar.has-rows {
   padding-bottom: 2.2px;
 }
-.search-bar.has-rows + .search-list,
-.search-bar.has-rows + .search-list > .search-suggestions:first-child {
+.search-bar.has-rows + .search-list {
   padding-top: 0;
 }
 .search-row {
@@ -178,7 +177,7 @@
    kind, with the part typed dimmer. */
 .search-suggestions {
   margin: 0;
-  padding: 4px 0 0;
+  padding: 0;
   list-style: none;
 }
 .search-suggestions li {
