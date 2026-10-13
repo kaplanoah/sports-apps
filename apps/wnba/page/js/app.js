@@ -351,6 +351,7 @@ async function boot() {
   watchNews(session.db, (news) => {
     session.news = news;
     redrawEased(drawNews);
+    refreshGameSearch();
   });
   watchDismissals(() => redrawEased(drawUpdates));
   refreshClockEveryMinute();

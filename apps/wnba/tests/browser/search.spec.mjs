@@ -687,7 +687,7 @@ test("every search state keeps to the type scale and its periods, and every tap 
   await expectReadable();
 });
 
-test("who's out lists each player out with why, a team its record, a team's news its stories, each a link to it, and where to watch each game's channels", async ({
+test("who's out lists each player out with why, a team its record, a team's news its stories as they arrive, each a link to it, and where to watch each game's channels", async ({
   page,
 }) => {
   const app = await openSeasonGames(page);
@@ -698,6 +698,22 @@ test("who's out lists each player out with why, a team its record, a team's news
       out: player.lastName === "Wilson" ? { reason: "Left ankle", isForSeason: false } : null,
     })),
   });
+  await tapSearch(page);
+
+  await sendSearch(page, "who is out");
+  await expect(findRows(page)).toHaveCount(1);
+  await expect(findRows(page)).toContainText("Wilson");
+  await expect(findRows(page)).toContainText("Left ankle");
+  await expectReadableSearch(page);
+
+  await sendSearch(page, "Liberty record");
+  await expect(findRows(page).first()).toContainText("New York Liberty");
+  await expect(findRows(page).first().locator(".search-detail")).toHaveText(/^\d+-\d+$/);
+
+  await sendSearch(page, "Liberty news");
+  await expect(findRows(page)).toHaveCount(1);
+  await expect(findRows(page).first()).toContainText("News");
+  await expect(findRows(page).first()).toContainText("Liberty");
   await app.writeDocument("news/cards", {
     cards: [
       {
@@ -717,21 +733,7 @@ test("who's out lists each player out with why, a team its record, a team's news
       },
     ],
   });
-  await tapSearch(page);
-
-  await sendSearch(page, "who is out");
-  await expect(findRows(page)).toHaveCount(1);
-  await expect(findRows(page)).toContainText("Wilson");
-  await expect(findRows(page)).toContainText("Left ankle");
-  await expectReadableSearch(page);
-
-  await sendSearch(page, "Liberty record");
-  await expect(findRows(page).first()).toContainText("New York Liberty");
-  await expect(findRows(page).first().locator(".search-detail")).toHaveText(/^\d+-\d+$/);
-
-  await sendSearch(page, "Liberty news");
-  await expect(findRows(page).first()).toContainText("News");
-  await expect(findRows(page).first()).toContainText("Liberty");
+  await expect(findRows(page)).toHaveCount(2);
   const story = findRows(page).nth(1);
   await expect(story).toContainText("The Liberty rest their starters");
   await expect(story).toHaveAttribute("href", "https://example.com/liberty");
