@@ -29,12 +29,12 @@ const waitForSettledColors = (page) =>
  * it that fills, with any see-through ones over it laid on top. Text over a picture, a gradient, or
  * a layer drawn behind it can't be measured this way and is left out, as are disabled controls and
  * marks with no letter or digit, like a separator or a dash, which WCAG leaves out, and text hidden
- * for screen readers. It measures once the page's colors have settled.
+ * for screen readers. It measures the page as it shows at once, a pressed row's tint and all, so a
+ * test of a pressed or hovered row's colors measures that state.
  * @param {import("@playwright/test").Page} page
  */
-export async function listLowContrastText(page) {
-  await waitForSettledColors(page);
-  return page.evaluate(async () => {
+export const listLowContrastTextAsShown = (page) =>
+  page.evaluate(async () => {
     await document.fonts.ready;
     const SMALL_TEXT_CONTRAST = 4.5;
     const LARGE_TEXT_CONTRAST = 3;
@@ -189,4 +189,12 @@ export async function listLowContrastText(page) {
     }
     return [...lowContrast];
   });
+
+/**
+ * The text listLowContrastTextAsShown names once the page's colors have settled.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function listLowContrastText(page) {
+  await waitForSettledColors(page);
+  return listLowContrastTextAsShown(page);
 }

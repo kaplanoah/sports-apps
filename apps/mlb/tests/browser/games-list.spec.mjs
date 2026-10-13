@@ -9,6 +9,10 @@ import {
 } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readStripEdges } from "../../../../tests/browser/day-strip-edges.mjs";
+import {
+  listLowContrastText,
+  listLowContrastTextAsShown,
+} from "../../../../tests/browser/contrast.mjs";
 import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -349,6 +353,28 @@ test("a clinched club's race letter is gold at the facts' own weight", async ({ 
   await expect(race).toHaveCSS("color", await readColor(page, "--highlight"));
   await expect(race).toHaveCSS("font-weight", "400");
 });
+
+for (const [theme, colorScheme] of /** @type {const} */ ([
+  ["Ball", "light"],
+  ["Night Game", "dark"],
+])) {
+  test(`in ${theme}, a racing club's race letter stays readable on its row under the mouse and pressed`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await openApp(page);
+    await page.getByRole("tab", { name: "Games" }).click();
+    const open = page
+      .locator("#seasonGames .game-day.is-today .game-row:has(.race.racing) .game-open")
+      .first();
+
+    await open.hover();
+    expect(await listLowContrastText(page)).toEqual([]);
+
+    await open.evaluate((button) => button.classList.add("is-pressed"));
+    expect(await listLowContrastTextAsShown(page)).toEqual([]);
+  });
+}
 
 test("on a phone, a long starter's name keeps his arm on its line", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
