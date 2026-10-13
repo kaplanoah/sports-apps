@@ -254,6 +254,13 @@ test("a player's name lists his sheet, by his whole, last, or first name, with o
   assert.deepEqual(listPages("Yama", true).rows, ["Yoshinobu Yamamoto"]);
 });
 
+test("a player's name of five letters or more is found with one letter wrong", () => {
+  assert.deepEqual(listPages("Yamamato"), { rows: ["Yoshinobu Yamamoto"], gameText: null });
+  assert.deepEqual(listPages("Lindro").rows, ["Francisco Lindor"]);
+  assert.deepEqual(listPages("Giancarlo Stantn").rows, ["Giancarlo Stanton"]);
+  assert.deepEqual(listPages("Yamamato", true).rows, ["Yoshinobu Yamamoto"]);
+});
+
 test("a starter's name lists his sheet and still finds his starts", () => {
   assert.deepEqual(listPages("Skenes"), { rows: ["Paul Skenes"], gameText: "Skenes" });
 });

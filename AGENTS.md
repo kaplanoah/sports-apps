@@ -393,7 +393,7 @@
   with suggestions and examples, in `game-search-view.js`, from `search-words.js`,
   `search-dates.js`, `game-search.js`, and `search-suggestions.js`,
   and reading the same words into the pages they name, a team's,
-  its section's, a player's, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
+  its section's, a player's, even with a letter wrong, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
   from the list of a season's players the store keeps for it, in `page-search.js`,
   each game day under a label, the WNBA's date beside its games as a wall calendar shows it and MLB's heading over them,
   with a No games row for today between game days, in `season-days.js`,

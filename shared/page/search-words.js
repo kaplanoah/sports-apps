@@ -85,6 +85,14 @@ export function isOneEditApart(first, second) {
 }
 
 /**
+ * Whether a typed word is a name with one wrong letter, which only a word long enough is forgiven.
+ * @param {string} word
+ * @param {string} name
+ */
+export const isForgivenTypo = (word, name) =>
+  word.length >= FORGIVING_LENGTH && isOneEditApart(word, name);
+
+/**
  * The meanings of a name one letter away from a word, when only one name is.
  * @param {string} word
  * @param {Dictionary} dictionary
@@ -95,7 +103,7 @@ function findForgivenMeanings(word, dictionary) {
     ([phrase, meanings]) =>
       !phrase.includes(" ") &&
       meanings.some((meaning) => FORGIVEN_KINDS.has(meaning.kind)) &&
-      isOneEditApart(word, phrase),
+      isForgivenTypo(word, phrase),
   );
   return near.length === 1 ? near[0][1] : [];
 }

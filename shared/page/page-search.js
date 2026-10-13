@@ -4,7 +4,7 @@
 // team's name lists its sheet and its section, and the section's name beside it lists the section
 // alone. A game part's name lists the part of the game the rest of the words find, or the season's:
 // the latest final for a final's part, or the next game for one before it. A player's name lists
-// her sheet, and finds no games, since nobody knows yet which games she'll play, unless a search of
+// her sheet, even with one letter wrong in a name of five letters or more, and finds no games, since nobody knows yet which games she'll play, unless a search of
 // games knows the name, as MLB's knows a starter's, finding his starts. A place's words list it,
 // and leave the games to any of them that a search of games reads, as "East" finds the East's
 // standings and its games.
@@ -13,7 +13,7 @@
 // named here by the same words it is in a search of games. Runs in the page and in Node, so it uses
 // no DOM.
 
-import { readTokens, splitWords } from "./search-words.js";
+import { isForgivenTypo, readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {{ code: string, name: string, fullName: string }} PageTeam */
 /** @typedef {{ id: string, team: string, firstName: string, lastName: string, number: string }} PagePlayer */
@@ -110,25 +110,57 @@ function listPlayerNames(player) {
  */
 
 /**
- * How many words from `start` name the player, as her whole name, last name, or first, or 0. While
- * words are typed, the last may be the start of her name, unless a search of games knows it whole.
+ * How a typed word names a word of a name: as written or begun, as `isWordOf` reads it, or with one
+ * wrong letter when a search of games doesn't know it, or not at all.
+ * @param {ReadWord} typed
+ * @param {string} part
+ * @param {boolean} isPartial
+ * @returns {"exact" | "typo" | null}
+ */
+function matchNamePart({ word, isKnown }, part, isPartial) {
+  if (isWordOf(word, part, isPartial)) return "exact";
+  return !isKnown && isForgivenTypo(word, part) ? "typo" : null;
+}
+
+/**
+ * How words name a player: by how many of them, and whether any has a wrong letter.
+ * @typedef {{ length: number, hasTypo: boolean }} NameMatch
+ */
+
+/**
+ * How the words from `start` name the player, as her whole name, last name, or first, by the most
+ * words, and then without a wrong letter, or null. While words are typed, the last may be the start
+ * of her name, unless a search of games knows it whole.
  * @param {ReadWord[]} words
  * @param {number} start
  * @param {PagePlayer} player
  * @param {boolean} isTyping
+ * @returns {NameMatch | null}
  */
 function measurePlayerAt(words, start, player, isTyping) {
+  /** @type {NameMatch | null} */
+  let best = null;
   for (const name of listPlayerNames(player)) {
     if (start + name.length > words.length) continue;
-    const isNamed = name.every((part, offset) => {
-      const { word, isKnown } = words[start + offset];
+    const matches = name.map((part, offset) => {
+      const typed = words[start + offset];
       const isLast = start + offset === words.length - 1 && offset === name.length - 1;
-      return isWordOf(word, part, isTyping && isLast && !isKnown);
+      return matchNamePart(typed, part, isTyping && isLast && !typed.isKnown);
     });
-    if (isNamed) return name.length;
+    if (matches.includes(null)) continue;
+    const match = { length: name.length, hasTypo: matches.includes("typo") };
+    if (!best || compareMatches(match, best) < 0) best = match;
   }
-  return 0;
+  return best;
 }
+
+/**
+ * Orders matches by the most words, then those without a wrong letter.
+ * @param {NameMatch} first
+ * @param {NameMatch} second
+ */
+const compareMatches = (first, second) =>
+  second.length - first.length || Number(first.hasTypo) - Number(second.hasTypo);
 
 /**
  * Whether only words a search of games doesn't know, like "stats", sit beside a name's.
@@ -141,8 +173,9 @@ const isRestUnknown = (words, start, length) =>
 
 /**
  * The players the words name, keeping only those named by the most words, so a whole name finds
- * her alone rather than everyone who shares her first name. Words a search of games knows beside a
- * name ask for something else, as "NL East" does, so they name no player.
+ * her alone rather than everyone who shares her first name, and, of those, the ones named without
+ * a wrong letter, so a name a letter off another's finds only its own. Words a search of games
+ * knows beside a name ask for something else, as "NL East" does, so they name no player.
  * @param {import("./search-words.js").Token[]} tokens
  * @param {PagePlayer[]} players
  * @param {boolean} isTyping
@@ -153,13 +186,15 @@ function findPlayers(tokens, players, isTyping) {
   );
   const found = players.flatMap((player) => {
     for (let start = 0; start < words.length; start += 1) {
-      const length = measurePlayerAt(words, start, player, isTyping);
-      if (length && isRestUnknown(words, start, length)) return [{ player, length }];
+      const match = measurePlayerAt(words, start, player, isTyping);
+      if (match && isRestUnknown(words, start, match.length)) return [{ player, match }];
     }
     return [];
   });
-  const longest = Math.max(0, ...found.map((each) => each.length));
-  return found.filter((each) => each.length === longest).map((each) => each.player);
+  const best = found.map((each) => each.match).toSorted(compareMatches)[0];
+  return found
+    .filter((each) => best && compareMatches(each.match, best) === 0)
+    .map((each) => each.player);
 }
 
 /**

@@ -47,6 +47,8 @@ const PAGES = {
     { id: "5", team: "FOX", firstName: "Cy", lastName: "Pell Jr.", number: "40" },
     { id: "6", team: "FOX", firstName: "Easton", lastName: "Vale", number: "9" },
     { id: "7", team: "HAW", firstName: "Ken", lastName: "Standish", number: "5" },
+    { id: "8", team: "FOX", firstName: "Ada", lastName: "Stoner", number: "8" },
+    { id: "9", team: "HAW", firstName: "Rex", lastName: "Finale", number: "1" },
   ],
   section: { key: "roster", name: "Roster" },
   places: [
@@ -150,6 +152,23 @@ test("while words are typed, the last can be the start of a name, once it's thre
   assert.deepEqual(listRows("Qui", true).rows, ["player HAW Quill"]);
   assert.deepEqual(listRows("Qu", true), { rows: [], gameText: "Qu" });
   assert.deepEqual(listRows("Sto"), { rows: [], gameText: "Sto" });
+});
+
+test("a name of five letters or more is found with one letter wrong, unless another's is found without", () => {
+  assert.deepEqual(listRows("Standsih"), { rows: ["player HAW Standish"], gameText: null });
+  assert.deepEqual(listRows("Standis").rows, ["player HAW Standish"]);
+  assert.deepEqual(listRows("Stome").rows, ["player HAW Stone", "player FOX Stone"]);
+  assert.deepEqual(listRows("Mara Stome").rows, ["player HAW Stone"]);
+  assert.deepEqual(listRows("Ada Stonr").rows, ["player FOX Stoner"]);
+  assert.deepEqual(listRows("Stoner").rows, ["player FOX Stoner"]);
+  assert.deepEqual(listRows("Stone").rows, ["player HAW Stone", "player FOX Stone"]);
+  assert.deepEqual(listRows("Qiull").rows, ["player HAW Quill"]);
+  assert.deepEqual(listRows("Vael"), { rows: [], gameText: "Vael" });
+});
+
+test("a word a search of games knows is never a name with a letter wrong", () => {
+  assert.deepEqual(listRows("Finals"), { rows: [], gameText: "Finals" });
+  assert.deepEqual(listRows("Finale").rows, ["player HAW Finale"]);
 });
 
 test("a place's words list it, from the start of any of its words, and every place they all find", () => {
