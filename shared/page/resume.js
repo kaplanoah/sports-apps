@@ -17,6 +17,7 @@ const HIDDEN_PAUSE_MS = 60 * 1000;
 let activeAt = Date.now();
 let wasHidden = false;
 let isCheckingRelease = false;
+let isRecheckWanted = false;
 let isReleaseCheckOwed = false;
 let isReloadPending = false;
 /** @type {() => boolean} */
@@ -43,9 +44,7 @@ function reloadPage() {
   else location.reload();
 }
 
-export async function reloadIfReplaced() {
-  if (isCheckingRelease) return;
-  isCheckingRelease = true;
+async function checkRelease() {
   try {
     const [loaded, current] = await Promise.all([loadRelease(), fetchRelease()]);
     isReleaseCheckOwed = false;
@@ -55,9 +54,22 @@ export async function reloadIfReplaced() {
     else isReleaseCheckOwed = true;
   } catch {
     isReleaseCheckOwed = true;
-  } finally {
-    isCheckingRelease = false;
   }
+}
+
+// A check asked for while one is under way runs once that one ends, since the one under way may
+// have read the release before a deploy replaced it.
+export async function reloadIfReplaced() {
+  if (isCheckingRelease) {
+    isRecheckWanted = true;
+    return;
+  }
+  isCheckingRelease = true;
+  await checkRelease();
+  isCheckingRelease = false;
+  if (!isRecheckWanted) return;
+  isRecheckWanted = false;
+  await reloadIfReplaced();
 }
 
 // Focus can come with no time away, and a phone can wake a page without hiding it first, so only
