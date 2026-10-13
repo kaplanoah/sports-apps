@@ -549,8 +549,12 @@ export function openGameSearch() {
   findInput()?.focus();
 }
 
-/** Brings the keyboard up in the open search's field, from a tap. */
-export function focusGameSearch() {
+/** Empties the open search's field for a new search, with the keyboard up, from a tap. */
+export function startGameSearchOver() {
+  writeQuery("");
+  isTyping = true;
+  isGamesOnly = false;
+  draw();
   findInput()?.focus();
 }
 
@@ -581,13 +585,7 @@ function followTap(event) {
   else if (place) runAfterPress(place, () => league?.openPlace(place.dataset.place ?? ""));
   else if (gamesLine) runAfterPress(gamesLine, () => showGamesOnly(gamesLine.dataset.games ?? ""));
   else if (target.closest(".search-cancel")) closeGameSearch();
-  else if (target.closest(".search-clear")) {
-    writeQuery("");
-    isTyping = true;
-    isGamesOnly = false;
-    draw();
-    findInput()?.focus();
-  }
+  else if (target.closest(".search-clear")) startGameSearchOver();
 }
 
 function followTyping() {

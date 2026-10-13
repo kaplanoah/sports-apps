@@ -8,7 +8,7 @@ import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
-import { focusGameSearch, openGameSearch, startGameSearch } from "#shared/game-search-view.js";
+import { openGameSearch, startGameSearch, startGameSearchOver } from "#shared/game-search-view.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
 import { watchPresses } from "#shared/press.js";
@@ -123,9 +123,9 @@ function enterSearch() {
   if (/** @type {HTMLElement} */ (document.getElementById("gameSearch")).hidden) openGameSearch();
 }
 
-// As on iPhone, choosing search while it shows brings the keyboard up in its field.
-function focusSearch() {
-  focusGameSearch();
+// As on iPhone, choosing search while it shows goes back to where it starts: an empty field.
+function startSearchOver() {
+  startGameSearchOver();
   return true;
 }
 
@@ -211,7 +211,7 @@ const listSearchDays = (found, now) =>
 function wireControls() {
   startPageTabs();
   setTabStart("games", returnGamesToToday);
-  setTabStart("search", focusSearch);
+  setTabStart("search", startSearchOver);
   setTabEnter("search", enterSearch);
   startDayStrip(/** @type {HTMLElement} */ (document.getElementById("seasonGames")));
   startGameSearch(/** @type {HTMLElement} */ (document.getElementById("gameSearch")), {

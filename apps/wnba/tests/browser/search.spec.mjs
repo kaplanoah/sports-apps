@@ -540,7 +540,9 @@ test("Cancel empties the search and goes back to the tab before it; another tab 
   await expect(findInput(page)).toHaveValue("");
 });
 
-test("Search tapped again while it shows brings the keyboard back up", async ({ page }) => {
+test("Search tapped again while it shows starts over: an empty field with its examples, ready to type", async ({
+  page,
+}) => {
   await openSeasonGames(page);
   await tapSearch(page);
   await sendSearch(page, "Liberty");
@@ -548,8 +550,9 @@ test("Search tapped again while it shows brings the keyboard back up", async ({ 
 
   await tapSearch(page);
 
+  await expect(findInput(page)).toHaveValue("");
   await expect(findInput(page)).toBeFocused();
-  await expect(findInput(page)).toHaveValue("Liberty");
+  await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
 });
 
 test("the field's clear button empties it and brings the examples back, ready to type", async ({
