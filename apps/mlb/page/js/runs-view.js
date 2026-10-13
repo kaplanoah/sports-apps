@@ -1,5 +1,5 @@
 // The Game section's Runs so far, above its innings: each half inning that scored, under its
-// heading with the score after it, and a line for each change of the score, the runners who got on
+// heading, and a line for each change of the score with the score after it, the runners who got on
 // since the last one on a lighter row over the play that scored. Then, while a half inning is under
 // way, the field with each runner by his base and how he got on, and who's up against whom. Once
 // the game is final, it's the game's Runs.
@@ -230,15 +230,12 @@ function renderScoreChange(side, { setup, play }) {
  * @param {ScoringHalf} half
  */
 function renderHalf(game, half) {
-  const changes = listScoreChanges(half);
-  const last = /** @type {ScoreChange} */ (changes.at(-1));
   return html`<div class="runs-half">
     <p class="runs-half-head">
-      ${renderTeamDot(game[half.side])}<span>${HALF_NAMES[half.side]} ${formatOrdinal(half.inning)}</span
-      >${renderScore(half.side, /** @type {Score} */ (last.play.score))}
+      ${renderTeamDot(game[half.side])}<span>${HALF_NAMES[half.side]} ${formatOrdinal(half.inning)}</span>
     </p>
     <ul class="runs-changes">
-      ${changes.map((change) => renderScoreChange(half.side, change))}
+      ${listScoreChanges(half).map((change) => renderScoreChange(half.side, change))}
     </ul>
   </div>`;
 }
