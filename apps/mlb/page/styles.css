@@ -1007,6 +1007,7 @@ table.st .seed-cell {
 .series {
   background: var(--card);
   border: 1px solid var(--card-border);
+  /* Rounder than a card, so its corners nest around the 3px chips it holds. */
   border-radius: var(--radius-control);
   overflow: hidden;
 }
