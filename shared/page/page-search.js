@@ -88,8 +88,9 @@ export const describePlayerIndex = (season, players) => ({
   players: players.toSorted(compareNames),
 });
 
-// A word this short only finds a name or a place once it's whole, or it would find too many.
-const SHORTEST_PREFIX = 3;
+// A word this short only finds a team, a name, or a place once it's whole, or it would find too
+// many.
+export const SHORTEST_PREFIX = 3;
 // The words beside a team's name that ask for its sheet, which leads with its record.
 const RECORD_WORDS = ["record", "standing"];
 // How many of a team's newest stories its news lists, under the News tab's row.

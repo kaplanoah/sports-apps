@@ -307,6 +307,23 @@ test("while the keyboard is up, the list's last row scrolls clear of it", async 
   expect(box.y + box.height).toBeLessThanOrEqual(keyboardTop);
 });
 
+test("while typing, a team's first two letters suggest it but list none of its games, and its third lists them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("Li");
+
+  await expect(findRows(page).first()).toContainText("Liberty");
+  await expect(findGamesLine(page)).toHaveCount(0);
+  await expect(page.locator("#gameSearch .listed-day")).toHaveCount(0);
+
+  await findInput(page).pressSequentially("b");
+
+  await expect(findGamesLine(page)).toHaveText("Liberty\u202252 games");
+});
+
 test("while typing, a word that reads as nothing yet lists no games", async ({ page }) => {
   await openSeasonGames(page);
   await tapSearch(page);

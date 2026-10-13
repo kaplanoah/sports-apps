@@ -24,7 +24,7 @@ import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { isWebAddress } from "./news-picks.js";
 import { nameStoryDay } from "./news-view.js";
-import { findPages, findPartGame } from "./page-search.js";
+import { SHORTEST_PREFIX, findPages, findPartGame } from "./page-search.js";
 import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
 import {
@@ -528,13 +528,16 @@ function isLastWordHalfTyped(text, context) {
 
 /**
  * The words with a half-typed team finished, as the first suggestion finishes it, or null when the
- * first suggestion doesn't finish one.
+ * first suggestion doesn't finish one or the last word is too short to name a team yet.
  * @param {string} text
  * @param {Suggestion[]} suggestions
  */
 function finishTeam(text, [first]) {
+  const last = text.split(/\s+/).at(-1) ?? "";
   const isTeamFinished =
-    first?.mark.kind === "team" && first.text.toLowerCase().startsWith(text.toLowerCase());
+    last.length >= SHORTEST_PREFIX &&
+    first?.mark.kind === "team" &&
+    first.text.toLowerCase().startsWith(text.toLowerCase());
   return isTeamFinished ? first.text : null;
 }
 
