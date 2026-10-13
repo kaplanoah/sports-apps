@@ -11,6 +11,7 @@ import {
 } from "../worker/src/highlights.js";
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // MLB's content and plays for two Division Series games of Oct 7, as it had them the next day.
 const RECORDED = JSON.parse(
@@ -273,38 +274,26 @@ test("the route turns away an id that isn't MLB's", async () => {
 function createJobRun(mlb, env) {
   const clock = { now: Date.parse(EVENING.now) };
   const slate = buildSnapshot(EVENING.responses, { season: EVENING.season, now: clock.now }).slate;
-  const stored = new Map(
-    Object.entries({
-      "live/current": { season: EVENING.season },
-      [`seasons/${EVENING.season}`]: { year: EVENING.season, slate },
-    }),
-  );
-  /** @type {Map<string, any>} */
-  const storage = new Map();
+  const docs = createDocs({
+    "live/current": { season: EVENING.season },
+    [`seasons/${EVENING.season}`]: { year: EVENING.season, slate },
+  });
+  const storage = createJobStorage();
   const context = /** @type {any} */ ({
-    docs: {
-      read: async (/** @type {string} */ key) => stored.get(key) ?? null,
-      list: async () => [],
-      write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-        stored.set(key, doc);
-      },
-    },
-    storage: {
-      get: async (/** @type {string} */ key) => structuredClone(storage.get(key)),
-      put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-        storage.set(key, structuredClone(value));
-      },
-    },
+    docs,
+    storage,
     env,
     fetchImpl: mlb.fetchImpl,
     now: () => clock.now,
   });
   const job = createHighlightsUpdater();
   return {
-    stored,
+    stored: docs.stored,
     runJob: () => job.updateStore(context),
     forgetReads: () => {
-      for (const key of storage.keys()) if (key.startsWith("highlight-reads:")) storage.delete(key);
+      for (const key of storage.stored.keys()) {
+        if (key.startsWith("highlight-reads:")) storage.stored.delete(key);
+      }
     },
     wait: (/** @type {number} */ minutes) => {
       clock.now += minutes * 60 * 1000;

@@ -11,6 +11,7 @@ import {
   readUpdates,
   saveSnapshot,
 } from "../worker/src/season-updater.js";
+import { createDocs } from "../../../tests/job-context.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -22,21 +23,6 @@ const GAMES = JSON.parse(
 );
 const RESPONSES = { ...AFTERNOON.responses, players: GAMES.preview.players };
 const SNAPSHOT = buildSnapshot(RESPONSES, { season: 2026, now: NOW });
-
-function createDocs() {
-  const stored = new Map();
-  const writes = [];
-  return {
-    writes,
-    read: async (key) => structuredClone(stored.get(key)) ?? null,
-    list: async () => [],
-    write: async (key, doc) => {
-      writes.push(key);
-      stored.set(key, structuredClone(doc));
-    },
-    remove: async (key) => stored.delete(key),
-  };
-}
 
 // The afternoon's scores, with the whole season's schedule from the next day, its regular season
 // and all.

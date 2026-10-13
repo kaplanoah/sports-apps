@@ -21,6 +21,7 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../worker/src/roster.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // Every player's totals and every team's games as the league answered the morning after the
 // Liberty's last game, with the game logs of a few players standing in for every player's, beside
@@ -105,45 +106,6 @@ function createLeagueFetch(answers) {
       : new Response("Not found", { status: 404 });
   };
   return { requests, fetchImpl };
-}
-
-function createJobStorage() {
-  const stored = new Map();
-  return {
-    get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
-    put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-      stored.set(key, structuredClone(value));
-    },
-    delete: async (/** @type {string} */ key) => stored.delete(key),
-    list: async (/** @type {string} */ prefix) =>
-      new Map([...stored].filter(([key]) => key.startsWith(prefix))),
-  };
-}
-
-/** @param {Record<string, any>} initial */
-function createDocs(initial) {
-  const stored = new Map(Object.entries(initial));
-  /** @type {string[]} */
-  const writes = [];
-  /** @type {string[]} */
-  const lists = [];
-  return {
-    stored,
-    writes,
-    lists,
-    read: async (/** @type {string} */ key) => structuredClone(stored.get(key)) ?? null,
-    list: async (/** @type {string} */ collection) => {
-      lists.push(collection);
-      return [...stored]
-        .filter(([key]) => key.startsWith(`${collection}/`))
-        .map(([, doc]) => structuredClone(doc));
-    },
-    write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-      writes.push(key);
-      stored.set(key, structuredClone(doc));
-    },
-    remove: async (/** @type {string} */ key) => stored.delete(key),
-  };
 }
 
 const FINAL_GAME = { id: "1", state: "final" };
