@@ -46,6 +46,7 @@ const PAGES = {
     { id: "4", team: "HAW", firstName: "A’ja", lastName: "Rook", number: "22" },
     { id: "5", team: "FOX", firstName: "Cy", lastName: "Pell Jr.", number: "40" },
     { id: "6", team: "FOX", firstName: "Easton", lastName: "Vale", number: "9" },
+    { id: "7", team: "HAW", firstName: "Ken", lastName: "Standish", number: "5" },
   ],
   section: { key: "roster", name: "Roster" },
   places: [
@@ -63,9 +64,9 @@ const PAGES = {
     },
     { key: "settings", name: ["Settings"], words: ["settings"], icon: "settings" },
     {
-      key: "settings:hawks-outlet",
-      name: ["Settings", "Include The Hawks Nest"],
-      words: ["settings", "the hawks nest"],
+      key: "settings:hillsider",
+      name: ["Settings", "Include The Hillsider"],
+      words: ["settings", "the hillsider"],
       icon: "settings",
     },
     {
@@ -157,7 +158,7 @@ test("a place's words list it, from the start of any of its words, and every pla
   assert.deepEqual(listRows("eastern conference").rows, ["place standings:east"]);
   assert.deepEqual(listRows("settings").rows, [
     "place settings",
-    "place settings:hawks-outlet",
+    "place settings:hillsider",
     "place settings:appearance",
   ]);
   assert.deepEqual(listRows("dark mode").rows, ["place settings:appearance"]);
@@ -222,9 +223,22 @@ test("a game's part before it opens the next game, and its name may be one a sea
   assert.deepEqual(listRows("the Hawks matchup").rows, ["matchup of the hawks"]);
 });
 
-test("a place whose own phrase is the whole search lists first, though its words read as a team", () => {
-  assert.deepEqual(listRows("the hawks nest"), {
-    rows: ["place settings:hawks-outlet"],
-    gameText: "the hawks nest",
-  });
+test("the places the words find list first, beside a player whose name they start, or a team a letter off", () => {
+  assert.deepEqual(listRows("stan", true).rows, [
+    "place standings:league",
+    "place standings:east",
+    "player HAW Standish",
+  ]);
+  for (const text of ["Hillsider", "the Hillsider"])
+    assert.deepEqual(
+      listRows(text).rows,
+      ["place settings:hillsider", "team FOX", "section FOX"],
+      text,
+    );
+  assert.deepEqual(listRows("Hillside").rows, ["team FOX", "section FOX"]);
+});
+
+test("a word a search of games passes over finds a place only as a whole word of its own", () => {
+  assert.deepEqual(listRows("season").rows, []);
+  assert.deepEqual(listRows("the").rows, ["place settings:hillsider"]);
 });

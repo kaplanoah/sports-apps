@@ -208,6 +208,8 @@ const INDEX = {
     { id: "695445", team: "TOR", number: "52", firstName: "Chase", lastName: "Lee" },
     { id: "694973", team: "PIT", number: "30", firstName: "Paul", lastName: "Skenes" },
     { id: "668834", team: "KC", number: "51", firstName: "Easton", lastName: "McGee" },
+    { id: "519317", team: "NYY", number: "27", firstName: "Giancarlo", lastName: "Stanton" },
+    { id: "650490", team: "TB", number: "2", firstName: "Yandy", lastName: "D\u00edaz" },
   ],
 };
 
@@ -242,12 +244,13 @@ test("a club's name lists its sheet and its Roster, by any name a search of game
   assert.deepEqual(listPages("Athletics").rows, ["Athletics", "Athletics Roster"]);
 });
 
-test("a player's name lists his sheet, by his whole, last, or first name, with or without his suffix", () => {
+test("a player's name lists his sheet, by his whole, last, or first name, with or without his suffix or accents", () => {
   assert.deepEqual(listPages("Lindor"), { rows: ["Francisco Lindor"], gameText: null });
   assert.deepEqual(listPages("Tatis").rows, ["Fernando Tatis Jr."]);
   assert.deepEqual(listPages("Fernando Tatis Jr").rows, ["Fernando Tatis Jr."]);
   assert.deepEqual(listPages("Jung Hoo Lee").rows, ["Jung Hoo Lee"]);
   assert.deepEqual(listPages("Lee").rows, ["Jung Hoo Lee", "Chase Lee"]);
+  assert.deepEqual(listPages("Diaz").rows, ["Yandy D\u00edaz"]);
   assert.deepEqual(listPages("Yama", true).rows, ["Yoshinobu Yamamoto"]);
 });
 
@@ -265,6 +268,12 @@ test("the Standings tab's playoff fields and each league's divisions are found b
     "Standings Playoffs",
     "Standings AL",
     "Standings NL",
+  ]);
+  assert.deepEqual(listPages("stan", true).rows, [
+    "Standings Playoffs",
+    "Standings AL",
+    "Standings NL",
+    "Giancarlo Stanton",
   ]);
   assert.deepEqual(listPages("wild card").rows, ["Standings Playoffs"]);
   assert.deepEqual(listPages("american league").rows, ["Standings AL"]);
@@ -295,12 +304,15 @@ test("settings and each setting are found by their words, and only the settings 
     "Settings Include content from Baseball Prospectus",
   ]);
   assert.deepEqual(listPages("ranking").rows, ["Settings Ranking"]);
-  assert.deepEqual(listPages("the athletic").rows, [
-    "Settings Include content from The Athletic",
-    "Athletics",
-    "Athletics Roster",
-  ]);
+  for (const text of ["the athletic", "athletic"])
+    assert.deepEqual(
+      listPages(text).rows,
+      ["Settings Include content from The Athletic", "Athletics", "Athletics Roster"],
+      text,
+    );
+  assert.deepEqual(listPages("athl", true).rows, ["Settings Include content from The Athletic"]);
   assert.deepEqual(listPages("season").rows, ["Settings Season"]);
+  assert.deepEqual(listPages("games").rows, []);
   const hidden = listSearchPages({
     index: INDEX,
     isSettingShown: (key) => key !== "settings:season",

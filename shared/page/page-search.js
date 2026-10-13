@@ -251,34 +251,26 @@ function findGamePart(tokens, parts) {
 }
 
 /**
- * The places whose own phrase is every word of the search, as "the athletic" is a setting's, even
- * where a search of games reads the words as something else, like MLB's Athletics.
- * @param {string} text
- * @param {PagePlace[]} places
- */
-const findPhrasePlaces = (text, places) => {
-  const typed = splitWords(text).join(" ");
-  return places.filter((place) => place.words.some((word) => splitWords(word).join(" ") === typed));
-};
-
-/**
  * The pages a search's words ask for, and the words left for its search of games, or null when
- * the words ask for no games. A place whose own phrase the words are lists first.
+ * the words ask for no games. The places the rest of the words find list first, beside what else
+ * the words name, as "stan" starts Standings and a player's name, and "the athletic" names The
+ * Athletic's setting and, a letter off, MLB's Athletics. The rest leave out the words a search of
+ * games passes over, and a team's own name, which names only the team.
  * @param {string} text
  * @param {{ dictionary: import("./search-words.js").Dictionary, pages: SearchPages, isTyping: boolean }} search
  * @returns {{ rows: PageRow[], gameText: string | null }}
  */
 export function findPages(text, search) {
-  const phrasePlaces = findPhrasePlaces(text, search.pages.places);
+  const isTeamName = (/** @type {import("./search-words.js").Token} */ token) =>
+    (search.dictionary.get(token.text) ?? []).some((meaning) => meaning.kind === "team");
+  const words = readTokens(text, search.dictionary)
+    .filter((token) => !hasKind(token, "filler") && !isTeamName(token))
+    .flatMap((token) => token.words);
+  const places = words.length ? findPlaces(words, search.pages.places) : [];
   const found = findWordPages(text, search);
-  const rest = found.rows.filter(
-    (row) => !(row.kind === "place" && phrasePlaces.includes(row.place)),
-  );
+  const rest = found.rows.filter((row) => !(row.kind === "place" && places.includes(row.place)));
   return {
-    rows: [
-      ...phrasePlaces.map((place) => /** @type {PageRow} */ ({ kind: "place", place })),
-      ...rest,
-    ],
+    rows: [...places.map((place) => /** @type {PageRow} */ ({ kind: "place", place })), ...rest],
     gameText: found.gameText,
   };
 }
@@ -321,8 +313,10 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
 }
 
 /**
- * The places that words a search of games passes over find, as "season" finds the Season picker,
- * leaving no words for games, or, when they find none, the words left for games.
+ * The places that words a search of games passes over find, each a whole word of the place's as
+ * typed, as "season" finds the Season picker, leaving no words for games, or, when they find none,
+ * the words left for games. A word so common is no start of another, nor its plural, so "games"
+ * finds no Night Game theme.
  * @param {import("./search-words.js").Token[]} tokens
  * @param {string} text
  * @param {SearchPages} pages
@@ -330,7 +324,12 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
  */
 function findPassedOverPlaces(tokens, text, pages) {
   const words = tokens.flatMap((token) => token.words);
-  const places = words.length ? findPlaces(words, pages.places) : [];
+  const places = words.length
+    ? pages.places.filter((place) => {
+        const parts = place.words.flatMap(splitWords);
+        return words.every((word) => parts.includes(word));
+      })
+    : [];
   if (!places.length) return { rows: [], gameText: text };
   return { rows: places.map((place) => ({ kind: "place", place })), gameText: null };
 }

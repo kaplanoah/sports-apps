@@ -26,6 +26,7 @@ const PLAYER_INDEX = {
     { id: "596019", team: "NYM", number: "12", firstName: "Francisco", lastName: "Lindor" },
     { id: "694973", team: "PIT", number: "30", firstName: "Paul", lastName: "Skenes" },
     { id: "605141", team: "LAD", number: "50", firstName: "Mookie", lastName: "Betts" },
+    { id: "519317", team: "NYY", number: "27", firstName: "Giancarlo", lastName: "Stanton" },
   ],
 };
 
@@ -465,6 +466,32 @@ test("a setting's words find it, and its row opens settings with the setting in 
 
   await expect(page.locator("#settingsDialog")).toBeVisible();
   await expect(page.locator("#rankingTitle")).toBeInViewport();
+});
+
+test("while typing, a place's half-typed word lists it first, beside a player it starts, and a setting's word beside the club it's a letter off", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("stan");
+
+  await expect(findRows(page)).toHaveText([
+    "Standings\u2022Playoffs",
+    "Standings\u2022AL",
+    "Standings\u2022NL",
+    "Giancarlo Stanton27\u2022Yankees",
+  ]);
+
+  const athletic = findRows(page).filter({ hasText: "The Athletic" });
+  for (const words of ["athl", "athletic"]) {
+    await findInput(page).fill("");
+    await findInput(page).pressSequentially(words);
+
+    await expect(athletic).toHaveText("Settings\u2022Include content from The Athletic");
+    await expect(athletic).toBeInViewport();
+  }
+  await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*$/ })).toHaveCount(1);
 });
 
 test("a found game's row opens its sheet wherever a finger lands on it", async ({ page }) => {
