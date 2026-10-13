@@ -7,8 +7,8 @@ import {
   listSearchGames,
 } from "#shared/game-search.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
-import { orderListedDays, readTypedSearch } from "#shared/search-reading.js";
-import { listPhrasings, sweepPhrasings } from "../../../tests/search-sweep.js";
+import { orderListedDays, readSentWords, readTypedSearch } from "#shared/search-reading.js";
+import { listPhrasings, sweepMisspellings, sweepPhrasings } from "../../../tests/search-sweep.js";
 import { listSeasonGames } from "../page/js/games-view.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
@@ -41,6 +41,60 @@ const PAGES = listSearchPages({
 test("typing each club's and place's name a key at a time, alone or in a search, finds no games from under three letters, names each club alone, finds what the whole search does once it reads it whole, and starts no player past its first word", () => {
   const phrasings = listPhrasings(CONTEXT, "mets");
   assert.deepEqual(sweepPhrasings(phrasings, { context: CONTEXT, pages: PAGES }), []);
+});
+
+test("typing each club's and place's name of five letters or more with a letter wrong, each way a thumb gets one wrong, finds only games the name's own letters find, or nothing, never another name's", () => {
+  assert.deepEqual(sweepMisspellings({ context: CONTEXT, pages: PAGES }), []);
+});
+
+/**
+ * What a search shows as it's typed: its rows, as each names its page, and the line over its games.
+ * @param {string} text
+ */
+function showTyped(text) {
+  const { rows, read } = readTypedSearch(text, {
+    context: CONTEXT,
+    pages: PAGES,
+    isTyping: true,
+    isGamesOnly: false,
+  });
+  return {
+    rows: rows.map((row) => {
+      if (row.kind === "player") return `${row.player.firstName} ${row.player.lastName}`;
+      if (row.kind === "team" || row.kind === "section") return `${row.kind} ${row.team.name}`;
+      return row.kind;
+    }),
+    read: read ? [read.lead, ...read.facts].join(" | ") : null,
+  };
+}
+
+test("a club's name with one letter wrong is found as it's typed, from five letters on, under what its letters find as typed", () => {
+  const nationals = {
+    rows: ["team Nationals", "section Nationals"],
+    read: "Nationals | 162 games",
+  };
+  for (const text of ["mationa", "mational", "natoi", "natoin"])
+    assert.deepEqual(showTyped(text), nationals, text);
+  assert.deepEqual(showTyped("mation"), {
+    rows: ["Phil Maton", "team Nationals", "section Nationals"],
+    read: "Nationals | 162 games",
+  });
+  assert.deepEqual(showTyped("mati"), { rows: [], read: null });
+});
+
+test("letters as near two names, or that start a player's name as typed, are read as no club", () => {
+  assert.deepEqual(showTyped("hosto"), { rows: [], read: null });
+  assert.deepEqual(showTyped("castr"), {
+    rows: ["Kervin Castro", "Willi Castro"],
+    read: null,
+  });
+});
+
+test("the Search key sends a club's name its letters have one wrong, unless they find a page as typed", () => {
+  assert.equal(readSentWords("mationa", CONTEXT, PAGES), "Nationals");
+  assert.equal(readSentWords("Mets at mationa", CONTEXT, PAGES), "Mets at Nationals");
+  assert.equal(readSentWords("mation", CONTEXT, PAGES), "mation");
+  assert.equal(readSentWords("castr", CONTEXT, PAGES), "castr");
 });
 
 test("typing a whole word that asks for every game lists them, and a letter or two on the way to a name lists none", () => {

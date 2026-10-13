@@ -1,12 +1,12 @@
 // What a search offers as it's typed, and before anything is. The word being typed is finished
-// first, a name teams share, like "Los Angeles", before each of them, a team before a place or a
-// date, and the team that plays soonest before another that starts the same; after a joining word
-// like "in" or "at", the words that can follow it; then whole searches built on a team it already
-// names, two at most, which fit where the season stands: its next game while it has one, its
-// playoffs while they're on, and its last game once it's done. A team's name that is also a place,
-// like "New York", has the games played there as its other reading when they're other games than
-// the team's. Nothing is offered that would find no games. Runs in the page and in Node, so it uses
-// no DOM.
+// first, even with one letter wrong once nothing starts as typed, a name teams share, like "Los
+// Angeles", before each of them, a team before a place or a date, and the team that plays soonest
+// before another that starts the same; after a joining word like "in" or "at", the words that can
+// follow it; then whole searches built on a team it already names, two at most, which fit where the
+// season stands: its next game while it has one, its playoffs while they're on, and its last game
+// once it's done. A team's name that is also a place, like "New York", has the games played there as
+// its other reading when they're other games than the team's. Nothing is offered that would find no
+// games. Runs in the page and in Node, so it uses no DOM.
 
 import { readMonthDays } from "./search-dates.js";
 import {
@@ -18,17 +18,18 @@ import {
   readSearch,
 } from "./game-search.js";
 import { findNeverShownWords } from "./league-words.js";
-import { readTokens, splitWords } from "./search-words.js";
+import { findForgivenStarts, readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
 /** @typedef {import("./search-words.js").Meaning} Meaning */
 /**
  * A suggestion: the whole search it would run, what marks its row, a detail at its end, like the
  * days a date covers or how many games a place has, and, for a word it finishes, the typed words it
- * finishes, which may start before the last, as "los ange" does "Los Angeles".
- * @typedef {{ text: string, mark: { kind: "team", code: string } | { kind: "date" | "place" | "search" }, detail: string, finished?: string }} Suggestion
+ * finishes, which may start before the last, as "los ange" does "Los Angeles", and whether it
+ * finishes them with one letter wrong, as "mation" does "Nationals".
+ * @typedef {{ text: string, mark: { kind: "team", code: string } | { kind: "date" | "place" | "search" }, detail: string, finished?: string, isForgiven?: boolean }} Suggestion
  */
-/** @typedef {{ text: string, meaning: Meaning | null, finished?: string }} Candidate */
+/** @typedef {{ text: string, meaning: Meaning | null, finished?: string, isForgiven?: boolean }} Candidate */
 
 const SUGGESTION_COUNT = 4;
 // Whole searches sit over the pages and games a search finds, so only a couple show.
@@ -165,18 +166,18 @@ const rateName = (written, meaning, fragment) =>
   (readWords(written).startsWith(fragment.trim()) ? 2 : 0) + (written === meaning.display ? 1 : 0);
 
 /**
- * Each word the dictionary knows that a typed fragment starts, written whole: a city before the
- * teams that play there, then a team by a name as typed before one by its own name, and the one
- * that plays soonest first.
+ * Each of the phrases a typed fragment starts, written whole: a city before the teams that play
+ * there, then a team by a name as typed before one by its own name, and the one that plays soonest
+ * first.
+ * @param {[string, Meaning[]][]} phrases
  * @param {string} fragment the last word or two, as read
  * @param {string[]} kinds
  * @param {SearchContext} context
  */
-function listFinishedWords(fragment, kinds, context) {
+function writeFinishedWords(phrases, fragment, kinds, context) {
   /** @type {Map<string, { written: string, meaning: Meaning, rating: number, isCity: boolean }>} */
   const words = new Map();
-  for (const [phrase, meanings] of context.dictionary) {
-    if (phrase === fragment || !phrase.startsWith(fragment)) continue;
+  for (const [phrase, meanings] of phrases) {
     for (const { meaning, isCity } of listFinishedMeanings(meanings, kinds)) {
       const written = writeFinished(phrase, meaning, fragment, context.terms.words.neverShown);
       const rating = rateName(written, meaning, fragment);
@@ -197,14 +198,33 @@ function listFinishedWords(fragment, kinds, context) {
 }
 
 /**
+ * Each word the dictionary knows that a typed fragment starts, written whole, or, when none does and
+ * it starts no other name, each it starts with one letter wrong, and whether those are the ones.
+ * @param {string} fragment the last word or two, as read
+ * @param {string[]} kinds
+ * @param {SearchContext} context
+ * @param {(word: string) => boolean} startsOtherName
+ */
+function listFinishedWords(fragment, kinds, context, startsOtherName) {
+  const starting = [...context.dictionary].filter(
+    ([phrase]) => phrase !== fragment && phrase.startsWith(fragment),
+  );
+  const finished = writeFinishedWords(starting, fragment, kinds, context);
+  if (finished.length || startsOtherName(fragment)) return { finished, isForgiven: false };
+  const forgiven = findForgivenStarts(fragment, context.dictionary);
+  return { finished: writeFinishedWords(forgiven, fragment, kinds, context), isForgiven: true };
+}
+
+/**
  * The word being typed, finished, or, after a space, the name its words start, as "los " starts
  * Los Angeles, unless it's a joining word already whole, or ends a phrase already whole that
  * nothing longer starts, as "weekend" does "this weekend".
  * @param {string} text
  * @param {SearchContext} context
+ * @param {(word: string) => boolean} startsOtherName
  * @returns {Candidate[]}
  */
-function listFinishingCandidates(text, context) {
+function listFinishingCandidates(text, context, startsOtherName) {
   const typed = listTypedWords(text);
   if (readJoin(typed.at(-1)?.word ?? "", context)) return [];
   const space = /\s$/.test(text) ? " " : "";
@@ -215,12 +235,18 @@ function listFinishingCandidates(text, context) {
     const kinds = KINDS_AFTER[before ? readJoin(before.word, context) : ""] ?? FINISHED_KINDS;
     const head = text.slice(0, start.at);
     const fragment = readWords(text.slice(start.at));
-    const finished = listFinishedWords(`${fragment}${space}`, kinds, context);
+    const { finished, isForgiven } = listFinishedWords(
+      `${fragment}${space}`,
+      kinds,
+      context,
+      startsOtherName,
+    );
     if (finished.length)
       return finished.map(({ written, meaning }) => ({
         text: `${head}${written}`,
         meaning,
         finished: text.slice(start.at),
+        isForgiven,
       }));
     if (context.dictionary.has(fragment)) return [];
   }
@@ -443,7 +469,9 @@ function listUseful(candidates, text, context) {
     seen.add(key);
     const result = findGames(candidate.text, context);
     if (!result.found.games.length) continue;
-    const finished = candidate.finished ? { finished: candidate.finished } : {};
+    const finished = candidate.finished
+      ? { finished: candidate.finished, isForgiven: !!candidate.isForgiven }
+      : {};
     useful.push({ text: candidate.text, ...finished, ...describeRow(candidate, result) });
     if (isWholeSearch) wholeSearches += 1;
     if (useful.length === SUGGESTION_COUNT) break;
@@ -456,12 +484,14 @@ function listUseful(candidates, text, context) {
  * whole searches on its one team right after the word that names it.
  * @param {string} text
  * @param {SearchContext} context
+ * @param {(word: string) => boolean} [startsOtherName] whether a word starts a name the search
+ *   finds apart from its games, like a player's, which then finishes no name with one letter wrong
  * @returns {Suggestion[]}
  */
-export function listSuggestions(text, context) {
+export function listSuggestions(text, context, startsOtherName = () => false) {
   if (!text.trim()) return [];
   const [first, ...others] = [
-    ...listFinishingCandidates(text, context),
+    ...listFinishingCandidates(text, context, startsOtherName),
     ...listFollowingCandidates(text, context),
   ];
   const searches = [

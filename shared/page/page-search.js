@@ -140,6 +140,17 @@ function readPlayerNames(player) {
 }
 
 /**
+ * Whether a word starts one of a player's names as typed, as "castr" does Castro's, so it isn't read
+ * as another name with one letter wrong.
+ * @param {string} word
+ * @param {SearchPages} pages
+ */
+export const startsPlayerName = (word, pages) =>
+  pages.players.some((player) =>
+    listPlayerNames(player).some((name) => name.some((part) => part.startsWith(word))),
+  );
+
+/**
  * A word of a search, and whether a search of games knows it, as it knows "east" or "NL".
  * @typedef {{ word: string, isKnown: boolean }} ReadWord
  */

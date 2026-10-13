@@ -7,7 +7,7 @@ import {
   listSearchGames,
 } from "#shared/game-search.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
-import { listPhrasings, sweepPhrasings } from "../../../tests/search-sweep.js";
+import { listPhrasings, sweepMisspellings, sweepPhrasings } from "../../../tests/search-sweep.js";
 import { listSeasonGames } from "../page/js/games-view.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
@@ -57,4 +57,8 @@ const PAGES = listSearchPages({ index: INDEX, isSettingShown: () => true });
 test("typing each team's and place's name a key at a time, alone or in a search, finds no games from under three letters, names each team alone, finds what the whole search does once it reads it whole, and starts no player past its first word", () => {
   const phrasings = listPhrasings(CONTEXT, "liberty");
   assert.deepEqual(sweepPhrasings(phrasings, { context: CONTEXT, pages: PAGES }), []);
+});
+
+test("typing each team's and place's name of five letters or more with a letter wrong, each way a thumb gets one wrong, finds only games the name's own letters find, or nothing, never another name's", () => {
+  assert.deepEqual(sweepMisspellings({ context: CONTEXT, pages: PAGES }), []);
 });

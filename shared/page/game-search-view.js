@@ -683,7 +683,8 @@ function sendSearch(event) {
   event.preventDefault();
   const season = league?.readSeason();
   const query = readQuery();
-  runSearch(season ? readSentWords(query, createContext(season)) : query);
+  const pages = league?.readPages() ?? null;
+  runSearch(season ? readSentWords(query, createContext(season), pages) : query);
 }
 
 /**
