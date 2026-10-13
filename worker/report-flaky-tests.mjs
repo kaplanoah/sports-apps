@@ -52,39 +52,41 @@ const nameTest = ({ spec, test, titles }) =>
 const isFailed = (result) => FAILED_STATUSES.has(result.status);
 
 /**
- * Whether a test's failures count as flaky. Where a test is retried, one that failed every try
- * fails its pull request, which is that pull request's to fix, so only one a retry passed counts.
- * @param {any} test
- * @param {boolean} isRetried
+ * Each test in Playwright JSON reports, with the titles of the describe blocks around it.
+ * @param {any[]} reports
  */
-const countsAsFlaky = (test, isRetried) =>
-  !isRetried || (test.results ?? []).some((/** @type {any} */ result) => !isFailed(result));
+const listReportsTests = (reports) =>
+  reports.flatMap((report) =>
+    (report.suites ?? []).flatMap((/** @type {any} */ top) => [...listReportTests(top, [])]),
+  );
+
+/** @param {any} test */
+const isFailedEveryTry = (test) => (test.results ?? []).length > 0 && test.results.every(isFailed);
 
 /**
  * Each test that failed in any of its runs across the reports, the most failed first. A test run
- * many times over appears once for each run.
+ * many times over appears once for each run. A retried run where some test failed every try
+ * names none: its change broke that test, and likely the ones a retry passed too, and the nightly
+ * run still finds any that only fail some of the time.
  * @param {any[]} reports Playwright JSON reports
  * @param {{ isRetried?: boolean }} [options] whether the run retried a failed test
  * @returns {TestRuns[]}
  */
 export function listFailedTests(reports, { isRetried = false } = {}) {
+  const tests = listReportsTests(reports);
+  if (isRetried && tests.some(({ test }) => isFailedEveryTry(test))) return [];
   /** @type {Map<string, TestRuns>} */
   const byName = new Map();
-  for (const report of reports) {
-    for (const top of report.suites ?? []) {
-      for (const entry of listReportTests(top, [])) {
-        const name = nameTest(entry);
-        const counted = byName.get(name) ?? { name, runs: 0, failures: 0, message: "" };
-        const isFlaky = countsAsFlaky(entry.test, isRetried);
-        for (const result of entry.test.results ?? []) {
-          counted.runs += 1;
-          if (!isFlaky || !isFailed(result)) continue;
-          counted.failures += 1;
-          counted.message ||= readFirstLine(result.error?.message);
-        }
-        byName.set(name, counted);
-      }
+  for (const entry of tests) {
+    const name = nameTest(entry);
+    const counted = byName.get(name) ?? { name, runs: 0, failures: 0, message: "" };
+    for (const result of entry.test.results ?? []) {
+      counted.runs += 1;
+      if (!isFailed(result)) continue;
+      counted.failures += 1;
+      counted.message ||= readFirstLine(result.error?.message);
     }
+    byName.set(name, counted);
   }
   return [...byName.values()]
     .filter((counted) => counted.failures > 0)

@@ -30,7 +30,6 @@ const SKIPPED_FILES = new Set([
   "worker/rollback.mjs",
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
-  "worker/split-browser-specs.mjs",
   "worker/worker-secrets.mjs",
 ]);
 const SKIPPED_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];

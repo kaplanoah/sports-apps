@@ -50,8 +50,14 @@ export default defineConfig({
     // A service worker's requests skip the routes tests answer, so only tests about it allow it.
     serviceWorkers: "block",
     // A failed try keeps its trace, whose snapshots show the page at each step. Its screenshots
-    // would add a tenth to every test's time and show nothing the snapshots don't.
-    trace: { mode: "retain-on-failure", screenshots: false },
+    // would add a tenth to every test's time and show nothing the snapshots don't. CI's browser
+    // job leaves out the snapshots too, a sixth of every test's time, while burn-in and the nightly
+    // run, where flaky tests are found, keep them.
+    trace: {
+      mode: "retain-on-failure",
+      screenshots: false,
+      snapshots: process.env.TRACE_SNAPSHOTS !== "off",
+    },
   },
   projects: appsWithBrowserTests.flatMap((app, index) => [
     {
