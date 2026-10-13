@@ -1,11 +1,11 @@
 // What a search shows for its words, before the view draws it: the suggestions while they're
 // typed, the pages the words name, the other ways to read them, and the games they find, with the
 // line saying how it read them. A word still being typed is read as the team or place the first
-// suggestion finishes it into, once three letters of its name are typed, and otherwise left out
-// until it's whole. Runs in the page and in Node, so it uses no DOM.
+// suggestion finishes it into, once three letters of its name are typed, or five with one wrong, and
+// otherwise left out until it's whole. Runs in the page and in Node, so it uses no DOM.
 
 import { describeSearch, findSearchGames, isAskingNothing, readSearch } from "./game-search.js";
-import { SHORTEST_PREFIX, findPages, findPartGame } from "./page-search.js";
+import { SHORTEST_PREFIX, findPages, findPartGame, startsPlayerName } from "./page-search.js";
 import { listOtherReadings, listSuggestions } from "./search-suggestions.js";
 import { splitWords } from "./search-words.js";
 
@@ -44,8 +44,9 @@ function isLastWordHalfTyped(text, context) {
 /**
  * The name a half-typed team or place is finished into, as the first suggestion finishes it, even
  * when it writes the name its own way, as "jay" is the Blue Jays, and whether its typed letters run
- * past the last word's start, as "los ange" does into Los Angeles; or null when the first
- * suggestion doesn't finish one, or too little of its name is typed to name one yet.
+ * past the last word's start, as "los ange" does into Los Angeles, and whether it finishes them with
+ * one letter wrong; or null when the first suggestion doesn't finish one, or too little of its name
+ * is typed to name one yet.
  * @param {string} text
  * @param {Suggestion[]} suggestions
  */
@@ -58,7 +59,13 @@ function finishName(text, [first]) {
     words.endsWith(typed) &&
     (first?.mark.kind === "team" || first?.mark.kind === "place") &&
     readWords(first.text).startsWith(head);
-  return isNameFinished ? { words: first.text, typed, isAcrossWords: /\s/.test(typed) } : null;
+  if (!isNameFinished) return null;
+  return {
+    words: first.text,
+    typed,
+    isAcrossWords: /\s/.test(typed),
+    isForgiven: !!first.isForgiven,
+  };
 }
 
 /**
@@ -82,6 +89,16 @@ function readWhileTyping(text, suggestions, context) {
 }
 
 /**
+ * The suggestions for words as they're typed, a word that starts a player's name finishing no other
+ * name with one letter wrong.
+ * @param {string} query
+ * @param {SearchContext} context
+ * @param {SearchPages | null} pages
+ */
+const suggest = (query, context, pages) =>
+  listSuggestions(query, context, (word) => !!pages && startsPlayerName(word, pages));
+
+/**
  * Rows of both lists, each once, those of the first first.
  * @param {PageRow[]} first
  * @param {PageRow[]} second
@@ -95,8 +112,10 @@ function joinRows(first, second) {
  * The pages the words ask for, the words left for the search of games, or null when they ask for
  * no games, and the line an answer says over its rows. A half-typed word finished into a name lists
  * that name's pages, then any other the word starts on its own, like a player's, unless letters
- * before it are part of the name. Any other half-typed word may start a player's name or a place's,
- * so the words as typed go first, and the words as the line reads them only when those find no page.
+ * before it are part of the name, or those others first when it finishes it with one letter wrong,
+ * since the word matches them as typed. Any other half-typed word may start a player's name or a
+ * place's, so the words as typed go first, and the words as the line reads them only when those
+ * find no page.
  * @param {string} text
  * @param {ReturnType<typeof readWhileTyping>} reading
  * @param {SearchState} state
@@ -108,7 +127,9 @@ function readPages(text, { readText, name }, { context, pages, isTyping }) {
   if (name) {
     const named = findPages(readText, search);
     if (name.isAcrossWords) return named;
-    return { ...named, rows: joinRows(named.rows, findPages(text, search).rows) };
+    const typed = findPages(text, search).rows;
+    const rows = name.isForgiven ? joinRows(typed, named.rows) : joinRows(named.rows, typed);
+    return { ...named, rows };
   }
   const typed = findPages(text, search);
   const isTypedEnough = typed.rows.length > 0 || text === readText;
@@ -175,7 +196,7 @@ export const orderListedDays = (days, isNewestFirst) =>
 export function readTypedSearch(query, state) {
   const { context, isTyping, isGamesOnly } = state;
   const text = query.trim();
-  const typed = isTyping ? listSuggestions(query, context) : [];
+  const typed = isTyping ? suggest(query, context, state.pages) : [];
   const reading = isTyping ? readWhileTyping(text, typed, context) : { readText: text, name: null };
   const { readText } = reading;
   const { rows: pageRows, gameText, read: answer } = readPages(text, reading, state);
@@ -206,11 +227,17 @@ export function readTypedSearch(query, state) {
 
 /**
  * The words the Search key sends: a half-typed last word finished when it starts a team or a place,
- * as the line read it while typing, and otherwise the words as typed.
+ * as the line read it while typing, unless it finishes it with one letter wrong and the words as
+ * typed find a page, as "mation" does Phil Maton's, and otherwise the words as typed.
  * @param {string} query
  * @param {SearchContext} context
+ * @param {SearchPages | null} pages
  */
-export function readSentWords(query, context) {
-  const { name } = readWhileTyping(query.trim(), listSuggestions(query, context), context);
-  return name?.words ?? query;
+export function readSentWords(query, context, pages) {
+  const text = query.trim();
+  const { name } = readWhileTyping(text, suggest(query, context, pages), context);
+  const isTypedFound =
+    !!pages &&
+    findPages(text, { dictionary: context.dictionary, pages, isTyping: false }).rows.length > 0;
+  return name && !(name.isForgiven && isTypedFound) ? name.words : query;
 }

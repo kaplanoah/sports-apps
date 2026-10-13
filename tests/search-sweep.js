@@ -1,6 +1,6 @@
-import { readSearch } from "#shared/game-search.js";
+import { findSearchGames, readSearch } from "#shared/game-search.js";
 import { readTypedSearch } from "#shared/search-reading.js";
-import { splitWords } from "#shared/search-words.js";
+import { FORGIVING_LENGTH, isOneEditApart, splitWords } from "#shared/search-words.js";
 
 // Types what fans search for, the way they type it on a phone: in lowercase, a key at a time, each
 // name of a team and a place, by its city, its nickname, or its venue, a team's name after its
@@ -14,8 +14,13 @@ import { splitWords } from "#shared/search-words.js";
 // - letters past the first word of a name start no player's;
 // - a space between a name's words still shows what its letters found;
 // - a team's name after any name of its city finds what the team's name does.
+// It also types each name of one word long enough to forgive a wrong letter with one letter wrong,
+// each way a thumb gets one wrong, and lists where it finds another name's games: a wrong letter
+// finds the name's, or, when it's as near another name, nothing.
 
 const SHORTEST_GUESS = 3;
+// A phone's keyboard, a row at a time, for the key a thumb lands on beside the one it meant.
+const KEY_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 
 /** @typedef {import("#shared/game-search.js").SearchContext} SearchContext */
 /** @typedef {import("#shared/page-search.js").SearchPages} SearchPages */
@@ -71,6 +76,123 @@ export function listPhrasings(context, rival) {
     ...fullNames.flatMap((name) => (name ? [{ head: `${rival} at `, name }] : [])),
     ...placeNames.map((name) => ({ head: "games in ", name: name.toLowerCase() })),
   ];
+}
+
+/**
+ * The key beside a letter on a phone's keyboard, or null for a character on no row.
+ * @param {string} letter
+ */
+function findKeyBeside(letter) {
+  const row = KEY_ROWS.find((keys) => keys.includes(letter));
+  if (!row) return null;
+  const at = row.indexOf(letter);
+  return row[at + 1] ?? row[at - 1];
+}
+
+/**
+ * A name with its letter at `at` wrong each way a thumb gets one wrong: the key beside it, the next
+ * letter first, the letter left out, or the letter twice, leaving out a slip that only shortens it
+ * to its start.
+ * @param {string} name
+ * @param {number} at
+ * @returns {string[]}
+ */
+function listMisspellings(name, at) {
+  const [before, letter, next, after] = [
+    name.slice(0, at),
+    name[at],
+    name[at + 1] ?? "",
+    name.slice(at + 2),
+  ];
+  const beside = findKeyBeside(letter);
+  return [
+    beside ? `${before}${beside}${next}${after}` : "",
+    next && next !== letter ? `${before}${next}${letter}${after}` : "",
+    next ? `${before}${next}${after}` : "",
+    `${before}${letter}${letter}${next}${after}`,
+  ].filter(Boolean);
+}
+
+/**
+ * Each name of one word long enough to forgive a wrong letter, a team's or a place's.
+ * @param {SearchContext} context
+ */
+function listForgivingNames({ terms }) {
+  const teamNames = terms.teams.flatMap((team) => [team.name, ...team.words]);
+  const placeNames = terms.places.map((place) => place.name);
+  const names = [...teamNames, ...placeNames].map((name) => name.toLowerCase());
+  return [...new Set(names)].filter(
+    (name) => /^[a-z]+$/.test(name) && name.length >= FORGIVING_LENGTH,
+  );
+}
+
+/**
+ * The keys of a misspelled name that show whether its wrong letter is forgiven: the first that
+ * types it once enough letters are typed to forgive one, and the last.
+ * @param {string} misspelled
+ * @param {number} at
+ */
+function listWrongKeys(misspelled, at) {
+  const first = misspelled.slice(0, Math.max(at + 1, FORGIVING_LENGTH));
+  return [...new Set([first, misspelled])];
+}
+
+/**
+ * Each key, as "typed (of misspelled, meaning name): what it finds", where a name with a letter
+ * wrong, as it's typed, finds a game the name's own letters find at no key, unless its letters start
+ * another name as typed, as "arlin" of "marlins" starts Arlington's, or are another whole name with
+ * one letter wrong, as "anger" of "rangers" is "angel".
+ * @param {{ context: SearchContext, pages: SearchPages }} search
+ */
+export function sweepMisspellings({ context, pages }) {
+  const phrases = [...context.dictionary.keys()];
+  /** @type {Map<string, Shown>} */
+  const shownByText = new Map();
+  /**
+   * @param {string} text
+   * @param {boolean} [isTyping]
+   */
+  const show = (text, isTyping = true) => {
+    const key = `${isTyping}:${text}`;
+    if (!shownByText.has(key))
+      shownByText.set(key, readTypedSearch(text, { context, pages, isTyping, isGamesOnly: false }));
+    return /** @type {Shown} */ (shownByText.get(key));
+  };
+  /**
+   * @param {string} typed
+   * @param {string} name
+   */
+  const isOtherName = (typed, name) =>
+    phrases.some(
+      (phrase) =>
+        phrase.startsWith(typed) || (!name.startsWith(phrase) && isOneEditApart(typed, phrase)),
+    );
+  /** @param {Shown} shown */
+  const listFound = ({ search }) => (search ? findSearchGames(search, context).games : []);
+  /** @param {string} name */
+  const listNameGames = (name) => {
+    const keys = Array.from({ length: name.length - SHORTEST_GUESS + 1 }, (_, index) =>
+      show(name.slice(0, SHORTEST_GUESS + index)),
+    );
+    const found = [...keys, show(name, false)].flatMap(listFound);
+    return new Set(found.map((game) => game.id));
+  };
+  return listForgivingNames(context).flatMap((name) => {
+    const nameGames = listNameGames(name);
+    return [...name].flatMap((_, at) =>
+      listMisspellings(name, at).flatMap((misspelled) =>
+        listWrongKeys(misspelled, at)
+          .filter((typed) => !isOtherName(typed, name))
+          .flatMap((typed) => {
+            const shown = show(typed);
+            const isOthers = shown.games.some((game) => !nameGames.has(game.id));
+            return isOthers
+              ? [`${typed} (of ${misspelled}, meaning ${name}): finds ${describeFound(shown)}`]
+              : [];
+          }),
+      ),
+    );
+  });
 }
 
 /**
