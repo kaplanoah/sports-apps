@@ -84,7 +84,9 @@
   --highlight: var(--ink);
   --accent: #bf3623;
   --accent-ink: #fff;
-  --now: #bf3623;
+  /* A shade deeper than its line, so its text keeps AA's 4.5 to 1 on a row tinted under the mouse
+     or a press. */
+  --now: #b93422;
   --now-line: #bf3623;
   --now-ink: #fffdf8;
   --al: #2b5f86;
