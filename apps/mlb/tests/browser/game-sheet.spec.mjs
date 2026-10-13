@@ -444,3 +444,42 @@ test("a live game's Runs so far set each runner's name by his base on the field,
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
 });
+
+test("a live game's field outlines its empty bases and home plate in the field's faint line color, and fills a taken base in the color of what's happening now", async ({
+  page,
+}) => {
+  const raysAtYankees = "823493";
+  const runners = [{ base: "1B", name: "Betts", reached: "Single" }];
+  const boxScore = { ...LIVE_BOX_SCORE, id: raysAtYankees };
+  await openApp(page, {
+    snapshots: { 2026: buildSnapshotWithStarters() },
+    boxScores: { [raysAtYankees]: { ...boxScore, bases: { ...boxScore.bases, runners } } },
+  });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page.getByRole("button", { name: /^Game details: Rays at Yankees, Thu, Sep 24/ }).click();
+  const field = page.locator("#gameBody .runs-field");
+  await expect(field.locator(".runs-base.taken")).toHaveCount(1);
+
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((name) => (document.documentElement.dataset.theme = name), theme);
+    const strokes = await field.evaluate((element) => {
+      const readStroke = (/** @type {Element} */ shape) => getComputedStyle(shape).stroke;
+      const readColor = (/** @type {string} */ value) => {
+        const probe = document.createElement("span");
+        probe.style.color = value;
+        element.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      return {
+        line: readStroke(/** @type {Element} */ (element.querySelector(".runs-line"))),
+        empty: [...element.querySelectorAll(".runs-base:not(.taken)")].map(readStroke),
+        taken: readStroke(/** @type {Element} */ (element.querySelector(".runs-base.taken"))),
+        now: readColor("var(--now-line)"),
+      };
+    });
+    expect(strokes.empty, theme).toEqual([strokes.line, strokes.line, strokes.line]);
+    expect(strokes.taken, theme).toBe(strokes.now);
+  }
+});

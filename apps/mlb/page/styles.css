@@ -1632,8 +1632,10 @@ table.st.line-score td.team .club {
 .runs-now-inning .out-lights {
   margin-left: 0.6em;
 }
-/* The field's drawing, 240 units across, ends at the foot of the dirt around home plate. */
+/* The field's drawing, 240 units across, ends at the foot of the dirt around home plate. Empty
+   bases and home plate are outlined in its line color, so only a taken base stands out. */
 .runs-field {
+  --runs-line: color-mix(in srgb, var(--ink-dim) 55%, transparent);
   position: relative;
   width: 268px;
   aspect-ratio: 240 / 178;
@@ -1647,7 +1649,7 @@ table.st.line-score td.team .club {
 }
 .runs-line {
   fill: none;
-  stroke: color-mix(in srgb, var(--ink-dim) 55%, transparent);
+  stroke: var(--runs-line);
   stroke-width: 1.25;
   vector-effect: non-scaling-stroke;
 }
@@ -1656,7 +1658,7 @@ table.st.line-score td.team .club {
 }
 .runs-base {
   fill: var(--sheet);
-  stroke: var(--ink-dim);
+  stroke: var(--runs-line);
   stroke-width: 1.25;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
