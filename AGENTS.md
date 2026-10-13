@@ -57,6 +57,11 @@
   the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have.
   After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
   so the test waits for `domcontentloaded` to know the code has run.
+- CI's browser machines split the specs by how long each took, from `tests/browser/spec-times.json`,
+  so they finish together (`worker/split-browser-specs.mjs`).
+  A new spec counts as the median spec until its time is recorded.
+  When a machine runs well past the rest, record every spec's time again from a JSON report of a Chromium run,
+  with `node worker/split-browser-specs.mjs --record <report.json>`.
 - Route a browser test's requests by a pattern, like the root's `matchPath` in `tests/browser/harness.mjs`,
   never a function, which makes Playwright ask the test about every request the page makes and slows each load; lint rejects one.
   To unroute one of two routes with the same pattern, name its handler too.
