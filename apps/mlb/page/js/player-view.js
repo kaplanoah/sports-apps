@@ -227,7 +227,7 @@ function renderHitting(player, hitters, clubGames) {
     ? "Rank among qualified hitters (3.1 plate appearances per team game)"
     : describePlateAppearancesToQualify(hitting.plateAppearances, clubGames);
   return renderSheetPart(
-    "Season",
+    "Regular season",
     html`${renderTotals([
       ["H", hitting.hits],
       ["R", hitting.runs],
@@ -394,7 +394,7 @@ function renderOutBox({ injury, out }) {
 
 const renderPending = () =>
   renderSheetPart(
-    "Season",
+    "Regular season",
     renderTotals(["H", "R", "RBI", "BB", "K"].map((label) => [label, renderPlaceholder("000")])),
   );
 
@@ -414,7 +414,7 @@ export function renderPlayerBody(shown) {
       ? html`${renderHitting(player, shown.hitters, shown.clubGames ?? null)}${renderLastGames("Last games", player.lastGames?.hitting, describeBattingGame)}`
       : html``;
   const pitching = player.pitching
-    ? renderPitching(player, shown, isTwoWay ? "Pitching" : "Season")
+    ? renderPitching(player, shown, isTwoWay ? "Pitching" : "Regular season")
     : html``;
   if (
     !player.hitting &&

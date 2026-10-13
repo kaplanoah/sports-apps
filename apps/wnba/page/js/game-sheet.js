@@ -247,14 +247,22 @@ async function refreshLead(opened, game) {
 const countPoints = (boxScore) => boxScore.away.score + boxScore.home.score;
 
 /**
- * Takes the box score and lead the Worker read for the open game. Points only ever add up, so
- * details the store saved before the sheet's own read are dropped.
+ * Whether a pushed box score is from before the one the sheet shows, as one the store saved before
+ * the sheet's own read is: points only ever add up.
+ * @param {any} pushed
+ * @param {any} current
+ */
+export const isEarlierBoxScore = (pushed, current) =>
+  !!current && countPoints(pushed) < countPoints(current);
+
+/**
+ * Takes the box score and lead the Worker read for the open game, unless it's from before the one
+ * the sheet shows.
  * @param {ShownGame} opened
  * @param {{ boxScore: any, lead: any }} pushed
  */
 function applyPushedDetails(opened, { boxScore, lead }) {
-  if (shown !== opened || !boxScore) return;
-  if (opened.details && countPoints(boxScore) < countPoints(opened.details)) return;
+  if (shown !== opened || !boxScore || isEarlierBoxScore(boxScore, opened.details)) return;
   opened.details = boxScore;
   opened.error = null;
   if (lead) Object.assign(opened, { lead, isLeadLoading: false });

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSearchContext, createSearchDictionary } from "#shared/game-search.js";
+import {
+  createSearchContext,
+  createSearchDictionary,
+  listSearchGames,
+} from "#shared/game-search.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import { orderListedDays, readSentWords, readTypedSearch } from "#shared/search-reading.js";
 import { listPhrasings, sweepMisspellings, sweepPhrasings } from "../../../tests/search-sweep.js";
@@ -26,9 +30,7 @@ const TERMS = createSearchTerms({ games: GAMES, divisions: SNAPSHOT.standings.di
 const CONTEXT = createSearchContext({
   terms: TERMS,
   dictionary: createSearchDictionary(TERMS),
-  games: GAMES.map(readSearchGame)
-    .filter((game) => game !== null)
-    .sort((first, second) => first.startMs - second.startMs),
+  games: listSearchGames(GAMES, readSearchGame),
   now: NOW,
 });
 const PAGES = listSearchPages({

@@ -17,6 +17,7 @@ import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { isWebAddress } from "./news-picks.js";
 import { nameStoryDay } from "./news-view.js";
+import { openPageTab, readShownTab, readTabBefore, setTabEnter, setTabStart } from "./page-tabs.js";
 import { findPages } from "./page-search.js";
 import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
@@ -40,8 +41,6 @@ import { EXAMPLE_COUNT, listExamples } from "./search-suggestions.js";
  * @property {(games: SearchGame[], now: number) => ListedDay[]} listDays the days of the games
  *   found, drawn as the Games view draws them, with a stand-in for each when it has them
  * @property {(code: string) => Markup} renderTeamMark a team's dot
- * @property {() => void} close what the view does as the search closes, like going back to the tab
- *   before it
  * @property {() => SearchPages} readPages the teams, players, and places a search can open
  * @property {string} placeholder what the empty field says
  * @property {(key: string) => void} openPlace opens a place a search lists, by its key
@@ -591,7 +590,7 @@ function showGamesOnly(text) {
  * Opens the search with an empty field and the keyboard up, from a tap, which a phone needs to
  * bring up the keyboard.
  */
-export function openGameSearch() {
+function openGameSearch() {
   if (!view) return;
   writeQuery("");
   isTyping = true;
@@ -602,12 +601,28 @@ export function openGameSearch() {
 }
 
 /** Empties the open search's field for a new search, with the keyboard up, from a tap. */
-export function startGameSearchOver() {
+function startGameSearchOver() {
   writeQuery("");
   isTyping = true;
   isGamesOnly = false;
   draw();
   findInput()?.focus();
+}
+
+// Search opens with the keyboard up from the tap on its tab, or as it was left, while it's open.
+function enterSearch() {
+  if (view?.hidden) openGameSearch();
+}
+
+// As on iPhone, choosing search while it shows goes back to where it starts: an empty field.
+function startSearchTabOver() {
+  startGameSearchOver();
+  return true;
+}
+
+// A search that closes while it shows goes back to the tab before it.
+function leaveSearchTab() {
+  if (readShownTab() === "search") openPageTab(readTabBefore() ?? "games");
 }
 
 /** Closes the search, emptying its field. */
@@ -619,7 +634,7 @@ function closeGameSearch() {
   isGamesOnly = false;
   placedFor = null;
   view.hidden = true;
-  league?.close();
+  leaveSearchTab();
 }
 
 // A finger dragging the list puts the keyboard away, as an iPhone's own searches do, so the rest of
@@ -702,6 +717,8 @@ export function startGameSearch(element, searchLeague) {
   element.addEventListener("submit", sendSearch);
   findList()?.addEventListener("scroll", followScroll, { passive: true });
   findList()?.addEventListener("touchmove", putKeyboardAway, { passive: true });
+  setTabStart("search", startSearchTabOver);
+  setTabEnter("search", enterSearch);
   watchTimeAway((awayMs) => {
     if (isAwayLong(awayMs)) closeGameSearch();
   });

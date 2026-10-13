@@ -8,6 +8,7 @@ import {
   formatMargin,
   listFieldRows,
   listSeasonRankRows,
+  renderFieldLegend,
 } from "#shared/team-numbers.js";
 import { renderTitles } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
@@ -264,7 +265,8 @@ function renderSeasonRanks(code, team, teams) {
 /**
  * A team's playoff numbers across from the playoff field's, under the two sides' names, each
  * measure a dot for each on a line across the regular season's range of every team's, so a playoff
- * number reads as high or low for the league.
+ * number reads as high or low for the league, dashed past it as far as either number reaches, with
+ * a legend saying so.
  * @param {string} code
  * @param {PhaseStats} team
  * @param {PhaseStats | null} field
@@ -277,7 +279,7 @@ function renderAgainstField(code, team, field, teams) {
       <span class="club">${nameTeam(code)} <span class="team-record tabular">${team.record}</span></span>
       <span class="club">Playoff field</span>
     </div>
-    ${renderRanks(code, rows)}
+    ${renderRanks(code, rows)}${renderFieldLegend(MEASURES, team, field, teams)}
   </div>`;
 }
 

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSearchContext, createSearchDictionary } from "#shared/game-search.js";
+import {
+  createSearchContext,
+  createSearchDictionary,
+  listSearchGames,
+} from "#shared/game-search.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import { listPhrasings, sweepMisspellings, sweepPhrasings } from "../../../tests/search-sweep.js";
 import { listSeasonGames } from "../page/js/games-view.js";
@@ -31,7 +35,7 @@ const TERMS = createSearchTerms({ games: GAMES, standings: SEASON.standings });
 const CONTEXT = createSearchContext({
   terms: TERMS,
   dictionary: createSearchDictionary(TERMS),
-  games: GAMES.map((game) => readSearchGame(game, null)).filter((game) => game !== null),
+  games: listSearchGames(GAMES, (game) => readSearchGame(game, null)),
   now: NOW,
 });
 const ROSTERS = loadFixture("2026-10-13-every-roster");
