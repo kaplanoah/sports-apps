@@ -192,7 +192,7 @@ jobs:
   # failed most.
   burn-in:
     needs: changed-specs
-    if: needs.changed-specs.outputs.specs != ''
+    if: ${{ !cancelled() && needs.changed-specs.result == 'success' && needs.changed-specs.outputs.specs != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
