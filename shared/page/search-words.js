@@ -5,8 +5,9 @@
 // in Node, so it uses no DOM.
 
 /**
- * What a phrase means, and how a suggestion writes it.
- * @typedef {{ kind: string, value?: any, display?: string }} Meaning
+ * What a phrase means, and how a suggestion writes it: by the name of what it means, or, for a
+ * phrase that doesn't start with that name, as written, like "LA Dodgers".
+ * @typedef {{ kind: string, value?: any, display?: string, written?: string }} Meaning
  */
 /**
  * A phrase of a search, its words as typed and as read, and what it can mean, or no meanings for a

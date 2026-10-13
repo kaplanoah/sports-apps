@@ -27,6 +27,7 @@ const PLAYER_INDEX = {
     { id: "694973", team: "PIT", number: "30", firstName: "Paul", lastName: "Skenes" },
     { id: "605141", team: "LAD", number: "50", firstName: "Mookie", lastName: "Betts" },
     { id: "519317", team: "NYY", number: "27", firstName: "Giancarlo", lastName: "Stanton" },
+    { id: "678662", team: "CLE", number: "1", firstName: "Angel", lastName: "Mart\u00ednez" },
   ],
 };
 
@@ -58,6 +59,12 @@ async function openSeasonGames(page) {
   await page.getByRole("tab", { name: "Games" }).click();
   await expect(page.locator("#seasonGames .listed-day").first()).toBeVisible();
 }
+
+/**
+ * The days the search's list shows, in its order.
+ * @param {import("@playwright/test").Page} page
+ */
+const findListedDays = (page) => page.locator("#gameSearch .listed-day");
 
 /**
  * Taps Search beside the tab bar where a finger would.
@@ -271,16 +278,26 @@ test("while words are typed, two whole searches, then the club's pages in place 
   await expect(findLine(page)).toHaveText("Mets\u2022Next game");
 });
 
-test("a sent club shows its pages over its games line, which opens its games alone on the first from today", async ({
+test("a sent club shows its pages over its games from today, soonest first, or, once all are past, the latest first, and its games line opens them alone on the first from today", async ({
   page,
 }) => {
   await openSeasonGames(page);
   await tapSearch(page);
 
+  await sendSearch(page, "New York in April");
+
+  await expect(findRows(page)).toHaveText(["Yankees in April26 games", "Mets in April26 games"]);
+  const pastDays = await findListedDays(page).evaluateAll((listed) =>
+    listed.map((day) => /** @type {HTMLElement} */ (day).dataset.day ?? ""),
+  );
+  expect(pastDays.length).toBeGreaterThan(1);
+  expect(pastDays).toEqual([...pastDays].sort().reverse());
+
   await sendSearch(page, "Mets");
 
   await expect(findRows(page)).toHaveText(["New York Mets", "RosterNew York Mets"]);
   await expect(findGamesLine(page)).toHaveText("Mets\u2022162 games");
+  await expect(findListedDays(page).first()).toHaveAttribute("data-day", "2026-09-24");
 
   await findGamesLine(page).tap();
 
@@ -309,6 +326,37 @@ test("a search that finds nothing says so", async ({ page }) => {
 
   await expect(findLine(page)).toHaveText("Mets\u2022December\u2022No games");
   await expect(page.locator("#gameSearch .empty-note")).toHaveText("No Mets games in December");
+});
+
+test("a search of most of the season draws the days near the screen whole, and a stand-in as tall as its games for each other until it comes near", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await sendSearch(page, "games");
+
+  const days = page.locator("#gameSearch .listed-day");
+  const first = days.first();
+  await expect(days.last()).toBeAttached();
+  expect(await page.locator("#gameSearch .is-stand-in").count()).toBeGreaterThan(
+    (await days.count()) / 2,
+  );
+  await expect(first.locator(".is-stand-in")).toHaveCount(1);
+  const top = await first.evaluate((day) => /** @type {HTMLElement} */ (day).offsetTop);
+
+  await page.locator("#gameSearch .search-list").evaluate(
+    (list) =>
+      new Promise((resolve) => {
+        list.addEventListener("scroll", resolve, { once: true });
+        list.scrollTop = 0;
+      }),
+  );
+  await page.clock.runFor(100);
+
+  await expect(first.locator(".is-stand-in")).toHaveCount(0);
+  await expect(first.locator(".game-list li").first()).toBeVisible();
+  expect(await first.evaluate((day) => /** @type {HTMLElement} */ (day).offsetTop)).toBe(top);
 });
 
 test("a club's row opens its sheet, and its Roster row the sheet on its Roster", async ({
@@ -526,7 +574,7 @@ test("a setting's words find it, and its row opens settings with the setting in 
   await expect(page.locator("#rankingTitle")).toBeInViewport();
 });
 
-test("while typing, a place's half-typed word lists it first, beside a player it starts, and a setting's word beside the club it's a letter off", async ({
+test("while typing, a place's half-typed word lists it first, beside a player it starts, a setting's word beside the club it's a letter off, and a city two clubs share both clubs' games, its half-typed words starting no player", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -550,6 +598,22 @@ test("while typing, a place's half-typed word lists it first, beside a player it
     await expect(athletic).toBeInViewport();
   }
   await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*$/ })).toHaveCount(1);
+
+  await findInput(page).fill("");
+  await findInput(page).pressSequentially("los");
+
+  await expect(findRows(page).first()).toContainText("Los Angeles");
+  await expect(findGamesLine(page)).toContainText("In Los Angeles");
+
+  const angel = findRows(page).filter({ hasText: "Angel Mart\u00ednez" });
+  await findInput(page).fill("");
+  await findInput(page).pressSequentially("ange");
+  await expect(angel).toHaveCount(1);
+
+  await findInput(page).fill("");
+  await findInput(page).pressSequentially("los ange");
+  await expect(findGamesLine(page)).toContainText("In Los Angeles");
+  await expect(angel).toHaveCount(0);
 });
 
 test("a found game's row opens its sheet wherever a finger lands on it", async ({ page }) => {

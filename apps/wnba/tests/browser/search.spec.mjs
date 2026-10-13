@@ -9,6 +9,7 @@ import {
   tapSearch,
 } from "./search-page.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { drag } from "../../../../tests/browser/touch.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
@@ -253,7 +254,9 @@ test("words that ask only for games go straight to them, and one whose games are
   await expect(page.locator('#gameSearch .listed-day[data-day="2026-09-23"]')).toBeInViewport();
 });
 
-test("a place a team is named for offers its games there as another reading", async ({ page }) => {
+test("a city finds the games played there, with its team's games as another reading", async ({
+  page,
+}) => {
   await openSeasonGames(page);
   await tapSearch(page);
 
@@ -262,14 +265,63 @@ test("a place a team is named for offers its games there as another reading", as
   await expect(findRows(page)).toHaveText([
     "New York Liberty26-18",
     "RosterNew York Liberty",
-    "Games in New York26 games",
+    "Liberty52 games",
   ]);
+  await expect(findGamesLine(page)).toHaveText("In New York\u202226 games");
   await expect(findRows(page).last().locator(".search-caret")).toHaveCount(0);
 
   await findRows(page).last().tap();
 
-  await expect(findInput(page)).toHaveValue("Games in New York");
-  await expect(findLine(page)).toHaveText("In New York•26 games");
+  await expect(findInput(page)).toHaveValue("Liberty");
+  await expect(findGamesLine(page)).toHaveText("Liberty\u202252 games");
+});
+
+test("while typing, a finger dragging the list puts the keyboard away and leaves what typing showed", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await findInput(page).pressSequentially("Lib");
+  await expect(findGamesLine(page)).toBeVisible();
+  await expect(findInput(page)).toBeFocused();
+
+  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (
+    await page.locator("#gameSearch .listed-day").first().boundingBox()
+  );
+  const lift = await drag(page, { x: box.x + box.width / 2, y: box.y + 10 }, { y: -120 });
+  await lift();
+
+  await expect(findInput(page)).not.toBeFocused();
+  await expect(findInput(page)).toHaveValue("Lib");
+  await expect(findGamesLine(page)).toHaveText("Liberty\u202252 games");
+});
+
+test("while typing, a team's first two letters suggest it but list none of its games, and its third lists them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("Li");
+
+  await expect(findRows(page).first()).toContainText("Liberty");
+  await expect(findGamesLine(page)).toHaveCount(0);
+  await expect(page.locator("#gameSearch .listed-day")).toHaveCount(0);
+
+  await findInput(page).pressSequentially("b");
+
+  await expect(findGamesLine(page)).toHaveText("Liberty\u202252 games");
+});
+
+test("while typing, a word that reads as nothing yet lists no games", async ({ page }) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("zq");
+
+  await expect(page.locator("#gameSearch .empty-note")).toBeAttached();
+  await expect(page.locator("#gameSearch .listed-day")).toHaveCount(0);
+  await expect(findLine(page)).toBeHidden();
 });
 
 test("a search that finds nothing says so, and a word it can't use is named", async ({ page }) => {
