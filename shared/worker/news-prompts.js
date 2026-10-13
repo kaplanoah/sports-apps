@@ -48,7 +48,7 @@ export function composeLabelPrompt({
 - lead: true when it should lead that card.
 - teams: the codes of ${teamsName} the story is about, most central first, from: ${teamList}.
 - reason: one short sentence.`,
-    `Answer with only a JSON array, one object per new story, in their order: {"id": 14, "keep": true, "same": 3, "lead": false, "teams": ["${sampleTeam}"], "reason": "..."}. No other text.`,
+    `Answer with stories, one object per new story, in their order: {"id": 14, "keep": true, "same": 3, "lead": false, "teams": ["${sampleTeam}"], "reason": "..."}.`,
   ];
   if (examples.length)
     sections.push(
