@@ -729,9 +729,11 @@ When a step says to go back to an earlier step, continue in order from there.
    The push with a fix is reviewed again.
    - A PR that changes `.github/workflows/ci.yml` isn't reviewed: the review runs only from the workflow as `main` has it, and passes without a summary otherwise.
      Keep a change to that file in its own small PR, so nothing else goes unreviewed with it.
-   - If the `review` job fails without posting any comments, don't try to reproduce it locally or re-run it: it already tried twice, eight minutes each at most.
-     Its log shows each attempt's turns and tool calls.
-     Tell the user what it shows: an invalid or expired Claude credential secret, Claude unreachable, or where a review stalled.
+   - If the `review` job fails without posting any comments, read its log, which shows each attempt's turns and tool calls.
+     If both attempts stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
+     Otherwise don't reproduce it locally or re-run it: it already tried twice, eight minutes each at most.
+     Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
+     where a review stalled, or a re-run that failed too.
      `check` can't pass until the job does.
 8. Squash-merge the PR once all of these are true:
    `check` passed on the latest commit, the PR has no merge conflicts, every review finding is answered, and its base is `main`.
