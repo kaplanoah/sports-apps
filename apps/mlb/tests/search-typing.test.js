@@ -67,7 +67,10 @@ function showTyped(text) {
 }
 
 test("a club's name with one letter wrong is found as it's typed, from five letters on, under what its letters find as typed", () => {
-  const nationals = { rows: ["team Nationals", "section Nationals"], read: "Nationals | 162 games" };
+  const nationals = {
+    rows: ["team Nationals", "section Nationals"],
+    read: "Nationals | 162 games",
+  };
   for (const text of ["mationa", "mational", "natoi", "natoin"])
     assert.deepEqual(showTyped(text), nationals, text);
   assert.deepEqual(showTyped("mation"), {

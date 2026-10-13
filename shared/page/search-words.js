@@ -182,7 +182,7 @@ function matchPhrase(words, start, dictionary) {
 export function readTokens(text, dictionary) {
   const words = splitWords(text);
   const tokens = [];
-  for (let start = 0; start < words.length; ) {
+  for (let start = 0; start < words.length;) {
     const { length, meanings } = matchPhrase(words, start, dictionary);
     const phrase = words.slice(start, start + length);
     tokens.push({ text: phrase.join(" "), words: phrase, meanings });
