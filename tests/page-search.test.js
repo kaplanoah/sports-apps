@@ -404,3 +404,26 @@ test("a team's name beside the News tab's words lists the tab for the team and i
     "place settings:outlets",
   ]);
 });
+
+/**
+ * The line a search's answer says over its rows, as its words read, or null when it says none.
+ * @param {string} text
+ * @param {import("../shared/page/page-search.js").SearchPages} [pages]
+ */
+function readLine(text, pages = PAGES_WITH_NEWS) {
+  const { read } = findPages(text, { dictionary: DICTIONARY, pages, isTyping: false });
+  return read ? [read.lead, ...read.facts].join(" | ") : null;
+}
+
+test("an answer says over its rows what they are, and how many, as the games line does", () => {
+  assert.equal(readLine("who is out"), "Who's out | 3 players");
+  assert.equal(readLine("Hawks injuries"), "Hawks | Who's out | 2 players");
+  assert.equal(readLine("Foxes injury report", PAGES), "Foxes | Who's out | No players");
+  assert.equal(readLine("Rook injury"), "A’ja Rook | Out");
+  assert.equal(readLine("Quill injured"), "Jo Quill | Not out");
+  assert.equal(readLine("Stone injury"), "Who's out | 2 players");
+  assert.equal(readLine("Hawks news"), "Hawks | News | 3 stories");
+  assert.equal(readLine("Foxes stories"), "Foxes | News | 2 stories");
+  assert.equal(readLine("Hawks record"), null);
+  assert.equal(readLine("standings"), null);
+});

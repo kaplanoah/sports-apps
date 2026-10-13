@@ -391,6 +391,12 @@ const renderDays = (days) =>
 const renderRead = ({ lead, facts }) => joinWithSeparator([html`<b>${lead}</b>`, ...facts]);
 
 /**
+ * The line under the field: what an answer's rows are, or what a search of games read, or nothing.
+ * @param {{ lead: string, facts: string[] } | null | undefined} read
+ */
+const renderReadLine = (read) => (read ? renderRead(read) : html``);
+
+/**
  * Places the list on the first day found from today, with room after the last day for it to reach
  * the top, or, when every day found is past, or rows sit over the games, at its end or its top.
  * @param {string} today
@@ -472,13 +478,14 @@ function dropTeamsShown(suggestions, rows) {
 }
 
 /**
- * The pages the words ask for, and the words left for the search of games, or null when they ask
- * for no games. A half-typed word may start a player's name or a place's, so the words as typed go
- * first, and the words as the line reads them only when those find no page.
+ * The pages the words ask for, the words left for the search of games, or null when they ask for
+ * no games, and the line an answer says over its rows. A half-typed word may start a player's name
+ * or a place's, so the words as typed go first, and the words as the line reads them only when
+ * those find no page.
  * @param {string} text
  * @param {string} readText the words as the line reads them while they're typed
  * @param {import("./game-search.js").SearchContext} context
- * @returns {{ pages: SearchPages | null, rows: PageRow[], gameText: string | null }}
+ * @returns {{ pages: SearchPages | null } & import("./page-search.js").FoundPages}
  */
 function readPages(text, readText, context) {
   const pages = league?.readPages() ?? null;
@@ -520,7 +527,7 @@ function draw() {
   }
   const typed = isTyping ? listSuggestions(query, context) : [];
   const readText = readWhileTyping(text, typed, context);
-  const { pages, rows: pageRows, gameText } = readPages(text, readText, context);
+  const { pages, rows: pageRows, gameText, read: answer } = readPages(text, readText, context);
   const rows = placeGameParts(pageRows, context);
   const suggestions = dropTeamsShown(typed, rows);
   const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];
@@ -530,7 +537,7 @@ function draw() {
   const isOverGames =
     !isGamesOnly && (suggestions.length > 0 || rows.length > 0 || others.length > 0);
   findBar()?.classList.toggle("has-rows", isOverGames);
-  setHtml(readLine, isOverGames || !read ? html`` : renderRead(read));
+  setHtml(readLine, renderReadLine(answer ?? (isOverGames ? null : read)));
   if (!isOverGames) {
     const games = found?.games.length
       ? renderDays(league.listDays(found.games, Date.now()))
