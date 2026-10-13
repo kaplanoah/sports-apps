@@ -158,16 +158,37 @@ jobs:
             playwright-report/
             test-results/
 
+  # The browser specs a pull request adds or changes, which burn-in repeats, so it starts its
+  # machines only when there are some. The merge commit's first parent is the base branch.
+  changed-specs:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      specs: ${{ steps.find.outputs.specs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+      # Naming the shell adds pipefail, so a failed diff fails the job rather than reading as no
+      # spec changed.
+      - id: find
+        shell: bash
+        run: |
+          specs=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | tr '\n' ' ')
+          echo "specs=$specs" >> "$GITHUB_OUTPUT"
+
   # A browser spec a pull request adds or changes runs ten times over, with no retry, so a test
   # that passes only some of the time fails on the pull request that brings it, rather than on
   # later ones. Only a test the pull request wrote or edited fails it: any other that failed goes
-  # to the issue Flaky browser tests from the check job (worker/judge-burn-in.mjs). The merge
-  # commit's first parent is the base branch. Ten runs of every spec a large
-  # pull request changes take longer than one machine's limit, so they're split across machines
-  # too, and a machine whose share holds no test passes. It runs in Playwright's own image, as the
-  # webkit job does, so the at-rest specs repeat in WebKit too, where they've failed most.
+  # to the issue Flaky browser tests from the check job (worker/judge-burn-in.mjs). Ten runs of
+  # every spec a large pull request changes take longer than one machine's limit, so they're split
+  # across machines too, and a machine whose share holds no test passes. It runs in Playwright's
+  # own image, as the webkit job does, so the at-rest specs repeat in WebKit too, where they've
+  # failed most.
   burn-in:
-    if: github.event_name == 'pull_request'
+    needs: changed-specs
+    if: needs.changed-specs.outputs.specs != ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
@@ -183,28 +204,22 @@ jobs:
       - *setup-node
       - *restore-modules
       - *install-modules
+      # Every test runs all ten times, however many fail, and the next step decides which
+      # failures fail the pull request, so a failed test doesn't fail this one.
       - name: Repeat each browser spec this pull request changes
-        id: repeat
         shell: bash
-        # The image's user doesn't own the checkout, so git trusts it only once it's named safe, and
-        # a failed diff fails the step rather than reading as no spec changed. Every test runs all
-        # ten times, however many fail, and the next step decides which failures fail the pull
-        # request, so a failed test doesn't fail this one.
+        env:
+          SPECS: ${{ needs.changed-specs.outputs.specs }}
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          changed=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs')
-          if [ -z "$changed" ]; then
-            echo "No browser spec changed."
-            exit 0
-          fi
-          echo "ran=true" >> "$GITHUB_OUTPUT"
-          mapfile -t specs <<< "$changed"
+          read -ra specs <<< "$SPECS"
           npm run test:browser -- --repeat-each=10 --retries=0 --max-failures=0 --pass-with-no-tests \
             --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}" || true
+      # The image's user doesn't own the checkout, so git trusts it only once it's named safe.
       - name: Fail only on a test this pull request wrote or edited
-        if: steps.repeat.outputs.ran == 'true'
         shell: bash
-        run: git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
         with:
@@ -398,7 +413,7 @@ jobs:
   # skipped required check as passing.
   check:
     if: always()
-    needs: [passed, gate, checks, browser, burn-in, webkit, review]
+    needs: [passed, gate, checks, browser, changed-specs, burn-in, webkit, review]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -410,7 +425,8 @@ jobs:
         if: >-
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
           (github.event_name == 'pull_request' && needs.gate.result != 'success') ||
-          (github.event_name == 'pull_request' && needs.burn-in.result != 'success') ||
+          (github.event_name == 'pull_request' && needs.changed-specs.result != 'success') ||
+          (needs.changed-specs.outputs.specs != '' && needs.burn-in.result != 'success') ||
           (!needs.passed.outputs.run && (needs.checks.result != 'success' ||
           needs.browser.result != 'success' || needs.webkit.result != 'success' ||
           needs.review.result != 'success'))
