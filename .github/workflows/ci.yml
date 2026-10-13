@@ -146,7 +146,11 @@ jobs:
       - &install-browsers
         if: steps.browsers.outputs.cache-hit != 'true'
         run: npx playwright install --only-shell chromium
+      # A failed try's trace leaves out the page at each step, a sixth of every test's time, which
+      # burn-in and the nightly run keep.
       - run: npm run test:browser -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        env:
+          TRACE_SNAPSHOTS: "off"
       - &find-flaky
         id: flaky
         if: ${{ !cancelled() && hashFiles('test-results/report.json') != '' }}
