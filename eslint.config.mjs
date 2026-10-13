@@ -31,6 +31,9 @@ const LOCAL_TIME_RESTRICTIONS = LOCAL_TIME_METHODS.map((property) => ({
   message: "Read and format days and times with shared/page/days.js.",
 }));
 
+// The Messages API's address, which only shared/worker/claude.js calls.
+const CLAUDE_MESSAGES = String.raw`/api\.anthropic\.com.v1.messages/`;
+
 const DEVICE_STORAGES = ["localStorage", "sessionStorage"];
 const DEVICE_STORAGE_MESSAGE =
   "Keep a viewer's choice with createViewerChoice from shared/page/device-storage.js.";
@@ -163,6 +166,22 @@ export default [
   {
     files: ["apps/*/worker/src/**/*.js", "shared/worker/**/*.js"],
     languageOptions: { globals: { ...globals.serviceworker, WebSocketPair: "readonly" } },
+  },
+  {
+    // Every answer the Worker and the tooling ask Claude for comes through requestClaude, which holds
+    // it to a JSON schema, so none has to be picked out of prose.
+    files: ["apps/*/worker/src/**/*.js", "shared/worker/**/*.js", "worker/**/*.mjs"],
+    ignores: ["shared/worker/claude.js"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...GENERIC_FUNCTION_NAMES,
+        {
+          selector: `Literal[value=${CLAUDE_MESSAGES}], TemplateElement[value.cooked=${CLAUDE_MESSAGES}]`,
+          message: "Ask Claude with requestClaude from shared/worker/claude.js and a JSON schema.",
+        },
+      ],
+    },
   },
   {
     // Callbacks passed to page.evaluate run in the page.

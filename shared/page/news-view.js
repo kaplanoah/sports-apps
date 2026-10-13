@@ -1,5 +1,6 @@
 import { formatShortDate, formatShortWeekday, nameDay } from "./days.js";
 import { html, joinWithSeparator } from "./html.js";
+import { framePhoto, WIDEST_FRAME } from "./news-photo.js";
 import { isWebAddress, pickReadCards } from "./news-picks.js";
 
 // The News view: a card for each piece of news, newest first, led by the story that tells it best,
@@ -129,13 +130,26 @@ function renderTeams(teams, renderTeam) {
   return known.length > 0 && html`<p class="news-teams">${known}</p>`;
 }
 
-/** @param {NewsStory["photo"]} photo */
+/** @param {number} value */
+const roundForCss = (value) => Math.round(value * 1000) / 1000;
+
+/**
+ * The photo in its frame, which the Worker sized to the photo, so the card keeps its height as the
+ * photo arrives.
+ * @param {NewsStory["photo"]} photo
+ */
 function renderPhoto(photo) {
   const url = findPhotoUrl(photo);
-  return (
-    url &&
-    html`<img class="news-photo" src="${url}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
-  );
+  if (!photo || !url) return null;
+  const { aspect, position } = framePhoto(photo);
+  return html`<img
+    class="news-photo"
+    src="${url}"
+    alt=""
+    loading="lazy"
+    referrerpolicy="no-referrer"
+    style="--photo-aspect: ${roundForCss(aspect)}; --photo-position: ${roundForCss(position)}%"
+  />`;
 }
 
 /**
@@ -199,14 +213,21 @@ function renderCard({ lead, more }, now, opened, renderTeam) {
 // How tall each part of a card draws, roughly, in the same unit, so the columns a wide screen shows
 // come out about as long as each other.
 const CARD_TEXT_HEIGHT = 3.4;
-const PHOTO_HEIGHT = 5.1;
+// A photo in its widest frame, 16:9; a taller frame draws taller in step.
+const WIDEST_PHOTO_HEIGHT = 5.1;
 const MORE_LABEL_HEIGHT = 0.8;
 const MORE_STORY_HEIGHT = 1.3;
+
+/** @param {NewsStory["photo"]} photo */
+const estimatePhotoHeight = (photo) =>
+  photo && findPhotoUrl(photo)
+    ? (WIDEST_PHOTO_HEIGHT * WIDEST_FRAME) / framePhoto(photo).aspect
+    : 0;
 
 /** @param {NewsCard} card */
 const estimateCardHeight = ({ lead, more }) =>
   CARD_TEXT_HEIGHT +
-  (findPhotoUrl(lead.photo) ? PHOTO_HEIGHT : 0) +
+  estimatePhotoHeight(lead.photo) +
   (more.length > 0 ? MORE_LABEL_HEIGHT + more.length * MORE_STORY_HEIGHT : 0);
 
 /**
