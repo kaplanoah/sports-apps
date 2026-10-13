@@ -33,17 +33,25 @@ const HOME_CITIES = {
   WAS: "Washington",
 };
 
-// What fans call a team besides its name, its city, and its code.
+// What fans call a team besides its name, its city, and its code, which a search reads but never
+// writes.
 const NICKNAMES = {
-  ATL: ["atl"],
-  DAL: ["dallas"],
-  GSV: ["valks", "golden state", "gs"],
-  IND: ["indy"],
+  ATL: ["atl", "atl dream"],
+  CON: ["ct sun"],
+  DAL: ["dallas", "arlington wings"],
+  GSV: ["valks", "golden state", "gs", "san francisco valkyries", "sf valkyries"],
+  IND: ["indianapolis fever"],
   LAS: ["la", "los angeles"],
-  LVA: ["vegas", "lv"],
-  NYL: ["libs", "ny", "nyc"],
+  LVA: ["vegas", "lv", "vegas aces", "lv aces"],
+  MIN: ["minneapolis lynx"],
+  NYL: ["ny", "nyc", "ny liberty", "nyc liberty", "brooklyn liberty"],
   PHX: ["phx"],
-  WAS: ["dc"],
+  WAS: ["dc", "dc mystics", "washington dc mystics"],
+};
+
+// A team's name after its city's short name, which a suggestion writes for one typed that way.
+const SHORT_NAMES = {
+  LAS: ["LA Sparks"],
 };
 
 // The places a search can name, each with the arena cities in it.
@@ -56,7 +64,7 @@ const PLACES = [
   },
   {
     name: "San Francisco",
-    words: ["san francisco", "sf", "bay area", "golden state"],
+    words: ["san francisco", "sf", "golden state"],
     cities: ["San Francisco"],
   },
   { name: "Las Vegas", words: ["las vegas", "vegas", "lv"], cities: ["Las Vegas"] },
@@ -64,8 +72,8 @@ const PLACES = [
   { name: "Atlanta", words: ["atlanta", "atl"], cities: ["Atlanta", "College Park"] },
   { name: "Dallas", words: ["dallas", "arlington"], cities: ["Arlington", "Dallas"] },
   { name: "Minnesota", words: ["minnesota", "minneapolis"], cities: ["Minneapolis"] },
-  { name: "Indiana", words: ["indiana", "indianapolis", "indy"], cities: ["Indianapolis"] },
-  { name: "Connecticut", words: ["connecticut", "uncasville", "ct"], cities: ["Uncasville"] },
+  { name: "Indiana", words: ["indiana", "indianapolis"], cities: ["Indianapolis"] },
+  { name: "Connecticut", words: ["connecticut", "ct"], cities: ["Uncasville"] },
   { name: "Los Angeles", words: ["los angeles", "la"], cities: ["Los Angeles"] },
   { name: "Chicago", words: ["chicago"], cities: ["Chicago"] },
   { name: "Seattle", words: ["seattle"], cities: ["Seattle"] },
@@ -123,6 +131,7 @@ export function createSearchTerms({ games, standings = [] }) {
       code,
       name: TEAMS[code].name,
       words: listTeamWords(code),
+      shownNames: [`${TEAMS[code].city} ${TEAMS[code].name}`, ...(SHORT_NAMES[code] ?? [])],
       homeCity: HOME_CITIES[code],
       conference: conferences.get(code) ?? "",
     })),

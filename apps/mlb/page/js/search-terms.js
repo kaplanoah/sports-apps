@@ -82,50 +82,58 @@ const CLUBS = {
   },
 };
 
-// What fans call a club besides its name, its city, and its code. Both Sox go by "Sox", which finds
-// either's games.
+// What fans call a club besides its name, its city, and its code, which a search reads but never
+// writes. Both Sox go by "Sox", which finds either's games.
 const NICKNAMES = {
-  ARI: ["dbacks", "d backs", "snakes"],
-  ATH: ["as", "a's", "oakland"],
-  BAL: ["os", "o's", "birds"],
-  BOS: ["sox", "bosox"],
-  CHC: ["cubbies", "north siders"],
-  CWS: ["sox", "chisox", "south siders"],
-  COL: ["rox"],
-  HOU: ["stros"],
-  MIA: ["fish"],
-  MIL: ["brew crew"],
-  NYM: ["amazins", "metropolitans"],
-  NYY: ["yanks", "bombers", "bronx bombers"],
-  PHI: ["phils"],
-  SD: ["friars", "pads"],
-  STL: ["cards", "redbirds"],
-  TB: ["tampa"],
+  ARI: ["dbacks", "d backs", "phoenix diamondbacks"],
+  ATH: ["oakland", "sacramento athletics"],
+  BOS: ["sox"],
+  COL: ["denver rockies"],
+  CWS: ["sox"],
+  LAA: ["anaheim angels"],
+  MIN: ["minneapolis twins"],
+  NYM: ["ny mets", "nyc mets", "new york city mets", "queens mets", "flushing mets"],
+  NYY: ["bronx bombers", "ny yankees", "nyc yankees", "new york city yankees", "bronx yankees"],
+  PHI: ["phils", "philly phillies"],
+  SF: ["sf giants"],
+  STL: ["cards", "saint louis cardinals"],
+  TB: ["tampa", "tampa rays"],
+  TEX: ["dallas rangers", "arlington rangers"],
   TOR: ["jays"],
-  WSH: ["nats"],
+  WSH: ["nats", "dc nationals", "washington dc nationals"],
 };
 
-// The places a search can name that span more than one ballpark city, or go by another name.
+// A club's name after its city's short name, which a suggestion writes for one typed that way.
+const SHORT_NAMES = {
+  LAA: ["LA Angels"],
+  LAD: ["LA Dodgers"],
+};
+
+// The places a search can name that span more than one ballpark city, or go by another name. A
+// part of a place finds only its own ballpark, and the place finds each of its parts'.
 /** @type {SearchPlace[]} */
 const PLACES = [
   {
     name: "New York",
-    words: ["new york", "ny", "nyc", "new york city", "queens", "bronx", "the bronx", "flushing"],
+    words: ["new york", "ny", "nyc", "new york city"],
     cities: ["Flushing", "Bronx", "New York"],
   },
+  { name: "The Bronx", words: ["bronx", "the bronx"], cities: ["Bronx"] },
+  { name: "Queens", words: ["queens", "flushing"], cities: ["Flushing"] },
   {
     name: "Los Angeles",
-    words: ["los angeles", "la", "socal", "southern california", "anaheim"],
+    words: ["los angeles", "la"],
     cities: ["Los Angeles", "Anaheim"],
   },
-  { name: "San Francisco", words: ["san francisco", "sf", "bay area"], cities: ["San Francisco"] },
+  { name: "Anaheim", words: ["anaheim"], cities: ["Anaheim"] },
+  { name: "San Francisco", words: ["san francisco", "sf"], cities: ["San Francisco"] },
   { name: "Washington", words: ["washington", "dc", "washington dc"], cities: ["Washington"] },
   {
     name: "Tampa Bay",
-    words: ["tampa bay", "tampa", "st petersburg", "st pete"],
+    words: ["tampa bay", "tampa", "st pete"],
     cities: ["St. Petersburg", "Tampa"],
   },
-  { name: "Dallas", words: ["dallas", "arlington", "dfw"], cities: ["Arlington", "Dallas"] },
+  { name: "Dallas", words: ["dallas", "arlington"], cities: ["Arlington", "Dallas"] },
   { name: "Philadelphia", words: ["philadelphia", "philly"], cities: ["Philadelphia"] },
   { name: "Minneapolis", words: ["minneapolis", "twin cities"], cities: ["Minneapolis"] },
   { name: "St. Louis", words: ["st louis", "saint louis"], cities: ["St. Louis"] },
@@ -287,7 +295,9 @@ export function createSearchTerms({ games, divisions = {} }) {
       code,
       name: TEAMS[code].name,
       words: listTeamWords(code),
+      shownNames: [nameClubFully(code), ...(SHORT_NAMES[code] ?? [])],
       homeCity: CLUBS[code].ballpark.city,
+      homeState: CLUBS[code].ballpark.state,
       conference: TEAMS[code].league,
     })),
     places: [...PLACES, ...listVenuePlaces(listBallparks(games), PLACES, BALLPARK_WORD)],
