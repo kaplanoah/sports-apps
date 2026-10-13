@@ -88,8 +88,9 @@ export const describePlayerIndex = (season, players) => ({
   players: players.toSorted(compareNames),
 });
 
-// A word this short only finds a name or a place once it's whole, or it would find too many.
-const SHORTEST_PREFIX = 3;
+// A word this short only finds a team, a name, or a place once it's whole, or it would find too
+// many.
+export const SHORTEST_PREFIX = 3;
 // The words beside a team's name that ask for its sheet, which leads with its record.
 const RECORD_WORDS = ["record", "standing"];
 // How many of a team's newest stories its news lists, under the News tab's row.
@@ -110,12 +111,25 @@ const isWordOf = (typed, word, isPartial) =>
 // Words after a last name that a fan may leave off.
 const NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
 
+// Each player's names, read once, since a search reads every player's on every key.
+/** @type {WeakMap<PagePlayer, string[][]>} */
+const playerNames = new WeakMap();
+
 /**
  * The words a player can be named by: her whole name, her last name, or her first, each with or
  * without a suffix after her last name, like "Jr.".
  * @param {PagePlayer} player
  */
 function listPlayerNames(player) {
+  const kept = playerNames.get(player);
+  if (kept) return kept;
+  const names = readPlayerNames(player);
+  playerNames.set(player, names);
+  return names;
+}
+
+/** @param {PagePlayer} player */
+function readPlayerNames(player) {
   const first = splitWords(player.firstName);
   const last = splitWords(player.lastName);
   const hasSuffix = last.length > 1 && NAME_SUFFIXES.has(last[last.length - 1]);

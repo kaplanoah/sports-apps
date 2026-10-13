@@ -20,6 +20,11 @@
 - Make every function do one thing well.
   Make orchestration a sequence of named steps.
   Extract and name any non-trivial logic inside blocks or chained conditions.
+- Keep a view's decisions out of the code that draws it.
+  What to show, which item is chosen, the order, and any time limit live in a module the view calls with its state and what it measured,
+  so a Node test reaches them, as `shared/page/search-reading.js` does for what search shows as words are typed.
+- A rule or a limit two places share lives in one place,
+  like the two minutes away that closes a sheet or the search, so the places can't drift apart.
 - Name variables with full words that are reasonable for their types.
   No opaque abbreviations.
 - Default to no comments.
@@ -34,6 +39,12 @@
 - Test text, numbers, and logic in Node, where a test takes milliseconds: render the view's markup or call the function,
   as `apps/mlb/tests/page.test.js` does for the Games list's series labels.
   Write a browser test only for what takes a browser: layout, color, motion, focus, and the page working with its Worker and store.
+- Test what people type the way they type it, never only the words a test's author thought of:
+  in lowercase, a key at a time, every name and the ways fans write it, alone and inside the searches they make,
+  as each app's `tests/search-typing.test.js` types every team and place with the root's `tests/search-sweep.js`.
+- Test what searches, matches, or ranks across a league against all of it, recorded, never a few rows picked by hand,
+  which hide the collisions a whole league has, like a first name that starts a city's,
+  as the sweep reads every player on a roster from `apps/mlb/tests/fixtures/2026-10-13-player-index.json`.
 - In a browser test, wait for what the page shows, with `expect(locator)` or `expect.poll`,
   never for a fixed time or for the network to go quiet; lint rejects `waitForTimeout`, `setTimeout`, and `networkidle`.
   Get past the page's timers and animation frames by moving its fake clock with `page.clock.runFor`,
@@ -384,6 +395,7 @@
   and a tap on Today already there pulsing the date, whose month follows the strip as a finger moves it,
   going back to today after two minutes away (`long-away.js`),
   and, for a league of many games a day, drawing whole only the days within a few screens of what shows and the rest as stand-ins as tall as their games,
+  which days those are in `near-days.js`, as the search's list of games draws them too,
   as each app's Games view shows them, in `day-strip.js`, a search over a season's games and a league's pages,
   in a view of its own, reading what's typed with fixed rules into teams,
   a word two teams share finding either's, places and venues, groups of teams like a conference or a division,
@@ -392,6 +404,8 @@
   and starters, finding the games, and saying in a line under the field what it read,
   with suggestions and examples, in `game-search-view.js`, from `search-words.js`,
   `search-dates.js`, `game-search.js`, and `search-suggestions.js`,
+  what it shows for words as they're typed, a name half typed read as the name the first suggestion finishes once three letters of it are, in `search-reading.js`,
+  which each app's `tests/search-typing.test.js` types a key at a time, as fans do, with the root's `tests/search-sweep.js`,
   and reading the same words into the pages they name, a team's,
   its section's, a player's, even with a letter wrong, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
   from the list of a season's players the store keeps for it, in `page-search.js`,

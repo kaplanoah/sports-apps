@@ -92,8 +92,8 @@ test("next game is the one on now or next, even before its opponent is known", (
 });
 
 test("nicknames, cities, and filler words read as a fan would mean them", () => {
-  assert.equal(search("When do the Libs play Vegas?").line, "Liberty vs Aces | 4 games");
-  assert.deepEqual(search("New York Valks").games, search("Liberty Valkyries").games);
+  assert.equal(search("When do the NY Liberty play the Aces?").line, "Liberty vs Aces | 4 games");
+  assert.deepEqual(search("NY Liberty Valks").games, search("Liberty Valkyries").games);
   assert.equal(search("Liberyt").line, "Liberty | 52 games");
 });
 
@@ -241,7 +241,7 @@ function listPages(text) {
 }
 
 test("a team's name lists its sheet and its Roster, by any name a search of games knows it by", () => {
-  for (const text of ["Liberty", "NYL", "libs", "New York Liberty"])
+  for (const text of ["Liberty", "NYL", "ny liberty", "New York Liberty"])
     assert.deepEqual(listPages(text).rows, ["New York Liberty", "New York Liberty Roster"], text);
   assert.deepEqual(listPages("Aces roster").rows, ["Las Vegas Aces Roster"]);
 });
@@ -255,10 +255,11 @@ test("a player's name lists her sheet, by her name without its accents or apostr
   assert.deepEqual(listPages("aja wilson").rows, ["A\u2019ja Wilson"]);
 });
 
-test("New York reads as the Liberty, with the games played in New York its other reading", () => {
+test("New York reads as the games played in New York, with the Liberty's its other reading", () => {
   const newYork = listPages("New York");
   assert.deepEqual(newYork.rows, ["New York Liberty", "New York Liberty Roster"]);
-  assert.deepEqual(newYork.others, ["Games in New York (26 games)"]);
+  assert.deepEqual(newYork.others, ["Liberty (52 games)"]);
+  assert.equal(search("New York").line, "In New York | 26 games");
 });
 
 test("the Standings lists and settings are found by their words, and only the settings shown", () => {
