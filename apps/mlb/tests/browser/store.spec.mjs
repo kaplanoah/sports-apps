@@ -17,7 +17,7 @@ const listShownRanking = (page) =>
 const LOCKED_AT = new Date(Date.parse(EVENING_FIXTURE.now) - 60 * 60 * 1000).toISOString();
 const SEASON_WITH_AN_UPDATE = { log: [{ kind: "lock", at: LOCKED_AT }] };
 
-test("loading the page reads which season is current and its record once each, and again as it watches them, and the season's games and the news once as it watches them", async ({
+test("loading the page reads which season is current and its record once each, and again as it watches them, and the season's games, its list of players, and the news once as it watches them", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -31,6 +31,7 @@ test("loading the page reads which season is current and its record once each, a
       "/store/live/current",
       "/store/live/status",
       "/store/news/cards",
+      "/store/player-index/2026",
       "/store/schedules-2026?limit=12",
       "/store/seasons/2026",
       "/store/seasons/2026",

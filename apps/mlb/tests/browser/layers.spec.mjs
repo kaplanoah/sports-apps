@@ -9,12 +9,12 @@ import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 // Search's round button beside the tab bar is a layer of its own on every view.
 const BUDGETS = {
   Bracket: 22,
-  Games: 16,
+  Games: 17,
   Standings: 25,
   News: 9,
-  Search: 10,
-  "Game sheet": 19,
-  "Club's sheet over a game's": 19,
+  Search: 12,
+  "Game sheet": 20,
+  "Club's sheet over a game's": 20,
 };
 
 test.use({ ...ON_A_PHONE, contextOptions: { reducedMotion: "reduce" } });
