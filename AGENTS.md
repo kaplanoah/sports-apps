@@ -42,7 +42,9 @@
   CI retries a failed browser test once, so it can't fail a pull request it has nothing to do with,
   and stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`),
   and GitHub's reporter marks each one that passed only on its retry on the pull request's checks,
-  the run keeps its failed try's trace, and the `check` job adds it to the table in the issue Flaky browser tests.
+  the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
+  and the `check` job adds it to the table in the issue Flaky browser tests,
+  unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
@@ -57,11 +59,6 @@
   the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have.
   After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
   so the test waits for `domcontentloaded` to know the code has run.
-- CI's browser machines split the specs by how long each took, from `tests/browser/spec-times.json`,
-  so they finish together (`worker/split-browser-specs.mjs`).
-  A new spec counts as the median spec until its time is recorded.
-  When a machine runs well past the rest, record every spec's time again from a JSON report of a Chromium run,
-  with `node worker/split-browser-specs.mjs --record <report.json>`.
 - Route a browser test's requests by a pattern, like the root's `matchPath` in `tests/browser/harness.mjs`,
   never a function, which makes Playwright ask the test about every request the page makes and slows each load; lint rejects one.
   To unroute one of two routes with the same pattern, name its handler too.
