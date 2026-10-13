@@ -1,5 +1,6 @@
 import { beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
+import { nameClubFully } from "../page/js/clubs.js";
 import { session } from "../page/js/session.js";
 import { keepRanking } from "../page/js/kept-on-device.js";
 import { reopenRoster } from "../page/js/roster-section.js";
@@ -80,7 +81,7 @@ test("a division leader in September: its division, seed, record, and percentage
   session.standings = NL_WEST_IN_SEPTEMBER;
   const sheet = renderTeamSheet("LAD");
 
-  assert.equal(readText(sheet.heading), "Dodgers #3");
+  assert.equal(readText(sheet.heading), "Los Angeles Dodgers");
   assert.equal(readText(sheet.note), "NL West | 2 seed | 89-61 | .593");
   assert.deepEqual(listParts(sheet.body), ["Regular season", "Leaders", "Titles"]);
   assert.deepEqual(readStats(sheet.body), ["NL West 1st", "Lead +6.0", "M# 7"]);
@@ -100,7 +101,7 @@ test("a club chasing a wild card has a row for each race, each starting with its
   };
   const sheet = renderTeamSheet("SEA");
 
-  assert.equal(readText(sheet.heading), "Mariners");
+  assert.equal(readText(sheet.heading), "Seattle Mariners");
   assert.equal(readText(sheet.note), "AL West | 81-69 | .540");
   assert.deepEqual(readStats(sheet.body), [
     "AL West 2nd",
@@ -590,4 +591,11 @@ test("a club's leaders show on its sheet once its roster is read, and not for a 
 
   session.activeYear = 2025;
   assert.ok(!listParts(renderTeamSheet("SD").body).includes("Leaders"));
+});
+
+test("a club's sheet title is its name with the city in it, and the Athletics', which names none, its name alone", () => {
+  assert.equal(readText(renderTeamSheet("NYM").heading), "New York Mets");
+  assert.equal(readText(renderTeamSheet("ATH").heading), "Athletics");
+  assert.equal(nameClubFully("KC"), "Kansas City Royals");
+  assert.equal(nameClubFully("TB"), "Tampa Bay Rays");
 });

@@ -56,7 +56,7 @@ test("each view, a game's sheet, and a club's sheet over it keep within their la
             .getByRole("button", { name: "Team details: Astros" })
             .first()
             .click();
-          await expect(page.locator("#teamTitle")).toHaveText("Astros");
+          await expect(page.locator("#teamTitle")).toHaveText("Houston Astros");
           await expectShown(page.locator("#teamSheet"));
         },
       },

@@ -4,7 +4,7 @@
 // league's divisions, and settings and each setting the page shows. Runs in the page and in Node, so
 // it uses no DOM.
 
-import { nameClubFully } from "./search-terms.js";
+import { nameClubFully } from "./clubs.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/page-search.js").SearchPages} SearchPages */

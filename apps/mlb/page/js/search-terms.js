@@ -6,6 +6,7 @@
 import { readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
 import { LEAGUE_WORDS } from "./league-words.js";
+import { nameClubFully } from "./clubs.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/game-search.js").SearchTerms} SearchTerms */
@@ -14,73 +15,40 @@ import { TEAMS } from "./teams.js";
 /** @typedef {import("#shared/game-search.js").SearchRound} SearchRound */
 /** @typedef {{ name: string, city: string, state: string, timeZone?: string | null }} Ballpark */
 
-// The city in each club's name, and the ballpark it plays in, as MLB's schedule names it, for a game
-// whose listing doesn't name one yet.
-/** @type {Record<string, { city: string, ballpark: Ballpark }>} */
-const CLUBS = {
-  ARI: { city: "Arizona", ballpark: { name: "Chase Field", city: "Phoenix", state: "AZ" } },
-  ATL: { city: "Atlanta", ballpark: { name: "Truist Park", city: "Atlanta", state: "GA" } },
-  BAL: {
-    city: "Baltimore",
-    ballpark: { name: "Oriole Park at Camden Yards", city: "Baltimore", state: "MD" },
-  },
-  BOS: { city: "Boston", ballpark: { name: "Fenway Park", city: "Boston", state: "MA" } },
-  CHC: { city: "Chicago", ballpark: { name: "Wrigley Field", city: "Chicago", state: "IL" } },
-  CWS: { city: "Chicago", ballpark: { name: "Rate Field", city: "Chicago", state: "IL" } },
-  CIN: {
-    city: "Cincinnati",
-    ballpark: { name: "Great American Ball Park", city: "Cincinnati", state: "OH" },
-  },
-  CLE: {
-    city: "Cleveland",
-    ballpark: { name: "Progressive Field", city: "Cleveland", state: "OH" },
-  },
-  COL: { city: "Colorado", ballpark: { name: "Coors Field", city: "Denver", state: "CO" } },
-  DET: { city: "Detroit", ballpark: { name: "Comerica Park", city: "Detroit", state: "MI" } },
-  HOU: { city: "Houston", ballpark: { name: "Daikin Park", city: "Houston", state: "TX" } },
-  KC: {
-    city: "Kansas City",
-    ballpark: { name: "Kauffman Stadium", city: "Kansas City", state: "MO" },
-  },
-  LAA: { city: "Los Angeles", ballpark: { name: "Angel Stadium", city: "Anaheim", state: "CA" } },
-  LAD: {
-    city: "Los Angeles",
-    ballpark: { name: "UNIQLO Field at Dodger Stadium", city: "Los Angeles", state: "CA" },
-  },
-  MIA: { city: "Miami", ballpark: { name: "loanDepot park", city: "Miami", state: "FL" } },
-  MIL: {
-    city: "Milwaukee",
-    ballpark: { name: "American Family Field", city: "Milwaukee", state: "WI" },
-  },
-  MIN: { city: "Minnesota", ballpark: { name: "Target Field", city: "Minneapolis", state: "MN" } },
-  NYM: { city: "New York", ballpark: { name: "Citi Field", city: "Flushing", state: "NY" } },
-  NYY: { city: "New York", ballpark: { name: "Yankee Stadium", city: "Bronx", state: "NY" } },
-  ATH: {
-    city: "",
-    ballpark: { name: "Sutter Health Park", city: "Sacramento", state: "CA" },
-  },
-  PHI: {
-    city: "Philadelphia",
-    ballpark: { name: "Citizens Bank Park", city: "Philadelphia", state: "PA" },
-  },
-  PIT: { city: "Pittsburgh", ballpark: { name: "PNC Park", city: "Pittsburgh", state: "PA" } },
-  SD: { city: "San Diego", ballpark: { name: "Petco Park", city: "San Diego", state: "CA" } },
-  SF: {
-    city: "San Francisco",
-    ballpark: { name: "Oracle Park", city: "San Francisco", state: "CA" },
-  },
-  SEA: { city: "Seattle", ballpark: { name: "T-Mobile Park", city: "Seattle", state: "WA" } },
-  STL: { city: "St. Louis", ballpark: { name: "Busch Stadium", city: "St. Louis", state: "MO" } },
-  TB: {
-    city: "Tampa Bay",
-    ballpark: { name: "Tropicana Field", city: "St. Petersburg", state: "FL" },
-  },
-  TEX: { city: "Texas", ballpark: { name: "Globe Life Field", city: "Arlington", state: "TX" } },
-  TOR: { city: "Toronto", ballpark: { name: "Rogers Centre", city: "Toronto", state: "ON" } },
-  WSH: {
-    city: "Washington",
-    ballpark: { name: "Nationals Park", city: "Washington", state: "DC" },
-  },
+// The ballpark each club plays in, as MLB's schedule names it, for a game whose listing doesn't name
+// one yet.
+/** @type {Record<string, Ballpark>} */
+const BALLPARKS = {
+  ARI: { name: "Chase Field", city: "Phoenix", state: "AZ" },
+  ATL: { name: "Truist Park", city: "Atlanta", state: "GA" },
+  BAL: { name: "Oriole Park at Camden Yards", city: "Baltimore", state: "MD" },
+  BOS: { name: "Fenway Park", city: "Boston", state: "MA" },
+  CHC: { name: "Wrigley Field", city: "Chicago", state: "IL" },
+  CWS: { name: "Rate Field", city: "Chicago", state: "IL" },
+  CIN: { name: "Great American Ball Park", city: "Cincinnati", state: "OH" },
+  CLE: { name: "Progressive Field", city: "Cleveland", state: "OH" },
+  COL: { name: "Coors Field", city: "Denver", state: "CO" },
+  DET: { name: "Comerica Park", city: "Detroit", state: "MI" },
+  HOU: { name: "Daikin Park", city: "Houston", state: "TX" },
+  KC: { name: "Kauffman Stadium", city: "Kansas City", state: "MO" },
+  LAA: { name: "Angel Stadium", city: "Anaheim", state: "CA" },
+  LAD: { name: "UNIQLO Field at Dodger Stadium", city: "Los Angeles", state: "CA" },
+  MIA: { name: "loanDepot park", city: "Miami", state: "FL" },
+  MIL: { name: "American Family Field", city: "Milwaukee", state: "WI" },
+  MIN: { name: "Target Field", city: "Minneapolis", state: "MN" },
+  NYM: { name: "Citi Field", city: "Flushing", state: "NY" },
+  NYY: { name: "Yankee Stadium", city: "Bronx", state: "NY" },
+  ATH: { name: "Sutter Health Park", city: "Sacramento", state: "CA" },
+  PHI: { name: "Citizens Bank Park", city: "Philadelphia", state: "PA" },
+  PIT: { name: "PNC Park", city: "Pittsburgh", state: "PA" },
+  SD: { name: "Petco Park", city: "San Diego", state: "CA" },
+  SF: { name: "Oracle Park", city: "San Francisco", state: "CA" },
+  SEA: { name: "T-Mobile Park", city: "Seattle", state: "WA" },
+  STL: { name: "Busch Stadium", city: "St. Louis", state: "MO" },
+  TB: { name: "Tropicana Field", city: "St. Petersburg", state: "FL" },
+  TEX: { name: "Globe Life Field", city: "Arlington", state: "TX" },
+  TOR: { name: "Rogers Centre", city: "Toronto", state: "ON" },
+  WSH: { name: "Nationals Park", city: "Washington", state: "DC" },
 };
 
 // What fans call a club besides its name, its city, and its code, which a search reads but never
@@ -214,8 +182,7 @@ const EXAMPLES = [
 
 /** @param {string} code */
 function listTeamWords(code) {
-  const { city } = CLUBS[code];
-  const { name } = TEAMS[code];
+  const { city, name } = TEAMS[code];
   const names = city ? [city, `${city} ${name}`] : [];
   return [name, ...names, code, ...(NICKNAMES[code] ?? [])].map((word) => word.toLowerCase());
 }
@@ -274,7 +241,7 @@ function listStarters(games) {
  * @param {any[]} games
  */
 const listBallparks = (games) => [
-  ...Object.values(CLUBS).map((club) => club.ballpark),
+  ...Object.values(BALLPARKS),
   ...games.flatMap((game) => (game.ballpark ? [game.ballpark] : [])),
 ];
 
@@ -292,8 +259,8 @@ export function createSearchTerms({ games, divisions = {} }) {
       name: TEAMS[code].name,
       words: listTeamWords(code),
       shownNames: [nameClubFully(code), ...(SHORT_NAMES[code] ?? [])],
-      homeCity: CLUBS[code].ballpark.city,
-      homeState: CLUBS[code].ballpark.state,
+      homeCity: BALLPARKS[code].city,
+      homeState: BALLPARKS[code].state,
       conference: TEAMS[code].league,
     })),
     places: [...PLACES, ...listVenuePlaces(listBallparks(games), PLACES, BALLPARK_WORD)],
@@ -341,13 +308,6 @@ const readKind = (game) => {
   if (game.allStar) return "all-star";
   return game.postseason ? "playoffs" : "regular";
 };
-
-/**
- * A club's name with its city, as "New York Mets", or its name alone when its city isn't in it.
- * @param {string} code
- */
-export const nameClubFully = (code) =>
-  [CLUBS[code].city, TEAMS[code].name].filter(Boolean).join(" ");
 
 /**
  * An MLB game as a search reads it, or null for one called off, which is played on another day.

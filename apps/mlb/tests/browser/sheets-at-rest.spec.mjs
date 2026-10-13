@@ -50,7 +50,7 @@ async function openAstrosOverGame(page) {
     .first()
     .click();
   const teamSheet = page.locator("#teamSheet");
-  await expect(teamSheet.locator("#teamTitle")).toHaveText("Astros");
+  await expect(teamSheet.locator("#teamTitle")).toHaveText("Houston Astros");
   await expectShown(teamSheet);
   return teamSheet;
 }
