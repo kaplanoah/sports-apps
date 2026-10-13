@@ -126,8 +126,9 @@
 }
 
 /* Before anything is typed, the examples sit 4.5px under the field and inside its width, as room
-   as wide as Cancel keeps them from it: their words 39.5px in from its left edge, a step above the
-   middle of their rows, and their lines from 39px in to 0.5px short of its right edge. */
+   as wide as Cancel keeps them from it: their words 1.5px right of where its text starts, a step
+   above the middle of their rows, and their lines from 2px right of where its text starts to 1px
+   short of its right edge. */
 .search-bar.is-empty + .search-list {
   padding-top: 0;
 }
@@ -149,8 +150,8 @@
 .search-examples li::after {
   content: "";
   position: absolute;
-  left: 39px;
-  right: 0.5px;
+  left: 37px;
+  right: 1px;
   bottom: 0;
   height: 1px;
   background: var(--divider);
@@ -160,7 +161,7 @@
   box-sizing: border-box;
   width: 100%;
   height: 38px;
-  padding: 0 0 3px 39.5px;
+  padding: 0 0 3px 36.5px;
   border: 0;
   background: none;
   font-family: var(--text);
