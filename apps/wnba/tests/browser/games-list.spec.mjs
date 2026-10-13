@@ -1,4 +1,4 @@
-import { test, expect, expectDayAtTop, openApp } from "./harness.mjs";
+import { test, expect, expectDayAtTop, openApp, readWholeSeasonSchedule } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -180,6 +180,22 @@ test("a game that may never happen says If needed in a status's dim ink, a weigh
   const [ifNeededStyle, finalStyle] = [await readStyle(ifNeeded), await readStyle(final)];
   expect(ifNeededStyle.color).toBe(finalStyle.color);
   expect(ifNeededStyle.weight).toBeLessThan(finalStyle.weight);
+});
+
+test("the strip takes in the days of a longer schedule that arrives after a redraw of the same days", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  const cells = page.locator("#seasonGames .day-cell");
+  await expect(cells.first()).toHaveAttribute("data-day", "2026-09-27");
+  await app.changeSeason((season) => ({ ...season }));
+  await app.changeDocument("schedules/2026", () => readWholeSeasonSchedule());
+  await expect(page.locator("#seasonGames .listed-day").first()).toHaveAttribute(
+    "data-day",
+    "2026-05-08",
+  );
+  await expect(cells.first()).toHaveAttribute("data-day", "2026-05-08");
 });
 
 const TODAYS_GAMES = ["1042600132", "1042600112"];
