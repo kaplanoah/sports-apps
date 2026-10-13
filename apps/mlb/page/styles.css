@@ -2644,10 +2644,6 @@ body.kbd .player-open:focus {
   font-weight: 550;
   letter-spacing: 0.02em;
 }
-.sheet-head .team-title .rank-slot {
-  width: auto;
-  margin: 0;
-}
 .sheet-head .team-note {
   font-weight: 450;
 }

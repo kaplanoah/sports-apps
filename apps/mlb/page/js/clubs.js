@@ -75,6 +75,13 @@ export function nameTeam(id) {
   return TEAMS[id] ? TEAMS[id].name : "?";
 }
 
+/**
+ * A club's name with its city, as "New York Mets", or its name alone when its city isn't in it.
+ * @param {string} id
+ */
+export const nameClubFully = (id) =>
+  TEAMS[id] ? [TEAMS[id].city, TEAMS[id].name].filter(Boolean).join(" ") : "?";
+
 const renderClubParts = (id) =>
   html`${renderTeamDot(id)}<span class="team-name">${nameTeam(id)}</span>`;
 

@@ -1,4 +1,5 @@
-// `titles` are the seasons the franchise won the World Series, under any name or city, which a
+// `city` is the place in the club's name, as in "New York Mets", and empty for the Athletics, who
+// name none. `titles` are the seasons the franchise won the World Series, under any name or city, which a
 // tracked season's champion adds to (see listTitles in clubs.js). `firstSeason` is only needed
 // while a club has never won. `color` and `color2` are the halves of the club's dot. `chartColors`
 // are what the pitching matchup marks the club's starter in on Night Game, first choice then other,
@@ -13,6 +14,7 @@
 export const TEAMS = {
   ARI: {
     name: "Diamondbacks",
+    city: "Arizona",
     league: "NL",
     espnId: 29,
     titles: [2001],
@@ -23,6 +25,7 @@ export const TEAMS = {
   },
   ATL: {
     name: "Braves",
+    city: "Atlanta",
     league: "NL",
     espnId: 15,
     titles: [1914, 1957, 1995, 2021],
@@ -33,6 +36,7 @@ export const TEAMS = {
   },
   BAL: {
     name: "Orioles",
+    city: "Baltimore",
     league: "AL",
     espnId: 1,
     titles: [1966, 1970, 1983],
@@ -43,6 +47,7 @@ export const TEAMS = {
   },
   BOS: {
     name: "Red Sox",
+    city: "Boston",
     league: "AL",
     espnId: 2,
     titles: [1903, 1912, 1915, 1916, 1918, 2004, 2007, 2013, 2018],
@@ -53,6 +58,7 @@ export const TEAMS = {
   },
   CHC: {
     name: "Cubs",
+    city: "Chicago",
     league: "NL",
     espnId: 16,
     titles: [1907, 1908, 2016],
@@ -63,6 +69,7 @@ export const TEAMS = {
   },
   CWS: {
     name: "White Sox",
+    city: "Chicago",
     league: "AL",
     espnId: 4,
     titles: [1906, 1917, 2005],
@@ -73,6 +80,7 @@ export const TEAMS = {
   },
   CIN: {
     name: "Reds",
+    city: "Cincinnati",
     league: "NL",
     espnId: 17,
     titles: [1919, 1940, 1975, 1976, 1990],
@@ -83,6 +91,7 @@ export const TEAMS = {
   },
   CLE: {
     name: "Guardians",
+    city: "Cleveland",
     league: "AL",
     espnId: 5,
     titles: [1920, 1948],
@@ -93,6 +102,7 @@ export const TEAMS = {
   },
   COL: {
     name: "Rockies",
+    city: "Colorado",
     league: "NL",
     espnId: 27,
     titles: [],
@@ -104,6 +114,7 @@ export const TEAMS = {
   },
   DET: {
     name: "Tigers",
+    city: "Detroit",
     league: "AL",
     espnId: 6,
     titles: [1935, 1945, 1968, 1984],
@@ -114,6 +125,7 @@ export const TEAMS = {
   },
   HOU: {
     name: "Astros",
+    city: "Houston",
     league: "AL",
     espnId: 18,
     titles: [2017, 2022],
@@ -124,6 +136,7 @@ export const TEAMS = {
   },
   KC: {
     name: "Royals",
+    city: "Kansas City",
     league: "AL",
     espnId: 7,
     titles: [1985, 2015],
@@ -134,6 +147,7 @@ export const TEAMS = {
   },
   LAA: {
     name: "Angels",
+    city: "Los Angeles",
     league: "AL",
     espnId: 3,
     titles: [2002],
@@ -144,6 +158,7 @@ export const TEAMS = {
   },
   LAD: {
     name: "Dodgers",
+    city: "Los Angeles",
     league: "NL",
     espnId: 19,
     titles: [1955, 1959, 1963, 1965, 1981, 1988, 2020, 2024, 2025],
@@ -154,6 +169,7 @@ export const TEAMS = {
   },
   MIA: {
     name: "Marlins",
+    city: "Miami",
     league: "NL",
     espnId: 28,
     titles: [1997, 2003],
@@ -164,6 +180,7 @@ export const TEAMS = {
   },
   MIL: {
     name: "Brewers",
+    city: "Milwaukee",
     league: "NL",
     espnId: 8,
     titles: [],
@@ -175,6 +192,7 @@ export const TEAMS = {
   },
   MIN: {
     name: "Twins",
+    city: "Minnesota",
     league: "AL",
     espnId: 9,
     titles: [1924, 1987, 1991],
@@ -185,6 +203,7 @@ export const TEAMS = {
   },
   NYM: {
     name: "Mets",
+    city: "New York",
     league: "NL",
     espnId: 21,
     titles: [1969, 1986],
@@ -195,6 +214,7 @@ export const TEAMS = {
   },
   NYY: {
     name: "Yankees",
+    city: "New York",
     league: "AL",
     espnId: 10,
     titles: [
@@ -208,6 +228,7 @@ export const TEAMS = {
   },
   ATH: {
     name: "Athletics",
+    city: "",
     league: "AL",
     espnId: 11,
     titles: [1910, 1911, 1913, 1929, 1930, 1972, 1973, 1974, 1989],
@@ -218,6 +239,7 @@ export const TEAMS = {
   },
   PHI: {
     name: "Phillies",
+    city: "Philadelphia",
     league: "NL",
     espnId: 22,
     titles: [1980, 2008],
@@ -228,6 +250,7 @@ export const TEAMS = {
   },
   PIT: {
     name: "Pirates",
+    city: "Pittsburgh",
     league: "NL",
     espnId: 23,
     titles: [1909, 1925, 1960, 1971, 1979],
@@ -238,6 +261,7 @@ export const TEAMS = {
   },
   SD: {
     name: "Padres",
+    city: "San Diego",
     league: "NL",
     espnId: 25,
     titles: [],
@@ -249,6 +273,7 @@ export const TEAMS = {
   },
   SF: {
     name: "Giants",
+    city: "San Francisco",
     league: "NL",
     espnId: 26,
     titles: [1905, 1921, 1922, 1933, 1954, 2010, 2012, 2014],
@@ -259,6 +284,7 @@ export const TEAMS = {
   },
   SEA: {
     name: "Mariners",
+    city: "Seattle",
     league: "AL",
     espnId: 12,
     titles: [],
@@ -270,6 +296,7 @@ export const TEAMS = {
   },
   STL: {
     name: "Cardinals",
+    city: "St. Louis",
     league: "NL",
     espnId: 24,
     titles: [1926, 1931, 1934, 1942, 1944, 1946, 1964, 1967, 1982, 2006, 2011],
@@ -280,6 +307,7 @@ export const TEAMS = {
   },
   TB: {
     name: "Rays",
+    city: "Tampa Bay",
     league: "AL",
     espnId: 30,
     titles: [],
@@ -291,6 +319,7 @@ export const TEAMS = {
   },
   TEX: {
     name: "Rangers",
+    city: "Texas",
     league: "AL",
     espnId: 13,
     titles: [2023],
@@ -301,6 +330,7 @@ export const TEAMS = {
   },
   TOR: {
     name: "Blue Jays",
+    city: "Toronto",
     league: "AL",
     espnId: 14,
     titles: [1992, 1993],
@@ -311,6 +341,7 @@ export const TEAMS = {
   },
   WSH: {
     name: "Nationals",
+    city: "Washington",
     league: "NL",
     espnId: 20,
     titles: [2019],

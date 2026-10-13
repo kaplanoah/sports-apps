@@ -21,9 +21,9 @@ import { buildBracket, describeTeamStatus } from "./bracket.js";
 import {
   describeDrought,
   listTitles,
+  nameClubFully,
   nameTeam,
   renderClub,
-  renderRankTag,
   renderStatusChip,
   renderTeamDot,
 } from "./clubs.js";
@@ -345,15 +345,15 @@ function renderClubLeaders(id) {
 }
 
 /**
- * The sheet a club opens: its dot, name, and rank over its division, seed, record, and winning
- * percentage, then the cards of its nearest games, once the field is set its postseason, then its
- * season, its leaders, and its titles.
+ * The sheet a club opens: its dot and name with its city over its division, seed, record, and
+ * winning percentage, then the cards of its nearest games, once the field is set its postseason,
+ * then its season, its leaders, and its titles.
  * @param {string} id
  */
 export function renderTeamSheet(id) {
   const division = findDivision(id);
   return {
-    heading: html`${renderTeamDot(id)}<span>${nameTeam(id)}</span>${renderRankTag(id)}`,
+    heading: html`${renderTeamDot(id)}<span>${nameClubFully(id)}</span>`,
     note: joinWithSeparator(listFacts(id, division)),
     body: html`${renderNearestGames(id)}${isInSetField(id) && renderPlayoffs(id)}
       ${renderSeason(division)}${renderClubLeaders(id)}

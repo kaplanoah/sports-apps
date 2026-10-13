@@ -16,6 +16,7 @@ import {
   matchPath,
   readColor,
 } from "./harness.mjs";
+import { nameClubFully } from "../../page/js/clubs.js";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
@@ -58,11 +59,11 @@ test("a club's sheet open over a game's on a reload shows again over it, with a 
   const gameSheet = page.locator("#gameSheet");
   await gameSheet.getByRole("button", { name: "Team details: Astros" }).first().click();
   const teamSheet = page.locator("#teamSheet");
-  await expect(teamSheet.locator("#teamTitle")).toHaveText("Astros");
+  await expect(teamSheet.locator("#teamTitle")).toHaveText("Houston Astros");
 
   await page.reload();
 
-  await expect(teamSheet.locator("#teamTitle")).toHaveText("Astros");
+  await expect(teamSheet.locator("#teamTitle")).toHaveText("Houston Astros");
   await expect(teamSheet.locator("#teamNote")).toContainText("AL West");
   await expect(teamSheet.getByRole("button", { name: "Back to Game", exact: true })).toBeVisible();
   await expect(teamSheet.getByRole("button", { name: "Close" })).toBeHidden();
@@ -107,6 +108,39 @@ async function tapOn(page, target) {
 
 test.describe("on a phone", () => {
   test.use(ON_A_PHONE);
+
+  test("every club's sheet title, its city and name, fits on one line on a phone as narrow as 375px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await openApp(page);
+    await page.getByRole("tab", { name: "Standings" }).click();
+    const clubs = await page
+      .locator(".div-grid tr[data-team]")
+      .evaluateAll((rows) =>
+        rows.map((row) => /** @type {HTMLElement} */ (row).dataset.team ?? ""),
+      );
+    expect(clubs).toHaveLength(30);
+    const sheet = page.locator("#teamSheet");
+    /** @type {string[]} */
+    const wrapped = [];
+    for (const club of clubs) {
+      await page.locator(`.div-grid tr[data-team="${club}"] .team-open`).click();
+      const title = sheet.locator("#teamTitle");
+      await expect(title).toHaveText(nameClubFully(club));
+      const lines = await title.evaluate((element) => {
+        const name = document.createRange();
+        name.selectNodeContents(
+          /** @type {Element} */ (element.querySelector(":scope > span:not(.dot)")),
+        );
+        return new Set([...name.getClientRects()].map((line) => Math.round(line.bottom))).size;
+      });
+      if (lines > 1) wrapped.push(club);
+      await page.keyboard.press("Escape");
+      await expect(sheet).toBeHidden();
+    }
+    expect(wrapped).toEqual([]);
+  });
 
   test("an update about a game opens its sheet", async ({ page }) => {
     const update = await showClinch(page);
@@ -261,7 +295,7 @@ test("a club in the ranking stays a handle to drag, not a way to its sheet", asy
   await expect(page.locator("#teamSheet")).toBeHidden();
 });
 
-test("a club's sheet title is its dot and name, in the page's own type, not in capitals, over highlighted part titles and dim labels", async ({
+test("a club's sheet title is its dot and name with its city, and no rank tag, in the page's own type, not in capitals, over highlighted part titles and dim labels", async ({
   page,
 }) => {
   await openApp(page);
@@ -270,6 +304,8 @@ test("a club's sheet title is its dot and name, in the page's own type, not in c
   const title = page.locator("#teamSheet #teamTitle");
 
   await expect(title.locator(".dot")).toBeVisible();
+  await expect(title).toHaveText("Seattle Mariners");
+  await expect(title.locator(".rank-tag")).toHaveCount(0);
   await expect(title).toHaveCSS("font-family", /^"Chivo Mono"/);
   await expect(title).toHaveCSS("text-transform", "none");
   await expect(page.locator("#teamSheet .sheet-part h3").first()).toHaveCSS(
