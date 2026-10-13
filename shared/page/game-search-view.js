@@ -20,7 +20,7 @@ import { nameStoryDay } from "./news-view.js";
 import { findPages } from "./page-search.js";
 import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
-import { readSentWords, readTypedSearch } from "./search-reading.js";
+import { orderListedDays, readSentWords, readTypedSearch } from "./search-reading.js";
 import { EXAMPLE_COUNT, listExamples } from "./search-suggestions.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
@@ -492,12 +492,25 @@ function draw() {
     return;
   }
   const pages = league?.readPages() ?? null;
-  const { suggestions, readText, rows, answer, others, search, read, isOverGames, games } =
-    readTypedSearch(query, { context, pages, isTyping, isGamesOnly });
+  const {
+    suggestions,
+    readText,
+    rows,
+    answer,
+    others,
+    search,
+    read,
+    isOverGames,
+    games,
+    isNewestFirst,
+  } = readTypedSearch(query, { context, pages, isTyping, isGamesOnly });
   findBar()?.classList.toggle("has-rows", isOverGames);
   setHtml(readLine, renderReadLine(answer ?? (isOverGames ? null : read)));
   const shown = nameShown(text, isOverGames);
-  const days = games.length ? league.listDays(games, Date.now()) : [];
+  const days = orderListedDays(
+    games.length ? league.listDays(games, Date.now()) : [],
+    isNewestFirst,
+  );
   keepListedDays(days, findStartDay(days, context.today, isOverGames), shown);
   if (!isOverGames) {
     const gameList = days.length

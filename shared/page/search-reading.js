@@ -154,9 +154,21 @@ function listFromToday(games, today) {
 }
 
 /**
+ * The days a search lists, in the order it shows them: the latest first when they're all past and
+ * rows sit over them, so the most recent game is the first under the rows, and otherwise by date.
+ * @template {{ day: string }} Day
+ * @param {Day[]} days in order of date
+ * @param {boolean} isNewestFirst
+ * @returns {Day[]}
+ */
+export const orderListedDays = (days, isNewestFirst) =>
+  isNewestFirst ? [...days].reverse() : days;
+
+/**
  * What the search shows for words in the field: while they're typed, suggestions over the pages
- * they name, other readings, and a line over the games they find from today on; otherwise, or once
- * nothing sits over them, every game they find.
+ * they name, other readings, and a line over the games they find from today on, or, when none are
+ * left, every one, the latest first; otherwise, or once nothing sits over them, every game they
+ * find.
  * @param {string} query the words as typed
  * @param {SearchState} state
  */
@@ -177,7 +189,19 @@ export function readTypedSearch(query, state) {
     !isGamesOnly && (suggestions.length > 0 || rows.length > 0 || others.length > 0);
   const overGames = read && found ? listFromToday(found.games, context.today) : [];
   const games = isOverGames ? overGames : (found?.games ?? []);
-  return { suggestions, readText, rows, answer, others, search, read, isOverGames, games };
+  const isNewestFirst = isOverGames && games.length > 0 && games.at(-1).day < context.today;
+  return {
+    suggestions,
+    readText,
+    rows,
+    answer,
+    others,
+    search,
+    read,
+    isOverGames,
+    games,
+    isNewestFirst,
+  };
 }
 
 /**

@@ -479,14 +479,14 @@ export const listExamples = (context, room = EXAMPLE_COUNT) =>
     .slice(0, room);
 
 /**
- * A search's word as another reading writes it: a team by its name, and anything else as typed.
+ * A search's word as another reading writes it: a name, like a team's or a month's, by its own
+ * name, and anything else as read.
  * @param {import("./search-words.js").Token} token
  */
 function writeToken(token) {
-  const teams = token.meanings.filter((meaning) => meaning.kind === "team");
-  return teams.length === 1 && token.meanings.length === 1
-    ? (teams[0].display ?? token.text)
-    : token.text;
+  const [meaning] = token.meanings;
+  const isName = token.meanings.length === 1 && NAME_KINDS.has(meaning.kind) && meaning.display;
+  return isName ? meaning.display : token.text;
 }
 
 /**

@@ -122,6 +122,10 @@ test("a city is offered first as the place, then each club by its whole name, an
   ]);
   assert.deepEqual(others("Fenway"), []);
   assert.deepEqual(others("Mets in New York"), []);
+  assert.deepEqual(others("new york in april"), [
+    "Yankees in April 26 games",
+    "Mets in April 26 games",
+  ]);
   assert.equal(listSuggestions("los ange", CONTEXT)[0].finished, "los ange");
   assert.equal(listSuggestions("Mets at l", CONTEXT)[0].finished, "l");
 });

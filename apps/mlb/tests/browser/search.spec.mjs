@@ -61,6 +61,12 @@ async function openSeasonGames(page) {
 }
 
 /**
+ * The days the search's list shows, in its order.
+ * @param {import("@playwright/test").Page} page
+ */
+const findListedDays = (page) => page.locator("#gameSearch .listed-day");
+
+/**
  * Taps Search beside the tab bar where a finger would.
  * @param {import("@playwright/test").Page} page
  */
@@ -270,16 +276,26 @@ test("while words are typed, two whole searches, then the club's pages in place 
   await expect(findLine(page)).toHaveText("Mets\u2022Next game");
 });
 
-test("a sent club shows its pages over its games line, which opens its games alone on the first from today", async ({
+test("a sent club shows its pages over its games from today, soonest first, or, once all are past, the latest first, and its games line opens them alone on the first from today", async ({
   page,
 }) => {
   await openSeasonGames(page);
   await tapSearch(page);
 
+  await sendSearch(page, "New York in April");
+
+  await expect(findRows(page)).toHaveText(["Yankees in April26 games", "Mets in April26 games"]);
+  const pastDays = await findListedDays(page).evaluateAll((listed) =>
+    listed.map((day) => /** @type {HTMLElement} */ (day).dataset.day ?? ""),
+  );
+  expect(pastDays.length).toBeGreaterThan(1);
+  expect(pastDays).toEqual([...pastDays].sort().reverse());
+
   await sendSearch(page, "Mets");
 
   await expect(findRows(page)).toHaveText(["New York Mets", "RosterNew York Mets"]);
   await expect(findGamesLine(page)).toHaveText("Mets\u2022162 games");
+  await expect(findListedDays(page).first()).toHaveAttribute("data-day", "2026-09-24");
 
   await findGamesLine(page).tap();
 
