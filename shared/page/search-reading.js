@@ -1,8 +1,8 @@
 // What a search shows for its words, before the view draws it: the suggestions while they're
 // typed, the pages the words name, the other ways to read them, and the games they find, with the
 // line saying how it read them. A word still being typed is read as the team or place the first
-// suggestion finishes it into, once three letters of its name are typed, and otherwise left out
-// until it's whole. Runs in the page and in Node, so it uses no DOM.
+// suggestion finishes it into, once three letters of its name are typed, or five with one wrong, and
+// otherwise left out until it's whole. Runs in the page and in Node, so it uses no DOM.
 
 import { describeSearch, findSearchGames, isAskingNothing, readSearch } from "./game-search.js";
 import { SHORTEST_PREFIX, findPages, findPartGame, startsPlayerName } from "./page-search.js";
@@ -113,8 +113,9 @@ function joinRows(first, second) {
  * no games, and the line an answer says over its rows. A half-typed word finished into a name lists
  * that name's pages, then any other the word starts on its own, like a player's, unless letters
  * before it are part of the name, or those others first when it finishes it with one letter wrong,
- * since the word matches them as typed. Any other half-typed word may start a player's name or a place's,
- * so the words as typed go first, and the words as the line reads them only when those find no page.
+ * since the word matches them as typed. Any other half-typed word may start a player's name or a
+ * place's, so the words as typed go first, and the words as the line reads them only when those
+ * find no page.
  * @param {string} text
  * @param {ReturnType<typeof readWhileTyping>} reading
  * @param {SearchState} state

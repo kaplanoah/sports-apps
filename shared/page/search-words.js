@@ -1,8 +1,8 @@
 // What a search's words mean. Each phrase a search knows, from the calendar, the page, or a league,
 // is matched longest first, and a word can mean more than one thing, like "New York", a team on its
 // own and a place after "in", which the search decides from the words around it. A possessive or a
-// plural reads as its word, and one wrong letter in a longer name, or in the start of one still being
-// typed, is forgiven. Runs in the page and in Node, so it uses no DOM.
+// plural reads as its word, and one wrong letter in a longer name, or in the start of one still
+// being typed, is forgiven. Runs in the page and in Node, so it uses no DOM.
 
 /**
  * What a phrase means, and how a suggestion writes it: by the name of what it means, or, for a

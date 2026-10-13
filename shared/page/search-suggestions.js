@@ -1,12 +1,12 @@
 // What a search offers as it's typed, and before anything is. The word being typed is finished
-// first, even with one letter wrong once nothing starts as typed, a name teams share, like "Los Angeles", before each of them, a team before a place or a
-// date, and the team that plays soonest before another that starts the same; after a joining word
-// like "in" or "at", the words that can follow it; then whole searches built on a team it already
-// names, two at most, which fit where the season stands: its next game while it has one, its
-// playoffs while they're on, and its last game once it's done. A team's name that is also a place,
-// like "New York", has the games played there as its other reading when they're other games than
-// the team's. Nothing is offered that would find no games. Runs in the page and in Node, so it uses
-// no DOM.
+// first, even with one letter wrong once nothing starts as typed, a name teams share, like "Los
+// Angeles", before each of them, a team before a place or a date, and the team that plays soonest
+// before another that starts the same; after a joining word like "in" or "at", the words that can
+// follow it; then whole searches built on a team it already names, two at most, which fit where the
+// season stands: its next game while it has one, its playoffs while they're on, and its last game
+// once it's done. A team's name that is also a place, like "New York", has the games played there as
+// its other reading when they're other games than the team's. Nothing is offered that would find no
+// games. Runs in the page and in Node, so it uses no DOM.
 
 import { readMonthDays } from "./search-dates.js";
 import {
