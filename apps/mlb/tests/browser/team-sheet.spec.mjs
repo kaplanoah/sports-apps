@@ -193,7 +193,7 @@ test("a club's row in the standings opens its sheet, with its nearest games, rac
 
   await expect(sheet.locator("#teamTitle")).toHaveText(/Mariners/);
   await expect(sheet.locator("#teamBody .sheet-part h3")).toHaveText([
-    "Season",
+    "Regular season",
     "Leaders",
     "Titles",
   ]);
@@ -564,7 +564,7 @@ test("a club's leaders show under its season once its roster is read, and a tap 
     "SV",
   ]);
   await expect(sheet.locator("#teamBody .sheet-part h3")).toHaveText([
-    "Season",
+    "Regular season",
     "Leaders",
     "Titles",
   ]);

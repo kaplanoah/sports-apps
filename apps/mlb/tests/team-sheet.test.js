@@ -31,7 +31,7 @@ const listParts = (markup) =>
 // The text of one titled part, from its title to the next part's.
 const readPart = (markup, title) =>
   readText(markup).match(
-    new RegExp(`${title} (.*?)(?= (?:Playoffs|Season|Leaders|Titles) |$)`),
+    new RegExp(`${title} (.*?)(?= (?:Playoffs|Regular season|Leaders|Titles) |$)`),
   )?.[1];
 
 const row = (id, w, l, fields = {}) => ({
@@ -82,9 +82,9 @@ test("a division leader in September: its division, seed, record, and percentage
 
   assert.equal(readText(sheet.heading), "Dodgers #3");
   assert.equal(readText(sheet.note), "NL West | 2 seed | 89-61 | .593");
-  assert.deepEqual(listParts(sheet.body), ["Season", "Leaders", "Titles"]);
+  assert.deepEqual(listParts(sheet.body), ["Regular season", "Leaders", "Titles"]);
   assert.deepEqual(readStats(sheet.body), ["NL West 1st", "Lead +6.0", "M# 7"]);
-  assert.match(readPart(sheet.body, "Season"), /^12 left NL West 1st /);
+  assert.match(readPart(sheet.body, "Regular season"), /^12 left NL West 1st /);
   assert.equal(readPart(sheet.body, "Titles"), "Defending 9 | 2025, 2024, 2020 and 6 more");
 });
 
@@ -130,7 +130,7 @@ test("a race number shows in copper while it counts down, as a gold dash once cl
   assert.match(chaser, /<span class="elim-num live">12<\/span>/);
 });
 
-test("once the season is over, the Season part counts no games left", () => {
+test("once the season is over, the Regular season part counts no games left", () => {
   session.standings = {
     divisions: {
       "NL Central": [
@@ -142,7 +142,7 @@ test("once the season is over, the Season part counts no games left", () => {
   const leader = renderTeamSheet("MIL").body;
 
   assert.deepEqual(readStats(leader), ["NL Central 1st", "Lead +4.0", "M# -"]);
-  assert.doesNotMatch(readPart(leader, "Season"), /left/);
+  assert.doesNotMatch(readPart(leader, "Regular season"), /left/);
 });
 
 test("once the field is set, a game rained out and never made up counts as none left", () => {
@@ -157,7 +157,7 @@ test("once the field is set, a game rained out and never made up counts as none 
   };
   const sheet = renderTeamSheet("PHI").body;
 
-  assert.doesNotMatch(readPart(sheet, "Season"), /left/);
+  assert.doesNotMatch(readPart(sheet, "Regular season"), /left/);
 });
 
 const NL_CENTRAL_IN_OCTOBER = {
@@ -187,7 +187,7 @@ test("once the field is set, a club alive in the postseason shows it first, with
   session.standings = NL_CENTRAL_IN_OCTOBER;
   const sheet = renderTeamSheet("CHC");
 
-  assert.deepEqual(listParts(sheet.body), ["Playoffs", "Season", "Leaders", "Titles"]);
+  assert.deepEqual(listParts(sheet.body), ["Playoffs", "Regular season", "Leaders", "Titles"]);
   assert.equal(
     readPart(sheet.body, "Playoffs"),
     "Alive NL WC Padres Won 2-1 NLDS Phillies Lead 2-1",

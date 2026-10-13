@@ -168,7 +168,7 @@ function renderSeason(division) {
   if (!division?.row) return false;
   const ranks = listSeasonRankRows(MEASURES, readRegularSeason(division.row), listRegularSeasons());
   return renderSheetPart(
-    "Season",
+    "Regular season",
     html`<div class="team-season">${renderTeamStats(listStats(division))}${renderRanks(ranks)}</div>`,
     renderGamesLeft(division),
   );
