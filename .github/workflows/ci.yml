@@ -11,16 +11,18 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request stops the checks still running on the one before it.
+# A new push to a pull request stops the checks still running on the one before it. A label
+# change waits for them instead, since it brings no new code and reuses what they find.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled' }}
 
 jobs:
   # On main, a pull request's CI that passed on exactly this code has already run every check, so
-  # they're skipped (worker/find-passed-ci.mjs).
+  # they're skipped. A label change brings no new code, so once a run passed every test on exactly
+  # this code, only the gate runs again (worker/find-passed-ci.mjs).
   passed:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -35,11 +37,12 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: .nvmrc
-      - name: Find the pull request's CI run that passed on this code
+      - name: Find the CI run that passed on this code
         id: find
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node worker/find-passed-ci.mjs
+          SEARCH: ${{ github.event_name == 'pull_request' && '--tested' || '' }}
+        run: node worker/find-passed-ci.mjs $SEARCH
 
   # A red change merges only once the owner has used it on the beta app and labeled it phone-ok
   # (worker/red-change.mjs), which reads the pull request's events for who added the label. The
@@ -161,7 +164,8 @@ jobs:
   # The browser specs a pull request adds or changes, which burn-in repeats, so it starts its
   # machines only when there are some. The merge commit's first parent is the base branch.
   changed-specs:
-    if: github.event_name == 'pull_request'
+    needs: passed
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && !needs.passed.outputs.run }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -420,32 +424,46 @@ jobs:
       contents: read
       issues: write
     steps:
-      # passed runs only on main, which skips the checks when it found a run that passed.
-      - name: Require every job to pass
-        if: >-
-          contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
-          (github.event_name == 'pull_request' && needs.gate.result != 'success') ||
-          (github.event_name == 'pull_request' && needs.changed-specs.result != 'success') ||
-          (needs.changed-specs.outputs.specs != '' && needs.burn-in.result != 'success') ||
-          (!needs.passed.outputs.run && (needs.checks.result != 'success' ||
-          needs.browser.result != 'success' || needs.webkit.result != 'success' ||
-          needs.review.result != 'success'))
-        run: exit 1
+      # Every test passed when passed found a run that passed them on exactly this code, or when
+      # every job but the gate passed.
+      - name: Tell whether every test passed
+        id: tested
+        env:
+          TESTED: >-
+            ${{ needs.passed.outputs.run != '' || (needs.checks.result == 'success' &&
+            needs.browser.result == 'success' && needs.webkit.result == 'success' &&
+            needs.review.result == 'success' &&
+            (github.event_name != 'pull_request' || needs.changed-specs.result == 'success') &&
+            (needs.changed-specs.outputs.specs == '' || needs.burn-in.result == 'success')) }}
+        run: echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
       # Checks out even when a job failed, to name the tests its retry passed.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: ${{ always() && github.event_name == 'pull_request' }}
-      # Records the code this pull request's checks passed on, so that once it merges, main deploys
-      # at once if it has exactly that code (worker/find-passed-ci.mjs).
-      - name: Record the code the checks passed on
-        id: passed
+        if: github.event_name == 'pull_request'
+      # Records the code this pull request's checks passed on: once every test passed, so a label
+      # change runs only the gate again, and once the gate passed too, so that once it merges, main
+      # deploys at once if it has exactly that code (worker/find-passed-ci.mjs).
+      - name: Record the code the checks ran on
+        id: code
         if: github.event_name == 'pull_request'
         run: |
           git rev-parse HEAD > passed-commit.txt
           echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true'
+        with:
+          name: ci-tested-${{ steps.code.outputs.tree }}
+          path: passed-commit.txt
+          retention-days: 14
+      - name: Require every job to pass
+        if: >-
+          steps.tested.outputs.tested != 'true' ||
+          contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
+          (github.event_name == 'pull_request' && needs.gate.result != 'success')
+        run: exit 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: github.event_name == 'pull_request'
         with:
-          name: ci-passed-${{ steps.passed.outputs.tree }}
+          name: ci-passed-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
       # The browser jobs' reports go to the issue from this one job, so two of them can't both
