@@ -272,6 +272,41 @@ test("a place a team is named for offers its games there as another reading", as
   await expect(findLine(page)).toHaveText("In New York•26 games");
 });
 
+test("while the keyboard is up, the list's last row scrolls clear of it", async ({ page }) => {
+  await page.addInitScript(() => {
+    let keyboard = 0;
+    const visible = Object.assign(new EventTarget(), { offsetTop: 0, scale: 1 });
+    Object.defineProperty(visible, "height", { get: () => innerHeight - keyboard });
+    Object.defineProperty(window, "visualViewport", { configurable: true, get: () => visible });
+    Object.assign(window, {
+      raiseKeyboard: (/** @type {number} */ height) => {
+        keyboard = height;
+        visible.dispatchEvent(new Event("resize"));
+      },
+    });
+  });
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await findInput(page).pressSequentially("Lib");
+  await expect(page.locator("#gameSearch .listed-day").first()).toBeVisible();
+
+  const keyboardTop = await page.evaluate(() => {
+    /** @type {any} */ (window).raiseKeyboard(336);
+    return innerHeight - 336;
+  });
+  await page.locator("#gameSearch .search-list").evaluate(
+    (list) =>
+      new Promise((resolve) => {
+        list.addEventListener("scroll", resolve, { once: true });
+        list.scrollTop = list.scrollHeight;
+      }),
+  );
+
+  const lastRow = page.locator("#gameSearch .listed-day").last().locator("li").last();
+  const box = /** @type {{ y: number, height: number }} */ (await lastRow.boundingBox());
+  expect(box.y + box.height).toBeLessThanOrEqual(keyboardTop);
+});
+
 test("while typing, a word that reads as nothing yet lists no games", async ({ page }) => {
   await openSeasonGames(page);
   await tapSearch(page);

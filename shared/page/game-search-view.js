@@ -726,6 +726,18 @@ function closeGameSearch() {
   league?.close();
 }
 
+// An iPhone's keyboard covers the screen's bottom without making the page shorter, so while it's
+// up the list's end leaves room as tall as it, and its last row can scroll clear of it, as an
+// iPhone's own lists do. A pinch makes what shows smaller too, which isn't a keyboard.
+function fitKeyboardRoom() {
+  const list = findList();
+  if (!view || !list || !visualViewport) return;
+  const shownBottom = visualViewport.offsetTop + visualViewport.height;
+  const covered = list.getBoundingClientRect().bottom - shownBottom;
+  const room = visualViewport.scale > 1 ? 0 : Math.max(0, Math.ceil(covered));
+  view.style.setProperty("--keyboard-room", `${room}px`);
+}
+
 /** Draws the search again from the season, as new data or the clock moves on. */
 export function refreshGameSearch() {
   if (view && !view.hidden) draw();
@@ -809,6 +821,8 @@ export function startGameSearch(element, searchLeague) {
   element.addEventListener("input", followTyping);
   element.addEventListener("submit", sendSearch);
   findList()?.addEventListener("scroll", followScroll, { passive: true });
+  visualViewport?.addEventListener("resize", fitKeyboardRoom);
+  visualViewport?.addEventListener("scroll", fitKeyboardRoom);
   watchTimeAway((awayMs) => {
     if (isAwayLong(awayMs)) closeGameSearch();
   });
