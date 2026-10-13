@@ -317,7 +317,7 @@ async function boot() {
   watchDismissals(() => redrawEased(drawUpdates));
   refreshClockEveryMinute();
   startServiceWorker();
-  startNotifications({ about: "Post-season game final scores" });
+  startNotifications({ about: "Final scores" });
 }
 
 boot();

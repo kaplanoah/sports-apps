@@ -74,7 +74,7 @@ export function renderStatus(game) {
     return html`<span class="clock tabular">${describeLiveClock(game)}</span>`;
   if (game.state === "live") return html`<span class="break">${game.status}</span>`;
   if (game.state === "final") return html`${game.status || "Final"}`;
-  return game.isIfNeeded && html`<span class="if-needed">If needed</span>`;
+  return game.isIfNeeded && html`<span class="if-needed">If necessary</span>`;
 }
 
 // A game shows its series as it stood at tip-off, and once it's over, as it stood after.

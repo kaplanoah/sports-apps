@@ -94,16 +94,11 @@ import { createDictionary, readTokens } from "./search-words.js";
  * @property {SearchTeam[]} teams
  * @property {SearchPlace[]} places
  * @property {SearchRound[]} rounds
- * @property {{ cup: string, allStar: string }} kindNames what the league calls its cup and All-Star Game
+ * @property {import("./league-words.js").LeagueWords} words what the league calls things
  * @property {string[]} examples whole searches to offer before anything is typed
  * @property {SearchGroup[]} [groups]
- * @property {{ name: string, words: string[] }} [crossConference] what the league calls a game
- *   between its conferences, like MLB's interleague
  * @property {SearchStarter[]} [starters]
  * @property {SearchChannel[]} [channels] the channels its games are on
- * @property {{ name: string, words: string[], games: string }} [pastRegulation] what the league
- *   calls a final that went past regulation, as the line names it, like the WNBA's "Overtime" or
- *   MLB's "Extra innings", the words that name it, and what it calls such games
  */
 /**
  * A channel games are on, as the line names it, the words that name it, and each name the league
@@ -273,13 +268,9 @@ const GENERAL_ENTRIES = [
     phrase,
     meaning: { kind: "kind", value: "all-star", display: "All-Star" },
   })),
-  ...["doubleheader", "doubleheaders", "double header", "twin bill", "twinbill"].map((phrase) => ({
-    phrase,
-    meaning: { kind: "doubleheader", display: "doubleheaders" },
-  })),
   ...["if needed", "if necessary"].map((phrase) => ({
     phrase,
-    meaning: { kind: "if-needed", display: "if needed" },
+    meaning: { kind: "if-needed", display: "if necessary" },
   })),
   ...["win", "wins", "won", "victory", "victories", "beat"].map((phrase) => ({
     phrase,
@@ -289,12 +280,6 @@ const GENERAL_ENTRIES = [
     phrase,
     meaning: { kind: "outcome", value: "loss", display: "losses" },
   })),
-  ...["opening night", "opener", "season opener", "opening day", "first game of the season"].map(
-    (phrase) => ({
-      phrase,
-      meaning: { kind: "landmark", value: "opener", display: "season opener" },
-    }),
-  ),
   ...["season finale", "finale", "last game of the season", "final game of the season"].map(
     (phrase) => ({
       phrase,
@@ -306,6 +291,25 @@ const GENERAL_ENTRIES = [
     meaning: { kind: "landmark", value: "break" },
   })),
 ];
+
+const OPENER_PHRASES = [
+  "opening night",
+  "opener",
+  "season opener",
+  "opening day",
+  "first game of the season",
+];
+const CUP_PHRASES = ["commissioners cup", "commissioner cup", "cup"];
+const DOUBLEHEADER_PHRASES = [
+  "doubleheader",
+  "doubleheaders",
+  "double header",
+  "twin bill",
+  "twinbill",
+];
+
+/** @param {string} text */
+const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
 const KIND_LABELS = { playoffs: "Playoffs", regular: "Regular season" };
 const STATE_LABELS = { live: "Live", pre: "Upcoming", final: "Results" };
@@ -441,9 +445,9 @@ export function createSearchDictionary(terms) {
         meaning: { kind: "group", value: group, display: group.name },
       })),
     ),
-    ...(terms.crossConference?.words ?? []).map((phrase) => ({
+    ...(terms.words.crossConference?.words ?? []).map((phrase) => ({
       phrase,
-      meaning: { kind: "cross", display: terms.crossConference?.name },
+      meaning: { kind: "cross", display: terms.words.crossConference?.name },
     })),
     ...(terms.starters ?? []).flatMap((starter) =>
       starter.words.map((phrase) => ({
@@ -457,13 +461,21 @@ export function createSearchDictionary(terms) {
         meaning: { kind: "channel", value: channel, display: channel.name },
       })),
     ),
-    ...(terms.pastRegulation?.words ?? []).map((phrase) => ({
+    ...terms.words.pastRegulation.words.map((phrase) => ({
       phrase,
-      meaning: { kind: "past-regulation", display: terms.pastRegulation?.name },
+      meaning: { kind: "past-regulation", display: terms.words.pastRegulation.name },
     })),
-    ...["commissioners cup", "commissioner cup", "cup"].map((phrase) => ({
+    ...OPENER_PHRASES.map((phrase) => ({
       phrase,
-      meaning: { kind: "kind", value: "cup", display: terms.kindNames.cup },
+      meaning: { kind: "landmark", value: "opener", display: terms.words.seasonOpener },
+    })),
+    ...(terms.words.cup ? CUP_PHRASES : []).map((phrase) => ({
+      phrase,
+      meaning: { kind: "kind", value: "cup", display: terms.words.cup },
+    })),
+    ...(terms.words.hasDoubleheaders ? DOUBLEHEADER_PHRASES : []).map((phrase) => ({
+      phrase,
+      meaning: { kind: "doubleheader", display: "doubleheaders" },
     })),
   ]);
 }
@@ -803,7 +815,10 @@ function readMeaningAt(state, meaning) {
       if (meaning.value === "break") return 0;
       search.landmark = {
         name: meaning.value,
-        label: meaning.value === "opener" ? "Season opener" : "Season finale",
+        label:
+          meaning.value === "opener"
+            ? capitalize(context.terms.words.seasonOpener)
+            : "Season finale",
       };
       return 1;
     },
@@ -1167,15 +1182,15 @@ function listConditionLabels(search, context) {
     : null;
   const kindNames = {
     ...KIND_LABELS,
-    cup: context.terms.kindNames.cup,
-    "all-star": context.terms.kindNames.allStar,
+    cup: context.terms.words.cup,
+    "all-star": context.terms.words.allStar,
   };
   return [
     ...search.kinds.map((kind) => kindNames[kind]),
     ...search.rounds.map((round) => round.name),
-    search.isCrossConference && context.terms.crossConference?.name,
+    search.isCrossConference && context.terms.words.crossConference?.name,
     search.gameNumber !== null && `Game ${search.gameNumber}`,
-    search.isIfNeeded && "If needed",
+    search.isIfNeeded && "If necessary",
     search.isDoubleheader && "Doubleheaders",
     ...search.places.map((place) => `In ${place.name}`),
     ...search.times.map((time) => time.label),
@@ -1185,7 +1200,7 @@ function listConditionLabels(search, context) {
     search.landmark?.label,
     ...search.states.map((state) => STATE_LABELS[state]),
     search.outcome && OUTCOME_LABELS[search.outcome],
-    search.isPastRegulation && context.terms.pastRegulation?.name,
+    search.isPastRegulation && context.terms.words.pastRegulation.name,
     search.channels.length && `On ${describeChannels(search)}`,
   ].filter(Boolean);
 }
@@ -1321,4 +1336,4 @@ export function describeNoGames(search, context) {
  * @param {SearchContext} context
  */
 const nameGamesAsked = (search, context) =>
-  search.isPastRegulation ? (context.terms.pastRegulation?.games ?? "games") : "games";
+  search.isPastRegulation ? context.terms.words.pastRegulation.games : "games";

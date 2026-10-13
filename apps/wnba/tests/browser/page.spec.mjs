@@ -7,7 +7,9 @@ import {
 } from "../../../../tests/browser/tap-states.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 import { chooseAppearance, readTokenColor } from "./theme.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -66,26 +68,31 @@ test("every piece of text keeps to the type scale, in every view", async ({ page
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await page.getByRole("tab", { name: "Games" }).click();
   await expect(page.locator("#seasonGames .game-day.is-today .game-row").first()).toBeVisible();
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 0 }));
   await expect(page.locator("#seasonGames .scoreboard").first()).toBeVisible();
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await page.getByRole("tab", { name: "Standings" }).click();
   await expect(page.locator("#standings-league tr").nth(2)).toBeVisible();
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await page.getByRole("button", { name: "Team details: Minnesota Lynx" }).first().click();
   await expect(page.locator("#teamSheet table.players")).toBeVisible();
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await page.keyboard.press("Escape");
   await expect(page.locator("#teamSheet")).toBeHidden();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -93,6 +100,7 @@ test("every piece of text keeps to the type scale, in every view", async ({ page
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
 });
 
 test("the page uses its own fonts, served with it", async ({ page }) => {
@@ -190,17 +198,20 @@ test.describe("on a phone, the text", () => {
     expect(await listOffScaleText(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
 
     await page.getByRole("tab", { name: "Games" }).click();
     await expect(page.locator("#seasonGames .game-day.is-today .game-row").first()).toBeVisible();
     expect(await listOffScaleText(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
     await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 0 }));
     await expect(page.locator("#seasonGames .scoreboard").first()).toBeVisible();
     expect(await listOffScaleText(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
 
     await page.getByRole("tab", { name: "Standings" }).click();
     const standings = page.locator("#standings-league");
@@ -208,6 +219,7 @@ test.describe("on a phone, the text", () => {
     expect(await listOffScaleText(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
 
     await standings.locator('tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
@@ -215,6 +227,7 @@ test.describe("on a phone, the text", () => {
     expect(await listOffScaleText(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
 
@@ -223,6 +236,7 @@ test.describe("on a phone, the text", () => {
     expect(await listOffScaleText(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   });
 
   test("of the Updates box reads at 16px with its team names at Condensed's 16.5px, its days at 14px, and its count at 13px, and a series' standing stays on one line", async ({

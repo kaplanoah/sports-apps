@@ -28,7 +28,15 @@ const TERMS = {
     { name: "Hillside", words: ["hillside"], cities: ["Hillside"] },
   ],
   rounds: [{ round: 3, name: "Finals", words: ["finals"] }],
-  kindNames: { cup: "The Cup", allStar: "All-Star Game" },
+  words: {
+    seasonOpener: "season opener",
+    allStar: "All-Star Game",
+    cup: "The Cup",
+    hasDoubleheaders: false,
+    pastRegulation: { name: "Overtime", words: ["overtime"], games: "overtime games" },
+    crossConference: null,
+    neverShown: [],
+  },
   examples: [],
   starters: [{ id: "5", name: "Pell", words: ["pell"] }],
 };

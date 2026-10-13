@@ -394,7 +394,7 @@ test("a game that may not be needed says so under its time", () =>
   inEastern(() => {
     assert.match(
       readGameMarkup(SEASON),
-      /<span class="time tabular">TBD<\/span><\/span\s*><span class="game-status"><span class="if-needed">If needed<\/span><\/span>/,
+      /<span class="time tabular">TBD<\/span><\/span\s*><span class="game-status"><span class="if-needed">If necessary<\/span><\/span>/,
     );
   }));
 

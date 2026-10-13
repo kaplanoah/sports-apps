@@ -160,7 +160,7 @@ const describePitchingLine = (pitching) =>
   ]);
 
 /**
- * His postseason at the plate and on the mound, while he has one.
+ * His playoffs at the plate and on the mound, while he has them.
  * @param {Player} player
  */
 function renderPostseason(player) {
@@ -168,7 +168,7 @@ function renderPostseason(player) {
   if (!hitting && !pitching) return html``;
   const games = Math.max(hitting?.gamesPlayed ?? 0, pitching?.gamesPlayed ?? 0);
   return renderSheetPart(
-    "Postseason",
+    "Playoffs",
     html`${hitting && html`<p class="season-line tabular">${describeHittingLine(hitting)}</p>`}
     ${pitching && html`<p class="season-line tabular">${describePitchingLine(pitching)}</p>`}`,
     countWord(games, "game"),

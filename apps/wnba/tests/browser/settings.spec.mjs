@@ -62,7 +62,7 @@ test("settings list Notifications, the News switches, and Appearance, with lines
     "Include content from The Athletic",
     "Appearance",
   ]);
-  await expect(page.locator("#notifyNote")).toHaveText("Post-season game final scores");
+  await expect(page.locator("#notifyNote")).toHaveText("Final scores");
   const groups = page.locator("#settingsDialog .settings-controls > *");
   const readBorders = () =>
     Promise.all([

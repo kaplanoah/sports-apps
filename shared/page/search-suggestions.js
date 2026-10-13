@@ -17,6 +17,7 @@ import {
   listPlaceTeams,
   readSearch,
 } from "./game-search.js";
+import { findNeverShownWords } from "./league-words.js";
 import { findForgivenStarts, readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
@@ -117,13 +118,16 @@ function readJoin(word, context) {
 /**
  * How a finished word is written: its name, or, when that doesn't start as typed, the name its
  * meaning writes for the phrase, like "Los Angeles Dodgers". A team or a place a search reads
- * from another word, like a nickname, is written by its own name, as "jays" is the Blue Jays.
+ * from another word, like a nickname, is written by its own name, as "jays" is the Blue Jays, and
+ * so is a word the league never shows, as the WNBA never shows "postseason".
  * @param {string} phrase
  * @param {Meaning} meaning
  * @param {string} fragment
+ * @param {string[]} neverShown
  */
-function writeFinished(phrase, meaning, fragment) {
+function writeFinished(phrase, meaning, fragment, neverShown) {
   if (readWords(meaning.display).startsWith(fragment)) return meaning.display;
+  if (findNeverShownWords(phrase, neverShown).length) return meaning.display;
   if (meaning.written) return meaning.written;
   if (OWN_NAME_KINDS.has(meaning.kind)) return meaning.display;
   if (!NAME_KINDS.has(meaning.kind)) return phrase;
@@ -175,7 +179,7 @@ function writeFinishedWords(phrases, fragment, kinds, context) {
   const words = new Map();
   for (const [phrase, meanings] of phrases) {
     for (const { meaning, isCity } of listFinishedMeanings(meanings, kinds)) {
-      const written = writeFinished(phrase, meaning, fragment);
+      const written = writeFinished(phrase, meaning, fragment, context.terms.words.neverShown);
       const rating = rateName(written, meaning, fragment);
       const kept = words.get(nameMeaning(meaning));
       const best = !kept || rating > kept.rating ? { written, meaning, rating } : kept;

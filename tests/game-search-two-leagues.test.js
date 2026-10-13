@@ -60,7 +60,6 @@ const TERMS = {
     { name: "SL", words: ["sl", "south league"], codes: ["BLU", "COM"] },
     { name: "NL East", words: ["nl east"], codes: ["GRY"] },
   ],
-  crossConference: { name: "Interleague", words: ["interleague"] },
   rounds: [
     { round: 3, name: "NLCS", words: ["nlcs"], conference: "NL" },
     { round: 3, name: "SLCS", words: ["slcs"], conference: "SL" },
@@ -71,7 +70,19 @@ const TERMS = {
     { id: "p2", name: "Bo Smith", words: ["bo smith", "smith"] },
     { id: "p3", name: "Cy Smith", words: ["cy smith", "smith"] },
   ],
-  kindNames: { cup: "Cup", allStar: "All-Star Game" },
+  words: {
+    seasonOpener: "Opening Day",
+    allStar: "All-Star Game",
+    cup: null,
+    hasDoubleheaders: true,
+    pastRegulation: {
+      name: "Extra innings",
+      words: ["extra innings"],
+      games: "extra-inning games",
+    },
+    crossConference: { name: "Interleague", words: ["interleague"] },
+    neverShown: ["postseason"],
+  },
   examples: [],
 };
 

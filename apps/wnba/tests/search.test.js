@@ -167,6 +167,16 @@ test("an arena city no place covers becomes a place of its own", () => {
   assert.ok(terms.places.some((place) => place.name === "Rogers Arena" && place.isArena));
 });
 
+test("postseason finds the playoffs but is offered as playoffs, and a doubleheader reads as nothing", () => {
+  const texts = (/** @type {string} */ text) =>
+    listSuggestions(text, CONTEXT).map((row) => row.text);
+  assert.deepEqual(texts("post"), ["playoffs"]);
+  assert.match(search("postseason").line, /^Playoffs \| /);
+  assert.match(search("opener").line, /^Season opener \| /);
+  assert.match(search("if necessary").line, /^If necessary \| /);
+  assert.deepEqual(readSearch("doubleheader", CONTEXT).skipped, ["doubleheader"]);
+});
+
 test("the examples before typing and the suggestions as you type each find games, with two whole searches at most", () => {
   assert.deepEqual(listExamples(CONTEXT), [
     "Dream at Valkyries",
