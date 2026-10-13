@@ -26,13 +26,6 @@
 .search-bar.is-empty {
   padding-bottom: 0;
 }
-/* While the keyboard is up, the list's end leaves room as tall as it (game-search-view.js), so its
-   last row can scroll clear of it. */
-@media (max-width: 779px) {
-  .search-list {
-    padding-bottom: max(var(--tab-bar-clearance), var(--end-room, 0px), var(--keyboard-room, 0px));
-  }
-}
 /* While rows sit over the games, the first one's text starts 18px under the field, about as far as
    the first example's does when the search opens: 2.2px of the bar, then the rows. */
 .search-bar.has-rows {

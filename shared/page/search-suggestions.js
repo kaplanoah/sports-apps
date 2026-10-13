@@ -1,11 +1,12 @@
 // What a search offers as it's typed, and before anything is. The word being typed is finished
-// first, a team before a place or a date, and the team that plays soonest before another that starts
-// the same; after a joining word like "in" or "at", the words that can follow it; then whole
-// searches built on a team it already names, two at most, which fit where the season stands: its
-// next game while it has one, its playoffs while they're on, and its last game once it's done. A
-// team's name that is also a place, like "New York", has the games played there as its other
-// reading. Nothing is offered that would find no games. Runs in the page and in Node, so it uses no
-// DOM.
+// first, a name teams share, like "Los Angeles", before each of them, a team before a place or a
+// date, and the team that plays soonest before another that starts the same; after a joining word
+// like "in" or "at", the words that can follow it; then whole searches built on a team it already
+// names, two at most, which fit where the season stands: its next game while it has one, its
+// playoffs while they're on, and its last game once it's done. A team's name that is also a place,
+// like "New York", has the games played there as its other reading when they're other games than
+// the team's. Nothing is offered that would find no games. Runs in the page and in Node, so it uses
+// no DOM.
 
 import { readMonthDays } from "./search-dates.js";
 import { describeCount, findSearchGames, isGameInPlace, readSearch } from "./game-search.js";
@@ -119,31 +120,57 @@ function writeFinished(phrase, meaning, fragment) {
 const nameMeaning = (meaning) => `${meaning.kind}:${JSON.stringify(meaning.value)}`;
 
 /**
- * Each word the dictionary knows that a typed fragment starts, written whole: a team whose name it
- * starts before one it finds by city or nickname, and the one that plays soonest first.
+ * What a finished phrase means: a place when it names more than one team as well, as "Los Angeles"
+ * does, since it finds all their games, and otherwise its first meaning of the kinds that fit.
+ * @param {Meaning[]} meanings
+ * @param {string[]} kinds
+ */
+function chooseFinishedMeaning(meanings, kinds) {
+  const fitting = meanings.filter((meaning) => kinds.includes(meaning.kind) && meaning.display);
+  const teams = fitting.filter((meaning) => meaning.kind === "team");
+  const place = fitting.find((meaning) => meaning.kind === "place");
+  return teams.length > 1 && place ? { meaning: place, isShared: true } : { meaning: fitting[0] };
+}
+
+/**
+ * How well a finished word names what it means: its name, then a phrase that holds it, as "Los
+ * Angeles Angels" holds "Angels", then any other, like a city or a nickname.
+ * @param {string} written
+ * @param {Meaning} meaning
+ */
+function rateName(written, meaning) {
+  if (written === meaning.display) return 2;
+  return written.includes(meaning.display) ? 1 : 0;
+}
+
+/**
+ * Each word the dictionary knows that a typed fragment starts, written whole: a name that teams
+ * share before each of them, then a team by its name before one it finds by city or nickname, and
+ * the one that plays soonest first.
  * @param {string} fragment the last word or two, as read
  * @param {string[]} kinds
  * @param {SearchContext} context
  */
 function listFinishedWords(fragment, kinds, context) {
-  /** @type {Map<string, { written: string, meaning: Meaning, isName: boolean }>} */
+  /** @type {Map<string, { written: string, meaning: Meaning, rating: number, isShared: boolean }>} */
   const words = new Map();
   for (const [phrase, meanings] of context.dictionary) {
     if (phrase === fragment || !phrase.startsWith(fragment)) continue;
-    const meaning = meanings.find((each) => kinds.includes(each.kind) && each.display);
+    const { meaning, isShared = false } = chooseFinishedMeaning(meanings, kinds);
     if (!meaning) continue;
     const written = writeFinished(phrase, meaning, fragment);
-    const isName = written === meaning.display;
+    const rating = rateName(written, meaning);
     const kept = words.get(nameMeaning(meaning));
-    if (!kept || (isName && !kept.isName))
-      words.set(nameMeaning(meaning), { written, meaning, isName });
+    const best = !kept || rating > kept.rating ? { written, meaning, rating } : kept;
+    words.set(nameMeaning(meaning), { ...best, isShared: isShared || !!kept?.isShared });
   }
   const readSoonest = (/** @type {Meaning} */ meaning) =>
     meaning.kind === "team" ? readNextStart(context, meaning.value) : 0;
   return [...words.values()].sort(
     (first, second) =>
+      Number(second.isShared) - Number(first.isShared) ||
       kinds.indexOf(first.meaning.kind) - kinds.indexOf(second.meaning.kind) ||
-      Number(second.isName) - Number(first.isName) ||
+      second.rating - first.rating ||
       readSoonest(first.meaning) - readSoonest(second.meaning),
   );
 }
@@ -441,13 +468,14 @@ function writeToken(token) {
 /**
  * The other way to read a search whose words name a team that is also a place, as "New York"
  * names the Liberty, or the games played in New York: the same search with the place for the
- * team, when it finds games.
+ * team, when it finds games, and other games than the words as read do.
  * @param {string} text
  * @param {SearchContext} context
  * @returns {Suggestion[]}
  */
 export function listOtherReadings(text, context) {
   const tokens = readTokens(text, context.dictionary);
+  const asRead = new Set(findGames(text, context).found.games);
   return tokens.flatMap((token, index) => {
     const place = token.meanings.find((meaning) => meaning.kind === "place");
     const isTeam = token.meanings.some((meaning) => meaning.kind === "team");
@@ -458,7 +486,9 @@ export function listOtherReadings(text, context) {
       .join(" ");
     const reading = words.startsWith("in ") ? `Games ${words}` : words;
     const { found } = findGames(reading, context);
-    if (!found.games.length) return [];
+    const isSameGames =
+      found.games.length === asRead.size && found.games.every((game) => asRead.has(game));
+    if (!found.games.length || isSameGames) return [];
     return [{ text: reading, mark: { kind: "search" }, detail: describeCount(found.games.length) }];
   });
 }

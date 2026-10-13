@@ -377,7 +377,7 @@ const placeGameParts = (rows, context) =>
 
 /**
  * The line saying how the search read its words, right over the games, which a tap opens whole,
- * with the words as it read them, a half-typed team's finished.
+ * with the words as it read them, a half-typed team's or place's finished.
  * @param {{ lead: string, facts: string[] }} read
  * @param {string} readText
  */
@@ -503,9 +503,9 @@ function listFromToday(games, today) {
 }
 
 /**
- * What the line reads while words are typed: a half-typed team as the team the first suggestion
- * finishes it into, and any other half-typed word left out until it's whole, rather than named as
- * one it can't use.
+ * What the line reads while words are typed: a half-typed team or place as the one the first
+ * suggestion finishes it into, and any other half-typed word left out until it's whole, rather than
+ * named as one it can't use.
  * @param {string} text
  * @param {Suggestion[]} suggestions
  * @param {import("./game-search.js").SearchContext} context
@@ -513,7 +513,7 @@ function listFromToday(games, today) {
 function readWhileTyping(text, suggestions, context) {
   if (!isTyping || !isLastWordHalfTyped(text, context)) return text;
   const last = text.split(/\s+/).at(-1) ?? "";
-  return finishTeam(text, suggestions) ?? text.slice(0, text.length - last.length).trim();
+  return finishName(text, suggestions) ?? text.slice(0, text.length - last.length).trim();
 }
 
 /**
@@ -527,18 +527,18 @@ function isLastWordHalfTyped(text, context) {
 }
 
 /**
- * The words with a half-typed team finished, as the first suggestion finishes it, or null when the
- * first suggestion doesn't finish one or the last word is too short to name a team yet.
+ * The words with a half-typed team or place finished, as the first suggestion finishes it, or null
+ * when the first suggestion doesn't finish one or the last word is too short to name one yet.
  * @param {string} text
  * @param {Suggestion[]} suggestions
  */
-function finishTeam(text, [first]) {
+function finishName(text, [first]) {
   const last = text.split(/\s+/).at(-1) ?? "";
-  const isTeamFinished =
+  const isNameFinished =
     last.length >= SHORTEST_PREFIX &&
-    first?.mark.kind === "team" &&
+    (first?.mark.kind === "team" || first?.mark.kind === "place") &&
     first.text.toLowerCase().startsWith(text.toLowerCase());
-  return isTeamFinished ? first.text : null;
+  return isNameFinished ? first.text : null;
 }
 
 /**
@@ -729,16 +729,11 @@ function closeGameSearch() {
   league?.close();
 }
 
-// An iPhone's keyboard covers the screen's bottom without making the page shorter, so while it's
-// up the list's end leaves room as tall as it, and its last row can scroll clear of it, as an
-// iPhone's own lists do. A pinch makes what shows smaller too, which isn't a keyboard.
-function fitKeyboardRoom() {
-  const list = findList();
-  if (!view || !list || !visualViewport) return;
-  const shownBottom = visualViewport.offsetTop + visualViewport.height;
-  const covered = list.getBoundingClientRect().bottom - shownBottom;
-  const room = visualViewport.scale > 1 ? 0 : Math.max(0, Math.ceil(covered));
-  view.style.setProperty("--keyboard-room", `${room}px`);
+// A finger dragging the list puts the keyboard away, as an iPhone's own searches do, so the rest of
+// the list shows.
+function putKeyboardAway() {
+  const input = findInput();
+  if (input && document.activeElement === input) input.blur();
 }
 
 /** Draws the search again from the season, as new data or the clock moves on. */
@@ -782,8 +777,8 @@ function sendSearch(event) {
 }
 
 /**
- * The words the Search key sends: a half-typed last word finished when it starts a team, as the
- * line read it while typing, and otherwise the words as typed.
+ * The words the Search key sends: a half-typed last word finished when it starts a team or a place,
+ * as the line read it while typing, and otherwise the words as typed.
  * @param {string} query
  */
 function readSentWords(query) {
@@ -792,7 +787,7 @@ function readSentWords(query) {
   const context = createContext(season);
   const text = query.trim();
   if (!isLastWordHalfTyped(text, context)) return query;
-  return finishTeam(text, listSuggestions(query, context)) ?? query;
+  return finishName(text, listSuggestions(query, context)) ?? query;
 }
 
 /**
@@ -824,8 +819,7 @@ export function startGameSearch(element, searchLeague) {
   element.addEventListener("input", followTyping);
   element.addEventListener("submit", sendSearch);
   findList()?.addEventListener("scroll", followScroll, { passive: true });
-  visualViewport?.addEventListener("resize", fitKeyboardRoom);
-  visualViewport?.addEventListener("scroll", fitKeyboardRoom);
+  findList()?.addEventListener("touchmove", putKeyboardAway, { passive: true });
   watchTimeAway((awayMs) => {
     if (isAwayLong(awayMs)) closeGameSearch();
   });

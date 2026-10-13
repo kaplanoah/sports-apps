@@ -10,7 +10,7 @@ import {
   readSearch,
 } from "#shared/game-search.js";
 import { findPages, findPartGame } from "#shared/page-search.js";
-import { listExamples, listSuggestions } from "#shared/search-suggestions.js";
+import { listExamples, listOtherReadings, listSuggestions } from "#shared/search-suggestions.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import { listSeasonGames } from "../page/js/games-view.js";
 import { listSearchPages } from "../page/js/search-pages.js";
@@ -81,6 +81,26 @@ test("a name two clubs share finds both clubs' games, and a city two clubs share
   assert.equal(search("New York").line, "In New York | 164 games");
   assert.equal(search("Chicago").line, "In Chicago | 164 games");
   assert.equal(search("Los Angeles").line, "In Los Angeles | 167 games");
+});
+
+test("a part of a place finds only its own ballpark's games, and the place finds each part's", () => {
+  assert.equal(search("Anaheim").line, "In Anaheim | 81 games");
+  assert.equal(search("Bronx").line, "In The Bronx | 83 games");
+  assert.equal(search("Queens").line, "In Queens | 81 games");
+  assert.equal(search("Flushing").line, "In Queens | 81 games");
+});
+
+test("a city two clubs share is offered first as the place, then each club by its whole name, with no other reading of the same games", () => {
+  const texts = (/** @type {string} */ text) =>
+    listSuggestions(text, CONTEXT).map((row) => `${row.mark.kind} ${row.text}`);
+  assert.deepEqual(texts("los"), [
+    "place Los Angeles",
+    "team Los Angeles Dodgers",
+    "team Los Angeles Angels",
+  ]);
+  assert.deepEqual(texts("chi"), ["place Chicago", "team Chicago White Sox", "team Chicago Cubs"]);
+  assert.deepEqual(texts("bos").slice(0, 1), ["team Boston Red Sox"]);
+  assert.deepEqual(listOtherReadings("Los Angeles", CONTEXT), []);
 });
 
 test("a ballpark finds the games played there, by its name or what fans call it", () => {

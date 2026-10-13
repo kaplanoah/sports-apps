@@ -555,7 +555,7 @@ test("a setting's words find it, and its row opens settings with the setting in 
   await expect(page.locator("#rankingTitle")).toBeInViewport();
 });
 
-test("while typing, a place's half-typed word lists it first, beside a player it starts, and a setting's word beside the club it's a letter off", async ({
+test("while typing, a place's half-typed word lists it first, beside a player it starts, a setting's word beside the club it's a letter off, and a city two clubs share both clubs' games", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -579,6 +579,12 @@ test("while typing, a place's half-typed word lists it first, beside a player it
     await expect(athletic).toBeInViewport();
   }
   await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*$/ })).toHaveCount(1);
+
+  await findInput(page).fill("");
+  await findInput(page).pressSequentially("los");
+
+  await expect(findRows(page).first()).toContainText("Los Angeles");
+  await expect(findGamesLine(page)).toContainText("In Los Angeles");
 });
 
 test("a found game's row opens its sheet wherever a finger lands on it", async ({ page }) => {

@@ -9,6 +9,7 @@ import {
   tapSearch,
 } from "./search-page.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { drag } from "../../../../tests/browser/touch.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
@@ -272,39 +273,24 @@ test("a place a team is named for offers its games there as another reading", as
   await expect(findLine(page)).toHaveText("In New York•26 games");
 });
 
-test("while the keyboard is up, the list's last row scrolls clear of it", async ({ page }) => {
-  await page.addInitScript(() => {
-    let keyboard = 0;
-    const visible = Object.assign(new EventTarget(), { offsetTop: 0, scale: 1 });
-    Object.defineProperty(visible, "height", { get: () => innerHeight - keyboard });
-    Object.defineProperty(window, "visualViewport", { configurable: true, get: () => visible });
-    Object.assign(window, {
-      raiseKeyboard: (/** @type {number} */ height) => {
-        keyboard = height;
-        visible.dispatchEvent(new Event("resize"));
-      },
-    });
-  });
+test("while typing, a finger dragging the list puts the keyboard away and leaves what typing showed", async ({
+  page,
+}) => {
   await openSeasonGames(page);
   await tapSearch(page);
   await findInput(page).pressSequentially("Lib");
-  await expect(page.locator("#gameSearch .listed-day").first()).toBeVisible();
+  await expect(findGamesLine(page)).toBeVisible();
+  await expect(findInput(page)).toBeFocused();
 
-  const keyboardTop = await page.evaluate(() => {
-    /** @type {any} */ (window).raiseKeyboard(336);
-    return innerHeight - 336;
-  });
-  await page.locator("#gameSearch .search-list").evaluate(
-    (list) =>
-      new Promise((resolve) => {
-        list.addEventListener("scroll", resolve, { once: true });
-        list.scrollTop = list.scrollHeight;
-      }),
+  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (
+    await page.locator("#gameSearch .listed-day").first().boundingBox()
   );
+  const lift = await drag(page, { x: box.x + box.width / 2, y: box.y + 10 }, { y: -120 });
+  await lift();
 
-  const lastRow = page.locator("#gameSearch .listed-day").last().locator("li").last();
-  const box = /** @type {{ y: number, height: number }} */ (await lastRow.boundingBox());
-  expect(box.y + box.height).toBeLessThanOrEqual(keyboardTop);
+  await expect(findInput(page)).not.toBeFocused();
+  await expect(findInput(page)).toHaveValue("Lib");
+  await expect(findGamesLine(page)).toHaveText("Liberty\u202252 games");
 });
 
 test("while typing, a team's first two letters suggest it but list none of its games, and its third lists them", async ({

@@ -105,19 +105,23 @@ const NICKNAMES = {
   WSH: ["nats"],
 };
 
-// The places a search can name that span more than one ballpark city, or go by another name.
+// The places a search can name that span more than one ballpark city, or go by another name. A
+// part of a place finds only its own ballpark, and the place finds each of its parts'.
 /** @type {SearchPlace[]} */
 const PLACES = [
   {
     name: "New York",
-    words: ["new york", "ny", "nyc", "new york city", "queens", "bronx", "the bronx", "flushing"],
+    words: ["new york", "ny", "nyc", "new york city"],
     cities: ["Flushing", "Bronx", "New York"],
   },
+  { name: "The Bronx", words: ["bronx", "the bronx"], cities: ["Bronx"] },
+  { name: "Queens", words: ["queens", "flushing"], cities: ["Flushing"] },
   {
     name: "Los Angeles",
-    words: ["los angeles", "la", "socal", "southern california", "anaheim"],
+    words: ["los angeles", "la", "socal", "southern california"],
     cities: ["Los Angeles", "Anaheim"],
   },
+  { name: "Anaheim", words: ["anaheim"], cities: ["Anaheim"] },
   { name: "San Francisco", words: ["san francisco", "sf", "bay area"], cities: ["San Francisco"] },
   { name: "Washington", words: ["washington", "dc", "washington dc"], cities: ["Washington"] },
   {
