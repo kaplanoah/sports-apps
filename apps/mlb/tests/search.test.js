@@ -90,6 +90,11 @@ test("a part of a place finds only its own ballpark's games, and the place finds
   assert.equal(search("Flushing").line, "In Queens | 81 games");
 });
 
+test("a state finds the games played in it, a game whose ballpark MLB doesn't name by its home club's", () => {
+  assert.equal(search("California").line, "In California | 414 games");
+  assert.equal(search("Ohio").line, "In Ohio | 165 games");
+});
+
 test("a city two clubs share is offered first as the place, then each club by its whole name, with no other reading of the same games, each finishing all the typed words of its name", () => {
   const texts = (/** @type {string} */ text) =>
     listSuggestions(text, CONTEXT).map((row) => `${row.mark.kind} ${row.text}`);

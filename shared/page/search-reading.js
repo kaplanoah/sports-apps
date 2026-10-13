@@ -4,7 +4,7 @@
 // suggestion finishes it into, once three letters of its name are typed, and otherwise left out
 // until it's whole. Runs in the page and in Node, so it uses no DOM.
 
-import { describeSearch, findSearchGames, readSearch } from "./game-search.js";
+import { describeSearch, findSearchGames, isAskingNothing, readSearch } from "./game-search.js";
 import { SHORTEST_PREFIX, findPages, findPartGame } from "./page-search.js";
 import { listOtherReadings, listSuggestions } from "./search-suggestions.js";
 import { splitWords } from "./search-words.js";
@@ -29,29 +29,35 @@ import { splitWords } from "./search-words.js";
 const readWords = (text) => splitWords(text).join(" ");
 
 /**
- * Whether the last word is one the search can't read yet, as a word still being typed is.
+ * Whether the last word is one the search can't read yet, as a word still being typed is, or is too
+ * short to ask for anything yet, as "a" on its way to "Astros" passes over.
  * @param {string} text
  * @param {SearchContext} context
  */
 function isLastWordHalfTyped(text, context) {
   const last = text.split(/\s+/).at(-1) ?? "";
-  return readSearch(text, context).skipped.includes(last.toLowerCase());
+  const search = readSearch(text, context);
+  const isTooShort = last.length < SHORTEST_PREFIX && isAskingNothing(search);
+  return search.skipped.includes(last.toLowerCase()) || isTooShort;
 }
 
 /**
- * The name a half-typed team or place is finished into, as the first suggestion finishes it, and
- * whether its typed letters run past the last word's start, as "los ange" does into Los Angeles; or
- * null when the first suggestion doesn't finish one, or too little of its name is typed to name one
- * yet.
+ * The name a half-typed team or place is finished into, as the first suggestion finishes it, even
+ * when it writes the name its own way, as "jay" is the Blue Jays, and whether its typed letters run
+ * past the last word's start, as "los ange" does into Los Angeles; or null when the first
+ * suggestion doesn't finish one, or too little of its name is typed to name one yet.
  * @param {string} text
  * @param {Suggestion[]} suggestions
  */
 function finishName(text, [first]) {
   const typed = readWords(first?.finished ?? "");
+  const words = readWords(text);
+  const head = words.slice(0, words.length - typed.length).trim();
   const isNameFinished =
     typed.replace(/\s+/g, "").length >= SHORTEST_PREFIX &&
+    words.endsWith(typed) &&
     (first?.mark.kind === "team" || first?.mark.kind === "place") &&
-    readWords(first.text).startsWith(readWords(text));
+    readWords(first.text).startsWith(head);
   return isNameFinished ? { words: first.text, typed, isAcrossWords: /\s/.test(typed) } : null;
 }
 

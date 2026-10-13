@@ -32,7 +32,7 @@ import {
   readTimeOfDay,
 } from "./search-dates.js";
 import { describeChannel } from "./network-logos.js";
-import { createDictionary, normalizeText, readTokens } from "./search-words.js";
+import { createDictionary, readTokens } from "./search-words.js";
 
 /** @typedef {import("./search-words.js").Meaning} Meaning */
 /** @typedef {import("./search-words.js").Token} Token */
@@ -66,8 +66,10 @@ import { createDictionary, normalizeText, readTokens } from "./search-words.js";
  * @property {any} game the league's own game
  */
 /**
- * A team as a search knows it: the words that name it, where its arena is, and its conference.
- * @typedef {{ code: string, name: string, words: string[], homeCity: string, conference: string }} SearchTeam
+ * A team as a search knows it: the words that name it, the names besides its own a suggestion may
+ * write for it, like "Los Angeles Dodgers" or, after "LA", "LA Dodgers", the city and state of its
+ * arena, and its conference.
+ * @typedef {{ code: string, name: string, words: string[], shownNames?: string[], homeCity: string, homeState?: string, conference: string }} SearchTeam
  */
 /**
  * A place, the words that name it, and the arena cities and states that are in it, or an arena by
@@ -393,40 +395,23 @@ export function listSearchChannels(games) {
   return [...channels.values()];
 }
 
-// A place's short name a fan writes in capitals, as "LA" or "NY".
-const LONGEST_INITIALS = 3;
-
 /**
- * A place's name as a fan writes it before a team's: a short one in capitals, as "LA", and any
- * other with each word capitalized, as "Bay Area".
- * @param {string} word
- */
-const writePlaceWord = (word) =>
-  word.length <= LONGEST_INITIALS
-    ? word.toUpperCase()
-    : word.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
-
-/**
- * A team's name after any name of the city it plays in, but a venue's, as fans write "LA Dodgers"
- * or "NY Mets", which names the team rather than its games there.
+ * A team's words, each naming it, and the names a suggestion may write for it, each as written.
  * @param {SearchTeam} team
- * @param {SearchPlace[]} places
  */
-function listPlacedTeamEntries(team, places) {
-  const known = new Set(team.words.map(normalizeText));
-  return places
-    .filter((place) => !place.isArena && place.cities.includes(team.homeCity))
-    .flatMap((place) => place.words)
-    .filter((word) => !known.has(normalizeText(`${word} ${team.name}`)))
-    .map((word) => ({
-      phrase: `${word} ${team.name}`.toLowerCase(),
-      meaning: {
-        kind: "team",
-        value: team.code,
-        display: team.name,
-        written: `${writePlaceWord(word)} ${team.name}`,
-      },
-    }));
+function listTeamEntries(team) {
+  const shown = (team.shownNames ?? []).filter((name) => name !== team.name);
+  const shownPhrases = new Set(shown.map((name) => name.toLowerCase()));
+  const meaning = { kind: "team", value: team.code, display: team.name };
+  return [
+    ...team.words
+      .filter((phrase) => !shownPhrases.has(phrase))
+      .map((phrase) => ({ phrase, meaning })),
+    ...shown.map((written) => ({
+      phrase: written.toLowerCase(),
+      meaning: { ...meaning, written },
+    })),
+  ];
 }
 
 /**
@@ -437,13 +422,7 @@ export function createSearchDictionary(terms) {
   return createDictionary([
     ...GENERAL_ENTRIES,
     ...CALENDAR_ENTRIES,
-    ...terms.teams.flatMap((team) =>
-      team.words.map((phrase) => ({
-        phrase,
-        meaning: { kind: "team", value: team.code, display: team.name },
-      })),
-    ),
-    ...terms.teams.flatMap((team) => listPlacedTeamEntries(team, terms.places)),
+    ...terms.teams.flatMap(listTeamEntries),
     ...terms.places.flatMap((place) =>
       place.words.map((phrase) => ({
         phrase,
@@ -832,13 +811,19 @@ export function readSearch(text, context) {
 }
 
 /**
+ * Whether a search asks for nothing a game has, as one of only words it passes over, like "a",
+ * does.
+ * @param {Search} search
+ */
+export const isAskingNothing = (search) =>
+  JSON.stringify({ ...search, skipped: [] }) === JSON.stringify(createEmptySearch());
+
+/**
  * Whether a search could use none of its words, as one about players' stats can't, so it asks for
  * nothing a game has.
  * @param {Search} search
  */
-const isUnread = (search) =>
-  search.skipped.length > 0 &&
-  JSON.stringify({ ...search, skipped: [] }) === JSON.stringify(createEmptySearch());
+const isUnread = (search) => search.skipped.length > 0 && isAskingNothing(search);
 
 /**
  * Whether a game has a team in it, or one of the teams one word names.
@@ -926,7 +911,7 @@ function isHomeElsewhere(search, game) {
 function readGameCity(context, game) {
   if (game.arena) return { city: game.arena.city, state: game.arena.state };
   const home = game.home && context.teamsByCode.get(game.home);
-  return home && !game.isNeutral ? { city: home.homeCity, state: "" } : null;
+  return home && !game.isNeutral ? { city: home.homeCity, state: home.homeState ?? "" } : null;
 }
 
 /**

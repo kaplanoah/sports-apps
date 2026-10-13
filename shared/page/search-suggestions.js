@@ -20,7 +20,7 @@ import { readTokens, splitWords } from "./search-words.js";
  * finishes, which may start before the last, as "los ange" does "Los Angeles".
  * @typedef {{ text: string, mark: { kind: "team", code: string } | { kind: "date" | "place" | "search" }, detail: string, finished?: string }} Suggestion
  */
-/** @typedef {{ text: string, meaning: Meaning | null, finished?: string, isShared?: boolean }} Candidate */
+/** @typedef {{ text: string, meaning: Meaning | null, finished?: string }} Candidate */
 
 const SUGGESTION_COUNT = 4;
 // Whole searches sit over the pages and games a search finds, so only a couple show.
@@ -51,6 +51,8 @@ const FINISHED_KINDS = [
 const KINDS_AFTER = { in: ["place", "month"], at: ["team", "side"], vs: ["team"] };
 const DATE_KINDS = new Set(["range", "month", "weekday", "weekdays", "time", "landmark"]);
 const NAME_KINDS = new Set(["team", "starter", "place", "month", "weekday", "round", "group"]);
+// What a suggestion writes only by a name of its own, never by another word a search reads for it.
+const OWN_NAME_KINDS = new Set(["team", "place"]);
 
 /**
  * The search's own words as typed, each with where it starts.
@@ -105,8 +107,9 @@ function readJoin(word, context) {
 }
 
 /**
- * How a finished word is written: its name, or, when that doesn't start as typed, the word it
- * finished, as its meaning writes it, like "LA Dodgers", or as "Vegas" for the Aces.
+ * How a finished word is written: its name, or, when that doesn't start as typed, the name its
+ * meaning writes for the phrase, like "Los Angeles Dodgers". A team or a place a search reads
+ * from another word, like a nickname, is written by its own name, as "jays" is the Blue Jays.
  * @param {string} phrase
  * @param {Meaning} meaning
  * @param {string} fragment
@@ -114,6 +117,7 @@ function readJoin(word, context) {
 function writeFinished(phrase, meaning, fragment) {
   if (readWords(meaning.display).startsWith(fragment)) return meaning.display;
   if (meaning.written) return meaning.written;
+  if (OWN_NAME_KINDS.has(meaning.kind)) return meaning.display;
   if (!NAME_KINDS.has(meaning.kind)) return phrase;
   return phrase.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
@@ -122,35 +126,36 @@ function writeFinished(phrase, meaning, fragment) {
 const nameMeaning = (meaning) => `${meaning.kind}:${JSON.stringify(meaning.value)}`;
 
 /**
- * What a finished phrase means: its first meaning of the kinds that fit, and whether teams share
- * it, as "Los Angeles" and "Sox" are shared, which finds all their games, read as the place when
- * it's one.
+ * What a finished phrase means, each of the kinds that fit, and whether teams share it: a place
+ * when it names more than one team as well, as "Los Angeles" does, since it finds all their games;
+ * each team that shares it when it names no place, as "Sox" does; and otherwise its first meaning.
  * @param {Meaning[]} meanings
  * @param {string[]} kinds
+ * @returns {{ meaning: Meaning, isShared: boolean }[]}
  */
-function chooseFinishedMeaning(meanings, kinds) {
+function listFinishedMeanings(meanings, kinds) {
   const fitting = meanings.filter((meaning) => kinds.includes(meaning.kind) && meaning.display);
   const teams = fitting.filter((meaning) => meaning.kind === "team");
   const place = fitting.find((meaning) => meaning.kind === "place");
-  if (teams.length < 2) return { meaning: fitting[0], isShared: false };
-  return { meaning: place ?? teams[0], isShared: true };
+  if (teams.length > 1 && place) return [{ meaning: place, isShared: true }];
+  if (teams.length > 1) return teams.map((meaning) => ({ meaning, isShared: false }));
+  return fitting.slice(0, 1).map((meaning) => ({ meaning, isShared: false }));
 }
 
 /**
- * How well a finished word names what it means: its name, then a phrase that holds it, as "Los
- * Angeles Angels" holds "Angels", then any other, like a city or a nickname.
+ * How well a finished word names what it means: one that starts as typed first, then its own name,
+ * as "boston" finishes into "Boston Red Sox" and "jay" into "Blue Jays".
  * @param {string} written
  * @param {Meaning} meaning
+ * @param {string} fragment
  */
-function rateName(written, meaning) {
-  if (written === meaning.display) return 2;
-  return written.includes(meaning.display) ? 1 : 0;
-}
+const rateName = (written, meaning, fragment) =>
+  (readWords(written).startsWith(fragment.trim()) ? 2 : 0) + (written === meaning.display ? 1 : 0);
 
 /**
  * Each word the dictionary knows that a typed fragment starts, written whole: a name that teams
- * share before each of them, then a team by its name before one it finds by city or nickname, and
- * the one that plays soonest first.
+ * share before each of them, then a team by a name as typed before one by its own name, and the
+ * one that plays soonest first.
  * @param {string} fragment the last word or two, as read
  * @param {string[]} kinds
  * @param {SearchContext} context
@@ -160,13 +165,13 @@ function listFinishedWords(fragment, kinds, context) {
   const words = new Map();
   for (const [phrase, meanings] of context.dictionary) {
     if (phrase === fragment || !phrase.startsWith(fragment)) continue;
-    const { meaning, isShared } = chooseFinishedMeaning(meanings, kinds);
-    if (!meaning) continue;
-    const written = writeFinished(phrase, meaning, fragment);
-    const rating = rateName(written, meaning);
-    const kept = words.get(nameMeaning(meaning));
-    const best = !kept || rating > kept.rating ? { written, meaning, rating } : kept;
-    words.set(nameMeaning(meaning), { ...best, isShared: isShared || !!kept?.isShared });
+    for (const { meaning, isShared } of listFinishedMeanings(meanings, kinds)) {
+      const written = writeFinished(phrase, meaning, fragment);
+      const rating = rateName(written, meaning, fragment);
+      const kept = words.get(nameMeaning(meaning));
+      const best = !kept || rating > kept.rating ? { written, meaning, rating } : kept;
+      words.set(nameMeaning(meaning), { ...best, isShared: isShared || !!kept?.isShared });
+    }
   }
   const readSoonest = (/** @type {Meaning} */ meaning) =>
     meaning.kind === "team" ? readNextStart(context, meaning.value) : 0;
@@ -200,11 +205,10 @@ function listFinishingCandidates(text, context) {
     const fragment = readWords(text.slice(start.at));
     const finished = listFinishedWords(`${fragment}${space}`, kinds, context);
     if (finished.length)
-      return finished.map(({ written, meaning, isShared }) => ({
+      return finished.map(({ written, meaning }) => ({
         text: `${head}${written}`,
         meaning,
         finished: text.slice(start.at),
-        isShared,
       }));
     if (context.dictionary.has(fragment)) return [];
   }
@@ -393,15 +397,14 @@ function listTeamSearchCandidates(text, context) {
 }
 
 /**
- * What marks a suggestion's row, and its detail: a team's dot, a date's days, or a place's, a
- * month's, or a word teams share's games.
+ * What marks a suggestion's row, and its detail: a team's dot, a date's days, or a place's or a
+ * month's games.
  * @param {Candidate} candidate
  * @param {ReturnType<typeof findGames>} result
  * @returns {Pick<Suggestion, "mark" | "detail">}
  */
-function describeRow({ meaning, isShared }, { search, found }) {
+function describeRow({ meaning }, { search, found }) {
   const count = describeCount(found.games.length);
-  if (meaning?.kind === "team" && isShared) return { mark: { kind: "search" }, detail: count };
   if (meaning?.kind === "team") return { mark: { kind: "team", code: meaning.value }, detail: "" };
   if (meaning?.kind === "place") return { mark: { kind: "place" }, detail: count };
   if (meaning?.kind === "month") return { mark: { kind: "date" }, detail: count };

@@ -8,6 +8,7 @@ import { splitWords } from "#shared/search-words.js";
 // "yankees at red sox" or "games in boston". At each key it lists where what search shows breaks a
 // rule a fan counts on:
 // - fewer than three letters of a name find no games, unless they're a whole word search knows;
+// - a suggestion writes a team or a place only by a name of its own, never a nickname;
 // - a team's suggestion, read whole, names that team alone;
 // - letters the line reads as the whole search find what the whole search does;
 // - letters past the first word of a name start no player's;
@@ -36,17 +37,20 @@ const readWords = (text) => splitWords(text).join(" ");
 const describeFound = ({ read }) => (read ? [read.lead, ...read.facts].join(" | ") : "nothing");
 
 /**
- * A team's name after each name of the place it plays in, as "la dodgers" or "ny mets", each to
- * find what the team's own name does.
+ * A team's name after its city's, as fans write it, like "la dodgers", each to find what the
+ * team's own name does.
  * @param {SearchContext} context
  * @returns {Phrasing[]}
  */
 const listPlacedTeams = ({ terms }) =>
   terms.teams.flatMap((team) =>
-    terms.places
-      .filter((place) => !place.isArena && place.cities.includes(team.homeCity))
-      .flatMap((place) => place.words)
-      .map((word) => ({ head: "", name: `${word} ${team.name}`.toLowerCase(), sameAs: team.name })),
+    (team.shownNames ?? [])
+      .filter((name) => name !== team.name)
+      .map((name) => ({
+        head: "",
+        name: name.toLowerCase(),
+        sameAs: team.name,
+      })),
   );
 
 /**
@@ -70,15 +74,38 @@ export function listPhrasings(context, rival) {
 }
 
 /**
+ * The words a suggestion finished, as it writes them.
+ * @param {Suggestion} suggestion
+ * @param {string} typed
+ */
+const writeFinishedName = (suggestion, typed) =>
+  suggestion.text.slice(typed.length - (suggestion.finished ?? "").length);
+
+/**
+ * The names a suggestion may write for what it marks: a team's own and the ones it shows, like
+ * "LA Dodgers", or a place's own; or null for anything else, which it writes as it's typed.
+ * @param {Suggestion["mark"]} mark
+ * @param {SearchContext} context
+ * @returns {string[] | null}
+ */
+function listShownNames(mark, context) {
+  if (mark.kind === "team") {
+    const team = context.teamsByCode.get(mark.code);
+    return team ? [team.name, ...(team.shownNames ?? [])] : [];
+  }
+  return mark.kind === "place" ? context.terms.places.map((place) => place.name) : null;
+}
+
+/**
  * The teams a suggestion's finished words name, read whole.
  * @param {Suggestion} suggestion
  * @param {string} typed
  * @param {SearchContext} context
  */
 function readFinishedTeams(suggestion, typed, context) {
-  const head = typed.slice(0, typed.length - (suggestion.finished ?? "").length);
-  const written = suggestion.text.slice(head.length);
-  return readSearch(written, context).teams.flatMap((team) => team.codes);
+  return readSearch(writeFinishedName(suggestion, typed), context).teams.flatMap(
+    (team) => team.codes,
+  );
 }
 
 /**
@@ -95,7 +122,12 @@ function listBrokenRules(shown, { head, name, typedName, whole }, context) {
   if (letters < SHORTEST_GUESS && !isKnownWord && !head && shown.games.length)
     broken.push("finds games from fewer than three letters");
   for (const suggestion of shown.suggestions) {
-    if (suggestion.mark.kind !== "team" || !suggestion.finished) continue;
+    if (!suggestion.finished) continue;
+    const written = writeFinishedName(suggestion, typed);
+    const names = listShownNames(suggestion.mark, context);
+    if (names && !names.includes(written))
+      broken.push(`writes ${written}, which isn't a name search shows`);
+    if (suggestion.mark.kind !== "team") continue;
     const teams = readFinishedTeams(suggestion, typed, context);
     if (teams.length !== 1 || teams[0] !== suggestion.mark.code)
       broken.push(`suggests ${suggestion.text} for ${suggestion.mark.code}, which names ${teams}`);

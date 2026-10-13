@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createSearchContext, createSearchDictionary } from "#shared/game-search.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
+import { readTypedSearch } from "#shared/search-reading.js";
 import { listPhrasings, sweepPhrasings } from "../../../tests/search-sweep.js";
 import { listSeasonGames } from "../page/js/games-view.js";
 import { listSearchPages } from "../page/js/search-pages.js";
@@ -38,4 +39,19 @@ const PAGES = listSearchPages({
 test("typing each club's and place's name a key at a time, alone or in a search, finds no games from under three letters, names each club alone, finds what the whole search does once it reads it whole, and starts no player past its first word", () => {
   const phrasings = listPhrasings(CONTEXT, "mets");
   assert.deepEqual(sweepPhrasings(phrasings, { context: CONTEXT, pages: PAGES }), []);
+});
+
+test("typing a whole word that asks for every game lists them, and a letter or two on the way to a name lists none", () => {
+  /** @param {string} text */
+  const countTyped = (text) =>
+    readTypedSearch(text, { context: CONTEXT, pages: PAGES, isTyping: true, isGamesOnly: false })
+      .games.length;
+  assert.deepEqual(
+    ["games", "a", "as"].map((text) => [text, countTyped(text)]),
+    [
+      ["games", CONTEXT.games.length],
+      ["a", 0],
+      ["as", 0],
+    ],
+  );
 });

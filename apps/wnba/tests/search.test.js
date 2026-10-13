@@ -92,7 +92,7 @@ test("next game is the one on now or next, even before its opponent is known", (
 });
 
 test("nicknames, cities, and filler words read as a fan would mean them", () => {
-  assert.equal(search("When do the Libs play Vegas?").line, "Liberty vs Aces | 4 games");
+  assert.equal(search("When do the NY Liberty play Vegas?").line, "Liberty vs Aces | 4 games");
   assert.deepEqual(search("New York Valks").games, search("Liberty Valkyries").games);
   assert.equal(search("Liberyt").line, "Liberty | 52 games");
 });
@@ -231,7 +231,7 @@ function listPages(text) {
 }
 
 test("a team's name lists its sheet and its Roster, by any name a search of games knows it by", () => {
-  for (const text of ["Liberty", "NYL", "libs", "New York Liberty"])
+  for (const text of ["Liberty", "NYL", "ny liberty", "New York Liberty"])
     assert.deepEqual(listPages(text).rows, ["New York Liberty", "New York Liberty Roster"], text);
   assert.deepEqual(listPages("Aces roster").rows, ["Las Vegas Aces Roster"]);
 });
