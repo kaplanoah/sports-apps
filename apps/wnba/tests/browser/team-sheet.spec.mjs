@@ -1,4 +1,8 @@
 import { test, expect, openApp } from "./harness.mjs";
+import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
+import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -282,6 +286,31 @@ test.describe("a team's sheet", () => {
     for (const dot of layout.dots) expect(dot).toEqual([7.5, 7.5]);
     expect(layout.endDots).toHaveLength(4);
     for (const past of layout.endDots) expect(past).toBeCloseTo(0.5, 1);
+  });
+
+  test("a team's playoff lines run dashed past the regular season's range, each a whole gap from the solid line, under a legend 20px below the last line, its two lines 11px apart, and 23px over the Regular season title", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("tab", { name: "Standings" }).click();
+    await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
+    const sheet = page.locator("#teamSheet");
+    await expect(sheet.locator(".placed-legend")).toHaveText(
+      "Regular season range for all teamsPlayoffs range, beyond regular season range",
+    );
+
+    const layout = await measurePlacedLegend(sheet);
+    expect(layout.above).toBeCloseTo(20, 0);
+    expect(layout.between).toBeCloseTo(11, 0);
+    expect(layout.below).toBeCloseTo(23, 0);
+    expect(layout.dashes.length).toBeGreaterThan(0);
+    for (const dash of layout.dashes) {
+      expect(dash.meets).toBeCloseTo(0, 1);
+      expect(dash.isGapFirst).toBe(true);
+    }
+    expect(await listOffScaleText(page)).toEqual([]);
+    expect(await listLowContrastText(page)).toEqual([]);
+    expect(await listStrayPeriods(page)).toEqual([]);
   });
 
   test("a team's sheet is titled with its name, set like every other team's", async ({ page }) => {

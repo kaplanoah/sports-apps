@@ -149,7 +149,7 @@ test("a placed row shows the label, the number, a line with the other's dot unde
   assert.match(row, /player-rank-value tabular">89\.5</);
   assert.match(
     row,
-    /<span class="placed-line" aria-hidden="true"><span><i class="other" style="left: 44\.4%"><\/i><i class="own" style="left: 62\.1%"><\/i><\/span><\/span>/,
+    /<span class="placed-line" aria-hidden="true"><span><b class="placed-range" style="left: calc\(-1 \* var\(--placed-inset\)\); right: calc\(-1 \* var\(--placed-inset\)\)"><\/b><i class="other" style="left: 44\.4%"><\/i><i class="own" style="left: 62\.1%"><\/i><\/span><\/span>/,
   );
   assert.match(row, /placed-other tabular">86\.5</);
   const unplaced = String(
@@ -161,6 +161,36 @@ test("a placed row shows the label, the number, a line with the other's dot unde
   );
   assert.doesNotMatch(unplaced, /class="own"/);
   assert.match(unplaced, /class="other"/);
+});
+
+test("a placed row's line is solid over its range and dashed past either end of it, each stretch reaching the line's end where it ends there", () => {
+  /** @param {[number, number]} range */
+  const readLine = (range) =>
+    String(
+      renderPlacedRow({
+        label: "R/G",
+        own: { shown: "4.00", at: 27.7 },
+        other: { shown: "3.52", at: 0 },
+        range,
+      }),
+    ).match(/<span class="placed-line" aria-hidden="true"><span>(.*?)<i /)?.[1];
+  const end = "calc(-1 * var(--placed-inset))";
+  assert.equal(
+    readLine([27.7, 100]),
+    `<b class="placed-past toward-start" style="left: ${end}; right: 72.3%"></b>` +
+      `<b class="placed-range" style="left: 27.7%; right: ${end}"></b>`,
+  );
+  assert.equal(
+    readLine([0, 80.1]),
+    `<b class="placed-range" style="left: ${end}; right: 19.9%"></b>` +
+      `<b class="placed-past toward-end" style="left: 80.1%; right: ${end}"></b>`,
+  );
+  assert.equal(
+    readLine([12.5, 75]),
+    `<b class="placed-past toward-start" style="left: ${end}; right: 87.5%"></b>` +
+      `<b class="placed-range" style="left: 12.5%; right: 25%"></b>` +
+      `<b class="placed-past toward-end" style="left: 75%; right: ${end}"></b>`,
+  );
 });
 
 test("a player not yet ranked has where he would rank once he's a quarter of the way to qualifying, and not before", () => {

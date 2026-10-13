@@ -2170,6 +2170,11 @@ table.standings tr.playoff-line + tr td {
 .team-numbers {
   display: grid;
 }
+/* A line's legend sits 20px under the last row's numbers and 23px over the next part's title, as
+   MLB's does, the title sitting 1px into its part's head, on the baseline of the note beside it. */
+.team-numbers > .placed-legend {
+  margin: 20px 0 calc(23px - 1px - var(--part-space-above));
+}
 .team-numbers .tape-teams {
   margin-bottom: var(--field-space-below);
 }
@@ -2658,14 +2663,14 @@ table.player-game td {
   margin-right: -7.5px;
 }
 .placed-line {
+  --placed-inset: calc(7.5px / 2 - 0.5px);
   position: relative;
   height: 1px;
   margin-left: 7px;
-  background: color-mix(in srgb, var(--ink-dim) 55%, transparent);
 }
 .placed-line > span {
   position: absolute;
-  inset: 0 calc(7.5px / 2 - 0.5px);
+  inset: 0 var(--placed-inset);
 }
 .placed-line i {
   position: absolute;

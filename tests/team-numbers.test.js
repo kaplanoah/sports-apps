@@ -7,6 +7,7 @@ import {
   listFieldRows,
   listSeasonRankRows,
   readWinShare,
+  renderFieldLegend,
 } from "../shared/page/team-numbers.js";
 
 /** @type {import("../shared/page/team-numbers.js").Measure[]} */
@@ -73,8 +74,8 @@ test("a team's playoffs place it and the field on each regular season range, its
   const playoffs = {
     record: "2-1",
     scored: 85,
-    allowed: 95,
-    margin: -10,
+    allowed: 90,
+    margin: -5,
     home: "1-1",
     road: "1-0",
   };
@@ -84,9 +85,40 @@ test("a team's playoffs place it and the field on each regular season range, its
     rows[0],
     /<i class="other" style="left: 50%"><\/i><i class="own" style="left: 75%"><\/i>/,
   );
-  assert.match(rows[1], /<i class="own" style="left: 0%"><\/i>/);
+  assert.match(
+    rows[1],
+    /<i class="other" style="left: 100%"><\/i><i class="own" style="left: 33\.3%"><\/i>/,
+  );
   assert.match(
     rows[2],
     /<i class="other" style="left: 0%"><\/i><i class="own" style="left: 50%"><\/i>/,
+  );
+  assert.doesNotMatch(rows.join(""), /placed-past/);
+  assert.equal(renderFieldLegend(MEASURES, playoffs, field, TEAMS), false);
+});
+
+test("a playoff number past every team's regular season stretches its line only as far as it, dashed past the range, with the legend under the lines", () => {
+  const playoffs = {
+    record: "1-2",
+    scored: 60,
+    allowed: 90,
+    margin: -30,
+    home: "0-2",
+    road: "1-0",
+  };
+  const field = describePlayoffField([{ home: 75, away: 75 }]);
+  const rows = listFieldRows(MEASURES, playoffs, field, TEAMS).map(String);
+  assert.match(
+    rows[0],
+    /<b class="placed-past toward-start" style="left: calc\(-1 \* var\(--placed-inset\)\); right: 66\.7%"><\/b><b class="placed-range" style="left: 33\.3%; right: calc\(-1 \* var\(--placed-inset\)\)"><\/b><i class="other" style="left: 50%"><\/i><i class="own" style="left: 0%"><\/i>/,
+  );
+  assert.match(
+    rows[1],
+    /<b class="placed-range" style="left: calc\(-1 \* var\(--placed-inset\)\); right: 25%"><\/b><b class="placed-past toward-end" style="left: 75%; right: calc\(-1 \* var\(--placed-inset\)\)"><\/b><i class="other" style="left: 100%"><\/i>/,
+  );
+  assert.doesNotMatch(rows[2], /placed-past/);
+  assert.equal(
+    readRow(renderFieldLegend(MEASURES, playoffs, field, TEAMS)),
+    "Regular season range for all teams Playoffs range, beyond regular season range",
   );
 });

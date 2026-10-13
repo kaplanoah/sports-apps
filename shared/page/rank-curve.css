@@ -1,12 +1,14 @@
 /*
  * A rank curve, as rank-curve.js draws it: how every ranked player's numbers spread, smoothed, with
  * each player's place on it a line up to a dot, ringed in the sheet's color so two dots that meet
- * stay apart, or a hairline with no dot where a player not yet ranked would rank. Apps link it
- * before their own styles.css, which places the curve in its row.
+ * stay apart, or a hairline with no dot where a player not yet ranked would rank, and a line that
+ * measures a number against a range, with the legend for its stretches. Apps link it before their
+ * own styles.css, which places the curve or line in its row and colors the line's dots.
  *
- * Beside chrome.css's --ink-dim and --sheet, an app defines this token, in its :root or around the
- * curve:
+ * Beside chrome.css's --ink-dim and --sheet, an app defines these tokens, in its :root or around the
+ * curve or line:
  *   --rank-mark            a player's line and dot
+ *   --placed-inset         how far a placed line's dots sit in from its ends
  */
 
 .player-curve {
@@ -57,4 +59,66 @@
   border-radius: 50%;
   background: var(--rank-mark);
   box-shadow: 0 0 0 1.5px var(--sheet);
+}
+
+/* A line that measures a number against a range is solid over the range and dashed past either
+   end of it as far as a number reaches, each dashed stretch running out from the solid one, a
+   whole gap first, and fainter, so the range reads first. A stretch that ends where the line does
+   reaches past the dots' box by the app's --placed-inset. */
+.placed-range,
+.placed-past {
+  position: absolute;
+  top: 0;
+  height: 1px;
+}
+.placed-range {
+  background: color-mix(in srgb, var(--ink-dim) 55%, transparent);
+}
+.placed-past {
+  background: repeating-linear-gradient(
+    var(--placed-away),
+    transparent 0 3.5px,
+    color-mix(in srgb, var(--ink-dim) 45%, transparent) 3.5px 6.5px
+  );
+}
+.placed-past.toward-start {
+  --placed-away: 270deg;
+}
+.placed-past.toward-end {
+  --placed-away: 90deg;
+}
+/* The legend under the lines, centered, each stretch drawn beside what it means on a line of its
+   own, the two lines' text 11px apart. */
+.placed-legend {
+  display: grid;
+  justify-content: center;
+  justify-items: start;
+  margin: 0;
+  font-size: var(--size-glance);
+  line-height: 1;
+  color: var(--ink-dim);
+}
+.placed-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.placed-key + .placed-key {
+  margin-top: 11px;
+}
+.placed-swatch {
+  flex: none;
+  width: 18px;
+  height: 1px;
+}
+.placed-swatch.range {
+  background: color-mix(in srgb, var(--ink-dim) 55%, transparent);
+}
+.placed-swatch.past {
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ink-dim) 45%, transparent) 0 3px,
+    transparent 3px 6.5px
+  );
 }
