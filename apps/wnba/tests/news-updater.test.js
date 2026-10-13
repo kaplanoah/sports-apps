@@ -1,7 +1,7 @@
 import test from "node:test";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
-import { NEWS_MODEL, readJsonArray } from "../../../shared/worker/news-claude.js";
+import { LABELS_SCHEMA, NEWS_MODEL } from "../../../shared/worker/news-claude.js";
 import { LABEL_PROMPT } from "../worker/src/news-prompts.js";
 import { createWnbaNewsJob } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
@@ -38,13 +38,14 @@ const answerLabels = (content, { skip, place, ignore }) =>
 
 /**
  * The feeds as recorded, and a Claude that answers as `skip`, `place`, and `ignore` say, or with
- * `status` when it's not 200.
+ * `status` when it's not 200, stopping for `stopReason`.
  */
 function createFetch({
   skip = () => false,
   place = () => ({}),
   ignore = () => false,
   status = 200,
+  stopReason = "end_turn",
   requests = [],
 } = {}) {
   const readFeed = createFeedFetch();
@@ -55,7 +56,8 @@ function createFetch({
     if (status !== 200) return Response.json({ error: { message: "Overloaded" } }, { status });
     const answers = answerLabels(body.messages[0].content, { skip, place, ignore });
     return Response.json({
-      content: [{ type: "text", text: `Here you go:\n${JSON.stringify(answers)}` }],
+      content: [{ type: "text", text: JSON.stringify({ stories: answers }) }],
+      stop_reason: stopReason,
       usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 900 },
     });
   };
@@ -336,14 +338,24 @@ test("an overnight wait ends at 7 a.m. Eastern, in and out of daylight time", ()
   assert.equal(job.chooseDelay(Date.parse("2027-01-10T11:40:00Z")), 20 * 60 * 1000);
 });
 
-test("Claude's answer is read from its JSON array, whatever text is around it", () => {
-  assert.deepEqual(readJsonArray('Sure:\n[{"id": 1}]\nDone.'), [{ id: 1 }]);
-  assert.throws(() => readJsonArray("No stories."), /no JSON array/);
+test("Claude answers in the schema, and a run whose answer Claude didn't finish saves the problem", async () => {
+  const requests = [];
+  const { docs, runJob } = createRun();
+
+  await runJob(createFetch({ requests, stopReason: "max_tokens" }));
+
+  assert.deepEqual(requests[0].body.output_config, {
+    format: { type: "json_schema", schema: LABELS_SCHEMA },
+  });
+  assert.equal(
+    docs.stored.get("news/status").problem,
+    "Claude stopped without finishing: max_tokens",
+  );
 });
 
 // Claude judges every story again when its prompt changes, so the prompt changes only on purpose,
 // with this hash.
 test("the WNBA's prompt is the one its stories were last judged by", () => {
   const hash = createHash("sha256").update(LABEL_PROMPT).digest("hex").slice(0, 16);
-  assert.equal(hash, "4d828de06be0fcde");
+  assert.equal(hash, "5a56822c8c0fb6d6");
 });

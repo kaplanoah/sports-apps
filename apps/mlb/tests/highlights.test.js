@@ -75,8 +75,10 @@ function createMlbFetch(withHeadlines = new Set()) {
       const still = JSON.parse(init.body).messages[0].content[0].source.url;
       stillsAsked.push(still);
       if (claude.isDown) return new Response("{}", { status: 529 });
-      const text = withHeadlines.has(still) ? "yes" : "no";
-      return new Response(JSON.stringify({ content: [{ type: "text", text }] }));
+      const text = JSON.stringify({ headline: withHeadlines.has(still) });
+      return new Response(
+        JSON.stringify({ content: [{ type: "text", text }], stop_reason: "end_turn" }),
+      );
     }
     const path = url.slice(MLB_API.length);
     requests.push(path);
