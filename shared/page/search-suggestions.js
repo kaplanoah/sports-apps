@@ -15,11 +15,12 @@ import { readTokens, splitWords } from "./search-words.js";
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
 /** @typedef {import("./search-words.js").Meaning} Meaning */
 /**
- * A suggestion: the whole search it would run, what marks its row, and a detail at its end, like the
- * days a date covers or how many games a place has.
- * @typedef {{ text: string, mark: { kind: "team", code: string } | { kind: "date" | "place" | "search" }, detail: string }} Suggestion
+ * A suggestion: the whole search it would run, what marks its row, a detail at its end, like the
+ * days a date covers or how many games a place has, and, for a word it finishes, the typed words it
+ * finishes, which may start before the last, as "los ange" does "Los Angeles".
+ * @typedef {{ text: string, mark: { kind: "team", code: string } | { kind: "date" | "place" | "search" }, detail: string, finished?: string }} Suggestion
  */
-/** @typedef {{ text: string, meaning: Meaning | null }} Candidate */
+/** @typedef {{ text: string, meaning: Meaning | null, finished?: string }} Candidate */
 
 const SUGGESTION_COUNT = 4;
 // Whole searches sit over the pages and games a search finds, so only a couple show.
@@ -194,7 +195,11 @@ function listFinishingCandidates(text, context) {
     const fragment = readWords(text.slice(start.at));
     const finished = listFinishedWords(fragment, kinds, context);
     if (finished.length)
-      return finished.map(({ written, meaning }) => ({ text: `${head}${written}`, meaning }));
+      return finished.map(({ written, meaning }) => ({
+        text: `${head}${written}`,
+        meaning,
+        finished: text.slice(start.at),
+      }));
     if (context.dictionary.has(fragment)) return [];
   }
   return [];
@@ -416,7 +421,8 @@ function listUseful(candidates, text, context) {
     seen.add(key);
     const result = findGames(candidate.text, context);
     if (!result.found.games.length) continue;
-    useful.push({ text: candidate.text, ...describeRow(candidate.meaning, result) });
+    const finished = candidate.finished ? { finished: candidate.finished } : {};
+    useful.push({ text: candidate.text, ...finished, ...describeRow(candidate.meaning, result) });
     if (isWholeSearch) wholeSearches += 1;
     if (useful.length === SUGGESTION_COUNT) break;
   }

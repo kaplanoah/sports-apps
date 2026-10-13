@@ -528,18 +528,28 @@ function isLastWordHalfTyped(text, context) {
 
 /**
  * The words with a half-typed team or place finished, as the first suggestion finishes it, or null
- * when the first suggestion doesn't finish one or the last word is too short to name one yet.
+ * when the first suggestion doesn't finish one or too little of its name is typed to name one yet.
  * @param {string} text
  * @param {Suggestion[]} suggestions
  */
 function finishName(text, [first]) {
-  const last = text.split(/\s+/).at(-1) ?? "";
+  const typedLetters = (first?.finished ?? "").replace(/\s+/g, "").length;
   const isNameFinished =
-    last.length >= SHORTEST_PREFIX &&
+    typedLetters >= SHORTEST_PREFIX &&
     (first?.mark.kind === "team" || first?.mark.kind === "place") &&
     first.text.toLowerCase().startsWith(text.toLowerCase());
   return isNameFinished ? first.text : null;
 }
+
+/**
+ * Whether the line reads the words as a name the first suggestion finished from more than the last
+ * word, as "los ange" is Los Angeles, so the half-typed word is part of that name and starts no
+ * other, like a player's.
+ * @param {string} readText
+ * @param {Suggestion[]} suggestions
+ */
+const isNameFinishedAcrossWords = (readText, [first]) =>
+  first?.text === readText && /\s/.test(first.finished?.trim() ?? "");
 
 /**
  * The suggestions less a team whose page shows under them, since its page's row stands for it.
@@ -556,7 +566,7 @@ function dropTeamsShown(suggestions, rows) {
  * no games, and the line an answer says over its rows. A half-typed word may start a player's name
  * or a place's, so the words as typed go first, and the words as the line reads them only when
  * those find no page.
- * @param {string} text
+ * @param {string} text the words to try first
  * @param {string} readText the words as the line reads them while they're typed
  * @param {import("./game-search.js").SearchContext} context
  * @returns {{ pages: SearchPages | null } & import("./page-search.js").FoundPages}
@@ -566,7 +576,8 @@ function readPages(text, readText, context) {
   if (!pages) return { pages, rows: [], gameText: readText };
   const search = { dictionary: context.dictionary, pages, isTyping };
   const typed = findPages(text, search);
-  return { pages, ...(typed.rows.length ? typed : findPages(readText, search)) };
+  const isTypedEnough = typed.rows.length > 0 || text === readText;
+  return { pages, ...(isTypedEnough ? typed : findPages(readText, search)) };
 }
 
 /**
@@ -602,7 +613,8 @@ function draw() {
   }
   const typed = isTyping ? listSuggestions(query, context) : [];
   const readText = readWhileTyping(text, typed, context);
-  const { pages, rows: pageRows, gameText, read: answer } = readPages(text, readText, context);
+  const pagesText = isNameFinishedAcrossWords(readText, typed) ? readText : text;
+  const { pages, rows: pageRows, gameText, read: answer } = readPages(pagesText, readText, context);
   const rows = placeGameParts(pageRows, context);
   const suggestions = dropTeamsShown(typed, rows);
   const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];

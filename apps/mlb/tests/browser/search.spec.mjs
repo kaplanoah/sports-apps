@@ -27,6 +27,7 @@ const PLAYER_INDEX = {
     { id: "694973", team: "PIT", number: "30", firstName: "Paul", lastName: "Skenes" },
     { id: "605141", team: "LAD", number: "50", firstName: "Mookie", lastName: "Betts" },
     { id: "519317", team: "NYY", number: "27", firstName: "Giancarlo", lastName: "Stanton" },
+    { id: "678662", team: "CLE", number: "1", firstName: "Angel", lastName: "Mart\u00ednez" },
   ],
 };
 
@@ -555,7 +556,7 @@ test("a setting's words find it, and its row opens settings with the setting in 
   await expect(page.locator("#rankingTitle")).toBeInViewport();
 });
 
-test("while typing, a place's half-typed word lists it first, beside a player it starts, a setting's word beside the club it's a letter off, and a city two clubs share both clubs' games", async ({
+test("while typing, a place's half-typed word lists it first, beside a player it starts, a setting's word beside the club it's a letter off, and a city two clubs share both clubs' games, its half-typed words starting no player", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -585,6 +586,16 @@ test("while typing, a place's half-typed word lists it first, beside a player it
 
   await expect(findRows(page).first()).toContainText("Los Angeles");
   await expect(findGamesLine(page)).toContainText("In Los Angeles");
+
+  const angel = findRows(page).filter({ hasText: "Angel Mart\u00ednez" });
+  await findInput(page).fill("");
+  await findInput(page).pressSequentially("ange");
+  await expect(angel).toHaveCount(1);
+
+  await findInput(page).fill("");
+  await findInput(page).pressSequentially("los ange");
+  await expect(findGamesLine(page)).toContainText("In Los Angeles");
+  await expect(angel).toHaveCount(0);
 });
 
 test("a found game's row opens its sheet wherever a finger lands on it", async ({ page }) => {

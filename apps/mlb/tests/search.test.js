@@ -90,7 +90,7 @@ test("a part of a place finds only its own ballpark's games, and the place finds
   assert.equal(search("Flushing").line, "In Queens | 81 games");
 });
 
-test("a city two clubs share is offered first as the place, then each club by its whole name, with no other reading of the same games", () => {
+test("a city two clubs share is offered first as the place, then each club by its whole name, with no other reading of the same games, each finishing all the typed words of its name", () => {
   const texts = (/** @type {string} */ text) =>
     listSuggestions(text, CONTEXT).map((row) => `${row.mark.kind} ${row.text}`);
   assert.deepEqual(texts("los"), [
@@ -101,6 +101,8 @@ test("a city two clubs share is offered first as the place, then each club by it
   assert.deepEqual(texts("chi"), ["place Chicago", "team Chicago White Sox", "team Chicago Cubs"]);
   assert.deepEqual(texts("bos").slice(0, 1), ["team Boston Red Sox"]);
   assert.deepEqual(listOtherReadings("Los Angeles", CONTEXT), []);
+  assert.equal(listSuggestions("los ange", CONTEXT)[0].finished, "los ange");
+  assert.equal(listSuggestions("Mets at l", CONTEXT)[0].finished, "l");
 });
 
 test("a ballpark finds the games played there, by its name or what fans call it", () => {
