@@ -75,6 +75,20 @@ test("burn-in runs every test ten times however many fail, and fails only on a t
   assert.match(burnIn, /name: burn-in-flaky-/);
 });
 
+// Burn-in's four machines start only for a pull request that changes a browser spec, and check
+// requires them to pass then.
+test("burn-in runs only when a pull request changes a browser spec, and check requires it then", () => {
+  assert.match(readJob("changed-specs"), /git diff --name-only --diff-filter=AM HEAD\^1 HEAD/);
+  const burnIn = readJob("burn-in");
+  assert.match(burnIn, /needs: changed-specs/);
+  assert.match(burnIn, /if: needs\.changed-specs\.outputs\.specs != ''/);
+  assert.match(burnIn, /SPECS: \$\{\{ needs\.changed-specs\.outputs\.specs \}\}/);
+  assert.match(
+    readJob("check"),
+    /\(needs\.changed-specs\.outputs\.specs != '' && needs\.burn-in\.result != 'success'\)/,
+  );
+});
+
 test("the check job names each test burn-in found failing in the issue, and can start the fix routine", () => {
   const check = readJob("check");
   assert.match(check, /pattern: burn-in-flaky-\*/);
