@@ -118,7 +118,7 @@
   before first pitch its clubs' season series (`page/js/season-series.js`),
   and its box score, or each club's lineup before first pitch (`page/js/game-sheet.js`,
   `matchup.js`, and `box-score-view.js`), over which a game under way has its Runs so far and a final its Runs,
-  each half inning that scored under its heading with the score after it, and a line for each change of the score,
+  each half inning that scored under its heading, and a line for each change of the score with the score after it,
   with the runners who got on since the last one on a lighter line above the play that scored,
   from each play in MLB's live feed, and, while a half inning is under way,
   a drawing of the field with each runner's name by his base and how he got on,

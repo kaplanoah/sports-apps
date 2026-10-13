@@ -46,27 +46,27 @@ const createPlay = (play) => ({
   ...play,
 });
 
-test("a final's Runs give each half inning that scored, with a line for each change of the score and who got on before it", () => {
+test("a final's Runs give each half inning that scored under a heading without a score, with a line for each change of the score and who got on before it", () => {
   const lines = readRuns(GUARDIANS_AT_WHITE_SOX, describeGame(GUARDIANS_AT_WHITE_SOX));
 
   assert.deepEqual(lines, [
     "Runs",
-    "Bottom 3rd0-2",
+    "Bottom 3rd",
     "Montgomery singled, Meidroth doubled, and Vargas walked, loading the basesMurakami walked, forcing in Montgomery0-1",
     "Antonacci's sac fly scored Meidroth0-2",
-    "Top 5th3-2",
+    "Top 5th",
     "Bailey homered1-2",
     "Kwan singledRamírez homered, scoring Kwan3-2",
-    "Bottom 5th3-4",
+    "Bottom 5th",
     "Meidroth and Vargas walked and Murakami singled, loading the basesAntonacci was hit by a pitch, forcing in Meidroth3-3",
     "Doyle's sac fly scored Vargas3-4",
-    "Top 6th9-4",
+    "Top 6th",
     "Martínez was hit by a pitchBazzana doubled home Martínez4-4",
     "Bailey singled home Bazzana5-4",
     "Rocchio and Kwan walked, loading the basesRamírez singled home Bailey6-4",
     "DeLauter singled home Rocchio7-4",
     "Adell singled home Ramírez and Kwan9-4",
-    "Bottom 9th9-5",
+    "Bottom 9th",
     "Vargas homered9-5",
   ]);
 });
@@ -84,7 +84,7 @@ test("a game being played has its Runs so far, then who's on base, how each got 
 
   assert.deepEqual(readRuns(DODGERS_AT_BREWERS, boxScore), [
     "Runs so far",
-    "Top 2nd1-0",
+    "Top 2nd",
     "Ohtani walked and Hernández singledPages singled home Ohtani1-0",
     "NowTop 3rd",
     "Bettssingled",
