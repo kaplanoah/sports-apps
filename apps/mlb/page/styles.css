@@ -1609,7 +1609,7 @@ table.st.line-score td.team .club {
 }
 .runs-half-head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   column-gap: 8px;
   align-items: baseline;
   margin: 0;
@@ -1622,10 +1622,6 @@ table.st.line-score td.team .club {
 .runs-half-head .dot {
   position: relative;
   top: 1px;
-}
-.runs-half-head .runs-score {
-  font-size: var(--size-glance);
-  letter-spacing: 0;
 }
 .runs-changes {
   display: grid;
