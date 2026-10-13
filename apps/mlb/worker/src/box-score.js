@@ -212,17 +212,31 @@ function groupHalves(allPlays) {
 }
 
 /**
- * Moves each runner a play moved, on the half inning's bases, by base.
+ * Where each runner a play moved ended up: the last base he reached, or none once he scored or
+ * was out. A runner moves once for each thing that moved him, like a steal and then a hit.
+ * @param {any} play
+ */
+function findRunnersEnds(play) {
+  /** @type {Map<number, string | null>} */
+  const ends = new Map();
+  for (const runner of play.runners ?? []) {
+    const { end, isOut } = runner.movement ?? {};
+    const id = runner.details?.runner?.id;
+    ends.set(id, isOut || ends.get(id) === null || !BASE_SET.has(end) ? null : end);
+  }
+  return ends;
+}
+
+/**
+ * Moves each runner a play moved, on the half inning's bases, by base. Every base a runner left is
+ * cleared before any is taken, since a pinch runner leaves the base under an id other than that of
+ * the runner he replaced.
  * @param {Map<string, number>} bases
  * @param {any} play
  */
 function moveRunners(bases, play) {
-  for (const runner of play.runners ?? []) {
-    const { start, end, isOut } = runner.movement ?? {};
-    const id = runner.details?.runner?.id;
-    if (BASE_SET.has(start) && bases.get(start) === id) bases.delete(start);
-    if (BASE_SET.has(end) && !isOut) bases.set(end, id);
-  }
+  for (const runner of play.runners ?? []) bases.delete(runner.movement?.start);
+  for (const [id, end] of findRunnersEnds(play)) if (end) bases.set(end, id);
 }
 
 /**

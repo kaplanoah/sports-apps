@@ -226,6 +226,31 @@ test("a run scored on something during a play other than its result, like a wild
   assert.deepEqual(bottomOfThird.plays[3].scorers, [{ name: "Montgomery", event: "Wild Pitch" }]);
 });
 
+test("a pinch runner leaves no one behind on the base he took over, so the bases load only when they fill", () => {
+  const feed = readPlaysFeed(GUARDIANS_AT_WHITE_SOX_FINAL);
+  const montgomery = 695657;
+  const pinchRunner = 999999;
+  const [single, ...rest] = feed.liveData.plays.allPlays.filter(
+    (/** @type {any} */ play) => play.about.inning === 3 && play.about.halfInning === "bottom",
+  );
+  assert.equal(single.matchup.batter.id, montgomery);
+  for (const runner of rest.flatMap((/** @type {any} */ play) => play.runners))
+    if (runner.details.runner.id === montgomery) runner.details.runner.id = pinchRunner;
+
+  const [bottomOfThird] = describeBoxScore(GUARDIANS_AT_WHITE_SOX_FINAL, feed).scoringHalves;
+
+  assert.deepEqual(
+    bottomOfThird.plays.map((/** @type {any} */ play) => [play.batter, play.filledBases]),
+    [
+      ["Montgomery", false],
+      ["Meidroth", false],
+      ["Vargas", true],
+      ["Murakami", false],
+      ["Antonacci", false],
+    ],
+  );
+});
+
 test("a runner whose way on the half inning's plays don't say, like a pinch runner, is on his base without it", () => {
   const feed = readPlaysFeed(DODGERS_AT_BREWERS);
   const { linescore } = feed.liveData;
