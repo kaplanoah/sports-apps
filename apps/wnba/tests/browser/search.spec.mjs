@@ -580,7 +580,7 @@ test("every search state keeps to the type scale and its periods, and every tap 
   await expectReadable();
 });
 
-test("who's out lists each player out with why, a team its record, a team's news its stories as they arrive, each a link to it, and a channel its games", async ({
+test("who's out lists each player out with why, a team its record, a team's news its stories as they arrive, each a link to it, and a channel its games, each answer saying what it lists in the line under the field", async ({
   page,
 }) => {
   const app = await openSeasonGames(page);
@@ -597,6 +597,7 @@ test("who's out lists each player out with why, a team its record, a team's news
   await expect(findRows(page)).toHaveCount(1);
   await expect(findRows(page)).toContainText("Wilson");
   await expect(findRows(page)).toContainText("Left ankle");
+  await expect(findLine(page)).toHaveText(/^Who's out\W+1 player$/);
   await expectReadableSearch(page);
 
   await sendSearch(page, "Liberty record");
@@ -607,6 +608,7 @@ test("who's out lists each player out with why, a team its record, a team's news
   await expect(findRows(page)).toHaveCount(1);
   await expect(findRows(page).first()).toContainText("News");
   await expect(findRows(page).first()).toContainText("Liberty");
+  await expect(findLine(page)).toHaveText(/^Liberty\W+News\W+No stories$/);
   await app.writeDocument("news/cards", {
     cards: [
       {
@@ -627,6 +629,7 @@ test("who's out lists each player out with why, a team its record, a team's news
     ],
   });
   await expect(findRows(page)).toHaveCount(2);
+  await expect(findLine(page)).toHaveText(/^Liberty\W+News\W+1 story$/);
   const story = findRows(page).nth(1);
   await expect(story).toContainText("The Liberty rest their starters");
   await expect(story).toHaveAttribute("href", "https://example.com/liberty");

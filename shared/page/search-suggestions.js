@@ -8,7 +8,7 @@
 // DOM.
 
 import { readMonthDays } from "./search-dates.js";
-import { countGames, findSearchGames, isGameInPlace, readSearch } from "./game-search.js";
+import { describeCount, findSearchGames, isGameInPlace, readSearch } from "./game-search.js";
 import { readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
@@ -362,7 +362,7 @@ function listTeamSearchCandidates(text, context) {
  * @returns {Pick<Suggestion, "mark" | "detail">}
  */
 function describeRow(meaning, { search, found }) {
-  const count = countGames(found.games.length);
+  const count = describeCount(found.games.length);
   if (meaning?.kind === "team") return { mark: { kind: "team", code: meaning.value }, detail: "" };
   if (meaning?.kind === "place") return { mark: { kind: "place" }, detail: count };
   if (meaning?.kind === "month") return { mark: { kind: "date" }, detail: count };
@@ -459,6 +459,6 @@ export function listOtherReadings(text, context) {
     const reading = words.startsWith("in ") ? `Games ${words}` : words;
     const { found } = findGames(reading, context);
     if (!found.games.length) return [];
-    return [{ text: reading, mark: { kind: "search" }, detail: countGames(found.games.length) }];
+    return [{ text: reading, mark: { kind: "search" }, detail: describeCount(found.games.length) }];
   });
 }

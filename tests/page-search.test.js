@@ -341,6 +341,23 @@ test("words asking who is out list each player out, by team and then last name, 
   assert.ok(rows.every((row) => row.kind === "player" && row.out === "listed"));
 });
 
+test("the start of a word asking who is out, from its third letter, asks it too", () => {
+  for (const isTyping of [true, false]) {
+    for (const text of ["inj", "inju", "side"])
+      assert.deepEqual(
+        listRows(text, isTyping, PAGES_WITH_NEWS).rows,
+        ["player FOX Stone", "player HAW Rook", "player HAW Stone"],
+        text,
+      );
+    assert.deepEqual(listRows("Hawks inj", isTyping, PAGES_WITH_NEWS).rows, [
+      "player HAW Rook",
+      "player HAW Stone",
+    ]);
+    assert.deepEqual(listRows("Rook inj", isTyping, PAGES_WITH_NEWS).rows, ["player HAW Rook"]);
+  }
+  assert.ok(!listRows("in", true, PAGES_WITH_NEWS).rows.some((row) => row.startsWith("player")));
+});
+
 test("a player's name with words asking who is out lists her, saying whether she is", () => {
   for (const text of ["Rook injury", "is Rook out", "Quill injured"]) {
     const { rows } = findPages(text, {
@@ -386,4 +403,27 @@ test("a team's name beside the News tab's words lists the tab for the team and i
     "place tab:news",
     "place settings:outlets",
   ]);
+});
+
+/**
+ * The line a search's answer says over its rows, as its words read, or null when it says none.
+ * @param {string} text
+ * @param {import("../shared/page/page-search.js").SearchPages} [pages]
+ */
+function readLine(text, pages = PAGES_WITH_NEWS) {
+  const { read } = findPages(text, { dictionary: DICTIONARY, pages, isTyping: false });
+  return read ? [read.lead, ...read.facts].join(" | ") : null;
+}
+
+test("an answer says over its rows what they are, and how many, as the games line does", () => {
+  assert.equal(readLine("who is out"), "Who's out | 3 players");
+  assert.equal(readLine("Hawks injuries"), "Hawks | Who's out | 2 players");
+  assert.equal(readLine("Foxes injury report", PAGES), "Foxes | Who's out | No players");
+  assert.equal(readLine("Rook injury"), "A’ja Rook | Out");
+  assert.equal(readLine("Quill injured"), "Jo Quill | Not out");
+  assert.equal(readLine("Stone injury"), "Who's out | 2 players");
+  assert.equal(readLine("Hawks news"), "Hawks | News | 3 stories");
+  assert.equal(readLine("Foxes stories"), "Foxes | News | 2 stories");
+  assert.equal(readLine("Hawks record"), null);
+  assert.equal(readLine("standings"), null);
 });

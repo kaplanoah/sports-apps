@@ -1147,11 +1147,13 @@ function describePick({ which, count }, noun) {
 }
 
 /**
+ * How many of something there are, as the line says it: "1 game", "3 games", or "No games".
  * @param {number} count
  * @param {string} [noun]
+ * @param {string} [plural]
  */
-export const countGames = (count, noun = "game") =>
-  count ? `${count} ${noun}${count === 1 ? "" : "s"}` : `No ${noun}s`;
+export const describeCount = (count, noun = "game", plural = `${noun}s`) =>
+  count ? `${count} ${count === 1 ? noun : plural}` : `No ${plural}`;
 
 /**
  * The starters a search names, as the line says them: "Paul Skenes".
@@ -1209,7 +1211,7 @@ export function describeSearch(search, found, context) {
     ...conditions,
     ...(lead === null ? [] : [pick]),
     isStartUnannounced(search, found) && "Not yet announced",
-    !search.pick && countGames(sure, noun),
+    !search.pick && describeCount(sure, noun),
     found.timeUnset.length && `${found.timeUnset.length} with no time yet`,
     describeLeftOut(found.leftOut),
     describeSkipped(search.skipped),

@@ -15,6 +15,7 @@
 // and the search's dictionary, so a team is named here by the same words it is in a search of
 // games. Runs in the page and in Node, so it uses no DOM.
 
+import { describeCount } from "./game-search.js";
 import { isForgivenTypo, readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {{ code: string, name: string, fullName: string, record?: string }} PageTeam */
@@ -54,6 +55,12 @@ import { isForgivenTypo, readTokens, splitWords } from "./search-words.js";
  * a player named, that she's out and why. A place's row can say whose it's asked for, as a team's
  * news names the team, and a story's row opens the story.
  * @typedef {{ kind: "team" | "section", team: PageTeam } | { kind: "player", team: PageTeam, player: PagePlayer, out?: "listed" | "named" } | { kind: "place", place: PagePlace, detail?: string } | { kind: "story", story: import("./news-picks.js").NewsStory } | { kind: "game-part", part: GamePart, gameText: string | null }} PageRow
+ */
+/**
+ * What a search's words find: the pages they list, the words left for a search of games, or null
+ * when they ask for none, and, for an answer like who is out, the line that says over its rows what
+ * they are, as the games line does: its lead, then its facts.
+ * @typedef {{ rows: PageRow[], gameText: string | null, read?: { lead: string, facts: string[] } }} FoundPages
  */
 
 /**
@@ -280,7 +287,8 @@ function listTeamRows(team, typed, pages) {
   return isSection ? sectionRow : [];
 }
 
-// The words that ask who is out, and the one that does after one of them, as "injury report" does.
+// The words that ask who is out, each from its third letter, and the one that does after one of
+// them, as "injury report" does.
 const OUT_WORDS = ["out", "injured", "injury", "injuries", "hurt", "sidelined", "inactive"];
 const AFTER_OUT_WORDS = ["report", "list"];
 
@@ -290,10 +298,11 @@ const AFTER_OUT_WORDS = ["report", "list"];
  */
 function readOutAsked(tokens) {
   const words = tokens.flatMap((token) => token.words);
+  const isOutWord = (/** @type {string | undefined} */ word) =>
+    !!word && OUT_WORDS.some((outWord) => isWordOf(word, outWord, true));
   const isAsking = words.map(
     (word, index) =>
-      OUT_WORDS.includes(word) ||
-      (AFTER_OUT_WORDS.includes(word) && OUT_WORDS.includes(words[index - 1])),
+      isOutWord(word) || (AFTER_OUT_WORDS.includes(word) && isOutWord(words[index - 1])),
   );
   let start = 0;
   const isAskingToken = tokens.map((token) => {
@@ -353,7 +362,7 @@ function findGamePart(tokens, parts) {
  * games passes over, and a team's own name, which names only the team.
  * @param {string} text
  * @param {{ dictionary: import("./search-words.js").Dictionary, pages: SearchPages, isTyping: boolean }} search
- * @returns {{ rows: PageRow[], gameText: string | null }}
+ * @returns {FoundPages}
  */
 export function findPages(text, search) {
   const asked = findAskedPages(text, search);
@@ -377,7 +386,7 @@ export function findPages(text, search) {
  * who is out, alone, on a team, or by name, and a team's record or its news.
  * @param {string} text
  * @param {{ dictionary: import("./search-words.js").Dictionary, pages: SearchPages, isTyping: boolean }} search
- * @returns {{ rows: PageRow[], gameText: string | null } | null}
+ * @returns {FoundPages | null}
  */
 function findAskedPages(text, { dictionary, pages, isTyping }) {
   const tokens = readTokens(text, dictionary);
@@ -418,7 +427,7 @@ function findOneTeam(teamTokens, pages) {
  * The pages the search's words find, read word by word.
  * @param {string} text
  * @param {{ dictionary: import("./search-words.js").Dictionary, pages: SearchPages, isTyping: boolean }} search
- * @returns {{ rows: PageRow[], gameText: string | null }}
+ * @returns {FoundPages}
  */
 function findWordPages(text, { dictionary, pages, isTyping }) {
   const tokens = readTokens(text, dictionary);
@@ -456,20 +465,37 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
  * she's out, or no page when they name no one.
  * @param {import("./search-words.js").Token[]} rest the tokens besides those that ask who is out
  * @param {{ text: string, pages: SearchPages, isTyping: boolean }} search
- * @returns {{ rows: PageRow[], gameText: string | null }}
+ * @returns {FoundPages}
  */
 function findOutPages(rest, { text, pages, isTyping }) {
   if (!rest.length) {
     const rows = listOutRows(pages.players, pages);
-    return rows.length ? { rows, gameText: null } : { rows: [], gameText: text };
+    if (!rows.length) return { rows: [], gameText: text };
+    return { rows, gameText: null, read: describeWhoIsOut(rows) };
   }
   const teams = new Map(pages.teams.map((team) => [team.code, team]));
-  const rows = findPlayers(rest, pages.players, isTyping).flatMap((player) => {
+  const players = findPlayers(rest, pages.players, isTyping);
+  const rows = players.flatMap((player) => {
     const team = teams.get(player.team);
     return team ? [/** @type {PageRow} */ ({ kind: "player", team, player, out: "named" })] : [];
   });
-  return rows.length ? { rows, gameText: null } : { rows: [], gameText: text };
+  if (!rows.length) return { rows: [], gameText: text };
+  const [player] = players;
+  const read =
+    players.length === 1
+      ? { lead: `${player.firstName} ${player.lastName}`, facts: [player.out ? "Out" : "Not out"] }
+      : describeWhoIsOut(rows);
+  return { rows, gameText: null, read };
 }
+
+/**
+ * Who is out, as the line over its rows says it: "Who's out", and how many players.
+ * @param {PageRow[]} rows
+ */
+const describeWhoIsOut = (rows) => ({
+  lead: "Who's out",
+  facts: [describeCount(rows.length, "player")],
+});
 
 /**
  * The places that words a search of games passes over find, each a whole word of the place's as
@@ -479,7 +505,7 @@ function findOutPages(rest, { text, pages, isTyping }) {
  * @param {import("./search-words.js").Token[]} tokens
  * @param {string} text
  * @param {SearchPages} pages
- * @returns {{ rows: PageRow[], gameText: string | null }}
+ * @returns {FoundPages}
  */
 function findPassedOverPlaces(tokens, text, pages) {
   const words = tokens.flatMap((token) => token.words);
@@ -498,7 +524,7 @@ function findPassedOverPlaces(tokens, text, pages) {
  * @param {import("./search-words.js").Token[]} teamTokens
  * @param {import("./search-words.js").Token[]} otherTokens
  * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages }} search
- * @returns {{ rows: PageRow[], gameText: string | null }}
+ * @returns {FoundPages}
  */
 function findTeamPages(teamTokens, otherTokens, { text, tokens, pages }) {
   const otherWords = otherTokens.flatMap((token) => token.words);
@@ -513,22 +539,23 @@ function findTeamPages(teamTokens, otherTokens, { text, tokens, pages }) {
  * Who is out on a team, or, when no one is, its section, which lists every player.
  * @param {PageTeam} team
  * @param {SearchPages} pages
- * @returns {{ rows: PageRow[], gameText: string | null }}
+ * @returns {FoundPages}
  */
 function findTeamOutPages(team, pages) {
   const rows = listOutRows(
     pages.players.filter((player) => player.team === team.code),
     pages,
   );
-  if (rows.length) return { rows, gameText: null };
-  return { rows: pages.section ? [{ kind: "section", team }] : [], gameText: null };
+  const read = { lead: team.name, facts: ["Who's out", describeCount(rows.length, "player")] };
+  if (rows.length) return { rows, gameText: null, read };
+  return { rows: pages.section ? [{ kind: "section", team }] : [], gameText: null, read };
 }
 
 /**
  * A team's news: the News tab, and the newest stories about the team.
  * @param {PageTeam} team
  * @param {NonNullable<SearchPages["news"]>} news
- * @returns {{ rows: PageRow[], gameText: string | null }}
+ * @returns {FoundPages}
  */
 function findTeamNews(team, { place, stories }) {
   const about = stories.filter((story) => story.teams.includes(team.code)).slice(0, TEAM_STORIES);
@@ -538,5 +565,6 @@ function findTeamNews(team, { place, stories }) {
       ...about.map((story) => /** @type {PageRow} */ ({ kind: "story", story })),
     ],
     gameText: null,
+    read: { lead: team.name, facts: ["News", describeCount(about.length, "story", "stories")] },
   };
 }
