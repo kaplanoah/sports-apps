@@ -1,3 +1,27 @@
+import { expect } from "@playwright/test";
+
+/**
+ * Waits until no row is pressed and no color is mid-transition, so a press a test's own tap left
+ * behind, or a tint still fading, is never measured as the page's colors. Each test of a pressed
+ * or hovered row's colors measures that state on purpose.
+ * @param {import("@playwright/test").Page} page
+ */
+const waitForSettledColors = (page) =>
+  expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          !document.querySelector(".is-pressed") &&
+          !document
+            .getAnimations()
+            .some(
+              (animation) =>
+                animation instanceof CSSTransition && animation.playState === "running",
+            ),
+      ),
+    )
+    .toBe(true);
+
 /**
  * Every piece of shown text that stands out from what's behind it by less than WCAG's AA level
  * asks: 4.5 to 1, or 3 to 1 for large text, 24px and up or 18.66px and up at 700. The text's color
@@ -5,10 +29,11 @@
  * it that fills, with any see-through ones over it laid on top. Text over a picture, a gradient, or
  * a layer drawn behind it can't be measured this way and is left out, as are disabled controls and
  * marks with no letter or digit, like a separator or a dash, which WCAG leaves out, and text hidden
- * for screen readers.
+ * for screen readers. It measures the page as it shows at once, a pressed row's tint and all, so a
+ * test of a pressed or hovered row's colors measures that state.
  * @param {import("@playwright/test").Page} page
  */
-export const listLowContrastText = (page) =>
+export const listLowContrastTextAsShown = (page) =>
   page.evaluate(async () => {
     await document.fonts.ready;
     const SMALL_TEXT_CONTRAST = 4.5;
@@ -164,3 +189,12 @@ export const listLowContrastText = (page) =>
     }
     return [...lowContrast];
   });
+
+/**
+ * The text listLowContrastTextAsShown names once the page's colors have settled.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function listLowContrastText(page) {
+  await waitForSettledColors(page);
+  return listLowContrastTextAsShown(page);
+}

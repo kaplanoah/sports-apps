@@ -292,6 +292,16 @@ test("filler is skipped, a name one letter off or a plural is forgiven, and a wo
   );
 });
 
+test("a search that can use none of its words finds no games, rather than every game", () => {
+  assert.deepEqual(search("highest 3p%"), {
+    ids: [],
+    line: "No results | 'highest' and '3p' unrecognized, skipped",
+    empty: "Check the spelling or try a new search",
+  });
+  assert.deepEqual(search("the highest games").ids, []);
+  assert.equal(search("the games").line, "All games | 11 games");
+});
+
 /** @param {string} text */
 const suggest = (text) =>
   listSuggestions(text, createContext()).map(({ text: suggestion, mark, detail }) =>

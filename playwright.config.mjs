@@ -23,6 +23,10 @@ export default defineConfig({
   // retry as flaky on the pull request's checks, and a nightly run finds them on main
   // (.github/workflows/flaky.yml).
   retries: process.env.CI ? 1 : 0,
+  // A broken change fails many tests, each only after its timeout and its retry's, so CI stops a
+  // run once five tests have failed rather than spending its whole time limit on them. A test
+  // that passed on its retry doesn't count.
+  maxFailures: process.env.CI ? 5 : 0,
   // Each test stands alone, so CI's shards split the tests evenly rather than file by file.
   fullyParallel: true,
   // The tests are bound by the CPU, and a browser per core keeps CI's busier than Playwright's
@@ -45,7 +49,9 @@ export default defineConfig({
     locale: "en-US",
     // A service worker's requests skip the routes tests answer, so only tests about it allow it.
     serviceWorkers: "block",
-    trace: "retain-on-failure",
+    // A failed try keeps its trace, whose snapshots show the page at each step. Its screenshots
+    // would add a tenth to every test's time and show nothing the snapshots don't.
+    trace: { mode: "retain-on-failure", screenshots: false },
   },
   projects: appsWithBrowserTests.flatMap((app, index) => [
     {

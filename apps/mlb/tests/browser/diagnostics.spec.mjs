@@ -1,9 +1,7 @@
 import { test, expect, openApp, openSettings } from "./harness.mjs";
+import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
-
-const PHONE = { width: 390, height: 844 };
-const WIDE = { width: 1280, height: 800 };
 
 /** @param {import("@playwright/test").Page} page */
 const findSwitch = (page) => page.getByRole("switch", { name: "Diagnostics" });
@@ -49,12 +47,12 @@ test("on a phone, Diagnostics sit past the copyright, a scroll beyond where sett
 test("on a wide screen, Diagnostics sit under the settings and ranking, a scroll away", async ({
   page,
 }) => {
-  await page.setViewportSize(WIDE);
+  await page.setViewportSize(LAPTOP);
   await openApp(page);
   await openSettings(page);
   await expect(page.locator(".rank-frame")).toBeInViewport();
   await expect(findSwitch(page)).not.toBeInViewport();
-  await page.mouse.move(WIDE.width / 2, WIDE.height / 2);
+  await page.mouse.move(LAPTOP.width / 2, LAPTOP.height / 2);
 
   await scrollSettings(page, 600);
 

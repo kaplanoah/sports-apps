@@ -1,7 +1,9 @@
-// Finds a pull request's CI run that passed on exactly the code main now has, so main can deploy
-// without waiting for CI to run again. A pull request's CI tests it merged into its base branch as
-// that branch was then, and records that code's git tree; when the base is main and nothing else
-// merged first, the squash merge has the same tree.
+// Finds a pull request's CI run that passed on exactly some code. A pull request's CI tests it
+// merged into its base branch as that branch was then, and records that code's git tree: once
+// every check passed, so that main can deploy without waiting for CI to run again, since when the
+// base is main and nothing else merged first, the squash merge has the same tree; and once every
+// test passed, whatever the gate said, so that a label change, which brings no new code, runs only
+// the gate again.
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -11,25 +13,40 @@ const CI_WORKFLOW = ".github/workflows/ci.yml";
 const REQUEST_TIMEOUT_MS = 10000;
 
 /** @param {string} tree */
-export const nameTestedArtifact = (tree) => `ci-passed-${tree}`;
+export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
+
+/** @param {string} tree */
+export const nameTestedArtifact = (tree) => `ci-tested-${tree}`;
 
 // Only CI as main's own workflow ran it, on a branch of this repository: a fork's pull request
 // runs its own copy of the workflow, which could record a tree it never tested.
-const isPassedPullRequestRun = (run) =>
+const isPullRequestRun = (run) =>
   run.path === CI_WORKFLOW &&
   run.event === "pull_request" &&
-  run.conclusion === "success" &&
   run.head_repository?.id === run.repository?.id;
 
+const isPassedPullRequestRun = (run) => isPullRequestRun(run) && run.conclusion === "success";
+
 /**
- * @param {object} options
- * @param {string} options.tree the git tree main now has
- * @param {string} options.repository as owner/name
- * @param {typeof fetch} [options.fetchImpl]
- * @param {NodeJS.ProcessEnv} [options.env]
- * @returns {Promise<number | null>} the passed run's id
+ * @typedef {object} FindOptions
+ * @property {string} tree the git tree to look for
+ * @property {string} repository as owner/name
+ * @property {typeof fetch} [fetchImpl]
+ * @property {NodeJS.ProcessEnv} [env]
  */
-export async function findPassedRun({ tree, repository, fetchImpl = fetch, env = process.env }) {
+
+/**
+ * The first run that recorded this artifact and that `isRecordingRun` accepts.
+ * @param {Omit<FindOptions, "tree"> & { artifact: string, isRecordingRun: (run: any) => boolean }} options
+ * @returns {Promise<number | null>} the run's id
+ */
+async function findRecordingRun({
+  artifact,
+  isRecordingRun,
+  repository,
+  fetchImpl = fetch,
+  env = process.env,
+}) {
   const readJson = async (path) => {
     const response = await fetchImpl(`${API}/repos/${repository}${path}`, {
       headers: {
@@ -42,25 +59,65 @@ export async function findPassedRun({ tree, repository, fetchImpl = fetch, env =
     if (!response.ok) throw new Error(`GitHub answered ${response.status} for ${path}`);
     return response.json();
   };
-  const name = nameTestedArtifact(tree);
-  const { artifacts } = await readJson(`/actions/artifacts?name=${name}&per_page=100`);
-  for (const artifact of artifacts) {
-    if (artifact.expired) continue;
-    const run = await readJson(`/actions/runs/${artifact.workflow_run.id}`);
-    if (isPassedPullRequestRun(run)) return run.id;
+  const { artifacts } = await readJson(`/actions/artifacts?name=${artifact}&per_page=100`);
+  for (const { expired, workflow_run } of artifacts) {
+    if (expired) continue;
+    const run = await readJson(`/actions/runs/${workflow_run.id}`);
+    if (isRecordingRun(run)) return run.id;
   }
   return null;
 }
 
 /**
- * The run that passed on main's code, or why main waits for its own CI.
+ * A run on which every check, the gate too, passed.
+ * @param {FindOptions} options
+ */
+export const findPassedRun = ({ tree, ...options }) =>
+  findRecordingRun({
+    ...options,
+    artifact: namePassedArtifact(tree),
+    isRecordingRun: isPassedPullRequestRun,
+  });
+
+/**
+ * A run on which every test passed. Its gate may have failed it, so the run's own conclusion
+ * doesn't count: the record is made only once every other job has passed.
+ * @param {FindOptions} options
+ */
+export const findTestedRun = ({ tree, ...options }) =>
+  findRecordingRun({
+    ...options,
+    artifact: nameTestedArtifact(tree),
+    isRecordingRun: isPullRequestRun,
+  });
+
+const SEARCHES = {
+  passed: {
+    find: findPassedRun,
+    missing: "No pull request's CI passed on exactly this code",
+    found: (runId) => `CI run ${runId} passed on exactly this code, so it deploys now.`,
+    waiting: "so the deploy waits for CI on main",
+  },
+  tested: {
+    find: findTestedRun,
+    missing: "No CI run passed every test on exactly this code",
+    found: (runId) =>
+      `CI run ${runId} passed every test on exactly this code, so only the gate runs again.`,
+    waiting: "so every check runs again",
+  },
+};
+
+/**
+ * The run that passed on this code, or why it isn't there.
+ * @param {keyof typeof SEARCHES} kind
  * @param {string} tree
  * @returns {Promise<{ runId: number } | { reason: string }>}
  */
-async function lookForPassedRun(tree) {
+async function lookForRun(kind, tree) {
   try {
-    const runId = await findPassedRun({ tree, repository: String(process.env.GITHUB_REPOSITORY) });
-    return runId ? { runId } : { reason: "No pull request's CI passed on exactly this code" };
+    const repository = String(process.env.GITHUB_REPOSITORY);
+    const runId = await SEARCHES[kind].find({ tree, repository });
+    return runId ? { runId } : { reason: SEARCHES[kind].missing };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { reason: `Couldn't look for a passed CI run: ${message}` };
@@ -68,13 +125,14 @@ async function lookForPassedRun(tree) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const kind = process.argv.includes("--tested") ? "tested" : "passed";
   const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim();
-  const found = await lookForPassedRun(tree);
+  const found = await lookForRun(kind, tree);
   if ("runId" in found) {
-    console.log(`CI run ${found.runId} passed on exactly this code, so it deploys now.`);
+    console.log(SEARCHES[kind].found(found.runId));
     if (process.env.GITHUB_OUTPUT)
       appendFileSync(process.env.GITHUB_OUTPUT, `run=${found.runId}\n`);
   } else {
-    console.log(`::notice::${found.reason}, so the deploy waits for CI on main.`);
+    console.log(`::notice::${found.reason}, ${SEARCHES[kind].waiting}.`);
   }
 }

@@ -17,7 +17,8 @@
     "shared/page/release-guard.js",
     "apps/*/tests/*.test.js",
     "apps/*/tests/browser/*.spec.mjs",
-    "apps/*/tests/fixtures/record*.js"
+    "apps/*/tests/fixtures/record*.js",
+    ".claude/hooks/*.mjs"
   ],
   "project": [
     "apps/*/page/js/**/*.js",
@@ -26,7 +27,8 @@
     "shared/**/*.js",
     "worker/**/*.{js,mjs}",
     "tests/**/*.{js,mjs}",
-    "*.mjs"
+    "*.mjs",
+    ".claude/hooks/*.mjs"
   ],
   "ignore": ["apps/*/page/js/sortable.min.js"]
 }

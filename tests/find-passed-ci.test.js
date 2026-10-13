@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findPassedRun, nameTestedArtifact } from "../worker/find-passed-ci.mjs";
+import {
+  findPassedRun,
+  findTestedRun,
+  namePassedArtifact,
+  nameTestedArtifact,
+} from "../worker/find-passed-ci.mjs";
 
 const TREE = "a".repeat(40);
 const REPOSITORY = "owner/sports-apps";
@@ -16,11 +21,11 @@ const PASSED_RUN = {
 };
 
 /**
- * GitHub's API with these artifacts named for TREE and these runs by id.
+ * GitHub's API with these artifacts under the given name for TREE, and these runs by id.
  * @param {object[]} artifacts
  * @param {{ id: number }[]} runs
  */
-function createFakeGitHub(artifacts, runs) {
+function createFakeGitHub(artifacts, runs, name = namePassedArtifact(TREE)) {
   const paths = [];
   /** @type {typeof fetch} */
   const fetchImpl = async (url) => {
@@ -28,7 +33,7 @@ function createFakeGitHub(artifacts, runs) {
     paths.push(pathname + search);
     if (pathname.endsWith("/actions/artifacts"))
       return Response.json({
-        artifacts: search.includes(nameTestedArtifact(TREE)) ? artifacts : [],
+        artifacts: search.includes(name) ? artifacts : [],
       });
     const run = runs.find((each) => pathname.endsWith(`/actions/runs/${each.id}`));
     return run ? Response.json(run) : new Response("", { status: 404 });
@@ -86,6 +91,51 @@ test("a fork's run, a failed run, another workflow, another event, or an expired
     await findPassedRun({ tree: TREE, repository: REPOSITORY, fetchImpl: withPassed.fetchImpl }),
     7,
   );
+});
+
+// A red change's first run fails at the gate, and a label change is how it passes.
+test("a run whose tests all passed on this exact code is found for a label change, even if its gate failed it", async () => {
+  const gateFailed = { ...PASSED_RUN, conclusion: "failure" };
+  const github = createFakeGitHub([buildArtifact(7)], [gateFailed], nameTestedArtifact(TREE));
+  const runId = await findTestedRun({
+    tree: TREE,
+    repository: REPOSITORY,
+    fetchImpl: github.fetchImpl,
+  });
+  assert.equal(runId, 7);
+  assert.deepEqual(github.paths, [
+    `/repos/${REPOSITORY}/actions/artifacts?name=ci-tested-${TREE}&per_page=100`,
+    `/repos/${REPOSITORY}/actions/runs/7`,
+  ]);
+});
+
+test("for a label change, a fork's run, another workflow, another event, or an expired record doesn't count", async () => {
+  const runs = [
+    { ...PASSED_RUN, id: 1, head_repository: FORK },
+    { ...PASSED_RUN, id: 2, path: ".github/workflows/deploy.yml" },
+    { ...PASSED_RUN, id: 3, event: "push" },
+    { ...PASSED_RUN, id: 4 },
+  ];
+  const artifacts = [1, 2, 3].map((id) => buildArtifact(id)).concat(buildArtifact(4, true));
+  const github = createFakeGitHub(artifacts, runs, nameTestedArtifact(TREE));
+  const runId = await findTestedRun({
+    tree: TREE,
+    repository: REPOSITORY,
+    fetchImpl: github.fetchImpl,
+  });
+  assert.equal(runId, null);
+  assert.ok(!github.paths.some((path) => path.endsWith("/actions/runs/4")));
+});
+
+// Main deploys only code whose gate passed too.
+test("a run whose tests passed but whose gate didn't isn't found for main's deploy", async () => {
+  const github = createFakeGitHub([buildArtifact(7)], [PASSED_RUN], nameTestedArtifact(TREE));
+  const runId = await findPassedRun({
+    tree: TREE,
+    repository: REPOSITORY,
+    fetchImpl: github.fetchImpl,
+  });
+  assert.equal(runId, null);
 });
 
 test("a refusal from GitHub names its status, and sends the token", async () => {

@@ -11,16 +11,18 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request stops the checks still running on the one before it.
+# A new push to a pull request stops the checks still running on the one before it. A label
+# change waits for them instead, since it brings no new code and reuses what they find.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled' }}
 
 jobs:
   # On main, a pull request's CI that passed on exactly this code has already run every check, so
-  # they're skipped (worker/find-passed-ci.mjs).
+  # they're skipped. A label change brings no new code, so once a run passed every test on exactly
+  # this code, only the gate runs again (worker/find-passed-ci.mjs).
   passed:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -35,11 +37,12 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: .nvmrc
-      - name: Find the pull request's CI run that passed on this code
+      - name: Find the CI run that passed on this code
         id: find
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node worker/find-passed-ci.mjs
+          SEARCH: ${{ github.event_name == 'pull_request' && '--tested' || '' }}
+        run: node worker/find-passed-ci.mjs $SEARCH
 
   # A red change merges only once the owner has used it on the beta app and labeled it phone-ok
   # (worker/red-change.mjs), which reads the pull request's events for who added the label. The
@@ -158,14 +161,38 @@ jobs:
             playwright-report/
             test-results/
 
+  # The browser specs a pull request adds or changes, which burn-in repeats, so it starts its
+  # machines only when there are some. The merge commit's first parent is the base branch.
+  changed-specs:
+    needs: passed
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && !needs.passed.outputs.run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      specs: ${{ steps.find.outputs.specs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+      # Naming the shell adds pipefail, so a failed diff fails the job rather than reading as no
+      # spec changed.
+      - id: find
+        shell: bash
+        run: |
+          specs=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | tr '\n' ' ')
+          echo "specs=$specs" >> "$GITHUB_OUTPUT"
+
   # A browser spec a pull request adds or changes runs ten times over, with no retry, so a test
   # that passes only some of the time fails on the pull request that brings it, rather than on
-  # later ones. The merge commit's first parent is the base branch. Ten runs of every spec a large
-  # pull request changes take longer than one machine's limit, so they're split across machines
-  # too, and a machine whose share holds no test passes. It runs in Playwright's own image, as the
-  # webkit job does, so the at-rest specs repeat in WebKit too, where they've failed most.
+  # later ones. Only a test the pull request wrote or edited fails it: any other that failed goes
+  # to the issue Flaky browser tests from the check job (worker/judge-burn-in.mjs). Ten runs of
+  # every spec a large pull request changes take longer than one machine's limit, so they're split
+  # across machines too, and a machine whose share holds no test passes. It runs in Playwright's
+  # own image, as the webkit job does, so the at-rest specs repeat in WebKit too, where they've
+  # failed most.
   burn-in:
-    if: github.event_name == 'pull_request'
+    needs: changed-specs
+    if: needs.changed-specs.outputs.specs != ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
@@ -181,20 +208,27 @@ jobs:
       - *setup-node
       - *restore-modules
       - *install-modules
+      # Every test runs all ten times, however many fail, and the next step decides which
+      # failures fail the pull request, so a failed test doesn't fail this one.
       - name: Repeat each browser spec this pull request changes
         shell: bash
-        # The image's user doesn't own the checkout, so git trusts it only once it's named safe, and
-        # a failed diff fails the step rather than reading as no spec changed.
+        env:
+          SPECS: ${{ needs.changed-specs.outputs.specs }}
+        run: |
+          read -ra specs <<< "$SPECS"
+          npm run test:browser -- --repeat-each=10 --retries=0 --max-failures=0 --pass-with-no-tests \
+            --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}" || true
+      # The image's user doesn't own the checkout, so git trusts it only once it's named safe.
+      - name: Fail only on a test this pull request wrote or edited
+        shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          changed=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs')
-          if [ -z "$changed" ]; then
-            echo "No browser spec changed."
-            exit 0
-          fi
-          mapfile -t specs <<< "$changed"
-          npm run test:browser -- --repeat-each=10 --retries=0 --pass-with-no-tests \
-            --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}"
+          git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
+        with:
+          name: burn-in-flaky-${{ matrix.shard }}
+          path: test-results/burn-in-flaky.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()
         with:
@@ -338,7 +372,7 @@ jobs:
             The PR branch is checked out in the working directory. Read the diff with `gh pr diff`,
             and read any surrounding code you need to judge it.
 
-            Report only these four kinds of finding:
+            Report only these five kinds of finding:
 
             1. Bugs: logic errors, unhandled edge cases, and broken assumptions that would make the
                code behave wrongly.
@@ -349,6 +383,10 @@ jobs:
                would notice and the existing tests would still pass if that change were reverted.
                Never ask for tests of refactors, renames, comments, docs, styling, or
                configuration.
+            5. Browser tests that would pass only some of the time: one that reads or measures the
+               page right after an action without first waiting, with expect or expect.poll, for
+               what that action shows; one that depends on how fast the machine is; or one that
+               measures while a press, hover, transition, or scroll it started may still be going.
 
             This may not be the first review of this PR. Read the comments already on it with
             `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments --paginate`,
@@ -379,38 +417,53 @@ jobs:
   # skipped required check as passing.
   check:
     if: always()
-    needs: [passed, gate, checks, browser, burn-in, webkit, review]
+    needs: [passed, gate, checks, browser, changed-specs, burn-in, webkit, review]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       issues: write
     steps:
-      # passed runs only on main, which skips the checks when it found a run that passed.
-      - name: Require every job to pass
-        if: >-
-          contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
-          (github.event_name == 'pull_request' && needs.gate.result != 'success') ||
-          (github.event_name == 'pull_request' && needs.burn-in.result != 'success') ||
-          (!needs.passed.outputs.run && (needs.checks.result != 'success' ||
-          needs.browser.result != 'success' || needs.webkit.result != 'success' ||
-          needs.review.result != 'success'))
-        run: exit 1
+      # Every test passed when passed found a run that passed them on exactly this code, or when
+      # every job but the gate passed.
+      - name: Tell whether every test passed
+        id: tested
+        env:
+          TESTED: >-
+            ${{ needs.passed.outputs.run != '' || (needs.checks.result == 'success' &&
+            needs.browser.result == 'success' && needs.webkit.result == 'success' &&
+            needs.review.result == 'success' &&
+            (github.event_name != 'pull_request' || needs.changed-specs.result == 'success') &&
+            (needs.changed-specs.outputs.specs == '' || needs.burn-in.result == 'success')) }}
+        run: echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
       # Checks out even when a job failed, to name the tests its retry passed.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: ${{ always() && github.event_name == 'pull_request' }}
-      # Records the code this pull request's checks passed on, so that once it merges, main deploys
-      # at once if it has exactly that code (worker/find-passed-ci.mjs).
-      - name: Record the code the checks passed on
-        id: passed
+        if: github.event_name == 'pull_request'
+      # Records the code this pull request's checks passed on: once every test passed, so a label
+      # change runs only the gate again, and once the gate passed too, so that once it merges, main
+      # deploys at once if it has exactly that code (worker/find-passed-ci.mjs).
+      - name: Record the code the checks ran on
+        id: code
         if: github.event_name == 'pull_request'
         run: |
           git rev-parse HEAD > passed-commit.txt
           echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true'
+        with:
+          name: ci-tested-${{ steps.code.outputs.tree }}
+          path: passed-commit.txt
+          retention-days: 14
+      - name: Require every job to pass
+        if: >-
+          steps.tested.outputs.tested != 'true' ||
+          contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
+          (github.event_name == 'pull_request' && needs.gate.result != 'success')
+        run: exit 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: github.event_name == 'pull_request'
         with:
-          name: ci-passed-${{ steps.passed.outputs.tree }}
+          name: ci-passed-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
       # The browser jobs' reports go to the issue from this one job, so two of them can't both
@@ -427,13 +480,24 @@ jobs:
         with:
           pattern: browser-report-*
           path: browser-reports/
-      - name: Name each test its retry passed in the issue Flaky browser tests
-        if: ${{ always() && github.event_name == 'pull_request' && hashFiles('browser-reports/**/report.json') != '' }}
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        with:
+          pattern: burn-in-flaky-*
+          path: burn-in-flaky/
+      # A test new to the issue starts the routine that fixes flaky tests, through its API trigger.
+      - name: Name each test its retry passed, or burn-in found failing, in the issue Flaky browser tests
+        if: ${{ always() && github.event_name == 'pull_request' && (hashFiles('browser-reports/**/report.json') != '' || hashFiles('burn-in-flaky/**/burn-in-flaky.json') != '') }}
         continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FLAKY_ROUTINE_URL: ${{ secrets.FLAKY_ROUTINE_URL }}
+          FLAKY_ROUTINE_TOKEN: ${{ secrets.FLAKY_ROUTINE_TOKEN }}
         run: |
-          shopt -s globstar
-          node worker/report-flaky-tests.mjs --retried browser-reports/**/report.json
+          shopt -s globstar nullglob
+          listed=()
+          for file in burn-in-flaky/**/burn-in-flaky.json; do listed+=(--listed "$file"); done
+          node worker/report-flaky-tests.mjs --retried "${listed[@]}" browser-reports/**/report.json
