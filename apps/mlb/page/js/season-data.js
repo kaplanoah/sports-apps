@@ -1,6 +1,7 @@
 import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { buildBracket } from "./bracket.js";
+import { namePlayerIndexKey } from "#shared/page-search.js";
 import { SNAPSHOT_VERSION, nameScheduleCollection } from "./snapshot.js";
 import { composeState, guessSeasonYear, session } from "./session.js";
 import { TEAMS } from "./teams.js";
@@ -17,6 +18,9 @@ let deferredSeason = null;
 /** @type {number | null} */
 let scheduleYear = null;
 let unwatchSchedule = () => {};
+/** @type {number | null} */
+let playerIndexYear = null;
+let unwatchPlayerIndex = () => {};
 // A season's games run from March to November, a month to a document.
 const SCHEDULE_MONTHS = 12;
 
@@ -53,6 +57,31 @@ function followSchedule(year, showChange) {
       },
       () => {},
     );
+}
+
+/**
+ * Follows the list of players the store keeps for the current season, whichever season shows, as
+ * the rosters it's made from are the current season's, for search, which redraws with `showChange`
+ * as it changes. A list the page can't read is left out.
+ * @param {number} year
+ * @param {() => void} showChange
+ */
+function followPlayerIndex(year, showChange) {
+  if (year === playerIndexYear) return;
+  playerIndexYear = year;
+  unwatchPlayerIndex();
+  session.playerIndex = null;
+  unwatchPlayerIndex = session.db.doc(namePlayerIndexKey(year)).onSnapshot(
+    (/** @type {any} */ snapshot) => {
+      if (year !== playerIndexYear) return;
+      const index = snapshot.exists ? snapshot.data() : null;
+      const shown = Array.isArray(index?.players) ? index : null;
+      if (!shown && !session.playerIndex) return;
+      session.playerIndex = shown;
+      if (!session.isReordering) showChange();
+    },
+    () => {},
+  );
 }
 
 const keepKnownClubs = (teams) =>
@@ -124,6 +153,7 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
       if (year !== session.season?.year) session.schedule = null;
       keepSeason(year, record);
       followSchedule(year, showChange);
+      followPlayerIndex(reader?.readCurrentYear() ?? year, showChange);
     },
     showChange: () => {
       if (!session.isReordering) showChange();

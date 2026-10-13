@@ -6,13 +6,15 @@ import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 // budget is the view's count in CI's Chromium once nothing asked for a layer ahead. A change that
 // should add a layer re-records its view's budget from the count this test names, once the owner's
 // phone has drawn it on beta.
+// Search's round button beside the tab bar is a layer of its own on every view.
 const BUDGETS = {
-  Bracket: 21,
-  Games: 16,
-  Standings: 24,
-  News: 8,
-  "Game sheet": 19,
-  "Club's sheet over a game's": 19,
+  Bracket: 22,
+  Games: 17,
+  Standings: 25,
+  News: 9,
+  Search: 12,
+  "Game sheet": 20,
+  "Club's sheet over a game's": 20,
 };
 
 test.use({ ...ON_A_PHONE, contextOptions: { reducedMotion: "reduce" } });
@@ -33,7 +35,7 @@ test("each view, a game's sheet, and a club's sheet over it keep within their la
   await expectWithinBudgets(
     page,
     [
-      ...["Bracket", "Standings", "News", "Games"].map((name) => ({
+      ...["Bracket", "Standings", "News", "Search", "Games"].map((name) => ({
         view: name,
         show: showTab(name),
       })),

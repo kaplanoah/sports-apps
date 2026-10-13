@@ -1,5 +1,5 @@
-// A search over a season's games, and, for a league that hands it its pages, its teams and
-// players and their pages too: a field with Cancel, then what the words find. Before anything is
+// A search over a season's games, and the league's teams and players and its other pages too: a
+// field with Cancel, then what the words find. Before anything is
 // typed, quiet examples to tap sit under the field, inside its width. While words are typed,
 // suggestions sit over the pages the words name, like a team's sheet, then a line saying how the
 // search read the words, right over the games it found from today on, which a tap on the line opens
@@ -7,7 +7,8 @@
 // games, the games at once, the line under the field and the list opening on the first from today,
 // as does a tap on the line. A tap on the field goes back to what typing showed. A reload shows the
 // search as it was, and two minutes away closes it. A league hands it its season's games and words,
-// how it draws a day's games, a team's dot, and what the search does as it closes.
+// how it draws a day's games, a team's dot, its pages and how it opens them, and what the search
+// does as it closes.
 
 import { describeDay, readCalendarDate } from "./days.js";
 import {
@@ -22,7 +23,7 @@ import { html, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { isWebAddress } from "./news-picks.js";
 import { nameStoryDay } from "./news-view.js";
-import { findLatestFinal, findPages } from "./page-search.js";
+import { findPages, findPartGame } from "./page-search.js";
 import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
 import {
@@ -40,7 +41,7 @@ import {
 /** @typedef {import("./page-search.js").PageRow} PageRow */
 /** @typedef {import("./page-search.js").GamePart} GamePart */
 /**
- * A page's row as the search shows it, a game's part on the final it opens.
+ * A page's row as the search shows it, a game's part on the game it opens.
  * @typedef {Exclude<PageRow, { kind: "game-part" }> | { kind: "game", part: GamePart, game: SearchGame }} ShownRow
  */
 /**
@@ -52,17 +53,18 @@ import {
  *   the days of the games found, drawn as the Games view draws them, with each game's channels when
  *   the search asks where to watch
  * @property {(code: string) => Markup} renderTeamMark a team's dot
- * @property {() => void} close what the view does as the search closes, like going back to today
- * @property {() => SearchPages | null} [readPages] the teams and players a search can open, for a
- *   league whose search finds them
- * @property {string} [placeholder] what the empty field says, when it finds more than games
- * @property {(key: string) => void} [openPlace] opens a place a search lists, by its key
+ * @property {() => void} close what the view does as the search closes, like going back to the tab
+ *   before it
+ * @property {() => SearchPages} readPages the teams, players, and places a search can open
+ * @property {string} placeholder what the empty field says
+ * @property {(key: string) => void} openPlace opens a place a search lists, by its key
  */
 
 // Phosphor's magnifying-glass at its Light weight in the field, as the page's controls are, and at
 // its Regular weight, calendar-blank, and map-pin beside a suggestion's words, trophy, trend-up,
 // newspaper, and sliders-horizontal beside a place's, as the tabs and the settings button show them,
-// film-strip beside a game's part, and x-circle at its Fill weight to clear the field, as iOS does.
+// film-strip beside a final's Highlights and baseball beside a game's Matchup, and x-circle at its
+// Fill weight to clear the field, as iOS does.
 const FIELD_GLASS = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228.24,219.76l-51.38-51.38a86.15,86.15,0,1,0-8.48,8.48l51.38,51.38a6,6,0,0,0,8.48-8.48ZM38,112a74,74,0,1,1,74,74A74.09,74.09,0,0,1,38,112Z"/></svg>`;
 const MARKS = {
   search: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`,
@@ -72,6 +74,7 @@ const MARKS = {
   standings: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,56v64a8,8,0,0,1-16,0V75.31l-82.34,82.35a8,8,0,0,1-11.32,0L96,123.31,29.66,189.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0L136,140.69,212.69,64H168a8,8,0,0,1,0-16h64A8,8,0,0,1,240,56Z"/></svg>`,
   news: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M88,112a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H96A8,8,0,0,1,88,112Zm8,40h80a8,8,0,0,0,0-16H96a8,8,0,0,0,0,16ZM232,64V184a24,24,0,0,1-24,24H32A24,24,0,0,1,8,184.11V88a8,8,0,0,1,16,0v96a8,8,0,0,0,16,0V64A16,16,0,0,1,56,48H216A16,16,0,0,1,232,64Zm-16,0H56V184a23.84,23.84,0,0,1-1.37,8H208a8,8,0,0,0,8-8Z"/></svg>`,
   settings: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"/></svg>`,
+  matchup: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM72.09,195.91c.82-1,1.64-1.93,2.42-2.91A8,8,0,1,0,62,183l-1.34,1.62a87.82,87.82,0,0,1,0-113.24L62,73A8,8,0,1,0,74.51,63c-.78-1-1.6-2-2.42-2.91a87.84,87.84,0,0,1,111.82,0c-.82,1-1.64,1.92-2.42,2.91A8,8,0,1,0,194,73l1.34-1.62a87.82,87.82,0,0,1,0,113.24L194,183a8,8,0,1,0-12.48,10c.78,1,1.6,1.95,2.42,2.91a87.84,87.84,0,0,1-111.82,0Zm23.8-50.59a104.5,104.5,0,0,1-4.48,17.35,8,8,0,0,1-15.09-5.34,87.1,87.1,0,0,0,3.79-14.65,8,8,0,1,1,15.78,2.64Zm0-34.64a8,8,0,0,1-6.57,9.21A8.52,8.52,0,0,1,88,120a8,8,0,0,1-7.88-6.68,87.1,87.1,0,0,0-3.79-14.65,8,8,0,0,1,15.09-5.34A104.5,104.5,0,0,1,95.89,110.68Zm78.91,56.86a8,8,0,0,1-10.21-4.87,104.5,104.5,0,0,1-4.48-17.35,8,8,0,1,1,15.78-2.64,87.1,87.1,0,0,0,3.79,14.65A8,8,0,0,1,174.8,167.54Zm-14.69-56.86a104.5,104.5,0,0,1,4.48-17.35,8,8,0,0,1,15.09,5.34,87.1,87.1,0,0,0-3.79,14.65A8,8,0,0,1,168,120a8.52,8.52,0,0,1-1.33-.11A8,8,0,0,1,160.11,110.68Z"/></svg>`,
   highlights: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,88h80v80H40Zm96-16V56h32V72Zm-16,0H88V56h32Zm0,112v16H88V184Zm16,0h32v16H136Zm0-16V88h80v80Zm80-96H184V56h32ZM72,56V72H40V56ZM40,184H72v16H40Zm176,16H184V184h32v16Z"/></svg>`,
 };
 // Phosphor's caret-right at its Regular weight, at the end of a row that opens a page.
@@ -201,11 +204,11 @@ const renderSuggestions = (suggestions, typed) =>
   </ul>`;
 
 /**
- * A final's teams and day, as "Lynx at Liberty" on "Yesterday".
+ * A game's teams and day, as "Lynx at Liberty" on "Yesterday".
  * @param {SearchGame} game
  * @param {import("./game-search.js").SearchContext} context
  */
-const describeFinal = (game, context) =>
+const describeGame = (game, context) =>
   joinWithSeparator([
     [game.away, game.home].map((code) => context.teamsByCode.get(code ?? "")?.name).join(" at "),
     describeDay(readCalendarDate(game.day), Date.now()),
@@ -228,8 +231,7 @@ function describePageRow(row, pages, context) {
         nameStoryDay(row.story.publishedAt, Date.now()),
       ]),
     };
-  if (row.kind === "game")
-    return { words: row.part.name, detail: describeFinal(row.game, context) };
+  if (row.kind === "game") return { words: row.part.name, detail: describeGame(row.game, context) };
   if (!("player" in row)) {
     if (row.kind === "team") return { words: row.team.fullName, detail: row.team.record ?? "" };
     return { words: pages.section?.name ?? "", detail: row.team.fullName };
@@ -260,7 +262,7 @@ const describeOut = ({ reason, isForSeason }, how) =>
   );
 
 /**
- * What a page's row opens: a place or a final's part, as the league opens it, or a button the
+ * What a page's row opens: a place or a game's part, as the league opens it, or a button the
  * team's and player's sheets open from, a player's over her team's sheet, on its section that lists
  * her.
  * @param {ShownRow} row
@@ -276,7 +278,7 @@ function renderPageButton(row, pages) {
   const opens = html`type="button" class="search-suggestion team-open" data-team="${row.team.code}" data-team-section="${section}"`;
   if (!("player" in row)) return opens;
   const { player } = row;
-  return html`${opens} data-player="${player.id}" data-player-team="${player.team}" data-player-name="${player.firstName} ${player.lastName}"`;
+  return html`${opens} data-player="${player.id}" data-player-team="${player.team}" data-player-name="${player.firstName} ${player.lastName}" data-player-number="${player.number}"`;
 }
 
 /**
@@ -286,7 +288,7 @@ function renderPageButton(row, pages) {
 function renderRowMark(row) {
   if (row.kind === "place") return MARKS[row.place.icon];
   if (row.kind === "story") return MARKS.news;
-  if (row.kind === "game") return MARKS.highlights;
+  if (row.kind === "game") return MARKS[row.part.key];
   return league?.renderTeamMark(row.team.code);
 }
 
@@ -339,8 +341,8 @@ const renderPageRows = (rows, pages, context) =>
   </ul>`;
 
 /**
- * The rows to show, each game's part on the latest final the words left for it find, and left out
- * when none has ended.
+ * The rows to show, each game's part on the game it opens of those the words left for it find, and
+ * left out when there's none.
  * @param {PageRow[]} rows
  * @param {import("./game-search.js").SearchContext} context
  * @returns {ShownRow[]}
@@ -352,7 +354,7 @@ const placeGameParts = (rows, context) =>
       row.gameText === null
         ? context.games
         : findSearchGames(readSearch(row.gameText, context), context).games;
-    const game = findLatestFinal(games);
+    const game = findPartGame(games, row.part);
     return game ? [/** @type {ShownRow} */ ({ kind: "game", part: row.part, game })] : [];
   });
 
@@ -470,7 +472,7 @@ function dropTeamsShown(suggestions, rows) {
  * @returns {{ pages: SearchPages | null, rows: PageRow[], gameText: string | null }}
  */
 function readPages(text, readText, context) {
-  const pages = league?.readPages?.() ?? null;
+  const pages = league?.readPages() ?? null;
   if (!pages) return { pages, rows: [], gameText: readText };
   const search = { dictionary: context.dictionary, pages, isTyping };
   const typed = findPages(text, search);
@@ -482,7 +484,7 @@ function readPages(text, readText, context) {
  * @param {import("./game-search.js").SearchContext} context
  */
 function listShownExamples(context) {
-  const pages = league?.readPages?.() ?? null;
+  const pages = league?.readPages() ?? null;
   const pageExamples = (pages?.examples ?? []).filter(
     (example) =>
       findPages(example, { dictionary: context.dictionary, pages, isTyping: false }).rows.length,
@@ -614,12 +616,9 @@ export function focusGameSearch() {
   findInput()?.focus();
 }
 
-/**
- * Closes the search, emptying its field.
- * @returns {boolean} whether it was open
- */
-export function closeGameSearch() {
-  if (!view || view.hidden) return false;
+/** Closes the search, emptying its field. */
+function closeGameSearch() {
+  if (!view || view.hidden) return;
   findInput()?.blur();
   writeQuery("");
   isTyping = false;
@@ -627,7 +626,6 @@ export function closeGameSearch() {
   placedFor = null;
   view.hidden = true;
   league?.close();
-  return true;
 }
 
 /** Draws the search again from the season, as new data or the clock moves on. */
@@ -642,7 +640,7 @@ function followTap(event) {
   const place = /** @type {HTMLElement | null} */ (target.closest("[data-place]"));
   const gamesLine = /** @type {HTMLElement | null} */ (target.closest(".search-games-line"));
   if (chosen) runAfterPress(chosen, () => runSearch(chosen.dataset.search ?? ""));
-  else if (place) runAfterPress(place, () => league?.openPlace?.(place.dataset.place ?? ""));
+  else if (place) runAfterPress(place, () => league?.openPlace(place.dataset.place ?? ""));
   else if (gamesLine) runAfterPress(gamesLine, () => showGamesOnly(gamesLine.dataset.games ?? ""));
   else if (target.closest(".search-cancel")) closeGameSearch();
   else if (target.closest(".search-clear")) {
@@ -710,7 +708,7 @@ export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
   if (!findInput()) setHtml(element, renderShell());
-  nameField(searchLeague.placeholder ?? "Search games");
+  nameField(searchLeague.placeholder);
   placedFor = element.hidden
     ? null
     : nameShown(readQuery().trim(), !!element.querySelector(".search-games-line"));

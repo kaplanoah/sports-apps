@@ -320,16 +320,30 @@ function updateStarters(opened) {
   loadSides(opened, named, game);
 }
 
-/** @param {MatchupGame} game */
-function openGameSheet(game) {
+/**
+ * @param {MatchupGame} game
+ * @param {string} [section] the section to open on, or its first
+ */
+function openGameSheet(game, section) {
   openSheet(findSheet(), {
     key: nameGameKey(game),
     show: () => {
       highlights?.forget();
       showGame(game, listSides(game));
-      sections?.showFirstSection();
+      if (section) sections?.showSection(section, true);
+      else sections?.showFirstSection();
     },
   });
+}
+
+/**
+ * Opens a game's sheet on one of its sections, as a search does.
+ * @param {string} key the game's, from nameGameKey
+ * @param {string} section
+ */
+export function openGameSection(key, section) {
+  const game = findGame(key);
+  if (game) openGameSheet(game, section);
 }
 
 const readShownGame = () =>

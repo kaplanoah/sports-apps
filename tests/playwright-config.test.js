@@ -24,3 +24,12 @@ test("CI stops a run of the browser tests once five have failed", async () => {
 test("off CI, a run of the browser tests never stops early", async () => {
   assert.equal((await loadConfig(undefined)).maxFailures, 0);
 });
+
+// A failed try's trace is where fixing a flaky test starts, and recording its screenshots slows
+// every test.
+test("each failed try of a browser test keeps its trace, without screenshots", async () => {
+  assert.deepEqual((await loadConfig("true")).use?.trace, {
+    mode: "retain-on-failure",
+    screenshots: false,
+  });
+});

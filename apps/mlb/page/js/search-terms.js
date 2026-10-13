@@ -346,6 +346,13 @@ const readKind = (game) => {
 };
 
 /**
+ * A club's name with its city, as "New York Mets", or its name alone when its city isn't in it.
+ * @param {string} code
+ */
+export const nameClubFully = (code) =>
+  [CLUBS[code].city, TEAMS[code].name].filter(Boolean).join(" ");
+
+/**
  * An MLB game as a search reads it, or null for one called off, which is played on another day.
  * @param {any} game
  * @returns {SearchGame | null}

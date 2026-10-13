@@ -115,7 +115,7 @@ test("each club's batters, with their team's totals, come before its pitchers, w
   assert.deepEqual(pitchers.map((row) => row[0]).slice(1), ["Yamamoto W", "Scott", "Díaz S"]);
   assert.match(
     markup,
-    /<tr class="box-sub">\s*<td class="team row-button-cell"><button type="button" class="player-open box-name" data-player="\d+" data-player-club="LAD" data-player-name="Muncy" data-player-number="">Muncy<\/button>/,
+    /<tr class="box-sub">\s*<td class="team row-button-cell"><button type="button" class="player-open box-name" data-player="\d+" data-player-team="LAD" data-player-name="Muncy" data-player-number="">Muncy<\/button>/,
   );
 });
 
@@ -163,14 +163,14 @@ test("a box score from before the one shown is passed over, and one from after i
 
 test("each batter's and pitcher's name in a box score, and each batter's in a lineup, opens his sheet with his club", () => {
   const final = String(renderBoxScore({ away: "LAD", home: "ATL" }, describeGame("849819")));
-  assert.match(final, /data-player="605141" data-player-club="LAD" data-player-name="Betts"/);
+  assert.match(final, /data-player="605141" data-player-team="LAD" data-player-name="Betts"/);
   const pitcher = describeGame("849819").home.pitchers[0];
   assert.match(
     final,
-    new RegExp(`data-player="${pitcher.id}" data-player-club="ATL" data-player-name="Sale"`),
+    new RegExp(`data-player="${pitcher.id}" data-player-team="ATL" data-player-name="Sale"`),
   );
   const lineup = String(renderBoxScore({ away: "TB", home: "NYY" }, describeGame("849838")));
-  assert.match(lineup, /data-player="650490" data-player-club="TB" data-player-name="Díaz, Y"/);
+  assert.match(lineup, /data-player="650490" data-player-team="TB" data-player-name="Díaz, Y"/);
 });
 
 test("a box score kept without its players' ids names them plainly", () => {
@@ -190,7 +190,7 @@ test("each named starter's name in the matchup opens his sheet with his club", (
     assert.match(
       markup,
       new RegExp(
-        `class="player-open pitcher-name" data-player="${side.starter.id}" data-player-club="${side.club}"`,
+        `class="player-open pitcher-name" data-player="${side.starter.id}" data-player-team="${side.club}"`,
       ),
     );
 });

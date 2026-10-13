@@ -43,9 +43,6 @@ import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
 // Phosphor's calendar-dot, at its Regular weight, as beside the words of a Read button.
 const CALENDAR_DOT = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Zm-64-56a16,16,0,1,1-16-16A16,16,0,0,1,144,152Z"/></svg>`;
 
-// Phosphor's magnifying-glass, at its Regular weight, beside its word as Today's calendar is.
-const MAGNIFYING_GLASS = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`;
-
 // Farther than this many screens, a jump is made at once rather than flown.
 const FLOWN_SCREENS = 3;
 // Days within this many screens of what the list shows, and of a day a tap or Today sends it to,
@@ -64,11 +61,6 @@ const FOLLOW_START_MS = 10 * 1000;
 
 /** @type {HTMLElement | null} */
 let view = null;
-// What the bar's Search opens, when the league's view has one.
-/** @type {(() => void) | null} */
-let openSearch = null;
-// The list comes back on its start day the next time it shows, as after a search.
-let isStartPending = false;
 /** @type {DayStripFill | null} */
 let shown = null;
 /** @type {string | null} */
@@ -168,7 +160,7 @@ const renderMonth = (day) => formatMonth(readCalendarDate(day));
 const renderBar = (fill) =>
   html`<div class="day-bar-head">
       <p class="strip-month">${renderMonth(chosenDay ?? fill.startDay)}</p>
-      <span class="bar-actions">${openSearch && html`<button type="button" class="go-search">${MAGNIFYING_GLASS}<span>Search</span></button>`}<button type="button" class="go-today">${CALENDAR_DOT}<span>Today</span></button></span>
+      <button type="button" class="go-today">${CALENDAR_DOT}<span>Today</span></button>
     </div>
     <div class="day-strip" role="group" aria-label="Days">${renderCells(fill)}</div>`;
 
@@ -548,11 +540,6 @@ export function showStartDay(motion = "flown") {
   if (shown?.days.length) showDay(shown.startDay, motion);
 }
 
-/** Has the list come back on its start day the next time it shows, as once a search closes. */
-export function showStartDayOnReturn() {
-  isStartPending = true;
-}
-
 /** Has the next fill open the list on its start day, as for another season. */
 export function startOverDayStrip() {
   endStripSlide();
@@ -664,6 +651,25 @@ const nameDrawing = (listed) =>
   chooseDrawnMarkup(listed) === listed.markup ? "whole" : "as a stand-in";
 
 /**
+ * Writes the bar again, and each day that shows something else than it last did, since a write of
+ * the whole view keeps what each part written on its own last showed (setHtml in html.js), as the
+ * bar is when the days stay the same and a day is when only it changes.
+ * @param {DayStripFill} fill
+ * @param {ListedDay[]} days
+ * @param {Map<string, string>} drawnBefore what each day showed before
+ */
+function redrawWrittenParts(fill, days, drawnBefore) {
+  const bar = findBar();
+  if (bar) setHtml(bar, renderBar(fill));
+  for (const listed of days) {
+    const markup = chooseDrawnMarkup(listed);
+    const element = findListedDay(listed.day);
+    const isChanged = drawnBefore.has(listed.day) && drawnBefore.get(listed.day) !== String(markup);
+    if (element && isChanged) setHtml(element, markup);
+  }
+}
+
+/**
  * @param {DayStripFill} fill
  * @returns {string} what it drew, for Diagnostics, or an empty string when nothing changed
  */
@@ -677,7 +683,9 @@ function drawFill(fill) {
     const changed = redrawChangedDays(days);
     return changed ? `redraw ${changed} of ${days.length} days` : "";
   }
+  const drawnBefore = new Map(drawnDays);
   setHtml(/** @type {HTMLElement} */ (view), renderView(fill, days));
+  redrawWrittenParts(fill, days, drawnBefore);
   drawnDays.clear();
   for (const listed of days) drawnDays.set(listed.day, String(chooseDrawnMarkup(listed)));
   fitEndRoom();
@@ -735,11 +743,9 @@ function dropQuietDayOutOfSight() {
 function placeList(putBackDay) {
   const list = findList();
   if (!shown || !list || !isListShown()) return;
-  if (isStartPending) showDay(shown.startDay, "instant");
-  else if (isPlaced) takeBackAnchor();
+  if (isPlaced) takeBackAnchor();
   else if (putBackDay && findListedDay(putBackDay.day)) placeDay(putBackDay);
   else showDay(shown.startDay, "instant");
-  isStartPending = false;
   isPlaced = true;
   noteStartTop();
   markStuck();
@@ -877,10 +883,6 @@ function pulseStartDay() {
 /** @param {Event} event */
 function openTappedDay(event) {
   const target = /** @type {Element} */ (event.target);
-  if (target.closest(".go-search")) {
-    openSearch?.();
-    return;
-  }
   if (target.closest(".go-today")) {
     if (isOnStartDay()) pulseStartDay();
     else showStartDay();
@@ -905,14 +907,11 @@ function showStartAfterLongAway(awayMs) {
 }
 
 /**
- * Wires the view in `element`, which `fillDayStrip` fills, with a Search beside Today when the
- * league's view searches its games.
+ * Wires the view in `element`, which `fillDayStrip` fills.
  * @param {HTMLElement} element
- * @param {{ search?: () => void }} [options]
  */
-export function startDayStrip(element, { search } = {}) {
+export function startDayStrip(element) {
   view = element;
-  openSearch = search ?? null;
   element.addEventListener("click", openTappedDay);
   element.addEventListener(
     "scroll",

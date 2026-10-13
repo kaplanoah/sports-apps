@@ -175,7 +175,7 @@ export function renderDivisionBlock(name, rows) {
     const cells = renderRaceCells(row, row.gb, row.elim, isOut);
     return renderStandingsRow(row, cells, { out: isOut });
   };
-  return html`<div class="div-block">
+  return html`<div class="div-block" data-standings="${league}">
     <div class="div-title">
       <span class="${league}">${name}</span><span class="title-right">${renderDivisionTag(rows[0] || {})}</span>
     </div>
@@ -293,4 +293,15 @@ export function renderStandings() {
     <div class="stand-head">Divisions</div>
     <div class="div-grid">${blocks}</div>`,
   );
+}
+
+/**
+ * Shows one of the tab's parts, as a search's row for it asks: the playoff fields, which lead the
+ * tab, at its top, or a league's divisions, from its first.
+ * @param {string} key "playoffs", or the league, as "AL"
+ */
+export function showStandingsPart(key) {
+  const firstDivision = document.querySelector(`[data-standings="${CSS.escape(key)}"]`);
+  if (firstDivision) firstDivision.scrollIntoView({ block: "start" });
+  else scrollTo({ top: 0 });
 }

@@ -93,7 +93,7 @@ test("each leader's row opens his sheet wherever it's tapped", () => {
   assert.match(markup, /class="row-button-clip"/);
   assert.match(
     markup,
-    /<td class="team row-button-cell"><span class="leader-stat">AVG<\/span><button type="button" class="player-open box-name" data-player="518692" data-player-club="LAD"/,
+    /<td class="team row-button-cell"><span class="leader-stat">AVG<\/span><button type="button" class="player-open box-name" data-player="518692" data-player-team="LAD"/,
   );
 });
 

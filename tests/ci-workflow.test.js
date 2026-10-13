@@ -85,7 +85,7 @@ test("burn-in runs only when a pull request changes a browser spec, and check re
   assert.match(burnIn, /SPECS: \$\{\{ needs\.changed-specs\.outputs\.specs \}\}/);
   assert.match(
     readJob("check"),
-    /\(needs\.changed-specs\.outputs\.specs != '' && needs\.burn-in\.result != 'success'\)/,
+    /\(needs\.changed-specs\.outputs\.specs == '' \|\| needs\.burn-in\.result == 'success'\)/,
   );
 });
 
@@ -95,4 +95,31 @@ test("the check job names each test burn-in found failing in the issue, and can 
   assert.match(check, /--retried "\$\{listed\[@\]\}"/);
   assert.match(check, /FLAKY_ROUTINE_URL: \$\{\{ secrets\.FLAKY_ROUTINE_URL \}\}/);
   assert.match(check, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
+});
+
+// A label change, like adding phone-ok, brings no new code: once a run passed every test on
+// exactly this code, only the gate runs again, and the label waits for a run still going rather
+// than stopping it.
+test("a label change runs only the gate again once a run passed every test on the same code", () => {
+  const workflow = readRepoFile(".github/workflows/ci.yml");
+  assert.match(
+    workflow,
+    /cancel-in-progress: .*github\.event\.action != 'labeled' && github\.event\.action != 'unlabeled'/,
+  );
+  const passed = readJob("passed");
+  assert.match(
+    passed,
+    /if: .*github\.event\.action == 'labeled' \|\| github\.event\.action == 'unlabeled'/,
+  );
+  assert.match(
+    passed,
+    /SEARCH: \$\{\{ github\.event_name == 'pull_request' && '--tested' \|\| '' \}\}/,
+  );
+  assert.match(readJob("changed-specs"), /needs: passed\n.*!needs\.passed\.outputs\.run/);
+  const check = readJob("check");
+  assert.match(
+    check,
+    /if: github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true'\n.*\n\s+name: ci-tested-/,
+  );
+  assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
 });

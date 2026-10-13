@@ -9,9 +9,11 @@ import {
   findSearchGames,
   readSearch,
 } from "#shared/game-search.js";
+import { findPages, findPartGame } from "#shared/page-search.js";
 import { listExamples, listSuggestions } from "#shared/search-suggestions.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import { listSeasonGames } from "../page/js/games-view.js";
+import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 
@@ -213,4 +215,221 @@ test("a channel finds the games MLB lists on it, by any name it goes by", () => 
   ]);
   assert.deepEqual(search("HBO").games, search("on TBS").games);
   assert.equal(search("on FS1").line, "On FS1 | 1 game");
+});
+
+// A few players as the store's list of the season's players has them.
+const INDEX = {
+  players: [
+    { id: "596019", team: "NYM", number: "12", firstName: "Francisco", lastName: "Lindor" },
+    { id: "808967", team: "LAD", number: "18", firstName: "Yoshinobu", lastName: "Yamamoto" },
+    { id: "665487", team: "SD", number: "23", firstName: "Fernando", lastName: "Tatis Jr." },
+    { id: "808982", team: "SF", number: "51", firstName: "Jung Hoo", lastName: "Lee" },
+    { id: "695445", team: "TOR", number: "52", firstName: "Chase", lastName: "Lee" },
+    { id: "694973", team: "PIT", number: "30", firstName: "Paul", lastName: "Skenes" },
+    { id: "668834", team: "KC", number: "51", firstName: "Easton", lastName: "McGee" },
+  ],
+};
+
+/**
+ * The pages a search lists, as each row reads, and the words it leaves for a search of games,
+ * with every setting shown.
+ * @param {string} text
+ * @param {boolean} [isTyping]
+ */
+function listPages(text, isTyping = false) {
+  const pages = listSearchPages({ index: INDEX, isSettingShown: () => true });
+  const { rows, gameText } = findPages(text, {
+    dictionary: CONTEXT.dictionary,
+    pages,
+    isTyping,
+  });
+  return {
+    rows: rows.map((row) => {
+      if (row.kind === "place") return row.place.name.join(" ");
+      if (row.kind === "player") return `${row.player.firstName} ${row.player.lastName}`;
+      if (row.kind === "game-part") return `${row.part.name} of ${row.gameText ?? "the season"}`;
+      if (row.kind === "story") return row.story.title;
+      return row.kind === "team" ? row.team.fullName : `${row.team.fullName} Roster`;
+    }),
+    gameText,
+  };
+}
+
+test("a club's name lists its sheet and its Roster, by any name a search of games knows it by", () => {
+  for (const text of ["Mets", "NYM", "New York Mets"])
+    assert.deepEqual(listPages(text).rows, ["New York Mets", "New York Mets Roster"], text);
+  assert.deepEqual(listPages("Dodgers roster").rows, ["Los Angeles Dodgers Roster"]);
+  assert.deepEqual(listPages("Athletics").rows, ["Athletics", "Athletics Roster"]);
+});
+
+test("a player's name lists his sheet, by his whole, last, or first name, with or without his suffix", () => {
+  assert.deepEqual(listPages("Lindor"), { rows: ["Francisco Lindor"], gameText: null });
+  assert.deepEqual(listPages("Tatis").rows, ["Fernando Tatis Jr."]);
+  assert.deepEqual(listPages("Fernando Tatis Jr").rows, ["Fernando Tatis Jr."]);
+  assert.deepEqual(listPages("Jung Hoo Lee").rows, ["Jung Hoo Lee"]);
+  assert.deepEqual(listPages("Lee").rows, ["Jung Hoo Lee", "Chase Lee"]);
+  assert.deepEqual(listPages("Yama", true).rows, ["Yoshinobu Yamamoto"]);
+});
+
+test("a starter's name lists his sheet and still finds his starts", () => {
+  assert.deepEqual(listPages("Skenes"), { rows: ["Paul Skenes"], gameText: "Skenes" });
+});
+
+test("words a search of games knows beside a name ask for something else, so they name no player", () => {
+  assert.deepEqual(listPages("NL East"), { rows: ["Standings NL"], gameText: "nl east" });
+  assert.deepEqual(listPages("Lindor stats").rows, ["Francisco Lindor"]);
+});
+
+test("the Standings tab's playoff fields and each league's divisions are found by their words", () => {
+  assert.deepEqual(listPages("standings").rows, [
+    "Standings Playoffs",
+    "Standings AL",
+    "Standings NL",
+  ]);
+  assert.deepEqual(listPages("wild card").rows, ["Standings Playoffs"]);
+  assert.deepEqual(listPages("american league").rows, ["Standings AL"]);
+  assert.deepEqual(listPages("AL Central").rows, ["Standings AL"]);
+  assert.deepEqual(listPages("playoffs").rows, ["Bracket", "Standings Playoffs"]);
+  assert.equal(listPages("playoffs").gameText, "playoffs");
+});
+
+test("Highlights find the latest final, and the Matchup the next game, of the season or of the games the other words find", () => {
+  assert.deepEqual(listPages("highlights"), {
+    rows: ["Highlights of the season"],
+    gameText: null,
+  });
+  assert.deepEqual(listPages("Mets recap").rows, ["Highlights of mets"]);
+  assert.deepEqual(listPages("Mets matchup").rows, ["Matchup of mets"]);
+  assert.deepEqual(listPages("pitching matchup").rows, ["Matchup of the season"]);
+  assert.deepEqual(listPages("Dodgers probables").rows, ["Matchup of dodgers"]);
+  const { gameParts } = listSearchPages({ index: INDEX, isSettingShown: () => true });
+  const matchup = /** @type {import("#shared/page-search.js").GamePart} */ (
+    gameParts.find((part) => part.key === "matchup")
+  );
+  assert.equal(findPartGame(CONTEXT.games, matchup)?.state, "pre");
+});
+
+test("settings and each setting are found by their words, and only the settings shown", () => {
+  assert.deepEqual(listPages("night game").rows, ["Settings Appearance"]);
+  assert.deepEqual(listPages("prospectus").rows, [
+    "Settings Include content from Baseball Prospectus",
+  ]);
+  assert.deepEqual(listPages("ranking").rows, ["Settings Ranking"]);
+  assert.deepEqual(listPages("the athletic").rows, [
+    "Settings Include content from The Athletic",
+    "Athletics",
+    "Athletics Roster",
+  ]);
+  assert.deepEqual(listPages("season").rows, ["Settings Season"]);
+  const hidden = listSearchPages({
+    index: INDEX,
+    isSettingShown: (key) => key !== "settings:season",
+  });
+  assert.ok(!hidden.places.some((place) => place.key === "settings:season"));
+});
+
+test("the examples are three searches for games, then a player and a club's Roster", () => {
+  const { examples } = listSearchPages({ index: INDEX, isSettingShown: () => true });
+  assert.deepEqual(
+    [...listExamples(CONTEXT, 5 - examples.length), ...examples],
+    ["Mets at Phillies", "Yankees in Boston", "Games this weekend", "Yamamoto", "Mets roster"],
+  );
+});
+
+// Every tab, sheet, sheet section, and setting the page has, and what search does with it: the
+// search that lists a row opening it, the search of games that finds it, or why search leaves it
+// out. A new one fails the test below until it's here, so it's made searchable, or left out on
+// purpose.
+const COVERAGE = {
+  "tab:bracket": { search: "bracket", opens: "tab:bracket" },
+  "tab:games": { leftOut: "Typing games already searches every game" },
+  "tab:standings": { search: "standings", opens: "standings:playoffs" },
+  "tab:news": { search: "news", opens: "tab:news" },
+  "tab:search": { leftOut: "It's the search itself" },
+  "dialog:settingsDialog": { search: "settings", opens: "settings" },
+  "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
+  "sheet:gameSheet": { games: "Mets at Phillies" },
+  "section:game": { games: "Mets at Phillies" },
+  "section:matchup": { search: "Mets matchup", opens: "matchup" },
+  "section:highlights": { search: "highlights", opens: "highlights" },
+  "sheet:teamSheet": { search: "Mets", opens: "team" },
+  "section:team": { search: "Mets", opens: "team" },
+  "section:roster": { search: "Mets roster", opens: "roster" },
+  "sheet:playerSheet": { search: "Lindor", opens: "player" },
+  "settings:season": { search: "season", opens: "settings:season" },
+  "settings:notifications": { search: "notifications", opens: "settings:notifications" },
+  "settings:appearance": { search: "night game", opens: "settings:appearance" },
+  "settings:team-outlets": { search: "dedicated sources", opens: "settings:team-outlets" },
+  "settings:paywalled": { search: "the athletic", opens: "settings:paywalled" },
+  "settings:prospectus": { search: "prospectus", opens: "settings:prospectus" },
+  "settings:home-screen": {
+    leftOut: "Shows only in a phone's browser, whose bar at the top also asks to add the page",
+  },
+  "settings:ranking": { search: "ranking", opens: "settings:ranking" },
+  "settings:diagnostics": { search: "diagnostics", opens: "settings:diagnostics" },
+};
+
+/** The page's tabs, dialogs, sheets, sheet sections, and settings, as its markup names them. */
+function listPagePlaces() {
+  const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
+  const tabBar = page.slice(page.indexOf('<nav class="tabs">'), page.indexOf("</nav>"));
+  const sheets = page.slice(page.indexOf('<dialog id="sheetDialog"'));
+  const listMatches = (/** @type {string} */ text, /** @type {RegExp} */ pattern) =>
+    [...text.matchAll(pattern)].map(([, key]) => key);
+  return [
+    ...listMatches(tabBar, /data-tab="([^"]+)"/g).map((key) => `tab:${key}`),
+    ...listMatches(page, /<dialog id="([^"]+)"/g).map((id) => `dialog:${id}`),
+    ...listMatches(sheets, /<section\s+id="([^"]+)"\s+class="sheet-page[\s"]/g).map(
+      (id) => `sheet:${id}`,
+    ),
+    ...listMatches(sheets, /data-tab="([^"]+)"/g).map((key) => `section:${key}`),
+    ...listMatches(page, /data-setting="([^"]+)"/g),
+  ];
+}
+
+/**
+ * What a search's row opens, by the key a place has, or the kind of sheet or section.
+ * @param {import("#shared/page-search.js").PageRow} row
+ */
+function nameOpened(row) {
+  if (row.kind === "place") return row.place.key;
+  if (row.kind === "game-part") return row.part.key;
+  if (row.kind === "section") return "roster";
+  return row.kind;
+}
+
+test("every tab, sheet, section, and setting says what search does with it", () => {
+  assert.deepEqual(
+    listPagePlaces().sort(),
+    Object.keys(COVERAGE).sort(),
+    "Make each new place searchable in search-pages.js, or say why not, in COVERAGE",
+  );
+});
+
+test("every setting's row names the place a search opens", () => {
+  const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
+  const rows = [...page.matchAll(/<\w+\s+class="control-row[^>]*>/g)].map(([row]) => row);
+  assert.deepEqual(
+    rows.filter((row) => !row.includes("data-setting=")),
+    [],
+  );
+});
+
+test("each place search opens is listed by its search, and each game by a search of games", () => {
+  const pages = listSearchPages({ index: INDEX, isSettingShown: () => true });
+  for (const [place, coverage] of Object.entries(COVERAGE)) {
+    if ("search" in coverage) {
+      const { rows } = findPages(coverage.search, {
+        dictionary: CONTEXT.dictionary,
+        pages,
+        isTyping: false,
+      });
+      assert.ok(rows.map(nameOpened).includes(coverage.opens), place);
+    }
+    if ("games" in coverage)
+      assert.ok(
+        findSearchGames(readSearch(coverage.games, CONTEXT), CONTEXT).games.length > 0,
+        place,
+      );
+  }
 });

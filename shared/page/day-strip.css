@@ -84,15 +84,8 @@
   color: var(--strip-month);
 }
 /* Today looks the same wherever the list is, so it reads as a shortcut, never as where the list
-   is. Its calendar names what it does before its word, and its tap area runs past them. Search,
-   when a league's view has one, sits before it, alike. */
-.bar-actions {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-.go-today,
-.go-search {
+   is. Its calendar names what it does before its word, and its tap area runs past them. */
+.go-today {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -109,12 +102,10 @@
 }
 /* Today's capitals and its icon sit level with the month's capitals, whose smaller size sets them
    higher in the same line. */
-.go-today > span,
-.go-search > span {
+.go-today > span {
   translate: 0 -1px;
 }
-.go-today svg,
-.go-search svg {
+.go-today svg {
   flex: none;
   width: 14px;
   height: 14px;

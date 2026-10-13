@@ -6,9 +6,14 @@ import {
   buildSnapshotWithStarters,
   EVENING_FIXTURE,
   readColor,
+  SCHEDULE_DOCS,
 } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readStripEdges } from "../../../../tests/browser/day-strip-edges.mjs";
+import {
+  listLowContrastText,
+  listLowContrastTextAsShown,
+} from "../../../../tests/browser/contrast.mjs";
 import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -71,7 +76,7 @@ test("the Games tab lists the whole season under a strip of its days, opening on
   ).toHaveText("Sat, Sep 26");
 });
 
-test("the Games list's month starts 15px under the header's line, with Search's and Today's capitals level with its", async ({
+test("the Games list's month starts 15px under the header's line, with Today's capitals level with its", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -81,10 +86,8 @@ test("the Games list's month starts 15px under the header's line, with Search's 
     .evaluate((header) => header.getBoundingClientRect().bottom);
   const month = await readCapitals(page.locator("#seasonGames .strip-month"));
   expect(month.top - headerBottom).toBeCloseTo(15, 0);
-  for (const action of ["go-search", "go-today"]) {
-    const { top } = await readCapitals(page.locator(`#seasonGames .${action} > span`));
-    expect(Math.abs(top - month.top), action).toBeLessThan(0.25);
-  }
+  const today = await readCapitals(page.locator("#seasonGames .go-today > span"));
+  expect(Math.abs(today.top - month.top)).toBeLessThan(0.25);
 });
 
 test("a reload keeps the whole season in the Games list while the store catches up, never dropping to the slate's few days", async ({
@@ -179,6 +182,34 @@ test("scrolling the list draws each day whole as it nears the top, before it sho
       )
       .toBe(0);
   }
+});
+
+test("a schedule that arrives after the slate's days were drawn again fills the strip with every day, as it does the list", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator("#seasonGames .day-cell").first()).toHaveAttribute(
+    "data-day",
+    "2026-09-23",
+  );
+  const season = await app.readDocument("seasons/2026");
+  const scored = structuredClone(season);
+  scored.slate.today.games.find((/** @type {any} */ game) => game.id === "824866").score = [6, 5];
+  await app.writeFromWorker("seasons/2026", scored);
+  await expect(page.locator("#stamp > span").first()).toHaveText(/^NOW\s*Reds @ Braves 6-5/);
+
+  for (const [path, month] of Object.entries(SCHEDULE_DOCS)) await app.writeFromWorker(path, month);
+
+  await expect(page.locator("#seasonGames .listed-day").first()).toHaveAttribute(
+    "data-day",
+    "2026-03-25",
+  );
+  await expect(page.locator("#seasonGames .day-cell").first()).toHaveAttribute(
+    "data-day",
+    "2026-03-25",
+  );
 });
 
 test("tapping the Games tab while it shows goes back to today", async ({ page }) => {
@@ -349,6 +380,28 @@ test("a clinched club's race letter is gold at the facts' own weight", async ({ 
   await expect(race).toHaveCSS("color", await readColor(page, "--highlight"));
   await expect(race).toHaveCSS("font-weight", "400");
 });
+
+for (const [theme, colorScheme] of /** @type {const} */ ([
+  ["Ball", "light"],
+  ["Night Game", "dark"],
+])) {
+  test(`in ${theme}, a racing club's race letter stays readable on its row under the mouse and pressed`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await openApp(page);
+    await page.getByRole("tab", { name: "Games" }).click();
+    const open = page
+      .locator("#seasonGames .game-day.is-today .game-row:has(.race.racing) .game-open")
+      .first();
+
+    await open.hover();
+    expect(await listLowContrastText(page)).toEqual([]);
+
+    await open.evaluate((button) => button.classList.add("is-pressed"));
+    expect(await listLowContrastTextAsShown(page)).toEqual([]);
+  });
+}
 
 test("on a phone, a long starter's name keeps his arm on its line", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

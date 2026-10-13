@@ -8,17 +8,8 @@ import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/page-search.js").SearchPages} SearchPages */
 /** @typedef {import("#shared/page-search.js").PagePlace} PagePlace */
+/** @typedef {import("#shared/page-search.js").PagePlayer} PagePlayer */
 /** @typedef {import("#shared/news-picks.js").NewsStory} NewsStory */
-/**
- * A player as the store's list of a season's players has her, with why she's out while she is.
- * @typedef {{ id: string, team: string, number: string, firstName: string, lastName: string, out?: import("#shared/page-search.js").PlayerOut | null }} IndexedPlayer
- */
-
-/**
- * Where the store keeps a season's list of players.
- * @param {number} season
- */
-export const namePlayerIndexKey = (season) => `player-index/${season}`;
 
 /**
  * Where the store keeps which of a season's finals went to overtime, for search.
@@ -27,11 +18,15 @@ export const namePlayerIndexKey = (season) => `player-index/${season}`;
 export const nameOvertimesKey = (season) => `overtimes/${season}`;
 
 const SECTION = { key: "roster", name: "Roster" };
-const GAME_PART = {
-  key: "highlights",
-  name: "Highlights",
-  words: ["highlights", "recap", "clips", "video"],
-};
+/** @type {import("#shared/page-search.js").GamePart[]} */
+const GAME_PARTS = [
+  {
+    key: "highlights",
+    name: "Highlights",
+    words: ["highlights", "recap", "clips", "video"],
+    game: "latest-final",
+  },
+];
 const EXAMPLES = ["Stewart", "Aces roster"];
 
 // The words that ask how the playoffs stand, which both the Bracket and the league's standings
@@ -122,7 +117,7 @@ const listSettings = (isShown) =>
 /**
  * The teams, players, and places a search of a season can open, each team with its record from the
  * standings, and the stories the News tab shows.
- * @param {{ index: { players: IndexedPlayer[] } | null, isSettingShown: (key: string) => boolean, standings?: { team: string, wins: number, losses: number }[], stories?: NewsStory[] }} shown
+ * @param {{ index: { players: PagePlayer[] } | null, isSettingShown: (key: string) => boolean, standings?: { team: string, wins: number, losses: number }[], stories?: NewsStory[] }} shown
  * @returns {SearchPages}
  */
 export function listSearchPages({ index, isSettingShown, standings = [], stories = [] }) {
@@ -144,7 +139,7 @@ export function listSearchPages({ index, isSettingShown, standings = [], stories
     })),
     section: SECTION,
     places: [...TABS, ...STANDINGS, ...listSettings(isSettingShown)],
-    gamePart: GAME_PART,
+    gameParts: GAME_PARTS,
     examples: EXAMPLES,
     news: { place: NEWS_TAB, stories: listNewestFirst(stories) },
   };

@@ -227,7 +227,7 @@ function rewindSeasonGames(seasonGames, now) {
  * The season's games, a month to a document, as the Worker saves them from the evening's snapshot.
  * @type {Record<string, object>}
  */
-const SCHEDULE_DOCS = (() => {
+export const SCHEDULE_DOCS = (() => {
   const responses = {
     ...EVENING_FIXTURE.responses,
     schedule: null,

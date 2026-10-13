@@ -1,7 +1,6 @@
 /*
- * A season's search, as game-search-view.js draws it in a .search-view, sharing a .day-view's
- * layout: in the Games view beside the season's .day-view, which it takes the place of while it's
- * open, or in a view of its own. Apps link it after day-strip.css, before their own styles.css.
+ * A season's search, as game-search-view.js draws it in a .search-view, in a view of its own,
+ * sharing a .day-view's layout. Apps link it after day-strip.css, before their own styles.css.
  *
  * Beside type.css's sizes, chrome.css's --ink, --ink-dim, --divider, and --radius-control, and
  * day-strip.css's --reach-left and --reach-right, an app's :root defines these tokens:
@@ -16,8 +15,7 @@
  *                  the --text face
  */
 
-.search-view[hidden],
-.search-view:not([hidden]) + .day-view {
+.search-view[hidden] {
   display: none;
 }
 

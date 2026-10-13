@@ -12,7 +12,7 @@ export const session = {
   /** @type {{ games: any[] } | null} */
   schedule: null,
   // Every player on a team's roster in the season shown, for search, null when the store has none.
-  /** @type {{ players: import("./search-pages.js").IndexedPlayer[] } | null} */
+  /** @type {{ players: import("#shared/page-search.js").PagePlayer[] } | null} */
   playerIndex: null,
   // How many overtimes each final of the season shown that went past regulation played, by its id,
   // for search, null when the store has none.

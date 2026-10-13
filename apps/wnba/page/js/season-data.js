@@ -1,7 +1,8 @@
 import { readEasternDay } from "#shared/days.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
-import { nameOvertimesKey, namePlayerIndexKey } from "./search-pages.js";
+import { namePlayerIndexKey } from "#shared/page-search.js";
+import { nameOvertimesKey } from "./search-pages.js";
 import { session } from "./session.js";
 import { SNAPSHOT_VERSION, nameScheduleKey } from "./snapshot.js";
 
@@ -39,15 +40,20 @@ function followSchedule(year, showChange) {
 }
 
 /**
- * Follows a document the store keeps for the season shown, for search, keeping what `keep` reads
- * of it, or null for one the page can't read, and redrawing with `showChange` as it changes. One
- * for a season the page has moved on from is left out.
+ * Follows a document the store keeps for the season shown, for search, keeping what `read` makes
+ * of it, or null for one the page can't read, with `keep`, and redrawing with `showChange` as it
+ * changes, but not while there is still none. One for a season the page has moved on from is left
+ * out.
+ * @template Kept
  * @param {(year: number) => string} nameKey
- * @param {(doc: any) => void} keep
+ * @param {(doc: any) => Kept | null} read
+ * @param {(kept: Kept | null) => void} keep
  */
-function createSeasonDocFollower(nameKey, keep) {
+function createSeasonDocFollower(nameKey, read, keep) {
   /** @type {number | null} */
   let followedYear = null;
+  /** @type {Kept | null} */
+  let kept = null;
   let unwatch = () => {};
   /**
    * @param {number} year
@@ -57,11 +63,15 @@ function createSeasonDocFollower(nameKey, keep) {
     if (year === followedYear) return;
     followedYear = year;
     unwatch();
+    kept = null;
     keep(null);
     unwatch = session.db.doc(nameKey(year)).onSnapshot(
       (/** @type {any} */ snapshot) => {
         if (year !== followedYear) return;
-        keep(snapshot.exists ? snapshot.data() : null);
+        const shown = read(snapshot.exists ? snapshot.data() : null);
+        if (!shown && !kept) return;
+        kept = shown;
+        keep(shown);
         showChange();
       },
       () => {},
@@ -70,13 +80,20 @@ function createSeasonDocFollower(nameKey, keep) {
 }
 
 // The list of players search finds, and which finals went to overtime.
-const followPlayerIndex = createSeasonDocFollower(namePlayerIndexKey, (index) => {
-  session.playerIndex = Array.isArray(index?.players) ? index : null;
-});
-const followOvertimes = createSeasonDocFollower(nameOvertimesKey, (overtimes) => {
-  session.overtimes =
-    overtimes?.games && typeof overtimes.games === "object" ? overtimes.games : null;
-});
+const followPlayerIndex = createSeasonDocFollower(
+  namePlayerIndexKey,
+  (index) => (Array.isArray(index?.players) ? index : null),
+  (index) => {
+    session.playerIndex = index;
+  },
+);
+const followOvertimes = createSeasonDocFollower(
+  nameOvertimesKey,
+  (overtimes) => (overtimes?.games && typeof overtimes.games === "object" ? overtimes.games : null),
+  (games) => {
+    session.overtimes = games;
+  },
+);
 
 const noteUnreachable = () => {
   session.problem = UNREACHABLE;
