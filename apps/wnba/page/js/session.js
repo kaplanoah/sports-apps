@@ -1,9 +1,11 @@
+import { readCalendarYear } from "#shared/days.js";
+
 // What the page shows, read from the Worker's store and kept current as it changes.
 export const session = {
   /** @type {ReturnType<typeof import("#shared/worker-store.js").createWorkerStore> | null} */
   db: null,
   // The season shown, and the one the store says is current, null until it says.
-  year: new Date().getFullYear(),
+  year: readCalendarYear(new Date()),
   /** @type {number | null} */
   currentYear: null,
   /** @type {any} */

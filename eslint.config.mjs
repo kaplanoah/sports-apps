@@ -4,6 +4,28 @@ import globals from "globals";
 // A bullet or middle dot typed by hand, as a character, an escape, or an HTML entity.
 const HAND_SEPARATOR = String.raw`/\u2022|\u00b7|&bull;|&middot;|&#8226;|&#183;/`;
 
+// The Date methods that read or write a moment on the machine's own calendar and clock.
+const LOCAL_TIME_METHODS = [
+  "getDate",
+  "getDay",
+  "getFullYear",
+  "getHours",
+  "getMinutes",
+  "getMonth",
+  "getSeconds",
+  "getTimezoneOffset",
+  "setDate",
+  "setFullYear",
+  "setHours",
+  "setMinutes",
+  "setMonth",
+  "setSeconds",
+  "toDateString",
+  "toLocaleDateString",
+  "toLocaleTimeString",
+  "toTimeString",
+];
+
 export default [
   { ignores: [".claude/worktrees/", "apps/*/worker/dist/", "apps/*/page/js/sortable.min.js"] },
   js.configs.recommended,
@@ -35,6 +57,26 @@ export default [
           selector: `Literal[value=${HAND_SEPARATOR}], TemplateElement[value.cooked=${HAND_SEPARATOR}]`,
           message: "Separate items with joinWithSeparator from html.js.",
         },
+      ],
+    },
+  },
+  {
+    // Only days.js reads the viewer's calendar and clock, so a day or time reads the same in every
+    // zone, which its tests check zone by zone.
+    files: [
+      "apps/*/page/**/*.js",
+      "apps/*/worker/src/**/*.js",
+      "shared/**/*.js",
+      "worker/**/*.mjs",
+    ],
+    ignores: ["shared/page/days.js"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...LOCAL_TIME_METHODS.map((property) => ({
+          property,
+          message: "Read and format days and times with shared/page/days.js.",
+        })),
       ],
     },
   },
