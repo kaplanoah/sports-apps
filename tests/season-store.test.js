@@ -364,7 +364,7 @@ function createJobLeague(contexts) {
   let finishRun = () => {};
   const job = {
     chooseDelay: () => 15 * MINUTE_MS,
-    run: (context) => {
+    updateStore: (context) => {
       contexts.push(context);
       return new Promise((resolve) => {
         finishRun = resolve;
@@ -438,7 +438,7 @@ test("a job that fails is logged, and runs again when it's next due", async (t) 
     backgroundJobs: {
       news: {
         chooseDelay: () => 15 * MINUTE_MS,
-        run: async () => {
+        updateStore: async () => {
           runs += 1;
           throw new Error("Claude answered 529");
         },
@@ -468,7 +468,7 @@ test("a job keeps what it saves under keys the store's paths can't name, and wri
     backgroundJobs: {
       news: {
         chooseDelay: () => 15 * MINUTE_MS,
-        run: async ({ storage, docs }) => {
+        updateStore: async ({ storage, docs }) => {
           await storage.put("story:a", { title: "A" });
           await storage.put("story:b", { title: "B" });
           await storage.put("other", 1);
@@ -574,7 +574,7 @@ test("the Worker adds to a count a job keeps, which the job reads and the page c
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore({
     ...QUIET_LEAGUE,
-    backgroundJobs: { players: { chooseDelay: () => 5 * MINUTE_MS, run: async () => {} } },
+    backgroundJobs: { players: { chooseDelay: () => 5 * MINUTE_MS, updateStore: async () => {} } },
   });
   const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
   const env = {

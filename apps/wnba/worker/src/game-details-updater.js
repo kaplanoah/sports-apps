@@ -2,6 +2,7 @@ import { isSameJson } from "#shared/compare.js";
 import { fetchBoxScore } from "./box-score.js";
 import { createLeadReader } from "./lead.js";
 import { nameGameDetailsKey } from "./store-docs.js";
+import { findSettledTime } from "../../../../shared/worker/feed-keeper.js";
 
 // Keeps each finished game's box score and lead, so a sheet opened on a final reads only the
 // store. A game is read as the store finds it final, and again until a read comes long enough
@@ -13,8 +14,6 @@ import { nameGameDetailsKey } from "./store-docs.js";
 const MINUTE_MS = 60 * 1000;
 const RUN_DELAY_MS = 2 * MINUTE_MS;
 const GAMES_PER_RUN = 4;
-// The league and ESPN catch up on a game's last plays a few minutes after it ends.
-const SETTLE_MS = 10 * MINUTE_MS;
 const RETRY_MS = 10 * MINUTE_MS;
 // A game whose details haven't settled this long after its first read is let go.
 const GIVE_UP_MS = 2 * 60 * MINUTE_MS;
@@ -62,13 +61,6 @@ const listFinalsNewestFirst = (season) =>
  * @param {number} now
  */
 const isDue = (read, now) => !read || (!read.isDone && now - read.readAt >= RETRY_MS);
-
-/**
- * When a read can no longer miss the game's last plays. A game the store never saw live was over
- * before it was found final.
- * @param {any} game
- */
-const findSettledTime = (game) => (game.end ? Date.parse(game.end) + SETTLE_MS : -Infinity);
 
 /** @param {PromiseSettledResult<any>} result */
 const readAnswer = (result) => (result.status === "fulfilled" ? result.value : null);
@@ -141,5 +133,5 @@ async function keepFinishedGames(context) {
 }
 
 export function createGameDetailsJob() {
-  return { chooseDelay: () => RUN_DELAY_MS, run: keepFinishedGames };
+  return { chooseDelay: () => RUN_DELAY_MS, updateStore: keepFinishedGames };
 }

@@ -123,7 +123,7 @@ test("the store's job reads each of the season's finals in ESPN's scoreboard and
   const docs = createDocs({ "live/current": { season: 2026 }, [nameScheduleKey(2026)]: schedule });
   const espn = createEspnFetch();
 
-  await createHighlightsUpdater().run(
+  await createHighlightsUpdater().updateStore(
     /** @type {any} */ ({
       docs,
       storage: createJobStorage(),

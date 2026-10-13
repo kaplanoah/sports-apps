@@ -61,7 +61,7 @@ async function runJob(stored, snapshot = SNAPSHOT_2025) {
     loads.push(season);
     return structuredClone(answer(season));
   };
-  await createPastSeasonsJob().run({
+  await createPastSeasonsJob().updateStore({
     docs,
     loadSnapshot,
     storage: createJobStorage(),

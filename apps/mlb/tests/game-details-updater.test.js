@@ -83,7 +83,7 @@ function createRun({ slate = SLATE, minutesAfter = 0, stored = {}, kept = {} } =
   const storage = createJobStorage(kept);
   const job = createGameDetailsJob();
   const runJob = () =>
-    job.run({
+    job.updateStore({
       docs,
       storage,
       loadSnapshot: async () => null,

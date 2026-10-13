@@ -35,11 +35,30 @@ const DEVICE_STORAGES = ["localStorage", "sessionStorage"];
 const DEVICE_STORAGE_MESSAGE =
   "Keep a viewer's choice with createViewerChoice from shared/page/device-storage.js.";
 
+// A generic name hides what a function does; calling a library's run is fine, declaring one is not.
+// A later block's no-restricted-syntax replaces this one's for its files, so each such block lists
+// these too.
+const GENERIC_NAME = "/^(call|run|execute|handle)$/";
+const GENERIC_FUNCTION_NAMES = [
+  `FunctionDeclaration[id.name=${GENERIC_NAME}]`,
+  `MethodDefinition[key.name=${GENERIC_NAME}]`,
+  `Property[key.name=${GENERIC_NAME}][value.type=/FunctionExpression$/]`,
+  `PropertyDefinition[key.name=${GENERIC_NAME}][value.type=/FunctionExpression$/]`,
+  `VariableDeclarator[id.name=${GENERIC_NAME}][init.type=/FunctionExpression$/]`,
+].map((selector) => ({
+  selector,
+  message: "Name the function with a verb for what it does, not call, run, execute, or handle.",
+}));
+
 export default [
   { ignores: [".claude/worktrees/", "apps/*/worker/dist/", "apps/*/page/js/sortable.min.js"] },
   js.configs.recommended,
   { rules: { "no-unused-vars": ["error", { ignoreRestSiblings: true }] } },
   { files: ["**/*.{js,mjs}"], languageOptions: { sourceType: "module", globals: globals.node } },
+  {
+    files: ["**/*.{js,mjs}"],
+    rules: { "no-restricted-syntax": ["error", ...GENERIC_FUNCTION_NAMES] },
+  },
   {
     files: ["apps/*/page/js/**/*.js", "shared/page/**/*.js"],
     languageOptions: { globals: { ...globals.browser, Sortable: "readonly" } },
@@ -53,6 +72,7 @@ export default [
     rules: {
       "no-restricted-syntax": [
         "error",
+        ...GENERIC_FUNCTION_NAMES,
         {
           selector:
             "AssignmentExpression > MemberExpression.left[property.name=/^(innerHTML|outerHTML)$/]",
@@ -153,6 +173,7 @@ export default [
       // time on a fast one.
       "no-restricted-syntax": [
         "error",
+        ...GENERIC_FUNCTION_NAMES,
         {
           selector: "CallExpression[callee.property.name='waitForTimeout']",
           message:

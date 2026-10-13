@@ -8,10 +8,6 @@ import { createHighlightsReader, nameHighlightsKey } from "./highlights.js";
 // A game the store didn't see end ends about two and a half hours after it starts.
 const GAME_LENGTH_MS = 2.5 * 60 * 60 * 1000;
 
-/** @param {any} game */
-const findEnd = (game) =>
-  game.end ? Date.parse(game.end) : Date.parse(game.start) + GAME_LENGTH_MS;
-
 /**
  * The current season's finals, each once, newest first: the season's own copy of a game, which
  * knows when it ended, before the schedule's.
@@ -40,7 +36,7 @@ async function listCurrentFinals(context) {
 export function createHighlightsUpdater() {
   return createHighlightsJob({
     listFinals: listCurrentFinals,
-    findEnd,
+    gameLengthMs: GAME_LENGTH_MS,
     readHighlights: (context, game) =>
       createHighlightsReader({ fetchImpl: context.fetchImpl })({
         id: game.id,

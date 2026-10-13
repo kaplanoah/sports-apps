@@ -6,7 +6,7 @@ import { createDocs } from "../../../tests/job-context.js";
 /** @param {Record<string, any>} stored */
 async function runJob(stored) {
   const docs = createDocs(stored);
-  await createOldRecordsJob().run(
+  await createOldRecordsJob().updateStore(
     /** @type {any} */ ({ docs, loadSnapshot: async () => null, now: () => 0 }),
   );
   return { keys: [...docs.stored.keys()].sort(), removed: docs.removals };
