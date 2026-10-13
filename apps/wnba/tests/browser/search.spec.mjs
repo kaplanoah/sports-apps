@@ -1,27 +1,21 @@
-import { test, expect, openApp, matchPath } from "./harness.mjs";
+import { test, expect, matchPath } from "./harness.mjs";
+import {
+  ON_A_PHONE,
+  findInput,
+  findRows,
+  openSeasonGames,
+  sendSearch,
+  tapSearch,
+} from "./search-page.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
-import { listOffScaleText, measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
+import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 
-// Search, the round button beside the tab bar, over the whole season and its players, on a phone.
-// Today is Wednesday, September 30.
+// What Search finds and opens, and how it comes and goes, on a phone.
 
-test.use({
-  viewport: { width: 390, height: 844 },
-  hasTouch: true,
-  isMobile: true,
-  contextOptions: { reducedMotion: "reduce" },
-});
-
-const PLAYER_INDEX = {
-  season: 2026,
-  players: [
-    { id: "1627668", team: "NYL", number: "30", firstName: "Breanna", lastName: "Stewart" },
-    { id: "1628932", team: "LVA", number: "22", firstName: "A'ja", lastName: "Wilson" },
-  ],
-};
+test.use({ ...ON_A_PHONE, contextOptions: { reducedMotion: "reduce" } });
 
 // Phosphor's film-strip at its Regular weight.
 const FILM_STRIP =
@@ -30,54 +24,9 @@ const FILM_STRIP =
 /** @param {import("@playwright/test").Page} page */
 const findSearch = (page) => page.locator("#gameSearch");
 /** @param {import("@playwright/test").Page} page */
-const findInput = (page) => page.locator("#gameSearch .search-input");
-/** @param {import("@playwright/test").Page} page */
 const findLine = (page) => page.locator("#gameSearch .search-read");
 /** @param {import("@playwright/test").Page} page */
-const findRows = (page) => page.locator("#gameSearch .search-suggestion");
-/** @param {import("@playwright/test").Page} page */
 const findGamesLine = (page) => page.locator("#gameSearch .search-games-line");
-
-/**
- * Opens the whole season, with its list of players, on the Games tab.
- * @param {import("@playwright/test").Page} page
- */
-async function openSeasonGames(page) {
-  const app = await openApp(page, { isWholeSeason: true });
-  await app.writeDocument("player-index/2026", PLAYER_INDEX);
-  await page.getByRole("tab", { name: "Games" }).click();
-  await expect(page.locator("#seasonGames .listed-day").first()).toHaveAttribute(
-    "data-day",
-    /^2026-05-/,
-  );
-  return app;
-}
-
-/**
- * Taps Search beside the tab bar where a finger would.
- * @param {import("@playwright/test").Page} page
- */
-async function tapSearch(page) {
-  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (
-    await page.locator("#tab-search").boundingBox()
-  );
-  const found = await page.evaluate(
-    ({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.id ?? null,
-    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-  );
-  expect(found).toBe("tab-search");
-  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
-}
-
-/**
- * Searches for words, as the keyboard's Search key sends them.
- * @param {import("@playwright/test").Page} page
- * @param {string} words
- */
-async function sendSearch(page, words) {
-  await findInput(page).fill(words);
-  await findInput(page).press("Enter");
-}
 
 /**
  * The day at the top of the search's list, where a finger just under its top lands.
@@ -128,15 +77,6 @@ const readSearchTabLook = (page) =>
     };
   });
 
-test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-read", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await expect(findInput(page)).toHaveCSS("font-size", "16px");
-  const widths = await measureFieldFace(findInput(page), "--size-read");
-  expect(widths.field).toBeCloseTo(widths.step, 0);
-});
-
 test("Search beside the tab bar opens its own view, an empty field ready to type with examples under it, its icon in the accent, and hides the bar's pill", async ({
   page,
 }) => {
@@ -173,57 +113,6 @@ test("Search beside the tab bar opens its own view, an empty field ready to type
 test("the Games tab has no Search of its own", async ({ page }) => {
   await openSeasonGames(page);
   await expect(page.locator("#view-games .go-search")).toHaveCount(0);
-});
-
-test("the examples sit 4.5px under the field, their words 39.5px in, their lines from 39px in to 0.5px short of its right edge", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
-
-  const place = await page.evaluate(() => {
-    const field = /** @type {Element} */ (document.querySelector("#gameSearch .search-field"));
-    const row = /** @type {HTMLElement} */ (document.querySelector("#gameSearch .search-example"));
-    const item = /** @type {Element} */ (row.parentElement);
-    const line = getComputedStyle(item, "::after");
-    const fieldBox = field.getBoundingClientRect();
-    const itemBox = item.getBoundingClientRect();
-    const style = getComputedStyle(row);
-    return {
-      gap: itemBox.top - fieldBox.bottom,
-      words: itemBox.left - fieldBox.left + Number.parseFloat(style.paddingLeft),
-      lineLeft: itemBox.left - fieldBox.left + Number.parseFloat(line.left),
-      lineRight: fieldBox.right - (itemBox.right - Number.parseFloat(line.right)),
-      lift: (Number.parseFloat(style.paddingBottom) - Number.parseFloat(style.paddingTop)) / 2,
-    };
-  });
-
-  expect(place).toEqual({ gap: 4.5, words: 39.5, lineLeft: 39, lineRight: 0.5, lift: 1.5 });
-});
-
-test("a row's words sit 1.25px over its middle, as the examples' are raised", async ({ page }) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await sendSearch(page, "Liberty");
-  const words = findRows(page).first().locator(".search-words");
-
-  await expect(words).toHaveCSS("padding-bottom", "2.5px");
-  await expect(words).toHaveCSS("padding-top", "0px");
-});
-
-test("the field sits 10.5px under the header's line", async ({ page }) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await expect(findInput(page)).toBeFocused();
-
-  const space = await page.evaluate(() => {
-    const header = /** @type {Element} */ (document.querySelector("header.top"));
-    const field = /** @type {Element} */ (document.querySelector("#gameSearch .search-field"));
-    return field.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
-  });
-
-  expect(space).toBeCloseTo(10.5, 1);
 });
 
 test("an example tapped runs its search and puts the keyboard away", async ({ page }) => {
@@ -481,66 +370,6 @@ test("the Bracket tab's words find it, and its row opens it", async ({ page }) =
 
   await expect(page.locator("#view-bracket")).toBeVisible();
   await expect(page.locator("#tab-bracket")).toHaveAttribute("aria-selected", "true");
-});
-
-test("every row is 44px under its line, with no room between the suggestions and the pages under them", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-
-  await findInput(page).pressSequentially("Lib");
-
-  await expect(page.locator("#gameSearch .search-suggestions")).toHaveCount(2);
-  const rows = await page.locator("#gameSearch .search-suggestions li").evaluateAll((items) =>
-    items.map((item) => {
-      const { top, bottom } = item.getBoundingClientRect();
-      return { top, bottom };
-    }),
-  );
-  for (const [index, { top, bottom }] of rows.entries()) {
-    expect(bottom - top).toBe(45);
-    if (index > 0) expect(top).toBe(rows[index - 1].bottom);
-  }
-});
-
-test("a place's row names the place it's in dimmed, then a dim caret 4px from the words each side, centered on them", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-
-  await sendSearch(page, "dark mode");
-
-  await expect(findRows(page)).toHaveAccessibleName("Settings, Appearance");
-  const crumb = await findRows(page).evaluate((row) => {
-    const box = (/** @type {Element} */ element) => element.getBoundingClientRect();
-    const inkOf = (/** @type {string} */ selector) =>
-      getComputedStyle(/** @type {Element} */ (row.querySelector(selector))).color;
-    const placeIn = /** @type {Element} */ (row.querySelector(".search-place-in"));
-    const caret = /** @type {Element} */ (row.querySelector(".search-crumb"));
-    const range = document.createRange();
-    range.selectNodeContents(/** @type {Node} */ (caret.nextSibling));
-    return {
-      dim: inkOf(".search-mark"),
-      words: inkOf(".search-words"),
-      placeIn: inkOf(".search-place-in"),
-      caret: inkOf(".search-crumb"),
-      width: box(caret).width,
-      height: box(caret).height,
-      before: box(caret).left - box(placeIn).right,
-      after: range.getBoundingClientRect().left - box(caret).right,
-      offCenter:
-        box(caret).top + box(caret).height / 2 - (box(placeIn).top + box(placeIn).height / 2),
-    };
-  });
-  expect(crumb.placeIn).toBe(crumb.dim);
-  expect(crumb.caret).toBe(crumb.dim);
-  expect(crumb.words).not.toBe(crumb.dim);
-  expect(crumb).toMatchObject({ width: 12, height: 12 });
-  expect(crumb.before).toBeCloseTo(4, 1);
-  expect(crumb.after).toBeCloseTo(4, 1);
-  expect(Math.abs(crumb.offCenter)).toBeLessThan(2);
 });
 
 test("a setting's words find it, and its row opens settings with the setting in sight", async ({
