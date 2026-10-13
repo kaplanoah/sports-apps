@@ -32,10 +32,31 @@ let pauseTimer;
 const awayWatchers = [];
 
 /**
+ * Whether a deploy has replaced the release the page loaded.
  * @param {import("./release.js").Release | null} loaded
  * @param {import("./release.js").Release | null} current
  */
-const isReplaced = (loaded, current) => !!loaded && !!current && loaded.commit !== current.commit;
+export const isReplaced = (loaded, current) =>
+  !!loaded && !!current && loaded.commit !== current.commit;
+
+/**
+ * Whether a page coming back was away: hidden, or asleep for as long as a tick that late says,
+ * since focus can come with no time away, and a phone can wake a page without hiding it first.
+ * @param {{ wasHidden: boolean, awayMs: number }} since
+ */
+export const hasBeenAway = ({ wasHidden, awayMs }) => wasHidden || awayMs >= ASLEEP_MS;
+
+/**
+ * What a tick does: a reload that waited for the page to be free, catching up on a page that was
+ * asleep, a release check that got no answer tried again, or nothing.
+ * @param {{ isReloadPending: boolean, awayMs: number, isReleaseCheckOwed: boolean }} state
+ * @returns {"reload" | "catch-up" | "check-release" | "none"}
+ */
+export function chooseTickStep({ isReloadPending, awayMs, isReleaseCheckOwed }) {
+  if (isReloadPending) return "reload";
+  if (awayMs >= ASLEEP_MS) return "catch-up";
+  return isReleaseCheckOwed ? "check-release" : "none";
+}
 
 // A reload while the app is busy, as mid-drag, would drop what's under way, so it waits for the
 // first tick after.
@@ -72,16 +93,14 @@ export async function reloadIfReplaced() {
   await reloadIfReplaced();
 }
 
-// Focus can come with no time away, and a phone can wake a page without hiding it first, so only
-// a page that was hidden or asleep catches up.
 function catchUpOnReturn() {
   if (document.hidden) return;
   clearTimeout(pauseTimer);
   const awayMs = Date.now() - activeAt;
-  const hasBeenAway = wasHidden || awayMs >= ASLEEP_MS;
+  const isBack = hasBeenAway({ wasHidden, awayMs });
   activeAt = Date.now();
   wasHidden = false;
-  if (hasBeenAway) {
+  if (isBack) {
     for (const watcher of awayWatchers) watcher(awayMs);
     catchUp(awayMs);
   }
@@ -90,12 +109,15 @@ function catchUpOnReturn() {
 
 function tick() {
   if (document.hidden) return;
-  if (isReloadPending) reloadPage();
-  else if (Date.now() - activeAt >= ASLEEP_MS) catchUpOnReturn();
-  else {
-    activeAt = Date.now();
-    if (isReleaseCheckOwed) reloadIfReplaced();
-  }
+  const step = chooseTickStep({
+    isReloadPending,
+    awayMs: Date.now() - activeAt,
+    isReleaseCheckOwed,
+  });
+  if (step === "reload") reloadPage();
+  else if (step === "catch-up") catchUpOnReturn();
+  else activeAt = Date.now();
+  if (step === "check-release") reloadIfReplaced();
 }
 
 /**
