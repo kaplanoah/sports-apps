@@ -81,12 +81,25 @@ test("burn-in runs only when a pull request changes a browser spec, and check re
   assert.match(readJob("changed-specs"), /git diff --name-only --diff-filter=AM HEAD\^1 HEAD/);
   const burnIn = readJob("burn-in");
   assert.match(burnIn, /needs: changed-specs/);
-  assert.match(burnIn, /if: needs\.changed-specs\.outputs\.specs != ''/);
+  assert.match(
+    burnIn,
+    /if: .*needs\.changed-specs\.result == 'success' && needs\.changed-specs\.outputs\.specs != ''/,
+  );
   assert.match(burnIn, /SPECS: \$\{\{ needs\.changed-specs\.outputs\.specs \}\}/);
   assert.match(
     readJob("check"),
     /\(needs\.changed-specs\.outputs\.specs == '' \|\| needs\.burn-in\.result == 'success'\)/,
   );
+});
+
+// GitHub skips a job once any job before it in its chain of needs was skipped, as passed is on
+// every push to a pull request, unless its condition checks the run's status itself.
+test("each job that needs another runs even when one before it was skipped", () => {
+  const skippedWithTheirChain = listJobs().filter((job) => {
+    const condition = readJob(job).match(/^ {4}if: (.*)$/m)?.[1] ?? "success()";
+    return /^ {4}needs:/m.test(readJob(job)) && !/!cancelled\(\)|always\(\)/.test(condition);
+  });
+  assert.deepEqual(skippedWithTheirChain, []);
 });
 
 test("the check job names each test burn-in found failing in the issue, and can start the fix routine", () => {
