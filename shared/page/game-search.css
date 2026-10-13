@@ -231,6 +231,20 @@
   font-size: var(--size-glance);
   color: var(--ink-dim);
 }
+/* A place's row names the places it's in dimmed, each followed by a smaller caret, 4px from the
+   words each side and 0.5px over their middle. */
+.search-place-in {
+  color: var(--ink-dim);
+}
+.search-crumb {
+  width: 12px;
+  height: 12px;
+  margin: 0 4px;
+  vertical-align: middle;
+  position: relative;
+  top: -0.5px;
+  color: var(--ink-dim);
+}
 /* A row that opens a page ends in a caret, and a row that runs a search doesn't. */
 .search-caret {
   flex: none;

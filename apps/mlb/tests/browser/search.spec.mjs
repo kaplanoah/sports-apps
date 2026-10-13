@@ -376,11 +376,7 @@ test("standings words find the playoff fields and each league's divisions, and a
 
   await sendSearch(page, "standings");
 
-  await expect(findRows(page)).toHaveText([
-    "Standings\u2022Playoffs",
-    "Standings\u2022AL",
-    "Standings\u2022NL",
-  ]);
+  await expect(findRows(page)).toHaveText(["StandingsPlayoffs", "StandingsAL", "StandingsNL"]);
 
   await findRows(page).filter({ hasText: "AL" }).tap();
 
@@ -452,6 +448,45 @@ test("the Bracket tab's words find it, and its row opens it", async ({ page }) =
   await expect(page.locator("#tab-bracket")).toHaveAttribute("aria-selected", "true");
 });
 
+test("a place's row names the place it's in dimmed, then a dim caret 4px from the words each side, centered on them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await sendSearch(page, "ranking");
+
+  await expect(findRows(page)).toHaveAccessibleName("Settings, Ranking");
+  const crumb = await findRows(page).evaluate((row) => {
+    const box = (/** @type {Element} */ element) => element.getBoundingClientRect();
+    const inkOf = (/** @type {string} */ selector) =>
+      getComputedStyle(/** @type {Element} */ (row.querySelector(selector))).color;
+    const placeIn = /** @type {Element} */ (row.querySelector(".search-place-in"));
+    const caret = /** @type {Element} */ (row.querySelector(".search-crumb"));
+    const range = document.createRange();
+    range.selectNodeContents(/** @type {Node} */ (caret.nextSibling));
+    return {
+      dim: inkOf(".search-mark"),
+      words: inkOf(".search-words"),
+      placeIn: inkOf(".search-place-in"),
+      caret: inkOf(".search-crumb"),
+      width: box(caret).width,
+      height: box(caret).height,
+      before: box(caret).left - box(placeIn).right,
+      after: range.getBoundingClientRect().left - box(caret).right,
+      offCenter:
+        box(caret).top + box(caret).height / 2 - (box(placeIn).top + box(placeIn).height / 2),
+    };
+  });
+  expect(crumb.placeIn).toBe(crumb.dim);
+  expect(crumb.caret).toBe(crumb.dim);
+  expect(crumb.words).not.toBe(crumb.dim);
+  expect(crumb).toMatchObject({ width: 12, height: 12 });
+  expect(crumb.before).toBeCloseTo(4, 1);
+  expect(crumb.after).toBeCloseTo(4, 1);
+  expect(Math.abs(crumb.offCenter)).toBeLessThan(2);
+});
+
 test("a setting's words find it, and its row opens settings with the setting in sight", async ({
   page,
 }) => {
@@ -460,7 +495,7 @@ test("a setting's words find it, and its row opens settings with the setting in 
 
   await sendSearch(page, "ranking");
 
-  await expect(findRows(page)).toHaveText(["Settings\u2022Ranking"]);
+  await expect(findRows(page)).toHaveText(["SettingsRanking"]);
 
   await findRows(page).tap();
 
@@ -477,9 +512,9 @@ test("while typing, a place's half-typed word lists it first, beside a player it
   await findInput(page).pressSequentially("stan");
 
   await expect(findRows(page)).toHaveText([
-    "Standings\u2022Playoffs",
-    "Standings\u2022AL",
-    "Standings\u2022NL",
+    "StandingsPlayoffs",
+    "StandingsAL",
+    "StandingsNL",
     "Giancarlo Stanton27\u2022Yankees",
   ]);
 
@@ -488,7 +523,7 @@ test("while typing, a place's half-typed word lists it first, beside a player it
     await findInput(page).fill("");
     await findInput(page).pressSequentially(words);
 
-    await expect(athletic).toHaveText("Settings\u2022Include content from The Athletic");
+    await expect(athletic).toHaveText("SettingsInclude content from The Athletic");
     await expect(athletic).toBeInViewport();
   }
   await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*$/ })).toHaveCount(1);

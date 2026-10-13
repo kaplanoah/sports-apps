@@ -440,7 +440,7 @@ test("a standings list's words find it, and its row opens Standings on that list
 
   await sendSearch(page, "standings");
 
-  await expect(findRows(page)).toHaveText(["Standings•League", "Standings•East", "Standings•West"]);
+  await expect(findRows(page)).toHaveText(["StandingsLeague", "StandingsEast", "StandingsWest"]);
 
   await findRows(page).filter({ hasText: "East" }).tap();
 
@@ -483,6 +483,45 @@ test("the Bracket tab's words find it, and its row opens it", async ({ page }) =
   await expect(page.locator("#tab-bracket")).toHaveAttribute("aria-selected", "true");
 });
 
+test("a place's row names the place it's in dimmed, then a dim caret 4px from the words each side, centered on them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await sendSearch(page, "dark mode");
+
+  await expect(findRows(page)).toHaveAccessibleName("Settings, Appearance");
+  const crumb = await findRows(page).evaluate((row) => {
+    const box = (/** @type {Element} */ element) => element.getBoundingClientRect();
+    const inkOf = (/** @type {string} */ selector) =>
+      getComputedStyle(/** @type {Element} */ (row.querySelector(selector))).color;
+    const placeIn = /** @type {Element} */ (row.querySelector(".search-place-in"));
+    const caret = /** @type {Element} */ (row.querySelector(".search-crumb"));
+    const range = document.createRange();
+    range.selectNodeContents(/** @type {Node} */ (caret.nextSibling));
+    return {
+      dim: inkOf(".search-mark"),
+      words: inkOf(".search-words"),
+      placeIn: inkOf(".search-place-in"),
+      caret: inkOf(".search-crumb"),
+      width: box(caret).width,
+      height: box(caret).height,
+      before: box(caret).left - box(placeIn).right,
+      after: range.getBoundingClientRect().left - box(caret).right,
+      offCenter:
+        box(caret).top + box(caret).height / 2 - (box(placeIn).top + box(placeIn).height / 2),
+    };
+  });
+  expect(crumb.placeIn).toBe(crumb.dim);
+  expect(crumb.caret).toBe(crumb.dim);
+  expect(crumb.words).not.toBe(crumb.dim);
+  expect(crumb).toMatchObject({ width: 12, height: 12 });
+  expect(crumb.before).toBeCloseTo(4, 1);
+  expect(crumb.after).toBeCloseTo(4, 1);
+  expect(Math.abs(crumb.offCenter)).toBeLessThan(2);
+});
+
 test("a setting's words find it, and its row opens settings with the setting in sight", async ({
   page,
 }) => {
@@ -491,7 +530,7 @@ test("a setting's words find it, and its row opens settings with the setting in 
 
   await sendSearch(page, "dark mode");
 
-  await expect(findRows(page)).toHaveText(["Settings•Appearance"]);
+  await expect(findRows(page)).toHaveText(["SettingsAppearance"]);
 
   await findRows(page).tap();
 
