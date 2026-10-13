@@ -33,6 +33,7 @@ import {
   matchPath,
   openLockedPage,
 } from "../../../../tests/browser/harness.mjs";
+import { waitForFirstCatchUp } from "../../../../tests/browser/at-rest.mjs";
 import { holdStore } from "../../../../tests/browser/hold-store.mjs";
 import { joinGameLogs } from "../player-fixtures.js";
 
@@ -327,6 +328,7 @@ export async function openApp(
      * @param {(season: any) => any} change
      */
     changeSeasonWhileAway: async (change) => {
+      await waitForFirstCatchUp(page);
       await context.ctx.storage.put("seasons/2026", change(await readSeason()));
     },
     holdStore: () => holdStore(page),
