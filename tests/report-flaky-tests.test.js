@@ -111,40 +111,30 @@ test("a night where every test passed names none", () => {
 });
 
 // Shaped as a pull request's run, where a failed test runs once more.
-const retriedReport = {
-  suites: [
-    {
-      title: "resume.spec.mjs",
-      specs: [
-        {
-          title: "a test its retry passed",
-          file: "resume.spec.mjs",
-          line: 160,
-          tests: [
-            reportTest("wnba", [
-              { status: "failed", message: "Expected: null" },
-              { status: "passed" },
-            ]),
-          ],
-        },
-        {
-          title: "a test that failed both tries",
-          file: "resume.spec.mjs",
-          line: 200,
-          tests: [
-            reportTest("wnba", [
-              { status: "failed", message: "Broken" },
-              { status: "failed", message: "Broken" },
-            ]),
-          ],
-        },
-      ],
-    },
+const retryPassedSpec = {
+  title: "a test its retry passed",
+  file: "resume.spec.mjs",
+  line: 160,
+  tests: [
+    reportTest("wnba", [{ status: "failed", message: "Expected: null" }, { status: "passed" }]),
   ],
 };
+const failedBothTriesSpec = {
+  title: "a test that failed both tries",
+  file: "resume.spec.mjs",
+  line: 200,
+  tests: [
+    reportTest("wnba", [
+      { status: "failed", message: "Broken" },
+      { status: "failed", message: "Broken" },
+    ]),
+  ],
+};
+/** @param {any[]} specs */
+const retriedReport = (specs) => ({ suites: [{ title: "resume.spec.mjs", specs }] });
 
-test("where a failed test is retried, only one its retry passed is named, since one that failed both tries fails its pull request", () => {
-  assert.deepEqual(listFailedTests([retriedReport], { isRetried: true }), [
+test("a retried run names each test its retry passed", () => {
+  assert.deepEqual(listFailedTests([retriedReport([retryPassedSpec])], { isRetried: true }), [
     {
       name: "[wnba] resume.spec.mjs:160 > a test its retry passed",
       runs: 2,
@@ -152,6 +142,13 @@ test("where a failed test is retried, only one its retry passed is named, since 
       message: "Expected: null",
     },
   ]);
+});
+
+test("a retried run where a test failed both tries names none, since its change likely broke the tests a retry passed too", () => {
+  const sameReport = retriedReport([retryPassedSpec, failedBothTriesSpec]);
+  assert.deepEqual(listFailedTests([sameReport], { isRetried: true }), []);
+  const otherShards = [retriedReport([retryPassedSpec]), retriedReport([failedBothTriesSpec])];
+  assert.deepEqual(listFailedTests(otherShards, { isRetried: true }), []);
 });
 
 const AT_REST = "[wnba-webkit] at-rest.spec.mjs:16 > a tab tap leaves the page at rest";
