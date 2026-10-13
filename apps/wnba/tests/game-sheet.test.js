@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderBoxScore, renderPendingBoxScore } from "../page/js/box-score-view.js";
+import { isEarlierBoxScore } from "../page/js/game-sheet.js";
 import { listSeasonDays } from "../page/js/games-view.js";
 import { renderPreview } from "../page/js/preview-view.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
@@ -305,4 +306,12 @@ test("a preview still loading holds the meetings' shape with placeholders, and s
     pending.text.slice(pending.text.indexOf("Season stats")),
     loaded.text.slice(loaded.text.indexOf("Season stats")),
   );
+});
+
+test("a pushed box score with fewer points than the one the sheet shows is from before it, and dropped", () => {
+  const scoring = (away, home) => ({ away: { score: away }, home: { score: home } });
+  assert.equal(isEarlierBoxScore(scoring(40, 38), scoring(42, 38)), true);
+  assert.equal(isEarlierBoxScore(scoring(42, 38), scoring(40, 38)), false);
+  assert.equal(isEarlierBoxScore(scoring(40, 38), scoring(40, 38)), false);
+  assert.equal(isEarlierBoxScore(scoring(40, 38), null), false);
 });

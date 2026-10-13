@@ -8,7 +8,8 @@ import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
-import { openGameSearch, startGameSearch, startGameSearchOver } from "#shared/game-search-view.js";
+import { startGameSearch } from "#shared/game-search-view.js";
+import { listSearchGames } from "#shared/game-search.js";
 import { keepLastRead } from "#shared/kept-read.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
@@ -20,15 +21,8 @@ import {
   startNewsRedraws,
   watchNews,
 } from "#shared/news.js";
-import {
-  openPageTab,
-  readShownTab,
-  readTabBefore,
-  setTabEnter,
-  setTabStart,
-  startPageTabs,
-} from "#shared/page-tabs.js";
-import { openSettings } from "#shared/settings-sheet.js";
+import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
+import { isSettingShown, openSettings } from "#shared/settings-sheet.js";
 import { openGameSection, startGameSheet } from "./game-sheet.js";
 import { listFoundGameDays, listSeasonGames, nameGameKey } from "./games-view.js";
 import { REORDER_EVENT } from "./ranking.js";
@@ -119,35 +113,8 @@ function returnGamesToToday() {
   return true;
 }
 
-// Search opens with the keyboard up from the tap on its tab, or as it was left, while it's open.
-function enterSearch() {
-  if (/** @type {HTMLElement} */ (document.getElementById("gameSearch")).hidden) openGameSearch();
-}
-
-// As on iPhone, choosing search while it shows goes back to where it starts: an empty field.
-function startSearchOver() {
-  startGameSearchOver();
-  return true;
-}
-
-// A search that closes while it shows goes back to the tab before it.
-function leaveSearch() {
-  if (readShownTab() === "search") openPageTab(readTabBefore() ?? "games");
-}
-
 /** Every game the Games view lists, which a search reads. */
 const listListedGames = () => listSeasonGames(session.state?.slate, session.schedule);
-
-/** @param {string} key */
-const findSettingRow = (key) =>
-  /** @type {HTMLElement | null} */ (document.querySelector(`[data-setting="${key}"]`));
-
-// Settings itself always shows, and a setting only while its row does.
-/** @param {string} key */
-const isSettingShown = (key) => {
-  const row = findSettingRow(key);
-  return key === "settings" || (!!row && !row.closest("[hidden]"));
-};
 
 const readSearchPages = () => listSearchPages({ index: session.playerIndex, isSettingShown });
 
@@ -173,7 +140,7 @@ function openSearchPlace(key) {
     openPageTab("standings");
     showStandingsPart(detail);
   } else if (place === "highlights" || place === "matchup") openGameAt(detail, place);
-  else openSettings(findSettingRow(key));
+  else openSettings(key);
 }
 
 // A search reads the season on each key press, so its games and words are worked out again only
@@ -189,10 +156,7 @@ const readSearchSeasonFrom = keepLastRead(
     return {
       listed,
       terms: createSearchTerms({ games: listed, divisions: standings?.divisions }),
-      games: listed
-        .map(readSearchGame)
-        .filter((game) => game !== null)
-        .sort((first, second) => first.startMs - second.startMs),
+      games: listSearchGames(listed, readSearchGame),
     };
   },
 );
@@ -217,14 +181,11 @@ const listSearchDays = (found, now) =>
 function wireControls() {
   startPageTabs();
   setTabStart("games", returnGamesToToday);
-  setTabStart("search", startSearchOver);
-  setTabEnter("search", enterSearch);
   startDayStrip(/** @type {HTMLElement} */ (document.getElementById("seasonGames")));
   startGameSearch(/** @type {HTMLElement} */ (document.getElementById("gameSearch")), {
     readSeason: readSearchSeason,
     listDays: listSearchDays,
     renderTeamMark: renderTeamDot,
-    close: leaveSearch,
     readPages: readSearchPages,
     openPlace: openSearchPlace,
     placeholder: "Teams, players, and games",
