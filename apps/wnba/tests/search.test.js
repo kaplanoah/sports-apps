@@ -7,6 +7,7 @@ import {
   describeNoGames,
   describeSearch,
   findSearchGames,
+  listSearchGames,
   readSearch,
 } from "#shared/game-search.js";
 import { findPages } from "#shared/page-search.js";
@@ -40,7 +41,7 @@ const TERMS = createSearchTerms({ games: SEASON_GAMES, standings: SEASON.standin
 const CONTEXT = createSearchContext({
   terms: TERMS,
   dictionary: createSearchDictionary(TERMS),
-  games: SEASON_GAMES.map((game) => readSearchGame(game, null)).filter(Boolean),
+  games: listSearchGames(SEASON_GAMES, (game) => readSearchGame(game, null)),
   now: NOW,
 });
 
@@ -416,7 +417,7 @@ const LISTED_TERMS = createSearchTerms({ games: LISTED_GAMES, standings: LISTED.
 const LISTED_CONTEXT = createSearchContext({
   terms: LISTED_TERMS,
   dictionary: createSearchDictionary(LISTED_TERMS),
-  games: LISTED_GAMES.map((game) => readSearchGame(game, OVERTIMES)).filter(Boolean),
+  games: listSearchGames(LISTED_GAMES, (game) => readSearchGame(game, OVERTIMES)),
   now: NOW,
 });
 

@@ -15,31 +15,20 @@ import { keepOpenedStories } from "#shared/opened-stories.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
-import {
-  openGameSearch,
-  refreshGameSearch,
-  startGameSearch,
-  startGameSearchOver,
-} from "#shared/game-search-view.js";
+import { refreshGameSearch, startGameSearch } from "#shared/game-search-view.js";
+import { listSearchGames } from "#shared/game-search.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { keepLastRead } from "#shared/kept-read.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
 import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
-import {
-  openPageTab,
-  readShownTab,
-  readTabBefore,
-  setTabEnter,
-  setTabStart,
-  startPageTabs,
-} from "#shared/page-tabs.js";
+import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
 import { fillSeasonPicker } from "#shared/season-picker.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { startServiceWorker } from "#shared/service-worker.js";
-import { openSettings, startSettingsSheet } from "#shared/settings-sheet.js";
+import { isSettingShown, openSettings, startSettingsSheet } from "#shared/settings-sheet.js";
 import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { fillStamp } from "#shared/stamp.js";
 import { chooseTitleYear, showTitleYear } from "#shared/title-year.js";
@@ -192,33 +181,6 @@ function returnGamesToToday() {
   return true;
 }
 
-// Search opens with the keyboard up from the tap on its tab, or as it was left, while it's open.
-function enterSearch() {
-  if (findElement("gameSearch").hidden) openGameSearch();
-}
-
-// As on iPhone, choosing search while it shows goes back to where it starts: an empty field.
-function startSearchOver() {
-  startGameSearchOver();
-  return true;
-}
-
-// A search that closes while it shows goes back to the tab before it.
-function leaveSearch() {
-  if (readShownTab() === "search") openPageTab(readTabBefore() ?? "games");
-}
-
-/** @param {string} key */
-const findSettingRow = (key) =>
-  /** @type {HTMLElement | null} */ (document.querySelector(`[data-setting="${key}"]`));
-
-// Settings itself always shows, and a setting only while its row does.
-/** @param {string} key */
-const isSettingShown = (key) => {
-  const row = findSettingRow(key);
-  return key === "settings" || (!!row && !row.closest("[hidden]"));
-};
-
 // Every story the News tab shows, for search to list a team's newest.
 const listReadStories = () =>
   pickReadCards(session.news?.cards ?? [], readNewsChoices(), NEWS_LEAGUE.outletSwitches).flatMap(
@@ -245,7 +207,7 @@ function openSearchPlace(key) {
     openPageTab("standings");
     showStandingsList(detail);
   } else if (place === "highlights") openGameSection(detail, "highlights");
-  else openSettings(findSettingRow(key));
+  else openSettings(key);
 }
 
 // A search reads the season on each key press, so its games and words are worked out again only
@@ -261,7 +223,7 @@ const readSearchSeasonFrom = keepLastRead(
     return {
       listed,
       terms: createSearchTerms({ games: listed, standings: season.standings }),
-      games: listed.map((game) => readSearchGame(game, overtimes)).filter(Boolean),
+      games: listSearchGames(listed, (game) => readSearchGame(game, overtimes)),
     };
   },
 );
@@ -303,14 +265,11 @@ async function boot() {
   watchPresses([".team-line .team-open"]);
   startPageTabs();
   setTabStart("games", returnGamesToToday);
-  setTabStart("search", startSearchOver);
-  setTabEnter("search", enterSearch);
   startDayStrip(findElement("seasonGames"));
   startGameSearch(findElement("gameSearch"), {
     readSeason: readSearchSeason,
     listDays: listSearchDays,
     renderTeamMark: renderDot,
-    close: leaveSearch,
     readPages: readSearchPages,
     openPlace: openSearchPlace,
     placeholder: "Teams, players, and games",

@@ -7,6 +7,7 @@ import {
   describeSearch,
   findSearchGames,
   listSearchChannels,
+  listSearchGames,
   readSearch,
 } from "../shared/page/game-search.js";
 import {
@@ -428,4 +429,28 @@ test("a team's name that is also a place has the games played there as its other
 
 test("the examples fit the room they're given, the first that find a game first", () => {
   assert.deepEqual(listExamples(createContext(), 1), ["Hawks next game"]);
+});
+
+test("a league's games are read in order of start, leaving out any without a day, so the season runs from its first to its last", () => {
+  const games = [
+    { id: "late", startMs: 300 },
+    { id: "no-day", startMs: 0 },
+    { id: "early", startMs: 100 },
+  ];
+  const readGame = (/** @type {{ id: string, startMs: number }} */ game) =>
+    game.id === "no-day"
+      ? null
+      : /** @type {any} */ ({ ...game, day: `2026-09-0${game.startMs / 100}` });
+  const listed = listSearchGames(games, readGame);
+  assert.deepEqual(
+    listed.map((game) => game.id),
+    ["early", "late"],
+  );
+  const context = createSearchContext({
+    terms: TERMS,
+    dictionary: createSearchDictionary(TERMS),
+    games: listed,
+    now: Date.parse("2026-09-30T16:00:00Z"),
+  });
+  assert.deepEqual([context.seasonStart, context.seasonEnd], ["2026-09-01", "2026-09-03"]);
 });

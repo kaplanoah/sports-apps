@@ -7,6 +7,7 @@ import {
   describeNoGames,
   describeSearch,
   findSearchGames,
+  listSearchGames,
   readSearch,
 } from "#shared/game-search.js";
 import { findPages, findPartGame } from "#shared/page-search.js";
@@ -38,10 +39,7 @@ function createContext(change = (game) => game) {
   return createSearchContext({
     terms,
     dictionary: createSearchDictionary(terms),
-    games: games
-      .map(readSearchGame)
-      .filter((game) => game !== null)
-      .sort((first, second) => first.startMs - second.startMs),
+    games: listSearchGames(games, readSearchGame),
     now: NOW,
   });
 }
