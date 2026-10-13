@@ -18,7 +18,7 @@ export const TEAM_OUTLETS = "teamOutlets";
  * @property {string} source
  * @property {string} [teamFeed] the team whose own outlets alone carry it
  * @property {string} publishedAt
- * @property {{ url: string, credit: string } | null} photo
+ * @property {import("./news-photo.js").NewsPhoto | null} photo
  * @property {string[]} teams
  */
 

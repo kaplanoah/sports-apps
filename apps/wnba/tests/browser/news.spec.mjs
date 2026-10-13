@@ -184,6 +184,31 @@ test("a card's photo runs its full width", async ({ page }) => {
   expect(Math.abs(photoBox.width - (cardBox.width - 2))).toBeLessThan(1);
 });
 
+test("a photo's frame takes the shape the Worker read, from 16:9 to 3:2, whatever the photo's own", async ({
+  page,
+}) => {
+  await openNewsWithStories(page, (photoUrl) => {
+    const [athletic, espn, post] = createStories(photoUrl);
+    return [
+      { ...post, photo: { ...post.photo, width: 683, height: 1024, frameTop: 0.128 } },
+      { ...athletic, photo: { ...athletic.photo, width: 1600, height: 1000 } },
+      espn,
+    ];
+  });
+
+  const frames = await page.locator(".news-photo").evaluateAll((photos) =>
+    photos.map((photo) => ({
+      shape: Math.round((photo.clientWidth / photo.clientHeight) * 100) / 100,
+      position: getComputedStyle(photo).objectPosition,
+    })),
+  );
+  expect(frames).toEqual([
+    { shape: 1.5, position: "50% 23.049%" },
+    { shape: 1.6, position: "50% 50%" },
+    { shape: 1.78, position: "50% 0%" },
+  ]);
+});
+
 test("under its lead, a card lists the stories that add to it, quieter than the lead and with no photo", async ({
   page,
 }) => {

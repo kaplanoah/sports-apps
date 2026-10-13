@@ -1,7 +1,10 @@
 import { isSameJson } from "../page/compare.js";
 import { readEasternDay } from "../page/days.js";
+import { isWebAddress } from "../page/news-picks.js";
+import { hashText } from "./hash-text.js";
 import { countRequests, describeJobRun } from "./job-status.js";
 import { askClaude } from "./news-claude.js";
+import { frameNewsPhotos } from "./news-photos.js";
 import { describeError } from "./responses.js";
 
 // Keeps the news the page shows: each run reads the outlets' feeds, drops what the rules can tell
@@ -10,9 +13,10 @@ import { describeError } from "./responses.js";
 // it goes under its lead. A story Claude hasn't answered for stays waiting and is asked about again
 // on the next run, so a run that fails loses nothing. The cards go in `news/cards`, newest lead
 // first, where each page picks the stories from the outlets its device reads, and how the runs are
-// going, with Claude's daily token counts and each run's requests, in `news/status`. Each league
-// hands it its outlets, the prompt Claude judges by, its teams' codes, and the rules that drop what
-// isn't news.
+// going, with Claude's daily token counts and each run's requests, in `news/status`. Each card's
+// photo carries its size and, for one taller than its frame, where Claude says its subject is
+// (news-photos.js). Each league hands it its outlets, the prompt Claude judges by, its teams' codes,
+// and the rules that drop what isn't news.
 
 const MINUTE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -45,7 +49,7 @@ const RULES_KEY = "rules";
  * @property {string} [teamFeed]
  * @property {string} publishedAt
  * @property {string} firstSeenAt
- * @property {{ url: string, credit: string } | null} photo
+ * @property {{ url: string, credit: string } | null} photo as its feed gives it
  * @property {string} [espnType]
  * @property {"pending" | "kept" | "dropped"} state
  * @property {string} [why]
@@ -64,14 +68,6 @@ function chooseNewsDelay(now) {
   // Eastern time is a whole number of hours off UTC, so its minutes are UTC's.
   const untilMorningMs = ((MORNING_HOUR - hour) * 60 - new Date(now).getUTCMinutes()) * MINUTE_MS;
   return Math.min(NIGHT_DELAY_MS, untilMorningMs);
-}
-
-/** @param {string} text */
-async function hashText(text) {
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-  );
-  return [...digest.subarray(0, 8)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -354,7 +350,26 @@ async function curateStories(context) {
   }
 }
 
-const describeShownStory = (story) => ({
+/**
+ * The story's photo with its size and frame, once read.
+ * @param {NewsStory["photo"]} photo
+ * @param {Map<string, import("./news-photos.js").PhotoFrame>} frames
+ */
+function describePhoto(photo, frames) {
+  if (!photo) return null;
+  const { width, height, frameTop } = frames.get(photo.url) ?? {};
+  return {
+    ...photo,
+    ...(width && height && { width, height }),
+    ...(frameTop !== undefined && { frameTop }),
+  };
+}
+
+/**
+ * @param {NewsStory} story
+ * @param {Map<string, import("./news-photos.js").PhotoFrame>} frames
+ */
+const describeShownStory = (story, frames) => ({
   id: story.id,
   url: story.url,
   title: story.title,
@@ -364,18 +379,28 @@ const describeShownStory = (story) => ({
   source: story.source,
   ...(story.teamFeed && { teamFeed: story.teamFeed }),
   publishedAt: story.publishedAt,
-  photo: story.photo,
+  photo: describePhoto(story.photo, frames),
   teams: story.teams ?? [],
 });
 
-async function saveCards(docs, stories, now) {
-  const cards = listCards(stories, now)
-    .reverse()
-    .slice(0, MAX_CARDS)
-    .map(({ lead, more }) => ({
-      lead: describeShownStory(lead),
-      more: more.map(describeShownStory),
-    }));
+/** The cards the page shows, newest lead first. */
+const listShownCards = (stories, now) => listCards(stories, now).reverse().slice(0, MAX_CARDS);
+
+/** The cards' photos, newest card's first. */
+const listCardPhotos = (cards) => [
+  ...new Set(
+    cards
+      .flatMap(({ lead, more }) => [lead, ...more])
+      .map((story) => story.photo?.url)
+      .filter(isWebAddress),
+  ),
+];
+
+async function saveCards(docs, shownCards, frames) {
+  const cards = shownCards.map(({ lead, more }) => ({
+    lead: describeShownStory(lead, frames),
+    more: more.map((story) => describeShownStory(story, frames)),
+  }));
   const stored = await docs.read(CARDS_KEY);
   if (!isSameJson(stored?.cards, cards)) await docs.write(CARDS_KEY, { cards });
   if (await docs.read(OLD_TOPICS_KEY)) await docs.remove(OLD_TOPICS_KEY);
@@ -391,12 +416,13 @@ async function readRecentUsage(storage, now) {
   return usage;
 }
 
-async function saveStatus({ docs, storage, now, endedAt, requests, missing, problem }) {
+async function saveStatus({ docs, storage, now, endedAt, requests, missing, problem, photos }) {
   const stored = await docs.read(STATUS_KEY);
   await docs.write(STATUS_KEY, {
     ...describeJobRun({ startedAt: now, endedAt, requests, failure: problem }, stored),
     missing,
     problem,
+    photos,
     usage: await readRecentUsage(storage, now),
   });
 }
@@ -417,7 +443,12 @@ async function updateNews(context, league) {
   await forgetOldStories(storage, stories, now);
   await judgeAgainOnNewRules(storage, stories, league.prompt);
   const problem = await curateStories({ storage, stories, env, fetchImpl, now, league });
-  await saveCards(docs, stories, now);
+  const cards = listShownCards(stories, now);
+  const { frames, framed, failed } = await frameNewsPhotos(
+    { storage, env, fetchImpl },
+    listCardPhotos(cards),
+  );
+  await saveCards(docs, cards, frames);
   await saveStatus({
     docs,
     storage,
@@ -426,6 +457,7 @@ async function updateNews(context, league) {
     requests: counter.count,
     missing,
     problem,
+    photos: { framed, failed },
   });
 }
 

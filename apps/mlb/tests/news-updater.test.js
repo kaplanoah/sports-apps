@@ -5,20 +5,28 @@ import { LABEL_PROMPT } from "../worker/src/news-prompts.js";
 import { createMlbNewsJob, readMlbRuleDrop } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
+import { createPng } from "../../../tests/photo-files.js";
 
 const NOW = Date.parse("2026-10-09T20:00:00Z");
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
+const FEED_URLS = new Set(NEWS_FEEDS.map((feed) => feed.url));
 
 const readStories = (content) => JSON.parse(content.slice(content.lastIndexOf("[")));
 
 /**
- * The feeds as recorded, and a Claude that keeps every story, tagging each with the Mets and a code
- * that isn't a club's, and that keeps each request it gets in `calls`.
+ * The feeds as recorded, each photo 3:2, which it keeps in `photoReads`, and a Claude that keeps
+ * every story, tagging each with the Mets and a code that isn't a club's, and that keeps each
+ * request it gets in `calls`.
  */
-function createFetch(calls) {
+function createFetch(calls, photoReads) {
   const readFeed = createFeedFetch();
   return async (url, init) => {
-    if (String(url) !== CLAUDE_URL) return readFeed(url);
+    const address = String(url);
+    if (FEED_URLS.has(address)) return readFeed(url);
+    if (address !== CLAUDE_URL) {
+      photoReads.push(address);
+      return new Response(createPng(1800, 1200));
+    }
     const body = JSON.parse(init.body);
     calls.push(body);
     const answers = readStories(body.messages[0].content).map((story) => ({
@@ -38,7 +46,8 @@ function createFetch(calls) {
 async function runOnce() {
   const docs = createDocs();
   const calls = [];
-  const readFeed = createFetch(calls);
+  const photoReads = [];
+  const readFeed = createFetch(calls, photoReads);
   let requests = 0;
   await createMlbNewsJob().updateStore({
     docs,
@@ -51,13 +60,14 @@ async function runOnce() {
     },
     now: () => NOW,
   });
-  return { docs, calls, requests };
+  return { docs, calls, photoReads, requests };
 }
 
-test("a run reads each outlet once and asks Claude about only the stories the rules leave, by MLB's prompt", async () => {
-  const { docs, calls, requests } = await runOnce();
+test("a run reads each outlet and each card's photo once and asks Claude about only the stories the rules leave, by MLB's prompt", async () => {
+  const { docs, calls, photoReads, requests } = await runOnce();
 
-  assert.equal(requests, NEWS_FEEDS.length + calls.length);
+  assert.equal(requests, NEWS_FEEDS.length + photoReads.length + calls.length);
+  assert.equal(new Set(photoReads).size, photoReads.length);
   assert.ok(calls.every((call) => call.system[0].text === LABEL_PROMPT));
   const asked = calls.flatMap((call) => readStories(call.messages[0].content));
   assert.ok(asked.length > 0);
