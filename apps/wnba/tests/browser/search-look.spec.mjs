@@ -22,7 +22,7 @@ test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks
   expect(widths.field).toBeCloseTo(widths.step, 0);
 });
 
-test("the examples sit 4.5px under the field, their words 39.5px in, their lines from 39px in to 0.5px short of its right edge", async ({
+test("the examples sit 4.5px under the field, their words 1.5px right of where its text starts, their lines from 2px right of it to 1px short of its right edge", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -31,22 +31,24 @@ test("the examples sit 4.5px under the field, their words 39.5px in, their lines
 
   const place = await page.evaluate(() => {
     const field = /** @type {Element} */ (document.querySelector("#gameSearch .search-field"));
+    const input = /** @type {Element} */ (document.querySelector("#gameSearch .search-input"));
     const row = /** @type {HTMLElement} */ (document.querySelector("#gameSearch .search-example"));
     const item = /** @type {Element} */ (row.parentElement);
     const line = getComputedStyle(item, "::after");
     const fieldBox = field.getBoundingClientRect();
     const itemBox = item.getBoundingClientRect();
+    const textStart = input.getBoundingClientRect().left;
     const style = getComputedStyle(row);
     return {
       gap: itemBox.top - fieldBox.bottom,
-      words: itemBox.left - fieldBox.left + Number.parseFloat(style.paddingLeft),
-      lineLeft: itemBox.left - fieldBox.left + Number.parseFloat(line.left),
+      words: itemBox.left + Number.parseFloat(style.paddingLeft) - textStart,
+      lineLeft: itemBox.left + Number.parseFloat(line.left) - textStart,
       lineRight: fieldBox.right - (itemBox.right - Number.parseFloat(line.right)),
       lift: (Number.parseFloat(style.paddingBottom) - Number.parseFloat(style.paddingTop)) / 2,
     };
   });
 
-  expect(place).toEqual({ gap: 4.5, words: 39.5, lineLeft: 39, lineRight: 0.5, lift: 1.5 });
+  expect(place).toEqual({ gap: 4.5, words: 1.5, lineLeft: 2, lineRight: 1, lift: 1.5 });
 });
 
 test("a row's words sit 1.25px over its middle, as the examples' are raised", async ({ page }) => {
