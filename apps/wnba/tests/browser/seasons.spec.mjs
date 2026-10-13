@@ -79,8 +79,8 @@ test("a past season's Games tab opens on its last day, and the current season's 
   await chooseSeason(page, 2025);
 
   const days = page.locator("#seasonGames .listed-day");
+  await expect(days.last()).toHaveAttribute("data-day", /^2025-09/);
   const lastDay = await days.last().getAttribute("data-day");
-  expect(lastDay.startsWith("2025-09")).toBe(true);
   await expect(page.locator("#seasonGames .day-list")).toContainText("Final");
   await expect(page.locator("#seasonGames .no-games")).toHaveCount(0);
   expect((await days.first().getAttribute("data-day")).startsWith("2025-")).toBe(true);
@@ -164,6 +164,7 @@ test("once the Finals are won, the current season's year is in the title too", a
 test("the year is the title's font and size, lighter and dimmer", async ({ page }) => {
   await openApp(page, ONE_PAST_SEASON);
   await chooseSeason(page, 2025);
+  await expect(findTitle(page)).toHaveText("WNBA 2025");
   const readLook = (selector) =>
     page.locator(selector).evaluate((element) => {
       const style = getComputedStyle(element);
