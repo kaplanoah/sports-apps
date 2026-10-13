@@ -43,6 +43,14 @@ async function sleepUnannounced(page, minutes) {
 /** @param {import("@playwright/test").Page} page */
 const findFinalWinner = (page) => page.locator('[data-series="1-0"] .team-line.won');
 
+/**
+ * The page has its last read once it has caught up with the store, which it notes for its next
+ * visit.
+ * @param {import("@playwright/test").Page} page
+ */
+const waitForCatchUp = (page) =>
+  expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
+
 test("a reload shows the bracket the page last showed while the store is still answering", async ({
   page,
 }) => {
@@ -315,6 +323,36 @@ test("a release check that never answers gives up, and the next tick tries again
   await expectReload(page, () => page.clock.runFor(30 * 1000));
 });
 
+test("a page that comes back during a release check checks again once it ends, for a deploy the check read too early to see", async ({
+  page,
+}) => {
+  const served = await serveReleases(page);
+  await openApp(page);
+  await expect.poll(() => served.requests).toBe(1);
+  await markPage(page);
+  const loadedRelease = served.release;
+  let answerEarlyCheck = () => {};
+  const isAnswered = new Promise((resolve) => {
+    answerEarlyCheck = () => resolve(undefined);
+  });
+  await page.route(
+    matchPath("/version.json"),
+    async (route) => {
+      await isAnswered;
+      await route.fulfill({ json: loadedRelease });
+    },
+    { times: 1 },
+  );
+  const earlyCheck = page.waitForRequest(matchPath("/version.json"));
+  await comeBack(page);
+  await earlyCheck;
+
+  served.release = NEXT_RELEASE;
+  await comeBack(page);
+
+  await expectReload(page, async () => answerEarlyCheck());
+});
+
 test("a page whose first release check failed still reloads for a later deploy", async ({
   page,
 }) => {
@@ -385,6 +423,7 @@ test("a page coming back to new scores sweeps the header's lines up to full stre
   const stamp = page.locator("#stamp");
   await expect(stamp).toBeVisible();
   await expect(stamp).not.toHaveClass(/caught-up/);
+  await waitForCatchUp(page);
   await app.changeSeasonWhileAway((season) => {
     const game = season.games.find((each) => each.id === "1042600132");
     Object.assign(game, { state: "live", status: "Q2 5:10", period: 2, clock: "5:10" });
