@@ -280,7 +280,8 @@ function listTeamRows(team, typed, pages) {
   return isSection ? sectionRow : [];
 }
 
-// The words that ask who is out, and the one that does after one of them, as "injury report" does.
+// The words that ask who is out, each from its third letter, and the one that does after one of
+// them, as "injury report" does.
 const OUT_WORDS = ["out", "injured", "injury", "injuries", "hurt", "sidelined", "inactive"];
 const AFTER_OUT_WORDS = ["report", "list"];
 
@@ -290,10 +291,11 @@ const AFTER_OUT_WORDS = ["report", "list"];
  */
 function readOutAsked(tokens) {
   const words = tokens.flatMap((token) => token.words);
+  const isOutWord = (/** @type {string | undefined} */ word) =>
+    !!word && OUT_WORDS.some((outWord) => isWordOf(word, outWord, true));
   const isAsking = words.map(
     (word, index) =>
-      OUT_WORDS.includes(word) ||
-      (AFTER_OUT_WORDS.includes(word) && OUT_WORDS.includes(words[index - 1])),
+      isOutWord(word) || (AFTER_OUT_WORDS.includes(word) && isOutWord(words[index - 1])),
   );
   let start = 0;
   const isAskingToken = tokens.map((token) => {

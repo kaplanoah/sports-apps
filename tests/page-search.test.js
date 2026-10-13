@@ -341,6 +341,23 @@ test("words asking who is out list each player out, by team and then last name, 
   assert.ok(rows.every((row) => row.kind === "player" && row.out === "listed"));
 });
 
+test("the start of a word asking who is out, from its third letter, asks it too", () => {
+  for (const isTyping of [true, false]) {
+    for (const text of ["inj", "inju", "side"])
+      assert.deepEqual(
+        listRows(text, isTyping, PAGES_WITH_NEWS).rows,
+        ["player FOX Stone", "player HAW Rook", "player HAW Stone"],
+        text,
+      );
+    assert.deepEqual(listRows("Hawks inj", isTyping, PAGES_WITH_NEWS).rows, [
+      "player HAW Rook",
+      "player HAW Stone",
+    ]);
+    assert.deepEqual(listRows("Rook inj", isTyping, PAGES_WITH_NEWS).rows, ["player HAW Rook"]);
+  }
+  assert.ok(!listRows("in", true, PAGES_WITH_NEWS).rows.some((row) => row.startsWith("player")));
+});
+
 test("a player's name with words asking who is out lists her, saying whether she is", () => {
   for (const text of ["Rook injury", "is Rook out", "Quill injured"]) {
     const { rows } = findPages(text, {
