@@ -47,6 +47,9 @@ export default defineConfig({
     // Tests expect Eastern times unless they pick another zone with test.use({ timezoneId }).
     timezoneId: "America/New_York",
     locale: "en-US",
+    // Eased scrolls and springs would only slow a test that isn't about them, so a test about
+    // motion asks for it with test.use({ contextOptions: { reducedMotion: "no-preference" } }).
+    contextOptions: { reducedMotion: "reduce" },
     // A service worker's requests skip the routes tests answer, so only tests about it allow it.
     serviceWorkers: "block",
     // A failed try keeps its trace, whose snapshots show the page at each step. Its screenshots

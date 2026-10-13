@@ -11,6 +11,7 @@ import {
 } from "../worker/src/pitchers.js";
 import { SIDE_VERSION, createPitcherJob, nameReadsKey } from "../worker/src/pitcher-updater.js";
 import { createRotationServer, nameRotationKey } from "../worker/src/rotations.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // MLB's tables, the last two weeks of games, and the pitchers the matchup sheet reads, as MLB
 // answered early on the morning of a Division Series day, with this season's qualified starters
@@ -65,40 +66,6 @@ function createMlbFetch(answers, unanswered = new Set()) {
     return new Response("Not found", { status: 404 });
   };
   return { requests, fetchImpl };
-}
-
-function createJobStorage() {
-  const stored = new Map();
-  return {
-    get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
-    put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-      stored.set(key, structuredClone(value));
-    },
-    delete: async (/** @type {string} */ key) => stored.delete(key),
-    list: async (/** @type {string} */ prefix) =>
-      new Map([...stored].filter(([key]) => key.startsWith(prefix))),
-  };
-}
-
-/** @param {Record<string, any>} initial */
-function createDocs(initial) {
-  const stored = new Map(Object.entries(initial));
-  /** @type {string[]} */
-  const writes = [];
-  return {
-    stored,
-    writes,
-    read: async (/** @type {string} */ key) => structuredClone(stored.get(key)) ?? null,
-    list: async (/** @type {string} */ collection) =>
-      [...stored]
-        .filter(([key]) => key.startsWith(`${collection}/`))
-        .map(([, doc]) => structuredClone(doc)),
-    write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-      writes.push(key);
-      stored.set(key, structuredClone(doc));
-    },
-    remove: async (/** @type {string} */ key) => stored.delete(key),
-  };
 }
 
 /**

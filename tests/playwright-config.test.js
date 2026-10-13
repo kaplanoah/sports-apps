@@ -33,3 +33,13 @@ test("each failed try of a browser test keeps its trace, without screenshots", a
     screenshots: false,
   });
 });
+
+// Eased scrolls and springs only slow a test that isn't about them. A project's own
+// contextOptions would replace the config's whole object and lose the default.
+test("every browser test asks for reduced motion unless it opts out", async () => {
+  const config = await loadConfig(undefined);
+  assert.deepEqual(config.use?.contextOptions, { reducedMotion: "reduce" });
+  for (const project of config.projects ?? []) {
+    assert.equal(project.use?.contextOptions, undefined, project.name);
+  }
+});

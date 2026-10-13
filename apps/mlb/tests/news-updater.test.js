@@ -4,36 +4,10 @@ import { NEWS_FEEDS } from "../worker/src/news-feeds.js";
 import { LABEL_PROMPT } from "../worker/src/news-prompts.js";
 import { createMlbNewsJob, readMlbRuleDrop } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 const NOW = Date.parse("2026-10-09T20:00:00Z");
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
-
-function createJobStorage() {
-  const stored = new Map();
-  return {
-    stored,
-    get: async (key) => structuredClone(stored.get(key)),
-    put: async (key, value) => {
-      stored.set(key, structuredClone(value));
-    },
-    delete: async (key) => stored.delete(key),
-    list: async (prefix) => new Map([...stored].filter(([key]) => key.startsWith(prefix))),
-  };
-}
-
-function createDocs() {
-  const stored = new Map();
-  return {
-    stored,
-    read: async (key) => structuredClone(stored.get(key)) ?? null,
-    write: async (key, doc) => {
-      stored.set(key, structuredClone(doc));
-    },
-    remove: async (key) => {
-      stored.delete(key);
-    },
-  };
-}
 
 const readStories = (content) => JSON.parse(content.slice(content.lastIndexOf("[")));
 

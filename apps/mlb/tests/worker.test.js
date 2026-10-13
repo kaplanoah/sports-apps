@@ -166,36 +166,35 @@ test("MLB failing is reported, and not remembered", async () => {
   assert.match((await response.json()).error, /MLB Stats API answered 503/);
 });
 
+const RELEASE = { version: "2.13.0", commit: "abc1234", builtAt: "2026-09-28T00:10:41.000Z" };
+
+// A build bundles the whole Worker and its page, so the tests of the bundle share one.
+/** @type {Promise<any> | undefined} */
+let bundle;
+const loadBundle = () =>
+  (bundle ??= import("../../../worker/build.mjs")
+    .then(({ buildWorker }) => buildWorker("mlb", { release: RELEASE }))
+    .then((script) => import(`data:text/javascript,${encodeURIComponent(script)}`)));
+
 test("the deployable bundle builds and exports the Worker and its store", async () => {
-  const { buildWorker } = await import("../../../worker/build.mjs");
-  const bundle = await import(
-    `data:text/javascript,${encodeURIComponent(await buildWorker("mlb"))}`
-  );
-  assert.equal(typeof bundle.default.fetch, "function");
-  assert.equal(typeof bundle.SeasonStore, "function");
+  const { default: worker, SeasonStore } = await loadBundle();
+  assert.equal(typeof worker.fetch, "function");
+  assert.equal(typeof SeasonStore, "function");
 });
 
-const importBundle = async (script) => import(`data:text/javascript,${encodeURIComponent(script)}`);
-const requestVersion = (bundle) =>
-  bundle.default.fetch(new Request("https://mlb-app.example/k3y/version.json"), {
+test("the bundle serves the release it was built from", async () => {
+  const { default: worker } = await loadBundle();
+  const response = await worker.fetch(new Request("https://mlb-app.example/k3y/version.json"), {
     APP_KEY: "k3y",
   });
-
-test("the bundle serves the release it was built from", async () => {
-  const { buildWorker } = await import("../../../worker/build.mjs");
-  const release = { version: "2.13.0", commit: "abc1234", builtAt: "2026-09-28T00:10:41.000Z" };
-  const response = await requestVersion(await importBundle(await buildWorker("mlb", { release })));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "application/json");
-  assert.deepEqual(await response.json(), release);
+  assert.deepEqual(await response.json(), RELEASE);
 });
 
 test("a bundle built without a release has no version file", async () => {
-  const { buildWorker } = await import("../../../worker/build.mjs");
-  const response = await requestVersion(
-    await importBundle(await buildWorker("mlb", { release: null })),
-  );
-  assert.equal(response.status, 404);
+  const { listBundledFiles } = await import("../../../worker/build.mjs");
+  assert.equal(listBundledFiles("mlb", null)["version.json"], undefined);
 });
 
 test("the release names the version, the commit, and when it was built", async () => {

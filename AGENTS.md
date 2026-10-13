@@ -78,9 +78,9 @@
   beside what it shows, and draws again from that while it reads again,
   never its placeholders, as the game sheet does with its box score and a team's sheet with its roster (`sectionsKeeper` in `shared/page/team-sheet.js`).
   The WNBA's `tests/browser/sheet-reload.spec.mjs` reloads each sheet with its reads held and checks it shows the same; a new sheet joins its list, or the test fails.
-- A browser test that isn't about motion asks for reduced motion,
-  with `page.emulateMedia({ reducedMotion: "reduce" })` or, for a whole file,
-  `test.use({ contextOptions: { reducedMotion: "reduce" } })`, so it doesn't wait out eased scrolls and springs.
+- The root's `playwright.config.mjs` asks for reduced motion for every browser test, so none waits out eased scrolls and springs.
+  A test about motion opts out, with `page.emulateMedia({ reducedMotion: "no-preference" })` or, for a group of tests,
+  `test.use({ contextOptions: { reducedMotion: "no-preference" } })`.
   Each animation keeps a full-motion test of its own.
   A gesture, like a swipe, is tested both ways too: its full-motion test drives it with the root's `tests/browser/touch.mjs`,
   as a finger does, and checks what moves and what doesn't once the finger lifts,

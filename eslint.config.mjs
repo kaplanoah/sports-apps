@@ -26,6 +26,15 @@ const LOCAL_TIME_METHODS = [
   "toTimeString",
 ];
 
+const LOCAL_TIME_RESTRICTIONS = LOCAL_TIME_METHODS.map((property) => ({
+  property,
+  message: "Read and format days and times with shared/page/days.js.",
+}));
+
+const DEVICE_STORAGES = ["localStorage", "sessionStorage"];
+const DEVICE_STORAGE_MESSAGE =
+  "Keep a viewer's choice with createViewerChoice from shared/page/device-storage.js.";
+
 export default [
   { ignores: [".claude/worktrees/", "apps/*/worker/dist/", "apps/*/page/js/sortable.min.js"] },
   js.configs.recommended,
@@ -70,13 +79,45 @@ export default [
       "worker/**/*.mjs",
     ],
     ignores: ["shared/page/days.js"],
+    rules: { "no-restricted-properties": ["error", ...LOCAL_TIME_RESTRICTIONS] },
+  },
+  {
+    // An app's page keeps a viewer's choice only through createViewerChoice in
+    // shared/page/device-storage.js, which keeps it as JSON under its own key, lists it, and tells
+    // the page's other tabs when it changes. A block's rule replaces an earlier block's, so this
+    // one keeps the local-time restrictions too.
+    files: ["apps/*/page/js/**/*.js"],
     rules: {
+      "no-restricted-globals": [
+        "error",
+        ...DEVICE_STORAGES.map((name) => ({ name, message: DEVICE_STORAGE_MESSAGE })),
+      ],
       "no-restricted-properties": [
         "error",
-        ...LOCAL_TIME_METHODS.map((property) => ({
+        ...LOCAL_TIME_RESTRICTIONS,
+        ...DEVICE_STORAGES.map((property) => ({
+          object: "window",
           property,
-          message: "Read and format days and times with shared/page/days.js.",
+          message: DEVICE_STORAGE_MESSAGE,
         })),
+      ],
+    },
+  },
+  {
+    // A change to shared code reaches every app, so an app hands it what it needs instead.
+    files: ["shared/**/*.{js,mjs}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "(^|/)apps/|^#page-files/",
+              message:
+                "Shared code never imports an app's modules: have the app hand it what differs.",
+            },
+          ],
+        },
       ],
     },
   },

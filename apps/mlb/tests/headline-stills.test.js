@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { STILL_MODEL, findHeadlineStills, hasHeadline } from "../worker/src/headline-stills.js";
+import { createJobStorage } from "../../../tests/job-context.js";
 
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 const STILL = "https://img.mlbstatic.com/mlb-images/image/upload/w_480,h_270/mlb/home-run.jpg";
@@ -31,17 +32,12 @@ function createClaude(answer) {
 }
 
 function createContext({ apiKey = "key", fetchImpl = /** @type {any} */ (null) } = {}) {
-  const stored = new Map();
+  const storage = createJobStorage();
   return /** @type {any} */ ({
-    stored,
+    stored: storage.stored,
     env: apiKey ? { ANTHROPIC_API_KEY: apiKey } : {},
     fetchImpl,
-    storage: {
-      get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
-      put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-        stored.set(key, structuredClone(value));
-      },
-    },
+    storage,
   });
 }
 

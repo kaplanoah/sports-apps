@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHighlightsJob } from "../shared/worker/highlights-job.js";
+import { createDocs, createJobStorage } from "./job-context.js";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -13,32 +14,6 @@ const NOW = Date.parse("2026-10-07T04:00:00Z");
  */
 const endGame = (id, hoursAgo) => ({ id, end: NOW - hoursAgo * HOUR_MS });
 
-function createStorage() {
-  const stored = new Map();
-  return {
-    get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
-    put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-      stored.set(key, structuredClone(value));
-    },
-    delete: async (/** @type {string} */ key) => stored.delete(key),
-    list: async () => new Map(),
-  };
-}
-
-function createDocs() {
-  const stored = new Map();
-  /** @type {string[]} */
-  const writes = [];
-  return {
-    writes,
-    read: async (/** @type {string} */ key) => structuredClone(stored.get(key)) ?? null,
-    write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-      writes.push(key);
-      stored.set(key, structuredClone(doc));
-    },
-  };
-}
-
 /**
  * The job over `games`, newest first, whose league answers each read with `answer(id)`, and
  * reads them as of its edition, which a test can raise between runs.
@@ -47,7 +22,7 @@ function createDocs() {
  */
 function createRun(games, { answer = (id) => ({ id, plays: [] }) } = {}) {
   const docs = createDocs();
-  const storage = createStorage();
+  const storage = createJobStorage();
   const clock = { now: NOW };
   const league = { edition: /** @type {number | undefined} */ (undefined) };
   /** @type {string[]} */

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SCHEDULE_EDITION, buildSnapshot } from "../page/js/snapshot.js";
 import { createPastSeasonsJob } from "../worker/src/past-seasons.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 const FINAL_2025 = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2025-final.json`, "utf8"),
@@ -48,23 +49,6 @@ const FOLLOWED_2025 = {
   log: [],
 };
 
-/** @param {Record<string, any>} stored */
-function createDocs(stored) {
-  const documents = new Map(Object.entries(stored));
-  return {
-    documents,
-    read: async (key) => documents.get(key) ?? null,
-    list: async (collection) =>
-      [...documents].filter(([key]) => key.startsWith(`${collection}/`)).map(([, doc]) => doc),
-    write: async (key, doc) => {
-      documents.set(key, doc);
-    },
-    remove: async (key) => {
-      documents.delete(key);
-    },
-  };
-}
-
 /**
  * @param {Record<string, any>} stored
  * @param {any} [snapshot] what MLB answers for 2025, or for each season
@@ -80,12 +64,12 @@ async function runJob(stored, snapshot = SNAPSHOT_2025) {
   await createPastSeasonsJob().run({
     docs,
     loadSnapshot,
-    storage: /** @type {any} */ ({}),
+    storage: createJobStorage(),
     env: {},
-    fetchImpl: fetch,
+    fetchImpl: () => assert.fail("The job reads MLB only through loadSnapshot."),
     now: () => Date.parse("2026-10-05T12:00:00Z"),
   });
-  return { documents: docs.documents, loads };
+  return { documents: docs.stored, loads };
 }
 
 test("a past season saved without its standings is read from MLB and saved whole", async () => {
