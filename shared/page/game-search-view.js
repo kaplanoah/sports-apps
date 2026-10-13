@@ -49,9 +49,8 @@ import {
  * @typedef {object} SearchLeague
  * @property {() => { terms: SearchTerms, games: SearchGame[] } | null} readSeason the season shown,
  *   or null before the page has one
- * @property {(games: SearchGame[], now: number, shown: { showsNetworks: boolean }) => { day: string, markup: Markup }[]} listDays
- *   the days of the games found, drawn as the Games view draws them, with each game's channels when
- *   the search asks where to watch
+ * @property {(games: SearchGame[], now: number) => { day: string, markup: Markup }[]} listDays the
+ *   days of the games found, drawn as the Games view draws them
  * @property {(code: string) => Markup} renderTeamMark a team's dot
  * @property {() => void} close what the view does as the search closes, like going back to the tab
  *   before it
@@ -492,13 +491,6 @@ function listShownExamples(context) {
   return [...listExamples(context, EXAMPLE_COUNT - pageExamples.length), ...pageExamples];
 }
 
-/**
- * What the games found show besides what the Games view does: their channels, when the search asks
- * where to watch.
- * @param {import("./game-search.js").Search | null} search
- */
-const describeShown = (search) => ({ showsNetworks: !!search?.isWhereToWatch });
-
 /** Draws what the search finds, or its examples while nothing is typed. */
 function draw() {
   const season = league?.readSeason();
@@ -531,7 +523,7 @@ function draw() {
   setHtml(readLine, isOverGames || !read ? html`` : renderRead(read));
   if (!isOverGames) {
     const games = found?.games.length
-      ? renderDays(league.listDays(found.games, Date.now(), describeShown(search)))
+      ? renderDays(league.listDays(found.games, Date.now()))
       : html`<p class="empty-note">${search && describeNoGames(search, context)}</p>`;
     setHtml(list, games);
     placeOnce(nameShown(text, false), context.today);
@@ -545,9 +537,7 @@ function draw() {
     }${others.length > 0 && renderSuggestions(others, "")}${
       read &&
       shownGames.length > 0 &&
-      html`${renderGamesLine(read, readText)}${renderDays(
-        league.listDays(shownGames, Date.now(), describeShown(search)),
-      )}`
+      html`${renderGamesLine(read, readText)}${renderDays(league.listDays(shownGames, Date.now()))}`
     }`,
   );
   placeOnce(nameShown(text, true), context.today);

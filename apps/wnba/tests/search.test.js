@@ -434,14 +434,13 @@ function searchListed(text) {
   };
 }
 
-test("a channel finds the games ESPN lists on it, and where to watch the games yet to end", () => {
+test("a channel finds the games ESPN lists on it, by any name fans call it", () => {
   assert.deepEqual(searchListed("on ESPN"), {
     games: ["2026-09-30 ATL at WAS", "2026-09-30 GSV at DAL"],
     line: "On ESPN | 2 games",
   });
   assert.deepEqual(searchListed("Fever on USA").games, ["2026-10-01 IND at LVA"]);
   assert.deepEqual(searchListed("Prime").games, ["2026-09-27 WAS at ATL", "2026-09-29 LVA at IND"]);
-  assert.equal(searchListed("where to watch").line, "Upcoming | 4 games");
 });
 
 test("overtime finds the finals the season's team logs say went past 40 minutes", () => {

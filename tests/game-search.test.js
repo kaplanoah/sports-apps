@@ -319,18 +319,6 @@ test("a channel finds the games on it, by any name the league lists it by or fan
   assert.equal(search("Foxes on ABC").empty, "No Foxes games on ABC");
 });
 
-test("where to watch finds the games yet to end whose channels are listed, as upcoming", () => {
-  assert.deepEqual(search("where to watch"), {
-    ids: ["g6", "g7", "g9"],
-    line: "Upcoming | 3 games",
-    empty: "No games to watch",
-  });
-  assert.deepEqual(search("what channel are the Owls on").ids, ["g7"]);
-  assert.equal(search("Owls on tv").line, "Owls | Upcoming | 1 game");
-  assert.equal(readSearch("where to watch", createContext()).isWhereToWatch, true);
-  assert.equal(readSearch("Hawks next game", createContext()).isWhereToWatch, false);
-});
-
 test("the league's word for a final past regulation finds those finals", () => {
   assert.deepEqual(search("overtime"), {
     ids: ["g2"],

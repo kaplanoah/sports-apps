@@ -1,13 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { html } from "../shared/page/html.js";
 import {
   describeChannel,
   listNetworkLogos,
   NETWORK_LOGOS,
   renderNetworks,
-  renderStatusWithNetworks,
 } from "../shared/page/network-logos.js";
 
 /** @param {string[]} names */
@@ -134,16 +132,4 @@ test("a listing names its channel, with every word fans call it, or its own name
     "amazon prime",
   ]);
   assert.deepEqual(describeChannel("ION"), { name: "ION", words: ["ION"] });
-});
-
-test("a game row's status keeps what it says, with its channels after it once any are listed", () => {
-  const ifNeeded = html`<span class="if-needed">If needed</span>`;
-  assert.equal(renderStatusWithNetworks(ifNeeded, []), ifNeeded);
-  assert.equal(renderStatusWithNetworks(false, []), false);
-  const alone = String(renderStatusWithNetworks(false, ["ESPN"]));
-  assert.match(alone, /^<span class="networks" role="group" aria-label="Where to watch"/);
-  assert.match(alone, /alt="ESPN"/);
-  const after = String(renderStatusWithNetworks(ifNeeded, ["ION"]));
-  assert.match(after, /If needed<\/span><span class="sep">/);
-  assert.match(after, /<span class="network-name">ION<\/span>/);
 });

@@ -6,7 +6,6 @@ import { renderDot } from "../page/js/clubs.js";
 import { readGameDay } from "../page/js/days.js";
 import {
   describeFinalInSeries,
-  listFoundGameDays,
   listSeasonDays,
   listSeasonGames,
   renderHeadline,
@@ -1339,26 +1338,4 @@ test("each appearance choice shows the home-screen icon it offers, and the page 
   });
   for (const source of Object.values(choices).flat())
     assert.ok(existsSync(`${import.meta.dirname}/../page/${source}`), source);
-});
-
-test("a search's games show each one's channels only when it asks where to watch", () => {
-  const scoreboard = JSON.parse(
-    readFileSync(`${import.meta.dirname}/fixtures/2026-10-02-espn-scoreboard.json`, "utf8"),
-  );
-  const listed = buildSnapshot(
-    { ...AFTERNOON.responses, networks: Object.values(scoreboard.answers) },
-    { season: 2026, now: NOW },
-  );
-  const games = listSeasonGames(listed, null).filter((game) => game.networks?.length);
-  const [shown] = inEastern(() =>
-    listFoundGameDays(games, games, NOW, { showsNetworks: true }).filter(
-      (day) => day.day === "2026-09-30",
-    ),
-  );
-  assert.equal((shown.markup.text.match(/class="network-logo"/g) ?? []).length, 2);
-  assert.match(shown.markup.text, /alt="ESPN"/);
-  const [plain] = listFoundGameDays(games, games, NOW, { showsNetworks: false }).filter(
-    (day) => day.day === "2026-09-30",
-  );
-  assert.doesNotMatch(plain.markup.text, /network-logo/);
 });

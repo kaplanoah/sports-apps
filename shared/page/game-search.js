@@ -11,9 +11,8 @@
 // pick from what's left. A game whose time isn't set yet counts in a search of its day, and in a
 // search for a time of day it's listed by date with the rest and counted apart, since it may yet fit.
 // A word two teams share, like "Sox", finds either's games, and a starter's name finds the games he's
-// named to start, his next only once it's announced. A channel's name finds the games on it, and
-// "where to watch" the games yet to end whose channels are listed, with them, while a league's word
-// for a final past regulation, like "overtime", finds those finals.
+// named to start, his next only once it's announced. A channel's name finds the games on it, and a
+// league's word for a final past regulation, like "overtime", finds those finals.
 
 import { addDays, formatCalendarDate } from "./days.js";
 import {
@@ -143,8 +142,6 @@ import { createDictionary, readTokens } from "./search-words.js";
  * @property {{ which: "next" | "last", count: number } | null} pick
  * @property {{ name: string, label: string } | null} landmark
  * @property {SearchChannel[]} channels
- * @property {boolean} isWhereToWatch whether it asks where to watch, so it finds games whose
- *   channels are listed, yet to end unless it asks otherwise, and shows each one's channels
  * @property {boolean} isPastRegulation
  * @property {string[]} skipped the words it couldn't use, as typed
  */
@@ -306,23 +303,6 @@ const GENERAL_ENTRIES = [
     phrase,
     meaning: { kind: "landmark", value: "break" },
   })),
-  ...[
-    "watch",
-    "to watch",
-    "where to watch",
-    "watching",
-    "tv",
-    "on tv",
-    "channel",
-    "channels",
-    "network",
-    "networks",
-    "broadcast",
-    "broadcasts",
-    "stream",
-    "streaming",
-    "televised",
-  ].map((phrase) => ({ phrase, meaning: { kind: "watch", display: "where to watch" } })),
 ];
 
 const KIND_LABELS = { playoffs: "Playoffs", regular: "Regular season" };
@@ -514,7 +494,6 @@ const createEmptySearch = () => ({
   pick: null,
   landmark: null,
   channels: [],
-  isWhereToWatch: false,
   isPastRegulation: false,
   skipped: [],
 });
@@ -780,7 +759,6 @@ function readMeaningAt(state, meaning) {
     doubleheader: () => ((search.isDoubleheader = true), 1),
     outcome: () => ((search.outcome = meaning.value), 1),
     channel: () => (search.channels.push(meaning.value), 1),
-    watch: () => ((search.isWhereToWatch = true), 1),
     "past-regulation": () => ((search.isPastRegulation = true), 1),
     landmark: () => {
       if (meaning.value === "break") return 0;
@@ -1008,8 +986,6 @@ function fitsAllButTime(search, context, game) {
     () => !search.outcome || isOutcome(search, game),
     () => !search.landmark || isAtLandmark(context, search.landmark.name, game),
     () => !search.channels.length || search.channels.some((channel) => isOnChannel(channel, game)),
-    () => !search.isWhereToWatch || !!game.networks?.length,
-    () => !isFindingGamesToWatch(search) || game.state !== "final",
     () => !search.isPastRegulation || !!game.isPastRegulation,
   ];
   return checks.every((check) => check());
@@ -1022,12 +998,6 @@ function fitsAllButTime(search, context, game) {
  */
 const isOnChannel = (channel, game) =>
   !!game.networks?.some((network) => channel.listings.includes(network));
-
-/**
- * Whether a search asks where to watch with no state of its own, so it finds games yet to end.
- * @param {Search} search
- */
-const isFindingGamesToWatch = (search) => search.isWhereToWatch && !search.states.length;
 
 /**
  * Whether a final went the way a search asks for its one team.
@@ -1128,19 +1098,11 @@ function describeTeams(search, context) {
 }
 
 /**
- * Where to watch, as the line says it: the games yet to start, and any under way.
- * @param {ReturnType<typeof findSearchGames>} found
- */
-const describeGamesToWatch = (found) =>
-  found.games.some((game) => game.state === "live") ? "Live and upcoming" : "Upcoming";
-
-/**
  * Each condition but the teams, as the line says it.
  * @param {Search} search
- * @param {ReturnType<typeof findSearchGames>} found
  * @param {SearchContext} context
  */
-function listConditionLabels(search, found, context) {
+function listConditionLabels(search, context) {
   const range = search.ranges.length
     ? search.ranges.reduce((all, each) => all && overlapRanges(all, each))
     : null;
@@ -1163,7 +1125,6 @@ function listConditionLabels(search, found, context) {
     search.weekdays?.label,
     search.landmark?.label,
     ...search.states.map((state) => STATE_LABELS[state]),
-    isFindingGamesToWatch(search) && describeGamesToWatch(found),
     search.outcome && OUTCOME_LABELS[search.outcome],
     search.isPastRegulation && context.terms.pastRegulation?.name,
     search.channels.length && `On ${describeChannels(search)}`,
@@ -1238,7 +1199,7 @@ export function describeSearch(search, found, context) {
     return { lead: "No results", facts: [/** @type {string} */ (describeSkipped(search.skipped))] };
   const starters = describeStarters(search);
   const teams = describeTeams(search, context);
-  const conditions = listConditionLabels(search, found, context);
+  const conditions = listConditionLabels(search, context);
   const lead = starters ?? teams ?? conditions.shift() ?? (search.pick ? null : "All games");
   const noun = starters ? "start" : "game";
   const pick = search.pick && describePick(search.pick, noun);
@@ -1293,14 +1254,10 @@ export function describeNoGames(search, context) {
 }
 
 /**
- * What the games a search asks for are called: "games", the league's own words for a final past
- * regulation, like "overtime games", or "games to watch".
+ * What the games a search asks for are called: "games", or the league's own words for a final past
+ * regulation, like "overtime games".
  * @param {Search} search
  * @param {SearchContext} context
  */
-function nameGamesAsked(search, context) {
-  const games = search.isPastRegulation
-    ? (context.terms.pastRegulation?.games ?? "games")
-    : "games";
-  return isFindingGamesToWatch(search) ? `${games} to watch` : games;
-}
+const nameGamesAsked = (search, context) =>
+  search.isPastRegulation ? (context.terms.pastRegulation?.games ?? "games") : "games";

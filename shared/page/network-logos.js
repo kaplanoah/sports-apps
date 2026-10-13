@@ -1,4 +1,4 @@
-import { html, joinWithSeparator } from "./html.js";
+import { html } from "./html.js";
 
 // The channels a game can be on that have a logo in networks/, each a public-domain file from
 // Wikimedia Commons or one the repo's owner supplied. A channel goes by more than one name across
@@ -176,17 +176,13 @@ function renderLogo(logo) {
 }
 
 /** @param {string[]} networks */
-const renderNetworkMarks = (networks) =>
-  listNetworkLogos(networks).map((network) =>
-    typeof network === "string"
-      ? html`<span class="network-name">${network}</span>`
-      : renderLogo(network),
-  );
-
-/** @param {string[]} networks */
 const renderNetworkLine = (networks) =>
   html`<div class="networks" role="group" aria-label="Where to watch">
-    ${renderNetworkMarks(networks)}
+    ${listNetworkLogos(networks).map((network) =>
+      typeof network === "string"
+        ? html`<span class="network-name">${network}</span>`
+        : renderLogo(network),
+    )}
   </div>`;
 
 /**
@@ -199,19 +195,3 @@ export const renderNetworks = (networks) =>
   networks.length
     ? renderNetworkLine(networks)
     : html`<p class="networks networks-pending">Check back for where to watch</p>`;
-
-/**
- * A game row's status, with where to watch it after: its channels in a line, as a game's sheet shows
- * them, once any are listed.
- * @param {import("./html.js").Markup | false} status what the row's status says, or false for
- *   nothing
- * @param {string[]} networks
- * @returns {import("./html.js").Markup | false}
- */
-export function renderStatusWithNetworks(status, networks) {
-  if (!networks.length) return status;
-  const line = html`<span class="networks" role="group" aria-label="Where to watch"
-    >${renderNetworkMarks(networks)}</span
-  >`;
-  return status ? joinWithSeparator([status, line]) : line;
-}

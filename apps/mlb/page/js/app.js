@@ -200,14 +200,12 @@ function readSearchSeason() {
  * The days of the games a search found, drawn as the Games view draws them.
  * @param {import("#shared/game-search.js").SearchGame[]} found
  * @param {number} now
- * @param {{ showsNetworks: boolean }} shown
  */
-const listSearchDays = (found, now, shown) =>
+const listSearchDays = (found, now) =>
   listFoundGameDays(
     found.map((game) => game.game),
     listListedGames(),
     now,
-    shown,
   );
 
 function wireControls() {

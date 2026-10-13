@@ -687,7 +687,7 @@ test("every search state keeps to the type scale and its periods, and every tap 
   await expectReadable();
 });
 
-test("who's out lists each player out with why, a team its record, a team's news its stories as they arrive, each a link to it, and where to watch each game's channels", async ({
+test("who's out lists each player out with why, a team its record, a team's news its stories as they arrive, each a link to it, and a channel its games", async ({
   page,
 }) => {
   const app = await openSeasonGames(page);
@@ -743,13 +743,6 @@ test("who's out lists each player out with why, a team its record, a team's news
   await sendSearch(page, "on ESPN");
   await expect(findLine(page)).toContainText("On ESPN");
   await expect(page.locator("#gameSearch .search-list .game-row").first()).toBeVisible();
-  await expectReadableSearch(page);
-
-  await sendSearch(page, "where to watch");
-  await expect(findLine(page)).toContainText("Upcoming");
-  const channels = page.locator("#gameSearch .search-list .game-status .networks").first();
-  await expect(channels).toBeVisible();
-  await expect(channels.locator(".network-logo, .network-name").first()).toBeVisible();
   await expectReadableSearch(page);
 });
 
