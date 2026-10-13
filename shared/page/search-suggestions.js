@@ -20,7 +20,7 @@ import { readTokens, splitWords } from "./search-words.js";
  * finishes, which may start before the last, as "los ange" does "Los Angeles".
  * @typedef {{ text: string, mark: { kind: "team", code: string } | { kind: "date" | "place" | "search" }, detail: string, finished?: string }} Suggestion
  */
-/** @typedef {{ text: string, meaning: Meaning | null, finished?: string }} Candidate */
+/** @typedef {{ text: string, meaning: Meaning | null, finished?: string, isShared?: boolean }} Candidate */
 
 const SUGGESTION_COUNT = 4;
 // Whole searches sit over the pages and games a search finds, so only a couple show.
@@ -106,13 +106,14 @@ function readJoin(word, context) {
 
 /**
  * How a finished word is written: its name, or, when that doesn't start as typed, the word it
- * finished, as "Vegas" for the Aces.
+ * finished, as its meaning writes it, like "LA Dodgers", or as "Vegas" for the Aces.
  * @param {string} phrase
  * @param {Meaning} meaning
  * @param {string} fragment
  */
 function writeFinished(phrase, meaning, fragment) {
   if (readWords(meaning.display).startsWith(fragment)) return meaning.display;
+  if (meaning.written) return meaning.written;
   if (!NAME_KINDS.has(meaning.kind)) return phrase;
   return phrase.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
@@ -121,8 +122,9 @@ function writeFinished(phrase, meaning, fragment) {
 const nameMeaning = (meaning) => `${meaning.kind}:${JSON.stringify(meaning.value)}`;
 
 /**
- * What a finished phrase means: a place when it names more than one team as well, as "Los Angeles"
- * does, since it finds all their games, and otherwise its first meaning of the kinds that fit.
+ * What a finished phrase means: its first meaning of the kinds that fit, and whether teams share
+ * it, as "Los Angeles" and "Sox" are shared, which finds all their games, read as the place when
+ * it's one.
  * @param {Meaning[]} meanings
  * @param {string[]} kinds
  */
@@ -130,7 +132,8 @@ function chooseFinishedMeaning(meanings, kinds) {
   const fitting = meanings.filter((meaning) => kinds.includes(meaning.kind) && meaning.display);
   const teams = fitting.filter((meaning) => meaning.kind === "team");
   const place = fitting.find((meaning) => meaning.kind === "place");
-  return teams.length > 1 && place ? { meaning: place, isShared: true } : { meaning: fitting[0] };
+  if (teams.length < 2) return { meaning: fitting[0], isShared: false };
+  return { meaning: place ?? teams[0], isShared: true };
 }
 
 /**
@@ -157,7 +160,7 @@ function listFinishedWords(fragment, kinds, context) {
   const words = new Map();
   for (const [phrase, meanings] of context.dictionary) {
     if (phrase === fragment || !phrase.startsWith(fragment)) continue;
-    const { meaning, isShared = false } = chooseFinishedMeaning(meanings, kinds);
+    const { meaning, isShared } = chooseFinishedMeaning(meanings, kinds);
     if (!meaning) continue;
     const written = writeFinished(phrase, meaning, fragment);
     const rating = rateName(written, meaning);
@@ -195,10 +198,11 @@ function listFinishingCandidates(text, context) {
     const fragment = readWords(text.slice(start.at));
     const finished = listFinishedWords(fragment, kinds, context);
     if (finished.length)
-      return finished.map(({ written, meaning }) => ({
+      return finished.map(({ written, meaning, isShared }) => ({
         text: `${head}${written}`,
         meaning,
         finished: text.slice(start.at),
+        isShared,
       }));
     if (context.dictionary.has(fragment)) return [];
   }
@@ -387,14 +391,15 @@ function listTeamSearchCandidates(text, context) {
 }
 
 /**
- * What marks a suggestion's row, and its detail: a team's dot, a date's days, or a place's or a
- * month's games.
- * @param {Meaning | null} meaning the finished word's, or null for a whole search
+ * What marks a suggestion's row, and its detail: a team's dot, a date's days, or a place's, a
+ * month's, or a word teams share's games.
+ * @param {Candidate} candidate
  * @param {ReturnType<typeof findGames>} result
  * @returns {Pick<Suggestion, "mark" | "detail">}
  */
-function describeRow(meaning, { search, found }) {
+function describeRow({ meaning, isShared }, { search, found }) {
   const count = describeCount(found.games.length);
+  if (meaning?.kind === "team" && isShared) return { mark: { kind: "search" }, detail: count };
   if (meaning?.kind === "team") return { mark: { kind: "team", code: meaning.value }, detail: "" };
   if (meaning?.kind === "place") return { mark: { kind: "place" }, detail: count };
   if (meaning?.kind === "month") return { mark: { kind: "date" }, detail: count };
@@ -422,7 +427,7 @@ function listUseful(candidates, text, context) {
     const result = findGames(candidate.text, context);
     if (!result.found.games.length) continue;
     const finished = candidate.finished ? { finished: candidate.finished } : {};
-    useful.push({ text: candidate.text, ...finished, ...describeRow(candidate.meaning, result) });
+    useful.push({ text: candidate.text, ...finished, ...describeRow(candidate, result) });
     if (isWholeSearch) wholeSearches += 1;
     if (useful.length === SUGGESTION_COUNT) break;
   }

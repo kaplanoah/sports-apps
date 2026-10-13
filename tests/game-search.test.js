@@ -364,7 +364,7 @@ test("a word being typed is finished first, the team playing soonest before anot
     "home search",
   ]);
   assert.deepEqual(suggest("H").slice(0, 2), ["Hornets HOR", "Hornets next game search"]);
-  assert.equal(suggest("Hil")[0], "Hillside FOX");
+  assert.equal(suggest("Hil")[0], "Hillside Foxes FOX");
 });
 
 test("a whole search fits where the season stands, two at most, and nothing is offered that would find no games", () => {

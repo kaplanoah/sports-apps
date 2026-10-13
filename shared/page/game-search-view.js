@@ -11,28 +11,17 @@
 // does as it closes.
 
 import { describeDay, readCalendarDate } from "./days.js";
-import {
-  createSearchContext,
-  createSearchDictionary,
-  describeNoGames,
-  describeSearch,
-  findSearchGames,
-  readSearch,
-} from "./game-search.js";
+import { createSearchContext, createSearchDictionary, describeNoGames } from "./game-search.js";
 import { html, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { isWebAddress } from "./news-picks.js";
 import { nameStoryDay } from "./news-view.js";
-import { SHORTEST_PREFIX, findPages, findPartGame } from "./page-search.js";
+import { findPages } from "./page-search.js";
 import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
-import {
-  EXAMPLE_COUNT,
-  listExamples,
-  listOtherReadings,
-  listSuggestions,
-} from "./search-suggestions.js";
+import { readSentWords, readTypedSearch } from "./search-reading.js";
+import { EXAMPLE_COUNT, listExamples } from "./search-suggestions.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
 /** @typedef {import("./game-search.js").SearchGame} SearchGame */
@@ -42,10 +31,7 @@ import {
 /** @typedef {import("./page-search.js").PageRow} PageRow */
 /** @typedef {import("./page-search.js").GamePart} GamePart */
 /** @typedef {import("./day-strip.js").ListedDay} ListedDay */
-/**
- * A page's row as the search shows it, a game's part on the game it opens.
- * @typedef {Exclude<PageRow, { kind: "game-part" }> | { kind: "game", part: GamePart, game: SearchGame }} ShownRow
- */
+/** @typedef {import("./search-reading.js").ShownRow} ShownRow */
 /**
  * What a league hands its search.
  * @typedef {object} SearchLeague
@@ -358,24 +344,6 @@ const renderPageRows = (rows, pages, context) =>
   </ul>`;
 
 /**
- * The rows to show, each game's part on the game it opens of those the words left for it find, and
- * left out when there's none.
- * @param {PageRow[]} rows
- * @param {import("./game-search.js").SearchContext} context
- * @returns {ShownRow[]}
- */
-const placeGameParts = (rows, context) =>
-  rows.flatMap((row) => {
-    if (row.kind !== "game-part") return [/** @type {ShownRow} */ (row)];
-    const games =
-      row.gameText === null
-        ? context.games
-        : findSearchGames(readSearch(row.gameText, context), context).games;
-    const game = findPartGame(games, row.part);
-    return game ? [/** @type {ShownRow} */ ({ kind: "game", part: row.part, game })] : [];
-  });
-
-/**
  * The line saying how the search read its words, right over the games, which a tap opens whole,
  * with the words as it read them, a half-typed team's or place's finished.
  * @param {{ lead: string, facts: string[] }} read
@@ -493,94 +461,6 @@ function followScroll() {
 }
 
 /**
- * The games from today on, or, when none are left, all of them.
- * @param {SearchGame[]} games
- * @param {string} today
- */
-function listFromToday(games, today) {
-  const ahead = games.filter((game) => game.day >= today);
-  return ahead.length ? ahead : games;
-}
-
-/**
- * What the line reads while words are typed: a half-typed team or place as the one the first
- * suggestion finishes it into, and any other half-typed word left out until it's whole, rather than
- * named as one it can't use.
- * @param {string} text
- * @param {Suggestion[]} suggestions
- * @param {import("./game-search.js").SearchContext} context
- */
-function readWhileTyping(text, suggestions, context) {
-  if (!isTyping || !isLastWordHalfTyped(text, context)) return text;
-  const last = text.split(/\s+/).at(-1) ?? "";
-  return finishName(text, suggestions) ?? text.slice(0, text.length - last.length).trim();
-}
-
-/**
- * Whether the last word is one the search can't read yet, as a word still being typed is.
- * @param {string} text
- * @param {import("./game-search.js").SearchContext} context
- */
-function isLastWordHalfTyped(text, context) {
-  const last = text.split(/\s+/).at(-1) ?? "";
-  return readSearch(text, context).skipped.includes(last.toLowerCase());
-}
-
-/**
- * The words with a half-typed team or place finished, as the first suggestion finishes it, or null
- * when the first suggestion doesn't finish one or too little of its name is typed to name one yet.
- * @param {string} text
- * @param {Suggestion[]} suggestions
- */
-function finishName(text, [first]) {
-  const typedLetters = (first?.finished ?? "").replace(/\s+/g, "").length;
-  const isNameFinished =
-    typedLetters >= SHORTEST_PREFIX &&
-    (first?.mark.kind === "team" || first?.mark.kind === "place") &&
-    first.text.toLowerCase().startsWith(text.toLowerCase());
-  return isNameFinished ? first.text : null;
-}
-
-/**
- * Whether the line reads the words as a name the first suggestion finished from more than the last
- * word, as "los ange" is Los Angeles, so the half-typed word is part of that name and starts no
- * other, like a player's.
- * @param {string} readText
- * @param {Suggestion[]} suggestions
- */
-const isNameFinishedAcrossWords = (readText, [first]) =>
-  first?.text === readText && /\s/.test(first.finished?.trim() ?? "");
-
-/**
- * The suggestions less a team whose page shows under them, since its page's row stands for it.
- * @param {Suggestion[]} suggestions
- * @param {ShownRow[]} rows
- */
-function dropTeamsShown(suggestions, rows) {
-  const shown = new Set(rows.flatMap((row) => (row.kind === "team" ? [row.team.code] : [])));
-  return suggestions.filter(({ mark }) => mark.kind !== "team" || !shown.has(mark.code));
-}
-
-/**
- * The pages the words ask for, the words left for the search of games, or null when they ask for
- * no games, and the line an answer says over its rows. A half-typed word may start a player's name
- * or a place's, so the words as typed go first, and the words as the line reads them only when
- * those find no page.
- * @param {string} text the words to try first
- * @param {string} readText the words as the line reads them while they're typed
- * @param {import("./game-search.js").SearchContext} context
- * @returns {{ pages: SearchPages | null } & import("./page-search.js").FoundPages}
- */
-function readPages(text, readText, context) {
-  const pages = league?.readPages() ?? null;
-  if (!pages) return { pages, rows: [], gameText: readText };
-  const search = { dictionary: context.dictionary, pages, isTyping };
-  const typed = findPages(text, search);
-  const isTypedEnough = typed.rows.length > 0 || text === readText;
-  return { pages, ...(isTypedEnough ? typed : findPages(readText, search)) };
-}
-
-/**
  * The examples to offer: the league's searches of games, then its pages that find something.
  * @param {import("./game-search.js").SearchContext} context
  */
@@ -611,40 +491,28 @@ function draw() {
     placeOnce(nameShown("", false), context.today);
     return;
   }
-  const typed = isTyping ? listSuggestions(query, context) : [];
-  const readText = readWhileTyping(text, typed, context);
-  const pagesText = isNameFinishedAcrossWords(readText, typed) ? readText : text;
-  const { pages, rows: pageRows, gameText, read: answer } = readPages(pagesText, readText, context);
-  const rows = placeGameParts(pageRows, context);
-  const suggestions = dropTeamsShown(typed, rows);
-  const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];
-  const search = gameText ? readSearch(gameText, context) : null;
-  const found = search && findSearchGames(search, context);
-  const read = search && found && describeSearch(search, found, context);
-  const isOverGames =
-    !isGamesOnly && (suggestions.length > 0 || rows.length > 0 || others.length > 0);
+  const pages = league?.readPages() ?? null;
+  const { suggestions, readText, rows, answer, others, search, read, isOverGames, games } =
+    readTypedSearch(query, { context, pages, isTyping, isGamesOnly });
   findBar()?.classList.toggle("has-rows", isOverGames);
   setHtml(readLine, renderReadLine(answer ?? (isOverGames ? null : read)));
   const shown = nameShown(text, isOverGames);
+  const days = games.length ? league.listDays(games, Date.now()) : [];
+  keepListedDays(days, findStartDay(days, context.today, isOverGames), shown);
   if (!isOverGames) {
-    const days = found?.games.length ? league.listDays(found.games, Date.now()) : [];
-    keepListedDays(days, findStartDay(days, context.today, false), shown);
-    const games = days.length
+    const gameList = days.length
       ? renderDays(days)
       : html`<p class="empty-note">${search && describeNoGames(search, context)}</p>`;
-    setHtml(list, games);
+    setHtml(list, gameList);
     showDays(shown, context.today);
     return;
   }
-  const shownGames = read && found ? listFromToday(found.games, context.today) : [];
-  const days = shownGames.length ? league.listDays(shownGames, Date.now()) : [];
-  keepListedDays(days, findStartDay(days, context.today, true), shown);
   setHtml(
     list,
     html`${suggestions.length > 0 && renderSuggestions(suggestions, query)}${
       pages && rows.length > 0 && renderPageRows(rows, pages, context)
     }${others.length > 0 && renderSuggestions(others, "")}${
-      days.length > 0 && html`${renderGamesLine(read, readText)}${renderDays(days)}`
+      read && days.length > 0 && html`${renderGamesLine(read, readText)}${renderDays(days)}`
     }`,
   );
   showDays(shown, context.today);
@@ -785,21 +653,9 @@ function followFocus(event) {
 /** @param {Event} event */
 function sendSearch(event) {
   event.preventDefault();
-  runSearch(readSentWords(readQuery()));
-}
-
-/**
- * The words the Search key sends: a half-typed last word finished when it starts a team or a place,
- * as the line read it while typing, and otherwise the words as typed.
- * @param {string} query
- */
-function readSentWords(query) {
   const season = league?.readSeason();
-  if (!season) return query;
-  const context = createContext(season);
-  const text = query.trim();
-  if (!isLastWordHalfTyped(text, context)) return query;
-  return finishName(text, listSuggestions(query, context)) ?? query;
+  const query = readQuery();
+  runSearch(season ? readSentWords(query, createContext(season)) : query);
 }
 
 /**

@@ -32,7 +32,7 @@ import {
   readTimeOfDay,
 } from "./search-dates.js";
 import { describeChannel } from "./network-logos.js";
-import { createDictionary, readTokens } from "./search-words.js";
+import { createDictionary, normalizeText, readTokens } from "./search-words.js";
 
 /** @typedef {import("./search-words.js").Meaning} Meaning */
 /** @typedef {import("./search-words.js").Token} Token */
@@ -393,6 +393,42 @@ export function listSearchChannels(games) {
   return [...channels.values()];
 }
 
+// A place's short name a fan writes in capitals, as "LA" or "NY".
+const LONGEST_INITIALS = 3;
+
+/**
+ * A place's name as a fan writes it before a team's: a short one in capitals, as "LA", and any
+ * other with each word capitalized, as "Bay Area".
+ * @param {string} word
+ */
+const writePlaceWord = (word) =>
+  word.length <= LONGEST_INITIALS
+    ? word.toUpperCase()
+    : word.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+
+/**
+ * A team's name after any name of the city it plays in, but a venue's, as fans write "LA Dodgers"
+ * or "NY Mets", which names the team rather than its games there.
+ * @param {SearchTeam} team
+ * @param {SearchPlace[]} places
+ */
+function listPlacedTeamEntries(team, places) {
+  const known = new Set(team.words.map(normalizeText));
+  return places
+    .filter((place) => !place.isArena && place.cities.includes(team.homeCity))
+    .flatMap((place) => place.words)
+    .filter((word) => !known.has(normalizeText(`${word} ${team.name}`)))
+    .map((word) => ({
+      phrase: `${word} ${team.name}`.toLowerCase(),
+      meaning: {
+        kind: "team",
+        value: team.code,
+        display: team.name,
+        written: `${writePlaceWord(word)} ${team.name}`,
+      },
+    }));
+}
+
 /**
  * Every phrase a league's searches know, its own words and the calendar's.
  * @param {SearchTerms} terms
@@ -407,6 +443,7 @@ export function createSearchDictionary(terms) {
         meaning: { kind: "team", value: team.code, display: team.name },
       })),
     ),
+    ...terms.teams.flatMap((team) => listPlacedTeamEntries(team, terms.places)),
     ...terms.places.flatMap((place) =>
       place.words.map((phrase) => ({
         phrase,
