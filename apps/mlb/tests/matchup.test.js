@@ -234,6 +234,17 @@ test("a finished game without its starters names both clubs and has nothing to c
   assert.doesNotMatch(markup, /check-back/);
 });
 
+test("a game on a later day says to check back for the pitcher of the one club yet to name him, or for pitchers", () => {
+  const laterDay = { ...AT_ATHLETICS, date: "2026-09-25", today: false };
+  const oneNamed = renderLoaded({ ...laterDay, starters: [{ id: 1, name: "Blubaugh" }] }, [
+    { pitcher: BLUBAUGH },
+    {},
+  ]);
+  assert.deepEqual(readClass(oneNamed, "check-back"), ["Check back for Athletics pitcher"]);
+  const neitherNamed = renderLoaded({ ...laterDay, starters: [] }, [{}, {}]);
+  assert.deepEqual(readClass(neitherNamed, "check-back"), ["Check back for pitchers"]);
+});
+
 test("a game with its starters named has nothing to check back for", () => {
   const markup = renderStarters();
   assert.equal(countMatches(markup, /class="pitch-mix"/g), 2);

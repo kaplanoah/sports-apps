@@ -370,10 +370,17 @@ const isAwaitingStarter = (side, game) =>
 const isCheckBackSide = (side, game) =>
   game.state === "pre" && !side.starter?.name && !isAwaitingStarter(side, game);
 
-const renderCheckBack = (sides, game) =>
-  sides.some((side) => isCheckBackSide(side, game))
-    ? html`<p class="check-back">Check back for pitchers</p>`
-    : html``;
+function describeCheckBack(waiting) {
+  const [only] = waiting;
+  if (waiting.length === 1 && only.club) return `Check back for ${nameTeam(only.club)} pitcher`;
+  return "Check back for pitchers";
+}
+
+function renderCheckBack(sides, game) {
+  const waiting = sides.filter((side) => isCheckBackSide(side, game));
+  if (!waiting.length) return html``;
+  return html`<p class="check-back">${describeCheckBack(waiting)}</p>`;
+}
 
 function renderScouting(side, game, speedRange) {
   if (isAwaitingStarter(side, game)) return renderRotation(side, game);
