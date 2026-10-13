@@ -49,7 +49,9 @@ export default defineConfig({
     locale: "en-US",
     // A service worker's requests skip the routes tests answer, so only tests about it allow it.
     serviceWorkers: "block",
-    trace: "retain-on-failure",
+    // A failed try keeps its trace, whose snapshots show the page at each step. Its screenshots
+    // would add a tenth to every test's time and show nothing the snapshots don't.
+    trace: { mode: "retain-on-failure", screenshots: false },
   },
   projects: appsWithBrowserTests.flatMap((app, index) => [
     {
