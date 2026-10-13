@@ -28,7 +28,8 @@ function createFetch(calls) {
       reason: "News.",
     }));
     return Response.json({
-      content: [{ type: "text", text: JSON.stringify(answers) }],
+      content: [{ type: "text", text: JSON.stringify({ stories: answers }) }],
+      stop_reason: "end_turn",
       usage: { input_tokens: 100, output_tokens: 50 },
     });
   };
