@@ -185,6 +185,15 @@ test("a home game away from the club's own ballpark is left out of its home game
   assert.equal(search("London", london).line, "In London | 1 game");
 });
 
+test("the season's first game reads as Opening Day, a game the series may not need as If necessary, and a cup as nothing", () => {
+  const texts = (/** @type {string} */ text) =>
+    listSuggestions(text, CONTEXT).map((row) => row.text);
+  assert.deepEqual(texts("open"), ["Opening Day"]);
+  assert.match(search("opening day").line, /^Opening Day \| /);
+  assert.match(search("if necessary").line, /^If necessary \| /);
+  assert.deepEqual(readSearch("cup", CONTEXT).skipped, ["cup"]);
+});
+
 test("the examples before typing find games, and a starter's name typed is finished", () => {
   assert.deepEqual(listExamples(CONTEXT), [
     "Mets at Phillies",

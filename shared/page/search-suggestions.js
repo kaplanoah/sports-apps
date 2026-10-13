@@ -7,8 +7,9 @@
 // reading. Nothing is offered that would find no games. Runs in the page and in Node, so it uses no
 // DOM.
 
-import { readMonthDays } from "./search-dates.js";
 import { describeCount, findSearchGames, isGameInPlace, readSearch } from "./game-search.js";
+import { findNeverShownWords } from "./league-words.js";
+import { readMonthDays } from "./search-dates.js";
 import { readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
@@ -104,13 +105,16 @@ function readJoin(word, context) {
 
 /**
  * How a finished word is written: its name, or, when that doesn't start as typed, the word it
- * finished, as "Vegas" for the Aces.
+ * finished, as "Vegas" for the Aces, unless the league never shows that word, as the WNBA never
+ * shows "postseason".
  * @param {string} phrase
  * @param {Meaning} meaning
  * @param {string} fragment
+ * @param {string[]} neverShown
  */
-function writeFinished(phrase, meaning, fragment) {
+function writeFinished(phrase, meaning, fragment, neverShown) {
   if (readWords(meaning.display).startsWith(fragment)) return meaning.display;
+  if (findNeverShownWords(phrase, neverShown).length) return meaning.display;
   if (!NAME_KINDS.has(meaning.kind)) return phrase;
   return phrase.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
@@ -132,7 +136,7 @@ function listFinishedWords(fragment, kinds, context) {
     if (phrase === fragment || !phrase.startsWith(fragment)) continue;
     const meaning = meanings.find((each) => kinds.includes(each.kind) && each.display);
     if (!meaning) continue;
-    const written = writeFinished(phrase, meaning, fragment);
+    const written = writeFinished(phrase, meaning, fragment, context.terms.words.neverShown);
     const isName = written === meaning.display;
     const kept = words.get(nameMeaning(meaning));
     if (!kept || (isName && !kept.isName))

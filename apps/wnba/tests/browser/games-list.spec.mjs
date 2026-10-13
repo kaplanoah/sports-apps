@@ -163,13 +163,13 @@ test("a game's dots, names, and time center on their capitals, level with each o
   }
 });
 
-test("a game that may never happen says If needed in a status's dim ink, a weight lighter than Final", async ({
+test("a game that may never happen says If necessary in a status's dim ink, a weight lighter than Final", async ({
   page,
 }) => {
   await openApp(page);
   await page.getByRole("tab", { name: "Games" }).click();
   const ifNeeded = page.locator("#seasonGames .if-needed").first();
-  await expect(ifNeeded).toHaveText("If needed");
+  await expect(ifNeeded).toHaveText("If necessary");
   const final = page.locator("#seasonGames .game-status", { hasText: "Final" }).first();
   const readStyle = (/** @type {import("@playwright/test").Locator} */ locator) =>
     locator.evaluate((element) => {
@@ -251,7 +251,7 @@ test("No games today is 15.5px, centered beside today's date, its capitals a tou
   expect(Math.abs(textMiddle - columnMiddle)).toBeLessThanOrEqual(1);
 });
 
-test("a game's series label is on the type scale's small step, and it and If needed read lighter than Final", async ({
+test("a game's series label is on the type scale's small step, and it and If necessary read lighter than Final", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -261,7 +261,7 @@ test("a game's series label is on the type scale's small step, and it and If nee
     return season;
   });
   const ifNeeded = page.locator('[data-game="1042600132"] .game-status');
-  await expect(ifNeeded).toHaveText("If needed");
+  await expect(ifNeeded).toHaveText("If necessary");
   await expect(ifNeeded.locator(".if-needed")).toHaveCSS("font-weight", "500");
   const final = page.locator("#seasonGames .game-status", { hasText: "Final" }).first();
   await expect(final).toHaveCSS("font-weight", "600");

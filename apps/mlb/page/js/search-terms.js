@@ -1,10 +1,11 @@
 // MLB's words for a search of its season's games: its clubs by name, city, code, and the nicknames
 // fans use, the places and ballparks its games are played in, its leagues and divisions, each
-// league's own postseason rounds, its starting pitchers, the channels its games are on, extra
-// innings, and how to read one of its games. Runs in the page and in Node, so it uses no DOM.
+// league's own playoff rounds, its starting pitchers, the channels its games are on, and how to
+// read one of its games. Runs in the page and in Node, so it uses no DOM.
 
 import { readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
+import { LEAGUE_WORDS } from "./league-words.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/game-search.js").SearchTerms} SearchTerms */
@@ -200,7 +201,7 @@ const EXAMPLES = [
   "Games this weekend",
   "World Series",
   "Mets last game",
-  "Postseason",
+  "Playoffs",
 ];
 
 /** @param {string} code */
@@ -269,11 +270,6 @@ const listBallparks = (games) => [
   ...games.flatMap((game) => (game.ballpark ? [game.ballpark] : [])),
 ];
 
-const EXTRA_INNINGS = {
-  name: "Extra innings",
-  words: ["extra innings", "extra inning", "extras", "extra frames", "free baseball"],
-  games: "extra-inning games",
-};
 const REGULATION_INNINGS = 9;
 
 /**
@@ -292,13 +288,11 @@ export function createSearchTerms({ games, divisions = {} }) {
     })),
     places: [...PLACES, ...listVenuePlaces(listBallparks(games), PLACES, BALLPARK_WORD)],
     groups: listGroups(divisions),
-    crossConference: { name: "Interleague", words: ["interleague", "inter league"] },
     rounds: listRounds(),
     starters: listStarters(games),
-    kindNames: { cup: "Cup", allStar: "All-Star Game" },
     examples: EXAMPLES,
     channels: listSearchChannels(games),
-    pastRegulation: EXTRA_INNINGS,
+    words: LEAGUE_WORDS,
   };
 }
 

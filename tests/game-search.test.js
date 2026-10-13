@@ -64,7 +64,15 @@ const TERMS = {
     { round: 1, name: "First Round", words: ["first round"] },
     { round: 3, name: "Finals", words: ["finals"] },
   ],
-  kindNames: { cup: "The Cup", allStar: "All-Star Game" },
+  words: {
+    seasonOpener: "season opener",
+    allStar: "All-Star Game",
+    cup: "The Cup",
+    hasDoubleheaders: false,
+    pastRegulation: { name: "Overtime", words: ["overtime", "ot"], games: "overtime games" },
+    crossConference: null,
+    neverShown: ["postseason", "post season"],
+  },
   examples: ["Hawks next game", "Foxes at Owls", "Hornets last game", "Hawks in March"],
 };
 
@@ -140,7 +148,6 @@ const GAMES = [
 ].sort((first, second) => first.startMs - second.startMs);
 
 TERMS.channels = listSearchChannels(GAMES);
-TERMS.pastRegulation = { name: "Overtime", words: ["overtime", "ot"], games: "overtime games" };
 
 const DICTIONARY = createSearchDictionary(TERMS);
 

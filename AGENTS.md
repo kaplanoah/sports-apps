@@ -559,6 +559,8 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
    as the WNBA's orange West and white East do, its visitors orange and its home team white in a year of captains' teams,
    and MLB's American and National League colors do, through `renderAllStarMark` in `shared/page/all-star.js`,
    and `styles.css` sets the star's tokens that `game-row.css` lists from the league's own dot.
+   `page/js/league-words.js` names what the league's fans call things and the words its pages never show,
+   as "Writing" below says, and its search terms hand it to the shared search as `words`.
 6. **Tests.** Record a real afternoon of the league's feeds as a fixture in `tests/fixtures/`,
    and test the snapshot, the Worker, the season updater, and the page's views against it.
    Browser tests in `tests/browser/` run the page against the real store, as the WNBA's harness does.
@@ -827,3 +829,12 @@ like a release note or a message that says what to do, ends with one.
 An outlet's own words keep their punctuation, in an element marked `data-quoted`.
 The root's `tests/browser/stray-periods.mjs` lists any shown text that breaks this,
 and each app's browser tests check every view with it, wherever they check the type scale.
+
+On the pages, write how fans talk, not a league's official or press words:
+the playoffs in every app, never the postseason or a berth,
+and a league's own word only where its fans say it too, like the World Series, Opening Day, and extra innings.
+Each app's `page/js/league-words.js` holds what its fans call the things that differ by league,
+which shared code reads instead of typing its own (`shared/page/league-words.js`),
+and the words its pages never show, like another sport's.
+The root's `tests/browser/never-shown-words.mjs` lists any shown text that holds one,
+and each app's `page.spec.mjs` checks every view with it, wherever it checks the type scale.

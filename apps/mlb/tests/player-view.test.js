@@ -131,9 +131,9 @@ test("a player's totals sit in a club's Season box, five to a row", () => {
   assert.match(markup, /<div class="team-stats" style="--team-stat-columns: 5">/);
 });
 
-test("his postseason shows over his season, as one line", () => {
+test("his playoffs show over his season, as one line", () => {
   const text = renderText(describeRostered(114, "CLE", "Steven Kwan"));
-  assert.match(text, /^Postseason 3 games 2-13 • \.154 AVG • 2 R • 1 RBI • 1 BB • 1 K Season/);
+  assert.match(text, /^Playoffs 3 games 2-13 • \.154 AVG • 2 R • 1 RBI • 1 BB • 1 K Season/);
 });
 
 test("a hitter MLB doesn't rank shows where he would rank in each rate, but not in a count, once he has a quarter of the plate appearances he needs, and his plate appearances against them", () => {

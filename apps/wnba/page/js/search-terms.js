@@ -1,11 +1,11 @@
 // The WNBA's words for a search of its season's games: its teams by name, city, code, and the
 // nicknames fans use, the places its games are played, its playoff rounds, the channels its games
-// are on, overtime, and how to read one of its games. Runs in the page and in Node, so it uses no
-// DOM.
+// are on, and how to read one of its games. Runs in the page and in Node, so it uses no DOM.
 
 import { formatCalendarDate, readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
 import { readGameDay } from "./days.js";
+import { LEAGUE_WORDS } from "./league-words.js";
 import { ROUNDS } from "./snapshot.js";
 import { TEAMS } from "./teams.js";
 
@@ -80,12 +80,6 @@ const ROUND_WORDS = {
   3: ["finals", "wnba finals", "the finals", "championship", "final round"],
 };
 
-const OVERTIME = {
-  name: "Overtime",
-  words: ["overtime", "overtimes", "ot", "extra time", "extra period"],
-  games: "overtime games",
-};
-
 // Searches to tap before anything is typed, each offered only when it finds a game.
 const EXAMPLES = [
   "Dream at Valkyries",
@@ -132,10 +126,9 @@ export function createSearchTerms({ games, standings = [] }) {
       name,
       words: ROUND_WORDS[round],
     })),
-    kindNames: { cup: "Commissioner's Cup", allStar: "All-Star Game" },
     examples: EXAMPLES,
     channels: listSearchChannels(games),
-    pastRegulation: OVERTIME,
+    words: LEAGUE_WORDS,
   };
 }
 
