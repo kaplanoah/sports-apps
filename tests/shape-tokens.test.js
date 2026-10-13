@@ -31,6 +31,10 @@ test("every corner the shared stylesheets draw comes from an app's shape tokens"
   for (const path of listSharedStylesheets()) assert.deepEqual(listStrayCorners(path), [], path);
 });
 
+test("every corner each app's own styles draw comes from its shape tokens", () => {
+  for (const path of listAppStylesheets()) assert.deepEqual(listStrayCorners(path), [], path);
+});
+
 test("every app's styles set each shape and pill color the shared stylesheets ask for", () => {
   for (const path of listAppStylesheets()) {
     const tokens = listRootTokens(path);

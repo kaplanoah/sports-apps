@@ -410,6 +410,12 @@ test("after in, the places with the most of a team's games, then the season's mo
   ]);
 });
 
+test("a date typed whole isn't finished again from its last word", () => {
+  assert.deepEqual(suggest("this weekend"), []);
+  assert.deepEqual(suggest("Hawks this week"), ["Hawks this weekend date Oct 2\u20134"]);
+  assert.deepEqual(suggest("weekend"), ["Weekends date"]);
+});
+
 test("the examples offered before typing are those that find a game", () => {
   assert.deepEqual(listExamples(createContext()), ["Hawks next game", "Foxes at Owls"]);
 });

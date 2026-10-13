@@ -22,6 +22,12 @@ const NEAR_DAYS = [-1, 0, 1];
 const readStartOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
 /**
+ * A "YYYY-MM-DD" date's year, month from 1, and day.
+ * @param {string} date
+ */
+const readDateParts = (date) => date.split("-").map(Number);
+
+/**
  * The league's day of an instant, as "YYYY-MM-DD", with its hour and year on the Eastern clock.
  * @param {number} ms
  */
@@ -42,7 +48,7 @@ export function readEasternDay(ms) {
  * @param {number} days
  */
 export function addDays(date, days) {
-  const [year, month, day] = date.split("-").map(Number);
+  const [year, month, day] = readDateParts(date);
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
 
@@ -51,8 +57,71 @@ export function addDays(date, days) {
  * @param {string} date
  */
 export function readCalendarDate(date) {
-  const [year, month, day] = date.split("-").map(Number);
+  const [year, month, day] = readDateParts(date);
   return new Date(year, month - 1, day);
+}
+
+/**
+ * The day of the month of a "YYYY-MM-DD" date.
+ * @param {string} date
+ */
+export const readDayOfMonth = (date) => readDateParts(date)[2];
+
+/**
+ * The weekday of a "YYYY-MM-DD" date, 0 for Sunday.
+ * @param {string} date
+ */
+export function readWeekday(date) {
+  const [year, month, day] = readDateParts(date);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+/**
+ * Whether two "YYYY-MM-DD" dates fall in the same month of the same year.
+ * @param {string} first
+ * @param {string} second
+ */
+export const isSameMonth = (first, second) => first.slice(0, 7) === second.slice(0, 7);
+
+/**
+ * How many days a month has.
+ * @param {number} month 1 to 12
+ * @param {number} year
+ */
+export const countDaysInMonth = (month, year) => new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+/**
+ * The month some whole months after a "YYYY-MM-DD" date's, or before it when `months` is negative.
+ * @param {string} date
+ * @param {number} months
+ */
+export function shiftMonth(date, months) {
+  const [year, month] = readDateParts(date);
+  const shifted = new Date(Date.UTC(year, month - 1 + months, 1));
+  return { month: shifted.getUTCMonth() + 1, year: shifted.getUTCFullYear() };
+}
+
+/**
+ * The year of a moment on the viewer's calendar.
+ * @param {Date} moment
+ */
+export const readCalendarYear = (moment) => moment.getFullYear();
+
+/**
+ * A moment's minutes after midnight on the viewer's clock, or on another zone's.
+ * @param {Date} moment
+ * @param {string} [timeZone]
+ */
+export function readMinutesIntoDay(moment, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
+    ...(timeZone && { timeZone }),
+  }).formatToParts(moment);
+  const read = (/** @type {string} */ type) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return read("hour") * 60 + read("minute");
 }
 
 /**
@@ -115,6 +184,30 @@ export const formatClockTimeWithoutMeridiem = (date) =>
     .map(({ value }) => value)
     .join("")
     .trim();
+
+/**
+ * A time of day given in minutes after midnight, as "9 PM", or "9:30 PM" off the hour.
+ * @param {number} minutes
+ */
+export function formatMinutesIntoDay(minutes) {
+  const date = new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60);
+  const options = minutes % 60 ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric" };
+  return date.toLocaleTimeString([], /** @type {Intl.DateTimeFormatOptions} */ (options));
+}
+
+/**
+ * A moment's date and clock time, naming its year only when it isn't the year of `now`.
+ * @param {Date} moment
+ * @param {Date} now
+ */
+export const formatDateAndTime = (moment, now) =>
+  moment.toLocaleString([], {
+    year: moment.getFullYear() === now.getFullYear() ? undefined : "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
 /** @param {Date} date */
 export const formatShortDate = (date) =>

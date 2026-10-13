@@ -7,6 +7,7 @@ import {
   formatWeekdayAndDate,
   nameDay,
   readCalendarDate,
+  readDayOfMonth,
 } from "./days.js";
 import { html, joinWithSeparator } from "./html.js";
 
@@ -47,9 +48,9 @@ function renderCalendarLabel(day, today) {
   const date = readCalendarDate(day);
   const todayDate = readCalendarDate(today);
   const month = formatShortMonth(date);
-  return html`<h3 class="day-label" aria-label="${nameListDay(date, todayDate)}, ${month} ${date.getDate()}">
+  return html`<h3 class="day-label" aria-label="${nameListDay(date, todayDate)}, ${month} ${readDayOfMonth(day)}">
     <span class="day-month">${month}</span
-    ><span class="day-number tabular">${date.getDate()}</span
+    ><span class="day-number tabular">${readDayOfMonth(day)}</span
     ><span class="day-name">${abbreviateDay(date, todayDate)}</span>
   </h3>`;
 }

@@ -3,7 +3,7 @@
 // are on, overtime, and how to read one of its games. Runs in the page and in Node, so it uses no
 // DOM.
 
-import { formatCalendarDate } from "#shared/days.js";
+import { formatCalendarDate, readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
 import { readGameDay } from "./days.js";
 import { ROUNDS } from "./snapshot.js";
@@ -161,7 +161,7 @@ function readWinner(game) {
 function readStartMinutes(game) {
   const start = new Date(game.start ?? "");
   if (!game.isTimeSet || Number.isNaN(start.getTime())) return null;
-  return start.getHours() * 60 + start.getMinutes();
+  return readMinutesIntoDay(start);
 }
 
 /**
