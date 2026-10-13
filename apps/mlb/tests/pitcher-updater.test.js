@@ -138,7 +138,7 @@ function createRun({ answers = listAnswers(), job = createPitcherJob() } = {}) {
   const mlb = createMlbFetch(answers, unanswered);
   const clock = { now: NOW };
   const runJob = () =>
-    job.run({
+    job.updateStore({
       docs,
       storage,
       loadSnapshot: async () => null,

@@ -163,7 +163,7 @@ function createRun({ series = [], answers = listAnswers(), job = createPlayerJob
   const league = createLeagueFetch(answers);
   const clock = { now: NOW };
   const runJob = () =>
-    job.run({
+    job.updateStore({
       docs,
       storage,
       loadSnapshot: async () => null,
@@ -440,7 +440,7 @@ test("a past season filled before the store kept its list of players gets one fr
   await storage.put("allFilled", `2026 ${await storage.get("filled:2025")}`);
   const pastReads = league.requests.filter((url) => /Season=2025/.test(url)).length;
 
-  await createPlayerJob().run({
+  await createPlayerJob().updateStore({
     docs,
     storage,
     loadSnapshot: async () => null,

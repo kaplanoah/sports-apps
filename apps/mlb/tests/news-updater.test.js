@@ -65,7 +65,7 @@ async function runOnce() {
   const calls = [];
   const readFeed = createFetch(calls);
   let requests = 0;
-  await createMlbNewsJob().run({
+  await createMlbNewsJob().updateStore({
     docs,
     storage: createJobStorage(),
     loadSnapshot: async () => ({}),

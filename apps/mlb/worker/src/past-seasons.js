@@ -18,7 +18,7 @@ const isWholeSnapshot = (snapshot) => !snapshot.missing.length && !!snapshot.sch
 export function createPastSeasonsJob() {
   return {
     chooseDelay: () => DAY_MS,
-    async run({ docs, loadSnapshot }) {
+    async updateStore({ docs, loadSnapshot }) {
       const current = await docs.read("live/current");
       if (!current) return;
       const past = (await docs.list("seasons"))

@@ -15,7 +15,8 @@
   a name for an earlier version, or a rule that overrides another where one rule would do.
   Before each push, read the whole diff against `main` for it, and the review flags any of it.
 - Start function names with a verb naming the action (boolean predicates excepted).
-  No generic names like `call`, `run`, `execute`, or `handle`.
+  No generic names like `call`, `run`, `execute`, or `handle`,
+  which lint rejects for a function.
 - Make every function do one thing well.
   Make orchestration a sequence of named steps.
   Extract and name any non-trivial logic inside blocks or chained conditions.
@@ -276,7 +277,8 @@
   which copy the browser's own buttons so people find them (`shared/page/home-screen.js`),
   MLB's seed lock (`games-view.js`), and the catching-up ring,
   Phosphor's circle-notch at its Light weight with a 55-degree gap, set in a line of text (`shared/page/catch-up-note.js`).
-  The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four.
+  The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four,
+  and on a Phosphor icon the last comment before it doesn't name with its weight.
   An All-Star team's star isn't an icon but stands in for its dot,
   so it's drawn for its place too, filled with soft tips and set in as the app's dot is (`shared/page/all-star.js`).
 - Make every tap land on a button or a link.
