@@ -196,7 +196,7 @@ function createStoreFetch(league) {
  * Every game of the season, from the whole season's schedule of the next day with the afternoon's
  * scoreboard, as the store keeps it.
  */
-function readWholeSeasonSchedule() {
+export function readWholeSeasonSchedule() {
   const snapshot = buildSnapshot(
     { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
     { season: 2026, now: Date.parse(NOW) },
