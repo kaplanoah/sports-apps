@@ -22,6 +22,7 @@ import {
   startGameSearchOver,
 } from "#shared/game-search-view.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
+import { keepLastRead } from "#shared/kept-read.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
 import { watchPresses } from "#shared/press.js";
@@ -247,24 +248,27 @@ function openSearchPlace(key) {
   else openSettings(findSettingRow(key));
 }
 
-// The season a search reads, its words read again only for another season or schedule.
-/** @type {{ season: any, schedule: any, terms: import("#shared/game-search.js").SearchTerms } | null} */
-let searchTerms = null;
+// A search reads the season on each key press, so its games and words are worked out again only
+// once the season, its schedule, or the games known to have gone to overtime change.
+const readSearchSeasonFrom = keepLastRead(
+  /**
+   * @param {any} season
+   * @param {any} schedule
+   * @param {any} overtimes
+   */
+  (season, schedule, overtimes) => {
+    const listed = listListedGames(season, schedule);
+    return {
+      listed,
+      terms: createSearchTerms({ games: listed, standings: season.standings }),
+      games: listed.map((game) => readSearchGame(game, overtimes)).filter(Boolean),
+    };
+  },
+);
 
 function readSearchSeason() {
-  const { season, schedule } = session;
-  if (!season) return null;
-  const games = listListedGames(season, schedule);
-  if (searchTerms?.season !== season || searchTerms?.schedule !== schedule)
-    searchTerms = {
-      season,
-      schedule,
-      terms: createSearchTerms({ games, standings: season.standings }),
-    };
-  return {
-    terms: searchTerms.terms,
-    games: games.map((game) => readSearchGame(game, session.overtimes)).filter(Boolean),
-  };
+  const { season, schedule, overtimes } = session;
+  return season ? readSearchSeasonFrom(season, schedule, overtimes) : null;
 }
 
 /**
@@ -275,7 +279,7 @@ function readSearchSeason() {
 const listSearchDays = (found, now) =>
   listFoundGameDays(
     found.map((game) => game.game),
-    listListedGames(session.season, session.schedule),
+    readSearchSeason()?.listed ?? [],
     now,
   );
 
