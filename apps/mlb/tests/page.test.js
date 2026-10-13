@@ -983,7 +983,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
   assert.deepEqual(describeGameList(slate), [
     "Today • Fri, Sep 25",
     "Orioles 4 - 2 Final Yankees",
-    "Orioles After 1st game Yankees Still TBD Still TBD",
+    "Orioles After 1st game Yankees TBD TBD",
     "Blue Jays Postponed Orioles",
     "Guardians 1 - 0 Bot 7th Red Sox",
   ]);
@@ -1197,7 +1197,7 @@ test("games list: a starter MLB can't name yet leaves his line out, rather than 
   );
 });
 
-test("games list: a club yet to name today's starter says Still TBD, and every game opens", () => {
+test("games list: a club yet to name today's starter says TBD, and every game opens", () => {
   const game = { away: "PHI", home: "ATL", state: "pre", start: "2026-10-02T00:08:00Z" };
   const slate = {
     today: { date: "2026-10-01", games: [game] },
@@ -1205,14 +1205,14 @@ test("games list: a club yet to name today's starter says Still TBD, and every g
   };
   assert.deepEqual(describeGameList(slate), [
     "Today • Thu, Oct 1",
-    "Phillies 8:08 PM Braves Still TBD Still TBD",
+    "Phillies 8:08 PM Braves TBD TBD",
   ]);
   assert.match(
     String(renderGameDay(slate)),
     /class="game-open" aria-label="Game details: Phillies at Braves, Thu, Oct 1"/,
   );
   const later = String(renderGameDay(slate, "2026-10-02"));
-  assert.doesNotMatch(later, /Still TBD/);
+  assert.doesNotMatch(later, /TBD/);
   assert.match(
     later,
     /class="game-open" aria-label="Game details: Phillies at Braves, Fri, Oct 2"/,
@@ -1272,7 +1272,7 @@ test("games list: a delay shows under the start time or the score", () => {
   };
   assert.deepEqual(describeGameList(slate), [
     "Today • Sun, Sep 27",
-    "Orioles 1:05 PM Delayed: Rain Yankees Still TBD Still TBD",
+    "Orioles 1:05 PM Delayed: Rain Yankees TBD TBD",
     "Rays 0 - 4 Delayed Phillies",
   ]);
   assert.match(String(renderGameDay(slate)), /class="game-row pre delayed"/);
@@ -1859,7 +1859,7 @@ test("games list: away from today, each club shows its record as of the game, an
     ]);
     assert.deepEqual(describeGameList(SEASON_SLATE, "2026-09-24", schedule), [
       "Today • Thu, Sep 24",
-      "Orioles 7:05 PM Yankees 4 seed 93-68 y Still TBD Still TBD",
+      "Orioles 7:05 PM Yankees 4 seed 93-68 y TBD TBD",
     ]);
   }));
 
