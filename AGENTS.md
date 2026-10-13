@@ -61,7 +61,9 @@
   To unroute one of two routes with the same pattern, name its handler too.
 - Before a test changes what the page reads next, wait until the page shows its last read, or the change races the read still on its way.
 - A theme changes only colors, so each view lays out the same in each of an app's themes.
-  A theme may also change a weight where its font keeps its width at every weight, as MLB's Ball sets each play that scored in a game's Runs a step heavier in Chivo Mono, to stand out from the lighter runners who got on before it as much as it does in Night Game.
+  A theme may also change a weight where its font keeps its width at every weight,
+  as MLB's Ball sets each play that scored in a game's Runs a step heavier in Chivo Mono,
+  to stand out from the lighter runners who got on before it as much as it does in Night Game.
   The WNBA's `tests/browser/themes.spec.mjs` checks every view in Walnut against Maple,
   on a phone and a wide screen, with the root's `tests/browser/theme-layout.mjs`; a new view joins its list.
 - Sheets look alike.
