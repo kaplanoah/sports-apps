@@ -57,7 +57,9 @@ function followPlayerIndex(year, showChange) {
     (/** @type {any} */ snapshot) => {
       if (year !== playerIndexYear) return;
       const index = snapshot.exists ? snapshot.data() : null;
-      session.playerIndex = Array.isArray(index?.players) ? index : null;
+      const shown = Array.isArray(index?.players) ? index : null;
+      if (!shown && !session.playerIndex) return;
+      session.playerIndex = shown;
       showChange();
     },
     () => {},

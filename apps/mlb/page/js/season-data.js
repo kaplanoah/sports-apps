@@ -75,7 +75,9 @@ function followPlayerIndex(year, showChange) {
     (/** @type {any} */ snapshot) => {
       if (year !== playerIndexYear) return;
       const index = snapshot.exists ? snapshot.data() : null;
-      session.playerIndex = Array.isArray(index?.players) ? index : null;
+      const shown = Array.isArray(index?.players) ? index : null;
+      if (!shown && !session.playerIndex) return;
+      session.playerIndex = shown;
       if (!session.isReordering) showChange();
     },
     () => {},
@@ -151,7 +153,7 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
       if (year !== session.season?.year) session.schedule = null;
       keepSeason(year, record);
       followSchedule(year, showChange);
-      followPlayerIndex(session.currentSeason, showChange);
+      followPlayerIndex(reader?.readCurrentYear() ?? year, showChange);
     },
     showChange: () => {
       if (!session.isReordering) showChange();
