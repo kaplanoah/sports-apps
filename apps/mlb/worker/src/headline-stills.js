@@ -10,13 +10,17 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 
 export const STILL_MODEL = "claude-haiku-5-5";
 const MAX_ANSWER_TOKENS = 1024;
-// One small picture and a one-word answer; a call this long has stalled.
+// One small picture and a one-field answer; a call this long has stalled.
 const CLAUDE_TIMEOUT_MS = 30e3;
-const PROMPT = `You judge baseball highlight thumbnails. Has a headline or title graphic been added on top of the picture by an editor, such as big words like "WAVE IT GOODBYE!" or "HOW DID HE DO THAT!?", a player's name in large type, a stat card, or a designed title card?
+const PROMPT = `You judge baseball highlight thumbnails. Has a headline or title graphic been added on top of the picture by an editor, such as big words like "WAVE IT GOODBYE!" or "HOW DID HE DO THAT!?", a player's name in large type, a stat card, or a designed title card? Answer with headline set to true or false.
 
-Answer "no" when the only words are part of the scene itself: ballpark signs and ads, uniforms, scoreboards in the stadium, or a small TV score box in a corner.
-
-Answer with one word: yes or no.`;
+Set headline to false when the only words are part of the scene itself: ballpark signs and ads, uniforms, scoreboards in the stadium, or a small TV score box in a corner.`;
+export const STILL_SCHEMA = {
+  type: "object",
+  properties: { headline: { type: "boolean" } },
+  required: ["headline"],
+  additionalProperties: false,
+};
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
 
@@ -31,10 +35,11 @@ const nameChecksKey = (id) => `headline-stills:${id}`;
  * @param {string} options.still the still's address
  */
 export async function hasHeadline({ apiKey, fetchImpl, still }) {
-  const { text } = await requestClaude({
+  const { answer } = await requestClaude({
     apiKey,
     fetchImpl,
     timeoutMs: CLAUDE_TIMEOUT_MS,
+    schema: STILL_SCHEMA,
     request: {
       model: STILL_MODEL,
       max_tokens: MAX_ANSWER_TOKENS,
@@ -45,9 +50,7 @@ export async function hasHeadline({ apiKey, fetchImpl, still }) {
       ],
     },
   });
-  const answer = /^\W*(yes|no)\b/i.exec(text)?.[1]?.toLowerCase();
-  if (!answer) throw new Error(`Claude answered neither yes nor no: ${text.slice(0, 80)}`);
-  return answer === "yes";
+  return answer.headline;
 }
 
 /**

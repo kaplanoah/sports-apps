@@ -36,6 +36,7 @@ const MENU_ICON = html`<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden=
   <circle cx="12" cy="12" r="2" />
   <circle cx="12" cy="19" r="2" />
 </svg>`;
+// Phosphor's x, at its Light weight, like the page's other close buttons.
 const CLOSE_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
   <path
     d="M204.24,195.76a6,6,0,1,1-8.48,8.48L128,136.49,60.24,204.24a6,6,0,0,1-8.48-8.48L119.51,128,51.76,60.24a6,6,0,0,1,8.48-8.48L128,119.51l67.76-67.75a6,6,0,0,1,8.48,8.48L136.49,128Z"

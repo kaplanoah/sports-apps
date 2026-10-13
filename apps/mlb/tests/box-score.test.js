@@ -126,11 +126,39 @@ test("a game being played has no runs yet for the half inning still to come", ()
   assert.deepEqual(boxScore.innings.at(-1), { away: 2, home: null });
 });
 
-test("a game being played has each run-scoring play so far, and who's on base, how each got there, and who's up", () => {
+/**
+ * One play of a half inning, a batter who got on unless it says otherwise.
+ * @param {string} batter
+ * @param {string} event
+ * @param {Record<string, any>} [play]
+ */
+const createPlay = (batter, event, play) => ({
+  batter,
+  event,
+  reached: true,
+  filledBases: false,
+  scorers: [],
+  score: null,
+  ...play,
+});
+
+test("a game being played has each half inning that scored so far, with who got on and who scored, and who's on base, how each got there, and who's up", () => {
   const boxScore = describeBoxScore(DODGERS_AT_BREWERS, readPlaysFeed(DODGERS_AT_BREWERS));
 
-  assert.deepEqual(boxScore.scoring, [
-    { side: "away", inning: 2, event: "Single", player: "Pages", rbi: 1, runs: 1 },
+  assert.deepEqual(boxScore.scoringHalves, [
+    {
+      side: "away",
+      inning: 2,
+      plays: [
+        createPlay("Ohtani", "Walk"),
+        createPlay("Hern\u00e1ndez", "Single"),
+        createPlay("Pages", "Single", {
+          scorers: [{ name: "Ohtani", event: "Single" }],
+          score: { away: 1, home: 0 },
+        }),
+        createPlay("Tucker", "Walk", { filledBases: true }),
+      ],
+    },
   ]);
   assert.deepEqual(boxScore.bases, {
     half: "top",
@@ -142,38 +170,50 @@ test("a game being played has each run-scoring play so far, and who's on base, h
   });
 });
 
-test("a final has every run-scoring play in the order they came, each with its batter's runs batted in, and no one on base", () => {
+test("a final has every half inning that scored in the order they came, a homer's batter not among those he drove in, and no one on base", () => {
   const boxScore = describeBoxScore(
     GUARDIANS_AT_WHITE_SOX_FINAL,
     readPlaysFeed(GUARDIANS_AT_WHITE_SOX_FINAL),
   );
+  const [bottomOfThird, topOfFifth] = boxScore.scoringHalves;
 
-  const play = (side, inning, event, player, rbi, runs = rbi) => ({
-    side,
-    inning,
-    event,
-    player,
-    rbi,
-    runs,
-  });
-  assert.deepEqual(boxScore.scoring, [
-    play("home", 3, "Walk", "Murakami", 1),
-    play("home", 3, "Sac Fly", "Antonacci", 1),
-    play("away", 5, "Home Run", "Bailey", 1),
-    play("away", 5, "Home Run", "Ram\u00edrez", 2),
-    play("home", 5, "Hit By Pitch", "Antonacci", 1),
-    play("home", 5, "Sac Fly", "Doyle", 1),
-    play("away", 6, "Double", "Bazzana", 1),
-    play("away", 6, "Single", "Bailey", 1),
-    play("away", 6, "Single", "Ram\u00edrez", 1),
-    play("away", 6, "Single", "DeLauter", 1),
-    play("away", 6, "Single", "Adell", 2),
-    play("home", 9, "Home Run", "Vargas", 1),
+  assert.deepEqual(
+    boxScore.scoringHalves.map((/** @type {any} */ half) => [half.side, half.inning]),
+    [
+      ["home", 3],
+      ["away", 5],
+      ["home", 5],
+      ["away", 6],
+      ["home", 9],
+    ],
+  );
+  assert.deepEqual(bottomOfThird.plays, [
+    createPlay("Montgomery", "Single"),
+    createPlay("Meidroth", "Double"),
+    createPlay("Vargas", "Walk", { filledBases: true }),
+    createPlay("Murakami", "Walk", {
+      scorers: [{ name: "Montgomery", event: "Walk" }],
+      score: { away: 0, home: 1 },
+    }),
+    createPlay("Antonacci", "Sac Fly", {
+      reached: false,
+      scorers: [{ name: "Meidroth", event: "Sac Fly" }],
+      score: { away: 0, home: 2 },
+    }),
+  ]);
+  assert.deepEqual(topOfFifth.plays, [
+    createPlay("Bailey", "Home Run", { reached: false, score: { away: 1, home: 2 } }),
+    createPlay("Kwan", "Single"),
+    createPlay("Ram\u00edrez", "Home Run", {
+      reached: false,
+      scorers: [{ name: "Kwan", event: "Home Run" }],
+      score: { away: 3, home: 2 },
+    }),
   ]);
   assert.equal(boxScore.bases, null);
 });
 
-test("a run scored on something during a play other than its result, like a wild pitch, is the runner's, with no runs batted in", () => {
+test("a run scored on something during a play other than its result, like a wild pitch, says so", () => {
   const feed = readPlaysFeed(GUARDIANS_AT_WHITE_SOX_FINAL);
   const walk = feed.liveData.plays.allPlays.find(
     (/** @type {any} */ play) => play.about.isScoringPlay && play.result.event === "Walk",
@@ -181,16 +221,34 @@ test("a run scored on something during a play other than its result, like a wild
   const scorer = walk.runners.find((/** @type {any} */ runner) => runner.movement.end === "score");
   scorer.details.event = "Wild Pitch";
 
-  const [first] = describeBoxScore(GUARDIANS_AT_WHITE_SOX_FINAL, feed).scoring;
+  const [bottomOfThird] = describeBoxScore(GUARDIANS_AT_WHITE_SOX_FINAL, feed).scoringHalves;
 
-  assert.deepEqual(first, {
-    side: "home",
-    inning: 3,
-    event: "Wild Pitch",
-    player: "Montgomery",
-    rbi: 0,
-    runs: 1,
-  });
+  assert.deepEqual(bottomOfThird.plays[3].scorers, [{ name: "Montgomery", event: "Wild Pitch" }]);
+});
+
+test("a pinch runner leaves no one behind on the base he took over, so the bases load only when they fill", () => {
+  const feed = readPlaysFeed(GUARDIANS_AT_WHITE_SOX_FINAL);
+  const montgomery = 695657;
+  const pinchRunner = 999999;
+  const [single, ...rest] = feed.liveData.plays.allPlays.filter(
+    (/** @type {any} */ play) => play.about.inning === 3 && play.about.halfInning === "bottom",
+  );
+  assert.equal(single.matchup.batter.id, montgomery);
+  for (const runner of rest.flatMap((/** @type {any} */ play) => play.runners))
+    if (runner.details.runner.id === montgomery) runner.details.runner.id = pinchRunner;
+
+  const [bottomOfThird] = describeBoxScore(GUARDIANS_AT_WHITE_SOX_FINAL, feed).scoringHalves;
+
+  assert.deepEqual(
+    bottomOfThird.plays.map((/** @type {any} */ play) => [play.batter, play.filledBases]),
+    [
+      ["Montgomery", false],
+      ["Meidroth", false],
+      ["Vargas", true],
+      ["Murakami", false],
+      ["Antonacci", false],
+    ],
+  );
 });
 
 test("a runner whose way on the half inning's plays don't say, like a pinch runner, is on his base without it", () => {
@@ -211,7 +269,7 @@ test("between halves of an inning no one is on base", () => {
 });
 
 test("a feed without plays says nothing of how the runs scored", () => {
-  assert.equal(describeGame(GUARDIANS_AT_WHITE_SOX).scoring, null);
+  assert.equal(describeGame(GUARDIANS_AT_WHITE_SOX).scoringHalves, null);
 });
 
 test("before first pitch, a club's posted lineup has each batter's season so far, and there are no innings or pitchers", () => {

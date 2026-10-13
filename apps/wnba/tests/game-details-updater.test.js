@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createBoxScoreServer, nameBoxScoreRequest } from "../worker/src/box-score.js";
 import { createGameDetailsJob } from "../worker/src/game-details-updater.js";
 import { createLeadServer, nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
@@ -62,40 +63,6 @@ function createLeagueFetch(answer) {
   return { requests, fetchImpl };
 }
 
-function createJobStorage() {
-  const stored = new Map();
-  return {
-    get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
-    put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-      stored.set(key, structuredClone(value));
-    },
-    delete: async (/** @type {string} */ key) => stored.delete(key),
-    list: async (/** @type {string} */ prefix) =>
-      new Map([...stored].filter(([key]) => key.startsWith(prefix))),
-  };
-}
-
-/** @param {Record<string, any>} initial */
-function createDocs(initial) {
-  const stored = new Map(Object.entries(initial));
-  /** @type {string[]} */
-  const writes = [];
-  return {
-    stored,
-    writes,
-    read: async (/** @type {string} */ key) => structuredClone(stored.get(key)) ?? null,
-    list: async (/** @type {string} */ collection) =>
-      [...stored]
-        .filter(([key]) => key.startsWith(`${collection}/`))
-        .map(([, doc]) => structuredClone(doc)),
-    write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-      writes.push(key);
-      stored.set(key, structuredClone(doc));
-    },
-    remove: async (/** @type {string} */ key) => stored.delete(key),
-  };
-}
-
 /**
  * A store whose current season is 2026, keeping `seasons`, with each season's playoff games and any
  * nearest games, and the job that keeps its finals' details, run as the store runs it.
@@ -120,7 +87,7 @@ function createRun({
   const clock = { now: NOW };
   const job = createGameDetailsJob();
   const runJob = () =>
-    job.run({
+    job.updateStore({
       docs,
       storage,
       loadSnapshot: async () => null,

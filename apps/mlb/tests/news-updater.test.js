@@ -4,36 +4,10 @@ import { NEWS_FEEDS } from "../worker/src/news-feeds.js";
 import { LABEL_PROMPT } from "../worker/src/news-prompts.js";
 import { createMlbNewsJob, readMlbRuleDrop } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 const NOW = Date.parse("2026-10-09T20:00:00Z");
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
-
-function createJobStorage() {
-  const stored = new Map();
-  return {
-    stored,
-    get: async (key) => structuredClone(stored.get(key)),
-    put: async (key, value) => {
-      stored.set(key, structuredClone(value));
-    },
-    delete: async (key) => stored.delete(key),
-    list: async (prefix) => new Map([...stored].filter(([key]) => key.startsWith(prefix))),
-  };
-}
-
-function createDocs() {
-  const stored = new Map();
-  return {
-    stored,
-    read: async (key) => structuredClone(stored.get(key)) ?? null,
-    write: async (key, doc) => {
-      stored.set(key, structuredClone(doc));
-    },
-    remove: async (key) => {
-      stored.delete(key);
-    },
-  };
-}
 
 const readStories = (content) => JSON.parse(content.slice(content.lastIndexOf("[")));
 
@@ -54,7 +28,8 @@ function createFetch(calls) {
       reason: "News.",
     }));
     return Response.json({
-      content: [{ type: "text", text: JSON.stringify(answers) }],
+      content: [{ type: "text", text: JSON.stringify({ stories: answers }) }],
+      stop_reason: "end_turn",
       usage: { input_tokens: 100, output_tokens: 50 },
     });
   };
@@ -65,7 +40,7 @@ async function runOnce() {
   const calls = [];
   const readFeed = createFetch(calls);
   let requests = 0;
-  await createMlbNewsJob().run({
+  await createMlbNewsJob().updateStore({
     docs,
     storage: createJobStorage(),
     loadSnapshot: async () => ({}),

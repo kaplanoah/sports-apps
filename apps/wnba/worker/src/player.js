@@ -1,8 +1,7 @@
 import { REQUESTS } from "../../page/js/snapshot.js";
-import { TEAMS } from "../../page/js/teams.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
-import { nameRosterKey } from "./roster.js";
+import { nameRosterKey, readTeam } from "./roster.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
 
 // What a player's sheet shows for a season: her facts from her team's roster that season, her last
@@ -489,12 +488,6 @@ function composePlayer({ id, team, season, numbers, roster, ranks }) {
 function readId(searchParams) {
   const id = searchParams.get("id") ?? "";
   return /^\d{1,12}$/.test(id) ? id : null;
-}
-
-/** @param {URLSearchParams} searchParams */
-function readTeam(searchParams) {
-  const team = searchParams.get("team") ?? "";
-  return Object.hasOwn(TEAMS, team) ? team : null;
 }
 
 /** @typedef {import("./store-docs.js").ReadDoc} ReadDoc */

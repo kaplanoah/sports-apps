@@ -1,3 +1,5 @@
+import { describeError } from "./responses.js";
+
 // What every background job's status document says of its last run, beside what the job adds of
 // its own, so Diagnostics reads each job's the same way: when the run started, how long it took,
 // how many requests it made, and the last run that failed, kept until another fails.
@@ -30,6 +32,32 @@ export function countRequests(fetchImpl) {
     },
   };
   return counter;
+}
+
+/**
+ * Logs what failed, and keeps it for the run's status.
+ * @param {string[]} failures what failed so far this run
+ * @param {string} what what failed, as an error names it
+ * @param {unknown} error
+ */
+export function noteFailure(failures, what, error) {
+  const failure = `${what} failed: ${describeError(error)}`;
+  console.error(failure);
+  failures.push(failure);
+}
+
+/**
+ * Does `work`, noting a failure for the run's status rather than letting it stop the run.
+ * @param {string[]} failures what failed so far this run
+ * @param {string} what what failed, as an error names it
+ * @param {() => Promise<unknown>} work
+ */
+export async function catchFailure(failures, what, work) {
+  try {
+    await work();
+  } catch (error) {
+    noteFailure(failures, what, error);
+  }
 }
 
 /**

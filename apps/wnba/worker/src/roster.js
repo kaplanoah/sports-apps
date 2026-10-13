@@ -166,8 +166,11 @@ export function describeRoster({ team, season, leagueRoster, playerList, outPlay
   };
 }
 
-/** @param {URLSearchParams} searchParams */
-function readTeam(searchParams) {
+/**
+ * The team a request names, or null when it names none of the league's.
+ * @param {URLSearchParams} searchParams
+ */
+export function readTeam(searchParams) {
   const team = searchParams.get("team") ?? "";
   return Object.hasOwn(TEAMS, team) ? team : null;
 }

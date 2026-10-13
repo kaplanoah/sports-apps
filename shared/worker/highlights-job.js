@@ -22,7 +22,7 @@ const READ_AFTER_END_MS = [0, HOUR_MS, 3 * HOUR_MS, 12 * HOUR_MS];
  * @typedef {object} HighlightsLeague
  * @property {(context: JobContext) => Promise<{ season: number, games: any[] } | null>} listFinals
  *   the current season's finals, newest first
- * @property {(game: any) => number} findEnd when the game ended, in milliseconds
+ * @property {number} gameLengthMs about how long a game lasts, for one the store didn't see end
  * @property {(context: JobContext, game: any) => Promise<any>} readHighlights the game's
  *   highlights, or null when the league has no such game
  * @property {(id: string) => string} nameKey where the store keeps a game's highlights
@@ -31,6 +31,14 @@ const READ_AFTER_END_MS = [0, HOUR_MS, 3 * HOUR_MS, 12 * HOUR_MS];
 
 /** @param {number} season */
 const nameReadsKey = (season) => `highlight-reads:${season}`;
+
+/**
+ * When the game ended, in milliseconds.
+ * @param {{ start: string, end?: string | null }} game
+ * @param {number} gameLengthMs
+ */
+const findEnd = (game, gameLengthMs) =>
+  game.end ? Date.parse(game.end) : Date.parse(game.start) + gameLengthMs;
 
 /**
  * The next time the game is due a read after the one at `readAt`, or null once its last is done.
@@ -100,11 +108,11 @@ export function createHighlightsJob(league) {
     );
     const when = { now: context.now(), edition: league.edition ?? 0 };
     const due = finals.games
-      .filter((game) => isDue(league.findEnd(game), reads[game.id], when))
+      .filter((game) => isDue(findEnd(game, league.gameLengthMs), reads[game.id], when))
       .slice(0, GAMES_PER_RUN);
     for (const game of due) reads[game.id] = await keepGame(context, league, game, reads[game.id]);
     if (!isSameJson(stored, reads)) await context.storage.put(readsKey, reads);
   }
 
-  return { chooseDelay: () => RUN_DELAY_MS, run: keepHighlights };
+  return { chooseDelay: () => RUN_DELAY_MS, updateStore: keepHighlights };
 }

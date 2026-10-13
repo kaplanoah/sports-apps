@@ -6,7 +6,7 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
-    at: "2026-10-13T12:00:00Z",
+    at: "2026-10-13T15:23:00Z",
     text: html`Search for teams, players, games, and highlights, with the <b>Search</b> button at the bottom. (Includes the old game search, which works the same as before.)`,
   },
   {

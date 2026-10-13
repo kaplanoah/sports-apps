@@ -62,8 +62,7 @@ import {
 // Phosphor's magnifying-glass at its Light weight in the field, as the page's controls are, and at
 // its Regular weight, calendar-blank, and map-pin beside a suggestion's words, trophy, trend-up,
 // newspaper, and sliders-horizontal beside a place's, as the tabs and the settings button show them,
-// film-strip beside a final's Highlights and baseball beside a game's Matchup, and x-circle at its
-// Fill weight to clear the field, as iOS does.
+// film-strip beside a final's Highlights, and baseball beside a game's Matchup.
 const FIELD_GLASS = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228.24,219.76l-51.38-51.38a86.15,86.15,0,1,0-8.48,8.48l51.38,51.38a6,6,0,0,0,8.48-8.48ZM38,112a74,74,0,1,1,74,74A74.09,74.09,0,0,1,38,112Z"/></svg>`;
 const MARKS = {
   search: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`,
@@ -76,8 +75,11 @@ const MARKS = {
   matchup: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM72.09,195.91c.82-1,1.64-1.93,2.42-2.91A8,8,0,1,0,62,183l-1.34,1.62a87.82,87.82,0,0,1,0-113.24L62,73A8,8,0,1,0,74.51,63c-.78-1-1.6-2-2.42-2.91a87.84,87.84,0,0,1,111.82,0c-.82,1-1.64,1.92-2.42,2.91A8,8,0,1,0,194,73l1.34-1.62a87.82,87.82,0,0,1,0,113.24L194,183a8,8,0,1,0-12.48,10c.78,1,1.6,1.95,2.42,2.91a87.84,87.84,0,0,1-111.82,0Zm23.8-50.59a104.5,104.5,0,0,1-4.48,17.35,8,8,0,0,1-15.09-5.34,87.1,87.1,0,0,0,3.79-14.65,8,8,0,1,1,15.78,2.64Zm0-34.64a8,8,0,0,1-6.57,9.21A8.52,8.52,0,0,1,88,120a8,8,0,0,1-7.88-6.68,87.1,87.1,0,0,0-3.79-14.65,8,8,0,0,1,15.09-5.34A104.5,104.5,0,0,1,95.89,110.68Zm78.91,56.86a8,8,0,0,1-10.21-4.87,104.5,104.5,0,0,1-4.48-17.35,8,8,0,1,1,15.78-2.64,87.1,87.1,0,0,0,3.79,14.65A8,8,0,0,1,174.8,167.54Zm-14.69-56.86a104.5,104.5,0,0,1,4.48-17.35,8,8,0,0,1,15.09,5.34,87.1,87.1,0,0,0-3.79,14.65A8,8,0,0,1,168,120a8.52,8.52,0,0,1-1.33-.11A8,8,0,0,1,160.11,110.68Z"/></svg>`,
   highlights: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,88h80v80H40Zm96-16V56h32V72Zm-16,0H88V56h32Zm0,112v16H88V184Zm16,0h32v16H136Zm0-16V88h80v80Zm80-96H184V56h32ZM72,56V72H40V56ZM40,184H72v16H40Zm176,16H184V184h32v16Z"/></svg>`,
 };
-// Phosphor's caret-right at its Regular weight, at the end of a row that opens a page.
+// Phosphor's caret-right at its Regular weight, at the end of a row that opens a page, and after
+// each place a place's row names it in, as a breadcrumb.
 const CARET = html`<svg class="search-caret" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>`;
+const CRUMB = html`<svg class="search-crumb" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>`;
+// Phosphor's x-circle at its Fill weight, to clear the field, as iOS does.
 const CLEAR = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm37.66,130.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>`;
 
 /** @type {HTMLElement | null} */
@@ -214,6 +216,14 @@ const describeGame = (game, context) =>
   ]);
 
 /**
+ * A place's name, after the places it's in, each dimmed and followed by a caret, as Settings, then
+ * Appearance.
+ * @param {string[]} name
+ */
+const renderPlaceName = (name) =>
+  html`${name.slice(0, -1).map((part) => html`<span class="search-place-in">${part}</span>${CRUMB}`)}${name.at(-1)}`;
+
+/**
  * What a page's row says, and what it says at its end.
  * @param {ShownRow} row
  * @param {SearchPages} pages
@@ -221,7 +231,7 @@ const describeGame = (game, context) =>
  */
 function describePageRow(row, pages, context) {
   if (row.kind === "place")
-    return { words: joinWithSeparator(row.place.name), detail: row.detail ?? "" };
+    return { words: renderPlaceName(row.place.name), detail: row.detail ?? "" };
   if (row.kind === "story")
     return {
       words: row.story.title,
@@ -269,7 +279,7 @@ const describeOut = ({ reason, isForSeason }, how) =>
  */
 function renderPageButton(row, pages) {
   if (row.kind === "place")
-    return html`type="button" class="search-suggestion" data-place="${row.place.key}"`;
+    return html`type="button" class="search-suggestion" data-place="${row.place.key}" aria-label="${row.place.name.join(", ")}"`;
   if (row.kind === "game")
     return html`type="button" class="search-suggestion" data-place="${row.part.key}:${row.game.id}"`;
   if (row.kind === "story") return html``;
@@ -601,8 +611,12 @@ export function openGameSearch() {
   findInput()?.focus();
 }
 
-/** Brings the keyboard up in the open search's field, from a tap. */
-export function focusGameSearch() {
+/** Empties the open search's field for a new search, with the keyboard up, from a tap. */
+export function startGameSearchOver() {
+  writeQuery("");
+  isTyping = true;
+  isGamesOnly = false;
+  draw();
   findInput()?.focus();
 }
 
@@ -633,13 +647,7 @@ function followTap(event) {
   else if (place) runAfterPress(place, () => league?.openPlace(place.dataset.place ?? ""));
   else if (gamesLine) runAfterPress(gamesLine, () => showGamesOnly(gamesLine.dataset.games ?? ""));
   else if (target.closest(".search-cancel")) closeGameSearch();
-  else if (target.closest(".search-clear")) {
-    writeQuery("");
-    isTyping = true;
-    isGamesOnly = false;
-    draw();
-    findInput()?.focus();
-  }
+  else if (target.closest(".search-clear")) startGameSearchOver();
 }
 
 function followTyping() {

@@ -234,6 +234,17 @@ test("a finished game without its starters names both clubs and has nothing to c
   assert.doesNotMatch(markup, /check-back/);
 });
 
+test("a game on a later day says to check back for the pitcher of the one club yet to name him, or for pitchers", () => {
+  const laterDay = { ...AT_ATHLETICS, date: "2026-09-25", today: false };
+  const oneNamed = renderLoaded({ ...laterDay, starters: [{ id: 1, name: "Blubaugh" }] }, [
+    { pitcher: BLUBAUGH },
+    {},
+  ]);
+  assert.deepEqual(readClass(oneNamed, "check-back"), ["Check back for Athletics pitcher"]);
+  const neitherNamed = renderLoaded({ ...laterDay, starters: [] }, [{}, {}]);
+  assert.deepEqual(readClass(neitherNamed, "check-back"), ["Check back for pitchers"]);
+});
+
 test("a game with its starters named has nothing to check back for", () => {
   const markup = renderStarters();
   assert.equal(countMatches(markup, /class="pitch-mix"/g), 2);
@@ -403,6 +414,20 @@ test("a starter whose numbers didn't load still shows the first name the game ke
   assert.match(failed, /data-player-name="Jeffrey Springs"/);
   const loading = renderLoaded(withFirstNames, [{ pitcher: BLUBAUGH }, {}]);
   assert.deepEqual(readClass(loading, "pitcher-first"), ["AJ", "Jeffrey"]);
+});
+
+test("a starter still to be named says TBD on a first-name line held empty, level with the other's last name", () => {
+  const laterDay = { ...AT_ATHLETICS, date: "2026-09-25", today: false };
+  const oneNamed = renderLoaded({ ...laterDay, starters: [{ id: 1, name: "Blubaugh" }] }, [
+    { pitcher: BLUBAUGH },
+    {},
+  ]);
+  assert.deepEqual(readClass(oneNamed, "pitcher-last"), ["Blubaugh", "TBD"]);
+  assert.deepEqual(readClass(oneNamed, "pitcher-first"), ["AJ", ""]);
+  assert.match(oneNamed, /<span class="pitcher-first" aria-hidden="true">&nbsp;<\/span>/);
+  const neitherNamed = renderLoaded({ ...laterDay, starters: [] }, [{}, {}]);
+  assert.deepEqual(readClass(neitherNamed, "pitcher-last"), ["TBD", "TBD"]);
+  assert.deepEqual(readClass(neitherNamed, "pitcher-first"), []);
 });
 
 test("with neither starter's numbers loaded, the section says why once, centered over Try again", () => {

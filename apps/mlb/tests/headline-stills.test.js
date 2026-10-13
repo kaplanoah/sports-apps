@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { STILL_MODEL, findHeadlineStills, hasHeadline } from "../worker/src/headline-stills.js";
+import {
+  STILL_MODEL,
+  STILL_SCHEMA,
+  findHeadlineStills,
+  hasHeadline,
+} from "../worker/src/headline-stills.js";
+import { createJobStorage } from "../../../tests/job-context.js";
 
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 const STILL = "https://img.mlbstatic.com/mlb-images/image/upload/w_480,h_270/mlb/home-run.jpg";
@@ -8,8 +14,9 @@ const OTHER_STILL = "https://img.mlbstatic.com/mlb-images/image/upload/w_480,h_2
 const NEW_STILL = "https://img.mlbstatic.com/mlb-images/image/upload/w_480,h_270/mlb/single.jpg";
 
 /**
- * Claude, answering for each still with `answer(still)`, a word or an error to throw.
- * @param {(still: string) => string} answer
+ * Claude, answering for each still with `answer(still)`: whether it has a headline, or how Claude
+ * fails to say.
+ * @param {(still: string) => boolean | "overloaded" | "refusal"} answer
  */
 function createClaude(answer) {
   /** @type {any[]} */
@@ -22,31 +29,31 @@ function createClaude(answer) {
     assert.equal(url, CLAUDE_URL);
     const body = JSON.parse(init.body);
     requests.push(body);
-    const text = answer(body.messages[0].content[0].source.url);
-    if (text === "overloaded")
+    const headline = answer(body.messages[0].content[0].source.url);
+    if (headline === "overloaded")
       return new Response(JSON.stringify({ error: { message: "Overloaded" } }), { status: 529 });
-    return new Response(JSON.stringify({ content: [{ type: "text", text }], usage: {} }));
+    if (headline === "refusal")
+      return new Response(JSON.stringify({ content: [], stop_reason: "refusal", usage: {} }));
+    const text = JSON.stringify({ headline });
+    return new Response(
+      JSON.stringify({ content: [{ type: "text", text }], stop_reason: "end_turn", usage: {} }),
+    );
   };
   return { requests, fetchImpl: /** @type {any} */ (fetchImpl) };
 }
 
 function createContext({ apiKey = "key", fetchImpl = /** @type {any} */ (null) } = {}) {
-  const stored = new Map();
+  const storage = createJobStorage();
   return /** @type {any} */ ({
-    stored,
+    stored: storage.stored,
     env: apiKey ? { ANTHROPIC_API_KEY: apiKey } : {},
     fetchImpl,
-    storage: {
-      get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
-      put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-        stored.set(key, structuredClone(value));
-      },
-    },
+    storage,
   });
 }
 
-test("Claude Haiku looks at the still at its address and answers yes or no", async () => {
-  const claude = createClaude(() => "Yes.");
+test("Claude Haiku looks at the still at its address and answers in the schema whether it has a headline", async () => {
+  const claude = createClaude(() => true);
 
   assert.equal(
     await hasHeadline({ apiKey: "key", fetchImpl: claude.fetchImpl, still: STILL }),
@@ -57,25 +64,29 @@ test("Claude Haiku looks at the still at its address and answers yes or no", asy
   assert.deepEqual(claude.requests[0].messages[0].content, [
     { type: "image", source: { type: "url", url: STILL } },
   ]);
+  assert.deepEqual(claude.requests[0].output_config, {
+    effort: "low",
+    format: { type: "json_schema", schema: STILL_SCHEMA },
+  });
 
-  const clean = createClaude(() => "no");
+  const clean = createClaude(() => false);
   assert.equal(
     await hasHeadline({ apiKey: "key", fetchImpl: clean.fetchImpl, still: STILL }),
     false,
   );
 });
 
-test("an answer that is neither yes nor no is no answer", async () => {
-  const claude = createClaude(() => "It shows a ballpark.");
+test("an answer Claude didn't finish is no answer", async () => {
+  const claude = createClaude(() => "refusal");
 
   await assert.rejects(
     hasHeadline({ apiKey: "key", fetchImpl: claude.fetchImpl, still: STILL }),
-    /neither yes nor no/,
+    /Claude stopped without finishing: refusal/,
   );
 });
 
 test("each still goes to Claude once: a game read again asks only about a still that's new", async () => {
-  const claude = createClaude((still) => (still === STILL ? "yes" : "no"));
+  const claude = createClaude((still) => still === STILL);
   const context = createContext({ fetchImpl: claude.fetchImpl });
 
   const first = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
@@ -96,7 +107,7 @@ test("each still goes to Claude once: a game read again asks only about a still 
 
 test("when Claude doesn't answer for a still, the read fails, keeping the answers it gave, and the next asks only about that still", async () => {
   const claude = { isDown: true };
-  const fake = createClaude((still) => (still === STILL && claude.isDown ? "overloaded" : "yes"));
+  const fake = createClaude((still) => (still === STILL && claude.isDown ? "overloaded" : true));
   const context = createContext({ fetchImpl: fake.fetchImpl });
 
   await assert.rejects(
@@ -112,7 +123,7 @@ test("when Claude doesn't answer for a still, the read fails, keeping the answer
 });
 
 test("without the Worker's API key, no still goes to Claude, each counts as clean, and none is kept", async () => {
-  const claude = createClaude(() => "yes");
+  const claude = createClaude(() => true);
   const context = createContext({ apiKey: "", fetchImpl: claude.fetchImpl });
 
   assert.deepEqual([...(await findHeadlineStills(context, "849826", [STILL]))], []);

@@ -17,10 +17,6 @@ const EDITION = 1;
 // A game MLB hasn't timed yet ends about three hours after it starts.
 const GAME_LENGTH_MS = 3 * 60 * 60 * 1000;
 
-/** @param {any} game */
-const findEnd = (game) =>
-  game.end ? Date.parse(game.end) : Date.parse(game.start) + GAME_LENGTH_MS;
-
 /**
  * @param {import("../../../../shared/worker/season-store.js").JobContext} context
  * @param {any} game
@@ -38,7 +34,7 @@ async function readHighlights(context, game) {
 export const createHighlightsUpdater = () =>
   createHighlightsJob({
     listFinals: listCurrentFinals,
-    findEnd,
+    gameLengthMs: GAME_LENGTH_MS,
     readHighlights,
     nameKey: nameHighlightsKey,
     edition: EDITION,

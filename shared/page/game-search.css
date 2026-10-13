@@ -31,8 +31,7 @@
 .search-bar.has-rows {
   padding-bottom: 2.2px;
 }
-.search-bar.has-rows + .search-list,
-.search-bar.has-rows + .search-list > .search-suggestions:first-child {
+.search-bar.has-rows + .search-list {
   padding-top: 0;
 }
 .search-row {
@@ -178,7 +177,7 @@
    kind, with the part typed dimmer. */
 .search-suggestions {
   margin: 0;
-  padding: 4px 0 0;
+  padding: 0;
   list-style: none;
 }
 .search-suggestions li {
@@ -230,6 +229,20 @@
 .search-detail {
   flex: none;
   font-size: var(--size-glance);
+  color: var(--ink-dim);
+}
+/* A place's row names the places it's in dimmed, each followed by a smaller caret, 4px from the
+   words each side and 0.5px over their middle. */
+.search-place-in {
+  color: var(--ink-dim);
+}
+.search-crumb {
+  width: 12px;
+  height: 12px;
+  margin: 0 4px;
+  vertical-align: middle;
+  position: relative;
+  top: -0.5px;
   color: var(--ink-dim);
 }
 /* A row that opens a page ends in a caret, and a row that runs a search doesn't. */

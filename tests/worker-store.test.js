@@ -131,6 +131,39 @@ test("a watch started once the socket is open reads right away", () => {
   );
 });
 
+/** @param {any} value */
+const assertFrozenDeeply = (value) => {
+  assert.ok(Object.isFrozen(value));
+  for (const nested of Object.values(value)) {
+    if (nested && typeof nested === "object") assertFrozenDeeply(nested);
+  }
+};
+
+const SEASON = { year: 2026, teams: { NYM: { record: [90, 72] } }, log: [{ id: "1", runs: [3] }] };
+
+test("a document the store returns is frozen, down to its nested objects and arrays", async () => {
+  const { store, reads } = startStore();
+  const reading = store.doc("seasons/2026").get();
+  reads[0].answer({ data: structuredClone(SEASON) });
+  const data = (await reading).data();
+
+  assert.deepEqual(data, SEASON);
+  assertFrozenDeeply(data);
+  assert.throws(() => {
+    data.log[0].runs.push(4);
+  }, TypeError);
+});
+
+test("each document in a listing the store returns is frozen deeply", async () => {
+  const { store, reads } = startStore();
+  const reading = store.collection("seasons").limit(10).get();
+  reads[0].answer({ docs: [{ id: "2026", data: structuredClone(SEASON) }] });
+  const [doc] = (await reading).docs;
+
+  assert.deepEqual(doc.data(), SEASON);
+  assertFrozenDeeply(doc.data());
+});
+
 test("a document read that arrives after a newer one is dropped", async () => {
   const { store, reads, openSocket } = startStore();
   const seen = [];

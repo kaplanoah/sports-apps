@@ -100,6 +100,11 @@
   --out: #6b645c;
   /* A source's credit under what it said, as pale as WCAG's AA level lets text be on a card. */
   --credit-ink: color-mix(in srgb, var(--ink-dim) 84%, var(--card));
+  /* Runs set the plays that changed the score apart from the runners who got on before them, in
+     Ball a weight heavier too, which Chivo Mono draws at the same width, so both themes still lay
+     out the same. */
+  --runs-setup-ink: var(--credit-ink);
+  --runs-play-weight: 500;
   --focus-ring: var(--now);
   --gate-heading-font: "Chivo Mono", "JetBrains Mono", monospace;
   --gate-code-font: "Chivo Mono", "JetBrains Mono", monospace;
@@ -191,6 +196,7 @@
   --all-star-light: rgba(241, 234, 212, 0.13);
   --out: #998b7d;
   --credit-ink: var(--ink-dim);
+  --runs-play-weight: 400;
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-ink: #fff;
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
@@ -1589,26 +1595,74 @@ table.st.line-score td.team .club {
 .sheet-part:has(> .box-wrap > .line-score) {
   gap: 2px;
 }
-/* Runs so far, as runs-view.js draws it: a sentence for each club, then, while a half inning is
-   under way, the field with each runner's name by his base, and who's up. */
-.sheet-part:has(> .runs-club) {
+/* Runs so far, as runs-view.js draws it: each half inning that scored, a line for each change of
+   the score, then, while a half inning is under way, the field with each runner's name by his base,
+   and who's up. */
+.sheet-part:has(> .runs-halves),
+.sheet-part:has(> .runs-none) {
   margin-bottom: 2px;
 }
-.runs-club {
+.runs-halves {
+  display: grid;
+  gap: 12px;
+}
+.runs-half {
+  display: grid;
+  gap: 4px;
+}
+.runs-half-head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 8px;
   align-items: baseline;
   margin: 0;
-  font-size: var(--size-read);
-  line-height: 1.45;
+  font-size: var(--size-small);
+  font-weight: 450;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
 }
-.runs-club b {
-  font-weight: 550;
-}
-.runs-club .dot {
+.runs-half-head .dot {
   position: relative;
   top: 1px;
+}
+.runs-changes {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 22px;
+  list-style: none;
+  font-size: var(--size-glance);
+  line-height: 1.35;
+}
+.runs-change {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: end;
+}
+.runs-change-text {
+  display: grid;
+}
+.runs-setup {
+  color: var(--runs-setup-ink);
+}
+.runs-play {
+  font-weight: var(--runs-play-weight);
+}
+.runs-score {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+.runs-score b {
+  font-weight: 550;
+  color: var(--ink);
+}
+.runs-none {
+  margin: 0;
+  font-size: var(--size-glance);
+  color: var(--ink-dim);
 }
 .runs-now {
   display: grid;

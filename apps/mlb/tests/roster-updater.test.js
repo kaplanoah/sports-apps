@@ -19,6 +19,7 @@ import {
   listSeasonStatsRequest,
   nameRosterKey,
 } from "../worker/src/rosters.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // What MLB answered early on Oct 8: the Guardians', Yankees', and Dodgers' 40-man rosters, their
 // players' regular seasons, and the day's transactions.
@@ -104,37 +105,6 @@ function createMlbFetch(answers) {
   return { requests, refused, espn, fetchImpl };
 }
 
-function createJobStorage() {
-  const stored = new Map();
-  return {
-    get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
-    put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-      stored.set(key, structuredClone(value));
-    },
-    delete: async (/** @type {string} */ key) => stored.delete(key),
-    list: async (/** @type {string} */ prefix) =>
-      new Map([...stored].filter(([key]) => key.startsWith(prefix))),
-  };
-}
-
-/** @param {Record<string, any>} initial */
-function createDocs(initial) {
-  const stored = new Map(Object.entries(initial));
-  /** @type {string[]} */
-  const writes = [];
-  return {
-    stored,
-    writes,
-    read: async (/** @type {string} */ key) => structuredClone(stored.get(key)) ?? null,
-    list: async () => [],
-    write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-      writes.push(key);
-      stored.set(key, structuredClone(doc));
-    },
-    remove: async (/** @type {string} */ key) => stored.delete(key),
-  };
-}
-
 /**
  * A slate with this many of today's games final, which the job counts as games end.
  * @param {number} finals
@@ -158,7 +128,7 @@ function createRun() {
   const storage = createJobStorage();
   const job = createRosterJob();
   const runJob = () =>
-    job.run({
+    job.updateStore({
       docs,
       storage,
       loadSnapshot: async () => null,

@@ -65,6 +65,11 @@ const readJob = (job) =>
     new RegExp(`^ {2}${job}:\\n(?:(?: {4}.*)?\\n)*`, "m"),
   )?.[0] ?? "";
 
+test("the browser job's traces leave out the page at each step, which burn-in's keep", () => {
+  assert.match(readJob("browser"), /TRACE_SNAPSHOTS: "off"/);
+  assert.doesNotMatch(readJob("burn-in"), /TRACE_SNAPSHOTS/);
+});
+
 test("burn-in runs every test ten times however many fail, and fails only on a test the pull request wrote or edited", () => {
   const burnIn = readJob("burn-in");
   assert.match(burnIn, /--repeat-each=10 --retries=0 --max-failures=0/);

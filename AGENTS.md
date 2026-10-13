@@ -15,7 +15,8 @@
   a name for an earlier version, or a rule that overrides another where one rule would do.
   Before each push, read the whole diff against `main` for it, and the review flags any of it.
 - Start function names with a verb naming the action (boolean predicates excepted).
-  No generic names like `call`, `run`, `execute`, or `handle`.
+  No generic names like `call`, `run`, `execute`, or `handle`,
+  which lint rejects for a function.
 - Make every function do one thing well.
   Make orchestration a sequence of named steps.
   Extract and name any non-trivial logic inside blocks or chained conditions.
@@ -41,7 +42,9 @@
   CI retries a failed browser test once, so it can't fail a pull request it has nothing to do with,
   and stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`),
   and GitHub's reporter marks each one that passed only on its retry on the pull request's checks,
-  the run keeps its failed try's trace, and the `check` job adds it to the table in the issue Flaky browser tests.
+  the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
+  and the `check` job adds it to the table in the issue Flaky browser tests,
+  unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
@@ -61,6 +64,9 @@
   To unroute one of two routes with the same pattern, name its handler too.
 - Before a test changes what the page reads next, wait until the page shows its last read, or the change races the read still on its way.
 - A theme changes only colors, so each view lays out the same in each of an app's themes.
+  A theme may also change a weight where its font keeps its width at every weight,
+  as MLB's Ball sets each play that scored in a game's Runs a step heavier in Chivo Mono,
+  to stand out from the lighter runners who got on before it as much as it does in Night Game.
   The WNBA's `tests/browser/themes.spec.mjs` checks every view in Walnut against Maple,
   on a phone and a wide screen, with the root's `tests/browser/theme-layout.mjs`; a new view joins its list.
 - Sheets look alike.
@@ -115,8 +121,9 @@
   before first pitch its clubs' season series (`page/js/season-series.js`),
   and its box score, or each club's lineup before first pitch (`page/js/game-sheet.js`,
   `matchup.js`, and `box-score-view.js`), over which a game under way has its Runs so far and a final its Runs,
-  a sentence for each club on how it scored, inning by inning,
-  from each run-scoring play in MLB's live feed, and, while a half inning is under way,
+  each half inning that scored under its heading, and a line for each change of the score with the score after it,
+  with the runners who got on since the last one on a lighter line above the play that scored,
+  from each play in MLB's live feed, and, while a half inning is under way,
   a drawing of the field with each runner's name by his base and how he got on,
   and who's up against whom (`page/js/runs-view.js`), and, once it's final,
   its Highlights section, MLB's recap video, MLB.com's story, and the clip of each play,
@@ -277,7 +284,8 @@
   which copy the browser's own buttons so people find them (`shared/page/home-screen.js`),
   MLB's seed lock (`games-view.js`), and the catching-up ring,
   Phosphor's circle-notch at its Light weight with a 55-degree gap, set in a line of text (`shared/page/catch-up-note.js`).
-  The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four.
+  The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four,
+  and on a Phosphor icon the last comment before it doesn't name with its weight.
   An All-Star team's star isn't an icon but stands in for its dot,
   so it's drawn for its place too, filled with soft tips and set in as the app's dot is (`shared/page/all-star.js`).
 - Make every tap land on a button or a link.
@@ -382,7 +390,7 @@
   with suggestions and examples, in `game-search-view.js`, from `search-words.js`,
   `search-dates.js`, `game-search.js`, and `search-suggestions.js`,
   and reading the same words into the pages they name, a team's,
-  its section's, a player's, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
+  its section's, a player's, even with a letter wrong, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
   from the list of a season's players the store keeps for it, in `page-search.js`,
   each game day under a label, the WNBA's date beside its games as a wall calendar shows it and MLB's heading over them,
   with a No games row for today between game days, in `season-days.js`,

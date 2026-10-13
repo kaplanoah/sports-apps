@@ -26,6 +26,7 @@ const PLAYER_INDEX = {
     { id: "596019", team: "NYM", number: "12", firstName: "Francisco", lastName: "Lindor" },
     { id: "694973", team: "PIT", number: "30", firstName: "Paul", lastName: "Skenes" },
     { id: "605141", team: "LAD", number: "50", firstName: "Mookie", lastName: "Betts" },
+    { id: "519317", team: "NYY", number: "27", firstName: "Giancarlo", lastName: "Stanton" },
   ],
 };
 
@@ -375,11 +376,7 @@ test("standings words find the playoff fields and each league's divisions, and a
 
   await sendSearch(page, "standings");
 
-  await expect(findRows(page)).toHaveText([
-    "Standings\u2022Playoffs",
-    "Standings\u2022AL",
-    "Standings\u2022NL",
-  ]);
+  await expect(findRows(page)).toHaveText(["StandingsPlayoffs", "StandingsAL", "StandingsNL"]);
 
   await findRows(page).filter({ hasText: "AL" }).tap();
 
@@ -451,6 +448,66 @@ test("the Bracket tab's words find it, and its row opens it", async ({ page }) =
   await expect(page.locator("#tab-bracket")).toHaveAttribute("aria-selected", "true");
 });
 
+test("every row is 44px under its line, with no room between the suggestions and the pages under them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("athl");
+
+  await expect(page.locator("#gameSearch .search-suggestions")).toHaveCount(2);
+  const rows = await page.locator("#gameSearch .search-suggestions li").evaluateAll((items) =>
+    items.map((item) => {
+      const { top, bottom } = item.getBoundingClientRect();
+      return { top, bottom };
+    }),
+  );
+  for (const [index, { top, bottom }] of rows.entries()) {
+    expect(bottom - top).toBe(45);
+    if (index > 0) expect(top).toBe(rows[index - 1].bottom);
+  }
+});
+
+test("a place's row names the place it's in dimmed, then a dim caret 4px from the words each side, centered on them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await sendSearch(page, "ranking");
+
+  await expect(findRows(page)).toHaveAccessibleName("Settings, Ranking");
+  const crumb = await findRows(page).evaluate((row) => {
+    const box = (/** @type {Element} */ element) => element.getBoundingClientRect();
+    const inkOf = (/** @type {string} */ selector) =>
+      getComputedStyle(/** @type {Element} */ (row.querySelector(selector))).color;
+    const placeIn = /** @type {Element} */ (row.querySelector(".search-place-in"));
+    const caret = /** @type {Element} */ (row.querySelector(".search-crumb"));
+    const range = document.createRange();
+    range.selectNodeContents(/** @type {Node} */ (caret.nextSibling));
+    return {
+      dim: inkOf(".search-mark"),
+      words: inkOf(".search-words"),
+      placeIn: inkOf(".search-place-in"),
+      caret: inkOf(".search-crumb"),
+      width: box(caret).width,
+      height: box(caret).height,
+      before: box(caret).left - box(placeIn).right,
+      after: range.getBoundingClientRect().left - box(caret).right,
+      offCenter:
+        box(caret).top + box(caret).height / 2 - (box(placeIn).top + box(placeIn).height / 2),
+    };
+  });
+  expect(crumb.placeIn).toBe(crumb.dim);
+  expect(crumb.caret).toBe(crumb.dim);
+  expect(crumb.words).not.toBe(crumb.dim);
+  expect(crumb).toMatchObject({ width: 12, height: 12 });
+  expect(crumb.before).toBeCloseTo(4, 1);
+  expect(crumb.after).toBeCloseTo(4, 1);
+  expect(Math.abs(crumb.offCenter)).toBeLessThan(2);
+});
+
 test("a setting's words find it, and its row opens settings with the setting in sight", async ({
   page,
 }) => {
@@ -459,12 +516,38 @@ test("a setting's words find it, and its row opens settings with the setting in 
 
   await sendSearch(page, "ranking");
 
-  await expect(findRows(page)).toHaveText(["Settings\u2022Ranking"]);
+  await expect(findRows(page)).toHaveText(["SettingsRanking"]);
 
   await findRows(page).tap();
 
   await expect(page.locator("#settingsDialog")).toBeVisible();
   await expect(page.locator("#rankingTitle")).toBeInViewport();
+});
+
+test("while typing, a place's half-typed word lists it first, beside a player it starts, and a setting's word beside the club it's a letter off", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("stan");
+
+  await expect(findRows(page)).toHaveText([
+    "StandingsPlayoffs",
+    "StandingsAL",
+    "StandingsNL",
+    "Giancarlo Stanton27\u2022Yankees",
+  ]);
+
+  const athletic = findRows(page).filter({ hasText: "The Athletic" });
+  for (const words of ["athl", "athletic"]) {
+    await findInput(page).fill("");
+    await findInput(page).pressSequentially(words);
+
+    await expect(athletic).toHaveText("SettingsInclude content from The Athletic");
+    await expect(athletic).toBeInViewport();
+  }
+  await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*$/ })).toHaveCount(1);
 });
 
 test("a found game's row opens its sheet wherever a finger lands on it", async ({ page }) => {
@@ -507,7 +590,9 @@ test("Cancel empties the search and goes back to the tab before it; another tab 
   await expect(findInput(page)).toHaveValue("");
 });
 
-test("Search tapped again while it shows brings the keyboard back up", async ({ page }) => {
+test("Search tapped again while it shows starts over: an empty field with its examples, ready to type", async ({
+  page,
+}) => {
   await openSeasonGames(page);
   await tapSearch(page);
   await sendSearch(page, "Mets");
@@ -515,8 +600,9 @@ test("Search tapped again while it shows brings the keyboard back up", async ({ 
 
   await tapSearch(page);
 
+  await expect(findInput(page)).toHaveValue("");
   await expect(findInput(page)).toBeFocused();
-  await expect(findInput(page)).toHaveValue("Mets");
+  await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
 });
 
 test("two minutes away closes the search and goes back to the tab before it", async ({ page }) => {
