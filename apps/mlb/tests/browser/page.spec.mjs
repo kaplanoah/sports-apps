@@ -16,6 +16,7 @@ import {
   PLAYER_DOCS,
   RECORDED_HIGHLIGHTS,
   ROSTER_DOCS,
+  SCHEDULE_DOCS,
 } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
@@ -233,6 +234,34 @@ test("scrolling the list draws each day whole as it nears the top, before it sho
       )
       .toBe(0);
   }
+});
+
+test("a schedule that arrives after the slate's days were drawn again fills the strip with every day, as it does the list", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator("#seasonGames .day-cell").first()).toHaveAttribute(
+    "data-day",
+    "2026-09-23",
+  );
+  const season = await app.readDocument("seasons/2026");
+  const scored = structuredClone(season);
+  scored.slate.today.games.find((/** @type {any} */ game) => game.id === "824866").score = [6, 5];
+  await app.writeFromWorker("seasons/2026", scored);
+  await expect(page.locator("#stamp > span").first()).toHaveText(/^NOW\s*Reds @ Braves 6-5/);
+
+  for (const [path, month] of Object.entries(SCHEDULE_DOCS)) await app.writeFromWorker(path, month);
+
+  await expect(page.locator("#seasonGames .listed-day").first()).toHaveAttribute(
+    "data-day",
+    "2026-03-25",
+  );
+  await expect(page.locator("#seasonGames .day-cell").first()).toHaveAttribute(
+    "data-day",
+    "2026-03-25",
+  );
 });
 
 test("tapping the Games tab while it shows goes back to today", async ({ page }) => {

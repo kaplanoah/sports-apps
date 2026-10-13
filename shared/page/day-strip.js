@@ -651,6 +651,25 @@ const nameDrawing = (listed) =>
   chooseDrawnMarkup(listed) === listed.markup ? "whole" : "as a stand-in";
 
 /**
+ * Writes the bar again, and each day that shows something else than it last did, since a write of
+ * the whole view keeps what each part written on its own last showed (setHtml in html.js), as the
+ * bar is when the days stay the same and a day is when only it changes.
+ * @param {DayStripFill} fill
+ * @param {ListedDay[]} days
+ * @param {Map<string, string>} drawnBefore what each day showed before
+ */
+function redrawWrittenParts(fill, days, drawnBefore) {
+  const bar = findBar();
+  if (bar) setHtml(bar, renderBar(fill));
+  for (const listed of days) {
+    const markup = chooseDrawnMarkup(listed);
+    const element = findListedDay(listed.day);
+    const isChanged = drawnBefore.has(listed.day) && drawnBefore.get(listed.day) !== String(markup);
+    if (element && isChanged) setHtml(element, markup);
+  }
+}
+
+/**
  * @param {DayStripFill} fill
  * @returns {string} what it drew, for Diagnostics, or an empty string when nothing changed
  */
@@ -664,7 +683,9 @@ function drawFill(fill) {
     const changed = redrawChangedDays(days);
     return changed ? `redraw ${changed} of ${days.length} days` : "";
   }
+  const drawnBefore = new Map(drawnDays);
   setHtml(/** @type {HTMLElement} */ (view), renderView(fill, days));
+  redrawWrittenParts(fill, days, drawnBefore);
   drawnDays.clear();
   for (const listed of days) drawnDays.set(listed.day, String(chooseDrawnMarkup(listed)));
   fitEndRoom();
