@@ -130,7 +130,7 @@ const renderStarter = (starter, side) =>
   html`<span class="starter ${side}" title="Starting pitcher"><span class="starter-name">${starter.name}</span>${renderArm(starter.hand)}</span>`;
 
 const renderPendingStarter = (side) =>
-  html`<span class="starter ${side} pending" title="Starting pitcher"><span class="starter-name">Still TBD</span></span>`;
+  html`<span class="starter ${side} pending" title="Starting pitcher"><span class="starter-name">TBD</span></span>`;
 
 function renderStarterLine(starter, place, isPending) {
   if (isNamed(starter)) return renderStarter(starter, place);

@@ -55,18 +55,25 @@ function renderBio(side) {
 // The game keeps a starter's first name beside his last, so it shows even when his numbers don't.
 const readFirstName = (side) => side.pitcher?.firstName || side.starter?.firstName || "";
 
-function renderFirstName(side) {
+const hasFirstName = (side) => isLoadingPitcher(side) || Boolean(readFirstName(side));
+
+// A side without a first name keeps its line empty while the other shows one, so the two last
+// names, and the clubs under them, line up.
+function renderFirstName(side, isFirstLineShown) {
   if (isLoadingPitcher(side) && !side.starter?.firstName)
     return html`<span class="pitcher-first">${renderPlaceholder("Firstname")}</span>`;
   const first = readFirstName(side);
-  return first ? html`<span class="pitcher-first">${first}</span>` : html``;
+  if (first) return html`<span class="pitcher-first">${first}</span>`;
+  return isFirstLineShown
+    ? html`<span class="pitcher-first" aria-hidden="true">&nbsp;</span>`
+    : html``;
 }
 
 // A named starter's name opens his sheet.
-function renderName(side) {
+function renderName(side, isFirstLineShown) {
   const { starter, pitcher } = side;
-  const last = pitcher?.lastName || starter?.name || (starter ? "Not named yet" : "Still TBD");
-  const content = html`${renderFirstName(side)}<span class="pitcher-last">${last}</span>`;
+  const last = pitcher?.lastName || starter?.name || (starter ? "Not named yet" : "TBD");
+  const content = html`${renderFirstName(side, isFirstLineShown)}<span class="pitcher-last">${last}</span>`;
   if (!starter?.id || !side.club) return html`<span class="pitcher-name">${content}</span>`;
   const name = [readFirstName(side), last].filter(Boolean).join(" ");
   return renderPlayerButton({ id: starter.id, name }, side.club, {
@@ -82,12 +89,13 @@ const renderSideRetry = () =>
 /**
  * @param {any} side
  * @param {boolean} isSectionFailed
+ * @param {boolean} isFirstLineShown
  */
-function renderPitcherId(side, isSectionFailed) {
+function renderPitcherId(side, isSectionFailed, isFirstLineShown) {
   const { club } = side;
   const isRetryShown = Boolean(side.failure) && Boolean(side.starter?.name) && !isSectionFailed;
   return html`<div class="pitcher-id ${side.key}">
-    ${renderName(side)}
+    ${renderName(side, isFirstLineShown)}
     ${club ? renderClub(club) : html``}
     ${renderBio(side)}
     ${isRetryShown && renderSideRetry()}
@@ -449,7 +457,8 @@ export function renderMatchupBody(game, sides, countClubGames) {
   const scouting = isFailed
     ? renderSectionRetry(listReadingSides(sides, game))
     : sides.map((side) => renderScouting(side, game, speedRange));
-  return html`<div class="faceoff">${sides.map((side) => renderPitcherId(side, isFailed))}</div>
+  const isFirstLineShown = sides.some(hasFirstName);
+  return html`<div class="faceoff">${sides.map((side) => renderPitcherId(side, isFailed, isFirstLineShown))}</div>
     ${renderCheckBack(sides, game)}
     ${renderTape(sides, countClubGames)}
     ${scouting}`;
