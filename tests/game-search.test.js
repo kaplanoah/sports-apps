@@ -203,8 +203,9 @@ test("either of two teams, and a team against a conference", () => {
   assert.deepEqual(search("Hawks vs West").ids, ["g1", "g2", "g5", "g7", "g9", "g10"]);
 });
 
-test("a city alone names its team, and after in, a place, with a game where its arena is", () => {
-  assert.deepEqual(search("Lakeside").ids, search("Owls").ids);
+test("a city reads as the games played there, alone or after in, with a game where its arena is", () => {
+  assert.equal(search("Lakeside").line, "In Lakeside | 3 games");
+  assert.deepEqual(search("Lakeside").ids, search("in Lakeside").ids);
   assert.deepEqual(search("Hawks in Lakeside").ids, ["g1", "g10"]);
   assert.equal(search("Hawks in Lakeside").line, "Hawks | In Lakeside | 2 games");
   assert.deepEqual(search("Hawks in Vancouver").ids, ["g3"]);
@@ -360,15 +361,20 @@ const suggest = (text) =>
     [suggestion, mark.kind === "team" ? mark.code : mark.kind, detail].filter(Boolean).join(" "),
   );
 
-test("a word being typed is finished first, the team playing soonest before another that starts the same", () => {
+test("a word being typed is finished first, a city before the teams, and the team playing soonest before another that starts the same", () => {
   assert.deepEqual(suggest("Ho"), [
     "Hornets HOR",
     "Hornets next game search",
     "Hornets at home search",
     "home search",
   ]);
-  assert.deepEqual(suggest("H").slice(0, 2), ["Hornets HOR", "Hornets next game search"]);
-  assert.equal(suggest("Hil")[0], "Hillside Foxes FOX");
+  assert.deepEqual(suggest("H"), [
+    "Hillside place 1 game",
+    "Hornets HOR",
+    "Hawks HAW",
+    "Hillside Foxes FOX",
+  ]);
+  assert.deepEqual(suggest("Hil"), ["Hillside place 1 game", "Hillside Foxes FOX"]);
 });
 
 test("a whole search fits where the season stands, two at most, and nothing is offered that would find no games", () => {
@@ -412,18 +418,17 @@ test("the examples offered before typing are those that find a game", () => {
   assert.deepEqual(listExamples(createContext()), ["Hawks next game", "Foxes at Owls"]);
 });
 
-test("a team's name that is also a place has the games played there as its other reading", () => {
+test("a city has each of its teams' games as another reading, unless it's after in", () => {
   const context = createContext();
   assert.deepEqual(listOtherReadings("Riverton", context), [
-    { text: "Games in Riverton", mark: { kind: "search" }, detail: "4 games" },
+    { text: "Hawks", mark: { kind: "search" }, detail: "8 games" },
   ]);
   assert.deepEqual(
     listOtherReadings("Owls riverton", context).map((reading) => reading.text),
-    ["Owls in Riverton"],
+    ["Owls Hawks"],
   );
   assert.deepEqual(listOtherReadings("in Riverton", context), []);
   assert.deepEqual(listOtherReadings("Hawks", context), []);
-  assert.deepEqual(listOtherReadings("Hornets riverton", context), []);
 });
 
 test("the examples fit the room they're given, the first that find a game first", () => {

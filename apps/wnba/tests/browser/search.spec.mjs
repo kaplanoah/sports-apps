@@ -254,7 +254,9 @@ test("words that ask only for games go straight to them, and one whose games are
   await expect(page.locator('#gameSearch .listed-day[data-day="2026-09-23"]')).toBeInViewport();
 });
 
-test("a place a team is named for offers its games there as another reading", async ({ page }) => {
+test("a city finds the games played there, with its team's games as another reading", async ({
+  page,
+}) => {
   await openSeasonGames(page);
   await tapSearch(page);
 
@@ -263,14 +265,15 @@ test("a place a team is named for offers its games there as another reading", as
   await expect(findRows(page)).toHaveText([
     "New York Liberty26-18",
     "RosterNew York Liberty",
-    "Games in New York26 games",
+    "Liberty52 games",
   ]);
+  await expect(findGamesLine(page)).toHaveText("In New York\u202226 games");
   await expect(findRows(page).last().locator(".search-caret")).toHaveCount(0);
 
   await findRows(page).last().tap();
 
-  await expect(findInput(page)).toHaveValue("Games in New York");
-  await expect(findLine(page)).toHaveText("In New York•26 games");
+  await expect(findInput(page)).toHaveValue("Liberty");
+  await expect(findGamesLine(page)).toHaveText("Liberty\u202252 games");
 });
 
 test("while typing, a finger dragging the list puts the keyboard away and leaves what typing showed", async ({
