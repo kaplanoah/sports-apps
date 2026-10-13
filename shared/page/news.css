@@ -23,11 +23,14 @@
   overflow: hidden;
   border-radius: var(--radius-card);
 }
+/* The frame news-photo.js chooses for the photo: its shape, and how far down a taller photo it
+   sits. */
 .news-photo {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: var(--photo-aspect);
   object-fit: cover;
+  object-position: 50% var(--photo-position);
 }
 .news-body {
   display: grid;

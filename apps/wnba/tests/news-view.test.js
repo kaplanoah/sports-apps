@@ -274,3 +274,56 @@ test("each card is named by its lead, so a redraw keeps the card, and its photo,
     ["newer", "older"],
   );
 });
+
+test("a card's photo draws in the frame the Worker sized for it, and 16:9 from its top until it has", () => {
+  const url = "https://example.com/photo.jpg";
+  const readPhotoStyle = (photo) =>
+    renderNews(createCards([createStory({ photo })]), ALL_ON, NOW).text.match(
+      /<img[^>]*class="news-photo"[^>]*style="([^"]*)"/,
+    )?.[1];
+
+  // Claude's frame starts 0.128 down a 2:3 photo, of the 0.555 a 3:2 frame can move down it.
+  assert.equal(
+    readPhotoStyle({ url, credit: "", width: 683, height: 1024, frameTop: 0.128 }),
+    "--photo-aspect: 1.5; --photo-position: 23.049%",
+  );
+  assert.equal(
+    readPhotoStyle({ url, credit: "", width: 1600, height: 1000 }),
+    "--photo-aspect: 1.6; --photo-position: 50%",
+  );
+  assert.equal(readPhotoStyle({ url, credit: "" }), "--photo-aspect: 1.778; --photo-position: 0%");
+});
+
+test("in two columns, a card whose photo's frame is taller counts as taller", () => {
+  const url = "https://example.com/photo.jpg";
+  const readColumns = (photo) => {
+    const cards = [
+      { lead: createStory({ id: "photo", title: "Photo", photo }), more: [] },
+      {
+        lead: createStory({ id: "more", title: "More", publishedAt: "2026-10-04T11:00:00.000Z" }),
+        more: [
+          createStory({ id: "under", title: "Under", publishedAt: "2026-10-04T10:00:00.000Z" }),
+        ],
+      },
+      ...["Third", "Fourth"].map((title, index) => ({
+        lead: createStory({ id: title, title, publishedAt: `2026-10-04T0${8 - index}:00:00.000Z` }),
+        more: [],
+      })),
+    ];
+    return renderNews(cards, ALL_ON, NOW, { columnCount: 2 })
+      .text.split('<ul class="news-column">')
+      .slice(1)
+      .map((column) =>
+        [...column.matchAll(/<h3[^>]*>\s*<a[^>]*>([^<]*)</g)].map((match) => match[1]),
+      );
+  };
+
+  assert.deepEqual(readColumns({ url, credit: "" }), [
+    ["Photo", "Fourth"],
+    ["More", "Third"],
+  ]);
+  assert.deepEqual(readColumns({ url, credit: "", width: 683, height: 1024 }), [
+    ["Photo"],
+    ["More", "Third", "Fourth"],
+  ]);
+});

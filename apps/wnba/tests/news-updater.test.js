@@ -2,14 +2,22 @@ import test from "node:test";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { LABELS_SCHEMA, NEWS_MODEL } from "../../../shared/worker/news-claude.js";
+import { PHOTO_MODEL, PHOTO_SPOT_SCHEMA } from "../../../shared/worker/news-photos.js";
+import { NEWS_FEEDS } from "../worker/src/news-feeds.js";
 import { LABEL_PROMPT } from "../worker/src/news-prompts.js";
 import { createWnbaNewsJob } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
+import { createPng } from "../../../tests/photo-files.js";
 
 const NOW = Date.parse("2026-10-05T16:00:00Z");
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 const ENV = { ANTHROPIC_API_KEY: "test-key" };
+const FEED_URLS = new Set(NEWS_FEEDS.map((feed) => feed.url));
+/** @type {[number, number]} */
+const WIDE_PHOTO = [1800, 1200];
+/** @type {[number, number]} */
+const TALL_PHOTO = [683, 1024];
 
 const readStories = (content) => JSON.parse(content.slice(content.lastIndexOf("[")));
 
@@ -37,8 +45,24 @@ const answerLabels = (content, { skip, place, ignore }) =>
     );
 
 /**
- * The feeds as recorded, and a Claude that answers as `skip`, `place`, and `ignore` say, or with
- * `status` when it's not 200, stopping for `stopReason`.
+ * Claude's answer for a photo: its subject from 20% to 50% of its height down.
+ * @param {number} status
+ */
+const answerSpot = (status) =>
+  status === 200
+    ? Response.json({
+        content: [{ type: "text", text: JSON.stringify({ subjectTop: 20, subjectBottom: 50 }) }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1000, output_tokens: 20 },
+      })
+    : Response.json({ error: { message: "Overloaded" } }, { status });
+
+/**
+ * The feeds as recorded, each photo in the size `photoSize` gives, or a 404 when
+ * `photoStatus` says, and a Claude that answers for a photo with `spotStatus`, and for stories as
+ * `skip`, `place`, and `ignore` say, or with `status` when it's not 200, stopping for
+ * `stopReason`. It keeps each photo it sends in `photoReads` and each photo Claude is asked about
+ * in `spotRequests`.
  */
 function createFetch({
   skip = () => false,
@@ -47,11 +71,26 @@ function createFetch({
   status = 200,
   stopReason = "end_turn",
   requests = [],
+  photoSize = WIDE_PHOTO,
+  photoStatus = 200,
+  spotStatus = 200,
+  photoReads = [],
+  spotRequests = [],
 } = {}) {
   const readFeed = createFeedFetch();
   return async (url, init) => {
-    if (String(url) !== CLAUDE_URL) return readFeed(url);
+    const address = String(url);
+    if (FEED_URLS.has(address)) return readFeed(url);
+    if (address !== CLAUDE_URL) {
+      photoReads.push(address);
+      if (photoStatus !== 200) return new Response("Not found", { status: photoStatus });
+      return new Response(createPng(...photoSize));
+    }
     const body = JSON.parse(init.body);
+    if (body.model === PHOTO_MODEL) {
+      spotRequests.push(body);
+      return answerSpot(spotStatus);
+    }
     requests.push({ headers: init.headers, body });
     if (status !== 200) return Response.json({ error: { message: "Overloaded" } }, { status });
     const answers = answerLabels(body.messages[0].content, { skip, place, ignore });
@@ -358,4 +397,117 @@ test("Claude answers in the schema, and a run whose answer Claude didn't finish 
 test("the WNBA's prompt is the one its stories were last judged by", () => {
   const hash = createHash("sha256").update(LABEL_PROMPT).digest("hex").slice(0, 16);
   assert.equal(hash, "5a56822c8c0fb6d6");
+});
+
+/** @param {{ stored: Map<string, any> }} docs */
+const listCardPhotos = (docs) =>
+  docs.stored
+    .get("news/cards")
+    .cards.flatMap(({ lead, more }) => [lead, ...more])
+    .map((story) => story.photo)
+    .filter(Boolean);
+
+test("each card's photo carries its size, and one taller than 3:2 where Claude places its frame, each read once", async () => {
+  const { docs, runJob } = createRun();
+  const photoReads = [];
+  const spotRequests = [];
+
+  await runJob(createFetch({ photoSize: TALL_PHOTO, photoReads, spotRequests }));
+  await runJob(createFetch({ photoSize: TALL_PHOTO, photoReads, spotRequests }));
+
+  const photos = listCardPhotos(docs);
+  assert.equal(new Set(photos.map((photo) => photo.url)).size, photoReads.length);
+  assert.equal(new Set(photoReads).size, photoReads.length);
+  // Claude's subject, 20% to 50% down, centered in a frame 683 / 1024 / 1.5 of the photo tall.
+  assert.ok(photos.every((photo) => photo.width === 683 && photo.height === 1024));
+  assert.ok(photos.every((photo) => photo.frameTop === 0.128));
+  assert.deepEqual(
+    spotRequests.map((request) => request.messages[0].content[0].source.url),
+    photoReads,
+  );
+  assert.equal(spotRequests[0].model, PHOTO_MODEL);
+  assert.deepEqual(spotRequests[0].output_config, {
+    effort: "low",
+    format: { type: "json_schema", schema: PHOTO_SPOT_SCHEMA },
+  });
+});
+
+test("a run frames 24 photos at most, the newest cards' first, and the next run the rest", async () => {
+  const { docs, runJob } = createRun();
+  const firstReads = [];
+  await runJob(createFetch({ photoReads: firstReads }));
+
+  const urls = [...new Set(listCardPhotos(docs).map((photo) => photo.url))];
+  assert.equal(urls.length, 25);
+  assert.deepEqual(firstReads.toSorted(), urls.slice(0, 24).toSorted());
+  assert.equal(listCardPhotos(docs).filter((photo) => !photo.width).length, 1);
+
+  const secondReads = [];
+  await runJob(createFetch({ photoReads: secondReads }));
+  assert.deepEqual(secondReads, urls.slice(24));
+  assert.ok(listCardPhotos(docs).every((photo) => photo.width === 1800));
+});
+
+test("a photo from 16:9 to 3:2 isn't asked about", async () => {
+  const spotRequests = [];
+  const { docs, runJob } = createRun();
+
+  await runJob(createFetch({ spotRequests }));
+
+  assert.equal(spotRequests.length, 0);
+  assert.ok(listCardPhotos(docs).every((photo) => photo.frameTop === undefined));
+});
+
+test("a photo Claude couldn't place is asked about again on the next runs, three times at most", async () => {
+  const { docs, runJob } = createRun();
+  const spotRequests = [];
+  const failing = { photoSize: TALL_PHOTO, spotStatus: 529, spotRequests };
+
+  // The 25th photo waits for a run's 24 places until the others have had their three tries.
+  for (let run = 0; run < 6; run += 1) await runJob(createFetch(failing));
+
+  const photos = new Set(listCardPhotos(docs).map((photo) => photo.url));
+  const askedPerPhoto = [...photos].map(
+    (url) =>
+      spotRequests.filter((request) => request.messages[0].content[0].source.url === url).length,
+  );
+  assert.ok(askedPerPhoto.every((count) => count === 3));
+  assert.ok(listCardPhotos(docs).every((photo) => photo.width && photo.frameTop === undefined));
+  assert.deepEqual(docs.stored.get("news/status").photos, { framed: 0, failed: 1 });
+});
+
+test("a photo whose size couldn't be read is read again on the next runs, three times at most", async () => {
+  const { docs, runJob } = createRun();
+  const photoReads = [];
+
+  await runJob(createFetch({ photoStatus: 404, photoReads }));
+  assert.deepEqual(docs.stored.get("news/status").photos, { framed: 0, failed: 24 });
+  for (let run = 0; run < 5; run += 1) await runJob(createFetch({ photoStatus: 404, photoReads }));
+
+  const photos = new Set(listCardPhotos(docs).map((photo) => photo.url));
+  assert.equal(photoReads.length, photos.size * 3);
+  assert.ok(listCardPhotos(docs).every((photo) => photo.width === undefined));
+});
+
+test("without an API key, no photo is asked about, and one no card shows is forgotten", async () => {
+  const { docs, storage } = createRun();
+  const job = createWnbaNewsJob();
+  const spotRequests = [];
+  const runWith = (env) =>
+    job.updateStore({
+      docs,
+      storage,
+      loadSnapshot: async () => ({}),
+      env,
+      fetchImpl: createFetch({ photoSize: TALL_PHOTO, spotRequests }),
+      now: () => NOW,
+    });
+  await runWith(ENV);
+  const asked = spotRequests.length;
+
+  const gone = { url: "https://example.com/gone.jpg", width: 683, height: 1024 };
+  await storage.put("photo:gone", gone);
+  await runWith({});
+  assert.equal(spotRequests.length, asked);
+  assert.equal(storage.stored.has("photo:gone"), false);
 });
