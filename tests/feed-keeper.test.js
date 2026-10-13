@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createFeedKeeper, createMemoryStorage } from "../shared/worker/feed-keeper.js";
+import {
+  createFeedKeeper,
+  createMemoryStorage,
+  findSettledTime,
+  isPlayerReadDue,
+} from "../shared/worker/feed-keeper.js";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -156,4 +161,21 @@ test("what a keeper kept outlasts it, as a Durable Object's storage outlasts its
   clock.now = 2 * MINUTE_MS;
   await read(createKeeperOnStorage());
   assert.equal(reads, 2);
+});
+
+test("a game's reads settle ten minutes after its end, and at once for a game the store never saw end", () => {
+  const end = "2026-10-07T04:00:00.000Z";
+  assert.equal(findSettledTime({ end }), Date.parse(end) + 10 * MINUTE_MS);
+  assert.equal(findSettledTime({ end: null }), -Infinity);
+});
+
+test("a player's read is due when his games change, and once more ten minutes after one made as he played", () => {
+  const settled = { games: 3, at: 0, isSettled: true };
+  const asHePlayed = { games: 3, at: 0, isSettled: false };
+
+  assert.equal(isPlayerReadDue(undefined, 3, 0), true);
+  assert.equal(isPlayerReadDue(settled, 4, MINUTE_MS), true);
+  assert.equal(isPlayerReadDue(settled, 3, HOUR_MS), false);
+  assert.equal(isPlayerReadDue(asHePlayed, 3, 9 * MINUTE_MS), false);
+  assert.equal(isPlayerReadDue(asHePlayed, 3, 10 * MINUTE_MS), true);
 });

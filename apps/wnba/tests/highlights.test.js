@@ -125,7 +125,7 @@ test("the store's job reads each of the season's finals in ESPN's scoreboard and
   const storage = new Map();
   const espn = createEspnFetch();
 
-  await createHighlightsUpdater().run(
+  await createHighlightsUpdater().updateStore(
     /** @type {any} */ ({
       docs: {
         read: async (/** @type {string} */ key) => stored.get(key) ?? null,

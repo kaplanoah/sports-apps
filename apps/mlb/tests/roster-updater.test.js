@@ -157,7 +157,7 @@ function createRun() {
   const storage = createJobStorage();
   const job = createRosterJob();
   const runJob = () =>
-    job.run({
+    job.updateStore({
       docs,
       storage,
       loadSnapshot: async () => null,

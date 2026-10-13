@@ -2,6 +2,8 @@ import { isSameJson } from "#shared/compare.js";
 import { nameScheduleCollection } from "../../page/js/snapshot.js";
 import { listSlateGames } from "../../page/js/slate.js";
 import { fetchBoxScore, nameGameDetailsKey } from "./box-score.js";
+import { listPastSeasons } from "../../../../shared/worker/background-job.js";
+import { findSettledTime } from "../../../../shared/worker/feed-keeper.js";
 
 // Keeps each finished game's box score, so a sheet opened on a final reads only the store. A game
 // is read as the store finds it final, and again once a read comes long enough after its end for
@@ -13,7 +15,6 @@ import { fetchBoxScore, nameGameDetailsKey } from "./box-score.js";
 const MINUTE_MS = 60 * 1000;
 const RUN_DELAY_MS = 2 * MINUTE_MS;
 const GAMES_PER_RUN = 4;
-const SETTLE_MS = 10 * MINUTE_MS;
 const RETRY_MS = 10 * MINUTE_MS;
 // A game whose box score hasn't settled this long after its first read is let go.
 const GIVE_UP_MS = 2 * 60 * MINUTE_MS;
@@ -76,12 +77,6 @@ function isDue(read, now) {
 }
 
 /**
- * When a read can no longer miss the game's last plays.
- * @param {any} game
- */
-const findSettledTime = (game) => (game.end ? Date.parse(game.end) + SETTLE_MS : -Infinity);
-
-/**
  * Reads a game's box score and saves it when it changed, keeping what was saved when the read fails.
  * @param {JobContext} context
  * @param {any} game
@@ -130,11 +125,8 @@ async function keepSeasonGames(context, season, finals, limit) {
  * @param {JobContext} context
  * @param {number} current
  */
-async function listPastSeasons(context, current) {
-  const years = (await context.docs.list("seasons"))
-    .map((/** @type {any} */ season) => season.year)
-    .filter((year) => year < current)
-    .sort((first, second) => second - first);
+async function listUnkeptPastSeasons(context, current) {
+  const years = await listPastSeasons(context.docs, current);
   const kept = await Promise.all(years.map((year) => context.storage.get(nameKeptKey(year))));
   return years.filter((_, index) => kept[index] !== BOX_SCORE_VERSION);
 }
@@ -162,7 +154,7 @@ async function keepFinishedGames(context) {
   const { season, games: currentFinals } = finals;
   const current = await keepSeasonGames(context, season, currentFinals, GAMES_PER_RUN);
   let left = GAMES_PER_RUN - current.readCount;
-  for (const year of await listPastSeasons(context, season)) {
+  for (const year of await listUnkeptPastSeasons(context, season)) {
     if (!left) return;
     const finals = await listScheduledFinals(context.docs, year);
     const { readCount, isDone } = await keepSeasonGames(context, year, finals, left);
@@ -172,5 +164,5 @@ async function keepFinishedGames(context) {
 }
 
 export function createGameDetailsJob() {
-  return { chooseDelay: () => RUN_DELAY_MS, run: keepFinishedGames };
+  return { chooseDelay: () => RUN_DELAY_MS, updateStore: keepFinishedGames };
 }

@@ -302,7 +302,7 @@ function createJobRun(mlb, env) {
   const job = createHighlightsUpdater();
   return {
     stored,
-    runJob: () => job.run(context),
+    runJob: () => job.updateStore(context),
     forgetReads: () => {
       for (const key of storage.keys()) if (key.startsWith("highlight-reads:")) storage.delete(key);
     },

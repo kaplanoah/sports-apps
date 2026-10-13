@@ -10,7 +10,7 @@ const listOldKeys = (year) => [`live/${year}`, `standings/${year}`];
 export function createOldRecordsJob() {
   return {
     chooseDelay: () => DAY_MS,
-    async run({ docs }) {
+    async updateStore({ docs }) {
       const years = (await docs.list("seasons")).map((season) => season.year);
       for (const key of years.flatMap(listOldKeys)) {
         if (await docs.read(key)) await docs.remove(key);

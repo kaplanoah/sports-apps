@@ -1,4 +1,3 @@
-import { isSameJson } from "#shared/compare.js";
 import { addDays, readEasternDay } from "#shared/days.js";
 import { listStarterIds } from "../../page/js/snapshot.js";
 import { fetchMlbJson } from "./mlb.js";
@@ -26,9 +25,18 @@ import {
   listScheduleRequest,
   nameRotationKey,
 } from "./rotations.js";
-import { SETTLE_MS, createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
-import { countRequests, describeJobRun } from "../../../../shared/worker/job-status.js";
-import { describeError } from "../../../../shared/worker/responses.js";
+import {
+  createPerStoreJob,
+  createSavedDocs,
+  listPastSeasons,
+} from "../../../../shared/worker/background-job.js";
+import { createFeedKeeper, isPlayerReadDue } from "../../../../shared/worker/feed-keeper.js";
+import {
+  catchFailure,
+  countRequests,
+  describeJobRun,
+  noteFailure,
+} from "../../../../shared/worker/job-status.js";
 import { nameCountKey } from "../../../../shared/worker/season-store.js";
 
 // Keeps what the matchup sheet shows, so a tap reads only the store and never waits on MLB. Each
@@ -62,23 +70,7 @@ const FEEDS = {
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
 /** @typedef {JobContext & { failures: string[] }} RunContext */
-
-/**
- * When a pitcher was last read, and how many games he had then.
- * @typedef {{ games: number, at: number, isSettled: boolean }} PitcherRead
- */
-
-/**
- * Logs what failed, and keeps it for the run's status.
- * @param {RunContext} context
- * @param {string} what what failed, as an error names it
- * @param {unknown} error
- */
-function noteFailure(context, what, error) {
-  const failure = `${what} failed: ${describeError(error)}`;
-  console.error(failure);
-  context.failures.push(failure);
-}
+/** @typedef {import("../../../../shared/worker/feed-keeper.js").PlayerRead} PlayerRead */
 
 /** @param {number} season */
 const nameFilledKey = (season) => `filled:${season}`;
@@ -105,19 +97,6 @@ export function countSlateFinals(savedSeason) {
 }
 
 /**
- * The seasons the store keeps from before the current one, newest first.
- * @param {JobContext["docs"]} docs
- * @param {number} current
- */
-async function listPastSeasons(docs, current) {
-  const seasons = await docs.list("seasons");
-  return seasons
-    .map((/** @type {any} */ saved) => Number(saved?.year))
-    .filter((year) => Number.isInteger(year) && year < current)
-    .sort((first, second) => second - first);
-}
-
-/**
  * Each pitcher's games, regular season and postseason together, and whether he has started one.
  * @param {any[]} tables
  */
@@ -134,43 +113,11 @@ function countAppearances(tables) {
   return counts;
 }
 
-/**
- * A pitcher's numbers reach MLB's stats a little after his game ends, so one read as he pitches is
- * read once more as they settle.
- * @param {PitcherRead | undefined} read
- * @param {number} games
- * @param {number} now
- */
-const isPitcherDue = (read, games, now) =>
-  !read || read.games !== games || (!read.isSettled && now - read.at >= SETTLE_MS);
-
-/** What one store keeps between runs, while it stays in memory, and how it runs. */
-function createStoreKeeper() {
+/** One store's update, with what it keeps between runs while it stays in memory. */
+function createStoreUpdate() {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
   let keeper = null;
-  // Each document as the job last read or saved it, so a run compares without reading the store.
-  /** @type {Map<string, any>} */
-  const saved = new Map();
-
-  /**
-   * @param {JobContext} context
-   * @param {string} key
-   */
-  async function readDoc({ docs }, key) {
-    if (!saved.has(key)) saved.set(key, await docs.read(key));
-    return saved.get(key);
-  }
-
-  /**
-   * @param {JobContext} context
-   * @param {string} key
-   * @param {any} doc
-   */
-  async function saveDoc(context, key, doc) {
-    if (isSameJson(await readDoc(context, key), doc)) return;
-    await context.docs.write(key, doc);
-    saved.set(key, doc);
-  }
+  const { readDoc, saveDoc } = createSavedDocs();
 
   /**
    * @param {JobContext} context
@@ -232,7 +179,7 @@ function createStoreKeeper() {
     );
     for (const person of people?.people || [])
       await saveDoc(
-        context,
+        context.docs,
         namePitcherKey(season, person.id),
         describePitcher(person, gameLogsById.get(person.id)),
       );
@@ -247,10 +194,10 @@ function createStoreKeeper() {
    * @param {Map<number, number>} games each kept pitcher's games, by id, the qualified first
    */
   async function updatePitchers(context, season, games) {
-    /** @type {Record<string, PitcherRead>} */
+    /** @type {Record<string, PlayerRead>} */
     const reads = (await context.storage.get(nameReadsKey(season))) ?? {};
     const due = [...games]
-      .filter(([id, count]) => isPitcherDue(reads[id], count, context.now()))
+      .filter(([id, count]) => isPlayerReadDue(reads[id], count, context.now()))
       .map(([id]) => id);
     const batches = splitIntoBatches(due).slice(0, BATCHES_PER_RUN);
     if (!batches.length) return;
@@ -259,7 +206,7 @@ function createStoreKeeper() {
     );
     for (const [index, result] of results.entries()) {
       if (result.status === "rejected") {
-        noteFailure(context, `Reading ${season}'s pitchers`, result.reason);
+        noteFailure(context.failures, `Reading ${season}'s pitchers`, result.reason);
         continue;
       }
       for (const id of batches[index]) {
@@ -281,12 +228,12 @@ function createStoreKeeper() {
   async function saveStarters(context, season, qualified) {
     const ids = listQualifiedIds(qualified);
     const pitchers = await Promise.all(
-      ids.map((id) => readDoc(context, namePitcherKey(season, id))),
+      ids.map((id) => readDoc(context.docs, namePitcherKey(season, id))),
     );
     const speeds = new Map(
       pitchers.filter(Boolean).map((pitcher) => [pitcher.id, pitcher.line?.speed ?? null]),
     );
-    await saveDoc(context, nameStartersKey(season), describeStarters(qualified, speeds));
+    await saveDoc(context.docs, nameStartersKey(season), describeStarters(qualified, speeds));
   }
 
   /**
@@ -299,12 +246,12 @@ function createStoreKeeper() {
     for (const club of listScheduleClubs(schedule)) {
       const ids = listClubStarterIds(schedule, club);
       const sides = await Promise.all(
-        ids.map((id) => readDoc(context, namePitcherKey(season, id))),
+        ids.map((id) => readDoc(context.docs, namePitcherKey(season, id))),
       );
       if (sides.some((side) => !side)) continue;
       const pitchers = new Map(sides.map((side) => [side.id, describeKeptRotationPitcher(side)]));
       const clubStarts = describeClubStarts({ club, from, schedule, pitchers });
-      await saveDoc(context, nameRotationKey(season, club), clubStarts);
+      await saveDoc(context.docs, nameRotationKey(season, club), clubStarts);
     }
   }
 
@@ -342,25 +289,12 @@ function createStoreKeeper() {
         listQualifiedIds(qualified),
       );
       await saveDoc(
-        context,
+        context.docs,
         nameStartersKey(season),
         describeStarters(qualified, readSpeeds(people)),
       );
       await context.storage.put(nameFilledKey(season), true);
       return;
-    }
-  }
-
-  /**
-   * @param {RunContext} context
-   * @param {string} what what failed, as an error names it
-   * @param {() => Promise<unknown>} work
-   */
-  async function logFailure(context, what, work) {
-    try {
-      await work();
-    } catch (error) {
-      noteFailure(context, what, error);
     }
   }
 
@@ -376,10 +310,10 @@ function createStoreKeeper() {
     if (!Number.isInteger(current)) return;
     const savedSeason = await context.docs.read(`seasons/${current}`);
     await keeper.noteFinalCount(countSlateFinals(savedSeason));
-    await logFailure(context, `Keeping ${current}'s pitchers`, () =>
+    await catchFailure(context.failures, `Keeping ${current}'s pitchers`, () =>
       updateCurrentSeason(context, current, savedSeason),
     );
-    await logFailure(context, "Filling a past season's starters", () =>
+    await catchFailure(context.failures, "Filling a past season's starters", () =>
       fillPastSeason(context, current),
     );
   }
@@ -398,7 +332,7 @@ function createStoreKeeper() {
   }
 
   /** @param {JobContext} context */
-  async function run(context) {
+  async function updateStore(context) {
     const startedAt = context.now();
     const counter = countRequests(context.fetchImpl);
     const runContext = { ...context, fetchImpl: counter.fetchImpl, failures: [] };
@@ -406,22 +340,7 @@ function createStoreKeeper() {
     await saveStatus(runContext, { startedAt, requests: counter.count });
   }
 
-  return { run };
+  return updateStore;
 }
 
-export function createPitcherJob() {
-  // One job serves every store made from its module, as each test makes its own, so each store
-  // keeps its own reads.
-  /** @type {WeakMap<JobContext["docs"], ReturnType<typeof createStoreKeeper>>} */
-  const keepers = new WeakMap();
-  return {
-    chooseDelay: () => RUN_DELAY_MS,
-    /** @param {JobContext} context */
-    run(context) {
-      if (!keepers.has(context.docs)) keepers.set(context.docs, createStoreKeeper());
-      return /** @type {ReturnType<typeof createStoreKeeper>} */ (keepers.get(context.docs)).run(
-        context,
-      );
-    },
-  };
-}
+export const createPitcherJob = () => createPerStoreJob(RUN_DELAY_MS, createStoreUpdate);

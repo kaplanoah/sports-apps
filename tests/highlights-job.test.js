@@ -6,12 +6,21 @@ const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const NOW = Date.parse("2026-10-07T04:00:00Z");
 
+const GAME_LENGTH_MS = 3 * HOUR_MS;
+
+/** @param {number} hoursAgo */
+const stampHoursAgo = (hoursAgo) => new Date(NOW - hoursAgo * HOUR_MS).toISOString();
+
 /**
  * A final that ended `hoursAgo` before the run's start.
  * @param {string} id
  * @param {number} hoursAgo
  */
-const endGame = (id, hoursAgo) => ({ id, end: NOW - hoursAgo * HOUR_MS });
+const endGame = (id, hoursAgo) => ({
+  id,
+  start: stampHoursAgo(hoursAgo + 3),
+  end: stampHoursAgo(hoursAgo),
+});
 
 function createStorage() {
   const stored = new Map();
@@ -55,7 +64,7 @@ function createRun(games, { answer = (id) => ({ id, plays: [] }) } = {}) {
   const createJob = () =>
     createHighlightsJob({
       listFinals: async () => ({ season: 2026, games }),
-      findEnd: (game) => game.end,
+      gameLengthMs: GAME_LENGTH_MS,
       readHighlights: async (_context, game) => {
         reads.push(game.id);
         return answer(game.id);
@@ -66,7 +75,7 @@ function createRun(games, { answer = (id) => ({ id, plays: [] }) } = {}) {
   const context = /** @type {any} */ ({ docs, storage, env: {}, now: () => clock.now });
   return {
     docs,
-    runJob: () => createJob().run(context),
+    runJob: () => createJob().updateStore(context),
     raiseEdition: (/** @type {number} */ edition) => {
       league.edition = edition;
     },
@@ -103,6 +112,20 @@ test("a game that just ended is read again an hour, three hours, and twelve hour
     if (takeReads().length) readsByHour.push(minutes / 60);
   }
   assert.deepEqual(readsByHour, [1, 3, 12]);
+});
+
+test("a game the store didn't see end is read as if it ended the league's game length after its start", async () => {
+  const { runJob, wait, takeReads } = createRun([{ id: "1", start: stampHoursAgo(1) }]);
+
+  await runJob();
+  assert.deepEqual(takeReads(), ["1"]);
+  const readsByHour = [];
+  for (let minutes = 2; minutes <= 24 * 60; minutes += 2) {
+    wait(2);
+    await runJob();
+    if (takeReads().length) readsByHour.push(minutes / 60);
+  }
+  assert.deepEqual(readsByHour, [2, 3, 5, 14]);
 });
 
 test("a game found final long after it ended is read once", async () => {

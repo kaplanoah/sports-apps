@@ -59,7 +59,7 @@ import {
 // Phosphor's magnifying-glass at its Light weight in the field, as the page's controls are, and at
 // its Regular weight, calendar-blank, and map-pin beside a suggestion's words, trophy, trend-up,
 // newspaper, and sliders-horizontal beside a place's, as the tabs and the settings button show them,
-// film-strip beside a game's part, and x-circle at its Fill weight to clear the field, as iOS does.
+// and film-strip beside a game's part.
 const FIELD_GLASS = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228.24,219.76l-51.38-51.38a86.15,86.15,0,1,0-8.48,8.48l51.38,51.38a6,6,0,0,0,8.48-8.48ZM38,112a74,74,0,1,1,74,74A74.09,74.09,0,0,1,38,112Z"/></svg>`;
 const MARKS = {
   search: html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>`,
@@ -73,6 +73,7 @@ const MARKS = {
 };
 // Phosphor's caret-right at its Regular weight, at the end of a row that opens a page.
 const CARET = html`<svg class="search-caret" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></svg>`;
+// Phosphor's x-circle at its Fill weight, to clear the field, as iOS does.
 const CLEAR = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm37.66,130.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>`;
 
 /** @type {HTMLElement | null} */

@@ -18,7 +18,7 @@ async function runJob(stored) {
       documents.delete(key);
     },
   };
-  await createOldRecordsJob().run(
+  await createOldRecordsJob().updateStore(
     /** @type {any} */ ({ docs, loadSnapshot: async () => null, now: () => 0 }),
   );
   return { keys: [...documents.keys()].sort(), removed };

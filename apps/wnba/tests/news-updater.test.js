@@ -94,7 +94,7 @@ function createRun({ env = ENV, now = NOW } = {}) {
   const job = createWnbaNewsJob();
   const loadSnapshot = async () => ({});
   const runJob = (fetchImpl) =>
-    job.run({ docs, storage, loadSnapshot, env, fetchImpl, now: () => now });
+    job.updateStore({ docs, storage, loadSnapshot, env, fetchImpl, now: () => now });
   return { storage, docs, runJob };
 }
 

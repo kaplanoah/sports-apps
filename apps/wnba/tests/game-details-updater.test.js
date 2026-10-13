@@ -120,7 +120,7 @@ function createRun({
   const clock = { now: NOW };
   const job = createGameDetailsJob();
   const runJob = () =>
-    job.run({
+    job.updateStore({
       docs,
       storage,
       loadSnapshot: async () => null,
