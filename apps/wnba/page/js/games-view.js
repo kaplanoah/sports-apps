@@ -1,6 +1,7 @@
 import { formatCalendarDate, formatClockTime } from "#shared/days.js";
 import { renderGameRow } from "#shared/game-row.js";
 import { html } from "#shared/html.js";
+import { renderStatusWithNetworks } from "#shared/network-logos.js";
 import { listFoundDays, listSeasonDays as listDayStripDays } from "#shared/season-days.js";
 import { renderAllStarClub, renderClub, renderPlainClub } from "./clubs.js";
 import { readGameDay } from "./days.js";
@@ -190,11 +191,16 @@ export const renderGameOpenButton = (game) =>
   hasBothTeams(game) &&
   html`<button type="button" class="game-open" aria-label="${nameOpenButton(game)}" data-game="${game.id}"></button>`;
 
+/** @typedef {{ showsNetworks: boolean }} Shown what a game's row shows besides the Games view's */
+
+const AS_THE_GAMES_VIEW = { showsNetworks: false };
+
 /**
  * @param {Game} game
  * @param {Game[]} games
+ * @param {Shown} shown
  */
-const renderGame = (game, games) =>
+const renderGame = (game, games, shown) =>
   renderGameRow({
     id: game.id,
     classes: [game.state],
@@ -202,17 +208,20 @@ const renderGame = (game, games) =>
     home: describeSide(game, "home"),
     label: renderSeriesLabel(game, games),
     headline: renderHeadline(game),
-    status: renderStatus(game),
+    status: shown.showsNetworks
+      ? renderStatusWithNetworks(renderStatus(game), game.networks ?? [])
+      : renderStatus(game),
     action: renderOpenButton(game),
   });
 
 /**
  * @param {Game[]} games
  * @param {Game[]} allGames every game of the season, which the series labels count from
+ * @param {Shown} [shown]
  */
-const renderGameList = (games, allGames) =>
+const renderGameList = (games, allGames, shown = AS_THE_GAMES_VIEW) =>
   html`<ul class="game-list">
-    ${games.map((game) => renderGame(game, allGames))}
+    ${games.map((game) => renderGame(game, allGames, shown))}
   </ul>`;
 
 /**
@@ -275,13 +284,14 @@ export function listListedGames(season, schedule) {
  * @param {Game[]} games the games found, in order of start
  * @param {Game[]} allGames every game the Games view lists, which the series labels count from
  * @param {number} now
+ * @param {Shown} shown
  */
-export const listFoundGameDays = (games, allGames, now) =>
+export const listFoundGameDays = (games, allGames, now, shown) =>
   listFoundDays({
     gameDays: groupByDay(games).map((gameDay) => ({
       day: formatCalendarDate(gameDay.day),
       count: gameDay.games.length,
-      games: renderGameList(gameDay.games, allGames),
+      games: renderGameList(gameDay.games, allGames, shown),
     })),
     today: formatCalendarDate(new Date(now)),
   });

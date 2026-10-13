@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { listNetworkLogos, NETWORK_LOGOS, renderNetworks } from "../shared/page/network-logos.js";
+import { html } from "../shared/page/html.js";
+import {
+  describeChannel,
+  listNetworkLogos,
+  NETWORK_LOGOS,
+  renderNetworks,
+  renderStatusWithNetworks,
+} from "../shared/page/network-logos.js";
 
 /** @param {string[]} names */
 const listLogos = (names) =>
@@ -113,4 +120,30 @@ test("a game with no channels listed yet says to check back", () => {
     renderNetworksLine([]),
     '<p class="networks networks-pending">Check back for where to watch</p>',
   );
+});
+
+test("a listing names its channel, with every word fans call it, or its own name without a logo", () => {
+  assert.deepEqual(describeChannel("USA Net"), {
+    name: "USA Network",
+    words: ["USA Network", "USA Net", "usa"],
+  });
+  assert.deepEqual(describeChannel("prime video").words, [
+    "Prime Video",
+    "prime",
+    "amazon",
+    "amazon prime",
+  ]);
+  assert.deepEqual(describeChannel("ION"), { name: "ION", words: ["ION"] });
+});
+
+test("a game row's status keeps what it says, with its channels after it once any are listed", () => {
+  const ifNeeded = html`<span class="if-needed">If needed</span>`;
+  assert.equal(renderStatusWithNetworks(ifNeeded, []), ifNeeded);
+  assert.equal(renderStatusWithNetworks(false, []), false);
+  const alone = String(renderStatusWithNetworks(false, ["ESPN"]));
+  assert.match(alone, /^<span class="networks" role="group" aria-label="Where to watch"/);
+  assert.match(alone, /alt="ESPN"/);
+  const after = String(renderStatusWithNetworks(ifNeeded, ["ION"]));
+  assert.match(after, /If needed<\/span><span class="sep">/);
+  assert.match(after, /<span class="network-name">ION<\/span>/);
 });

@@ -76,14 +76,16 @@ const DICTIONARY = createSearchDictionary(TERMS);
  * What a search lists, each row as its kind and what it opens, and the words left for its games.
  * @param {string} text
  * @param {boolean} [isTyping]
+ * @param {import("../shared/page/page-search.js").SearchPages} [pages]
  */
-function listRows(text, isTyping = false) {
-  const { rows, gameText } = findPages(text, { dictionary: DICTIONARY, pages: PAGES, isTyping });
+function listRows(text, isTyping = false, pages = PAGES) {
+  const { rows, gameText } = findPages(text, { dictionary: DICTIONARY, pages, isTyping });
   return {
     rows: rows.map((row) => {
       if (row.kind === "place") return `place ${row.place.key}`;
       if (row.kind === "player") return `player ${row.team.code} ${row.player.lastName}`;
       if (row.kind === "game-part") return `${row.part.key} of ${row.gameText ?? "the season"}`;
+      if (row.kind === "story") return `story ${row.story.id}`;
       return `${row.kind} ${row.team.code}`;
     }),
     gameText,
@@ -171,4 +173,128 @@ test("the latest final is the last game that has ended", () => {
   ];
   assert.equal(findLatestFinal(games)?.id, "b");
   assert.equal(findLatestFinal(games.slice(2)), null);
+});
+
+/**
+ * A story about some of the teams, published on a day of September.
+ * @param {string} id
+ * @param {string[]} teams
+ * @param {number} day
+ * @returns {import("../shared/page/news-picks.js").NewsStory}
+ */
+const makeStory = (id, teams, day) => ({
+  id,
+  url: `https://news.example/${id}`,
+  title: `Story ${id}`,
+  summary: "",
+  author: "",
+  outlet: "The Paper",
+  source: "paper",
+  publishedAt: `2026-09-${String(day).padStart(2, "0")}T12:00:00Z`,
+  photo: null,
+  teams,
+});
+
+const NEWS_PLACE = {
+  key: "tab:news",
+  name: ["News"],
+  words: ["news", "stories"],
+  icon: /** @type {const} */ ("news"),
+};
+
+// The same league with players out, a setting whose words start like "out", and its news.
+/** @type {import("../shared/page/page-search.js").SearchPages} */
+const PAGES_WITH_NEWS = {
+  ...PAGES,
+  teams: PAGES.teams.map((team) => ({ ...team, record: team.code === "HAW" ? "20-4" : "4-20" })),
+  players: PAGES.players.map((player) => {
+    const out = {
+      1: { reason: "Left knee", isForSeason: false },
+      2: { reason: null, isForSeason: false },
+      4: { reason: "Concussion", isForSeason: true },
+    }[player.id];
+    return { ...player, out: out ?? null };
+  }),
+  places: [
+    ...PAGES.places,
+    NEWS_PLACE,
+    {
+      key: "settings:outlets",
+      name: ["Settings", "Outlets"],
+      words: ["settings", "outlets", "news sources"],
+      icon: "settings",
+    },
+  ],
+  news: {
+    place: NEWS_PLACE,
+    stories: [
+      makeStory("a", ["HAW"], 29),
+      makeStory("b", ["FOX"], 28),
+      makeStory("c", ["HAW", "FOX"], 27),
+      makeStory("d", ["HAW"], 26),
+      makeStory("e", ["HAW"], 25),
+    ],
+  },
+};
+
+test("words asking who is out list each player out, by team and then last name, saying why", () => {
+  for (const text of ["who is out", "who's out", "injured", "injuries", "injury report"])
+    assert.deepEqual(
+      listRows(text, false, PAGES_WITH_NEWS),
+      { rows: ["player FOX Stone", "player HAW Rook", "player HAW Stone"], gameText: null },
+      text,
+    );
+  const { rows } = findPages("who is out", {
+    dictionary: DICTIONARY,
+    pages: PAGES_WITH_NEWS,
+    isTyping: false,
+  });
+  assert.ok(rows.every((row) => row.kind === "player" && row.out === "listed"));
+});
+
+test("a player's name with words asking who is out lists her, saying whether she is", () => {
+  for (const text of ["Rook injury", "is Rook out", "Quill injured"]) {
+    const { rows } = findPages(text, {
+      dictionary: DICTIONARY,
+      pages: PAGES_WITH_NEWS,
+      isTyping: false,
+    });
+    assert.equal(rows.length, 1, text);
+    assert.equal(rows[0].kind === "player" && rows[0].out, "named", text);
+  }
+  assert.deepEqual(listRows("Rook injury", false, PAGES_WITH_NEWS).rows, ["player HAW Rook"]);
+});
+
+test("a team's name with words asking who is out lists who is out on it, or its Roster when no one is", () => {
+  assert.deepEqual(listRows("Hawks injuries", false, PAGES_WITH_NEWS), {
+    rows: ["player HAW Rook", "player HAW Stone"],
+    gameText: null,
+  });
+  assert.deepEqual(listRows("Foxes injury report"), { rows: ["section FOX"], gameText: null });
+});
+
+test("a team's name beside its record's words lists its sheet and Roster over its games", () => {
+  for (const text of ["Hawks record", "Hawks standing"])
+    assert.deepEqual(
+      listRows(text, false, PAGES_WITH_NEWS),
+      { rows: ["team HAW", "section HAW"], gameText: "hawks" },
+      text,
+    );
+});
+
+test("a team's name beside the News tab's words lists the tab for the team and its three newest stories", () => {
+  assert.deepEqual(listRows("Hawks news", false, PAGES_WITH_NEWS), {
+    rows: ["place tab:news", "story a", "story c", "story d"],
+    gameText: null,
+  });
+  const [tab] = findPages("Foxes stories", {
+    dictionary: DICTIONARY,
+    pages: PAGES_WITH_NEWS,
+    isTyping: false,
+  }).rows;
+  assert.equal(tab.kind === "place" && tab.detail, "Foxes");
+  assert.deepEqual(listRows("news", false, PAGES_WITH_NEWS).rows, [
+    "place tab:news",
+    "place settings:outlets",
+  ]);
 });

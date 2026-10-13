@@ -11,7 +11,9 @@
 // pick from what's left. A game whose time isn't set yet counts in a search of its day, and in a
 // search for a time of day it's listed by date with the rest and counted apart, since it may yet fit.
 // A word two teams share, like "Sox", finds either's games, and a starter's name finds the games he's
-// named to start, his next only once it's announced.
+// named to start, his next only once it's announced. A channel's name finds the games on it, and
+// "where to watch" the games yet to end whose channels are listed, with them, while a league's word
+// for a final past regulation, like "overtime", finds those finals.
 
 import { addDays, formatCalendarDate } from "./days.js";
 import {
@@ -30,6 +32,7 @@ import {
   readPartOfMonth,
   readTimeOfDay,
 } from "./search-dates.js";
+import { describeChannel } from "./network-logos.js";
 import { createDictionary, readTokens } from "./search-words.js";
 
 /** @typedef {import("./search-words.js").Meaning} Meaning */
@@ -59,6 +62,8 @@ import { createDictionary, readTokens } from "./search-words.js";
  * @property {{ id: string, name: string }[]} [starters] the starters it names, once announced
  * @property {number | null} [localMinutes] its start in minutes on the clock where it's played
  * @property {boolean} [isDoubleheader]
+ * @property {string[]} [networks] the channels it's on, as the league lists them
+ * @property {boolean} [isPastRegulation] whether a final went past regulation, as into overtime
  * @property {any} game the league's own game
  */
 /**
@@ -94,6 +99,15 @@ import { createDictionary, readTokens } from "./search-words.js";
  * @property {{ name: string, words: string[] }} [crossConference] what the league calls a game
  *   between its conferences, like MLB's interleague
  * @property {SearchStarter[]} [starters]
+ * @property {SearchChannel[]} [channels] the channels its games are on
+ * @property {{ name: string, words: string[], games: string }} [pastRegulation] what the league
+ *   calls a final that went past regulation, as the line names it, like the WNBA's "Overtime" or
+ *   MLB's "Extra innings", the words that name it, and what it calls such games
+ */
+/**
+ * A channel games are on, as the line names it, the words that name it, and each name the league
+ * lists it by.
+ * @typedef {{ name: string, words: string[], listings: string[] }} SearchChannel
  */
 /**
  * @typedef {object} SearchContext
@@ -128,6 +142,10 @@ import { createDictionary, readTokens } from "./search-words.js";
  * @property {"win" | "loss" | null} outcome
  * @property {{ which: "next" | "last", count: number } | null} pick
  * @property {{ name: string, label: string } | null} landmark
+ * @property {SearchChannel[]} channels
+ * @property {boolean} isWhereToWatch whether it asks where to watch, so it finds games whose
+ *   channels are listed, yet to end unless it asks otherwise, and shows each one's channels
+ * @property {boolean} isPastRegulation
  * @property {string[]} skipped the words it couldn't use, as typed
  */
 
@@ -288,6 +306,23 @@ const GENERAL_ENTRIES = [
     phrase,
     meaning: { kind: "landmark", value: "break" },
   })),
+  ...[
+    "watch",
+    "to watch",
+    "where to watch",
+    "watching",
+    "tv",
+    "on tv",
+    "channel",
+    "channels",
+    "network",
+    "networks",
+    "broadcast",
+    "broadcasts",
+    "stream",
+    "streaming",
+    "televised",
+  ].map((phrase) => ({ phrase, meaning: { kind: "watch", display: "where to watch" } })),
 ];
 
 const KIND_LABELS = { playoffs: "Playoffs", regular: "Regular season" };
@@ -362,6 +397,23 @@ export function listVenuePlaces(venues, places, venueWord) {
 }
 
 /**
+ * Each channel a season's games are listed on, once however many names the league lists it by.
+ * @param {{ networks?: string[] }[]} games
+ * @returns {SearchChannel[]}
+ */
+export function listSearchChannels(games) {
+  /** @type {Map<string, SearchChannel>} */
+  const channels = new Map();
+  for (const listing of new Set(games.flatMap((game) => game.networks ?? []))) {
+    const { name, words } = describeChannel(listing);
+    const channel = channels.get(name) ?? { name, words, listings: [] };
+    channel.listings.push(listing);
+    channels.set(name, channel);
+  }
+  return [...channels.values()];
+}
+
+/**
  * Every phrase a league's searches know, its own words and the calendar's.
  * @param {SearchTerms} terms
  */
@@ -403,11 +455,20 @@ export function createSearchDictionary(terms) {
         meaning: { kind: "starter", value: starter.id, display: starter.name },
       })),
     ),
-    {
-      phrase: "commissioners cup",
+    ...(terms.channels ?? []).flatMap((channel) =>
+      channel.words.map((phrase) => ({
+        phrase,
+        meaning: { kind: "channel", value: channel, display: channel.name },
+      })),
+    ),
+    ...(terms.pastRegulation?.words ?? []).map((phrase) => ({
+      phrase,
+      meaning: { kind: "past-regulation", display: terms.pastRegulation?.name },
+    })),
+    ...["commissioners cup", "commissioner cup", "cup"].map((phrase) => ({
+      phrase,
       meaning: { kind: "kind", value: "cup", display: terms.kindNames.cup },
-    },
-    { phrase: "cup", meaning: { kind: "kind", value: "cup", display: terms.kindNames.cup } },
+    })),
   ]);
 }
 
@@ -452,6 +513,9 @@ const createEmptySearch = () => ({
   outcome: null,
   pick: null,
   landmark: null,
+  channels: [],
+  isWhereToWatch: false,
+  isPastRegulation: false,
   skipped: [],
 });
 
@@ -715,6 +779,9 @@ function readMeaningAt(state, meaning) {
     "if-needed": () => ((search.isIfNeeded = true), 1),
     doubleheader: () => ((search.isDoubleheader = true), 1),
     outcome: () => ((search.outcome = meaning.value), 1),
+    channel: () => (search.channels.push(meaning.value), 1),
+    watch: () => ((search.isWhereToWatch = true), 1),
+    "past-regulation": () => ((search.isPastRegulation = true), 1),
     landmark: () => {
       if (meaning.value === "break") return 0;
       search.landmark = {
@@ -940,9 +1007,27 @@ function fitsAllButTime(search, context, game) {
     () => !search.states.length || search.states.includes(game.state),
     () => !search.outcome || isOutcome(search, game),
     () => !search.landmark || isAtLandmark(context, search.landmark.name, game),
+    () => !search.channels.length || search.channels.some((channel) => isOnChannel(channel, game)),
+    () => !search.isWhereToWatch || !!game.networks?.length,
+    () => !isFindingGamesToWatch(search) || game.state !== "final",
+    () => !search.isPastRegulation || !!game.isPastRegulation,
   ];
   return checks.every((check) => check());
 }
+
+/**
+ * Whether a game is on a channel, by any name the league lists it by.
+ * @param {SearchChannel} channel
+ * @param {SearchGame} game
+ */
+const isOnChannel = (channel, game) =>
+  !!game.networks?.some((network) => channel.listings.includes(network));
+
+/**
+ * Whether a search asks where to watch with no state of its own, so it finds games yet to end.
+ * @param {Search} search
+ */
+const isFindingGamesToWatch = (search) => search.isWhereToWatch && !search.states.length;
 
 /**
  * Whether a final went the way a search asks for its one team.
@@ -1043,11 +1128,19 @@ function describeTeams(search, context) {
 }
 
 /**
+ * Where to watch, as the line says it: the games yet to start, and any under way.
+ * @param {ReturnType<typeof findSearchGames>} found
+ */
+const describeGamesToWatch = (found) =>
+  found.games.some((game) => game.state === "live") ? "Live and upcoming" : "Upcoming";
+
+/**
  * Each condition but the teams, as the line says it.
  * @param {Search} search
+ * @param {ReturnType<typeof findSearchGames>} found
  * @param {SearchContext} context
  */
-function listConditionLabels(search, context) {
+function listConditionLabels(search, found, context) {
   const range = search.ranges.length
     ? search.ranges.reduce((all, each) => all && overlapRanges(all, each))
     : null;
@@ -1070,9 +1163,18 @@ function listConditionLabels(search, context) {
     search.weekdays?.label,
     search.landmark?.label,
     ...search.states.map((state) => STATE_LABELS[state]),
+    isFindingGamesToWatch(search) && describeGamesToWatch(found),
     search.outcome && OUTCOME_LABELS[search.outcome],
+    search.isPastRegulation && context.terms.pastRegulation?.name,
+    search.channels.length && `On ${describeChannels(search)}`,
   ].filter(Boolean);
 }
+
+/**
+ * The channels a search names, as the line says them: "ESPN" or "ESPN or ABC".
+ * @param {Search} search
+ */
+const describeChannels = (search) => joinNames(search.channels.map((channel) => channel.name));
 
 /**
  * @param {{ which: "next" | "last", count: number }} pick
@@ -1136,7 +1238,7 @@ export function describeSearch(search, found, context) {
     return { lead: "No results", facts: [/** @type {string} */ (describeSkipped(search.skipped))] };
   const starters = describeStarters(search);
   const teams = describeTeams(search, context);
-  const conditions = listConditionLabels(search, context);
+  const conditions = listConditionLabels(search, found, context);
   const lead = starters ?? teams ?? conditions.shift() ?? (search.pick ? null : "All games");
   const noun = starters ? "start" : "game";
   const pick = search.pick && describePick(search.pick, noun);
@@ -1179,11 +1281,26 @@ export function describeNoGames(search, context) {
     asked?.how === "one" && !search.group
       ? `${nameTeams(context, /** @type {string[]} */ (asked.slots[0]))}${sides[search.side] ?? ""}`
       : describeTeams(search, context);
-  const where = search.places.length ? ` in ${search.places[0].name}` : "";
+  const where = `${search.places.length ? ` in ${search.places[0].name}` : ""}${
+    search.channels.length ? ` on ${describeChannels(search)}` : ""
+  }`;
   const starters = describeStarters(search);
   if (starters && search.pick?.which === "next")
     return `${starters}'s next start isn't announced yet`;
   if (starters)
     return `No ${starters} starts${teams ? ` vs ${teams}` : ""}${where}${describeWhen(search)}`;
-  return `No ${teams ? `${teams} ` : ""}games${where}${describeWhen(search)}`;
+  return `No ${teams ? `${teams} ` : ""}${nameGamesAsked(search, context)}${where}${describeWhen(search)}`;
+}
+
+/**
+ * What the games a search asks for are called: "games", the league's own words for a final past
+ * regulation, like "overtime games", or "games to watch".
+ * @param {Search} search
+ * @param {SearchContext} context
+ */
+function nameGamesAsked(search, context) {
+  const games = search.isPastRegulation
+    ? (context.terms.pastRegulation?.games ?? "games")
+    : "games";
+  return isFindingGamesToWatch(search) ? `${games} to watch` : games;
 }

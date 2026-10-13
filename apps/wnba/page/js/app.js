@@ -9,6 +9,9 @@ import {
   startNewsRedraws,
   watchNews,
 } from "#shared/news.js";
+import { readNewsChoices } from "#shared/news-choices.js";
+import { pickReadCards } from "#shared/news-picks.js";
+import { keepOpenedStories } from "#shared/opened-stories.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
@@ -215,7 +218,19 @@ const isSettingShown = (key) => {
   return key === "settings" || (!!row && !row.closest("[hidden]"));
 };
 
-const readSearchPages = () => listSearchPages({ index: session.playerIndex, isSettingShown });
+// Every story the News tab shows, for search to list a team's newest.
+const listReadStories = () =>
+  pickReadCards(session.news?.cards ?? [], readNewsChoices(), NEWS_LEAGUE.outletSwitches).flatMap(
+    (card) => [card.lead, ...card.more],
+  );
+
+const readSearchPages = () =>
+  listSearchPages({
+    index: session.playerIndex,
+    isSettingShown,
+    standings: session.season?.standings ?? [],
+    stories: listReadStories(),
+  });
 
 /**
  * Opens a place a search lists: a tab, one of the Standings tab's lists, a game's section, or
@@ -246,19 +261,24 @@ function readSearchSeason() {
       schedule,
       terms: createSearchTerms({ games, standings: season.standings }),
     };
-  return { terms: searchTerms.terms, games: games.map(readSearchGame).filter(Boolean) };
+  return {
+    terms: searchTerms.terms,
+    games: games.map((game) => readSearchGame(game, session.overtimes)).filter(Boolean),
+  };
 }
 
 /**
  * The days of the games a search found, drawn as the Games view draws them.
  * @param {import("#shared/game-search.js").SearchGame[]} found
  * @param {number} now
+ * @param {{ showsNetworks: boolean }} shown
  */
-const listSearchDays = (found, now) =>
+const listSearchDays = (found, now, shown) =>
   listFoundGameDays(
     found.map((game) => game.game),
     listListedGames(session.season, session.schedule),
     now,
+    shown,
   );
 
 async function reloadSeason() {
@@ -293,6 +313,7 @@ async function boot() {
     openPlace: openSearchPlace,
     placeholder: "Teams, players, and games",
   });
+  keepOpenedStories(findElement("gameSearch"), drawNews);
   startGameSheet();
   startTeamSheet({
     isTeam: (team) => team in TEAMS,

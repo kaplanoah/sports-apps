@@ -1,15 +1,17 @@
-// What the WNBA's search finds besides games: each team's sheet and its Roster, each player on a
-// team's roster in the season shown, from the list of players the store keeps for the season, a
-// final's Highlights, the Bracket and News tabs, the Standings tab's lists, and settings and each
-// setting the page shows. Runs in the page and in Node, so it uses no DOM.
+// What the WNBA's search finds besides games: each team's sheet, with its record, and its Roster,
+// each player on a team's roster in the season shown, and who is out, from the list of players the
+// store keeps for the season, a final's Highlights, the Bracket and News tabs, with each team's
+// newest stories, the Standings tab's lists, and settings and each setting the page shows. Runs in
+// the page and in Node, so it uses no DOM.
 
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/page-search.js").SearchPages} SearchPages */
 /** @typedef {import("#shared/page-search.js").PagePlace} PagePlace */
+/** @typedef {import("#shared/news-picks.js").NewsStory} NewsStory */
 /**
- * A player as the store's list of a season's players has her.
- * @typedef {{ id: string, team: string, number: string, firstName: string, lastName: string }} IndexedPlayer
+ * A player as the store's list of a season's players has her, with why she's out while she is.
+ * @typedef {{ id: string, team: string, number: string, firstName: string, lastName: string, out?: import("#shared/page-search.js").PlayerOut | null }} IndexedPlayer
  */
 
 /**
@@ -17,6 +19,12 @@ import { TEAMS } from "./teams.js";
  * @param {number} season
  */
 export const namePlayerIndexKey = (season) => `player-index/${season}`;
+
+/**
+ * Where the store keeps which of a season's finals went to overtime, for search.
+ * @param {number} season
+ */
+export const nameOvertimesKey = (season) => `overtimes/${season}`;
 
 const SECTION = { key: "roster", name: "Roster" };
 const GAME_PART = {
@@ -26,10 +34,26 @@ const GAME_PART = {
 };
 const EXAMPLES = ["Stewart", "Aces roster"];
 
+// The words that ask how the playoffs stand, which both the Bracket and the league's standings
+// answer.
+const PLAYOFF_PICTURE = ["playoff picture", "seeds", "seeding", "clinched", "clinch"];
+
+const NEWS_TAB = {
+  key: "tab:news",
+  name: ["News"],
+  words: ["news", "stories", "headlines"],
+  icon: /** @type {const} */ ("news"),
+};
+
 /** @type {PagePlace[]} */
 const TABS = [
-  { key: "tab:bracket", name: ["Bracket"], words: ["bracket", "playoffs"], icon: "bracket" },
-  { key: "tab:news", name: ["News"], words: ["news", "stories", "headlines"], icon: "news" },
+  {
+    key: "tab:bracket",
+    name: ["Bracket"],
+    words: ["bracket", "playoffs", ...PLAYOFF_PICTURE],
+    icon: "bracket",
+  },
+  NEWS_TAB,
 ];
 
 /** @type {PagePlace[]} */
@@ -37,7 +61,7 @@ const STANDINGS = [
   {
     key: "standings:league",
     name: ["Standings", "League"],
-    words: ["standings", "table", "league standings"],
+    words: ["standings", "table", "league standings", ...PLAYOFF_PICTURE],
     icon: "standings",
   },
   {
@@ -96,27 +120,41 @@ const listSettings = (isShown) =>
   }));
 
 /**
- * The teams, players, and places a search of a season can open.
- * @param {{ index: { players: IndexedPlayer[] } | null, isSettingShown: (key: string) => boolean }} shown
+ * The teams, players, and places a search of a season can open, each team with its record from the
+ * standings, and the stories the News tab shows.
+ * @param {{ index: { players: IndexedPlayer[] } | null, isSettingShown: (key: string) => boolean, standings?: { team: string, wins: number, losses: number }[], stories?: NewsStory[] }} shown
  * @returns {SearchPages}
  */
-export function listSearchPages({ index, isSettingShown }) {
+export function listSearchPages({ index, isSettingShown, standings = [], stories = [] }) {
+  const records = new Map(standings.map((row) => [row.team, `${row.wins}-${row.losses}`]));
   return {
     teams: Object.entries(TEAMS).map(([code, { city, name }]) => ({
       code,
       name,
       fullName: `${city} ${name}`,
+      ...(records.has(code) && { record: records.get(code) }),
     })),
-    players: (index?.players ?? []).map(({ id, team, firstName, lastName, number }) => ({
+    players: (index?.players ?? []).map(({ id, team, firstName, lastName, number, out }) => ({
       id,
       team,
       firstName,
       lastName,
       number,
+      out: out ?? null,
     })),
     section: SECTION,
     places: [...TABS, ...STANDINGS, ...listSettings(isSettingShown)],
     gamePart: GAME_PART,
     examples: EXAMPLES,
+    news: { place: NEWS_TAB, stories: listNewestFirst(stories) },
   };
 }
+
+/**
+ * Stories, newest first.
+ * @param {NewsStory[]} stories
+ */
+const listNewestFirst = (stories) =>
+  [...stories].sort(
+    (first, second) => Date.parse(second.publishedAt) - Date.parse(first.publishedAt),
+  );

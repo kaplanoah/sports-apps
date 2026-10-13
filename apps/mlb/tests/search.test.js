@@ -195,3 +195,22 @@ test("the examples before typing find games, and a starter's name typed is finis
     listSuggestions(text, CONTEXT).map((row) => row.text);
   assert.deepEqual(texts("Ske"), ["Skenes", "Skenes last start"]);
 });
+
+test("extra innings finds the finals that went past the ninth", () => {
+  assert.deepEqual(search("extra innings").games, [
+    "2026-09-27 LAD at SF",
+    "2026-09-30 PHI at ATL",
+  ]);
+  assert.equal(search("extras").line, "Extra innings | 2 games");
+  assert.equal(search("Mets extra innings").empty, "No Mets extra-inning games");
+});
+
+test("a channel finds the games MLB lists on it, by any name it goes by", () => {
+  assert.deepEqual(search("on TBS").games, ["2026-10-10 CWS at CLE", "2026-10-12 TBD at TB"]);
+  assert.deepEqual(search("Dodgers on FOX").games, [
+    "2026-10-11 LAD at MIL",
+    "2026-10-12 LAD at MIL",
+  ]);
+  assert.deepEqual(search("HBO").games, search("on TBS").games);
+  assert.equal(search("on FS1").line, "On FS1 | 1 game");
+});

@@ -8,7 +8,12 @@ import { renderCardNote, renderMatchupRow } from "../page/js/bracket-view.js";
 import { describeDrought, listRankedOrder } from "../page/js/clubs.js";
 import { keepRanking, keepSeenAt } from "../page/js/kept-on-device.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
-import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
+import {
+  listFoundGameDays,
+  listSeasonDays,
+  listSeasonGames,
+  renderGameFaceOff,
+} from "../page/js/games-view.js";
 import { listSlateGames } from "../page/js/slate.js";
 import { LOOKS } from "../page/js/looks.js";
 import { html } from "../../../shared/page/html.js";
@@ -1974,4 +1979,16 @@ test("each look offers icons the page has, and Ball's is Night Game's ball on cr
   const night = readFileSync(folder + "icon.svg", "utf8");
   const ball = readFileSync(folder + "icon-light.svg", "utf8");
   assert.equal(ball, night.replace('fill="#173524"', 'fill="#e3dac6"'));
+});
+
+test("a search's games show each one's channels only when it asks where to watch", () => {
+  const games = listSeasonGames(seasonSnapshot.slate, seasonSchedule);
+  const listed = games.filter((game) => game.networks?.length);
+  const readDay = (/** @type {boolean} */ showsNetworks) =>
+    listFoundGameDays(listed, games, SEASON_FIXTURE_NOW, { showsNetworks }).find(
+      (day) => day.day === "2026-10-10",
+    )?.markup.text ?? "";
+  assert.match(readDay(true), /alt="TBS"/);
+  assert.match(readDay(true), /<span class="network-name">TruTV<\/span>/);
+  assert.doesNotMatch(readDay(false), /networks/);
 });

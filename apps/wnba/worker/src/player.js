@@ -114,7 +114,7 @@ export const GAME_LOG_COLUMNS = [
   "GAME_DATE",
   "WL",
 ];
-export const TEAM_GAME_COLUMNS = ["TEAM_ID", "GAME_ID", "PTS", "PLUS_MINUS"];
+export const TEAM_GAME_COLUMNS = ["TEAM_ID", "GAME_ID", "PTS", "PLUS_MINUS", "MIN"];
 
 /**
  * A season's game logs: one player's, or every player's when no player is named.

@@ -9,6 +9,7 @@ import {
 } from "#shared/days.js";
 import { html } from "#shared/html.js";
 import { renderGameRow } from "#shared/game-row.js";
+import { renderStatusWithNetworks } from "#shared/network-logos.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import {
   listFoundDays,
@@ -251,19 +252,28 @@ function describeGameRow(game, seriesFinals, { isToday, isAwaitingStarters }, re
   };
 }
 
+/** @typedef {{ showsNetworks: boolean }} Shown what a game's row shows besides the Games view's */
+
+const AS_THE_GAMES_VIEW = { showsNetworks: false };
+
 /**
  * @param {any} game
  * @param {Map<string, any[]>} seriesFinals
  * @param {boolean} isToday
+ * @param {Shown} shown
  */
-function renderGame(game, seriesFinals, isToday) {
+function renderGame(game, seriesFinals, isToday, shown) {
+  const row = describeGameRow(
+    game,
+    seriesFinals,
+    { isToday, isAwaitingStarters: isToday },
+    renderSideClub,
+  );
   return renderGameRow({
-    ...describeGameRow(
-      game,
-      seriesFinals,
-      { isToday, isAwaitingStarters: isToday },
-      renderSideClub,
-    ),
+    ...row,
+    status: shown.showsNetworks
+      ? renderStatusWithNetworks(row.status, game.networks ?? [])
+      : row.status,
     action: renderGameButton(game),
   });
 }
@@ -311,10 +321,11 @@ function renderAllStarGame(game) {
  * @param {any} game
  * @param {Map<string, any[]>} seriesFinals
  * @param {boolean} isToday
+ * @param {Shown} shown
  */
-function renderListedGame(game, seriesFinals, isToday) {
+function renderListedGame(game, seriesFinals, isToday, shown) {
   if (game.allStar) return renderAllStarGame(game);
-  return renderGame(game, seriesFinals, isToday);
+  return renderGame(game, seriesFinals, isToday, shown);
 }
 
 /** Each postseason series' finals among the season's games the page has. */
@@ -392,13 +403,14 @@ function describeEmptySeason(slate) {
  * @param {any[]} games
  * @param {Map<string, any[]>} seriesFinals each postseason series' finals, which its label counts
  * @param {string} today
+ * @param {Shown} [shown]
  */
-const listGameDays = (games, seriesFinals, today) =>
+const listGameDays = (games, seriesFinals, today, shown = AS_THE_GAMES_VIEW) =>
   groupByDay(games).map((day) => ({
     day: day.date,
     count: day.games.length,
     games: html`<ul class="game-list">
-      ${day.games.map((game) => renderListedGame(game, seriesFinals, day.date === today))}
+      ${day.games.map((game) => renderListedGame(game, seriesFinals, day.date === today, shown))}
     </ul>`,
   }));
 
@@ -428,11 +440,12 @@ export function listSeasonDays(slate, schedule, now) {
  * @param {any[]} found the games found, in order of start
  * @param {any[]} allGames every game the Games view lists, which the series labels count from
  * @param {number} now
+ * @param {Shown} shown
  */
-export function listFoundGameDays(found, allGames, now) {
+export function listFoundGameDays(found, allGames, now, shown) {
   const today = session.state?.slate?.today.date ?? readEasternDay(now).date;
   return listFoundDays({
-    gameDays: listGameDays(found, groupSeriesFinals(allGames), today),
+    gameDays: listGameDays(found, groupSeriesFinals(allGames), today, shown),
     today,
     renderLabel: renderHeadingLabel,
   });

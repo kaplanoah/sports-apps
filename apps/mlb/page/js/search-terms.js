@@ -1,9 +1,9 @@
 // MLB's words for a search of its season's games: its clubs by name, city, code, and the nicknames
 // fans use, the places and ballparks its games are played in, its leagues and divisions, each
-// league's own postseason rounds, its starting pitchers, and how to read one of its games. Runs in
-// the page and in Node, so it uses no DOM.
+// league's own postseason rounds, its starting pitchers, the channels its games are on, extra
+// innings, and how to read one of its games. Runs in the page and in Node, so it uses no DOM.
 
-import { listVenuePlaces } from "#shared/game-search.js";
+import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/game-search.js").SearchTerms} SearchTerms */
@@ -268,6 +268,13 @@ const listBallparks = (games) => [
   ...games.flatMap((game) => (game.ballpark ? [game.ballpark] : [])),
 ];
 
+const EXTRA_INNINGS = {
+  name: "Extra innings",
+  words: ["extra innings", "extra inning", "extras", "extra frames", "free baseball"],
+  games: "extra-inning games",
+};
+const REGULATION_INNINGS = 9;
+
 /**
  * MLB's terms for a season's search, with each division from its standings.
  * @param {{ games: any[], divisions?: Record<string, { id: string }[]> }} season
@@ -289,6 +296,8 @@ export function createSearchTerms({ games, divisions = {} }) {
     starters: listStarters(games),
     kindNames: { cup: "Cup", allStar: "All-Star Game" },
     examples: EXAMPLES,
+    channels: listSearchChannels(games),
+    pastRegulation: EXTRA_INNINGS,
   };
 }
 
@@ -366,6 +375,8 @@ export function readSearchGame(game) {
       ? { name: game.ballpark.name, city: game.ballpark.city, state: game.ballpark.state }
       : null,
     isNeutral: !!game.neutral,
+    networks: game.networks ?? [],
+    isPastRegulation: game.state === "final" && (game.innings ?? 0) > REGULATION_INNINGS,
     starters: (game.starters ?? [])
       .filter(Boolean)
       .map((/** @type {any} */ starter) => ({ id: String(starter.id), name: starter.name })),

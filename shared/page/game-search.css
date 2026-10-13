@@ -199,6 +199,7 @@
   font-size: var(--size-read);
   color: var(--ink);
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 .search-mark {
@@ -289,6 +290,13 @@
   .search-cancel:hover {
     color: var(--ink-hover);
   }
+}
+
+/* A search for where to watch puts each game's channels on its status line, after anything it says,
+   as sheet.css draws them on a game's sheet. */
+.search-list .game-status .networks {
+  display: inline-flex;
+  vertical-align: middle;
 }
 
 /* On a wide screen the bar runs to the view's edges, as the list's days do. */

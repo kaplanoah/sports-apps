@@ -6,6 +6,7 @@ import {
   describeNoGames,
   describeSearch,
   findSearchGames,
+  listSearchChannels,
   readSearch,
 } from "../shared/page/game-search.js";
 import {
@@ -109,21 +110,26 @@ function makeGame(id, day, minutes, away, home, more = {}) {
 
 const GAMES = [
   makeGame("g1", "2026-06-11", 19 * 60, "HAW", "OWL"),
-  makeGame("g2", "2026-06-20", 13 * 60, "OWL", "HAW"),
+  makeGame("g2", "2026-06-20", 13 * 60, "OWL", "HAW", { isPastRegulation: true }),
   makeGame("g3", "2026-07-04", 20 * 60, "HAW", "FOX", {
     isNeutral: true,
     arena: { name: "Coast Arena", city: "Vancouver", state: "BC" },
   }),
-  makeGame("g4", "2026-07-10", 19 * 60, "FOX", "HAW"),
+  makeGame("g4", "2026-07-10", 19 * 60, "FOX", "HAW", { networks: ["ESPN"] }),
   makeGame("g5", "2026-09-25", 20 * 60 + 30, "OWL", "HAW", {
     kind: "playoffs",
     round: 1,
     number: 1,
   }),
-  makeGame("g6", "2026-10-02", 13 * 60, "HOR", "FOX"),
-  makeGame("g7", "2026-10-02", 19 * 60, "OWL", "HAW", { kind: "playoffs", round: 1, number: 2 }),
+  makeGame("g6", "2026-10-02", 13 * 60, "HOR", "FOX", { networks: ["ESPN"] }),
+  makeGame("g7", "2026-10-02", 19 * 60, "OWL", "HAW", {
+    kind: "playoffs",
+    round: 1,
+    number: 2,
+    networks: ["ABC", "ESPN"],
+  }),
   makeGame("g8", "2026-10-02", null, "FOX", "OWL", { isIfNeeded: true }),
-  makeGame("g9", "2026-10-03", 21 * 60, "HAW", "HOR"),
+  makeGame("g9", "2026-10-03", 21 * 60, "HAW", "HOR", { networks: ["USA Net"] }),
   makeGame("g10", "2026-10-06", null, "HAW", "OWL", { kind: "playoffs", round: 3, number: 1 }),
   makeGame("g11", "2026-07-04", 20 * 60, "HAW", "HAW", {
     away: null,
@@ -132,6 +138,9 @@ const GAMES = [
     arena: ARENAS.HOR,
   }),
 ].sort((first, second) => first.startMs - second.startMs);
+
+TERMS.channels = listSearchChannels(GAMES);
+TERMS.pastRegulation = { name: "Overtime", words: ["overtime", "ot"], games: "overtime games" };
 
 const DICTIONARY = createSearchDictionary(TERMS);
 
@@ -290,6 +299,57 @@ test("filler is skipped, a name one letter off or a plural is forgiven, and a wo
     search("Hawks fireworks parade").line,
     "Hawks | 8 games | 'fireworks' and 'parade' unrecognized, skipped",
   );
+});
+
+test("a channel finds the games on it, by any name the league lists it by or fans call it", () => {
+  assert.deepEqual(search("on ESPN"), {
+    ids: ["g4", "g6", "g7"],
+    line: "On ESPN | 3 games",
+    empty: "No games on ESPN",
+  });
+  assert.deepEqual(search("ESPN games").ids, ["g4", "g6", "g7"]);
+  assert.deepEqual(search("Hawks on ABC"), {
+    ids: ["g7"],
+    line: "Hawks | On ABC | 1 game",
+    empty: "No Hawks games on ABC",
+  });
+  for (const text of ["USA", "USA Network", "on usa net"])
+    assert.deepEqual(search(text).ids, ["g9"], text);
+  assert.equal(search("USA Network").line, "On USA Network | 1 game");
+  assert.equal(search("Foxes on ABC").empty, "No Foxes games on ABC");
+});
+
+test("where to watch finds the games yet to end whose channels are listed, as upcoming", () => {
+  assert.deepEqual(search("where to watch"), {
+    ids: ["g6", "g7", "g9"],
+    line: "Upcoming | 3 games",
+    empty: "No games to watch",
+  });
+  assert.deepEqual(search("what channel are the Owls on").ids, ["g7"]);
+  assert.equal(search("Owls on tv").line, "Owls | Upcoming | 1 game");
+  assert.equal(readSearch("where to watch", createContext()).isWhereToWatch, true);
+  assert.equal(readSearch("Hawks next game", createContext()).isWhereToWatch, false);
+});
+
+test("the league's word for a final past regulation finds those finals", () => {
+  assert.deepEqual(search("overtime"), {
+    ids: ["g2"],
+    line: "Overtime | 1 game",
+    empty: "No overtime games",
+  });
+  assert.deepEqual(search("Hawks OT games").ids, ["g2"]);
+  assert.deepEqual(search("Foxes overtime"), {
+    ids: [],
+    line: "Foxes | Overtime | No games",
+    empty: "No Foxes overtime games",
+  });
+});
+
+test("a cup's name reads with or without the apostrophe's s", () => {
+  for (const text of ["Commissioner's Cup", "commissioners cup", "commissioner cup"]) {
+    const asked = readSearch(text, createContext());
+    assert.deepEqual([asked.kinds, asked.skipped], [["cup"], []], text);
+  }
 });
 
 test("a search that can use none of its words finds no games, rather than every game", () => {

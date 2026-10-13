@@ -19,7 +19,8 @@ import {
   nameTotalsRequest,
 } from "./player.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
-import { namePlayerIndexKey } from "../../page/js/search-pages.js";
+import { nameOvertimesKey, namePlayerIndexKey } from "../../page/js/search-pages.js";
+import { describeOvertimes } from "./overtimes.js";
 import { describePlayerIndex } from "./player-index.js";
 import {
   describeRoster,
@@ -36,7 +37,8 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 // once for the whole league, every hour while a team still plays. It keeps each feed trimmed to the
 // columns the sheets read, and saves only the documents that changed: each team's roster, each
 // player's numbers, and the season's ranked numbers, which go after them, so a season that has them
-// is whole, and, once every team's roster has answered, the season's list of players. Each run also
+// is whole, the finals that went to overtime, for search, and, once every team's roster has
+// answered, the season's list of players. Each run also
 // fills one season the store keeps from before the current one, newest first, and a filled season
 // is never read again, since a past season doesn't change, unless the sheets come to read a column
 // it was filled without. Each run ends by saving how it went in `players/status`, with how often a
@@ -308,6 +310,11 @@ function createStoreKeeper() {
     for (const [id, numbers] of players)
       await saveDoc(context, nameNumbersKey(season, id), numbers);
     await saveDoc(context, nameRanksKey(season), ranks);
+    await saveDoc(
+      context,
+      nameOvertimesKey(season),
+      describeOvertimes(season, [teamRegularGames, teamPlayoffGames]),
+    );
   }
 
   /**

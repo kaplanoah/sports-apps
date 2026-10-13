@@ -1,4 +1,5 @@
-// The stories this device has opened from the News view, so each one's Read button shows a check.
+// The stories this device has opened from the News view or search, so each one's Read button shows
+// a check.
 // It forgets a story two weeks after opening it, by when the view no longer shows it.
 
 import { createViewerChoice } from "./device-storage.js";
@@ -37,17 +38,27 @@ const openedStories = createViewerChoice("openedStories", readOpens);
 export const readOpenedStories = () => openedStories.read();
 
 /**
+ * Keeps each story opened from a link in `element`, as search's rows open them too, and calls
+ * `onChange` after each one.
+ * @param {HTMLElement} element
+ * @param {() => void} onChange
+ */
+export function keepOpenedStories(element, onChange) {
+  element.addEventListener("click", (event) => {
+    const link = event.target instanceof Element && event.target.closest("a[href]");
+    if (!link) return;
+    openedStories.keep({ ...readOpenedStories(), [link.getAttribute("href") ?? ""]: Date.now() });
+    onChange();
+  });
+}
+
+/**
  * Keeps each story opened from a link in `list`, and calls `onChange` after each one opened here or
  * in another tab.
  * @param {HTMLElement} list
  * @param {() => void} onChange
  */
 export function startOpenedStories(list, onChange) {
-  list.addEventListener("click", (event) => {
-    const link = event.target instanceof Element && event.target.closest("a[href]");
-    if (!link) return;
-    openedStories.keep({ ...readOpenedStories(), [link.getAttribute("href") ?? ""]: Date.now() });
-    onChange();
-  });
+  keepOpenedStories(list, onChange);
   openedStories.watch(onChange);
 }

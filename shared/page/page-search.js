@@ -1,19 +1,26 @@
 // Reading a search's words into the pages they ask for, beside the games they find: a team's sheet
 // and its section, like a WNBA team's Roster, a player's sheet, and the league's places, like the
 // Standings lists and settings, and a game's part, like a WNBA final's Highlights. A team's name
-// lists its sheet and its section, and the section's name beside it lists the section alone. A game
-// part's name lists the part of the latest final the rest of the words find, or of the season's. A player's name lists her sheet, and finds no games,
-// since nobody knows yet which games she'll play. A place's words list it, and leave the games to
-// any of them that a search of games reads, as "East" finds the East's standings and its games.
-// Words that ask for anything else, like a second team, a day, or "at", ask for games, and list no
-// page. A league hands it its teams, players, and places, and the search's dictionary, so a team is
-// named here by the same words it is in a search of games. Runs in the page and in Node, so it uses
-// no DOM.
+// lists its sheet and its section, as it does beside "record", and the section's name beside it
+// lists the section alone. A game part's name lists the part of the latest final the rest of the
+// words find, or of the season's. A player's name lists her sheet, and finds no games, since nobody
+// knows yet which games she'll play. Words like "out" or "injured" list who is out, alone, on a
+// team beside its name, or the player they name, saying whether she is. A team's name beside the
+// News tab's words lists the tab and the newest stories about the team. A place's words list it,
+// and leave the games to any of them that a search of games reads, as "East" finds the East's
+// standings and its games. Words that ask for anything else, like a second team, a day, or "at",
+// ask for games, and list no page. A league hands it its teams, players, and places, and the
+// search's dictionary, so a team is named here by the same words it is in a search of games. Runs
+// in the page and in Node, so it uses no DOM.
 
 import { readTokens, splitWords } from "./search-words.js";
 
-/** @typedef {{ code: string, name: string, fullName: string }} PageTeam */
-/** @typedef {{ id: string, team: string, firstName: string, lastName: string, number: string }} PagePlayer */
+/** @typedef {{ code: string, name: string, fullName: string, record?: string }} PageTeam */
+/**
+ * Why a player is out, while she is: what the injury report says, and whether for the season.
+ * @typedef {{ reason: string | null, isForSeason: boolean }} PlayerOut
+ */
+/** @typedef {{ id: string, team: string, firstName: string, lastName: string, number: string, out?: PlayerOut | null }} PagePlayer */
 /**
  * A place in the app a search can open, the words of its row, the words that find it, and the
  * icon of the button it's otherwise opened from.
@@ -35,16 +42,25 @@ import { readTokens, splitWords } from "./search-words.js";
  * @property {PagePlace[]} places
  * @property {GamePart | null} gamePart
  * @property {string[]} examples
+ * @property {{ place: PagePlace, stories: import("./news-picks.js").NewsStory[] }} [news] the News
+ *   tab, and the stories it shows, newest first, so a team's news lists the newest about it
  */
 /**
  * A page a search lists: a team's sheet or its section, a player's sheet, a place, or a game's
  * part, of the latest final the words left for a search of games find, or of the season's when
- * none are left.
- * @typedef {{ kind: "team" | "section", team: PageTeam } | { kind: "player", team: PageTeam, player: PagePlayer } | { kind: "place", place: PagePlace } | { kind: "game-part", part: GamePart, gameText: string | null }} PageRow
+ * none are left. A player's row asked who is out says why she is: in a list of who's out, just
+ * why, and for a player named, that she's out and why.
+ * A place's row can say whose it's asked for, as a team's news names the team, and a story's row
+ * opens the story.
+ * @typedef {{ kind: "team" | "section", team: PageTeam } | { kind: "player", team: PageTeam, player: PagePlayer, out?: "listed" | "named" } | { kind: "place", place: PagePlace, detail?: string } | { kind: "story", story: import("./news-picks.js").NewsStory } | { kind: "game-part", part: GamePart, gameText: string | null }} PageRow
  */
 
 // A word this short only finds a name or a place once it's whole, or it would find too many.
 const SHORTEST_PREFIX = 3;
+// The words beside a team's name that ask for its sheet, which leads with its record.
+const RECORD_WORDS = ["record", "standing"];
+// How many of a team's newest stories its news lists, under the News tab's row.
+const TEAM_STORIES = 3;
 
 /**
  * Whether a typed word names a word: as written, as a plural's single, or, when it may be only the
@@ -165,10 +181,48 @@ function listTeamRows(team, typed, pages) {
   const section = pages.section;
   /** @type {PageRow[]} */
   const sectionRow = section ? [{ kind: "section", team }] : [];
-  if (!typed.length) return [{ kind: "team", team }, ...sectionRow];
+  if (!typed.length || isEveryWordOf(typed, RECORD_WORDS))
+    return [{ kind: "team", team }, ...sectionRow];
   const sectionWords = section ? splitWords(section.name) : [];
   const isSection = typed.every((word) => sectionWords.some((part) => isWordOf(word, part, true)));
   return isSection ? sectionRow : [];
+}
+
+// The words that ask who is out, and the one that does after one of them, as "injury report" does.
+const OUT_WORDS = ["out", "injured", "injury", "injuries", "hurt", "sidelined", "inactive"];
+const AFTER_OUT_WORDS = ["report", "list"];
+
+/**
+ * The words besides those that ask who is out, or null when none ask.
+ * @param {string[]} words
+ */
+function readOutAsked(words) {
+  const isAsking = (/** @type {string} */ word, /** @type {number} */ index) =>
+    OUT_WORDS.includes(word) ||
+    (AFTER_OUT_WORDS.includes(word) && OUT_WORDS.includes(words[index - 1]));
+  const rest = words.filter((word, index) => !isAsking(word, index));
+  return rest.length < words.length ? rest : null;
+}
+
+/**
+ * The rows of the players out, by team and then last name, each saying why.
+ * @param {PagePlayer[]} players
+ * @param {SearchPages} pages
+ * @returns {PageRow[]}
+ */
+function listOutRows(players, pages) {
+  const teams = new Map(pages.teams.map((team) => [team.code, team]));
+  return players
+    .flatMap((player) => {
+      const team = teams.get(player.team);
+      return team && player.out ? [{ player, team }] : [];
+    })
+    .sort(
+      (first, second) =>
+        first.team.name.localeCompare(second.team.name) ||
+        first.player.lastName.localeCompare(second.player.lastName),
+    )
+    .map(({ player, team }) => ({ kind: "player", team, player, out: "listed" }));
 }
 
 /**
@@ -192,6 +246,8 @@ export function findPages(text, { dictionary, pages, isTyping }) {
   }
   if (teamTokens.length) return findTeamPages(teamTokens, otherWords, { text, tokens, pages });
   if (!otherWords.length) return findPassedOverPlaces(tokens, text, pages);
+  const outRest = readOutAsked(otherWords);
+  if (outRest) return findOutPages(outRest, { text, pages, isTyping });
   const teams = new Map(pages.teams.map((team) => [team.code, team]));
   const players = findPlayers(otherWords, pages.players, isTyping).flatMap((player) => {
     const team = teams.get(player.team);
@@ -204,6 +260,26 @@ export function findPages(text, { dictionary, pages, isTyping }) {
     rows: places.map((place) => ({ kind: "place", place })),
     gameText: leaveGameText(tokens, otherTokens),
   };
+}
+
+/**
+ * Who is out, when the words ask with no name, or the players they name, each saying whether
+ * she's out, or no page when they name no one.
+ * @param {string[]} rest the words besides those that ask who is out
+ * @param {{ text: string, pages: SearchPages, isTyping: boolean }} search
+ * @returns {{ rows: PageRow[], gameText: string | null }}
+ */
+function findOutPages(rest, { text, pages, isTyping }) {
+  if (!rest.length) {
+    const rows = listOutRows(pages.players, pages);
+    return rows.length ? { rows, gameText: null } : { rows: [], gameText: text };
+  }
+  const teams = new Map(pages.teams.map((team) => [team.code, team]));
+  const rows = findPlayers(rest, pages.players, isTyping).flatMap((player) => {
+    const team = teams.get(player.team);
+    return team ? [/** @type {PageRow} */ ({ kind: "player", team, player, out: "named" })] : [];
+  });
+  return rows.length ? { rows, gameText: null } : { rows: [], gameText: text };
 }
 
 /**
@@ -238,8 +314,43 @@ function findTeamPages(teamTokens, otherWords, { text, tokens, pages }) {
     codes.size === 1 && teamTokens.length === 1
       ? pages.teams.find((each) => codes.has(each.code))
       : undefined;
+  if (team && readOutAsked(otherWords)?.length === 0) return findTeamOutPages(team, pages);
+  if (team && pages.news && otherWords.length && isEveryWordOf(otherWords, pages.news.place.words))
+    return findTeamNews(team, pages.news);
   const rows = team ? listTeamRows(team, otherWords, pages) : [];
   if (!rows.length) return { rows: [], gameText: text };
   const taken = tokens.filter((token) => !teamTokens.includes(token) && !hasKind(token, "filler"));
   return { rows, gameText: leaveGameText(tokens, taken) };
+}
+
+/**
+ * Who is out on a team, or, when no one is, its section, which lists every player.
+ * @param {PageTeam} team
+ * @param {SearchPages} pages
+ * @returns {{ rows: PageRow[], gameText: string | null }}
+ */
+function findTeamOutPages(team, pages) {
+  const rows = listOutRows(
+    pages.players.filter((player) => player.team === team.code),
+    pages,
+  );
+  if (rows.length) return { rows, gameText: null };
+  return { rows: pages.section ? [{ kind: "section", team }] : [], gameText: null };
+}
+
+/**
+ * A team's news: the News tab, and the newest stories about the team.
+ * @param {PageTeam} team
+ * @param {NonNullable<SearchPages["news"]>} news
+ * @returns {{ rows: PageRow[], gameText: string | null }}
+ */
+function findTeamNews(team, { place, stories }) {
+  const about = stories.filter((story) => story.teams.includes(team.code)).slice(0, TEAM_STORIES);
+  return {
+    rows: [
+      { kind: "place", place, detail: team.name },
+      ...about.map((story) => /** @type {PageRow} */ ({ kind: "story", story })),
+    ],
+    gameText: null,
+  };
 }

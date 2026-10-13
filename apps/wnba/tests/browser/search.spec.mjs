@@ -112,6 +112,17 @@ async function leaveForTwoMinutes(page) {
 }
 
 /**
+ * Checks that what the search shows keeps to the type scale and its periods, and that every tap
+ * lands on a button.
+ * @param {import("@playwright/test").Page} page
+ */
+async function expectReadableSearch(page) {
+  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listTapsOffButtons(page)).toEqual([]);
+}
+
+/**
  * Whether Search's icon takes the app's accent, and what its circle draws inside it.
  * @param {import("@playwright/test").Page} page
  */
@@ -249,7 +260,7 @@ test("while words are typed, two whole searches, then the team's pages in place 
   await expect(findRows(page)).toHaveText([
     "Liberty next game",
     "Liberty playoffs",
-    "New York Liberty",
+    "New York Liberty26-18",
     "RosterNew York Liberty",
   ]);
   await expect(findRows(page).first().locator(".search-typed")).toHaveText("Lib");
@@ -276,7 +287,7 @@ test("a sent team shows its pages over its games line, which opens its games alo
   await sendSearch(page, "Liberty");
 
   await expect(findInput(page)).not.toBeFocused();
-  await expect(findRows(page)).toHaveText(["New York Liberty", "RosterNew York Liberty"]);
+  await expect(findRows(page)).toHaveText(["New York Liberty26-18", "RosterNew York Liberty"]);
   await expect(findGamesLine(page)).toHaveText("Liberty•52 games");
 
   await findGamesLine(page).tap();
@@ -333,7 +344,7 @@ test("the Search key finishes a half-typed team, as the line read it while typin
   await sendSearch(page, "Lib");
 
   await expect(findInput(page)).toHaveValue("Liberty");
-  await expect(findRows(page)).toHaveText(["New York Liberty", "RosterNew York Liberty"]);
+  await expect(findRows(page)).toHaveText(["New York Liberty26-18", "RosterNew York Liberty"]);
   await expect(findGamesLine(page)).toHaveText("Liberty\u202252 games");
 });
 
@@ -359,7 +370,7 @@ test("a place a team is named for offers its games there as another reading", as
   await sendSearch(page, "New York");
 
   await expect(findRows(page)).toHaveText([
-    "New York Liberty",
+    "New York Liberty26-18",
     "RosterNew York Liberty",
     "Games in New York26 games",
   ]);
@@ -400,7 +411,7 @@ test("a team's row opens its sheet, and its Roster row the sheet on its Roster",
   await tapSearch(page);
   await sendSearch(page, "Liberty");
 
-  await findSearch(page).getByRole("button", { name: "New York Liberty", exact: true }).tap();
+  await findSearch(page).getByRole("button", { name: "New York Liberty 26-18", exact: true }).tap();
 
   await expect(page.locator("#teamTitle")).toHaveText("New York Liberty");
   await expectShown(page.locator("#teamSection"));
@@ -640,11 +651,7 @@ test("every search state keeps to the type scale and its periods, and every tap 
   page,
 }) => {
   await openSeasonGames(page);
-  const expectReadable = async () => {
-    expect(await listOffScaleText(page)).toEqual([]);
-    expect(await listStrayPeriods(page)).toEqual([]);
-    expect(await listTapsOffButtons(page)).toEqual([]);
-  };
+  const expectReadable = () => expectReadableSearch(page);
   await expectReadable();
 
   await tapSearch(page);
@@ -678,6 +685,70 @@ test("every search state keeps to the type scale and its periods, and every tap 
   await sendSearch(page, "Liberty in March");
   await expect(page.locator("#gameSearch .empty-note")).toBeVisible();
   await expectReadable();
+});
+
+test("who's out lists each player out with why, a team its record, a team's news its stories, each a link to it, and where to watch each game's channels", async ({
+  page,
+}) => {
+  const app = await openSeasonGames(page);
+  await app.writeDocument("player-index/2026", {
+    ...PLAYER_INDEX,
+    players: PLAYER_INDEX.players.map((player) => ({
+      ...player,
+      out: player.lastName === "Wilson" ? { reason: "Left ankle", isForSeason: false } : null,
+    })),
+  });
+  await app.writeDocument("news/cards", {
+    cards: [
+      {
+        lead: {
+          id: "liberty",
+          url: "https://example.com/liberty",
+          title: "The Liberty rest their starters",
+          summary: "",
+          author: "",
+          outlet: "ESPN",
+          source: "espn",
+          publishedAt: "2026-09-30T14:00:00.000Z",
+          photo: null,
+          teams: ["NYL"],
+        },
+        more: [],
+      },
+    ],
+  });
+  await tapSearch(page);
+
+  await sendSearch(page, "who is out");
+  await expect(findRows(page)).toHaveCount(1);
+  await expect(findRows(page)).toContainText("Wilson");
+  await expect(findRows(page)).toContainText("Left ankle");
+  await expectReadableSearch(page);
+
+  await sendSearch(page, "Liberty record");
+  await expect(findRows(page).first()).toContainText("New York Liberty");
+  await expect(findRows(page).first().locator(".search-detail")).toHaveText(/^\d+-\d+$/);
+
+  await sendSearch(page, "Liberty news");
+  await expect(findRows(page).first()).toContainText("News");
+  await expect(findRows(page).first()).toContainText("Liberty");
+  const story = findRows(page).nth(1);
+  await expect(story).toContainText("The Liberty rest their starters");
+  await expect(story).toHaveAttribute("href", "https://example.com/liberty");
+  await expect(story).toHaveAttribute("target", "_blank");
+  await expectReadableSearch(page);
+
+  await sendSearch(page, "on ESPN");
+  await expect(findLine(page)).toContainText("On ESPN");
+  await expect(page.locator("#gameSearch .search-list .game-row").first()).toBeVisible();
+  await expectReadableSearch(page);
+
+  await sendSearch(page, "where to watch");
+  await expect(findLine(page)).toContainText("Upcoming");
+  const channels = page.locator("#gameSearch .search-list .game-status .networks").first();
+  await expect(channels).toBeVisible();
+  await expect(channels.locator(".network-logo, .network-name").first()).toBeVisible();
+  await expectReadableSearch(page);
 });
 
 test.describe("on a wide screen", () => {

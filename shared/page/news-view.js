@@ -43,7 +43,7 @@ const nameEarlierDay = (date, daysAway) =>
  * @param {string} publishedAt
  * @param {number} now
  */
-const nameStoryDay = (publishedAt, now) =>
+export const nameStoryDay = (publishedAt, now) =>
   nameDay(new Date(publishedAt), new Date(now), {
     nearDays: [-1, 0],
     nameOtherDay: nameEarlierDay,

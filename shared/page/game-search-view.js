@@ -20,6 +20,8 @@ import {
 } from "./game-search.js";
 import { html, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
+import { isWebAddress } from "./news-picks.js";
+import { nameStoryDay } from "./news-view.js";
 import { findLatestFinal, findPages } from "./page-search.js";
 import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
@@ -46,8 +48,9 @@ import {
  * @typedef {object} SearchLeague
  * @property {() => { terms: SearchTerms, games: SearchGame[] } | null} readSeason the season shown,
  *   or null before the page has one
- * @property {(games: SearchGame[], now: number) => { day: string, markup: Markup }[]} listDays the
- *   days of the games found, drawn as the Games view draws them
+ * @property {(games: SearchGame[], now: number, shown: { showsNetworks: boolean }) => { day: string, markup: Markup }[]} listDays
+ *   the days of the games found, drawn as the Games view draws them, with each game's channels when
+ *   the search asks where to watch
  * @property {(code: string) => Markup} renderTeamMark a team's dot
  * @property {() => void} close what the view does as the search closes, like going back to today
  * @property {() => SearchPages | null} [readPages] the teams and players a search can open, for a
@@ -215,19 +218,46 @@ const describeFinal = (game, context) =>
  * @param {import("./game-search.js").SearchContext} context
  */
 function describePageRow(row, pages, context) {
-  if (row.kind === "place") return { words: joinWithSeparator(row.place.name), detail: "" };
+  if (row.kind === "place")
+    return { words: joinWithSeparator(row.place.name), detail: row.detail ?? "" };
+  if (row.kind === "story")
+    return {
+      words: row.story.title,
+      detail: joinWithSeparator([
+        row.story.outlet,
+        nameStoryDay(row.story.publishedAt, Date.now()),
+      ]),
+    };
   if (row.kind === "game")
     return { words: row.part.name, detail: describeFinal(row.game, context) };
   if (!("player" in row)) {
-    if (row.kind === "team") return { words: row.team.fullName, detail: "" };
+    if (row.kind === "team") return { words: row.team.fullName, detail: row.team.record ?? "" };
     return { words: pages.section?.name ?? "", detail: row.team.fullName };
   }
   const { player, team } = row;
   return {
     words: `${player.firstName} ${player.lastName}`,
-    detail: joinWithSeparator([player.number, team.name].filter(Boolean)),
+    detail:
+      row.out && player.out
+        ? describeOut(player.out, row.out)
+        : joinWithSeparator([player.number, team.name].filter(Boolean)),
   };
 }
+
+/**
+ * Why a player is out, as her row says it: in a list of who's out, just why, like "Concussion",
+ * with "Season" after it when she's out for the season, and for a player named, that she's out too.
+ * @param {import("./page-search.js").PlayerOut} out
+ * @param {"listed" | "named"} how
+ */
+const describeOut = ({ reason, isForSeason }, how) =>
+  joinWithSeparator(
+    [
+      how === "named" && "Out",
+      reason ?? (how === "listed" && "Out"),
+      isForSeason && "Season",
+    ].filter(Boolean),
+  );
 
 /**
  * What a page's row opens: a place or a final's part, as the league opens it, or a button the
@@ -241,6 +271,7 @@ function renderPageButton(row, pages) {
     return html`type="button" class="search-suggestion" data-place="${row.place.key}"`;
   if (row.kind === "game")
     return html`type="button" class="search-suggestion" data-place="${row.part.key}:${row.game.id}"`;
+  if (row.kind === "story") return html``;
   const section = row.kind === "team" ? "" : (pages.section?.key ?? "");
   const opens = html`type="button" class="search-suggestion team-open" data-team="${row.team.code}" data-team-section="${section}"`;
   if (!("player" in row)) return opens;
@@ -254,6 +285,7 @@ function renderPageButton(row, pages) {
  */
 function renderRowMark(row) {
   if (row.kind === "place") return MARKS[row.place.icon];
+  if (row.kind === "story") return MARKS.news;
   if (row.kind === "game") return MARKS.highlights;
   return league?.renderTeamMark(row.team.code);
 }
@@ -267,13 +299,34 @@ function renderRowMark(row) {
 function renderPageRow(row, pages, context) {
   const { words, detail } = describePageRow(row, pages, context);
   const mark = renderRowMark(row);
+  const quoted = row.kind === "story" ? html` data-quoted` : html``;
+  const content = html`<span class="search-mark">${mark}</span><span class="search-words"${quoted}
+      >${words}</span
+    >${detail && html`<span class="search-detail">${detail}</span>`}${CARET}`;
+  if (row.kind === "story") return renderStoryRow(row.story, content);
   return html`<li>
-    <button ${renderPageButton(row, pages)}>
-      <span class="search-mark">${mark}</span><span class="search-words">${words}</span
-      >${detail && html`<span class="search-detail">${detail}</span>`}${CARET}
-    </button>
+    <button ${renderPageButton(row, pages)}>${content}</button>
   </li>`;
 }
+
+/**
+ * A story's row, a link that opens it apart from the page, as the News tab's Read button does, with
+ * its headline in the outlet's own words.
+ * @param {import("./news-picks.js").NewsStory} story
+ * @param {Markup} content
+ */
+const renderStoryRow = (story, content) =>
+  isWebAddress(story.url)
+    ? html`<li>
+        <a
+          class="search-suggestion"
+          href="${story.url}"
+          target="_blank"
+          rel="noopener noreferrer"
+          >${content}</a
+        >
+      </li>`
+    : html``;
 
 /**
  * @param {ShownRow[]} rows
@@ -437,6 +490,13 @@ function listShownExamples(context) {
   return [...listExamples(context, EXAMPLE_COUNT - pageExamples.length), ...pageExamples];
 }
 
+/**
+ * What the games found show besides what the Games view does: their channels, when the search asks
+ * where to watch.
+ * @param {import("./game-search.js").Search | null} search
+ */
+const describeShown = (search) => ({ showsNetworks: !!search?.isWhereToWatch });
+
 /** Draws what the search finds, or its examples while nothing is typed. */
 function draw() {
   const season = league?.readSeason();
@@ -469,7 +529,7 @@ function draw() {
   setHtml(readLine, isOverGames || !read ? html`` : renderRead(read));
   if (!isOverGames) {
     const games = found?.games.length
-      ? renderDays(league.listDays(found.games, Date.now()))
+      ? renderDays(league.listDays(found.games, Date.now(), describeShown(search)))
       : html`<p class="empty-note">${search && describeNoGames(search, context)}</p>`;
     setHtml(list, games);
     placeOnce(nameShown(text, false), context.today);
@@ -483,7 +543,9 @@ function draw() {
     }${others.length > 0 && renderSuggestions(others, "")}${
       read &&
       shownGames.length > 0 &&
-      html`${renderGamesLine(read, readText)}${renderDays(league.listDays(shownGames, Date.now()))}`
+      html`${renderGamesLine(read, readText)}${renderDays(
+        league.listDays(shownGames, Date.now(), describeShown(search)),
+      )}`
     }`,
   );
   placeOnce(nameShown(text, true), context.today);

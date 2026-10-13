@@ -416,7 +416,14 @@ test("each season's list of players names everyone on its rosters, with her team
   );
   assert.deepEqual(
     index.players.find((/** @type {any} */ player) => player.id === STEWART),
-    { id: STEWART, team: "NYL", number: "30", firstName: "Breanna", lastName: "Stewart" },
+    {
+      id: STEWART,
+      team: "NYL",
+      number: "30",
+      firstName: "Breanna",
+      lastName: "Stewart",
+      out: null,
+    },
   );
 });
 
@@ -511,6 +518,7 @@ test("each run saves its status: the requests it made by feed, what it saved, an
     out: 1,
   });
   assert.deepEqual(Object.keys(first.saved).sort(), [
+    "overtimes",
     "player-index",
     "players",
     "ranks",
