@@ -444,5 +444,5 @@ async function updateNews(context, league) {
  */
 export const createNewsJob = (league) => ({
   chooseDelay: chooseNewsDelay,
-  run: (context) => updateNews(context, league),
+  updateStore: (context) => updateNews(context, league),
 });

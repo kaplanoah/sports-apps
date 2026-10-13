@@ -9,6 +9,7 @@ import {
 } from "../worker/src/highlights.js";
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // Fever at Aces, Game 3 of the first round, which the Aces won 94-83, as ESPN had it the next week.
 const RECORDED = JSON.parse(
@@ -119,26 +120,13 @@ test("the store's job reads each of the season's finals in ESPN's scoreboard and
       },
     ],
   };
-  const stored = new Map(
-    Object.entries({ "live/current": { season: 2026 }, [nameScheduleKey(2026)]: schedule }),
-  );
-  const storage = new Map();
+  const docs = createDocs({ "live/current": { season: 2026 }, [nameScheduleKey(2026)]: schedule });
   const espn = createEspnFetch();
 
-  await createHighlightsUpdater().run(
+  await createHighlightsUpdater().updateStore(
     /** @type {any} */ ({
-      docs: {
-        read: async (/** @type {string} */ key) => stored.get(key) ?? null,
-        write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-          stored.set(key, doc);
-        },
-      },
-      storage: {
-        get: async (/** @type {string} */ key) => storage.get(key),
-        put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-          storage.set(key, value);
-        },
-      },
+      docs,
+      storage: createJobStorage(),
       env: {},
       fetchImpl: espn.fetchImpl,
       now: () => Date.parse("2026-10-08T12:00:00Z"),
@@ -147,7 +135,7 @@ test("the store's job reads each of the season's finals in ESPN's scoreboard and
 
   assert.equal(espn.requests.length, 2);
   assert.deepEqual(
-    stored.get(nameHighlightsKey(GAME.id)),
+    docs.stored.get(nameHighlightsKey(GAME.id)),
     describeHighlights(GAME.id, RECORDED.summary),
   );
 });

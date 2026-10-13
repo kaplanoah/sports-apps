@@ -76,6 +76,7 @@ test("settings open on a reload show again, with the season, notifications, and 
   await expect(settings.locator("#rankList .rank-item")).toHaveCount(12);
   await expect(settings.getByRole("combobox", { name: "Season" })).toHaveValue("2026");
   release();
+  await page.waitForLoadState("domcontentloaded");
   await expect(page.locator("#bracketWrap")).toContainText("Phillies");
   await settings.getByRole("button", { name: "Close" }).click();
   await expect(settings).toBeHidden();

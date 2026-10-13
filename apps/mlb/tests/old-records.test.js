@@ -1,27 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createOldRecordsJob } from "../worker/src/old-records.js";
+import { createDocs } from "../../../tests/job-context.js";
 
 /** @param {Record<string, any>} stored */
 async function runJob(stored) {
-  const documents = new Map(Object.entries(stored));
-  const removed = [];
-  const docs = {
-    read: async (key) => documents.get(key) ?? null,
-    list: async (collection) =>
-      [...documents].filter(([key]) => key.startsWith(`${collection}/`)).map(([, doc]) => doc),
-    write: async (key, doc) => {
-      documents.set(key, doc);
-    },
-    remove: async (key) => {
-      removed.push(key);
-      documents.delete(key);
-    },
-  };
-  await createOldRecordsJob().run(
+  const docs = createDocs(stored);
+  await createOldRecordsJob().updateStore(
     /** @type {any} */ ({ docs, loadSnapshot: async () => null, now: () => 0 }),
   );
-  return { keys: [...documents.keys()].sort(), removed };
+  return { keys: [...docs.stored.keys()].sort(), removed: docs.removals };
 }
 
 test("each season's old live scores and standings go, and its record and the store's own keys stay", async () => {

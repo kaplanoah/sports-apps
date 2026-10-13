@@ -30,7 +30,8 @@ import {
   listSeasonStatsRequest,
   nameRosterKey,
 } from "./rosters.js";
-import { SETTLE_MS, createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
+import { createPerStoreJob, createSavedDocs } from "../../../../shared/worker/background-job.js";
+import { createFeedKeeper, isPlayerReadDue } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 
 // Keeps each club's roster and each player on it for the current season, and the list of every
@@ -63,6 +64,7 @@ const FEEDS = {
 };
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
+/** @typedef {import("../../../../shared/worker/feed-keeper.js").PlayerRead} PlayerRead */
 /**
  * Every player's numbers this season, by id, and his facts, the hitters MLB ranks, and why each
  * player ESPN's injury report names is out, by nameInjuredKey. A table that hasn't answered is
@@ -73,11 +75,6 @@ const FEEDS = {
  * When each club's roster was read, which clubs have a transaction since, and the transactions
  * seen so far, none before the list is first read.
  * @typedef {{ readAt: Record<string, number>, changed: string[], seen: number[] | null }} RosterReads
- */
-
-/**
- * When a player's last games were read, and how many games he had then.
- * @typedef {{ games: number, at: number, isSettled: boolean }} GameLogRead
  */
 
 /** @param {number} season */
@@ -98,16 +95,6 @@ const countGames = (numbers, id) =>
   [numbers.hitting, numbers.pitching, numbers.postseasonHitting, numbers.postseasonPitching]
     .map((table) => table.get(id)?.gamesPlayed ?? 0)
     .reduce((total, games) => total + games, 0);
-
-/**
- * A player's games reach MLB's logs a little after his game ends, so one read as he plays is read
- * once more as they settle.
- * @param {GameLogRead | undefined} read
- * @param {number} games
- * @param {number} now
- */
-const isGameLogDue = (read, games, now) =>
-  !read || read.games !== games || (!read.isSettled && now - read.at >= SETTLE_MS);
 
 /**
  * @param {number} season
@@ -163,13 +150,11 @@ const logFailure = (what) => (/** @type {unknown} */ error) => {
   return null;
 };
 
-/** What one store keeps between runs, while it stays in memory, and how it runs. */
-function createStoreKeeper() {
+/** One store's update, with what it keeps between runs while it stays in memory. */
+function createStoreUpdate() {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
   let keeper = null;
-  // Each roster as the job last saved it, so a run compares without reading the store.
-  /** @type {Map<string, any>} */
-  const saved = new Map();
+  const { saveDoc } = createSavedDocs();
 
   /**
    * @param {JobContext} context
@@ -290,18 +275,6 @@ function createStoreKeeper() {
   }
 
   /**
-   * @param {JobContext} context
-   * @param {string} key
-   * @param {any} doc
-   */
-  async function saveDoc(context, key, doc) {
-    if (!saved.has(key)) saved.set(key, await context.docs.read(key));
-    if (isSameJson(saved.get(key), doc)) return;
-    await context.docs.write(key, doc);
-    saved.set(key, doc);
-  }
-
-  /**
    * Saves each player on a club's roster, as his numbers are now.
    * @param {JobContext} context
    * @param {number} season
@@ -315,7 +288,7 @@ function createStoreKeeper() {
       const id = entry.person.id;
       const person = numbers.people.get(id) ?? null;
       await saveDoc(
-        context,
+        context.docs,
         namePlayerKey(season, id),
         describePlayer({
           ...numbers,
@@ -352,11 +325,11 @@ function createStoreKeeper() {
    * @param {SeasonNumbers} numbers
    */
   async function readDueGameLogs(context, season, numbers) {
-    /** @type {Record<string, GameLogRead>} */
+    /** @type {Record<string, PlayerRead>} */
     const reads = (await context.storage.get(nameGameLogReadsKey(season))) ?? {};
     const now = context.now();
     const due = (await listRosteredIds(context, season)).filter((id) =>
-      isGameLogDue(reads[id], countGames(numbers, id), now),
+      isPlayerReadDue(reads[id], countGames(numbers, id), now),
     );
     const batches = splitIntoBatches(due).slice(0, GAME_LOG_BATCHES_PER_RUN);
     if (!batches.length) return;
@@ -399,7 +372,7 @@ function createStoreKeeper() {
       const roster = await context.storage.get(nameAnswerKey(season, club));
       if (!roster) continue;
       await saveDoc(
-        context,
+        context.docs,
         nameRosterKey(club),
         describeRoster({ club, season, roster, hitting, pitching }),
       );
@@ -407,10 +380,10 @@ function createStoreKeeper() {
       rosters.push({ club, roster });
     }
     if (numbers.qualified)
-      await saveDoc(context, nameHittersKey(season), describeHitters(numbers.qualified));
+      await saveDoc(context.docs, nameHittersKey(season), describeHitters(numbers.qualified));
     if (rosters.length === listClubs().length)
       await saveDoc(
-        context,
+        context.docs,
         namePlayerIndexKey(season),
         indexRosters(season, rosters, numbers.people),
       );
@@ -435,7 +408,7 @@ function createStoreKeeper() {
   }
 
   /** @param {JobContext} context */
-  async function run(context) {
+  async function updateStore(context) {
     keeper ??= createFeedKeeper({
       feeds: FEEDS,
       leagueName: LEAGUE_NAME,
@@ -448,22 +421,7 @@ function createStoreKeeper() {
     await updateRosters(context, season).catch(logFailure(`${season}'s rosters`));
   }
 
-  return { run };
+  return updateStore;
 }
 
-export function createRosterJob() {
-  // One job serves every store made from its module, as each test makes its own, so each store
-  // keeps its own reads.
-  /** @type {WeakMap<JobContext["docs"], ReturnType<typeof createStoreKeeper>>} */
-  const keepers = new WeakMap();
-  return {
-    chooseDelay: () => RUN_DELAY_MS,
-    /** @param {JobContext} context */
-    run(context) {
-      if (!keepers.has(context.docs)) keepers.set(context.docs, createStoreKeeper());
-      return /** @type {ReturnType<typeof createStoreKeeper>} */ (keepers.get(context.docs)).run(
-        context,
-      );
-    },
-  };
-}
+export const createRosterJob = () => createPerStoreJob(RUN_DELAY_MS, createStoreUpdate);

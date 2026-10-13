@@ -21,6 +21,7 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../worker/src/roster.js";
+import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // Every player's totals and every team's games as the league answered the morning after the
 // Liberty's last game, with the game logs of a few players standing in for every player's, beside
@@ -107,45 +108,6 @@ function createLeagueFetch(answers) {
   return { requests, fetchImpl };
 }
 
-function createJobStorage() {
-  const stored = new Map();
-  return {
-    get: async (/** @type {string} */ key) => structuredClone(stored.get(key)),
-    put: async (/** @type {string} */ key, /** @type {any} */ value) => {
-      stored.set(key, structuredClone(value));
-    },
-    delete: async (/** @type {string} */ key) => stored.delete(key),
-    list: async (/** @type {string} */ prefix) =>
-      new Map([...stored].filter(([key]) => key.startsWith(prefix))),
-  };
-}
-
-/** @param {Record<string, any>} initial */
-function createDocs(initial) {
-  const stored = new Map(Object.entries(initial));
-  /** @type {string[]} */
-  const writes = [];
-  /** @type {string[]} */
-  const lists = [];
-  return {
-    stored,
-    writes,
-    lists,
-    read: async (/** @type {string} */ key) => structuredClone(stored.get(key)) ?? null,
-    list: async (/** @type {string} */ collection) => {
-      lists.push(collection);
-      return [...stored]
-        .filter(([key]) => key.startsWith(`${collection}/`))
-        .map(([, doc]) => structuredClone(doc));
-    },
-    write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-      writes.push(key);
-      stored.set(key, structuredClone(doc));
-    },
-    remove: async (/** @type {string} */ key) => stored.delete(key),
-  };
-}
-
 const FINAL_GAME = { id: "1", state: "final" };
 
 /**
@@ -163,7 +125,7 @@ function createRun({ series = [], answers = listAnswers(), job = createPlayerJob
   const league = createLeagueFetch(answers);
   const clock = { now: NOW };
   const runJob = () =>
-    job.run({
+    job.updateStore({
       docs,
       storage,
       loadSnapshot: async () => null,
@@ -440,7 +402,7 @@ test("a past season filled before the store kept its list of players gets one fr
   await storage.put("allFilled", `2026 ${await storage.get("filled:2025")}`);
   const pastReads = league.requests.filter((url) => /Season=2025/.test(url)).length;
 
-  await createPlayerJob().run({
+  await createPlayerJob().updateStore({
     docs,
     storage,
     loadSnapshot: async () => null,

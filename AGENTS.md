@@ -15,7 +15,8 @@
   a name for an earlier version, or a rule that overrides another where one rule would do.
   Before each push, read the whole diff against `main` for it, and the review flags any of it.
 - Start function names with a verb naming the action (boolean predicates excepted).
-  No generic names like `call`, `run`, `execute`, or `handle`.
+  No generic names like `call`, `run`, `execute`, or `handle`,
+  which lint rejects for a function.
 - Make every function do one thing well.
   Make orchestration a sequence of named steps.
   Extract and name any non-trivial logic inside blocks or chained conditions.
@@ -56,11 +57,19 @@
   the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have.
   After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
   so the test waits for `domcontentloaded` to know the code has run.
+- CI's browser machines split the specs by how long each took, from `tests/browser/spec-times.json`,
+  so they finish together (`worker/split-browser-specs.mjs`).
+  A new spec counts as the median spec until its time is recorded.
+  When a machine runs well past the rest, record every spec's time again from a JSON report of a Chromium run,
+  with `node worker/split-browser-specs.mjs --record <report.json>`.
 - Route a browser test's requests by a pattern, like the root's `matchPath` in `tests/browser/harness.mjs`,
   never a function, which makes Playwright ask the test about every request the page makes and slows each load; lint rejects one.
   To unroute one of two routes with the same pattern, name its handler too.
 - Before a test changes what the page reads next, wait until the page shows its last read, or the change races the read still on its way.
 - A theme changes only colors, so each view lays out the same in each of an app's themes.
+  A theme may also change a weight where its font keeps its width at every weight,
+  as MLB's Ball sets each play that scored in a game's Runs a step heavier in Chivo Mono,
+  to stand out from the lighter runners who got on before it as much as it does in Night Game.
   The WNBA's `tests/browser/themes.spec.mjs` checks every view in Walnut against Maple,
   on a phone and a wide screen, with the root's `tests/browser/theme-layout.mjs`; a new view joins its list.
 - Sheets look alike.
@@ -115,8 +124,9 @@
   before first pitch its clubs' season series (`page/js/season-series.js`),
   and its box score, or each club's lineup before first pitch (`page/js/game-sheet.js`,
   `matchup.js`, and `box-score-view.js`), over which a game under way has its Runs so far and a final its Runs,
-  a sentence for each club on how it scored, inning by inning,
-  from each run-scoring play in MLB's live feed, and, while a half inning is under way,
+  each half inning that scored under its heading, and a line for each change of the score with the score after it,
+  with the runners who got on since the last one on a lighter line above the play that scored,
+  from each play in MLB's live feed, and, while a half inning is under way,
   a drawing of the field with each runner's name by his base and how he got on,
   and who's up against whom (`page/js/runs-view.js`), and, once it's final,
   its Highlights section, MLB's recap video, MLB.com's story, and the clip of each play,
@@ -277,7 +287,8 @@
   which copy the browser's own buttons so people find them (`shared/page/home-screen.js`),
   MLB's seed lock (`games-view.js`), and the catching-up ring,
   Phosphor's circle-notch at its Light weight with a 55-degree gap, set in a line of text (`shared/page/catch-up-note.js`).
-  The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four.
+  The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four,
+  and on a Phosphor icon the last comment before it doesn't name with its weight.
   An All-Star team's star isn't an icon but stands in for its dot,
   so it's drawn for its place too, filled with soft tips and set in as the app's dot is (`shared/page/all-star.js`).
 - Make every tap land on a button or a link.
@@ -495,7 +506,7 @@
   `npm run deadcode` runs knip, which fails on unused files, exports, and dependencies: delete them rather than ignoring them.
 - Which season is current, the store says in `live/current`, as the Worker decides it from the league's own data; a page never picks it by its own clock.
   Times show in the viewer's own time zone; only a league's own day is Eastern (read with the shared `readEasternDay` in `shared/page/days.js`: all of MLB's, and the WNBA's for a game without a set time).
-  Pages count, read, and format days and times with `shared/page/days.js`;
+  Pages count, read, and format days and times with `shared/page/days.js`, the one module lint lets read the machine's own calendar and clock, and its tests check each of its readings in zones on both sides of UTC;
   an app's own `readGameDay` only says which of its fields hold a game's start and its league's day.
   Tests pass in any `TZ`: a test that asserts a time picks its zone with the root's `tests/time-zone.js` or `test.use({ timezoneId })`.
 - The store returns documents frozen, with sorted keys.

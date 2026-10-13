@@ -61,25 +61,27 @@ test("a tap on the starters slides to Matchup, with them face to face, and the c
   await expect(sheet).toBeHidden();
 });
 
+const isAstrosGame = (game) => game.away === "HOU" && game.home === "ATH";
+
+/** @param {any} season @param {object[]} starters */
+const setStarters = (season, starters) => ({
+  ...season,
+  slate: {
+    ...season.slate,
+    today: {
+      ...season.slate.today,
+      games: season.slate.today.games.map((game) =>
+        isAstrosGame(game) ? { ...game, starters } : game,
+      ),
+    },
+  },
+});
+
 test("a starter named after the sheet opened shows on its starters line and in its matchup", async ({
   page,
 }) => {
   const named = buildSnapshotWithStarters();
-  const isAstrosGame = (game) => game.away === "HOU" && game.home === "ATH";
   const [blubaugh, springs] = named.slate.today.games.find(isAstrosGame).starters;
-  /** @param {any} season @param {object[]} starters */
-  const setStarters = (season, starters) => ({
-    ...season,
-    slate: {
-      ...season.slate,
-      today: {
-        ...season.slate.today,
-        games: season.slate.today.games.map((game) =>
-          isAstrosGame(game) ? { ...game, starters } : game,
-        ),
-      },
-    },
-  });
   const app = await openApp(page, {
     snapshots: { 2026: setStarters(named, [blubaugh, { id: springs.id }]) },
     pitchers: MATCHUP_STARTERS,
@@ -97,6 +99,31 @@ test("a starter named after the sheet opened shows on its starters line and in i
   await expect(sheet.getByRole("button", { name: BLUBAUGH_VS_SPRINGS })).toBeVisible();
   await showSection(sheet, "Matchup");
   await expect(sheet.locator(".pitcher-last")).toHaveText(["Blubaugh", "Springs"]);
+});
+
+test("a starter still to be named says TBD level with the other's last name, and the clubs line up", async ({
+  page,
+}) => {
+  const named = buildSnapshotWithStarters();
+  const [blubaugh] = named.slate.today.games.find(isAstrosGame).starters;
+  await openApp(page, {
+    snapshots: { 2026: setStarters(named, [blubaugh]) },
+    pitchers: MATCHUP_STARTERS,
+  });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page.getByRole("button", { name: ASTROS_AT_ATHLETICS }).click();
+  const sheet = page.locator("#gameSheet");
+  await showSection(sheet, "Matchup");
+  await expect(sheet.locator(".pitcher-last")).toHaveText(["Blubaugh", "TBD"]);
+  /** @param {import("@playwright/test").Locator} locator */
+  const readTops = (locator) =>
+    locator.evaluateAll((elements) =>
+      elements.map((element) => Math.round(element.getBoundingClientRect().top)),
+    );
+  const [awayLast, homeLast] = await readTops(sheet.locator(".pitcher-last"));
+  expect(homeLast).toBe(awayLast);
+  const [awayClub, homeClub] = await readTops(sheet.locator(".pitcher-id .club"));
+  expect(homeClub).toBe(awayClub);
 });
 
 test("a reload shows the open matchup before the page's code arrives, and the code reads its starters again", async ({
@@ -234,7 +261,7 @@ test("a game on a later day without its starters says to check back for them, un
   await page.locator(NEXT_DAY_GAMES).first().click();
   const sheet = page.locator("#gameSheet");
   await showSection(sheet, "Matchup");
-  await expect(sheet.locator(".pitcher-last")).toHaveText(["Still TBD", "Still TBD"]);
+  await expect(sheet.locator(".pitcher-last")).toHaveText(["TBD", "TBD"]);
   await expect(sheet.locator(".pitcher-id .club")).toHaveCount(2);
   await expect(sheet.locator(".check-back")).toHaveText("Check back for pitchers");
   await expect(sheet.locator(".tape, .scout")).toHaveCount(0);
@@ -263,24 +290,24 @@ const ANGELS_ROTATION = {
   ],
 };
 
-async function openStillTbd(page, rotations) {
+async function openTbd(page, rotations) {
   await openApp(page, { rotations });
   await page.getByRole("tab", { name: "Games" }).click();
   const row = page
     .locator("#seasonGames .game-day.is-today .game-row")
     .filter({ hasText: "Angels" });
-  await expect(row.locator(".starter.pending")).toHaveText(["Still TBD", "Still TBD"]);
+  await expect(row.locator(".starter.pending")).toHaveText(["TBD", "TBD"]);
   await row.locator(".game-open").click();
   const sheet = page.locator("#gameSheet");
   await showSection(sheet, "Matchup");
   return sheet;
 }
 
-test("a game later today without a starter says Still TBD, and opens to who started lately and how rested each is", async ({
+test("a game later today without a starter says TBD, and opens to who started lately and how rested each is", async ({
   page,
 }) => {
-  const sheet = await openStillTbd(page, { LAA: ANGELS_ROTATION });
-  await expect(sheet.locator(".pitcher-last")).toHaveText(["Still TBD", "Still TBD"]);
+  const sheet = await openTbd(page, { LAA: ANGELS_ROTATION });
+  await expect(sheet.locator(".pitcher-last")).toHaveText(["TBD", "TBD"]);
   const angels = sheet.locator(".scout").first();
   await expect(angels.locator("h3")).toHaveText("AngelsWho's rested");
   await expect(angels.locator(".scout-note")).toHaveText(
@@ -308,7 +335,7 @@ test("a club whose last starters didn't load reads them again on a tap on Try ag
 }) => {
   /** @type {Record<string, object>} */
   const rotations = { LAA: ANGELS_ROTATION };
-  const sheet = await openStillTbd(page, rotations);
+  const sheet = await openTbd(page, rotations);
   const mariners = sheet.locator(".scout").nth(1);
   await expect(mariners.locator(".retry-message")).toHaveText("Couldn't load who started lately");
   expect(await listOffScaleText(page)).toEqual([]);

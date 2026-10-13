@@ -29,7 +29,8 @@ import { describeError, respondError, respondJson } from "./responses.js";
  * on beside the season's updates and never holds them up.
  * @typedef {object} BackgroundJob
  * @property {(now: number) => number} chooseDelay the wait from one run's start to the next
- * @property {(context: JobContext) => Promise<void>} run
+ * @property {(context: JobContext) => Promise<void>} updateStore one run: brings what the job keeps
+ *   in the store up to date
  */
 
 /**
@@ -325,7 +326,7 @@ export function createSeasonStore(league) {
 
     async runJob(name, job) {
       try {
-        await job.run({
+        await job.updateStore({
           docs: this.docs,
           storage: this.createJobStorage(name),
           loadSnapshot: this.loadSnapshot,

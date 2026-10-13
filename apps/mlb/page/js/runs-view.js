@@ -1,41 +1,52 @@
-// The Game section's Runs so far, above its innings: a sentence for each club on how it scored,
-// inning by inning, then, while a half inning is under way, the field with each runner by his
-// base and how he got on, and who's up against whom. Once the game is final, it's the game's Runs.
+// The Game section's Runs so far, above its innings: each half inning that scored, under its
+// heading, and a line for each change of the score with the score after it, the runners who got on
+// since the last one on a lighter row over the play that scored. Then, while a half inning is under
+// way, the field with each runner by his base and how he got on, and who's up against whom. Once
+// the game is final, it's the game's Runs.
 
 import { html } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
-import { nameTeam, renderTeamDot } from "./clubs.js";
+import { renderTeamDot } from "./clubs.js";
 import { describeInning, renderOutLights } from "./games-view.js";
 
-const SIDES = /** @type {const} */ (["away", "home"]);
-const HOME_RUNS = { 1: "solo homer", 2: "2-run homer", 3: "3-run homer", 4: "grand slam" };
-const HITS = { Single: "single", Double: "double", Triple: "triple" };
-// A walk or a hit batter scores a run only with the bases loaded.
-const FORCED_IN = {
-  Walk: "walk",
-  "Intent Walk": "intentional walk",
-  "Hit By Pitch": "hit by pitch",
+const HALF_NAMES = { away: "Top", home: "Bottom" };
+const REACHED = {
+  Single: "singled",
+  Double: "doubled",
+  Triple: "tripled",
+  Walk: "walked",
+  "Intent Walk": "walked",
+  "Hit By Pitch": "was hit by a pitch",
+  "Field Error": "reached on an error",
+  "Fielders Choice": "reached on a fielder's choice",
+  "Fielders Choice Out": "reached on a fielder's choice",
+  Forceout: "reached on a forceout",
+  "Catcher Interference": "reached on interference",
+  Strikeout: "reached on a dropped third strike",
 };
-const CREDITED = {
-  "Sac Fly": "sac fly",
-  "Sac Fly Double Play": "sac fly",
-  "Sac Bunt": "sac bunt",
-  "Fielders Choice": "fielder's choice",
-  "Fielders Choice Out": "fielder's choice",
-  Forceout: "forceout",
-  "Grounded Into DP": "double play",
-  "Double Play": "double play",
-  "Stolen Base Home": "steal of home",
+const DROVE_HOME = { Single: "singled home", Double: "doubled home", Triple: "tripled home" };
+// A walk, a hit batter, or interference scores a run only by forcing it in from loaded bases.
+const FORCES = new Set(["Walk", "Intent Walk", "Hit By Pitch", "Catcher Interference"]);
+const MADE_OUT = {
+  Groundout: "grounded out",
+  "Bunt Groundout": "grounded out",
+  Flyout: "flied out",
+  Lineout: "lined out",
+  "Pop Out": "popped out",
+  "Grounded Into DP": "grounded into a double play",
+  "Double Play": "hit into a double play",
+  Strikeout: "struck out",
+  "Sac Bunt": "sacrificed",
 };
-// What scores a run without anyone to credit it to.
-const UNCREDITED = {
-  "Field Error": "an error",
-  Error: "an error",
+// What scores a runner during a play without the batter driving him in.
+const SCORED_ON = {
   "Wild Pitch": "a wild pitch",
   "Passed Ball": "a passed ball",
   Balk: "a balk",
-  "Catcher Interference": "catcher's interference",
+  "Field Error": "an error",
+  Error: "an error",
+  "Stolen Base Home": "a steal of home",
 };
 const WAYS_ON = {
   Single: "singled",
@@ -77,34 +88,14 @@ const NAME_OVER_SECOND_PX = 9;
 const NAME_PADDING_PX = 3;
 
 /** @typedef {{ away: string, home: string }} RunsGame */
-/** @typedef {{ side: "away" | "home", inning: number, event: string, player: string, rbi: number, runs: number }} RunPlay */
+/** @typedef {{ away: number, home: number }} Score */
+/** @typedef {{ name: string, event: string }} Scorer */
+/** @typedef {{ batter: string, event: string, reached: boolean, filledBases: boolean, scorers: Scorer[], score: Score | null }} HalfPlay */
+/** @typedef {{ side: "away" | "home", inning: number, plays: HalfPlay[] }} ScoringHalf */
+/** @typedef {{ setup: HalfPlay[], play: HalfPlay }} ScoreChange */
 
 /** @param {string} name */
 const makePossessive = (name) => (name.endsWith("s") ? `${name}'` : `${name}'s`);
-
-/**
- * How a play scored its runs, in a fan's words, like "Ramirez's 2-run homer" or "a wild pitch".
- * @param {RunPlay} play
- */
-export function describeRunPlay({ event, player, rbi }) {
-  if (event in UNCREDITED) return UNCREDITED[event];
-  return `${makePossessive(player)} ${describeCredit(event, rbi)}`;
-}
-
-/**
- * @param {string} event
- * @param {number} rbi
- */
-function describeCredit(event, rbi) {
-  if (event === "Home Run") return HOME_RUNS[rbi] ?? "homer";
-  if (event in HITS) return [describeRunsBattedIn(rbi), HITS[event]].filter(Boolean).join(" ");
-  if (event in FORCED_IN) return `bases-loaded ${FORCED_IN[event]}`;
-  if (event in CREDITED) return CREDITED[event];
-  return [describeRunsBattedIn(rbi), event.toLowerCase()].filter(Boolean).join(" ");
-}
-
-/** @param {number} rbi */
-const describeRunsBattedIn = (rbi) => (rbi > 1 ? `${rbi}-run` : rbi === 1 ? "RBI" : "");
 
 /** @param {string[]} items */
 function joinWithAnd(items) {
@@ -112,36 +103,141 @@ function joinWithAnd(items) {
   return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
 }
 
+/** @param {HalfPlay} play */
+const describeWhatBatterDid = (play) =>
+  REACHED[play.event] ?? MADE_OUT[play.event] ?? play.event.toLowerCase();
+
 /**
- * A club's runs, each inning's plays in a phrase, like "Bailey's solo homer in the 5th".
- * @param {RunPlay[]} plays
+ * How a batter's own play scored the runners it did, like "Bazzana doubled home Martinez".
+ * @param {HalfPlay} play
+ * @param {string[]} names the runners it drove in
+ * @param {boolean} isLoadedSaid whether the line already says the bases got loaded
  */
-function describeInnings(plays) {
-  /** @type {RunPlay[][]} */
-  const innings = [];
-  for (const play of plays) {
-    if (innings.at(-1)?.[0].inning === play.inning) innings.at(-1)?.push(play);
-    else innings.push([play]);
+function describeDrivenIn(play, names, isLoadedSaid) {
+  const runners = joinWithAnd(names);
+  if (play.event === "Home Run") return [`${play.batter} homered`, runners && `scoring ${runners}`];
+  if (play.event in DROVE_HOME) return [`${play.batter} ${DROVE_HOME[play.event]} ${runners}`];
+  if (FORCES.has(play.event)) {
+    const loaded = isLoadedSaid ? "" : " with the bases loaded";
+    return [`${play.batter} ${REACHED[play.event]}${loaded}`, `forcing in ${runners}`];
   }
-  return innings
-    .map(
-      (inning) =>
-        `${joinWithAnd(inning.map(describeRunPlay))} in the ${formatOrdinal(inning[0].inning)}`,
-    )
-    .join(", then ");
+  if (play.event.startsWith("Sac Fly"))
+    return [`${makePossessive(play.batter)} sac fly scored ${runners}`];
+  return [`${play.batter} ${describeWhatBatterDid(play)}`, `scoring ${runners}`];
+}
+
+/**
+ * The play that changed the score, in a fan's words: what the batter did and who it drove in, and
+ * anyone who scored on something else during it, like "Bailey scored on a wild pitch".
+ * @param {HalfPlay} play
+ * @param {boolean} isLoadedSaid
+ */
+export function describeScoringPlay(play, isLoadedSaid = false) {
+  const drivenIn = play.scorers.filter((scorer) => scorer.event === play.event);
+  /** @type {Map<string, Scorer[]>} */
+  const scoredOn = new Map();
+  for (const scorer of play.scorers.filter((each) => each.event !== play.event))
+    scoredOn.set(scorer.event, [...(scoredOn.get(scorer.event) ?? []), scorer]);
+  const batter =
+    drivenIn.length > 0 || play.event === "Home Run"
+      ? describeDrivenIn(
+          play,
+          drivenIn.map((scorer) => scorer.name),
+          isLoadedSaid,
+        )
+          .filter(Boolean)
+          .join(", ")
+      : play.reached && `${play.batter} ${describeWhatBatterDid(play)}`;
+  const others = [...scoredOn].map(
+    ([event, scorers]) =>
+      `${joinWithAnd(scorers.map((scorer) => scorer.name))} scored on ${SCORED_ON[event] ?? event.toLowerCase()}`,
+  );
+  return joinWithAnd([batter, ...others].filter(Boolean));
+}
+
+/**
+ * The runners who got on since the last change of the score, those who got on the same way in a
+ * row together, like "Rocchio and Kwan walked, loading the bases".
+ * @param {HalfPlay[]} plays
+ */
+export function describeSetup(plays) {
+  /** @type {{ way: string, names: string[], filledBases: boolean }[]} */
+  const groups = [];
+  for (const play of plays) {
+    const way = describeWhatBatterDid(play);
+    const last = groups.at(-1);
+    if (last?.way === way && !last.filledBases) {
+      last.names.push(play.batter);
+      last.filledBases = play.filledBases;
+    } else groups.push({ way, names: [play.batter], filledBases: play.filledBases });
+  }
+  return joinWithAnd(
+    groups.map(
+      ({ way, names, filledBases }) =>
+        `${joinWithAnd(names)} ${way}${filledBases ? ", loading the bases" : ""}`,
+    ),
+  );
+}
+
+/**
+ * Each change of the score in a half inning, with the runners who got on since the last one.
+ * Runners who got on after its last change aren't in any.
+ * @param {ScoringHalf} half
+ * @returns {ScoreChange[]}
+ */
+function listScoreChanges(half) {
+  const changes = [];
+  /** @type {HalfPlay[]} */
+  let setup = [];
+  for (const play of half.plays) {
+    if (play.score) {
+      changes.push({ setup, play });
+      setup = [];
+    } else setup.push(play);
+  }
+  return changes;
+}
+
+/**
+ * The score after a change, the club that changed it in bold.
+ * @param {"away" | "home"} side
+ * @param {Score} score
+ */
+function renderScore(side, score) {
+  const renderSide = (/** @type {"away" | "home"} */ each) =>
+    each === side ? html`<b>${score[each]}</b>` : String(score[each]);
+  return html`<span class="runs-score">${renderSide("away")}-${renderSide("home")}</span>`;
+}
+
+/**
+ * @param {"away" | "home"} side
+ * @param {ScoreChange} change
+ */
+function renderScoreChange(side, { setup, play }) {
+  const isLoadedSaid = setup.some((each) => each.filledBases);
+  return html`<li class="runs-change">
+    <span class="runs-change-text"
+      >${setup.length > 0 && html`<span class="runs-setup">${describeSetup(setup)}</span>`}<span
+        class="runs-play"
+        >${describeScoringPlay(play, isLoadedSaid)}</span
+      ></span
+    >${renderScore(side, /** @type {Score} */ (play.score))}
+  </li>`;
 }
 
 /**
  * @param {RunsGame} game
- * @param {any} boxScore
- * @param {"away" | "home"} side
+ * @param {ScoringHalf} half
  */
-function renderClubRuns(game, boxScore, side) {
-  const plays = boxScore.scoring.filter((/** @type {RunPlay} */ play) => play.side === side);
-  const total = html`<b>${nameTeam(game[side])} ${boxScore.totals[side].runs}</b>`;
-  return html`<p class="runs-club">
-    ${renderTeamDot(game[side])}<span>${total}${plays.length > 0 && ` on ${describeInnings(plays)}`}</span>
-  </p>`;
+function renderHalf(game, half) {
+  return html`<div class="runs-half">
+    <p class="runs-half-head">
+      ${renderTeamDot(game[half.side])}<span>${HALF_NAMES[half.side]} ${formatOrdinal(half.inning)}</span>
+    </p>
+    <ul class="runs-changes">
+      ${listScoreChanges(half).map((change) => renderScoreChange(half.side, change))}
+    </ul>
+  </div>`;
 }
 
 /**
@@ -226,10 +322,15 @@ function renderNow(bases) {
  * @param {any} boxScore a game's box score once it has started
  */
 export function renderRuns(game, boxScore) {
-  if (!Array.isArray(boxScore.scoring)) return html``;
+  const halves = boxScore.scoringHalves;
+  if (!Array.isArray(halves)) return html``;
   const isLive = boxScore.state === "live";
+  const runs =
+    halves.length > 0
+      ? html`<div class="runs-halves">${halves.map((half) => renderHalf(game, half))}</div>`
+      : html`<p class="runs-none">No runs yet</p>`;
   return renderSheetPart(
     isLive ? "Runs so far" : "Runs",
-    html`${SIDES.map((side) => renderClubRuns(game, boxScore, side))}${isLive && boxScore.bases && renderNow(boxScore.bases)}`,
+    html`${runs}${isLive && boxScore.bases && renderNow(boxScore.bases)}`,
   );
 }

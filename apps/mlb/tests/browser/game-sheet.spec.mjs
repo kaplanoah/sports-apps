@@ -394,7 +394,7 @@ test("a live game's Runs so far set each runner's name by his base on the field,
   });
   await page.getByRole("tab", { name: "Games" }).click();
   await page.getByRole("button", { name: /^Game details: Rays at Yankees, Thu, Sep 24/ }).click();
-  const part = page.locator("#gameBody .sheet-part", { has: page.locator(".runs-club") });
+  const part = page.locator("#gameBody .sheet-part", { has: page.locator(".runs-halves") });
   await expect(part.locator("h3")).toHaveText("Runs so far");
   await expect(part.locator(".runs-runner")).toHaveText([
     /Betts\s*singled/,
@@ -418,7 +418,7 @@ test("a live game's Runs so far set each runner's name by his base on the field,
       nowOffCenter: middle(now) - middle(measure(".runs-field")),
       firstGap: measure(".on-1B b").left - first.right,
       thirdGap: third.left - measure(".on-3B b").right,
-      aboveNow: measure(".runs-now").top - measure(".runs-club:last-of-type").bottom,
+      aboveNow: measure(".runs-now").top - measure(".runs-halves").bottom,
       belowNow: measure(".on-2B .runs-runner-name").top - now.bottom,
       aboveUp: up.top - measure(".runs-home-dirt").bottom,
       aboveInnings: measure(".sheet-part-head", innings).top - up.bottom,
@@ -443,6 +443,56 @@ test("a live game's Runs so far set each runner's name by his base on the field,
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
+});
+
+test("a game's Runs set the runners who got on lighter than the play that scored them, which Ball sets a step heavier and Night Game in the same weight", async ({
+  page,
+}) => {
+  const raysAtYankees = "823493";
+  await openApp(page, {
+    snapshots: { 2026: buildSnapshotWithStarters() },
+    boxScores: { [raysAtYankees]: { ...LIVE_BOX_SCORE, id: raysAtYankees } },
+  });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page.getByRole("button", { name: /^Game details: Rays at Yankees, Thu, Sep 24/ }).click();
+  const change = page.locator("#gameBody .runs-change");
+  await expect(change.locator(".runs-play")).toHaveText("Pages singled home Ohtani");
+
+  const looks = [];
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((name) => (document.documentElement.dataset.theme = name), theme);
+    looks.push(
+      await change.evaluate((element) => {
+        const readStyle = (/** @type {string} */ selector) =>
+          getComputedStyle(/** @type {Element} */ (element.querySelector(selector)));
+        const readColor = (/** @type {string} */ value) => {
+          const probe = document.createElement("span");
+          probe.style.color = value;
+          element.append(probe);
+          const color = getComputedStyle(probe).color;
+          probe.remove();
+          return color;
+        };
+        return {
+          setup: readStyle(".runs-setup").color,
+          setupWeight: readStyle(".runs-setup").fontWeight,
+          playWeight: readStyle(".runs-play").fontWeight,
+          playWidth: /** @type {Element} */ (
+            element.querySelector(".runs-play")
+          ).getBoundingClientRect().width,
+          credit: readColor("var(--credit-ink)"),
+          dim: readColor("var(--ink-dim)"),
+        };
+      }),
+    );
+  }
+  const [ball, nightGame] = looks;
+  expect(ball.setup).toBe(ball.credit);
+  expect([ball.setupWeight, ball.playWeight]).toEqual(["400", "500"]);
+  expect(nightGame.setup).toBe(nightGame.dim);
+  expect([nightGame.setupWeight, nightGame.playWeight]).toEqual(["400", "400"]);
+  expect(ball.playWidth).toBeCloseTo(nightGame.playWidth, 1);
+  expect(await listLowContrastText(page)).toEqual([]);
 });
 
 test("a live game's field outlines its empty bases and home plate in the field's faint line color, and fills a taken base in the color of what's happening now", async ({

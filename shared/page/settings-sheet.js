@@ -4,6 +4,7 @@
 // The page supplies the button (#settingsBtn) and the dialog (#settingsDialog), with its
 // .sheet-top, its close button (#settingsCloseBtn), and a place for the release (#versionNote).
 
+import { formatDateAndTime } from "./days.js";
 import { joinWithSeparator, setHtml } from "./html.js";
 import { START_AFTER_AWAY_MS } from "./long-away.js";
 import { loadRelease } from "./release.js";
@@ -14,26 +15,13 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
 const findDialog = () =>
   /** @type {HTMLDialogElement} */ (document.getElementById("settingsDialog"));
 
-// A release from an earlier year names its year; this year's go without.
-function formatReleaseTime(iso) {
-  const released = new Date(iso);
-  const isThisYear = released.getFullYear() === new Date().getFullYear();
-  return released.toLocaleString([], {
-    year: isThisYear ? undefined : "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 // A release this Worker no longer has names only its commit, and the page reloads for it, so it
 // has no line. A version the build couldn't work out leaves the commit in its place.
 /** @param {import("./release.js").Release} release */
 export function describeRelease({ version, commit, builtAt }) {
   if (!builtAt) return null;
   const name = version ? `v${version}` : commit;
-  return joinWithSeparator([name, `Released ${formatReleaseTime(builtAt)}`]);
+  return joinWithSeparator([name, `Released ${formatDateAndTime(new Date(builtAt), new Date())}`]);
 }
 
 // The commit is there on hover.

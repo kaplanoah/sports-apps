@@ -3,6 +3,7 @@
 // league's own postseason rounds, its starting pitchers, and how to read one of its games. Runs in
 // the page and in Node, so it uses no DOM.
 
+import { readMinutesIntoDay } from "#shared/days.js";
 import { listVenuePlaces } from "#shared/game-search.js";
 import { TEAMS } from "./teams.js";
 
@@ -313,15 +314,7 @@ function readSeries(series) {
 function readStartMinutes(game, timeZone) {
   const start = new Date(game.start ?? "");
   if (game.tbd || Number.isNaN(start.getTime())) return null;
-  const parts = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "numeric",
-    hourCycle: "h23",
-    ...(timeZone && { timeZone }),
-  }).formatToParts(start);
-  const read = (/** @type {string} */ type) =>
-    Number(parts.find((part) => part.type === type)?.value);
-  return read("hour") * 60 + read("minute");
+  return readMinutesIntoDay(start, timeZone);
 }
 
 /** @param {any} game */

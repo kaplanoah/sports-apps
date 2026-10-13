@@ -5,6 +5,7 @@ import {
   formatShortMonth,
   formatShortWeekday,
   readCalendarDate,
+  readDayOfMonth,
 } from "./days.js";
 import { dayStripLog } from "./day-strip-log.js";
 import { html, setHtml } from "./html.js";
@@ -126,7 +127,7 @@ function renderCell(day, { isListed, isToday, isChosen }) {
   const date = readCalendarDate(day);
   const label = isToday
     ? html`<span class="cell-name">Today</span>`
-    : date.getDate() === 1
+    : readDayOfMonth(day) === 1
       ? html`<span class="cell-month">${formatShortMonth(date)}</span>`
       : html`<span class="cell-name">${formatShortWeekday(date)}</span>`;
   const classes = [
@@ -137,7 +138,7 @@ function renderCell(day, { isListed, isToday, isChosen }) {
   ]
     .filter(Boolean)
     .join(" ");
-  const content = html`${label}<span class="cell-number tabular">${date.getDate()}</span>`;
+  const content = html`${label}<span class="cell-number tabular">${readDayOfMonth(day)}</span>`;
   return html`<button type="button" class="${classes}" data-day="${day}" aria-label="${formatLongDate(date)}"${isToday ? html` aria-current="date"` : ""}>${content}</button>`;
 }
 

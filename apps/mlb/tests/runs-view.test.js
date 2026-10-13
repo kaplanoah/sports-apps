@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Markup, convertToText } from "#shared/html.js";
-import { describeRunPlay, renderRuns } from "../page/js/runs-view.js";
+import { describeScoringPlay, describeSetup, renderRuns } from "../page/js/runs-view.js";
 import { describeBoxScore } from "../worker/src/box-score.js";
 
 // MLB's live feed for NLCS Game 1 as it stood with one out in the top of the 3rd, and for ALDS
@@ -12,43 +12,80 @@ const PLAYS = JSON.parse(
 );
 const DODGERS_AT_BREWERS = { id: "849809", away: "LAD", home: "MIL" };
 const GUARDIANS_AT_WHITE_SOX = { id: "849832", away: "CLE", home: "CWS" };
+const PART_LINES =
+  /<(h3|p|li)\b[^>]*>([\s\S]*?)<\/\1>|<span class="runs-runner-name">([\s\S]*?)<\/span>\s*<\/div>/g;
 
 /** @param {{ id: string }} game */
 const describeGame = (game) => describeBoxScore(game.id, PLAYS.feeds[game.id]);
 
-const PART_LINES =
-  /<(h3|p)\b[^>]*>([\s\S]*?)<\/\1>|<span class="runs-runner-name">([\s\S]*?)<\/span>\s*<\/div>/g;
+/** @param {string} markup */
+const readText = (markup) => convertToText(new Markup(markup)).replace(/\s+/g, " ").trim();
 
 /**
- * The part's text, a line for its title, each of its paragraphs, and each runner's name.
+ * The part's text, a line for its title, each half inning's heading, each change of the score, and
+ * each runner's name.
  * @param {any} game
  * @param {any} boxScore
  */
 const readRuns = (game, boxScore) =>
   [...String(renderRuns(game, boxScore)).matchAll(PART_LINES)].map((match) =>
-    convertToText(new Markup(match[2] ?? match[3]))
-      .replace(/\s+/g, " ")
-      .trim(),
+    readText(match[2] ?? match[3]),
   );
 
-test("a final's Runs say how each club scored, inning by inning, with no one on base", () => {
+/**
+ * One play of a half inning, a batter who got on unless it says otherwise.
+ * @param {Partial<import("../page/js/runs-view.js").HalfPlay>} play
+ */
+const createPlay = (play) => ({
+  batter: "Kwan",
+  event: "Single",
+  reached: true,
+  filledBases: false,
+  scorers: [],
+  score: null,
+  ...play,
+});
+
+test("a final's Runs give each half inning that scored under a heading without a score, with a line for each change of the score and who got on before it", () => {
   const lines = readRuns(GUARDIANS_AT_WHITE_SOX, describeGame(GUARDIANS_AT_WHITE_SOX));
 
   assert.deepEqual(lines, [
     "Runs",
-    "Guardians 9 on Bailey's solo homer and Ramírez's 2-run homer in the 5th, then Bazzana's RBI double, Bailey's RBI single, Ramírez's RBI single, DeLauter's RBI single, and Adell's 2-run single in the 6th",
-    "White Sox 5 on Murakami's bases-loaded walk and Antonacci's sac fly in the 3rd, then Antonacci's bases-loaded hit by pitch and Doyle's sac fly in the 5th, then Vargas' solo homer in the 9th",
+    "Bottom 3rd",
+    "Montgomery singled, Meidroth doubled, and Vargas walked, loading the basesMurakami walked, forcing in Montgomery0-1",
+    "Antonacci's sac fly scored Meidroth0-2",
+    "Top 5th",
+    "Bailey homered1-2",
+    "Kwan singledRamírez homered, scoring Kwan3-2",
+    "Bottom 5th",
+    "Meidroth and Vargas walked and Murakami singled, loading the basesAntonacci was hit by a pitch, forcing in Meidroth3-3",
+    "Doyle's sac fly scored Vargas3-4",
+    "Top 6th",
+    "Martínez was hit by a pitchBazzana doubled home Martínez4-4",
+    "Bailey singled home Bazzana5-4",
+    "Rocchio and Kwan walked, loading the basesRamírez singled home Bailey6-4",
+    "DeLauter singled home Rocchio7-4",
+    "Adell singled home Ramírez and Kwan9-4",
+    "Bottom 9th",
+    "Vargas homered9-5",
   ]);
 });
 
-test("a game being played has its Runs so far, then who's on base, how each got there, and who's up", () => {
-  const markup = String(renderRuns(DODGERS_AT_BREWERS, describeGame(DODGERS_AT_BREWERS)));
-  const lines = readRuns(DODGERS_AT_BREWERS, describeGame(DODGERS_AT_BREWERS));
+test("each score sets the club that changed it in bold", () => {
+  const markup = String(renderRuns(GUARDIANS_AT_WHITE_SOX, describeGame(GUARDIANS_AT_WHITE_SOX)));
 
-  assert.deepEqual(lines, [
+  assert.match(markup, /<span class="runs-score"><b>4<\/b>-4<\/span>/);
+  assert.match(markup, /<span class="runs-score">3-<b>4<\/b><\/span>/);
+});
+
+test("a game being played has its Runs so far, then who's on base, how each got there, and who's up", () => {
+  const boxScore = describeGame(DODGERS_AT_BREWERS);
+  const markup = String(renderRuns(DODGERS_AT_BREWERS, boxScore));
+
+  assert.deepEqual(readRuns(DODGERS_AT_BREWERS, boxScore), [
     "Runs so far",
-    "Dodgers 1 on Pages' RBI single in the 2nd",
-    "Brewers 0",
+    "Top 2nd",
+    "Ohtani walked and Hernández singledPages singled home Ohtani1-0",
     "NowTop 3rd",
     "Bettssingled",
     "Smith is up against Misiorowski",
@@ -57,48 +94,89 @@ test("a game being played has its Runs so far, then who's on base, how each got 
   assert.equal([...markup.matchAll(/class="runs-base taken"/g)].length, 1, "only 1st is taken");
 });
 
+test("a game being played with no runs yet says so over the field", () => {
+  const boxScore = { ...describeGame(DODGERS_AT_BREWERS), scoringHalves: [] };
+
+  assert.deepEqual(readRuns(DODGERS_AT_BREWERS, boxScore).slice(0, 3), [
+    "Runs so far",
+    "No runs yet",
+    "NowTop 3rd",
+  ]);
+});
+
 test("between halves of an inning, the Runs so far have no field", () => {
   const boxScore = { ...describeGame(DODGERS_AT_BREWERS), bases: null };
 
   assert.doesNotMatch(String(renderRuns(DODGERS_AT_BREWERS, boxScore)), /runs-field/);
 });
 
-test("a box score kept before it kept its plays has no Runs", () => {
-  const { scoring, ...boxScore } = describeGame(GUARDIANS_AT_WHITE_SOX);
+test("a box score kept before it kept each half inning's plays has no Runs", () => {
+  const { scoringHalves, ...boxScore } = describeGame(GUARDIANS_AT_WHITE_SOX);
 
-  assert.ok(scoring.length > 0);
+  assert.ok(scoringHalves.length > 0);
   assert.equal(String(renderRuns(GUARDIANS_AT_WHITE_SOX, boxScore)), "");
 });
 
-test("each way a run scores reads as a fan would say it, crediting no one for what isn't a batter's", () => {
-  /** @param {string} event @param {number} rbi @param {string} [player] */
-  const describe = (event, rbi, player = "Kwan") =>
-    describeRunPlay({ side: "away", inning: 1, event, player, rbi, runs: Math.max(rbi, 1) });
+test("each way a run scores reads as a fan would say it", () => {
+  const score = { away: 1, home: 0 };
+  const scorers = (/** @type {string} */ event) => [{ name: "Ohtani", event }];
 
   assert.deepEqual(
     [
-      describe("Home Run", 4),
-      describe("Triple", 3),
-      describe("Single", 0),
-      describe("Intent Walk", 1),
-      describe("Groundout", 1),
-      describe("Grounded Into DP", 0),
-      describe("Stolen Base Home", 0),
-      describe("Wild Pitch", 0),
-      describe("Field Error", 0),
-      describe("Single", 1, "Lewis"),
+      describeScoringPlay(createPlay({ event: "Triple", scorers: scorers("Triple"), score })),
+      describeScoringPlay(createPlay({ event: "Walk", scorers: scorers("Walk"), score })),
+      describeScoringPlay(createPlay({ event: "Walk", scorers: scorers("Walk"), score }), true),
+      describeScoringPlay(
+        createPlay({ event: "Groundout", reached: false, scorers: scorers("Groundout"), score }),
+      ),
+      describeScoringPlay(
+        createPlay({
+          event: "Sac Fly",
+          batter: "Lewis",
+          reached: false,
+          scorers: scorers("Sac Fly"),
+          score,
+        }),
+      ),
+      describeScoringPlay(
+        createPlay({ event: "Strikeout", reached: false, scorers: scorers("Wild Pitch"), score }),
+      ),
+      describeScoringPlay(createPlay({ event: "Walk", scorers: scorers("Passed Ball"), score })),
+      describeScoringPlay(
+        createPlay({ event: "Field Error", scorers: scorers("Field Error"), score }),
+      ),
     ],
     [
-      "Kwan's grand slam",
-      "Kwan's 3-run triple",
-      "Kwan's single",
-      "Kwan's bases-loaded intentional walk",
-      "Kwan's RBI groundout",
-      "Kwan's double play",
-      "Kwan's steal of home",
-      "a wild pitch",
-      "an error",
-      "Lewis' RBI single",
+      "Kwan tripled home Ohtani",
+      "Kwan walked with the bases loaded, forcing in Ohtani",
+      "Kwan walked, forcing in Ohtani",
+      "Kwan grounded out, scoring Ohtani",
+      "Lewis' sac fly scored Ohtani",
+      "Ohtani scored on a wild pitch",
+      "Kwan walked and Ohtani scored on a passed ball",
+      "Kwan reached on an error, scoring Ohtani",
     ],
   );
+});
+
+test("runners who got on the same way in a row are named together, and the one who loaded the bases says so", () => {
+  assert.equal(
+    describeSetup([
+      createPlay({ batter: "Meidroth", event: "Walk" }),
+      createPlay({ batter: "Vargas", event: "Walk" }),
+      createPlay({ batter: "Murakami", event: "Hit By Pitch", filledBases: true }),
+    ]),
+    "Meidroth and Vargas walked and Murakami was hit by a pitch, loading the bases",
+  );
+});
+
+test("runners who got on after a half inning's last change of the score aren't in its lines", () => {
+  const [, , bottomOfFifth] = describeGame(GUARDIANS_AT_WHITE_SOX).scoringHalves;
+  const lines = readRuns(GUARDIANS_AT_WHITE_SOX, {
+    ...describeGame(GUARDIANS_AT_WHITE_SOX),
+    scoringHalves: [bottomOfFifth],
+  });
+
+  assert.ok(bottomOfFifth.plays.some((/** @type {any} */ play) => play.batter === "Teel"));
+  assert.doesNotMatch(lines.join("\n"), /Teel/);
 });

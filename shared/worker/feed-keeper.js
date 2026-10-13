@@ -9,7 +9,7 @@ import { describeError } from "./responses.js";
 // it times out. What it keeps goes in `storage`, since a Durable Object leaves memory between
 // updates.
 
-export const SETTLE_MS = 10 * 60 * 1000;
+const SETTLE_MS = 10 * 60 * 1000;
 const FAILED_FEED_WAIT_MS = 5 * 60 * 1000;
 const BEHIND_FEED_WAIT_MS = 5 * 60 * 1000;
 const FINALS_KEY = "finals";
@@ -18,6 +18,28 @@ const FINALS_KEY = "finals";
  * What a keeper keeps its answers in.
  * @typedef {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void> }} FeedStorage
  */
+
+/**
+ * When a player's numbers were last read, and how many games he had then.
+ * @typedef {{ games: number, at: number, isSettled: boolean }} PlayerRead
+ */
+
+/**
+ * When a read of a game can no longer miss its last plays. A game the store never saw end was over
+ * before it was found final.
+ * @param {{ end?: string | null }} game
+ */
+export const findSettledTime = (game) => (game.end ? Date.parse(game.end) + SETTLE_MS : -Infinity);
+
+/**
+ * Whether a player's numbers are due a read: his games changed, or his last read came as he played,
+ * before they settled.
+ * @param {PlayerRead | undefined} read
+ * @param {number} games
+ * @param {number} now
+ */
+export const isPlayerReadDue = (read, games, now) =>
+  !read || read.games !== games || (!read.isSettled && now - read.at >= SETTLE_MS);
 
 /** @returns {FeedStorage} */
 export function createMemoryStorage() {

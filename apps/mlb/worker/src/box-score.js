@@ -3,10 +3,11 @@ import { describeError, respondJson } from "../../../../shared/worker/responses.
 
 // One game's box score for the Game section of its sheet, read from MLB's live feed in one request
 // trimmed to what the sheet shows: each club's runs by inning, its runs, hits, and errors, each
-// batter and pitcher who got in, each run-scoring play, and, while a half inning is under way,
-// who's on base and how each got there, and who's up. Before first pitch, once a club posts its
-// lineup, its batters are that lineup, each with his season so far. The store keeps each game's
-// (game-details-updater.js), so the route reads MLB only for a game the store hasn't kept yet.
+// batter and pitcher who got in, each half inning that scored, play by play, and, while a half
+// inning is under way, who's on base and how each got there, and who's up. Before first pitch, once
+// a club posts its lineup, its batters are that lineup, each with his season so far. The store
+// keeps each game's (game-details-updater.js), so the route reads MLB only for a game the store
+// hasn't kept yet.
 
 /** @typedef {(key: string) => Promise<any>} ReadDoc */
 
@@ -57,6 +58,8 @@ const FEED_FIELDS = [
   "isScoringPlay",
   "result",
   "event",
+  "awayScore",
+  "homeScore",
   "matchup",
   "batter",
   "pitcher",
@@ -85,6 +88,7 @@ const SIDES_BATTING = { top: "away", bottom: "home" };
 const HALVES_UNDER_WAY = { Top: "top", Bottom: "bottom" };
 const BASES = /** @type {const} */ (["first", "second", "third"]);
 const BASE_CODES = { first: "1B", second: "2B", third: "3B" };
+const BASE_SET = new Set(Object.values(BASE_CODES));
 
 // Where the store keeps each game's box score.
 export const GAME_DETAILS_COLLECTION = "games";
@@ -194,54 +198,108 @@ const describeTotals = (side) => ({
 });
 
 /**
- * The runners who scored on a play, grouped by what scored them: the play itself, like a single,
- * or something else during it, like a wild pitch.
- * @param {any} play
+ * The game's plays by half inning, in the order they came.
+ * @param {any[]} allPlays
  */
-function groupRunsByEvent(play) {
+function groupHalves(allPlays) {
   /** @type {Map<string, any[]>} */
-  const groups = new Map();
-  for (const runner of play.runners ?? []) {
-    if (runner.movement?.end !== "score" || runner.movement?.isOut) continue;
-    const event = runner.details?.event ?? play.result?.event ?? "";
-    groups.set(event, [...(groups.get(event) ?? []), runner]);
+  const halves = new Map();
+  for (const play of allPlays) {
+    const key = `${play.about?.inning} ${play.about?.halfInning}`;
+    halves.set(key, [...(halves.get(key) ?? []), play]);
   }
-  return groups;
+  return [...halves.values()];
 }
 
 /**
- * Each way a play scored runs: what scored them, who's credited, the batter for the play's own
- * result or the runner for anything else, the batter's runs batted in, and how many scored.
+ * Where each runner a play moved ended up: the last base he reached, or none once he scored or
+ * was out. A runner moves once for each thing that moved him, like a steal and then a hit.
+ * @param {any} play
+ */
+function findRunnersEnds(play) {
+  /** @type {Map<number, string | null>} */
+  const ends = new Map();
+  for (const runner of play.runners ?? []) {
+    const { end, isOut } = runner.movement ?? {};
+    const id = runner.details?.runner?.id;
+    ends.set(id, isOut || ends.get(id) === null || !BASE_SET.has(end) ? null : end);
+  }
+  return ends;
+}
+
+/**
+ * Moves each runner a play moved, on the half inning's bases, by base. Every base a runner left is
+ * cleared before any is taken, since a pinch runner leaves the base under an id other than that of
+ * the runner he replaced.
+ * @param {Map<string, number>} bases
+ * @param {any} play
+ */
+function moveRunners(bases, play) {
+  for (const runner of play.runners ?? []) bases.delete(runner.movement?.start);
+  for (const [id, end] of findRunnersEnds(play)) if (end) bases.set(end, id);
+}
+
+/**
+ * Each runner who scored on a play, with what scored him: the play itself, like a single, or
+ * something during it, like a wild pitch. A batter who scored on his own homer isn't one.
  * @param {any} play
  * @param {(id: number) => string} lastNameOf
  */
-function describeScoringPlay(play, lastNameOf) {
-  const side = SIDES_BATTING[play.about?.halfInning];
-  const inning = play.about?.inning;
-  return [...groupRunsByEvent(play)].map(([event, runners]) => {
-    const isPlayResult = event === play.result?.event;
-    const player = isPlayResult ? play.matchup?.batter?.id : runners[0].details?.runner?.id;
-    return {
-      side,
-      inning,
-      event,
-      player: lastNameOf(player),
-      rbi: isPlayResult ? (play.result?.rbi ?? 0) : 0,
-      runs: runners.length,
-    };
-  });
+function listScorers(play, lastNameOf) {
+  const batter = play.matchup?.batter?.id;
+  return (play.runners ?? [])
+    .filter(
+      (/** @type {any} */ runner) => runner.movement?.end === "score" && !runner.movement?.isOut,
+    )
+    .map((/** @type {any} */ runner) => ({
+      id: runner.details?.runner?.id,
+      event: runner.details?.event ?? play.result?.event ?? "",
+    }))
+    .filter((scorer) => !(scorer.id === batter && scorer.event === play.result?.event))
+    .map((scorer) => ({ name: lastNameOf(scorer.id), event: scorer.event }));
 }
 
 /**
- * Every run-scoring play in the order they came, or null when the feed has no plays to read.
+ * A half inning that scored: each play that put its batter on base or scored a run, in order, with
+ * who batted, what he did, whether he stayed on base, whether that filled the bases, who scored and
+ * how, and the score after a play that scored.
+ * @param {any[]} halfPlays
+ * @param {(id: number) => string} lastNameOf
+ */
+function describeHalf(halfPlays, lastNameOf) {
+  /** @type {Map<string, number>} */
+  const bases = new Map();
+  const plays = [];
+  for (const play of halfPlays) {
+    const wereFull = bases.size === BASE_SET.size;
+    moveRunners(bases, play);
+    const batter = play.matchup?.batter?.id;
+    const reached = [...bases.values()].includes(batter);
+    const scored = Boolean(play.about?.isScoringPlay);
+    if (!reached && !scored) continue;
+    plays.push({
+      batter: lastNameOf(batter),
+      event: play.result?.event ?? "",
+      reached,
+      filledBases: !wereFull && bases.size === BASE_SET.size,
+      scorers: listScorers(play, lastNameOf),
+      score: scored ? { away: play.result?.awayScore, home: play.result?.homeScore } : null,
+    });
+  }
+  const [first] = halfPlays;
+  return { side: SIDES_BATTING[first.about?.halfInning], inning: first.about?.inning, plays };
+}
+
+/**
+ * Each half inning that scored, in the order they came, or null when the feed has no plays to read.
  * @param {any} plays MLB's plays for the game
  * @param {(id: number) => string} lastNameOf
  */
-function describeScoring(plays, lastNameOf) {
+function describeScoringHalves(plays, lastNameOf) {
   if (!plays?.allPlays) return null;
-  return plays.allPlays
-    .filter((/** @type {any} */ play) => play.about?.isScoringPlay)
-    .flatMap((/** @type {any} */ play) => describeScoringPlay(play, lastNameOf));
+  return groupHalves(plays.allPlays)
+    .filter((half) => half.some((/** @type {any} */ play) => play.about?.isScoringPlay))
+    .map((half) => describeHalf(half, lastNameOf));
 }
 
 /**
@@ -317,7 +375,7 @@ export function describeBoxScore(id, feed) {
     },
     away: describeClub(teams.away ?? {}, nameOf, hasStarted),
     home: describeClub(teams.home ?? {}, nameOf, hasStarted),
-    scoring: hasStarted ? describeScoring(plays, lastNameOf) : null,
+    scoringHalves: hasStarted ? describeScoringHalves(plays, lastNameOf) : null,
     bases: state === "live" ? describeBases(linescore, plays, lastNameOf) : null,
   };
 }
