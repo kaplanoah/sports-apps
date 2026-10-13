@@ -9,7 +9,14 @@
 // no DOM.
 
 import { readMonthDays } from "./search-dates.js";
-import { describeCount, findSearchGames, isGameInPlace, readSearch } from "./game-search.js";
+import {
+  describeCount,
+  findSearchGames,
+  isGameInPlace,
+  isTownMeaning,
+  listPlaceTeams,
+  readSearch,
+} from "./game-search.js";
 import { readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
@@ -126,20 +133,21 @@ function writeFinished(phrase, meaning, fragment) {
 const nameMeaning = (meaning) => `${meaning.kind}:${JSON.stringify(meaning.value)}`;
 
 /**
- * What a finished phrase means, each of the kinds that fit, and whether teams share it: a place
- * when it names more than one team as well, as "Los Angeles" does, since it finds all their games;
- * each team that shares it when it names no place, as "Sox" does; and otherwise its first meaning.
+ * What a finished phrase means, each of the kinds that fit, and whether it's a city: the place
+ * when it names a team as well, as "Boston" and "Los Angeles" do, since a city reads as the games
+ * played there; each team that shares it when it names no place, as "Sox" does; and otherwise its
+ * first meaning.
  * @param {Meaning[]} meanings
  * @param {string[]} kinds
- * @returns {{ meaning: Meaning, isShared: boolean }[]}
+ * @returns {{ meaning: Meaning, isCity: boolean }[]}
  */
 function listFinishedMeanings(meanings, kinds) {
   const fitting = meanings.filter((meaning) => kinds.includes(meaning.kind) && meaning.display);
   const teams = fitting.filter((meaning) => meaning.kind === "team");
-  const place = fitting.find((meaning) => meaning.kind === "place");
-  if (teams.length > 1 && place) return [{ meaning: place, isShared: true }];
-  if (teams.length > 1) return teams.map((meaning) => ({ meaning, isShared: false }));
-  return fitting.slice(0, 1).map((meaning) => ({ meaning, isShared: false }));
+  const town = fitting.find(isTownMeaning);
+  if (teams.length && town) return [{ meaning: town, isCity: true }];
+  if (teams.length > 1) return teams.map((meaning) => ({ meaning, isCity: false }));
+  return fitting.slice(0, 1).map((meaning) => ({ meaning, isCity: false }));
 }
 
 /**
@@ -153,31 +161,31 @@ const rateName = (written, meaning, fragment) =>
   (readWords(written).startsWith(fragment.trim()) ? 2 : 0) + (written === meaning.display ? 1 : 0);
 
 /**
- * Each word the dictionary knows that a typed fragment starts, written whole: a name that teams
- * share before each of them, then a team by a name as typed before one by its own name, and the
- * one that plays soonest first.
+ * Each word the dictionary knows that a typed fragment starts, written whole: a city before the
+ * teams that play there, then a team by a name as typed before one by its own name, and the one
+ * that plays soonest first.
  * @param {string} fragment the last word or two, as read
  * @param {string[]} kinds
  * @param {SearchContext} context
  */
 function listFinishedWords(fragment, kinds, context) {
-  /** @type {Map<string, { written: string, meaning: Meaning, rating: number, isShared: boolean }>} */
+  /** @type {Map<string, { written: string, meaning: Meaning, rating: number, isCity: boolean }>} */
   const words = new Map();
   for (const [phrase, meanings] of context.dictionary) {
     if (phrase === fragment || !phrase.startsWith(fragment)) continue;
-    for (const { meaning, isShared } of listFinishedMeanings(meanings, kinds)) {
+    for (const { meaning, isCity } of listFinishedMeanings(meanings, kinds)) {
       const written = writeFinished(phrase, meaning, fragment);
       const rating = rateName(written, meaning, fragment);
       const kept = words.get(nameMeaning(meaning));
       const best = !kept || rating > kept.rating ? { written, meaning, rating } : kept;
-      words.set(nameMeaning(meaning), { ...best, isShared: isShared || !!kept?.isShared });
+      words.set(nameMeaning(meaning), { ...best, isCity: isCity || !!kept?.isCity });
     }
   }
   const readSoonest = (/** @type {Meaning} */ meaning) =>
     meaning.kind === "team" ? readNextStart(context, meaning.value) : 0;
   return [...words.values()].sort(
     (first, second) =>
-      Number(second.isShared) - Number(first.isShared) ||
+      Number(second.isCity) - Number(first.isCity) ||
       kinds.indexOf(first.meaning.kind) - kinds.indexOf(second.meaning.kind) ||
       second.rating - first.rating ||
       readSoonest(first.meaning) - readSoonest(second.meaning),
@@ -471,20 +479,36 @@ export const listExamples = (context, room = EXAMPLE_COUNT) =>
     .slice(0, room);
 
 /**
- * A search's word as another reading writes it: a team by its name, and anything else as typed.
+ * A search's word as another reading writes it: a name, like a team's or a month's, by its own
+ * name, and anything else as read.
  * @param {import("./search-words.js").Token} token
  */
 function writeToken(token) {
-  const teams = token.meanings.filter((meaning) => meaning.kind === "team");
-  return teams.length === 1 && token.meanings.length === 1
-    ? (teams[0].display ?? token.text)
-    : token.text;
+  const [meaning] = token.meanings;
+  const isName = token.meanings.length === 1 && NAME_KINDS.has(meaning.kind) && meaning.display;
+  return isName ? meaning.display : token.text;
 }
 
 /**
- * The other way to read a search whose words name a team that is also a place, as "New York"
- * names the Liberty, or the games played in New York: the same search with the place for the
- * team, when it finds games, and other games than the words as read do.
+ * The teams a place's games could also mean, as "New York" means the Yankees' and the Mets' as
+ * well as the games played there, the one that plays soonest first.
+ * @param {import("./search-words.js").Token} token
+ * @param {SearchContext} context
+ * @returns {string[]}
+ */
+function listPlaceTeamNames(token, context) {
+  const place = token.meanings.find((meaning) => meaning.kind === "place");
+  if (!place) return [];
+  return listPlaceTeams(place.value, context)
+    .sort(
+      (first, second) => readNextStart(context, first.code) - readNextStart(context, second.code),
+    )
+    .map((team) => team.name);
+}
+
+/**
+ * The other ways to read a search whose words name a place: the same search with each team whose
+ * arena is there in its place, when it finds games, and other games than the words as read do.
  * @param {string} text
  * @param {SearchContext} context
  * @returns {Suggestion[]}
@@ -493,18 +517,17 @@ export function listOtherReadings(text, context) {
   const tokens = readTokens(text, context.dictionary);
   const asRead = new Set(findGames(text, context).found.games);
   return tokens.flatMap((token, index) => {
-    const place = token.meanings.find((meaning) => meaning.kind === "place");
-    const isTeam = token.meanings.some((meaning) => meaning.kind === "team");
     const isAfterIn = tokens[index - 1]?.meanings.some((meaning) => meaning.kind === "in");
-    if (!place || !isTeam || isAfterIn) return [];
-    const words = tokens
-      .map((each, at) => (at === index ? `in ${place.display}` : writeToken(each)))
-      .join(" ");
-    const reading = words.startsWith("in ") ? `Games ${words}` : words;
-    const { found } = findGames(reading, context);
-    const isSameGames =
-      found.games.length === asRead.size && found.games.every((game) => asRead.has(game));
-    if (!found.games.length || isSameGames) return [];
-    return [{ text: reading, mark: { kind: "search" }, detail: describeCount(found.games.length) }];
+    if (isAfterIn) return [];
+    return listPlaceTeamNames(token, context).flatMap((team) => {
+      const reading = tokens.map((each, at) => (at === index ? team : writeToken(each))).join(" ");
+      const { found } = findGames(reading, context);
+      const isSameGames =
+        found.games.length === asRead.size && found.games.every((game) => asRead.has(game));
+      if (!found.games.length || isSameGames) return [];
+      return [
+        { text: reading, mark: { kind: "search" }, detail: describeCount(found.games.length) },
+      ];
+    });
   });
 }

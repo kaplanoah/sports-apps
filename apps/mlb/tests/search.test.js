@@ -63,7 +63,7 @@ function search(text, context = CONTEXT) {
   };
 }
 
-test("two clubs find their games, at only those in the second's ballpark, and a city its club's", () => {
+test("two clubs find their games, at only those in the second's ballpark, and a city the games played there", () => {
   assert.equal(search("Mets Phillies").line, "Mets vs Phillies | 13 games");
   assert.deepEqual(search("Mets at Phillies").games.slice(0, 3), [
     "2026-06-18 NYM at PHI",
@@ -72,6 +72,7 @@ test("two clubs find their games, at only those in the second's ballpark, and a 
   ]);
   assert.equal(search("Mets at Phillies").line, "Mets @ Phillies | 6 games");
   assert.equal(search("Yankees in Boston").line, "Yankees | In Boston | 7 games");
+  assert.equal(search("Boston").line, "In Boston | 81 games");
 });
 
 test("a name two clubs share finds both clubs' games, and a city two clubs share reads as the place", () => {
@@ -93,7 +94,7 @@ test("a state finds the games played in it, a game whose ballpark MLB doesn't na
   assert.equal(search("Ohio").line, "In Ohio | 165 games");
 });
 
-test("a city two clubs share is offered first as the place, then each club by its whole name, with no other reading of the same games, each finishing all the typed words of its name", () => {
+test("a city is offered first as the place, then each club by its whole name, and has each club that plays there as another reading, the one playing soonest first", () => {
   const texts = (/** @type {string} */ text) =>
     listSuggestions(text, CONTEXT).map((row) => `${row.mark.kind} ${row.text}`);
   assert.deepEqual(texts("los"), [
@@ -102,8 +103,27 @@ test("a city two clubs share is offered first as the place, then each club by it
     "team Los Angeles Angels",
   ]);
   assert.deepEqual(texts("chi"), ["place Chicago", "team Chicago White Sox", "team Chicago Cubs"]);
-  assert.deepEqual(texts("bos").slice(0, 1), ["team Boston Red Sox"]);
-  assert.deepEqual(listOtherReadings("Los Angeles", CONTEXT), []);
+  assert.deepEqual(texts("bos"), ["place Boston", "team Boston Red Sox"]);
+  const others = (/** @type {string} */ text) =>
+    listOtherReadings(text, CONTEXT).map((row) => `${row.text} ${row.detail}`);
+  assert.deepEqual(others("Los Angeles"), ["Dodgers 173 games", "Angels 162 games"]);
+  assert.deepEqual(others("la"), ["Dodgers 173 games", "Angels 162 games"]);
+  assert.deepEqual(others("New York"), ["Yankees 166 games", "Mets 162 games"]);
+  assert.deepEqual(others("Bronx"), ["Yankees 166 games"]);
+  assert.deepEqual(others("Boston"), ["Red Sox 164 games"]);
+  assert.deepEqual(others("cali"), [
+    "Dodgers 173 games",
+    "Padres 168 games",
+    "Angels 162 games",
+    "Athletics 162 games",
+    "Giants 162 games",
+  ]);
+  assert.deepEqual(others("Fenway"), []);
+  assert.deepEqual(others("Mets in New York"), []);
+  assert.deepEqual(others("new york in april"), [
+    "Yankees in April 26 games",
+    "Mets in April 26 games",
+  ]);
   assert.equal(listSuggestions("los ange", CONTEXT)[0].finished, "los ange");
   assert.equal(listSuggestions("Mets at l", CONTEXT)[0].finished, "l");
 });

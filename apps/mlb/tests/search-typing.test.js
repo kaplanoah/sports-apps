@@ -7,7 +7,7 @@ import {
   listSearchGames,
 } from "#shared/game-search.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
-import { readTypedSearch } from "#shared/search-reading.js";
+import { orderListedDays, readTypedSearch } from "#shared/search-reading.js";
 import { listPhrasings, sweepPhrasings } from "../../../tests/search-sweep.js";
 import { listSeasonGames } from "../page/js/games-view.js";
 import { listSearchPages } from "../page/js/search-pages.js";
@@ -56,4 +56,22 @@ test("typing a whole word that asks for every game lists them, and a letter or t
       ["as", 0],
     ],
   );
+});
+
+test("under the rows, a search lists its games from today on, soonest first, or, when none are left, every one, the latest first", () => {
+  /** @param {string} text */
+  const show = (text) => {
+    const shown = readTypedSearch(text, {
+      context: CONTEXT,
+      pages: PAGES,
+      isTyping: false,
+      isGamesOnly: false,
+    });
+    const days = [...new Set(shown.games.map((game) => game.day))].map((day) => ({ day }));
+    const listed = orderListedDays(days, shown.isNewestFirst).map(({ day }) => day);
+    return [shown.games.length, listed[0], listed.at(-1)];
+  };
+  assert.deepEqual(show("Los Angeles"), [3, "2026-10-14", "2026-10-16"]);
+  assert.deepEqual(show("New York"), [164, "2026-10-07", "2026-03-26"]);
+  assert.deepEqual(show("Mets"), [162, "2026-09-27", "2026-03-26"]);
 });

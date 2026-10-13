@@ -530,14 +530,22 @@ const createEmptySearch = () => ({
 });
 
 /**
- * The meaning a phrase has where it is, from the word before it.
+ * Whether a meaning is a place teams are from, like a city or a state, rather than an arena.
+ * @param {Meaning} meaning
+ */
+export const isTownMeaning = (meaning) => meaning.kind === "place" && !meaning.value.isArena;
+
+/**
+ * The meaning a phrase has where it is, from the word before it. A city reads as the place, the
+ * games played there, rather than as the teams that play there, which are its other readings; an
+ * arena named for its team, like "Nationals", reads as the team.
  * @param {Meaning[]} meanings
  * @param {string | null} before "in", "at", or null
  */
 function chooseMeaning(meanings, before) {
   if (meanings.length < 2) return meanings[0] ?? null;
-  const place = meanings.find((meaning) => meaning.kind === "place");
-  if (place && meanings.filter((meaning) => meaning.kind === "team").length > 1) return place;
+  const town = meanings.find(isTownMeaning);
+  if (town && meanings.some((meaning) => meaning.kind === "team")) return town;
   const order = PREFERRED_AFTER[before ?? "none"] ?? PREFERRED_AFTER.none;
   const rank = (/** @type {Meaning} */ meaning) => {
     const index = order.indexOf(meaning.kind);
@@ -946,6 +954,20 @@ const isInPlace = (place, where) =>
  */
 export const isGameInPlace = (place, game, context) =>
   isInPlace(place, readGameCity(context, game));
+
+/**
+ * The teams whose own arena is in a place, as the Dodgers and the Angels are in Los Angeles and
+ * every club in a state is in it; none for an arena, which names where games are played, not a
+ * place teams are from.
+ * @param {SearchPlace} place
+ * @param {SearchContext} context
+ */
+export const listPlaceTeams = (place, context) =>
+  place.isArena
+    ? []
+    : context.terms.teams.filter((team) =>
+        isInPlace(place, { city: team.homeCity, state: team.homeState ?? "" }),
+      );
 
 /**
  * The day a landmark of the season names, or the days on one side of it.
