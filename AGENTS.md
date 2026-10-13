@@ -146,9 +146,14 @@
   reading MLB's whole schedule once a day and the days around today with each update,
   and saving only the months that changed, with each game's ballpark,
   a game away from its home club's own one saying where in its label (`page/js/games-view.js` and `worker/src/season-updater.js`),
-  and whose Search beside Today finds the season's games as the WNBA's does,
+  and whose Search, a round button beside the tab bar, finds the season's games as the WNBA's does,
   from MLB's names for its clubs, ballparks, leagues and divisions,
   each league's own rounds, and its starters, by the games each is named to start (`page/js/search-terms.js`),
+  and the app's own pages as the WNBA's does: each club's sheet and its Roster,
+  each player on a club's roster this season, by the names MLB uses for him,
+  from the list of players the store keeps beside its rosters (`worker/src/player-index.js`),
+  the latest final's Highlights and the next game's Matchup, the Bracket and News tabs,
+  the Standings tab's playoff fields and each league's divisions, and settings and each setting (`page/js/search-pages.js`),
   apart from the slate the header, the Updates box, and the store follow (`page/js/slate.js`),
   whose ranking each device keeps for itself, in name order until its first drag,
   with its dismissal of the Updates box (`page/js/kept-on-device.js`),
@@ -337,7 +342,7 @@
   tabs and the tab bar, switching the page's tabs in `page-tabs.js` and reopening the last one before the first paint in `open-last-tab.js`,
   putting back what each part the page draws whole last showed,
   and the sheets it had open, before the first paint, hiding again a part marked `data-start-hidden`,
-  like the Games view's search, after two minutes away, in `show-last-drawn.js`,
+  like the search, after two minutes away, in `show-last-drawn.js`,
   closing, before the page draws as it comes back or loads again,
   settings left two minutes and any other sheet six hours, but a game's sheet on top showing a game on its day or under way,
   which stays until an hour after its end shows on the screen,
@@ -376,9 +381,8 @@
   and a tap on Today already there pulsing the date, whose month follows the strip as a finger moves it,
   going back to today after two minutes away (`long-away.js`),
   and, for a league of many games a day, drawing whole only the days within a few screens of what shows and the rest as stand-ins as tall as their games,
-  as each app's Games view shows them, in `day-strip.js`, a search over a season's games,
-  in the Games view's place, as MLB's is, or, handed a league's pages,
-  its own view that finds them too, as the WNBA's is, reading what's typed with fixed rules into teams,
+  as each app's Games view shows them, in `day-strip.js`, a search over a season's games and a league's pages,
+  in a view of its own, reading what's typed with fixed rules into teams,
   a word two teams share finding either's, places and venues, groups of teams like a conference or a division,
   days, times, day and night games by the clock where they're played,
   rounds, a conference's own rounds, kinds of game, doubleheaders,
@@ -386,7 +390,8 @@
   with suggestions and examples, in `game-search-view.js`, from `search-words.js`,
   `search-dates.js`, `game-search.js`, and `search-suggestions.js`,
   and reading the same words into the pages they name, a team's,
-  its section's, a player's, a place's, or a final's part's, in `page-search.js`,
+  its section's, a player's, even with a letter wrong, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
+  from the list of a season's players the store keeps for it, in `page-search.js`,
   each game day under a label, the WNBA's date beside its games as a wall calendar shows it and MLB's heading over them,
   with a No games row for today between game days, in `season-days.js`,
   a scroll that eases into place on a spring, as UIKit's scroll to top does,
@@ -455,7 +460,7 @@
   settings sheet and its Diagnostics, round dots, Home Screen bar and box,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,
   `pager.css` a pager's pill and lists, `day-strip.css` a season's list of days and its strip,
-  `game-search.css` the search in its place, `game-row.css` lays out a game row and colors an All-Star team's star,
+  `game-search.css` the search's view, `game-row.css` lays out a game row and colors an All-Star team's star,
   `sheet.css` a sheet a tap opens, like MLB's pitching matchup,
   with its face-off rows and line of channels, titled parts, and status chips,
   `team-sheet.css` a team's sheet and the buttons that open it,
@@ -787,7 +792,6 @@ When a step says to go back to an earlier step, continue in order from there.
   A kind of thing whose pages share one sheet, like a player's, is named once, by a search that finds one of them.
 - Reviewing a change, check that each place it adds is searchable,
   or is left out for a reason a fan would agree with, and that a place it removes leaves search too.
-- MLB's search finds only games until it gets the WNBA's pages, and takes on these rules then.
 
 ### What the apps should feel like
 

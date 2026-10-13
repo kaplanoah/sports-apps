@@ -22,6 +22,9 @@ export const session = {
   // Every game of the shown season, which the Games view lists, null when the store has none.
   /** @type {any[] | null} */
   schedule: null,
+  // Every player on a club's roster this season, for search, null when the store has none.
+  /** @type {{ players: import("#shared/page-search.js").PagePlayer[] } | null} */
+  playerIndex: null,
   // How the store's last update went.
   status: null,
   problem: "",

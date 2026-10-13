@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { readEasternDay } from "#shared/days.js";
+import { namePlayerIndexKey } from "#shared/page-search.js";
 import { listClubs, readMlbTeamId } from "../page/js/snapshot.js";
 import {
   describeHitters,
@@ -253,6 +254,74 @@ test("every club's roster fills six a run, after one read of every player's numb
     run.docs.stored.get(nameHittersKey(SEASON)),
     describeHitters(FIXTURE.answers[QUALIFIED]),
   );
+});
+
+// Jung Hoo Lee, on the Giants' roster, as MLB lists him, whose first name is two words.
+const LEE = { id: 808982, fullName: "Jung Hoo Lee", useName: "Jung Hoo", useLastName: "Lee" };
+
+/** @param {ReturnType<typeof createRun>} run */
+function addLee(run) {
+  run.answers[nameClubRequest("SF")].roster.push({
+    person: { id: LEE.id, fullName: LEE.fullName },
+    jerseyNumber: "51",
+    position: { abbreviation: "CF" },
+    status: { description: "Active" },
+  });
+  run.answers[PEOPLE].people.push(LEE);
+}
+
+/**
+ * A player in the season's list of players.
+ * @param {ReturnType<typeof createRun>} run
+ * @param {number} id
+ */
+const findIndexed = (run, id) =>
+  run.docs.stored
+    .get(namePlayerIndexKey(SEASON))
+    .players.find((/** @type {any} */ player) => player.id === String(id));
+
+test("once every club's roster is read, the season's list of players names each one on a roster, by MLB's own names, with his club and number", async () => {
+  const run = createRun();
+  addLee(run);
+  await run.runJob();
+  assert.equal(run.docs.stored.get(namePlayerIndexKey(SEASON)), undefined);
+
+  await fillRosters(run);
+  const rostered = [...Object.keys(RECORDED), "SF"].flatMap((club) =>
+    run.docs.stored
+      .get(nameRosterKey(club))
+      .players.map((/** @type {any} */ player) => `${club}:${player.id}`),
+  );
+  assert.deepEqual(
+    run.docs.stored
+      .get(namePlayerIndexKey(SEASON))
+      .players.map((/** @type {any} */ player) => `${player.team}:${player.id}`)
+      .sort(),
+    rostered.sort(),
+  );
+  assert.deepEqual(findIndexed(run, LEE.id), {
+    id: "808982",
+    team: "SF",
+    number: "51",
+    firstName: "Jung Hoo",
+    lastName: "Lee",
+  });
+  assert.deepEqual(findIndexed(run, 665862), {
+    id: "665862",
+    team: "NYY",
+    number: "13",
+    firstName: "Jazz",
+    lastName: "Chisholm Jr.",
+  });
+});
+
+test("a player MLB's list of every player doesn't have yet is named by his full name, split at its first space", async () => {
+  const run = createRun();
+  addLee(run);
+  run.answers[PEOPLE].people.pop();
+  await fillRosters(run);
+  const lee = findIndexed(run, LEE.id);
+  assert.deepEqual([lee.firstName, lee.lastName], ["Jung", "Hoo Lee"]);
 });
 
 test("a transaction not seen before reads again only the rosters of the clubs it names", async () => {

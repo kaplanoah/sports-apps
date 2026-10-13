@@ -199,13 +199,13 @@ async function showDay(page, day) {
 }
 
 /**
- * Each state of the Games view's search, shown in turn: its examples, its suggestions as a club's
- * name is typed, and a club's games.
+ * Each state of Search, shown in turn: its examples, its suggestions and pages as a club's name is
+ * typed, and a club's pages and games.
  * @param {import("@playwright/test").Page} page
  */
 const listSearchStates = (page) => [
   async () => {
-    await page.locator("#seasonGames .go-search").click();
+    await page.locator("#tab-search").click();
     await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
   },
   async () => {

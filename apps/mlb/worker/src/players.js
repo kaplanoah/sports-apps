@@ -13,6 +13,8 @@ const PEOPLE_FIELDS = [
   "people",
   "id",
   "fullName",
+  "useName",
+  "useLastName",
   "currentAge",
   "birthCity",
   "birthStateProvince",

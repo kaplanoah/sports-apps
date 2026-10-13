@@ -13,10 +13,10 @@ import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import {
-  focusGameSearch,
   openGameSearch,
   refreshGameSearch,
   startGameSearch,
+  startGameSearchOver,
 } from "#shared/game-search-view.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
@@ -193,9 +193,9 @@ function enterSearch() {
   if (findElement("gameSearch").hidden) openGameSearch();
 }
 
-// As on iPhone, choosing search while it shows brings the keyboard up in its field.
-function focusSearch() {
-  focusGameSearch();
+// As on iPhone, choosing search while it shows goes back to where it starts: an empty field.
+function startSearchOver() {
+  startGameSearchOver();
   return true;
 }
 
@@ -281,7 +281,7 @@ async function boot() {
   watchPresses([".team-line .team-open"]);
   startPageTabs();
   setTabStart("games", returnGamesToToday);
-  setTabStart("search", focusSearch);
+  setTabStart("search", startSearchOver);
   setTabEnter("search", enterSearch);
   startDayStrip(findElement("seasonGames"));
   startGameSearch(findElement("gameSearch"), {

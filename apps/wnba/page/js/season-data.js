@@ -1,7 +1,7 @@
 import { readEasternDay } from "#shared/days.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
-import { namePlayerIndexKey } from "./search-pages.js";
+import { namePlayerIndexKey } from "#shared/page-search.js";
 import { session } from "./session.js";
 import { SNAPSHOT_VERSION, nameScheduleKey } from "./snapshot.js";
 
@@ -57,7 +57,9 @@ function followPlayerIndex(year, showChange) {
     (/** @type {any} */ snapshot) => {
       if (year !== playerIndexYear) return;
       const index = snapshot.exists ? snapshot.data() : null;
-      session.playerIndex = Array.isArray(index?.players) ? index : null;
+      const shown = Array.isArray(index?.players) ? index : null;
+      if (!shown && !session.playerIndex) return;
+      session.playerIndex = shown;
       showChange();
     },
     () => {},

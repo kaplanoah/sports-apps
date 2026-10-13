@@ -201,11 +201,11 @@ function reopenPlayer(saved) {
 /** @param {Event} event */
 function openOnTap(event) {
   const button = /** @type {HTMLElement | null} */ (
-    /** @type {Element} */ (event.target).closest(".player-open")
+    /** @type {Element} */ (event.target).closest("[data-player]")
   );
   const {
     player,
-    playerClub: club,
+    playerTeam: club,
     playerName: name,
     playerNumber: number = "",
   } = button?.dataset ?? {};

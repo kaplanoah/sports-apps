@@ -38,6 +38,7 @@ function createStore(documents, { unreadable = [] } = {}) {
             .filter((path) => path.startsWith(`${name}/`))
             .map(readStored),
         }),
+        onSnapshot: () => () => {},
       }),
     }),
   };
@@ -117,6 +118,26 @@ test("an update that arrives during a drag waits for it, without a redraw", asyn
   session.isReordering = false;
   applyDeferredSeason();
   assert.deepEqual(session.season.log, [...RECORD_2026.log, newEntry]);
+});
+
+test("the season's list of players, for search, redraws the page as it arrives, and nothing while the store has none", async () => {
+  const { redraws, deliver } = startReading({
+    "live/current": { season: 2027 },
+    "seasons/2027": { ...RECORD_2026, year: 2027 },
+  });
+  await loadSeason();
+  await settle();
+  assert.equal(session.playerIndex, null);
+  assert.equal(redraws.changes, 0);
+
+  const index = {
+    season: 2027,
+    players: [{ id: "1", team: "NYM", number: "12", firstName: "Francisco", lastName: "Lindor" }],
+  };
+  deliver("player-index/2027", index);
+
+  assert.deepEqual(session.playerIndex, index);
+  assert.equal(redraws.changes, 1);
 });
 
 test("a season the store can't answer shows as an empty one, and says so", async () => {

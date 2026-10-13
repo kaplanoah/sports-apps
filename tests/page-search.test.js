@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSearchDictionary } from "../shared/page/game-search.js";
-import { findLatestFinal, findPages } from "../shared/page/page-search.js";
+import { findPages, findPartGame } from "../shared/page/page-search.js";
 
 // A small league: the Hawks of Riverton and the Foxes of Hillside, in the East, with a few of their
 // players, its standings, and its settings.
@@ -30,6 +30,7 @@ const TERMS = {
   rounds: [{ round: 3, name: "Finals", words: ["finals"] }],
   kindNames: { cup: "The Cup", allStar: "All-Star Game" },
   examples: [],
+  starters: [{ id: "5", name: "Pell", words: ["pell"] }],
 };
 
 /** @type {import("../shared/page/page-search.js").SearchPages} */
@@ -43,6 +44,11 @@ const PAGES = {
     { id: "2", team: "FOX", firstName: "Lena", lastName: "Stone", number: "12" },
     { id: "3", team: "HAW", firstName: "Jo", lastName: "Quill", number: "3" },
     { id: "4", team: "HAW", firstName: "A’ja", lastName: "Rook", number: "22" },
+    { id: "5", team: "FOX", firstName: "Cy", lastName: "Pell Jr.", number: "40" },
+    { id: "6", team: "FOX", firstName: "Easton", lastName: "Vale", number: "9" },
+    { id: "7", team: "HAW", firstName: "Ken", lastName: "Standish", number: "5" },
+    { id: "8", team: "FOX", firstName: "Ada", lastName: "Stoner", number: "8" },
+    { id: "9", team: "HAW", firstName: "Rex", lastName: "Finale", number: "1" },
   ],
   section: { key: "roster", name: "Roster" },
   places: [
@@ -60,13 +66,27 @@ const PAGES = {
     },
     { key: "settings", name: ["Settings"], words: ["settings"], icon: "settings" },
     {
+      key: "settings:hillsider",
+      name: ["Settings", "Include The Hillsider"],
+      words: ["settings", "the hillsider"],
+      icon: "settings",
+    },
+    {
       key: "settings:appearance",
       name: ["Settings", "Appearance"],
       words: ["settings", "appearance", "theme", "dark mode"],
       icon: "settings",
     },
   ],
-  gamePart: { key: "highlights", name: "Highlights", words: ["highlights", "recap"] },
+  gameParts: [
+    {
+      key: "highlights",
+      name: "Highlights",
+      words: ["highlights", "recap"],
+      game: "latest-final",
+    },
+    { key: "matchup", name: "Matchup", words: ["matchup", "probables"], game: "next" },
+  ],
   examples: [],
 };
 
@@ -134,11 +154,32 @@ test("while words are typed, the last can be the start of a name, once it's thre
   assert.deepEqual(listRows("Sto"), { rows: [], gameText: "Sto" });
 });
 
+test("a name of five letters or more is found with one letter wrong, unless another's is found without", () => {
+  assert.deepEqual(listRows("Standsih"), { rows: ["player HAW Standish"], gameText: null });
+  assert.deepEqual(listRows("Standis").rows, ["player HAW Standish"]);
+  assert.deepEqual(listRows("Stome").rows, ["player HAW Stone", "player FOX Stone"]);
+  assert.deepEqual(listRows("Mara Stome").rows, ["player HAW Stone"]);
+  assert.deepEqual(listRows("Ada Stonr").rows, ["player FOX Stoner"]);
+  assert.deepEqual(listRows("Stoner").rows, ["player FOX Stoner"]);
+  assert.deepEqual(listRows("Stone").rows, ["player HAW Stone", "player FOX Stone"]);
+  assert.deepEqual(listRows("Qiull").rows, ["player HAW Quill"]);
+  assert.deepEqual(listRows("Vael"), { rows: [], gameText: "Vael" });
+});
+
+test("a word a search of games knows is never a name with a letter wrong", () => {
+  assert.deepEqual(listRows("Finals"), { rows: [], gameText: "Finals" });
+  assert.deepEqual(listRows("Finale").rows, ["player HAW Finale"]);
+});
+
 test("a place's words list it, from the start of any of its words, and every place they all find", () => {
   assert.deepEqual(listRows("standings").rows, ["place standings:league", "place standings:east"]);
   assert.deepEqual(listRows("east standings").rows, ["place standings:east"]);
   assert.deepEqual(listRows("eastern conference").rows, ["place standings:east"]);
-  assert.deepEqual(listRows("settings").rows, ["place settings", "place settings:appearance"]);
+  assert.deepEqual(listRows("settings").rows, [
+    "place settings",
+    "place settings:hillsider",
+    "place settings:appearance",
+  ]);
   assert.deepEqual(listRows("dark mode").rows, ["place settings:appearance"]);
   assert.deepEqual(listRows("appear").rows, ["place settings:appearance"]);
 });
@@ -162,13 +203,61 @@ test("a game part's name lists it for the latest final the rest of the words fin
   assert.deepEqual(listRows("high", true).rows, ["highlights of the season"]);
 });
 
-test("the latest final is the last game that has ended", () => {
+test("a final's part opens the last game that has ended, and a part before one the next game", () => {
   const games = [
     { id: "a", state: "final" },
     { id: "b", state: "final" },
     { id: "c", state: "live" },
     { id: "d", state: "pre" },
   ];
-  assert.equal(findLatestFinal(games)?.id, "b");
-  assert.equal(findLatestFinal(games.slice(2)), null);
+  /** @type {import("../shared/page/page-search.js").GamePart} */
+  const final = { key: "highlights", name: "Highlights", words: [], game: "latest-final" };
+  /** @type {import("../shared/page/page-search.js").GamePart} */
+  const next = { key: "matchup", name: "Matchup", words: [], game: "next" };
+  assert.equal(findPartGame(games, final)?.id, "b");
+  assert.equal(findPartGame(games.slice(2), final), null);
+  assert.equal(findPartGame(games, next)?.id, "c");
+  assert.equal(findPartGame(games.slice(0, 2), next), null);
+});
+
+test("a suffix after a last name may be left off", () => {
+  assert.deepEqual(listRows("Pell Jr").rows, ["player FOX Pell Jr."]);
+  assert.deepEqual(listRows("Cy Pell").rows, ["player FOX Pell Jr."]);
+});
+
+test("a name a search of games knows, as a starter's, lists his sheet and still finds his starts", () => {
+  assert.deepEqual(listRows("Pell"), { rows: ["player FOX Pell Jr."], gameText: "Pell" });
+  assert.deepEqual(listRows("Quill"), { rows: ["player HAW Quill"], gameText: null });
+});
+
+test("words a search of games knows ask for something else, beside a name or as the start of one", () => {
+  assert.deepEqual(listRows("eastern conference vale").rows, []);
+  assert.deepEqual(listRows("east", true).rows, ["place standings:east"]);
+  assert.deepEqual(listRows("Easto", true).rows, ["player FOX Vale"]);
+});
+
+test("a game's part before it opens the next game, and its name may be one a search of games passes over", () => {
+  assert.deepEqual(listRows("Hawks matchup"), { rows: ["matchup of hawks"], gameText: null });
+  assert.deepEqual(listRows("probables").rows, ["matchup of the season"]);
+  assert.deepEqual(listRows("the Hawks matchup").rows, ["matchup of the hawks"]);
+});
+
+test("the places the words find list first, beside a player whose name they start, or a team a letter off", () => {
+  assert.deepEqual(listRows("stan", true).rows, [
+    "place standings:league",
+    "place standings:east",
+    "player HAW Standish",
+  ]);
+  for (const text of ["Hillsider", "the Hillsider"])
+    assert.deepEqual(
+      listRows(text).rows,
+      ["place settings:hillsider", "team FOX", "section FOX"],
+      text,
+    );
+  assert.deepEqual(listRows("Hillside").rows, ["team FOX", "section FOX"]);
+});
+
+test("a word a search of games passes over finds a place only as a whole word of its own", () => {
+  assert.deepEqual(listRows("season").rows, []);
+  assert.deepEqual(listRows("the").rows, ["place settings:hillsider"]);
 });
