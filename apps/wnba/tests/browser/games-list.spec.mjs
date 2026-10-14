@@ -127,11 +127,9 @@ test("a Games list's day reads its month, date, and weekday at their sizes, weig
     [`${score.size}px`, String(score.weight)],
     [`${label.size}px`, String(label.weight)],
   ]);
-  expect(parts.map(({ letterSpacing }) => letterSpacing)).toEqual([
-    `${label.size * 0.07}px`,
-    "normal",
-    `${label.size * 0.06}px`,
-  ]);
+  expect(date.letterSpacing).toBe("normal");
+  expect(parseFloat(month.letterSpacing)).toBeCloseTo(label.size * 0.07, 2);
+  expect(parseFloat(weekday.letterSpacing)).toBeCloseTo(label.size * 0.06, 2);
   expect(date.top - month.bottom).toBeCloseTo(3, 1);
   expect(weekday.top - date.bottom).toBeCloseTo(4.5, 1);
 });
