@@ -765,7 +765,7 @@ test("a redraw that makes the list shorter as it adds a day leaves the day at th
   });
 
   await expect(findDay(page, "2026-09-28").locator('[data-game="added"]')).toHaveCount(1);
-  expect(await readListHeight()).not.toBe(heightBefore);
+  await expect.poll(readListHeight).not.toBe(heightBefore);
   await page.clock.runFor(500);
   await expectDayAtTop(page, "2026-09-30");
 });
