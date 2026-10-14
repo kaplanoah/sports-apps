@@ -42,7 +42,8 @@ import {
   connectToStore,
   loadPageAt,
   matchPath,
-  openLockedPage,
+  serveLockedPage,
+  LOCKED_PAGE_PATH,
 } from "../../../../tests/browser/harness.mjs";
 import { holdStore } from "../../../../tests/browser/hold-store.mjs";
 
@@ -321,7 +322,7 @@ export function buildSnapshotWithStarters() {
   return buildFixtureSnapshot(fixture);
 }
 
-export { test, expect, matchPath };
+export { test, expect, matchPath, LOCKED_PAGE_PATH };
 
 // A phone's screen and touch, where the Updates box shows.
 export const ON_A_PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
@@ -570,12 +571,12 @@ export async function chooseSeason(page, year) {
 }
 
 /**
- * The page at its key's address behind an access code, as the Worker serves it, with the evening's
- * scores in place of MLB's.
+ * Serves the page at its key's address behind an access code, as the Worker serves it, with the
+ * evening's scores in place of MLB's.
  * @param {import("@playwright/test").Page} page
  * @param {{ accessCode: string }} options
  */
-export function openLockedApp(page, { accessCode }) {
+export function serveLockedApp(page, { accessCode }) {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   const loadSnapshot = async () => structuredClone(snapshot);
   const testStore = createTestStore(SeasonStore, { loadSnapshot, now: EVENING_FIXTURE.now });
@@ -584,5 +585,16 @@ export function openLockedApp(page, { accessCode }) {
     serveSnapshot: () => Response.json(snapshot),
     forwardToStore,
   });
-  return openLockedPage(page, { worker, testStore, accessCode, now: EVENING_FIXTURE.now });
+  return serveLockedPage(page, { worker, testStore, accessCode, now: EVENING_FIXTURE.now });
+}
+
+/**
+ * Opens the page `serveLockedApp` serves.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ accessCode: string }} options
+ */
+export async function openLockedApp(page, options) {
+  const controls = await serveLockedApp(page, options);
+  await page.goto(LOCKED_PAGE_PATH);
+  return controls;
 }

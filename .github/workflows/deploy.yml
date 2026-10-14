@@ -52,12 +52,30 @@ jobs:
       # token is.
       - run: npm ci --ignore-scripts
         if: github.event_name != 'push' || env.CHANNEL == 'beta' || steps.passed.outputs.run
-      # A secret, so the account ID is masked in this public log.
+      # The deploy opens each new version's page in Chromium's headless shell, and puts the one
+      # before back when it doesn't draw (worker/check-page.mjs).
+      - id: browsers
+        if: github.event_name != 'push' || env.CHANNEL == 'beta' || steps.passed.outputs.run
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: (github.event_name != 'push' || env.CHANNEL == 'beta' || steps.passed.outputs.run) && steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --only-shell chromium
+      # Secrets, so the account ID and each page's address and code are masked in this public log.
       - name: Deploy the Worker
         if: github.event_name != 'push' || env.CHANNEL == 'beta' || steps.passed.outputs.run
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MLB_PAGE_URL: ${{ secrets.MLB_PAGE_URL }}
+          MLB_ACCESS_CODE: ${{ secrets.MLB_ACCESS_CODE }}
+          MLB_BETA_PAGE_URL: ${{ secrets.MLB_BETA_PAGE_URL }}
+          MLB_BETA_ACCESS_CODE: ${{ secrets.MLB_BETA_ACCESS_CODE }}
+          WNBA_PAGE_URL: ${{ secrets.WNBA_PAGE_URL }}
+          WNBA_ACCESS_CODE: ${{ secrets.WNBA_ACCESS_CODE }}
+          WNBA_BETA_PAGE_URL: ${{ secrets.WNBA_BETA_PAGE_URL }}
+          WNBA_BETA_ACCESS_CODE: ${{ secrets.WNBA_BETA_ACCESS_CODE }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "::notice::No CLOUDFLARE_API_TOKEN in the production environment, so nothing was deployed."

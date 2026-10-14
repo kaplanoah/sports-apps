@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { findAppRoot, listAppsOrExit } from "./apps.mjs";
 import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
+import { checkAppPage } from "./check-page.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 
 const API = "https://api.cloudflare.com/client/v4";
@@ -233,6 +234,7 @@ export function createDeploymentsClient({ base, name, callCloudflare }) {
  * @param {NodeJS.ProcessEnv} [options.env]
  * @param {typeof console.log} [options.log]
  * @param {(milliseconds: number) => Promise<unknown>} [options.pause]
+ * @param {typeof checkAppPage} [options.checkPage] Opens the new version's page.
  * @returns {Promise<string | null>} the Worker's address, or null when nothing needed deploying
  */
 export async function deploy({
@@ -245,6 +247,7 @@ export async function deploy({
   env = process.env,
   log = console.log,
   pause = waitFor,
+  checkPage = checkAppPage,
 }) {
   const account = readAccount(env);
   const { name, compatibilityDate } = readAppWorkerConfig(app, channel);
@@ -329,11 +332,20 @@ export async function deploy({
   async function confirmWorkerAnswers(url, previousVersions) {
     if (!previousVersions) log("worker check: waiting for the new workers.dev address to resolve");
     const attempts = previousVersions ? CHECK_ATTEMPTS : FIRST_DEPLOY_CHECK_ATTEMPTS;
-    if (await isWorkerAnswering(url, { fetchImpl, pause, commit, attempts })) {
-      log("worker check: ok");
-      return;
-    }
+    if (await isWorkerAnswering(url, { fetchImpl, pause, commit, attempts })) return;
     await restoreAfter("The Worker didn't answer as the new version", previousVersions);
+  }
+
+  // A Worker can answer while its page throws or never draws, which a phone would show.
+  async function confirmPageDraws(previousVersions) {
+    const check = await checkPage({ app, channel, commit, env });
+    if (check.status === "drawn") log("page check: ok");
+    if (check.status === "unchecked") log(`::notice::page check: skipped, ${check.reason}`);
+    if (check.status === "broken")
+      await restoreAfter(
+        `The page didn't draw as the new version: ${check.reason}`,
+        previousVersions,
+      );
   }
 
   async function findNewVersionUrl(previousVersions) {
@@ -351,6 +363,8 @@ export async function deploy({
   await uploadWorker(migrations);
   const url = await findNewVersionUrl(previousVersions);
   await confirmWorkerAnswers(url, previousVersions);
+  await confirmPageDraws(previousVersions);
+  log("worker check: ok");
   return url;
 }
 

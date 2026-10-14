@@ -524,6 +524,12 @@
   `deploy-scope.mjs`, `flag-conflicts.mjs`, `red-change.mjs`, `release.mjs`,
   `rollback.mjs`, `set-app-key.mjs`, `set-access-code.mjs`, the secrets calls they share in `worker-secrets.mjs`,
   and the channels each command's `--channel` names in `channels.mjs`); its tests are in the root `tests/`.
+  It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`),
+  which each deploy does for its new version, putting the one before back when it doesn't,
+  and which the `Watch apps` workflow does every 15 minutes,
+  keeping one open issue for each app that isn't opening, which closes once it opens again (`watch-apps.mjs`),
+  both from each page's address and code in the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
+  with `_BETA` after the app's name for its beta channel.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" below.
 - Commands:
@@ -590,11 +596,16 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
    as "Writing" below says, and its search terms hand it to the shared search as `words`.
 6. **Tests.** Record a real afternoon of the league's feeds as a fixture in `tests/fixtures/`,
    and test the snapshot, the Worker, the season updater, and the page's views against it.
-   Browser tests in `tests/browser/` run the page against the real store, as the WNBA's harness does.
+   Browser tests in `tests/browser/` run the page against the real store, as the WNBA's harness does,
+   and its `release-check.spec.mjs` opens the page with the release check, as the WNBA's does.
+   Hand the deploy and the `Watch apps` workflow the page's secrets in `.github/workflows/deploy.yml` and `watch.yml`,
+   which the root's `tests/deploy.test.js` checks.
 7. **Docs.** Add the app to the README's table and its setup section's list of apps, and to the "Apps" bullet above.
 8. **Ship it.** Open it as a `feat:` PR.
    The app starts at version 1.0.0, and the merge's deploy creates its Worker,
    which answers nothing but `robots.txt` until `npm run set-app-key -- <app>` gives it a key and prints the page's address.
+   Ask the owner to add that address, and the page's code once it has one, as its secrets in the `production` environment,
+   so each deploy and the `Watch apps` workflow open its page.
 
 ## Workflow
 
@@ -755,7 +766,8 @@ When a step says to go back to an earlier step, continue in order from there.
    When the PR's CI passed on exactly the code `main` now has (`worker/find-passed-ci.mjs`),
    which it did if the PR was up to date with `main` as it merged,
    that first Deploy run deploys, and CI on `main` skips the checks it already ran; otherwise the Deploy run that follows CI on `main` does.
-   Either runs `worker/deploy.mjs`, which deploys each app's Worker and rolls back any new version that doesn't answer.
+   Either runs `worker/deploy.mjs`, which deploys each app's Worker and rolls back any new version that doesn't answer,
+   or whose page doesn't draw (`worker/check-page.mjs`).
    An app's deploy is skipped when nothing but docs, tests, tooling,
    and other apps' folders changed since its live version's commit; `worker/deploy-scope.mjs` lists those files.
    Each line of the deploy log starts with its app's name, so read step 10's results for each app.
@@ -765,6 +777,8 @@ When a step says to go back to an earlier step, continue in order from there.
       Read the next Deploy run's log.
     - It says `worker check: ok`: the new version is live.
       Tell the user.
+      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date:
+      tell the user that too.
     - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
       Tell the user which.
     - It says "has moved on": another merge landed first, and its Deploy run covers this one.

@@ -281,7 +281,18 @@ environment named `production`, limit its deployment branches to `main` and
 
 - a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare token made from the **Edit
   Cloudflare Workers** template, with no IP filtering and a long expiry;
-- a secret `CLOUDFLARE_ACCOUNT_ID`, so it stays out of the public deploy logs.
+- a secret `CLOUDFLARE_ACCOUNT_ID`, so it stays out of the public deploy logs;
+- for each app, a secret `<APP>_PAGE_URL` with its page's address, key and all,
+  like `WNBA_PAGE_URL`, and `<APP>_ACCESS_CODE` with its code if it asks for
+  one, and the same with `_BETA` after the app's name for its beta page, like
+  `WNBA_BETA_PAGE_URL`.
+
+Each deploy opens its new version's page as a phone does, signed in with its
+code, and puts the version before back when the page doesn't draw what its store
+sends. Every 15 minutes, the **Watch apps** workflow opens each app's page the
+same way and keeps one open issue for each app that isn't opening, which closes
+itself once the app opens again. An app without its page's secrets isn't
+opened, and the deploy log and the workflow say so.
 
 Each deploy records its commit on the Worker's version. A merge skips an app's
 deploy when nothing but docs, tests, tooling, and other apps' folders changed

@@ -31,7 +31,8 @@ import {
   connectToStore,
   loadPageAt,
   matchPath,
-  openLockedPage,
+  serveLockedPage,
+  LOCKED_PAGE_PATH,
 } from "../../../../tests/browser/harness.mjs";
 import { holdStore } from "../../../../tests/browser/hold-store.mjs";
 import { joinGameLogs } from "../player-fixtures.js";
@@ -108,7 +109,7 @@ const listPlayerAnswers = () => [
   }),
 ];
 
-export { test, expect, matchPath, GAMES, NOW };
+export { test, expect, matchPath, GAMES, NOW, LOCKED_PAGE_PATH };
 
 /**
  * A hex color as the browser's computed style writes it.
@@ -343,14 +344,25 @@ export async function openApp(
 }
 
 /**
- * The page at its key's address behind an access code, as the Worker serves it, with the
+ * Serves the page at its key's address behind an access code, as the Worker serves it, with the
  * afternoon's store behind it.
  * @param {import("@playwright/test").Page} page
  * @param {{ accessCode: string }} options
  */
-export async function openLockedApp(page, { accessCode }) {
+export async function serveLockedApp(page, { accessCode }) {
   const testStore = await createAfternoonStore();
-  return openLockedPage(page, { worker, testStore, accessCode, now: NOW });
+  return serveLockedPage(page, { worker, testStore, accessCode, now: NOW });
+}
+
+/**
+ * Opens the page `serveLockedApp` serves.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ accessCode: string }} options
+ */
+export async function openLockedApp(page, options) {
+  const controls = await serveLockedApp(page, options);
+  await page.goto(LOCKED_PAGE_PATH);
+  return controls;
 }
 
 /**

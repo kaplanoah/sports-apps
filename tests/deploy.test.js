@@ -522,6 +522,75 @@ test("a Worker still answering as the version before isn't the new one, and is p
   assert.equal(checks, 3);
 });
 
+test("a new version's page that doesn't draw puts the live version back", async () => {
+  const { deploy } = await loadDeployModule();
+  const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+  const checked = [];
+  await assert.rejects(
+    deploy({
+      app: "mlb",
+      channel: "beta",
+      fetchImpl: cloudflare.fetchImpl,
+      env: ENV,
+      script: "",
+      commit: NEW_COMMIT,
+      findChanges: () => ["apps/mlb/page/js/app.js"],
+      log: () => {},
+      pause: skipPause,
+      checkPage: async (options) => {
+        checked.push(options);
+        return { status: "broken", reason: "the page threw: season is undefined" };
+      },
+    }),
+    /The page didn't draw as the new version: the page threw: season is undefined, so the earlier version is live again/,
+  );
+  assert.deepEqual(checked, [{ app: "mlb", channel: "beta", commit: NEW_COMMIT, env: ENV }]);
+  assert.equal(
+    describeCalls(cloudflare.calls).at(-1),
+    "POST /accounts/acct123/workers/scripts/mlb-app-beta/deployments",
+  );
+});
+
+test("a new version passes once its Worker answers and its page draws, or has no page to open", async () => {
+  const { deploy } = await loadDeployModule();
+  for (const [check, line] of [
+    [{ status: "drawn" }, "page check: ok"],
+    [
+      { status: "unchecked", reason: "no MLB_PAGE_URL secret" },
+      "::notice::page check: skipped, no MLB_PAGE_URL secret",
+    ],
+  ]) {
+    const lines = [];
+    const url = await deploy({
+      app: "mlb",
+      fetchImpl: createFakeCloudflare().fetchImpl,
+      env: ENV,
+      script: "",
+      log: (logged) => lines.push(logged),
+      pause: skipPause,
+      checkPage: async () => /** @type {any} */ (check),
+    });
+    assert.equal(url, WORKER_URL);
+    assert.deepEqual(lines.slice(-2), [line, "worker check: ok"]);
+  }
+});
+
+test("each deploy and each watch of the apps opens every app's page with its own secrets", async () => {
+  const { listApps } = await import("../worker/apps.mjs");
+  const { nameAccessSecrets } = await import("../worker/check-page.mjs");
+  const readWorkflow = (name) =>
+    readFileSync(`${import.meta.dirname}/../.github/workflows/${name}`, "utf8");
+  const listPassed = (workflow, channel) =>
+    listApps().flatMap((app) =>
+      Object.values(nameAccessSecrets(app, channel)).filter(
+        (secret) => !workflow.includes(`${secret}: \${{ secrets.${secret} }}`),
+      ),
+    );
+  for (const channel of ["production", "beta"])
+    assert.deepEqual(listPassed(readWorkflow("deploy.yml"), channel), [], channel);
+  assert.deepEqual(listPassed(readWorkflow("watch.yml"), "production"), []);
+});
+
 test("a failed check says so when there's nothing to go back to, or going back fails", async () => {
   const { deploy } = await loadDeployModule();
   const answerWorker = () => new Response("", { status: 404 });

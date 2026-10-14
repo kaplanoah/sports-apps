@@ -196,6 +196,11 @@ export default [
     },
   },
   {
+    // The release check's callbacks passed to page.evaluate run in the live page.
+    files: ["worker/check-page.mjs"],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+  {
     // Callbacks passed to page.evaluate run in the page.
     files: ["apps/*/tests/browser/*.mjs", "tests/browser/*.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
