@@ -314,3 +314,23 @@ test("finals whose box scores were kept before they kept each run-scoring play a
 
   assert.deepEqual(await listRunReads(run, 2), [[DODGERS_AT_BRAVES, "2001"], []]);
 });
+
+test("finals whose box scores were kept before they kept each pitcher's pitches are read once more, this season's and each past one's", async () => {
+  const pitchlessRead = { firstReadAt: 0, readAt: 0, isDone: true, version: 3 };
+  const run = createRun({
+    slate: keepSlateGames([DODGERS_AT_BRAVES]),
+    stored: {
+      "seasons/2025": { year: 2025 },
+      ...createScheduleMonth(2025, "2025-09", [{ id: "2001", day: 1 }]),
+    },
+    kept: {
+      [`final-reads:${EVENING.season}`]: { [DODGERS_AT_BRAVES]: pitchlessRead },
+      "final-reads:2025": { 2001: pitchlessRead },
+      "finals-kept:2025": 3,
+    },
+  });
+
+  assert.deepEqual(await listRunReads(run, 2), [[DODGERS_AT_BRAVES, "2001"], []]);
+  const boxScore = await run.docs.read(nameGameDetailsKey(DODGERS_AT_BRAVES));
+  assert.equal(boxScore.away.pitchers[0].pitches, 98);
+});

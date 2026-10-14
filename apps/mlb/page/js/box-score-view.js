@@ -21,6 +21,7 @@ const BATTING_COLUMNS = /** @type {const} */ ([
 ]);
 const PITCHING_COLUMNS = /** @type {const} */ ([
   ["IP", "inningsPitched"],
+  ["P", "pitches"],
   ["H", "hits"],
   ["R", "runs"],
   ["ER", "earnedRuns"],

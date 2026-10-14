@@ -103,14 +103,25 @@ test("a final's box score has each inning's runs, each club's runs, hits, and er
       pitcher.name,
       pitcher.decision,
       pitcher.inningsPitched,
+      pitcher.pitches,
     ]),
     [
-      ["Yamamoto", "W", "7.0"],
-      ["Scott", null, "1.0"],
-      ["Díaz", "S", "1.0"],
+      ["Yamamoto", "W", "7.0", 98],
+      ["Scott", null, "1.0", 19],
+      ["Díaz", "S", "1.0", 19],
     ],
   );
   assert.equal(boxScore.home.pitchers[0].decision, "L");
+});
+
+test("the box score asks MLB for each pitcher's pitches, which count up as a game is played", () => {
+  const fields = new URL(nameFeedRequest(DODGERS_AT_BREWERS), MLB_API).searchParams.get("fields");
+  assert.ok(fields?.split(",").includes("numberOfPitches"));
+  const boxScore = describeBoxScore(DODGERS_AT_BREWERS, readPlaysFeed(DODGERS_AT_BREWERS));
+  assert.deepEqual(
+    [boxScore.away, boxScore.home].map((side) => side.pitchers[0].pitches),
+    [29, 60],
+  );
 });
 
 test("a sub bats after the batter he replaced", () => {
