@@ -76,9 +76,9 @@
 }
 .strip-month {
   margin: 0;
-  font-size: var(--size-small);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--strip-month);
@@ -94,8 +94,8 @@
   border: 0;
   background: none;
   font: inherit;
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
   letter-spacing: 0.01em;
   color: var(--strip-action);
   cursor: pointer;
@@ -144,9 +144,9 @@
 }
 .cell-name,
 .cell-month {
-  font-size: var(--size-small);
-  font-weight: 500;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
+  line-height: var(--leading);
   text-transform: uppercase;
   letter-spacing: 0.02em;
   color: var(--ink-dim);
@@ -155,9 +155,9 @@
   color: var(--strip-month);
 }
 .cell-number {
-  font-size: var(--size-read);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-body-size);
+  font-weight: calc(var(--type-body-weight) + 200);
+  line-height: var(--leading);
 }
 /* A day without games is quieter: as dim as a weekday, the dimmest a date can be and still read,
    and a step lighter. */
@@ -165,7 +165,7 @@
   color: var(--ink-dim);
 }
 .day-cell.is-quiet .cell-number {
-  font-weight: 500;
+  font-weight: calc(var(--type-body-weight) + 100);
 }
 .day-cell.is-today .cell-number {
   color: var(--strip-today);

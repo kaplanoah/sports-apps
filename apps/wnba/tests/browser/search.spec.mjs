@@ -12,7 +12,7 @@ import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 
 // What Search finds and opens, and how it comes and goes, on a phone.
@@ -68,7 +68,7 @@ async function leaveForTwoMinutes(page) {
  * @param {import("@playwright/test").Page} page
  */
 async function expectReadableSearch(page) {
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
 }

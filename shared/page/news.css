@@ -46,7 +46,8 @@
 .news-photo-credit {
   grid-column: 2;
   text-align: right;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   text-wrap: balance;
 }
@@ -63,7 +64,8 @@
   margin: 0;
 }
 .news-teams .club {
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -78,7 +80,8 @@
 }
 .news-meta {
   margin: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-mid);
 }
 /* The stories under a card's lead, quieter than it: a headline and its outlet each. */
@@ -90,7 +93,8 @@
 }
 .news-more-label {
   margin: 0;
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -101,12 +105,14 @@
   list-style: none;
 }
 .news-more-title {
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   text-wrap: pretty;
 }
 .news-summary {
   margin: 2px 0 0;
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
 }
 .news-foot {
   display: flex;

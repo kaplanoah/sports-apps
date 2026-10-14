@@ -10,7 +10,7 @@ import {
 } from "./harness.mjs";
 import { createReading } from "../../worker/src/readings.js";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 
@@ -79,7 +79,7 @@ test.describe("on a phone", () => {
 
     await expect(updates).toContainText(/Mets .*Phillies/);
     expect((await app.readDocument(`readings-2026/${part}`)).changes).toHaveLength(2);
-    expect(await listOffScaleText(page)).toEqual([]);
+    expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     await expect(updates.locator(".what").first()).toHaveCSS("font-size", "14.5px");

@@ -23,7 +23,7 @@ import {
   waitForTimedMotions,
 } from "../../../../tests/browser/sheet-motions.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 
@@ -328,12 +328,12 @@ for (const { screen, viewport } of [
     }) => {
       const sheet = await openGame(page);
       await expect(sheet.getByRole("button", { name: BLUBAUGH_VS_SPRINGS })).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await showSection(sheet, "Matchup");
       await expect(sheet.locator(".pitch-rows li")).toHaveCount(5);
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
     });
@@ -361,7 +361,7 @@ test("a game still to come lists its clubs' meetings so far under its starters, 
     [sheet.locator(".starters-open"), series].map((each) => each.boundingBox()),
   );
   expect(part.y).toBeGreaterThan(starters.y + starters.height);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -439,7 +439,7 @@ test("a live game's Runs so far set each runner's name by his base on the field,
   };
   for (const [name, value] of Object.entries(expected))
     expect(layout[name], name).toBeCloseTo(value, 0);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);

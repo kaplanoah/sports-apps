@@ -56,8 +56,8 @@ body.kbd .team-open:focus {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: var(--type-team-large-size);
+  font-weight: var(--type-team-large-weight);
   text-transform: none;
 }
 .sheet-head .team-title .dot {
@@ -65,12 +65,12 @@ body.kbd .team-open:focus {
   height: 14px;
 }
 .sheet-head .team-note {
-  font-weight: 500;
+  font-weight: calc(var(--type-detail-weight) + 100);
   color: var(--ink-mid);
 }
 .team-label {
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ink-mid);
@@ -93,20 +93,20 @@ body.kbd .team-open:focus {
   gap: 3px;
 }
 .team-stat b {
-  font-size: 1.05rem;
-  font-weight: 500;
+  font-size: var(--type-stat-large-size);
+  font-weight: calc(var(--type-stat-large-weight) - 100);
 }
 .team-detail {
   margin: 0;
-  font-size: var(--size-glance);
-  font-weight: 500;
-  line-height: 1.4;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
+  line-height: calc(1.4 * var(--leading));
 }
 .team-detail > .team-label {
   margin-right: 6px;
 }
 .team-detail b {
-  font-weight: 600;
+  font-weight: calc(var(--type-detail-weight) + 200);
 }
 .team-detail .tabular {
   white-space: nowrap;

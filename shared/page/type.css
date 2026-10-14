@@ -1,30 +1,39 @@
 /*
- * The apps' type scale. Pages link it before the other shared stylesheets, and every size under
- * 16px is one of these or one of settings' two, or half a pixel over one, like the WNBA roster's
- * player numbers at 14.5px. Sizes and weights are Barlow's: an app whose font draws larger or smaller
- * than Barlow at the same size gives that font's @font-face a size-adjust, so 14px looks the same
- * in every font, and a font that reads heavier, like Chivo Mono, sets each weight 50 under. A font
- * that still looks larger or smaller at some step sets its own value for it, as Chivo Mono and
- * Barlow Condensed do. Weights
- * are 400 to 600 under 24px, at least 500 for capitals under 16px, and 300 to 700 from 24px;
- * Barlow Condensed stops at 600. tests/browser/type-scale.mjs checks every shown text.
+ * The apps' type roles. Every shown text takes one, and each app's :root sets each role's size and
+ * weight for its own fonts, so a role looks as big and as heavy in every app:
+ *   --type-<role>-size and --type-<role>-weight.
+ * A rule that sets a role's size sets its weight from the role too, or a step from it where the text
+ * leads or recedes within its role, as calc(var(--type-label-weight) - 100).
+ *
+ *   title         the app's name at the top
+ *   headline      a news story's title, the access gate's title
+ *   heading       a sheet's title, a bracket round
+ *   team-large    the team or player a sheet is about, the teams facing off on a game's sheet
+ *   team          team names in game rows, standings, and comparisons
+ *   team-compact  team names over a game sheet's tables
+ *   score         the big numbers: bracket series wins, a day's date beside its games
+ *   stat-large    a game row's lead and a sheet's lead numbers
+ *   stat          numbers in a game sheet's tables and comparisons
+ *   body          sentences: Updates, news summaries, why a player is out
+ *   detail        short facts: the header's lines, records, the clock, a sheet's facts
+ *   label         capitals: headings over parts, column heads, the strip's month and days
+ *   caption       the smallest text: seeds, stat details, credits
+ *   setting       a setting's name, a step up, as the phone's own Settings set it
+ *   setting-note  a setting's note
+ *
+ * tests/type-roles.test.js checks that every size comes from a role, and
+ * tests/browser/type-scale.mjs that every shown text draws at its app's role sizes, in a face the
+ * page loads.
  */
 
 :root {
-  /* Sentences read through: the Updates box, notes, and messages. */
-  --size-read: 1rem;
-  /* Short facts read in passing: times, dates, records, the header's lines. */
-  --size-glance: 0.875rem;
-  /* Capital labels, chips, and the smallest text there is. */
-  --size-small: 0.8125rem;
-  /* Settings set a setting's name and its note a step up, as the phone's own Settings do. */
-  --size-setting: 1.0625rem;
-  --size-setting-note: 0.9375rem;
   /* A field's text: an iPhone zooms in on a field under 16px when it's tapped. A field meant to
-     look smaller gets a face whose size-adjust draws it at that step. */
-  --size-field: 1rem;
+     look smaller gets a face whose size-adjust draws it at its role's size. */
+  --type-field-size: 1rem;
+  /* How far apart a font's lines sit, as a share of every line height the stylesheets set. */
+  --leading: 1;
   /* Safari on an iPhone otherwise enlarges some text on a turn to landscape and can keep it big
-     on the turn back, off the scale. */
+     on the turn back. */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }

@@ -1,6 +1,6 @@
 import { test, expect, openLockedApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 
 /** @param {import("@playwright/test").Page} page */
@@ -32,7 +32,7 @@ test("the gate's text keeps to the type scale, with its code light only because 
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expect(findGate(page)).toBeVisible();
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   await expect(page.locator(".code-field")).toHaveCSS("font-size", "24px");

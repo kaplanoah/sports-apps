@@ -31,9 +31,9 @@ body.gate-page {
 .gate-title {
   margin: 4px 0 6px;
   font-family: var(--gate-heading-font);
-  font-size: 1.12rem;
-  font-weight: 500;
-  line-height: 1.1;
+  font-size: var(--type-headline-size);
+  font-weight: calc(var(--type-headline-weight) - 100);
+  line-height: calc(1.1 * var(--leading));
   text-transform: uppercase;
   letter-spacing: 0.05em;
   text-wrap: balance;
@@ -81,8 +81,8 @@ body.gate-page {
   background: var(--accent);
   color: var(--accent-ink);
   font-family: var(--gate-heading-font);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--type-body-size);
+  font-weight: calc(var(--type-body-weight) + 200);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
@@ -98,8 +98,9 @@ body.kbd .open-button:focus {
   inset-inline: 0;
   max-width: 30ch;
   margin: 12px auto 0;
-  font-size: var(--size-glance);
-  line-height: 1.4;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.4 * var(--leading));
   color: var(--gate-problem);
 }
 .gate-message.is-calm {

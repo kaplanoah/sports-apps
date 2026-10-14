@@ -1,6 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
-import { measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
+import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
@@ -32,14 +32,14 @@ async function expectTheme(page, theme) {
   );
 }
 
-test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-glance", async ({
+test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's text", async ({
   page,
 }) => {
   await openApp(page);
   const picker = page.locator("#seasonPicker");
   await expect(picker).toHaveCSS("font-size", "16px");
-  const widths = await measureFieldFace(picker, "--size-glance");
-  expect(widths.field).toBeCloseTo(widths.step, 0);
+  const widths = await measureFieldFace(picker, "--type-detail-size");
+  expect(widths.field).toBeCloseTo(widths.role, 0);
 });
 
 test("settings list Notifications, the News switches, and Appearance, with lines only between the three", async ({

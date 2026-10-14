@@ -2,7 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -308,7 +308,7 @@ test.describe("a team's sheet", () => {
       expect(dash.meets).toBeCloseTo(0, 1);
       expect(dash.isGapFirst).toBe(true);
     }
-    expect(await listOffScaleText(page)).toEqual([]);
+    expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
   });

@@ -12,7 +12,7 @@ import {
 } from "./harness.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
@@ -320,21 +320,21 @@ for (const { screen, viewport } of [
         highlights: SEP_23_HIGHLIGHTS,
       });
       await expect(page.locator("#bracketWrap .card-note").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.getByRole("tab", { name: "Games" }).click();
       for (const day of SHOWN_DAYS) {
         await showDay(page, day);
-        expect(await listOffScaleText(page)).toEqual([]);
+        expect(await listTextOffRoles(page)).toEqual([]);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listStrayPeriods(page)).toEqual([]);
         expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       }
       for (const state of listSearchStates(page)) {
         await state();
-        expect(await listOffScaleText(page)).toEqual([]);
+        expect(await listTextOffRoles(page)).toEqual([]);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listStrayPeriods(page)).toEqual([]);
         expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -342,33 +342,33 @@ for (const { screen, viewport } of [
       await page.locator("#gameSearch button.search-cancel").click();
       for (const section of await showGameSections(page)) {
         await section();
-        expect(await listOffScaleText(page)).toEqual([]);
+        expect(await listTextOffRoles(page)).toEqual([]);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listStrayPeriods(page)).toEqual([]);
         expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       }
       await page.getByRole("tab", { name: "Standings" }).click();
       await expect(page.locator("table.st tbody tr").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
       await expect(page.locator("#teamSheet .leader-stat").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
       await expect(page.locator("#rosterBody .box-table").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       for (const player of ["Steven Kwan", "Tanner Bibee"]) {
         await page.locator("#rosterBody").getByRole("button", { name: player }).click();
         await expect(page.locator("#playerBody .sheet-part").first()).toBeVisible();
-        expect(await listOffScaleText(page)).toEqual([]);
+        expect(await listTextOffRoles(page)).toEqual([]);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listStrayPeriods(page)).toEqual([]);
         expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -376,7 +376,7 @@ for (const { screen, viewport } of [
         await expect(page.locator("#playerSheet")).toBeHidden();
       }
       await openInjuredPlayer(page);
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -384,13 +384,13 @@ for (const { screen, viewport } of [
       await expect(page.locator("#teamSheet")).toBeHidden();
       await page.getByRole("tab", { name: "News" }).click();
       await expect(page.locator(".news-more-title")).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await openSettings(page);
       await expect(page.locator("#settingsDialog")).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
