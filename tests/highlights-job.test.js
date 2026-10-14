@@ -24,12 +24,13 @@ const endGame = (id, hoursAgo) => ({
 });
 
 /**
- * The job over `games`, newest first, whose league answers each read with `answer(id)`, and
- * reads them as of its edition, which a test can raise between runs.
+ * The job over `games`, newest first, whose league answers each read with `answer(id)`, finished
+ * unless `isFinished(id)` says not, and reads them as of its edition, which a test can raise
+ * between runs.
  * @param {any[]} games
- * @param {{ answer?: (id: string) => any }} [options]
+ * @param {{ answer?: (id: string) => any, isFinished?: (id: string) => boolean }} [options]
  */
-function createRun(games, { answer = (id) => ({ id, plays: [] }) } = {}) {
+function createRun(games, { answer = (id) => ({ id, plays: [] }), isFinished = () => true } = {}) {
   const docs = createDocs();
   const storage = createJobStorage();
   const clock = { now: NOW };
@@ -42,7 +43,7 @@ function createRun(games, { answer = (id) => ({ id, plays: [] }) } = {}) {
       gameLengthMs: GAME_LENGTH_MS,
       readHighlights: async (_context, game) => {
         reads.push(game.id);
-        return answer(game.id);
+        return { highlights: answer(game.id), isFinished: isFinished(game.id) };
       },
       nameKey: (id) => `highlights/${id}`,
       edition: league.edition,
@@ -211,4 +212,33 @@ test("a read as of a raised edition that fails is tried again ten minutes later"
   wait(24 * 60);
   await runJob();
   assert.deepEqual(takeReads(), []);
+});
+
+test("a read the league couldn't finish saves what it has and is read again next run, then on its schedule once it is", async () => {
+  const left = { count: 2 };
+  const { docs, runJob, wait, takeReads } = createRun([endGame("1", 0)], {
+    answer: (id) => ({ id, plays: ["first"], left: left.count }),
+    isFinished: () => left.count === 0,
+  });
+
+  await runJob();
+  assert.deepEqual(takeReads(), ["1"]);
+  assert.deepEqual(await docs.read("highlights/1"), { id: "1", plays: ["first"], left: 2 });
+  left.count = 1;
+  wait(2);
+  await runJob();
+  assert.deepEqual(takeReads(), ["1"]);
+  assert.deepEqual(await docs.read("highlights/1"), { id: "1", plays: ["first"], left: 1 });
+  left.count = 0;
+  wait(2);
+  await runJob();
+  assert.deepEqual(takeReads(), ["1"]);
+
+  const readsByHour = [];
+  for (let minutes = 2; minutes <= 24 * 60; minutes += 2) {
+    wait(2);
+    await runJob();
+    if (takeReads().length) readsByHour.push((minutes + 4) / 60);
+  }
+  assert.deepEqual(readsByHour, [1, 3, 12]);
 });
