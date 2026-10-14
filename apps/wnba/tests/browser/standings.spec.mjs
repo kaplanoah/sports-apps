@@ -266,7 +266,8 @@ test("the standings' ranks sit 10px in from the card's edge and 6px before the n
   );
   expect(ten.numberIn).toBeCloseTo(11, 0);
   expect(ten.spareAfterNumber).toBeGreaterThanOrEqual(0);
-  expect(ten.spareAfterNumber).toBeLessThan(1);
+  // A browser may draw a table's column up to a pixel wider than its widest content.
+  expect(ten.spareAfterNumber).toBeLessThanOrEqual(1);
   expect(ten.roomToName).toBeCloseTo(6, 0);
   expect(one.numberIn).toBeCloseTo(11, 0);
   expect(one.nameIn).toBeCloseTo(ten.nameIn, 0);
