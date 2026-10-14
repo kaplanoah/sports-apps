@@ -22,7 +22,7 @@
  *   setting-note  a setting's note
  *
  * tests/type-roles.test.js checks that every size comes from a role, and
- * tests/browser/type-scale.mjs that every shown text draws at its app's role sizes, in a face the
+ * tests/browser/type-roles.mjs that every shown text draws at its app's role sizes, in a face the
  * page loads.
  */
 
