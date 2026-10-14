@@ -161,7 +161,19 @@ export default [
   },
   {
     files: ["apps/*/page/sw.js", "shared/page/push-worker.js", "shared/page/offline-worker.js"],
-    languageOptions: { globals: globals.serviceworker },
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+        noteWorkerStep: "readonly",
+        describeFailure: "readonly",
+      },
+    },
+  },
+  {
+    // A plain script sw.js loads first, whose functions the worker's other scripts call.
+    files: ["shared/page/service-worker-steps.js"],
+    languageOptions: { sourceType: "script", globals: globals.serviceworker },
+    rules: { "no-unused-vars": ["error", { vars: "local" }] },
   },
   {
     files: ["apps/*/worker/src/**/*.js", "shared/worker/**/*.js"],

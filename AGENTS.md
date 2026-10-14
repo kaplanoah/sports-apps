@@ -333,6 +333,11 @@
   like the News photos, that the page last showed (`shared/page/offline-worker.js`),
   so the page opens from the phone at once, even offline, while a newer page downloads behind it and replaces the copy only once all its files have arrived,
   and a page a deploy replaced reloads only once it has (`refreshPageCopy`);
+  a copy the phone can't read leaves each request to the Worker, as if there were none,
+  so a phone whose storage fails still opens the page whenever the Worker can answer;
+  the worker keeps its last steps, each start, install, activation, and push,
+  and each page it opened and how, in a cache of its own,
+  for Diagnostics to show (`shared/page/service-worker-steps.js`, read by `service-worker.js`);
   a phone the Worker signs out drops the copy (`shared/page/access.js`).
   Browser tests block service workers, whose requests skip the tests' routes, unless a test is about one.
   Deploys bundle it with all of the app's `page/`; `npm run build` writes each app's bundle to its `worker/dist/`, which git ignores.
@@ -372,7 +377,8 @@
   and, with a tap on Share report, what the page shows then, with the sheets open,
   and share it at once under a header naming the release, the device,
   the page's state, and how each of the store's background jobs last ran,
-  from the status each saves (`shared/worker/job-status.js`), in `diagnostics.js`,
+  from the status each saves (`shared/worker/job-status.js`),
+  and the steps the service worker kept, in `diagnostics.js`,
   and log each change to the screen's viewports, and how they stand as the page opens,
   leaves the screen, and comes back, but not a bounce past the page's top or bottom,
   flagging the visual one out of line with the layout one that the tab bar and sheets are held to and keeping the latest line where it went off,
@@ -573,7 +579,7 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
    in that order, so a part on the shown tab can take back its sideways scroll.
    `gate.html` asks for the access code: copy the WNBA's, with the league's icon and colors,
    which `styles.css` hands `shared/gate.css`, linked after `shared/type.css`, through the tokens its top comment lists.
-   `sw.js` sets `self.pageName` and imports `shared/push-worker.js` and `shared/offline-worker.js`.
+   `sw.js` sets `self.pageName` and imports `shared/service-worker-steps.js`, `shared/push-worker.js`, and `shared/offline-worker.js`, in that order.
    Give it a manifest, icons, and an `apple-mobile-web-app-title` of the league's short name.
    Choose the league's All-Star colors with the owner: each All-Star team's star takes its uniform's color,
    as the WNBA's orange West and white East do, its visitors orange and its home team white in a year of captains' teams,
