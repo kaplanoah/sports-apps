@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createStepLog } from "../shared/page/step-log.js";
+import { createStepLog, writeStepsAsText } from "../shared/page/step-log.js";
 import { normalizeSpaces } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
@@ -135,3 +135,17 @@ test("a log keeps its last 200 lines, enough for a fling through a few weeks of 
   assert.equal(lines[0], "top day 51");
   assert.equal(lines.at(-1), "top day 250");
 });
+
+test("steps kept elsewhere, like the service worker's, copy under their title the same way, and none copies nothing", () =>
+  checkInTimeZone(EASTERN, () => {
+    assert.equal(
+      normalizeSpaces(
+        writeStepsAsText("Service worker", [
+          { at: Date.parse("2026-10-14T04:28:41Z"), text: "Opened the page from the copy" },
+          { at: Date.parse("2026-10-14T04:28:40Z"), text: "Started" },
+        ]),
+      ),
+      "Service worker\n12:28:41 AM Opened the page from the copy\n12:28:40 AM Started",
+    );
+    assert.equal(writeStepsAsText("Service worker", []), "");
+  }));

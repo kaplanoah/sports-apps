@@ -91,3 +91,24 @@ test("a page a deploy replaced waits to reload until its copy can hold the newer
   await reloaded;
   expect(await isSameLoad(page)).toBe(false);
 });
+
+test("Diagnostics show the steps the service worker kept: its start, install, and activation, and each page it opened", async ({
+  page,
+}) => {
+  await openKeptApp(page);
+  await page.reload();
+  await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+  await page.getByRole("switch", { name: "Diagnostics" }).click();
+
+  const steps = page.locator("#diagnostics .diagnostics-record", { hasText: "Service worker" });
+  await expect(steps).toHaveCount(1);
+  const lines = await steps.locator("li").allTextContents();
+  expect(lines.toReversed().map((line) => line.replace(/^\s*\S+\s[AP]M\s*/, "").trim())).toEqual([
+    "Started",
+    "Installed",
+    "Activated",
+    "Opened the page from the copy",
+  ]);
+});
