@@ -25,3 +25,16 @@ export async function serveReleases(page) {
   });
   return served;
 }
+
+/**
+ * Moves the page a tick on and returns how many release reads it has made, for a poll that waits
+ * for a failed check to be tried again. A check that starts before the page has taken in a failed
+ * read shares that read and fails with it, so only a tick after the failure reads both releases
+ * again.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ requests: number }} served
+ */
+export async function retryReleaseCheck(page, served) {
+  await page.clock.runFor(15 * 1000);
+  return served.requests;
+}

@@ -1,5 +1,9 @@
 import { buildReleaseServer, servePageFiles } from "../../../../tests/browser/release-worker.mjs";
-import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
+import {
+  NEXT_RELEASE,
+  retryReleaseCheck,
+  serveReleases,
+} from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
 
 const MINUTE_MS = 60 * 1000;
@@ -360,8 +364,7 @@ test("a page whose first release check failed still reloads for a later deploy",
   served.failures = 1;
   await openApp(page);
   await expect.poll(() => served.requests).toBe(1);
-  await waitForTick(page);
-  await expect.poll(() => served.requests).toBe(3);
+  await expect.poll(() => retryReleaseCheck(page, served)).toBeGreaterThanOrEqual(3);
   await markPage(page);
 
   served.release = NEXT_RELEASE;
