@@ -689,7 +689,13 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
   A new code signs every phone out, and `--remove` stops asking.
   Never commit, log, or post the code.
 - The repo is public.
-  Never commit secrets, keys, account IDs, real Worker addresses or subdomains, or personal data; use placeholders in tests and docs.
+  Never commit secrets, keys, account IDs, real Worker addresses or subdomains, or personal data; use placeholders in tests and docs:
+  `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
+  which the root's `tests/no-secrets.test.js` tells from a real one, failing on any real one in a tracked file.
+  Nothing a change logs or posts where the public can read it, like a workflow's log or an issue,
+  carries a page's address, its key, an access code, or the account's id either,
+  masked as `hideAddress` in `worker/check-page.mjs` masks a check's reason.
+  Reviewing a change, check what it commits, logs, and posts for any of these.
 - The Cloudflare token lives only in the cloud environment's API credentials and the repo's `production` GitHub environment.
   Never ask for it in chat or put it in environment variables, code, or commits.
 - Keep scratch work (design playgrounds, test harnesses) out of git, and never point tests at the real page.
