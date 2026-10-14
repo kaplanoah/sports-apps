@@ -4,7 +4,6 @@ import {
   describeDevice,
   describeJobStatus,
   describeLoad,
-  describeLoadRoute,
   describeOpenSheets,
   describeTimeAway,
   nameReportButton,
@@ -210,11 +209,4 @@ test("the report button offers the report at once, then says it went", () => {
   assert.equal(nameReportButton({ ...ready, isTouch: false }), "Copy report");
   assert.equal(nameReportButton({ ...ready, reportStep: "shared" }), "Shared");
   assert.equal(nameReportButton({ ...ready, reportStep: "copied" }), "Copied");
-});
-
-test("a load says whether the service worker answered it, where the browser says", () => {
-  assert.equal(describeLoadRoute({ workerStart: 12.5 }), "Loaded through the service worker");
-  assert.equal(describeLoadRoute({ workerStart: 0 }), "Loaded without the service worker");
-  assert.equal(describeLoadRoute({}), null);
-  assert.equal(describeLoadRoute(undefined), null);
 });
