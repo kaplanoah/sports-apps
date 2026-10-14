@@ -1,0 +1,48 @@
+name: Watch apps
+
+# Every 15 minutes, opens each app's live page as a phone does, and keeps one open issue for each
+# app that isn't opening, which closes once it opens again (worker/watch-apps.mjs).
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Each page's address and code live in the production environment beside the deploy's secrets,
+    # and opening a page deploys nothing.
+    environment:
+      name: production
+      deployment: false
+    concurrency:
+      group: watch-apps
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - id: browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --only-shell chromium
+      # Secrets, so each page's address and code are masked in this public log.
+      - run: node worker/watch-apps.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MLB_PAGE_URL: ${{ secrets.MLB_PAGE_URL }}
+          MLB_ACCESS_CODE: ${{ secrets.MLB_ACCESS_CODE }}
+          WNBA_PAGE_URL: ${{ secrets.WNBA_PAGE_URL }}
+          WNBA_ACCESS_CODE: ${{ secrets.WNBA_ACCESS_CODE }}

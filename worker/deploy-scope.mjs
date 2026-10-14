@@ -13,6 +13,7 @@ const SKIPPED_FILES = new Set([
   ".github/workflows/ci.yml",
   ".github/workflows/conflicts.yml",
   ".github/workflows/flaky.yml",
+  ".github/workflows/watch.yml",
   ".gitignore",
   ".prettierignore",
   "eslint.config.mjs",
@@ -20,6 +21,7 @@ const SKIPPED_FILES = new Set([
   "playwright.config.mjs",
   "tsconfig.json",
   "types/globals.d.ts",
+  "worker/check-page.mjs",
   "worker/check-pr-title.mjs",
   "worker/find-passed-ci.mjs",
   "worker/flag-conflicts.mjs",
@@ -30,6 +32,7 @@ const SKIPPED_FILES = new Set([
   "worker/rollback.mjs",
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
+  "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);
 const SKIPPED_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];

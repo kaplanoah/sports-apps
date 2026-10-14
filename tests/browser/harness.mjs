@@ -190,9 +190,11 @@ async function answerThroughWorker(route, worker, env) {
   });
 }
 
+export const LOCKED_PAGE_PATH = `/${PAGE_KEY}/`;
+
 /**
- * The page at its key's address behind an access code, with every request under the key answered
- * by `worker` in front of `testStore`.
+ * Serves the page at its key's address behind an access code, with every request under the key
+ * answered by `worker` in front of `testStore`, with the page's clock at `now`.
  * @param {import("@playwright/test").Page} page
  * @param {object} options
  * @param {Parameters<typeof answerThroughWorker>[1]} options.worker the app's Worker
@@ -200,7 +202,7 @@ async function answerThroughWorker(route, worker, env) {
  * @param {string} options.accessCode
  * @param {string} options.now
  */
-export async function openLockedPage(page, { worker, testStore, accessCode, now }) {
+export async function serveLockedPage(page, { worker, testStore, accessCode, now }) {
   const tries = { isOverLimit: false };
   const env = {
     APP_KEY: PAGE_KEY,
@@ -210,13 +212,12 @@ export async function openLockedPage(page, { worker, testStore, accessCode, now 
     STORE: { idFromName: () => "store", get: () => testStore.store },
   };
   await blockOtherHosts(page);
-  await page.route(matchPath(`/${PAGE_KEY}/`), (route) => answerThroughWorker(route, worker, env));
+  await page.route(matchPath(LOCKED_PAGE_PATH), (route) => answerThroughWorker(route, worker, env));
   await page.routeWebSocket(
-    (url) => url.pathname === `/${PAGE_KEY}/watch`,
+    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
     (socket) => testStore.context.ctx.acceptWebSocket({ send: (message) => socket.send(message) }),
   );
   await page.clock.install({ time: new Date(now) });
-  await page.goto(`/${PAGE_KEY}/`);
 
   return {
     /** @param {string} code */
