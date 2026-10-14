@@ -1,5 +1,16 @@
 import {
-  addDays,
+  chooseCellLabel,
+  choosePlacement,
+  chooseTrip,
+  describeWhyNoSlide,
+  findDayScrollTop,
+  isFollowingStartDay,
+  isRowOutOfSight,
+  listShownDays,
+  listStripDays,
+  readFollowStartUntil,
+} from "./day-strip-rules.js";
+import {
   formatLongDate,
   formatMonth,
   formatShortMonth,
@@ -45,15 +56,9 @@ import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
 // Phosphor's calendar-dot, at its Regular weight, as beside the words of a Read button.
 const CALENDAR_DOT = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Zm-64-56a16,16,0,1,1-16-16A16,16,0,0,1,144,152Z"/></svg>`;
 
-// Farther than this many screens, a jump is made at once rather than flown.
-const FLOWN_SCREENS = 3;
 // A tap on Today while the list is already there grows the date this much and back, this fast.
 const PULSE_SCALE = 1.04;
 const PULSE_MS = 290;
-// After a long time away, the list's start day can move as the store catches up, as when a game
-// still under way when the page left has since ended, so for this long, until someone moves the
-// list or the strip, the list follows it.
-const FOLLOW_START_MS = 10 * 1000;
 
 /** @type {HTMLElement | null} */
 let view = null;
@@ -103,28 +108,26 @@ function setHeld(next) {
 }
 
 /**
- * Every day from the first game day to the last.
- * @param {ListedDay[]} days
+ * A day's label in the strip, as its rule chooses it.
+ * @param {string} day
+ * @param {string} today
  */
-function listStripDays(days) {
-  if (!days.length) return [];
-  const last = days[days.length - 1].day;
-  const stripDays = [];
-  for (let day = days[0].day; day <= last; day = addDays(day, 1)) stripDays.push(day);
-  return stripDays;
+function renderCellLabel(day, today) {
+  const date = readCalendarDate(day);
+  const label = chooseCellLabel(day, today);
+  if (label === "today") return html`<span class="cell-name">Today</span>`;
+  if (label === "month") return html`<span class="cell-month">${formatShortMonth(date)}</span>`;
+  return html`<span class="cell-name">${formatShortWeekday(date)}</span>`;
 }
 
 /**
  * @param {string} day
- * @param {{ isListed: boolean, isToday: boolean, isChosen: boolean }} state
+ * @param {{ today: string, isListed: boolean, isChosen: boolean }} state
  */
-function renderCell(day, { isListed, isToday, isChosen }) {
+function renderCell(day, { today, isListed, isChosen }) {
   const date = readCalendarDate(day);
-  const label = isToday
-    ? html`<span class="cell-name">Today</span>`
-    : readDayOfMonth(day) === 1
-      ? html`<span class="cell-month">${formatShortMonth(date)}</span>`
-      : html`<span class="cell-name">${formatShortWeekday(date)}</span>`;
+  const isToday = day === today;
+  const label = renderCellLabel(day, today);
   const classes = [
     "day-cell",
     isToday && "is-today",
@@ -141,11 +144,7 @@ function renderCell(day, { isListed, isToday, isChosen }) {
 function renderCells({ days, today }) {
   const listed = new Set(days.map(({ day }) => day));
   return html`${listStripDays(days).map((day) =>
-    renderCell(day, {
-      isListed: listed.has(day),
-      isToday: day === today,
-      isChosen: day === chosenDay,
-    }),
+    renderCell(day, { today, isListed: listed.has(day), isChosen: day === chosenDay }),
   )}`;
 }
 
@@ -163,13 +162,8 @@ const renderBar = (fill) =>
 /**
  * The days the list shows: each game day, and the date without games a tap brought in.
  * @param {DayStripFill} fill
- * @returns {ListedDay[]}
  */
-function listShownDays(fill) {
-  if (!quietDay || fill.days.some(({ day }) => day === quietDay)) return fill.days;
-  const quiet = { day: quietDay, markup: fill.renderQuietDay(quietDay) };
-  return [...fill.days, quiet].sort((first, second) => (first.day < second.day ? -1 : 1));
-}
+const listFillDays = (fill) => listShownDays(fill.days, quietDay, fill.renderQuietDay);
 
 /**
  * The days drawn whole: those within a few screens of what the list shows and of the day a tap or
@@ -263,7 +257,11 @@ function followTopDay(day) {
   const strip = findStrip();
   const from = chosenDay && findCell(chosenDay);
   const to = findCell(day);
-  const cannotSlide = describeWhyNoSlide({ strip, from, to });
+  const cannotSlide = describeWhyNoSlide({
+    hasCells: !!strip && !!from && !!to,
+    isListInHand,
+    isReducedMotion: isReducedMotion(),
+  });
   dayStripLog.noteStep(
     `top day ${day}, ${cannotSlide ? `chosen at once: ${cannotSlide}` : "slide"}`,
   );
@@ -273,17 +271,6 @@ function followTopDay(day) {
   }
   slideStripTo(strip, from, to);
   markChosen(day);
-}
-
-/**
- * Why the strip's dates can't slide to the list's new top day, or null when they can.
- * @param {{ strip: HTMLElement | null, from: HTMLElement | null, to: HTMLElement | null }} cells
- */
-function describeWhyNoSlide({ strip, from, to }) {
-  if (!strip || !from || !to) return "a date isn't in the strip";
-  if (!isListInHand) return "no finger or wheel moved the list";
-  if (isReducedMotion()) return "less motion";
-  return null;
 }
 
 /** The strip's day under the middle of its width. */
@@ -375,8 +362,12 @@ function findDayTop(day) {
   const list = findList();
   const listed = findListedDay(day);
   if (!list || !listed) return null;
-  const top = listed.offsetTop - readDayGap(list);
-  return Math.max(0, Math.min(top, list.scrollHeight - list.clientHeight));
+  return findDayScrollTop({
+    dayTop: listed.offsetTop,
+    gap: readDayGap(list),
+    scrollHeight: list.scrollHeight,
+    clientHeight: list.clientHeight,
+  });
 }
 
 /**
@@ -394,8 +385,13 @@ function showDay(day, motion) {
   isListInHand = false;
   // A list already there doesn't scroll, so nothing else would see it arrive.
   if (Math.abs(top - list.scrollTop) < 2) markHeldArrived();
-  const isFar = Math.abs(top - list.scrollTop) > FLOWN_SCREENS * list.clientHeight;
-  const isJump = motion === "instant" || isFar || isReducedMotion();
+  const trip = chooseTrip({
+    motion,
+    distance: top - list.scrollTop,
+    screenHeight: list.clientHeight,
+    isReducedMotion: isReducedMotion(),
+  });
+  const isJump = trip === "jump";
   dayStripLog.noteStep(
     `${isJump ? "jump" : "fly"} to ${day}, list ${Math.round(list.scrollTop)} to ${Math.round(top)}`,
   );
@@ -583,7 +579,7 @@ function redrawChangedDays(days) {
 // stand-in is as tall as the games it stands for, so drawing a day whole or not moves nothing.
 function drawNearDays() {
   if (!shown || !hasStandIns(shown.days)) return;
-  const days = listShownDays(shown);
+  const days = listFillDays(shown);
   if (!hasSameDays(days)) return;
   const before = nearDays;
   nearDays = listNearDays(shown, days);
@@ -644,7 +640,7 @@ function redrawWrittenParts(fill, days, drawnBefore) {
 function drawFill(fill) {
   endStripSlide();
   const bar = findBar();
-  const days = listShownDays(fill);
+  const days = listFillDays(fill);
   nearDays = listNearDays(fill, days);
   if (hasSameDays(days) && bar) {
     setHtml(bar, renderBar(fill));
@@ -687,8 +683,12 @@ function openQuietDay(day) {
 }
 
 const isQuietDayOutOfSight = (/** @type {HTMLElement} */ list, /** @type {HTMLElement} */ row) =>
-  row.offsetTop + row.offsetHeight <= list.scrollTop ||
-  row.offsetTop >= list.scrollTop + list.clientHeight;
+  isRowOutOfSight({
+    rowTop: row.offsetTop,
+    rowHeight: row.offsetHeight,
+    scrollTop: list.scrollTop,
+    clientHeight: list.clientHeight,
+  });
 
 // The No games row a tap brought in leaves once it's out of sight, without moving the list.
 function dropQuietDayOutOfSight() {
@@ -711,8 +711,12 @@ function dropQuietDayOutOfSight() {
 function placeList(putBackDay) {
   const list = findList();
   if (!shown || !list || !isListShown()) return;
-  if (isPlaced) takeBackAnchor();
-  else if (putBackDay && findListedDay(putBackDay.day)) placeDay(putBackDay);
+  const placement = choosePlacement({
+    isPlaced,
+    hasPutBackDay: !!putBackDay && !!findListedDay(putBackDay.day),
+  });
+  if (placement === "last place") takeBackAnchor();
+  else if (placement === "put back" && putBackDay) placeDay(putBackDay);
   else showDay(shown.startDay, "instant");
   isPlaced = true;
   noteStartTop();
@@ -773,7 +777,7 @@ function findDayAt(list, top) {
 }
 
 function startFollowingStart() {
-  followStartUntil = Date.now() + FOLLOW_START_MS;
+  followStartUntil = readFollowStartUntil(Date.now());
 }
 
 /**
@@ -782,8 +786,15 @@ function startFollowingStart() {
  */
 function followStartDay(lastStartDay) {
   const startDay = shown?.startDay;
-  const isFollowing = Date.now() < followStartUntil && held?.day === lastStartDay;
-  if (!startDay || !isFollowing || startDay === lastStartDay || !isListShown()) return;
+  if (!startDay || !isListShown()) return;
+  const isFollowing = isFollowingStartDay({
+    now: Date.now(),
+    followStartUntil,
+    heldDay: held?.day ?? null,
+    lastStartDay,
+    startDay,
+  });
+  if (!isFollowing) return;
   dayStripLog.noteStep(`the start day moved from ${lastStartDay} to ${startDay}`);
   showDay(startDay, "instant");
 }
