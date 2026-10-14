@@ -20,7 +20,7 @@ import {
   measureInningsProgress,
   measurePlateAppearancesProgress,
 } from "./qualifying.js";
-import { formatInnings } from "./stat-table.js";
+import { describeGamePitching, formatInnings } from "./stat-table.js";
 
 /**
  * A player as the store keeps him.
@@ -307,7 +307,12 @@ const describeBattingGame = (game) =>
 
 /** @param {any} game a game in his log on the mound */
 const describePitchingGame = (game) =>
-  `${formatInnings(game.inningsPitched)} IP, ${game.runs} R, ${game.strikeOuts} K`;
+  describeGamePitching({
+    innings: game.inningsPitched,
+    pitches: game.numberOfPitches,
+    runs: game.runs,
+    strikeOuts: game.strikeOuts,
+  });
 
 /**
  * His last few games, newest first, each with its day, its opponent, and his line in it, or

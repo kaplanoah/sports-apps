@@ -237,12 +237,21 @@ test("a starter's last starts follow what he throws, and a reliever's last games
     starters: STARTERS,
     side: BIBEE_SIDE,
   });
-  assert.match(bibee, /What he throws .* Last starts Sep 26 @ Royals 6 IP, 3 R, 6 K/);
+  assert.match(bibee, /What he throws .* Last starts Sep 26 @ Royals 6 IP, 94 P, 3 R, 6 K/);
   const smith = renderText(describeRostered(114, "CLE", "Cade Smith"));
   assert.match(
     smith,
-    /BB 23 Last games Oct 7 @ White Sox 2 IP, 0 R, 5 K .* Sep 26 @ Royals 2\/3 IP, 0 R, 0 K /,
+    /BB 23 Last games Oct 7 @ White Sox 2 IP, 19 P, 0 R, 5 K .* Sep 26 @ Royals 2\/3 IP, 5 P, 0 R, 0 K /,
   );
+});
+
+test("a last game the store kept without his pitches shows the rest of his line", () => {
+  const smith = describeRostered(114, "CLE", "Cade Smith");
+  const pitching = smith.lastGames.pitching.map(
+    (/** @type {any} */ { numberOfPitches, ...game }) => game,
+  );
+  const text = renderText({ ...smith, lastGames: { ...smith.lastGames, pitching } });
+  assert.match(text, /Last games Oct 7 @ White Sox 2 IP, 0 R, 5 K /);
 });
 
 test("a player the store keeps no sheet for says his numbers show while he's on a roster", () => {

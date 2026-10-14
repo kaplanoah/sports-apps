@@ -6,6 +6,7 @@ import {
   describeLastGames,
   describePlayer,
   indexPeople,
+  listGameLogRequest,
   listPeopleRequest,
 } from "../worker/src/players.js";
 import {
@@ -116,5 +117,21 @@ test("a player's last games are his five newest at the plate and on the mound, w
   );
   assert.deepEqual(kwan.pitching, []);
   const bibee = describeLastGames(FIXTURE.gameLogs[676440]);
-  assert.ok(bibee.pitching.length > 0 && bibee.pitching[0].inningsPitched);
+  assert.deepEqual(bibee.pitching[0], {
+    date: "2026-09-26",
+    opponent: "KC",
+    isHome: false,
+    inningsPitched: "6.0",
+    numberOfPitches: 94,
+    runs: 3,
+    strikeOuts: 6,
+  });
+});
+
+test("a player's game log asks MLB for each game's pitches", () => {
+  const fields = new URL(
+    listGameLogRequest(2026, [676440], "2026-10-08"),
+    "https://mlb.test",
+  ).searchParams.get("fields");
+  assert.ok(fields?.split(",").includes("numberOfPitches"));
 });

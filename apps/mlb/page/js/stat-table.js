@@ -31,6 +31,21 @@ export const countOuts = (innings) => {
 };
 
 /**
+ * A pitcher's line in one game as the sheets write it, like "6 IP, 94 P, 3 R, 6 K", in the box
+ * score's order, without his pitches where they weren't kept.
+ * @param {{ innings: string | number, pitches?: number | null, runs: number, strikeOuts: number }} line
+ */
+export const describeGamePitching = ({ innings, pitches, runs, strikeOuts }) =>
+  [
+    `${formatInnings(innings)} IP`,
+    pitches != null ? `${pitches} P` : null,
+    `${runs} R`,
+    `${strikeOuts} K`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+/**
  * @param {any} row
  * @param {StatColumn[1]} reader
  */

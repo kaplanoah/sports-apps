@@ -11,7 +11,11 @@ import {
   namePlayerKey,
 } from "../worker/src/players.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
-import { createRosterJob, listTransactionsRequest } from "../worker/src/roster-updater.js";
+import {
+  createRosterJob,
+  listTransactionsRequest,
+  nameGameLogReadsKey,
+} from "../worker/src/roster-updater.js";
 import {
   describeRoster,
   indexSeasonStats,
@@ -147,6 +151,7 @@ function createRun() {
     docs.write(`seasons/${SEASON}`, { year: SEASON, slate: createSlate(finals) });
   return {
     docs,
+    storage,
     answers,
     refused: mlb.refused,
     espn: mlb.espn,
@@ -446,6 +451,24 @@ test("each rostered player's last games are read as his club's roster arrives, a
   const kwan = run.docs.stored.get(namePlayerKey(SEASON, 680757));
   assert.equal(kwan.lastGames.hitting.length, 5);
   assert.equal(kwan.lastGames.hitting[0].date, "2026-10-07");
+});
+
+test("last games read before they kept each game's pitches are read once more, and then have them", async () => {
+  const run = createRun();
+  await fillRosters(run);
+  const settled = await run.storage.get(nameGameLogReadsKey(SEASON));
+  await run.storage.delete(nameGameLogReadsKey(SEASON));
+  await run.storage.put(`game-log-reads:${SEASON}`, settled);
+
+  await run.runJob();
+  const reread = run.takeRequests().filter(isGameLogRequest).flatMap(readGameLogIds);
+  const rostered = Object.keys(FIXTURE.gameLogs).map(Number);
+  assert.deepEqual(
+    reread.sort((first, second) => first - second),
+    rostered.sort((first, second) => first - second),
+  );
+  const bibee = run.docs.stored.get(namePlayerKey(SEASON, 676440));
+  assert.equal(bibee.lastGames.pitching[0].numberOfPitches, 94);
 });
 
 test("a batch of last games MLB doesn't answer is read on the next run", async () => {
