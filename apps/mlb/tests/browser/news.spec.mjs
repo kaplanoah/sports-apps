@@ -191,7 +191,7 @@ test("a photo's credit too long to split before its agency wraps as one text, in
     teams: ["CLE", "CWS"],
     photo: {
       url: photoUrl,
-      credit: "Frank Jansky/Icon Sportswire/Cal Sport Media via Getty Images",
+      credit: "Frank Jansky/Icon Sportswire/Zuma via Getty Images",
     },
   });
   await app.writeFromWorker("news/cards", { cards: [{ lead, more: [] }] });
