@@ -1,3 +1,4 @@
+import { readGameState } from "../../page/js/snapshot.js";
 import { fetchMlbJson } from "./mlb.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
 
@@ -18,6 +19,8 @@ const FEED_FIELDS = [
   "gameData",
   "status",
   "abstractGameState",
+  "codedGameState",
+  "detailedState",
   "players",
   "boxscoreName",
   "lastName",
@@ -80,7 +83,6 @@ const FEED_FIELDS = [
   "second",
   "third",
 ].join(",");
-const STATES = { Preview: "pre", Live: "live", Final: "final" };
 // A pitcher's note reads like "(W, 4-2)" or "(S, 3)"; the sheet shows only the decision.
 const DECISIONS = new Set(["W", "L", "S"]);
 const SIDES_BATTING = { top: "away", bottom: "home" };
@@ -353,7 +355,7 @@ function describeBases(linescore, plays, lastNameOf) {
  * @param {any} feed MLB's live feed for the game, trimmed to FEED_FIELDS
  */
 export function describeBoxScore(id, feed) {
-  const state = STATES[feed?.gameData?.status?.abstractGameState] ?? "pre";
+  const state = readGameState(feed?.gameData?.status ?? {});
   const players = feed?.gameData?.players ?? {};
   const nameOf = (/** @type {number} */ playerId) => players[`ID${playerId}`]?.boxscoreName ?? "";
   const lastNameOf = (/** @type {number} */ playerId) =>
