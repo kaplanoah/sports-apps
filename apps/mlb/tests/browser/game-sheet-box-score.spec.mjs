@@ -10,7 +10,7 @@ import {
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
@@ -306,7 +306,7 @@ test("a final's Highlights show MLB's recap video, MLB.com's story, and each pla
   expect(await listStrayPeriods(page)).toEqual([]);
 });
 
-test("a final's plays sit 13px apart with no line between them, each still 128px wide with its length at 13px and its play button centered", async ({
+test("a final's plays sit 13px apart with no line between them, each still 128px wide with its length at the caption's size and its play button centered", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -332,10 +332,11 @@ test("a final's plays sit 13px apart with no line between them, each still 128px
       };
     }),
   );
+  const caption = await readRole(page, "caption");
   for (const [index, row] of rows.entries()) {
     expect(row.line).toBe(true);
     expect(row.stillWidth).toBe(128);
-    expect(row.lengthSize).toBe("13px");
+    expect(row.lengthSize).toBe(`${caption.size}px`);
     expect(row.glyphOffset).toBeCloseTo(-0.5, 1);
     if (index > 0) expect(row.top - rows[index - 1].bottom).toBeCloseTo(13, 0);
   }

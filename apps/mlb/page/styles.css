@@ -342,7 +342,7 @@ header.top h1 {
   letter-spacing: 0.03em;
   /* Whole-pixel lines keep the header a whole number of pixels tall, so the Games lists rise
      exactly to the pill. */
-  line-height: calc(18px * var(--leading));
+  line-height: 18px;
   text-align: right;
 }
 .stamp b {
@@ -647,13 +647,13 @@ table.st .seed-cell {
 .search-view {
   margin-top: calc(11px - var(--header-gap));
 }
-/* Today's capitals sit level with the month's, half a pixel lower than the shared rule sets them,
-   and its icon moves with them. */
+/* Today's capitals sit level with the month's, a pixel lower than the shared rule sets them, and
+   its icon moves with them. */
 .go-today > span {
-  translate: 0 -0.5px;
+  translate: none;
 }
 .go-today svg {
-  translate: none;
+  translate: 0 0.5px;
 }
 /* The strip's month and dates, and the search's lead, under the field or over the games, each a
    step from its role of MLB's own. */
@@ -797,7 +797,7 @@ table.st .seed-cell {
   gap: 8px;
   font-size: var(--type-stat-large-size);
   font-weight: var(--type-stat-large-weight);
-  line-height: calc(20px * var(--leading));
+  line-height: 20px;
 }
 .score-dash {
   color: var(--card-border);
@@ -806,7 +806,7 @@ table.st .seed-cell {
 .game-time {
   font-size: var(--type-body-size);
   font-weight: var(--type-body-weight);
-  line-height: calc(20px * var(--leading));
+  line-height: 20px;
 }
 .game-status {
   font-weight: calc(var(--type-caption-weight) + 50);
@@ -892,7 +892,7 @@ table.st .seed-cell {
   padding: 0 4px;
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
-  line-height: calc(12px * var(--leading));
+  line-height: 12px;
 }
 .updates .club {
   gap: 7px;
@@ -942,7 +942,7 @@ table.st .seed-cell {
   background: transparent;
   border: 1px solid var(--now-line);
   color: var(--now);
-  line-height: calc(13px * var(--leading));
+  line-height: 13px;
 }
 .rank-tag.solid {
   background: var(--now-line);
@@ -966,7 +966,7 @@ table.st .seed-cell {
   text-align: center;
   border-bottom: 0.5px solid currentColor;
   font-size: var(--type-label-size);
-  line-height: calc(16px * var(--leading));
+  line-height: 16px;
   text-transform: uppercase;
   letter-spacing: 0.09em;
 }
@@ -1057,7 +1057,7 @@ table.st .seed-cell {
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
   /* With the margin, STACKED.noteHeight in bracket-view.js. */
-  line-height: calc(16px * var(--leading));
+  line-height: 16px;
   font-style: italic;
   text-align: left;
   letter-spacing: 0.02em;
@@ -1333,7 +1333,7 @@ body.kbd .rank-item .grip:focus {
 .rank-id .team-name {
   font-size: var(--type-detail-size);
   font-weight: var(--type-detail-weight);
-  line-height: calc(16px * var(--leading));
+  line-height: 16px;
 }
 .rank-item .league-tag {
   grid-area: league;
@@ -1356,7 +1356,7 @@ body.kbd .rank-item .grip:focus {
   white-space: nowrap;
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
-  line-height: calc(14px * var(--leading));
+  line-height: 14px;
   color: var(--ink-dim);
 }
 .rank-item .status-chip {
@@ -1372,12 +1372,12 @@ body.kbd .rank-item .grip:focus {
   .rank-id .team-name {
     font-size: var(--type-caption-size);
     font-weight: var(--type-caption-weight);
-    line-height: calc(15px * var(--leading));
+    line-height: 15px;
   }
   .rank-ws {
     font-size: var(--type-caption-size);
     font-weight: var(--type-caption-weight);
-    line-height: calc(13px * var(--leading));
+    line-height: 13px;
   }
 }
 @container (max-height: 39px) {
@@ -1798,7 +1798,7 @@ table.st.line-score td.team .club {
   position: relative;
   width: 268px;
   aspect-ratio: 240 / 178;
-  margin-top: 9px;
+  margin-top: 8px;
 }
 .runs-field svg {
   display: block;
@@ -2227,7 +2227,7 @@ body.kbd .player-open:focus {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   column-gap: 8px;
-  padding-block: 7.5px 19px;
+  padding-block: 7.5px 20px;
 }
 /* A rank hangs under its number, 4px clear of the curve, so a number sits at the same height with
    a rank or without one. */
@@ -2446,7 +2446,7 @@ body.kbd .player-open:focus {
   margin-top: 3px;
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
-  line-height: calc(16px * var(--leading));
+  line-height: 16px;
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
 }

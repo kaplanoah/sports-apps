@@ -23,7 +23,7 @@ import {
   waitForTimedMotions,
 } from "../../../../tests/browser/sheet-motions.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 
@@ -160,11 +160,12 @@ test("the sheet's title names it in capitals, at one size on a desktop and a pho
 }) => {
   const sheet = await openMatchup(page);
   const title = sheet.getByRole("heading", { level: 2 });
+  const heading = await readRole(page, "heading");
   await expect(title).toHaveCSS("text-transform", "uppercase");
-  await expect(title).toHaveCSS("font-weight", "500");
-  await expect(title).toHaveCSS("font-size", "16px");
+  await expect(title).toHaveCSS("font-weight", String(heading.weight));
+  await expect(title).toHaveCSS("font-size", `${heading.size}px`);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(title).toHaveCSS("font-size", "16px");
+  await expect(title).toHaveCSS("font-size", `${heading.size}px`);
 });
 
 test("on a desktop, the title centers over the sheet, with its close button at its left edge, and 18px sides as on a phone", async ({
@@ -445,7 +446,7 @@ test("a live game's Runs so far set each runner's name by his base on the field,
   expect(await listTapsOffButtons(page)).toEqual([]);
 });
 
-test("a game's Runs set the runners who got on lighter than the play that scored them, which Ball sets a step heavier and Night Game in the same weight", async ({
+test("a game's Runs set the runners who got on in a lighter ink than the play that scored them, at one weight in both themes", async ({
   page,
 }) => {
   const raysAtYankees = "823493";
@@ -487,10 +488,10 @@ test("a game's Runs set the runners who got on lighter than the play that scored
     );
   }
   const [ball, nightGame] = looks;
+  const detail = String((await readRole(page, "detail")).weight);
   expect(ball.setup).toBe(ball.credit);
-  expect([ball.setupWeight, ball.playWeight]).toEqual(["400", "500"]);
   expect(nightGame.setup).toBe(nightGame.dim);
-  expect([nightGame.setupWeight, nightGame.playWeight]).toEqual(["400", "400"]);
+  for (const look of looks) expect([look.setupWeight, look.playWeight]).toEqual([detail, detail]);
   expect(ball.playWidth).toBeCloseTo(nightGame.playWidth, 1);
   expect(await listLowContrastText(page)).toEqual([]);
 });

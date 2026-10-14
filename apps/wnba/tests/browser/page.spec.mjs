@@ -6,7 +6,7 @@ import {
   listTouchHoverRules,
 } from "../../../../tests/browser/tap-states.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
@@ -150,7 +150,10 @@ test("the title and the round names are in Barlow Condensed, and each card's not
     expect(await readFirstFont(selector)).toBe("Barlow Condensed");
   expect(await readFirstFont(".card-note")).toBe("Barlow");
   await expect(page.locator(".card-note").first()).toHaveCSS("font-style", "italic");
-  await expect(page.locator(".card-note").first()).toHaveCSS("font-size", "14px");
+  await expect(page.locator(".card-note").first()).toHaveCSS(
+    "font-size",
+    `${(await readRole(page, "detail")).size}px`,
+  );
 });
 
 test("the sliders icon keeps the same room from the stamp as MLB's", async ({ page }) => {
@@ -239,16 +242,19 @@ test.describe("on a phone, the text", () => {
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   });
 
-  test("of the Updates box reads at 16px with its team names at Condensed's 16.5px, its days at 14px, and its count at 13px, and a series' standing stays on one line", async ({
+  test("of the Updates box reads as sentences, its days as details, and its count as a label, and a series' standing stays on one line", async ({
     page,
   }) => {
     await openApp(page, { isShowingUpdates: true });
     const updates = page.locator("#updates");
     await expect(updates.locator(".what").first()).toBeVisible();
-    await expect(updates.locator(".what").first()).toHaveCSS("font-size", "16px");
-    await expect(updates.locator(".what b").first()).toHaveCSS("font-size", "16.5px");
-    await expect(updates.locator(".when").first()).toHaveCSS("font-size", "14px");
-    await expect(updates.locator(".updates-count")).toHaveCSS("font-size", "13px");
+    const [body, detail, label] = await Promise.all(
+      ["body", "detail", "label"].map(async (role) => `${(await readRole(page, role)).size}px`),
+    );
+    await expect(updates.locator(".what").first()).toHaveCSS("font-size", body);
+    await expect(updates.locator(".what b").first()).toHaveCSS("font-size", body);
+    await expect(updates.locator(".when").first()).toHaveCSS("font-size", detail);
+    await expect(updates.locator(".updates-count")).toHaveCSS("font-size", label);
     const lineCounts = await updates
       .locator(".series-score")
       .evaluateAll((scores) => scores.map((score) => score.getClientRects().length));

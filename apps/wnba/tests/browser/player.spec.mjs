@@ -2,7 +2,7 @@ import { test, expect, openApp, openGameSheet, matchPath, formatRgb } from "./ha
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
@@ -205,9 +205,12 @@ test.describe("a player who is out", () => {
       expect(await measureOutLines(box)).toEqual({ sentence: 6, source: 4 });
       await expect(box.locator(".foul-chip")).toHaveCSS("margin-right", "7px");
       await expect(box.locator(".out-words")).toHaveCSS("top", "-1px");
-      await expect(box.locator(".out-line")).toHaveCSS("font-size", "15px");
-      await expect(box.locator(".out-sentence")).toHaveCSS("font-size", "14.5px");
-      await expect(box.locator(".out-source")).toHaveCSS("font-size", "13px");
+      const [body, detail, caption] = await Promise.all(
+        ["body", "detail", "caption"].map(async (role) => `${(await readRole(page, role)).size}px`),
+      );
+      await expect(box.locator(".out-line")).toHaveCSS("font-size", body);
+      await expect(box.locator(".out-sentence")).toHaveCSS("font-size", detail);
+      await expect(box.locator(".out-source")).toHaveCSS("font-size", caption);
       expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);

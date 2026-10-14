@@ -96,13 +96,14 @@ test("every app sets the size and weight of each role its page uses", () => {
   }
 });
 
-test("every line height the stylesheets set is a share of the app's leading", () => {
+// A line height in pixels is a box of the layout's, which keeps its pixels whatever the font.
+test("every line height set by its text's size is a share of the app's leading", () => {
   for (const path of [...listSharedStylesheets(), ...listAppStylesheets()]) {
     const strays = readDeclarations(path)
       .filter((declaration) => declaration.property === "line-height")
       .filter(
         (declaration) =>
-          !/^(var\(--leading\)|calc\([\d.]+(px)? \* var\(--leading\)\)|normal|inherit|0)$/.test(
+          !/^(var\(--leading\)|calc\([\d.]+ \* var\(--leading\)\)|[\d.]+px|normal|inherit|0)$/.test(
             declaration.value,
           ),
       )

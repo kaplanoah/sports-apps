@@ -12,7 +12,7 @@ import {
 } from "./harness.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
@@ -25,7 +25,7 @@ import { PHONE } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-test("the page's font comes from its own server, in every weight from one file", async ({
+test("the page's fonts come from its own server, each in every weight from one file", async ({
   page,
 }) => {
   const fontRequests = [];
@@ -37,13 +37,15 @@ test("the page's font comes from its own server, in every weight from one file",
   const loadedWeights = await page.evaluate(async () => {
     await document.fonts.ready;
     return [...document.fonts]
-      .filter(
-        (font) => font.family.replaceAll('"', "") === "Chivo Mono" && font.status === "loaded",
-      )
-      .map((font) => font.weight);
+      .filter((font) => font.status === "loaded")
+      .map((font) => `${font.family.replaceAll('"', "")} ${font.weight}`);
   });
-  expect(loadedWeights).toContain("100 900");
-  expect(fontRequests).toEqual(["/fonts/chivo-mono-latin.woff2"]);
+  expect(loadedWeights).toContain("Libre Franklin 100 900");
+  expect(loadedWeights).toContain("Chivo Mono 100 900");
+  expect(fontRequests).toEqual([
+    "/fonts/libre-franklin-latin.woff2",
+    "/fonts/chivo-mono-latin.woff2",
+  ]);
 });
 
 test("on a phone, the tabs float at the bottom and stay there while the page scrolls", async ({
@@ -462,12 +464,16 @@ test("every font the page's views draw with is preloaded", async ({ page }) => {
   expect(await listFontsNotPreloaded(page)).toEqual([]);
 });
 
-test("Chivo Mono takes its own size at each step: sentences 14.5px, facts and labels 13px", async ({
+test("the header's words are in Libre Franklin and its times in Chivo Mono, both at the detail's size, on whole-pixel lines", async ({
   page,
 }) => {
   await openApp(page);
-  await expect(page.locator("#stamp")).toBeVisible();
-  await expect(page.locator("#stamp")).toHaveCSS("font-size", "13px");
-  await expect(page.locator("#stamp")).toHaveCSS("line-height", "18px");
-  await expect(page.locator("#bracketWrap .card-note").first()).toHaveCSS("font-size", "13px");
+  const stamp = page.locator("#stamp");
+  await expect(stamp).toBeVisible();
+  const detail = `${(await readRole(page, "detail")).size}px`;
+  await expect(stamp).toHaveCSS("font-family", /^"Libre Franklin"/);
+  await expect(stamp).toHaveCSS("font-size", detail);
+  await expect(stamp).toHaveCSS("line-height", "18px");
+  await expect(stamp.locator("b:not(.now)").first()).toHaveCSS("font-family", /^"Chivo Mono"/);
+  await expect(stamp.locator("b:not(.now)").first()).toHaveCSS("font-size", detail);
 });

@@ -2,7 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -13,7 +13,7 @@ test.describe("on a phone, a team's sheet", () => {
     isMobile: true,
   });
 
-  test("sets its name like every team's at 20px, its numbers in Barlow Condensed like a game preview's, its text in medium but None yet a step lighter, and its title on the sheet's own color with no line under it, like a game's, with the titles of its nearest games 11.5px under it and its first part 16px under their cards", async ({
+  test("sets its name like every team's sheet, its numbers in Barlow Condensed like a game preview's, its text in medium but None yet a step lighter, and its title on the sheet's own color with no line under it, like a game's, with the titles of its nearest games 11.5px under it and its first part 16px under their cards", async ({
     page,
   }) => {
     await openApp(page);
@@ -22,8 +22,9 @@ test.describe("on a phone, a team's sheet", () => {
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator("table.players")).toBeVisible();
 
-    await expect(sheet.locator("#teamTitle")).toHaveCSS("font-weight", "600");
-    await expect(sheet.locator("#teamTitle")).toHaveCSS("font-size", "20px");
+    const teamLarge = await readRole(page, "team-large");
+    await expect(sheet.locator("#teamTitle")).toHaveCSS("font-weight", String(teamLarge.weight));
+    await expect(sheet.locator("#teamTitle")).toHaveCSS("font-size", `${teamLarge.size}px`);
     await expect(sheet.locator("#teamNote")).toHaveCSS("font-weight", "500");
     await expect(sheet.locator(".tape-value").first()).toHaveCSS(
       "font-family",
@@ -124,7 +125,7 @@ test.describe("a team's sheet", () => {
     await expect(sheet).toBeHidden();
   });
 
-  test("a team's sheet names the sides over its numbers at 16px, and sets Last 10 and Streak like its measures", async ({
+  test("a team's sheet names the sides over its numbers as teams, and sets Last 10 and Streak like its measures", async ({
     page,
   }) => {
     await openApp(page);
@@ -152,7 +153,7 @@ test.describe("a team's sheet", () => {
     expect(styles.formNumber).toEqual(styles.number);
     await expect(sheet.locator(".team-numbers .tape-teams .club").first()).toHaveCSS(
       "font-size",
-      "16px",
+      `${(await readRole(page, "team")).size}px`,
     );
   });
 
@@ -219,8 +220,9 @@ test.describe("a team's sheet", () => {
     expect(
       Math.round(recordBox.top + recordBox.height / 2 - (nameBox.top + nameBox.height / 2)),
     ).toBe(1);
-    await expect(record).toHaveCSS("font-size", "14px");
-    await expect(record).toHaveCSS("font-weight", "500");
+    const detail = await readRole(page, "detail");
+    await expect(record).toHaveCSS("font-size", `${detail.size}px`);
+    await expect(record).toHaveCSS("font-weight", String(detail.weight + 100));
   });
 
   test("Last 10 sits 20px under the regular season's ranks, and Streak 14px under Last 10", async ({
@@ -320,9 +322,10 @@ test.describe("a team's sheet", () => {
 
     await expect(title).toHaveText("New York Liberty");
     await expect(title).toHaveCSS("font-family", /^"Barlow Condensed"/);
-    await expect(title).toHaveCSS("font-weight", "600");
+    const teamLarge = await readRole(page, "team-large");
+    await expect(title).toHaveCSS("font-weight", String(teamLarge.weight));
     await expect(title).toHaveCSS("text-transform", "none");
-    await expect(title).toHaveCSS("font-size", "20px");
+    await expect(title).toHaveCSS("font-size", `${teamLarge.size}px`);
   });
 
   test("a team's name under the pointer shifts its color a little toward the accent, with no underline", async ({

@@ -9,6 +9,7 @@ import {
   SCHEDULE_DOCS,
 } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { readStripEdges } from "../../../../tests/browser/day-strip-edges.mjs";
 import {
   listLowContrastText,
@@ -126,7 +127,7 @@ test("a day's heading holds under the strip while its games pass, until the next
   expect(pushed.bottom).toBeLessThanOrEqual(next.top + 0.5);
 });
 
-test("each day's heading is a band of the page's color, ending in a line, its capitals on the type scale", async ({
+test("each day's heading is a band of the page's color, ending in a line, its capitals a label", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -134,7 +135,7 @@ test("each day's heading is a band of the page's color, ending in a line, its ca
   const pageColor = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
   await expect(heading).toHaveCSS("background-color", pageColor);
-  await expect(heading).toHaveCSS("font-size", "13px");
+  await expect(heading).toHaveCSS("font-size", `${(await readRole(page, "label")).size}px`);
   await expect(heading).toHaveCSS("text-transform", "uppercase");
   await expect(heading).toHaveCSS("box-shadow", /0px 1px 0px 0px$/);
   await expect(
@@ -378,7 +379,7 @@ test("a clinched club's race letter is gold at the facts' own weight", async ({ 
   await page.getByRole("tab", { name: "Games" }).click();
   const race = page.locator("#seasonGames .game-day.is-today .race.clinched").first();
   await expect(race).toHaveCSS("color", await readColor(page, "--highlight"));
-  await expect(race).toHaveCSS("font-weight", "400");
+  await expect(race).toHaveCSS("font-weight", String((await readRole(page, "caption")).weight));
 });
 
 for (const [theme, colorScheme] of /** @type {const} */ ([
@@ -536,11 +537,12 @@ test("the Games tab bolds each winner, and shows a club that's out as any other"
   const winnerOut = findSide("Nationals", "Tigers", "away").locator(".team-name");
   const loserOut = findSide("Nationals", "Tigers", "home");
 
-  await expect(winnerStillIn).toHaveCSS("font-weight", "550");
+  const team = await readRole(page, "team");
+  await expect(winnerStillIn).toHaveCSS("font-weight", String(team.weight + 150));
   await expect(winnerStillIn).toHaveCSS("color", await readColor(page, "--ink"));
-  await expect(loserStillIn).toHaveCSS("font-weight", "400");
+  await expect(loserStillIn).toHaveCSS("font-weight", String(team.weight));
   await expect(loserStillIn).toHaveCSS("color", await readColor(page, "--ink"));
-  await expect(winnerOut).toHaveCSS("font-weight", "550");
+  await expect(winnerOut).toHaveCSS("font-weight", String(team.weight + 150));
   await expect(winnerOut).toHaveCSS("color", await readColor(page, "--ink"));
   await expect(loserOut.locator(".team-name")).toHaveCSS("color", await readColor(page, "--ink"));
   await expect(loserOut.locator(".dot")).toHaveCSS("opacity", "1");

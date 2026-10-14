@@ -1,6 +1,6 @@
 import { test, expect, openLockedApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 
 /** @param {import("@playwright/test").Page} page */
@@ -147,9 +147,11 @@ test("the gate's heading, code, and Open each draw in their own weight of Barlow
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
-  await expect(findGate(page)).toHaveCSS("font-weight", "500");
+  const heading = String((await readRole(page, "headline")).weight - 100);
+  const open = String((await readRole(page, "body")).weight + 200);
+  await expect(findGate(page)).toHaveCSS("font-weight", heading);
   await expect(findCodeField(page)).toHaveCSS("font-weight", "300");
-  await expect(page.getByRole("button", { name: "Open" })).toHaveCSS("font-weight", "600");
+  await expect(page.getByRole("button", { name: "Open" })).toHaveCSS("font-weight", open);
 
   const loadedWeights = await page.evaluate(async () => {
     await document.fonts.ready;
@@ -157,7 +159,7 @@ test("the gate's heading, code, and Open each draw in their own weight of Barlow
       .filter((face) => face.family.includes("Barlow Condensed") && face.status === "loaded")
       .map((face) => face.weight);
   });
-  expect(loadedWeights).toEqual(expect.arrayContaining(["300", "500", "600"]));
+  expect(loadedWeights).toEqual(expect.arrayContaining([heading, "300", open]));
 });
 
 /**

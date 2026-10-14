@@ -1,5 +1,6 @@
 import { test, expect, expectDayAtTop, openApp, readWholeSeasonSchedule } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -46,8 +47,10 @@ test("a score the Worker saves shows up without a reload", async ({ page }) => {
   await expect(page.locator("#stamp > span").first()).toHaveText(
     /^NOW\s*Dream @ Mystics 30-27 with 5:10 in Q2$/,
   );
-  await expect(page.locator("#stamp b.now")).toHaveCSS("font-size", "13px");
-  await expect(page.locator("#stamp")).toHaveCSS("font-size", "14px");
+  const caption = await readRole(page, "caption");
+  const detail = await readRole(page, "detail");
+  await expect(page.locator("#stamp b.now")).toHaveCSS("font-size", `${caption.size}px`);
+  await expect(page.locator("#stamp")).toHaveCSS("font-size", `${detail.size}px`);
 });
 
 test("a team stays put as Bonus comes and goes, level with the score", async ({ page }) => {
@@ -117,12 +120,17 @@ test("a Games list's day reads its month, date, and weekday at their sizes, weig
     }),
   );
   const [month, date, weekday] = parts;
-  expect(
-    parts.map(({ fontSize, fontWeight, letterSpacing }) => [fontSize, fontWeight, letterSpacing]),
-  ).toEqual([
-    ["13px", "600", "0.91px"],
-    ["24px", "600", "normal"],
-    ["13px", "600", "0.78px"],
+  const label = await readRole(page, "label");
+  const score = await readRole(page, "score");
+  expect(parts.map(({ fontSize, fontWeight }) => [fontSize, fontWeight])).toEqual([
+    [`${label.size}px`, String(label.weight)],
+    [`${score.size}px`, String(score.weight)],
+    [`${label.size}px`, String(label.weight)],
+  ]);
+  expect(parts.map(({ letterSpacing }) => letterSpacing)).toEqual([
+    `${label.size * 0.07}px`,
+    "normal",
+    `${label.size * 0.06}px`,
   ]);
   expect(date.top - month.bottom).toBeCloseTo(3, 1);
   expect(weekday.top - date.bottom).toBeCloseTo(4.5, 1);
@@ -240,7 +248,7 @@ test("on a day without games, the Games list has a day saying so at today's plac
   await expectDayAtTop(page, "2026-09-30");
 });
 
-test("No games today is 15.5px, centered beside today's date, its capitals a touch above the middle of the date's number", async ({
+test("No games today is a sentence, centered beside today's date, its capitals a touch above the middle of the date's number", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -248,7 +256,7 @@ test("No games today is 15.5px, centered beside today's date, its capitals a tou
   await dropTodaysGames(app);
   const note = page.locator("#seasonGames .no-games .empty-note");
   await expect(note).toHaveText("No games today");
-  await expect(note).toHaveCSS("font-size", "15.5px");
+  await expect(note).toHaveCSS("font-size", `${(await readRole(page, "body")).size}px`);
   // Chromium's builds set a baseline up to a pixel apart, so the note's lead over the number is
   // checked loosely.
   const { middle: noteMiddle } = await readCapitals(note);
@@ -348,7 +356,10 @@ test("a seed sits a little lighter than its team's name, centered on its row lik
       offset: middle(seed.getBoundingClientRect()) - middle(element.getBoundingClientRect()),
     };
   });
-  expect([seedWeight, nameWeight]).toEqual(["400", "600"]);
+  const seed = await readRole(page, "caption");
+  const team = await readRole(page, "team");
+  expect([seedWeight, nameWeight]).toEqual([String(seed.weight), String(team.weight)]);
+  expect(seed.weight).toBeLessThan(team.weight);
   expect(offset).toBeCloseTo(0, 1);
   const isLoaded = await page.evaluate(() => document.fonts.check('400 12px "Barlow Condensed"'));
   expect(isLoaded).toBe(true);

@@ -9,7 +9,7 @@ import {
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { readOklab } from "../../../../shared/page/team-colors.js";
 import { TEAMS } from "../../page/js/teams.js";
@@ -75,15 +75,17 @@ const readPaintedBackground = (locator) =>
     return `#${[red, green, blue].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
   });
 
-test("a game's title is 16.5px at the sheets' title weight, over its series and day at the glance size", async ({
-  page,
-}) => {
+test("a game's title is a heading, over its series and day as details", async ({ page }) => {
   await openApp(page);
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
 
-  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-size", "16.5px");
-  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-weight", "500");
-  await expect(sheet.locator("#gameWhen")).toHaveCSS("font-size", "14px");
+  const heading = await readRole(page, "heading");
+  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-size", `${heading.size}px`);
+  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-weight", String(heading.weight));
+  await expect(sheet.locator("#gameWhen")).toHaveCSS(
+    "font-size",
+    `${(await readRole(page, "detail")).size}px`,
+  );
 });
 
 test("only the team rows of By quarter have a line above them, not its heading row", async ({

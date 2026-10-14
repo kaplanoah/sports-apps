@@ -391,10 +391,13 @@ header.top h1 {
   font-weight: calc(var(--type-detail-weight) + 100);
   color: var(--ink);
 }
+/* The smaller Now and PM sit inside their line's height, so the header keeps its height as they
+   come and go. */
 .stamp b.now {
   margin-right: 0.25ch;
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 100);
+  line-height: var(--leading);
 }
 .stamp .sep {
   margin: 0 3px;
@@ -403,6 +406,7 @@ header.top h1 {
   margin-left: 0.5ch;
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 100);
+  line-height: var(--leading);
 }
 .stamp-err {
   color: var(--now);
@@ -647,8 +651,8 @@ header.top h1 {
     --day-inset: 4px;
   }
   .game-day .game-side .club {
-    font-size: var(--type-team-size);
-    font-weight: var(--type-team-weight);
+    font-size: var(--type-team-compact-size);
+    font-weight: var(--type-team-compact-weight);
   }
   .game-day .score {
     gap: 4px;
@@ -793,7 +797,7 @@ header.top h1 {
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  line-height: calc(12px * var(--leading));
+  line-height: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -2025,8 +2029,8 @@ table.standings td.season {
   font-weight: calc(var(--type-detail-weight) + 100);
 }
 table.standings td.recent {
-  font-size: var(--type-detail-size);
-  font-weight: calc(var(--type-detail-weight) + 100);
+  font-size: var(--type-caption-size);
+  font-weight: calc(var(--type-caption-weight) + 100);
   color: var(--ink-mid);
 }
 table.standings th.recent {
@@ -2465,11 +2469,7 @@ table.standings tr.playoff-line + tr td {
   }
   .settings-panel .sheet-top {
     min-height: 0;
-    padding-bottom: 7px;
-  }
-  .settings-panel .sheet-head h2 {
-    font-size: var(--type-heading-size);
-    font-weight: var(--type-heading-weight);
+    padding-bottom: 6px;
   }
 }
 
@@ -2620,7 +2620,7 @@ table.player-game th {
 }
 table.player-game td {
   font-family: var(--numbers);
-  line-height: calc(18px * var(--leading));
+  line-height: 18px;
   text-align: center;
 }
 .player-game-line td {

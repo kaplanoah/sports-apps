@@ -306,7 +306,7 @@ test("a club's sheet title is its dot and name with its city, and no rank tag, i
   await expect(title.locator(".dot")).toBeVisible();
   await expect(title).toHaveText("Seattle Mariners");
   await expect(title.locator(".rank-tag")).toHaveCount(0);
-  await expect(title).toHaveCSS("font-family", /^"Chivo Mono"/);
+  await expect(title).toHaveCSS("font-family", /^"Libre Franklin"/);
   await expect(title).toHaveCSS("text-transform", "none");
   await expect(page.locator("#teamSheet .sheet-part h3").first()).toHaveCSS(
     "color",

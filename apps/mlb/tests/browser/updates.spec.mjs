@@ -10,7 +10,7 @@ import {
 } from "./harness.mjs";
 import { createReading } from "../../worker/src/readings.js";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 
@@ -82,7 +82,10 @@ test.describe("on a phone", () => {
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
-    await expect(updates.locator(".what").first()).toHaveCSS("font-size", "14.5px");
+    await expect(updates.locator(".what").first()).toHaveCSS(
+      "font-size",
+      `${(await readRole(page, "body")).size}px`,
+    );
   });
 
   test("a release note shows in the Updates box, headed New in the app, until it's dismissed", async ({

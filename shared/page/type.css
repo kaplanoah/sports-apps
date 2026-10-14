@@ -30,7 +30,7 @@
   /* A field's text: an iPhone zooms in on a field under 16px when it's tapped. A field meant to
      look smaller gets a face whose size-adjust draws it at its role's size. */
   --type-field-size: 1rem;
-  /* How far apart a font's lines sit, as a share of every line height the stylesheets set. */
+  /* How far apart a font's lines sit, as a share of every line height set by its text's size. */
   --leading: 1;
   /* Safari on an iPhone otherwise enlarges some text on a turn to landscape and can keep it big
      on the turn back. */
