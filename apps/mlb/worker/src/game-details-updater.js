@@ -19,7 +19,7 @@ const RETRY_MS = 10 * MINUTE_MS;
 // A game whose box score hasn't settled this long after its first read is let go.
 const GIVE_UP_MS = 2 * 60 * MINUTE_MS;
 // Raised whenever a box score keeps more of MLB's feed, so each final kept before is read again.
-const BOX_SCORE_VERSION = 3;
+const BOX_SCORE_VERSION = 4;
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
 /** @typedef {{ firstReadAt: number, readAt: number, isDone: boolean, version: number }} GameRead */
