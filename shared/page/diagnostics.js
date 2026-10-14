@@ -496,24 +496,11 @@ export function showJobStatuses(store, names) {
 export const describeLoad = (navigationType) =>
   navigationType === "reload" ? "Reloaded" : "Opened";
 
-/**
- * Whether the service worker answered the load, which its own steps say more about, or the page
- * came straight from the Worker, as when the worker isn't registered or the browser passed it over.
- * @param {{ workerStart?: number } | undefined} navigation a PerformanceNavigationTiming
- * @returns {string | null} nothing where the browser doesn't say
- */
-export function describeLoadRoute(navigation) {
-  if (typeof navigation?.workerStart !== "number") return null;
-  return navigation.workerStart > 0
-    ? "Loaded through the service worker"
-    : "Loaded without the service worker";
-}
-
-function readNavigation() {
+function readNavigationType() {
   const [navigation] = /** @type {PerformanceNavigationTiming[]} */ (
     performance.getEntriesByType("navigation")
   );
-  return navigation;
+  return navigation?.type;
 }
 
 /** @param {OpenRecord} openRecord */
@@ -762,10 +749,7 @@ export function startDiagnostics() {
   findElement("diagnostics").addEventListener("click", followSectionClick);
   findElement("settingsBtn").addEventListener("click", refreshJobStatusesWhileRecording);
   drawRecords();
-  const navigation = readNavigation();
-  startRecord(describeLoad(navigation?.type));
-  const route = describeLoadRoute(navigation);
-  if (route) noteStep(route);
+  startRecord(describeLoad(readNavigationType()));
   watchTimings();
   watchTimeAway(noteReturn);
   loadRelease().then(
