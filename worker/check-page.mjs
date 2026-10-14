@@ -27,6 +27,8 @@ export function nameAccessSecrets(app, channel) {
   return { pageUrl: `${prefix}_PAGE_URL`, accessCode: `${prefix}_ACCESS_CODE` };
 }
 
+// The page's routes, like its access code's, hang off its folder, so its address ends in a slash
+// whether or not the secret does.
 /**
  * @param {string} app
  * @param {string} channel
@@ -37,7 +39,10 @@ export function readPageAccess(app, channel, env) {
   const secrets = nameAccessSecrets(app, channel);
   const pageUrl = env[secrets.pageUrl];
   if (!pageUrl) return null;
-  return { pageUrl, accessCode: env[secrets.accessCode] || undefined };
+  return {
+    pageUrl: pageUrl.endsWith("/") ? pageUrl : `${pageUrl}/`,
+    accessCode: env[secrets.accessCode] || undefined,
+  };
 }
 
 /**
@@ -163,18 +168,28 @@ export async function checkPage(
 }
 
 /**
- * A check's reason without the page's address, since logs and issues are public.
+ * A check's reason without the page's address, since logs and issues are public: not the whole
+ * address, its Worker's with or without its scheme, its folder, or its key on its own, in
+ * whatever form a browser's error names them.
  * @param {PageCheck} check
  * @param {string} pageUrl
  * @returns {PageCheck}
  */
 export function hideAddress(check, pageUrl) {
   if (check.status === "drawn") return check;
-  const { origin, pathname } = new URL(pageUrl);
-  const reason = check.reason
-    .replaceAll(pageUrl, "<page>/")
-    .replaceAll(origin, "<worker>")
-    .replaceAll(pathname, "/<key>/");
+  const { origin, hostname, pathname } = new URL(pageUrl);
+  const key = pathname.split("/").filter(Boolean).at(-1) ?? "";
+  const masks = [
+    [pageUrl, "<page>/"],
+    [origin, "<worker>"],
+    [hostname, "<worker>"],
+    [pathname, "/<key>/"],
+    ...(key ? [[key, "<key>"]] : []),
+  ];
+  const reason = masks.reduce(
+    (text, [secret, mask]) => text.replaceAll(secret, mask),
+    check.reason,
+  );
   return { ...check, reason };
 }
 

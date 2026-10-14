@@ -33,6 +33,13 @@ test("a page with no address isn't opened, and one with no code opens without si
   );
 });
 
+test("an address saved without its ending slash gets one, so the page's routes hang off its folder", () => {
+  assert.deepEqual(readPageAccess("mlb", "production", { MLB_PAGE_URL: PAGE_URL.slice(0, -1) }), {
+    pageUrl: PAGE_URL,
+    accessCode: undefined,
+  });
+});
+
 test("an app without its page's secret goes unchecked, naming the secret", async () => {
   assert.deepEqual(await checkAppPage({ app: "mlb", channel: "beta", env: {} }), {
     status: "unchecked",
@@ -65,4 +72,19 @@ test("a reason never shows the page's address, its Worker's, or its key", () => 
       "the page didn't load: net::ERR_FAILED at <page>/, from <worker>, for /<key>/release/abc1234/js/app.js",
   });
   assert.deepEqual(hideAddress({ status: "drawn" }, PAGE_URL), { status: "drawn" });
+});
+
+test("a reason hides the Worker's name without its scheme, and the key on its own", () => {
+  const check = hideAddress(
+    {
+      status: "broken",
+      reason:
+        "the page didn't load: getaddrinfo ENOTFOUND wnba-app.example-subdomain.workers.dev, key k3y, folder /k3y",
+    },
+    PAGE_URL,
+  );
+  assert.deepEqual(check, {
+    status: "broken",
+    reason: "the page didn't load: getaddrinfo ENOTFOUND <worker>, key <key>, folder /<key>",
+  });
 });
