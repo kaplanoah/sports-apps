@@ -80,8 +80,11 @@ const FEEDS = {
 /** @param {number} season */
 const nameReadsKey = (season) => `roster-reads:${season}`;
 
+// Raised whenever a player's last games keep more of MLB's game log, so each player's is read again.
+const LAST_GAMES_VERSION = 2;
+
 /** @param {number} season */
-const nameGameLogReadsKey = (season) => `game-log-reads:${season}`;
+export const nameGameLogReadsKey = (season) => `game-log-reads:${season}:v${LAST_GAMES_VERSION}`;
 
 /** @param {number} season */
 const nameLastGamesPrefix = (season) => `last-games:${season}:`;

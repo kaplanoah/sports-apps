@@ -261,8 +261,8 @@ const describeStarter = (id, [firstName, lastName], hand, line, ranks, pitches) 
   starters: { count: 46, values: QUALIFIED_SPREAD },
   pitches,
   starts: [
-    { date: "2026-09-19", opp: "SEA", home: true, ip: "5.2", runs: 2, k: 6 },
-    { date: "2026-09-13", opp: "TEX", home: false, ip: "6.0", runs: 0, k: 8 },
+    { date: "2026-09-19", opp: "SEA", home: true, ip: "5.2", runs: 2, k: 6, pitches: 97 },
+    { date: "2026-09-13", opp: "TEX", home: false, ip: "6.0", runs: 0, k: 8, pitches: 88 },
   ],
 });
 export const MATCHUP_STARTERS = {

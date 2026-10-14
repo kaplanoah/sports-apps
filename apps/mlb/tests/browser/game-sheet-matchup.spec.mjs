@@ -54,7 +54,7 @@ test("a tap on the starters slides to Matchup, with them face to face, and the c
   await expect(sheet.locator(".pitcher-bio")).toHaveText(["RAge 27", "LAge 27"]);
   await expect(sheet.locator(".scout h3 span")).toHaveText(["What he throws", "What he throws"]);
   await expect(sheet.locator(".recent-starts").first()).toContainText(
-    "Sep 19vs Mariners5 2/3 IP, 2 R, 6 K",
+    "Sep 19vs Mariners5 2/3 IP, 97 P, 2 R, 6 K",
   );
 
   await sheet.getByRole("button", { name: "Close" }).click();

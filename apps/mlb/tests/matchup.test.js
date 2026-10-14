@@ -27,8 +27,8 @@ const describePitcher = (id, [firstName, lastName], line, ranks, pitches) => ({
   starters: { count: 46, values: SPREAD },
   pitches,
   starts: [
-    { date: "2026-09-19", opp: "SEA", home: true, ip: "5.2", runs: 2, k: 6 },
-    { date: "2026-09-13", opp: "TEX", home: false, ip: "6.0", runs: 0, k: 8 },
+    { date: "2026-09-19", opp: "SEA", home: true, ip: "5.2", runs: 2, k: 6, pitches: 97 },
+    { date: "2026-09-13", opp: "TEX", home: false, ip: "6.0", runs: 0, k: 8, pitches: 88 },
   ],
 });
 const BLUBAUGH = describePitcher(
@@ -349,7 +349,7 @@ function readLiveStarts({ isStillPitching }) {
     state: "live",
     starters: [{ ...blubaugh, pitching: isStillPitching }, springs],
   };
-  const tonight = { date: TONIGHT, opp: "ATH", home: false, ip: "2.0", runs: 0, k: 3 };
+  const tonight = { date: TONIGHT, opp: "ATH", home: false, ip: "2.0", runs: 0, k: 3, pitches: 31 };
   const pitcher = { ...BLUBAUGH, starts: [tonight, ...BLUBAUGH.starts] };
   const markup = renderLoaded(live, [{ pitcher }, { pitcher: SPRINGS }]);
   const [starts] = [...markup.matchAll(/<ul class="recent-starts">([\s\S]*?)<\/ul>/g)];
@@ -362,9 +362,9 @@ function readLiveStarts({ isStillPitching }) {
 test("a start in the game under way says Now while he's still pitching", () =>
   checkAt("2026-09-25T02:30:00Z", () => {
     const [now, last] = readLiveStarts({ isStillPitching: true });
-    assert.deepEqual(now, { parts: ["Now", "@ Athletics", "2 IP, 0 R, 3 K"], isNow: true });
+    assert.deepEqual(now, { parts: ["Now", "@ Athletics", "2 IP, 31 P, 0 R, 3 K"], isNow: true });
     assert.deepEqual(last, {
-      parts: ["Sep 19", "vs Mariners", "5 2/3 IP, 2 R, 6 K"],
+      parts: ["Sep 19", "vs Mariners", "5 2/3 IP, 97 P, 2 R, 6 K"],
       isNow: false,
     });
   }));
@@ -372,7 +372,10 @@ test("a start in the game under way says Now while he's still pitching", () =>
 test("a start in the game under way says Today once he's pulled", () =>
   checkAt("2026-09-25T02:30:00Z", () => {
     const [today] = readLiveStarts({ isStillPitching: false });
-    assert.deepEqual(today, { parts: ["Today", "@ Athletics", "2 IP, 0 R, 3 K"], isNow: false });
+    assert.deepEqual(today, {
+      parts: ["Today", "@ Athletics", "2 IP, 31 P, 0 R, 3 K"],
+      isNow: false,
+    });
   }));
 
 test("both starters' speed lines share one scale, from the slowest pitch either throws to the fastest", () => {

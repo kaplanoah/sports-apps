@@ -22,7 +22,7 @@ import { measureSpeedRange, renderPendingPitchMix, renderPitchMix } from "./pitc
 import { fetchPitcher, fetchRotation } from "./pitcher-fetch.js";
 import { renderPlayerButton } from "./player-button.js";
 import { describeInningsToQualify, measureInningsProgress } from "./qualifying.js";
-import { formatInnings } from "./stat-table.js";
+import { describeGamePitching, formatInnings } from "./stat-table.js";
 import { TEAMS } from "./teams.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import { describeWouldRank, rankAmong, renderSpreadCurve } from "#shared/rank-curve.js";
@@ -303,7 +303,12 @@ function renderStartDay(start, side, game) {
 
 function renderStart(start, side, game) {
   const opponent = start.opp ? `${start.home ? "vs" : "@"} ${nameTeam(start.opp)}` : "";
-  const line = `${formatInnings(start.ip)} IP, ${start.runs} R, ${start.k} K`;
+  const line = describeGamePitching({
+    innings: start.ip,
+    pitches: start.pitches,
+    runs: start.runs,
+    strikeOuts: start.k,
+  });
   return html`<li>${renderStartDay(start, side, game)}<span>${opponent}</span><span class="tabular">${line}</span></li>`;
 }
 

@@ -47,6 +47,7 @@ const GAME_LOG_FIELDS = [
   "baseOnBalls",
   "strikeOuts",
   "inningsPitched",
+  "numberOfPitches",
   "runs",
 ].join(",");
 // A player's last games are read from the last few weeks, so each read stays small.
@@ -55,7 +56,7 @@ const LAST_GAMES = 5;
 // What a game's line shows at the plate and on the mound.
 const GAME_COLUMNS = {
   hitting: ["atBats", "hits", "doubles", "triples", "homeRuns", "rbi", "baseOnBalls"],
-  pitching: ["inningsPitched", "runs", "strikeOuts"],
+  pitching: ["inningsPitched", "numberOfPitches", "runs", "strikeOuts"],
 };
 
 /**
