@@ -37,13 +37,15 @@ export function createHighlightsUpdater() {
   return createHighlightsJob({
     listFinals: listCurrentFinals,
     gameLengthMs: GAME_LENGTH_MS,
-    readHighlights: (context, game) =>
-      createHighlightsReader({ fetchImpl: context.fetchImpl })({
+    readHighlights: async (context, game) => ({
+      highlights: await createHighlightsReader({ fetchImpl: context.fetchImpl })({
         id: game.id,
         away: game.away.team,
         home: game.home.team,
         start: game.start,
       }),
+      isFinished: true,
+    }),
     nameKey: nameHighlightsKey,
   });
 }

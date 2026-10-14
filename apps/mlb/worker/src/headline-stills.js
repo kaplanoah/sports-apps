@@ -5,11 +5,15 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 // Which of MLB's stills for a game's plays have a headline laid over them, like "WAVE IT
 // GOODBYE!", which the sheet shows in place of the moment. Claude looks at each still once, and
 // the store keeps its answers for the game, so a game read again asks only about a still that's
-// new. When Claude doesn't answer for a still, the game's read fails, keeping the answers it got,
-// so the store's job reads it again soon. Without the Worker's API key, each still counts as clean.
+// new. A read asks about only a few stills, since Cloudflare caps the requests a Worker makes in
+// one run and a game has dozens, so a game with more isn't finished, and the store's job reads it
+// again next run for the next few. When Claude doesn't answer for a still it was asked about, the
+// game's read fails, keeping the answers it got, so the job reads it again soon. Without the
+// Worker's API key, each still counts as clean.
 
 export const STILL_MODEL = "claude-haiku-5-5";
 const MAX_ANSWER_TOKENS = 1024;
+export const STILLS_PER_READ = 5;
 // One small picture and a one-field answer; a call this long has stalled.
 const CLAUDE_TIMEOUT_MS = 30e3;
 const PROMPT = `You judge baseball highlight thumbnails. Has a headline or title graphic been added on top of the picture by an editor, such as big words like "WAVE IT GOODBYE!" or "HOW DID HE DO THAT!?", a player's name in large type, a stat card, or a designed title card? Answer with headline set to true or false.
@@ -79,30 +83,35 @@ async function checkStills({ apiKey, fetchImpl }, id, stills) {
 }
 
 /**
- * The game's stills that have a headline on them, asking Claude only about the ones it hasn't
- * seen, and keeping the answers for the game's stills of now. Throws when Claude didn't answer for
- * every still, once the answers it gave are kept.
+ * The game's stills that have a headline on them, asking Claude only about the first few it hasn't
+ * seen, and keeping the answers for the game's stills of now, with whether every still has been
+ * checked. Throws when Claude didn't answer for a still it was asked about, once the answers it
+ * gave are kept.
  * @param {JobContext} context
  * @param {string} id the game's
  * @param {string[]} stills
- * @returns {Promise<Set<string>>}
+ * @returns {Promise<{ withHeadlines: Set<string>, isFinished: boolean }>}
  */
 export async function findHeadlineStills(context, id, stills) {
   const apiKey = context.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return new Set();
+  if (!apiKey) return { withHeadlines: new Set(), isFinished: true };
   const key = nameChecksKey(id);
   /** @type {Record<string, boolean>} */
   const kept = (await context.storage.get(key)) ?? {};
   const unchecked = stills.filter((still) => !Object.hasOwn(kept, still));
-  const fresh = await checkStills({ apiKey, fetchImpl: context.fetchImpl }, id, unchecked);
+  const asked = unchecked.slice(0, STILLS_PER_READ);
+  const fresh = await checkStills({ apiKey, fetchImpl: context.fetchImpl }, id, asked);
   const checks = Object.fromEntries(
     stills
       .filter((still) => Object.hasOwn(kept, still) || Object.hasOwn(fresh, still))
       .map((still) => [still, fresh[still] ?? kept[still]]),
   );
   if (!isSameJson(kept, checks)) await context.storage.put(key, checks);
-  const unanswered = stills.length - Object.keys(checks).length;
+  const unanswered = asked.length - Object.keys(fresh).length;
   if (unanswered > 0)
     throw new Error(`Claude didn't answer for ${unanswered} of game ${id}'s stills`);
-  return new Set(stills.filter((still) => checks[still]));
+  return {
+    withHeadlines: new Set(stills.filter((still) => checks[still])),
+    isFinished: unchecked.length === asked.length,
+  };
 }

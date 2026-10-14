@@ -10,6 +10,7 @@ import {
   namePlaysRequest,
 } from "../worker/src/highlights.js";
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
+import { STILLS_PER_READ } from "../worker/src/headline-stills.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
@@ -318,15 +319,43 @@ test("the store's job reads each of the slate's finals in two requests, and save
   );
 });
 
-test("the store's job asks Claude about each still once, and saves the moment for one with a headline", async () => {
+/**
+ * Runs the job every two minutes until a run asks Claude nothing more, as the store does for a game
+ * with more stills than a run may ask about.
+ * @param {{ runJob: () => Promise<void>, wait: (minutes: number) => void }} run
+ * @param {{ stillsAsked: string[] }} mlb
+ */
+async function runUntilChecked(run, mlb) {
+  for (let runs = 0; runs < 40; runs += 1) {
+    const asked = mlb.stillsAsked.length;
+    await run.runJob();
+    if (mlb.stillsAsked.length === asked) return;
+    run.wait(2);
+  }
+  throw new Error("The job kept asking about stills");
+}
+
+test("the store's job asks Claude about a few stills a run, saving the game's highlights at once and the moment for a still with a headline as it's checked", async () => {
   const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
   const mlb = createMlbFetch(new Set([contreras.still]));
-  const { stored, runJob, forgetReads } = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
+  const run = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
+  const { stored, runJob, forgetReads } = run;
 
   await runJob();
 
   const games = [...new Set(mlb.requests.map((path) => /\/game\/(\d+)\//.exec(path)?.[1] ?? ""))];
-  const stills = games.flatMap((id) => listStillsToCheck(RECORDED.content[id], RECORDED.plays[id]));
+  const listStills = (id) => listStillsToCheck(RECORDED.content[id], RECORDED.plays[id]);
+  const askedFirst = games.map((id) => Math.min(listStills(id).length, STILLS_PER_READ));
+  assert.equal(
+    mlb.stillsAsked.length,
+    askedFirst.reduce((sum, count) => sum + count, 0),
+  );
+  assert.ok(askedFirst.some((count) => count === STILLS_PER_READ));
+  assert.ok(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)));
+
+  await runUntilChecked(run, mlb);
+
+  const stills = games.flatMap(listStills);
   assert.deepEqual(mlb.stillsAsked.toSorted(), stills.toSorted());
   assert.equal(
     findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), "William Contreras' solo home run")
@@ -337,22 +366,23 @@ test("the store's job asks Claude about each still once, and saves the moment fo
   const firstReads = mlb.requests.length;
   forgetReads();
   await runJob();
-  assert.equal(mlb.requests.length, 2 * firstReads);
+  assert.equal(mlb.requests.length, firstReads + 2 * games.length);
   assert.equal(mlb.stillsAsked.length, stills.length);
 });
 
-test("a game the store's job couldn't check every still of saves nothing, and is read again ten minutes later", async () => {
+test("a game whose stills Claude didn't answer for saves nothing, and is read again ten minutes later", async () => {
   const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
   const mlb = createMlbFetch(new Set([contreras.still]));
-  const { stored, runJob, wait } = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
+  const run = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
+  const { stored, wait } = run;
   mlb.claude.isDown = true;
 
-  await runJob();
+  await run.runJob();
   assert.equal(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), undefined);
 
   mlb.claude.isDown = false;
   wait(10);
-  await runJob();
+  await runUntilChecked(run, mlb);
   assert.equal(
     findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), "William Contreras' solo home run")
       .still,

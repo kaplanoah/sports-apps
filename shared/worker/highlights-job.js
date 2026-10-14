@@ -4,8 +4,10 @@ import { isSameJson } from "../page/compare.js";
 // clips, its recap video, and its written recap post over the hours after a game, so a game is read
 // as the store finds it final and again at each of a few times after its end, and then never
 // again. Each run reads a few games, newest first, so a game that just ended comes before the rest
-// of the season's, which are read once each, a few at a time. A league that changes how it reads a
-// game's highlights raises its edition, and each final it kept is read once more the same way.
+// of the season's, which are read once each, a few at a time. A read the league couldn't finish
+// in one run, like one with more stills to check than a run may ask about, saves what it has and
+// is read again at the next run, until it's finished. A league that changes how it reads a game's
+// highlights raises its edition, and each final it kept is read once more the same way.
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -15,7 +17,20 @@ const RETRY_MS = 10 * MINUTE_MS;
 const READ_AFTER_END_MS = [0, HOUR_MS, 3 * HOUR_MS, 12 * HOUR_MS];
 
 /** @typedef {import("./season-store.js").JobContext} JobContext */
-/** @typedef {{ readAt: number | null, triedAt: number, edition?: number }} HighlightsRead */
+/**
+ * @typedef {object} HighlightsRead
+ * @property {number | null} readAt when the game was last read whole
+ * @property {number} triedAt when it was last read, whole or not
+ * @property {number} [edition]
+ * @property {boolean} [isUnfinished] whether the last read saved what it had with more to read
+ */
+
+/**
+ * What a league's read of a game brings.
+ * @typedef {object} GameHighlights
+ * @property {any} highlights the game's highlights, or null when the league has no such game
+ * @property {boolean} isFinished whether the read brought everything, or has more to read next run
+ */
 
 /**
  * What a league hands the job.
@@ -23,8 +38,7 @@ const READ_AFTER_END_MS = [0, HOUR_MS, 3 * HOUR_MS, 12 * HOUR_MS];
  * @property {(context: JobContext) => Promise<{ season: number, games: any[] } | null>} listFinals
  *   the current season's finals, newest first
  * @property {number} gameLengthMs about how long a game lasts, for one the store didn't see end
- * @property {(context: JobContext, game: any) => Promise<any>} readHighlights the game's
- *   highlights, or null when the league has no such game
+ * @property {(context: JobContext, game: any) => Promise<GameHighlights>} readHighlights
  * @property {(id: string) => string} nameKey where the store keeps a game's highlights
  * @property {number} [edition] how the league reads a game's highlights, raised when that changes
  */
@@ -59,7 +73,7 @@ function findNextRead(end, readAt) {
  * @param {number} options.edition
  */
 function isDue(end, read, { now, edition }) {
-  if (!read) return true;
+  if (!read || read.isUnfinished) return true;
   if (now - read.triedAt < RETRY_MS) return false;
   if ((read.edition ?? 0) !== edition) return true;
   const next = findNextRead(end, read.readAt);
@@ -76,7 +90,7 @@ const stampEdition = (read, edition) => (edition ? { ...read, edition } : read);
 
 /**
  * Reads a game's highlights and saves them when they changed. A read that fails keeps what was
- * saved and is tried again later.
+ * saved and is tried again later; one that brought what it could so far is finished next run.
  * @param {JobContext} context
  * @param {HighlightsLeague} league
  * @param {any} game
@@ -85,12 +99,17 @@ const stampEdition = (read, edition) => (edition ? { ...read, edition } : read);
  */
 async function keepGame(context, league, game, read) {
   const now = context.now();
-  const highlights = await league.readHighlights(context, game).catch(() => undefined);
-  if (highlights === undefined)
+  const brought = await league.readHighlights(context, game).catch(() => undefined);
+  if (brought === undefined)
     return stampEdition({ readAt: read?.readAt ?? null, triedAt: now }, read?.edition);
   const key = league.nameKey(game.id);
-  if (highlights && !isSameJson(await context.docs.read(key), highlights))
-    await context.docs.write(key, highlights);
+  if (brought.highlights && !isSameJson(await context.docs.read(key), brought.highlights))
+    await context.docs.write(key, brought.highlights);
+  if (!brought.isFinished)
+    return stampEdition(
+      { readAt: read?.readAt ?? null, triedAt: now, isUnfinished: true },
+      read?.edition,
+    );
   return stampEdition({ readAt: now, triedAt: now }, league.edition);
 }
 
