@@ -9,6 +9,20 @@ const KEPT_LINES = 200;
 /** @typedef {{ at: number, text: string }} StepLine */
 
 /**
+ * A log's lines as text under its title, or nothing when it has none.
+ * @param {string} title
+ * @param {StepLine[]} lines newest first
+ * @returns {string}
+ */
+export const writeStepsAsText = (title, lines) =>
+  lines.length
+    ? [
+        title,
+        ...lines.map((line) => `${formatClockTimeWithSeconds(new Date(line.at))} ${line.text}`),
+      ].join("\n")
+    : "";
+
+/**
  * What a touch or click landed on: the button or link it's in, by name, or else the element.
  * @param {Element} target
  * @returns {string}
@@ -91,13 +105,7 @@ export function createStepLog({ key, title, isWatched }) {
    * @param {StepLine[]} lines newest first
    * @returns {string}
    */
-  const writeLinesAsText = (lines) =>
-    lines.length
-      ? [
-          title,
-          ...lines.map((line) => `${formatClockTimeWithSeconds(new Date(line.at))} ${line.text}`),
-        ].join("\n")
-      : "";
+  const writeLinesAsText = (lines) => writeStepsAsText(title, lines);
 
   /** @param {Event} event */
   function noteTouchOrClick(event) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   STILL_MODEL,
   STILL_SCHEMA,
+  STILLS_PER_READ,
   findHeadlineStills,
   hasHeadline,
 } from "../worker/src/headline-stills.js";
@@ -90,11 +91,12 @@ test("each still goes to Claude once: a game read again asks only about a still 
   const context = createContext({ fetchImpl: claude.fetchImpl });
 
   const first = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
-  assert.deepEqual([...first], [STILL]);
+  assert.deepEqual([...first.withHeadlines], [STILL]);
+  assert.equal(first.isFinished, true);
   assert.equal(claude.requests.length, 2);
 
   const again = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
-  assert.deepEqual([...again], [STILL]);
+  assert.deepEqual([...again.withHeadlines], [STILL]);
   assert.equal(claude.requests.length, 2);
 
   await findHeadlineStills(context, "849826", [STILL, NEW_STILL]);
@@ -105,7 +107,7 @@ test("each still goes to Claude once: a game read again asks only about a still 
   });
 });
 
-test("when Claude doesn't answer for a still, the read fails, keeping the answers it gave, and the next asks only about that still", async () => {
+test("when Claude doesn't answer for a still it was asked about, the read fails, keeping the answers it gave, and the next asks only about that still", async () => {
   const claude = { isDown: true };
   const fake = createClaude((still) => (still === STILL && claude.isDown ? "overloaded" : true));
   const context = createContext({ fetchImpl: fake.fetchImpl });
@@ -118,15 +120,40 @@ test("when Claude doesn't answer for a still, the read fails, keeping the answer
 
   claude.isDown = false;
   const found = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
-  assert.deepEqual([...found], [STILL, OTHER_STILL]);
+  assert.deepEqual([...found.withHeadlines], [STILL, OTHER_STILL]);
   assert.equal(fake.requests.length, 3);
+});
+
+test("a read asks Claude about only the first few stills it hasn't seen, and isn't finished until every still has an answer", async () => {
+  const stills = Array.from({ length: 12 }, (_, index) => `${STILL}?play=${index}`);
+  const claude = createClaude((still) => still.endsWith("play=7"));
+  const context = createContext({ fetchImpl: claude.fetchImpl });
+  assert.equal(STILLS_PER_READ, 5);
+
+  const first = await findHeadlineStills(context, "849826", stills);
+  assert.equal(first.isFinished, false);
+  assert.deepEqual([...first.withHeadlines], []);
+  assert.equal(claude.requests.length, 5);
+
+  const second = await findHeadlineStills(context, "849826", stills);
+  assert.equal(second.isFinished, false);
+  assert.deepEqual([...second.withHeadlines], [stills[7]]);
+  assert.equal(claude.requests.length, 10);
+
+  const third = await findHeadlineStills(context, "849826", stills);
+  assert.equal(third.isFinished, true);
+  assert.deepEqual([...third.withHeadlines], [stills[7]]);
+  assert.equal(claude.requests.length, 12);
+  assert.equal(Object.keys(context.stored.get("headline-stills:849826")).length, 12);
 });
 
 test("without the Worker's API key, no still goes to Claude, each counts as clean, and none is kept", async () => {
   const claude = createClaude(() => true);
   const context = createContext({ apiKey: "", fetchImpl: claude.fetchImpl });
 
-  assert.deepEqual([...(await findHeadlineStills(context, "849826", [STILL]))], []);
+  const found = await findHeadlineStills(context, "849826", [STILL]);
+  assert.deepEqual([...found.withHeadlines], []);
+  assert.equal(found.isFinished, true);
   assert.equal(claude.requests.length, 0);
   assert.equal(context.stored.size, 0);
 });

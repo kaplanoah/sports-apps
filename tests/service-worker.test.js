@@ -24,12 +24,17 @@ const readPageFile = (app, path) =>
  */
 function createCacheStorage(fetch) {
   const caches = new Map();
+  // Caches whose reads fail, as a phone's storage can.
+  const unreadable = new Set();
   const readKey = (request) => (typeof request === "string" ? request : request.url);
   const openCache = (name) => {
     if (!caches.has(name)) caches.set(name, new Map());
     const entries = caches.get(name);
     return {
-      match: async (request) => entries.get(readKey(request))?.clone(),
+      match: async (request) => {
+        if (unreadable.has(name)) throw new DOMException("The storage is gone", "UnknownError");
+        return entries.get(readKey(request))?.clone();
+      },
       put: async (request, response) => void entries.set(readKey(request), response),
       addAll: async (requests) => {
         const responses = await Promise.all(requests.map((request) => fetch(request)));
@@ -46,6 +51,7 @@ function createCacheStorage(fetch) {
       caches.has(cacheName) ? openCache(cacheName).match(request) : undefined,
     delete: async (name) => caches.delete(name),
     listKept: (name) => [...(caches.get(name)?.keys() ?? [])],
+    breakReads: (name) => unreadable.add(name),
   };
 }
 
@@ -75,6 +81,7 @@ function startServiceWorker({ publicKey = "AQID_w", app = "mlb", answer = null }
   const shown = [];
   const self = {
     clients: { claim: async () => {} },
+    skipWaiting: async () => {},
     addEventListener: (type, listener) => (listeners[type] ??= []).push(listener),
     registration: {
       scope: SCOPE,
@@ -91,6 +98,15 @@ function startServiceWorker({ publicKey = "AQID_w", app = "mlb", answer = null }
   context.importScripts = (...paths) =>
     paths.forEach((path) => runInContext(readPageFile(app, path), context));
   runInContext(readPageFile(app, "sw.js"), context);
+  const noteWorkerStep = runInContext("noteWorkerStep", context);
+  // The steps the worker kept so far, once its writes have landed.
+  const readSteps = async () => {
+    await runInContext("writing", context);
+    const kept = await caches.match(`${SCOPE}service-worker-steps`, {
+      cacheName: "service-worker-steps",
+    });
+    return kept ? (await kept.json()).map(({ text }) => text) : [];
+  };
   // A worker can extend an event while it handles it, so each wait is read as it's added.
   const finish = async (waiting) => {
     for (let index = 0; index < waiting.length; index++) await waiting[index];
@@ -130,6 +146,8 @@ function startServiceWorker({ publicKey = "AQID_w", app = "mlb", answer = null }
     request,
     refreshCopy,
     keepImages,
+    noteWorkerStep,
+    readSteps,
     caches,
     requests,
     subscribed,
@@ -436,4 +454,94 @@ test("a picture from another site that isn't kept is read from its site, and one
   await worker.keepImages([PHOTOS[1]]);
 
   assert.deepEqual(worker.caches.listKept("images"), []);
+});
+
+test("a copy the phone can't read is passed over for the Worker, which answers in its place, and the worker says so", async () => {
+  const server = { release: "a", missing: new Set(["release/a/fonts/extra.woff2"]) };
+  const worker = startServiceWorker({ answer: serveRelease(server) });
+  await worker.request(SCOPE, NAVIGATION);
+  await worker.keepImages([PHOTOS[0]]);
+  worker.caches.breakReads("page");
+  worker.caches.breakReads("images");
+
+  assert.equal(await (await worker.request(SCOPE, NAVIGATION)).text(), writePage("a"));
+  const code = await worker.request(`${SCOPE}release/a/js/app.js`);
+  assert.equal(await code.text(), "file release/a/js/app.js");
+  const missing = await worker.request(`${SCOPE}release/a/fonts/extra.woff2`);
+  assert.equal(missing.status, 404);
+  assert.equal(await readCopy(worker).catch(() => "unreadable"), "unreadable");
+  await worker.request(PHOTOS[0], IMAGE);
+  assert.equal(worker.requests.filter(({ url }) => url === PHOTOS[0]).length, 2);
+
+  assert.deepEqual(
+    (await worker.readSteps()).filter((step) => !step.startsWith("Opened the page from the copy")),
+    [
+      "Started",
+      "Opened the page from the Worker",
+      "Couldn't read the page from the copy: The storage is gone",
+      "Opened the page from the Worker",
+      "Couldn't read app.js from the copy: The storage is gone",
+      "Couldn't read extra.woff2 from the copy: The storage is gone",
+      "Couldn't check the copy for extra.woff2: The storage is gone",
+      "Couldn't read a.jpg from the copy: The storage is gone",
+    ],
+  );
+});
+
+test("the worker keeps its last steps for Diagnostics: each start, install, activation, and push, and each page it opened and how", async () => {
+  const server = { release: "a" };
+  const worker = startServiceWorker({ answer: serveRelease(server) });
+  assert.deepEqual(await worker.readSteps(), ["Started"]);
+
+  await worker.request(SCOPE, NAVIGATION);
+  await worker.request(SCOPE, NAVIGATION);
+  await worker.dispatch("install", {});
+  await worker.dispatch("activate", {});
+  await worker.dispatch("push", { data: { json: () => ({ title: "Final", body: "", tag: "f" }) } });
+  await (await worker.caches.open("page")).delete(SCOPE);
+  server.pageStatus = 503;
+  await worker.request(SCOPE, NAVIGATION);
+  Object.assign(server, { pageStatus: undefined, isOffline: true });
+  await assert.rejects(worker.request(SCOPE, NAVIGATION), /Failed to fetch/);
+
+  assert.deepEqual(await worker.readSteps(), [
+    "Started",
+    "Opened the page from the Worker",
+    "Opened the page from the copy",
+    "Installed",
+    "Activated",
+    "Push received",
+    "Opened the page from the Worker, which answered 503",
+    "Couldn't open the page: Failed to fetch",
+  ]);
+});
+
+test("the worker keeps its last 60 steps", async () => {
+  const worker = startServiceWorker({ answer: serveRelease({ release: "a" }) });
+  for (let step = 1; step <= 70; step += 1) worker.noteWorkerStep(`step ${step}`);
+
+  const steps = await worker.readSteps();
+
+  assert.equal(steps.length, 60);
+  assert.equal(steps[0], "step 11");
+  assert.equal(steps.at(-1), "step 70");
+});
+
+test("the page reads the steps the worker kept at the same address, and forgets them with Diagnostics", async () => {
+  const worker = startServiceWorker({ answer: serveRelease({ release: "a" }) });
+  await worker.request(SCOPE, NAVIGATION);
+  const { readServiceWorkerSteps, forgetServiceWorkerSteps } =
+    await import("../shared/page/service-worker.js");
+  Object.assign(globalThis, { caches: worker.caches, location: { href: `${SCOPE}index.html` } });
+  try {
+    assert.deepEqual(
+      (await readServiceWorkerSteps()).map(({ text }) => text),
+      ["Started", "Opened the page from the Worker"],
+    );
+    await forgetServiceWorkerSteps();
+    assert.deepEqual(await readServiceWorkerSteps(), []);
+  } finally {
+    Reflect.deleteProperty(globalThis, "caches");
+    Reflect.deleteProperty(globalThis, "location");
+  }
 });

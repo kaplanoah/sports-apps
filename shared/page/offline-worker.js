@@ -5,7 +5,10 @@
 // release check reloads it. It also keeps the pictures from other sites, like the news' photos,
 // that the page last showed, so they're back as soon as what it last showed is. Only the page,
 // its files, and those pictures go through here; version.json, the store, and everything else
-// always reach the Worker.
+// always reach the Worker. What it keeps is only ever a shortcut: a copy the phone can't read
+// leaves each request to the Worker, as if there were no copy, so a phone whose storage fails
+// still opens the page whenever the Worker can answer. Each page it opens, and how, it notes for
+// Diagnostics (service-worker-steps.js).
 
 const PAGE_CACHE = "page";
 const IMAGE_CACHE = "images";
@@ -114,6 +117,29 @@ async function keepPage(response) {
 
 const forgetPage = () => caches.delete(PAGE_CACHE);
 
+/**
+ * What a request names, for a step: the page, or a file by its name.
+ * @param {string} url
+ */
+const nameRequest = (url) =>
+  isPageAddress(new URL(url)) ? "the page" : (new URL(url).pathname.split("/").pop() ?? url);
+
+/**
+ * What a cache holds for the request, or nothing: when it holds nothing, or when it can't be read,
+ * as when the phone's storage fails, which the Worker then answers in its place.
+ * @param {string} url
+ * @param {string} cacheName
+ * @returns {Promise<Response | null>}
+ */
+async function matchKept(url, cacheName) {
+  try {
+    return (await caches.match(url, { cacheName })) ?? null;
+  } catch (error) {
+    noteWorkerStep(`Couldn't read ${nameRequest(url)} from the copy: ${describeFailure(error)}`);
+    return null;
+  }
+}
+
 // The Worker shows its access gate at the page's address, which it says never to store, to a
 // phone that is signed out, and the copy would get past it.
 /** @param {Response} response */
@@ -141,14 +167,31 @@ function refreshCopy() {
   return refreshing;
 }
 
+/**
+ * The page from the Worker, noting how it answered, or that it didn't.
+ * @param {FetchEvent} event
+ */
+async function openPageFromWorker(event) {
+  try {
+    const response = await fetch(event.request);
+    const status = response.ok ? "" : `, which answered ${response.status}`;
+    event.waitUntil(noteWorkerStep(`Opened the page from the Worker${status}`));
+    return response;
+  } catch (error) {
+    event.waitUntil(noteWorkerStep(`Couldn't open the page: ${describeFailure(error)}`));
+    throw error;
+  }
+}
+
 /** @param {FetchEvent} event */
 async function openPage(event) {
-  const copy = await caches.match(findPageAddress(), { cacheName: PAGE_CACHE });
+  const copy = await matchKept(findPageAddress(), PAGE_CACHE);
   if (copy) {
+    event.waitUntil(noteWorkerStep("Opened the page from the copy"));
     event.waitUntil(refreshCopy());
     return copy;
   }
-  const response = await fetch(event.request);
+  const response = await openPageFromWorker(event);
   event.waitUntil(followPage(response.clone()).catch(() => {}));
   return response;
 }
@@ -161,13 +204,23 @@ async function isNamedByCopy(file) {
 }
 
 // A file the Worker no longer has belongs to a release it has replaced, so a copy that needs it
-// can't open whole, and the page's reload then reaches the Worker.
+// can't open whole, and the page's reload then reaches the Worker. A copy that can't be read
+// stays until it can, since the Worker answers in its place meanwhile.
+/** @param {string} file */
+async function forgetCopyNaming(file) {
+  try {
+    if (await isNamedByCopy(file)) await forgetPage();
+  } catch (error) {
+    noteWorkerStep(`Couldn't check the copy for ${nameRequest(file)}: ${describeFailure(error)}`);
+  }
+}
+
 /** @param {Request} request */
 async function readPageFile(request) {
-  const kept = await caches.match(request, { cacheName: PAGE_CACHE });
+  const kept = await matchKept(request.url, PAGE_CACHE);
   if (kept) return kept;
   const response = await fetch(request);
-  if (response.status === 404 && (await isNamedByCopy(request.url))) await forgetPage();
+  if (response.status === 404) await forgetCopyNaming(request.url);
   return response;
 }
 
@@ -180,7 +233,7 @@ const isOtherSiteImage = (request, url) =>
 
 /** @param {Request} request */
 async function readImage(request) {
-  return (await caches.match(request.url, { cacheName: IMAGE_CACHE })) ?? fetch(request);
+  return (await matchKept(request.url, IMAGE_CACHE)) ?? fetch(request);
 }
 
 /**

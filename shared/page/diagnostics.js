@@ -3,10 +3,12 @@
 // (each `data-last-drawn` element) shows, frame by frame. The last few records stay on this
 // device. Its button shares them, after the page as it is right then, as a report on a phone or
 // tablet, or copies it on a computer, after a header that names the release, the device, the
-// page's state, and how each of the store's background jobs last ran, and before the logs of
-// the viewport's changes (viewport-log.js), of what each dialog's row of sheets does
-// (sheet-log.js), of what a season's list of days does (day-strip-log.js), and of each error the
-// page's code doesn't catch (error-log.js). It records nothing while it's off, which it starts as.
+// page's state, and how each of the store's background jobs last ran, and before the steps the
+// service worker kept (service-worker-steps.js), which it keeps on its own, since a load it never
+// let reach the page is what they're for, and the logs of the viewport's changes
+// (viewport-log.js), of what each dialog's row of sheets does (sheet-log.js), of what a season's
+// list of days does (day-strip-log.js), and of each error the page's code doesn't catch
+// (error-log.js). It records nothing while it's off, which it starts as.
 
 import {
   formatClockTime,
@@ -19,10 +21,12 @@ import { html, joinWithSeparator, setHtml } from "./html.js";
 import { describeAnimations, describeShownDayLists, describeShownPagers } from "./pager-log.js";
 import { loadRelease } from "./release.js";
 import { watchTimeAway } from "./resume.js";
+import { forgetServiceWorkerSteps, readServiceWorkerSteps } from "./service-worker.js";
 import { listSheetsInOpenDialogs } from "./sheet-reopen.js";
 import { dayStripLog } from "./day-strip-log.js";
 import { errorLog, watchErrors } from "./error-log.js";
 import { sheetLog } from "./sheet-log.js";
+import { writeStepsAsText } from "./step-log.js";
 import {
   forgetViewportLines,
   readViewportLines,
@@ -41,6 +45,7 @@ const MINUTE_MS = 60 * 1000;
 const SENT_MS = 2000;
 const ON_REQUEST = "On request";
 const STEP_LOGS = [errorLog, sheetLog, dayStripLog];
+const SERVICE_WORKER_TITLE = "Service worker";
 
 /** @typedef {{ ms: number, text: string, isDip?: boolean }} RecordLine */
 /** @typedef {"copied" | "shared"} ReportStep */
@@ -94,6 +99,8 @@ let release = null;
 let readJobStatuses = null;
 /** @type {JobStatus[]} */
 let jobStatuses = [];
+/** @type {import("./step-log.js").StepLine[]} */
+let serviceWorkerSteps = [];
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
@@ -135,6 +142,7 @@ function saveSwitch(isOn) {
       localStorage.removeItem(RECORDS_KEY);
       forgetViewportLines();
       for (const log of STEP_LOGS) log.forgetLines();
+      forgetServiceWorkerSteps();
     }
   } catch {
     /* the switch stays as it was */
@@ -449,10 +457,15 @@ const readPageFacts = () => ({
   now: new Date(),
 });
 
-// Read as settings opens, so a report sent from there names how the jobs stand without waiting.
+// Read as settings opens, so a report sent from there names how the jobs stand, and what the
+// service worker did, without waiting.
 function refreshJobStatuses() {
   readJobStatuses?.().then((read) => {
     jobStatuses = read;
+  });
+  readServiceWorkerSteps().then((steps) => {
+    serviceWorkerSteps = steps;
+    drawRecords();
   });
 }
 
@@ -570,19 +583,23 @@ const renderStepLine = (line) =>
     ><span>${line.text}</span>
   </li>`;
 
+/**
+ * @param {string} title
+ * @param {import("./step-log.js").StepLine[]} lines newest first
+ */
+const renderSteps = (title, lines) =>
+  lines.length > 0 &&
+  html`<details class="diagnostics-record">
+    <summary><span class="diagnostics-when">${title}</span></summary>
+    <ol class="diagnostics-lines diagnostics-viewport">
+      ${lines.map(renderStepLine)}
+    </ol>
+  </details>`;
+
 /** @param {import("./step-log.js").StepLog} log */
-function renderStepLog(log) {
-  const lines = log.readLines().toReversed();
-  return (
-    lines.length > 0 &&
-    html`<details class="diagnostics-record">
-      <summary><span class="diagnostics-when">${log.title}</span></summary>
-      <ol class="diagnostics-lines diagnostics-viewport">
-        ${lines.map(renderStepLine)}
-      </ol>
-    </details>`
-  );
-}
+const renderStepLog = (log) => renderSteps(log.title, log.readLines().toReversed());
+
+const listServiceWorkerSteps = () => serviceWorkerSteps.toReversed();
 
 /** @param {import("./viewport-log.js").ViewportLine[]} lines newest first */
 const renderViewport = (lines) => {
@@ -627,6 +644,7 @@ function renderRecords() {
         ? records.map(renderRecord)
         : html`<p class="diagnostics-empty">Nothing yet. Each open from now on shows here.</p>`
     }
+    ${renderSteps(SERVICE_WORKER_TITLE, listServiceWorkerSteps())}
     ${viewportLines.length > 0 && renderViewport(viewportLines)}
     ${STEP_LOGS.map(renderStepLog)}`;
 }
@@ -652,9 +670,10 @@ function toggleRecording() {
 function writeReport(pageNow) {
   const header = writeHeader(readPageFacts());
   const records = writeRecordsAsText([pageNow, ...listRecords()], new Date());
+  const worker = writeStepsAsText(SERVICE_WORKER_TITLE, listServiceWorkerSteps());
   const viewport = writeViewportAsText(readViewportLines().toReversed());
   const steps = STEP_LOGS.map((log) => log.writeLinesAsText(log.readLines().toReversed()));
-  return [header, records, viewport, ...steps].filter(Boolean).join("\n\n");
+  return [header, records, worker, viewport, ...steps].filter(Boolean).join("\n\n");
 }
 
 /** @param {ReportStep | null} step */
