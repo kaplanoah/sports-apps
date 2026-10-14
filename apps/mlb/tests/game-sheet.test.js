@@ -77,6 +77,14 @@ function readRows(markup, tableClass) {
   );
 }
 
+test("a box score the store kept without its pitchers' pitches shows a dash for them", () => {
+  const boxScore = describeGame("849819");
+  for (const pitcher of boxScore.away.pitchers) delete pitcher.pitches;
+  const markup = String(renderBoxScore({ away: "LAD", home: "ATL" }, boxScore));
+  const [, pitchers] = readRows(markup, "box-table");
+  assert.deepEqual(pitchers[1], ["Yamamoto W", "7.0", "-", "4", "1", "1", "1", "10"]);
+});
+
 test("a final's Innings show each club's runs in each, an x where the home club never batted, and its runs, hits, and errors", () => {
   const markup = String(renderBoxScore({ away: "MIL", home: "SD" }, describeGame("849826")));
   assert.deepEqual(readRows(markup, "line-score")[0], [
@@ -111,7 +119,8 @@ test("each club's batters, with their team's totals, come before its pitchers, w
   assert.deepEqual(batters[0], ["Batters", "AB", "R", "H", "RBI", "BB", "K"]);
   assert.deepEqual(batters[1], ["Betts SS", "5", "0", "2", "0", "0", "1"]);
   assert.deepEqual(batters.at(-1), ["Team", "36", "3", "8", "3", "2", "12"]);
-  assert.deepEqual(pitchers[0], ["Pitchers", "IP", "H", "R", "ER", "BB", "K"]);
+  assert.deepEqual(pitchers[0], ["Pitchers", "IP", "P", "H", "R", "ER", "BB", "K"]);
+  assert.deepEqual(pitchers[1], ["Yamamoto W", "7.0", "98", "4", "1", "1", "1", "10"]);
   assert.deepEqual(pitchers.map((row) => row[0]).slice(1), ["Yamamoto W", "Scott", "Díaz S"]);
   assert.match(
     markup,
