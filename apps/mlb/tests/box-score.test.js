@@ -289,6 +289,30 @@ test("before first pitch, a club's posted lineup has each batter's season so far
   assert.deepEqual([boxScore.away.pitchers, boxScore.home.pitchers], [[], []]);
 });
 
+test("a game in warmup, which MLB's feed reads as live with its leadoff man up, is still before first pitch", () => {
+  const feed = structuredClone(GAMES.feeds[RAYS_AT_YANKEES]);
+  feed.gameData.status = {
+    abstractGameState: "Live",
+    codedGameState: "P",
+    detailedState: "Warmup",
+  };
+  Object.assign(feed.liveData.linescore, {
+    currentInning: 1,
+    inningState: "Top",
+    outs: 0,
+    offense: { batter: { id: 650490 } },
+    defense: { pitcher: { id: 543037 } },
+  });
+
+  const boxScore = describeBoxScore(RAYS_AT_YANKEES, feed);
+
+  assert.equal(boxScore.state, "pre");
+  assert.deepEqual(boxScore.innings, []);
+  assert.equal(boxScore.away.batters.length, 9);
+  assert.equal(boxScore.scoringHalves, null);
+  assert.equal(boxScore.bases, null);
+});
+
 test("a game whose clubs haven't posted their lineups has no batters", () => {
   const boxScore = describeGame(TOMORROWS_GUARDIANS_AT_WHITE_SOX);
   assert.deepEqual([boxScore.away.batters, boxScore.home.batters], [[], []]);

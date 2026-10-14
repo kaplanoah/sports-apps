@@ -1,5 +1,5 @@
 import { addDays } from "#shared/days.js";
-import { readClubId, readMlbTeamId } from "../../page/js/snapshot.js";
+import { readClubId, readGameState, readMlbTeamId } from "../../page/js/snapshot.js";
 import { DATE_RULE, fetchMlbJson, readDateParam } from "./mlb.js";
 import { listGameLogRequest, listStarts, noteLeagueRead } from "./pitchers.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
@@ -23,6 +23,8 @@ const SCHEDULE_FIELDS = [
   "officialDate",
   "status",
   "abstractGameState",
+  "codedGameState",
+  "detailedState",
   "teams",
   "away",
   "home",
@@ -65,7 +67,7 @@ const findClubSide = (game, mlbTeamId) =>
 function listClubStarts(scheduleResponse, mlbTeamId) {
   return (scheduleResponse?.dates || [])
     .flatMap((/** @type {any} */ day) => day.games || [])
-    .filter((/** @type {any} */ game) => game.status?.abstractGameState === "Final")
+    .filter((/** @type {any} */ game) => readGameState(game.status ?? {}) === "final")
     .map((/** @type {any} */ game) => ({
       date: game.officialDate,
       id: findClubSide(game, mlbTeamId)?.probablePitcher?.id,

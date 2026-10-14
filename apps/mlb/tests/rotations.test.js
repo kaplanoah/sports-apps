@@ -13,14 +13,22 @@ const PHILLIES = 143;
 const BRAVES = 144;
 const RAYS = 139;
 
+const FINAL = { abstractGameState: "Final", codedGameState: "F", detailedState: "Final" };
+const IN_PROGRESS = {
+  abstractGameState: "Live",
+  codedGameState: "I",
+  detailedState: "In Progress",
+};
+const POSTPONED = { abstractGameState: "Final", codedGameState: "D", detailedState: "Postponed" };
+
 const describeGame = (
   officialDate,
   [awayId, awayStarter],
   [homeId, homeStarter],
-  state = "Final",
+  status = FINAL,
 ) => ({
   officialDate,
-  status: { abstractGameState: state },
+  status,
   teams: {
     away: { team: { id: awayId }, probablePitcher: awayStarter && { id: awayStarter } },
     home: { team: { id: homeId }, probablePitcher: homeStarter && { id: homeStarter } },
@@ -153,9 +161,12 @@ test("the route reads the club's last two weeks, then the game logs of the pitch
   assert.ok(mlb.calls.every((call) => call.init.cf.cacheTtl === 600));
 });
 
-test("only finished games name a starter, and a club with none has an empty rotation", async () => {
+test("only finished games name a starter, not one under way or postponed, and a club with none has an empty rotation", async () => {
   const schedule = {
-    dates: [{ games: [describeGame("2026-09-30", [PHILLIES, 1], [BRAVES, 94], "Live")] }],
+    dates: [
+      { games: [describeGame("2026-09-29", [PHILLIES, 4], [BRAVES, 93], POSTPONED)] },
+      { games: [describeGame("2026-09-30", [PHILLIES, 1], [BRAVES, 94], IN_PROGRESS)] },
+    ],
   };
   const { mlb, requestRotation } = createTestServer({ schedule });
   const rotation = await (await requestRotation("?club=PHI&date=2026-10-01")).json();
