@@ -4,13 +4,20 @@ import assert from "node:assert/strict";
 import { createAppWorker } from "../shared/worker/app-worker.js";
 
 const answerNothing = () => new Response(null, { status: 500 });
+const storeAnswers = async () => true;
+
+/** @param {Record<string, { contentType: string, text?: string }>} pageFiles */
+const createPageWorker = (pageFiles) =>
+  createAppWorker({
+    pageFiles,
+    serveSnapshot: answerNothing,
+    forwardToStore: answerNothing,
+    isStoreAnswering: storeAnswers,
+  });
 
 /** @param {Record<string, { contentType: string, text?: string }>} pageFiles */
 const requestRobots = (pageFiles) =>
-  createAppWorker({ pageFiles, serveSnapshot: answerNothing, forwardToStore: answerNothing }).fetch(
-    new Request("https://worker.example/robots.txt"),
-    {},
-  );
+  createPageWorker(pageFiles).fetch(new Request("https://worker.example/robots.txt"), {});
 
 test("robots.txt names the commit the Worker was built from, and none when the build named none", async () => {
   const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
@@ -24,9 +31,30 @@ test("robots.txt names the commit the Worker was built from, and none when the b
   assert.equal(unnamed.headers.get("x-release-commit"), null);
 });
 
-/** @param {Record<string, { contentType: string, text?: string }>} pageFiles */
-const createPageWorker = (pageFiles) =>
-  createAppWorker({ pageFiles, serveSnapshot: answerNothing, forwardToStore: answerNothing });
+test("health answers without the key, saying whether the store answers and which release this is", async () => {
+  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
+  const pageFiles = {
+    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+  };
+  const env = { APP_KEY: "key", STORE: "the store" };
+
+  const healthy = await createPageWorker(pageFiles).fetch(
+    new Request("https://worker.example/health"),
+    env,
+  );
+  assert.equal(healthy.status, 200);
+  assert.deepEqual(await healthy.json(), { ok: true, release: "abc1234", store: "ok" });
+  assert.equal(healthy.headers.get("x-robots-tag"), "noindex, nofollow");
+
+  const unhealthy = await createAppWorker({
+    pageFiles,
+    serveSnapshot: answerNothing,
+    forwardToStore: answerNothing,
+    isStoreAnswering: async () => false,
+  }).fetch(new Request("https://worker.example/health"), env);
+  assert.equal(unhealthy.status, 503);
+  assert.deepEqual(await unhealthy.json(), { ok: false, release: "abc1234", store: "no answer" });
+});
 
 /**
  * @param {ReturnType<typeof createPageWorker>} worker
@@ -92,6 +120,7 @@ function createLockedWorker() {
     pageFiles: PAGE_FILES,
     serveSnapshot: answerOk,
     forwardToStore: answerOk,
+    isStoreAnswering: storeAnswers,
     reads: { "/box-score": answerOk },
   });
 }
@@ -129,6 +158,7 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
     pageFiles: PAGE_FILES,
     serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
+    isStoreAnswering: storeAnswers,
     reads: {
       "/roster": (url, env) => {
         handed.push([url.searchParams.get("team"), env.STORE]);
