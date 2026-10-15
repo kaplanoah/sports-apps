@@ -38,7 +38,9 @@ test("a computer shows no Updates box, since each device keeps its own dismissal
 test.describe("on a phone", () => {
   test.use(ON_A_PHONE);
 
-  test("rebuilds updates from the saved readings as the Worker adds to them", async ({ page }) => {
+  test("rebuilds updates from the saved readings as the Worker adds to them, each club in its line's font a step heavier", async ({
+    page,
+  }) => {
     const currentSnapshot = buildFixtureSnapshot(EVENING_FIXTURE);
     const earlier = createReading({ ...currentSnapshot, asOf: "2026-09-24T20:00:00Z" });
     [earlier.teams.NYY, earlier.teams.BOS] = [
@@ -82,10 +84,16 @@ test.describe("on a phone", () => {
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
-    await expect(updates.locator(".what").first()).toHaveCSS(
-      "font-size",
-      `${(await readRole(page, "body")).size}px`,
+    const body = await readRole(page, "body");
+    const what = updates.locator(".what").first();
+    await expect(what).toHaveCSS("font-size", `${body.size}px`);
+    await expect(what).toHaveCSS("font-weight", String(body.weight - 50));
+    const team = what.locator(".team-name").first();
+    await expect(team).toHaveCSS(
+      "font-family",
+      await what.evaluate((element) => getComputedStyle(element).fontFamily),
     );
+    await expect(team).toHaveCSS("font-weight", String(body.weight + 50));
   });
 
   test("a release note shows in the Updates box, headed New in the app, until it's dismissed", async ({

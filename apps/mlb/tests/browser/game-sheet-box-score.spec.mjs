@@ -39,12 +39,17 @@ async function openOctoberGame(page, game, { boxScores = BOX_SCORES, store = {} 
   return { app, sheet: page.locator("#gameSheet") };
 }
 
-test("a final's Game section shows its innings, then each club's batters and pitchers, below its row", async ({
+test("a final's Game section shows its innings, then each club's batters and pitchers under its name as a team's, below its row", async ({
   page,
 }) => {
   const { sheet } = await openOctoberGame(page, "Brewers at Padres, Tue, Oct 6");
   const parts = sheet.locator("#gameBody .sheet-part-head h3");
   await expect(parts).toHaveText(["Innings", "Brewers", "Padres"]);
+  const club = parts.nth(1).locator(".club");
+  const team = await readRole(page, "team");
+  await expect(club).toHaveCSS("font-size", `${team.size}px`);
+  await expect(club).toHaveCSS("font-weight", String(team.weight));
+  await expect(club).toHaveCSS("text-transform", "none");
   const innings = sheet.locator(".line-score tbody tr");
   await expect(innings.nth(1).locator("td")).toHaveText([
     "SD",

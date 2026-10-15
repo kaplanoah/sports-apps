@@ -281,7 +281,7 @@
   and every line height set by its text's size is a share of the app's `--leading`,
   which MLB's Libre Franklin sets a little apart, while one in pixels keeps its pixels.
   The root's `tests/type-roles.test.js` checks the stylesheets for each.
-  The WNBA sets its words in Barlow and its teams, numbers, and headings in Barlow Condensed,
+  The WNBA sets its words in Barlow and its teams, numbers, and the app's name in Barlow Condensed,
   which draws 8% larger to look as big as Barlow,
   and MLB sets its words in Libre Franklin and its numbers in Chivo Mono,
   which draws at 97.48% to look as big as Libre Franklin's words.
@@ -290,6 +290,10 @@
   as both apps' searches and Season pickers do, never a viewport that stops a pinch.
   The root's `tests/browser/type-roles.mjs` lists every shown text off its app's role sizes,
   or in a weight its font has no face for, and each app's browser tests check every view with it.
+  Each role draws in one font and one case,
+  and in a second only where the app's `tests/browser/role-looks.spec.mjs` names the text and why,
+  like MLB's numbers in Chivo Mono and the WNBA Games list's dates in Barlow, as a wall calendar's;
+  it fails on any look its tables don't name, and on any they name that no view draws.
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pager's pill, and `--radius-sheet` for a sheet on a wide screen,

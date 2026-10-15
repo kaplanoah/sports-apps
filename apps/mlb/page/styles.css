@@ -151,7 +151,6 @@
      themes still lay out the same. */
   --lost-score-weight: calc(var(--type-stat-large-weight) - 100);
   --focus-ring: var(--now);
-  --gate-heading-font: var(--text);
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --radius-card: 3px;
@@ -884,7 +883,7 @@ table.st .seed-cell {
 }
 .updates-list .what b,
 .updates-list .what .team-name {
-  font-weight: calc(var(--type-body-weight) + 100);
+  font-weight: calc(var(--type-body-weight) + 50);
 }
 .updates .rank-slot {
   width: auto;
@@ -1647,6 +1646,8 @@ body.kbd .rank-item .grip:focus {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
   text-transform: none;
   letter-spacing: 0;
 }
@@ -2758,6 +2759,7 @@ body.kbd .player-open:focus {
 /* Capital labels, the gate, and a club's sheet in the shared styles, each a step from its role of
    MLB's own. */
 .pager-tabs button,
+.open-button,
 .updates-count {
   font-weight: var(--type-label-weight);
 }
@@ -2769,12 +2771,6 @@ body.kbd .player-open:focus {
 }
 .tape-label {
   font-weight: calc(var(--type-label-weight) + 50);
-}
-.gate-title {
-  font-weight: var(--type-headline-weight);
-}
-.open-button {
-  font-weight: calc(var(--type-body-weight) + 150);
 }
 .team-stat b {
   font-weight: calc(var(--type-stat-large-weight) - 50);

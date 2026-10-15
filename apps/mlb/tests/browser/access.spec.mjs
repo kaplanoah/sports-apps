@@ -1,6 +1,6 @@
 import { test, expect, openLockedApp, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 
 /** @param {import("@playwright/test").Page} page */
@@ -24,6 +24,22 @@ test("the gate's text keeps to the type scale", async ({ page }) => {
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
+});
+
+test("the gate's heading is set as a sheet's title, and Open as the app's other buttons", async ({
+  page,
+}) => {
+  await openLockedApp(page, { accessCode: "FASTBREAK" });
+  const heading = await readRole(page, "heading");
+  const label = await readRole(page, "label");
+  await expect(findGate(page)).toHaveCSS("font-size", `${heading.size}px`);
+  await expect(findGate(page)).toHaveCSS("font-weight", String(heading.weight));
+  await expect(findGate(page)).toHaveCSS("text-transform", "uppercase");
+
+  const open = page.getByRole("button", { name: "Open" });
+  await expect(open).toHaveCSS("font-size", `${label.size}px`);
+  await expect(open).toHaveCSS("font-weight", String(label.weight));
+  await expect(open).toHaveCSS("text-transform", "uppercase");
 });
 
 test("the page asks for its code in the theme's accent, and the right one opens the app for good", async ({

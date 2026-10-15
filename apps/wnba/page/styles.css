@@ -193,7 +193,7 @@
   --switch-knob: #f1e9df;
   --display: "Barlow", system-ui, sans-serif;
   --numbers: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --heading: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --title-face: "Barlow Condensed", "Arial Narrow", sans-serif;
   --team-name: "Barlow Condensed", "Arial Narrow", sans-serif;
   /* Each type role's size and weight in Barlow, and Barlow Condensed where a role sets it
      (shared/page/type.css). */
@@ -227,7 +227,6 @@
   --type-setting-weight: 400;
   --type-setting-note-size: calc(15rem / 16);
   --type-setting-note-weight: 400;
-  --gate-heading-font: var(--heading);
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --text: "Barlow", system-ui, sans-serif;
@@ -350,7 +349,7 @@ header.top {
   color: var(--ink-dim);
 }
 header.top h1 {
-  font-family: var(--heading);
+  font-family: var(--title-face);
   font-size: var(--type-title-size);
   font-weight: var(--type-title-weight);
   line-height: var(--leading);
@@ -1641,27 +1640,25 @@ th[aria-sort="ascending"] .roster-caret {
 .bracket-turns {
   clip-path: inset(0 0 0 calc(var(--scroll-left, 0px) + var(--page-gutter)));
 }
-/* A round's name, with Best of in the text face just after it, on the name's baseline but lifted
-   half a pixel, which looks level beside the name's heavier capitals. */
+/* A round's name, set as a sheet's title is, with Best of just after it on the name's baseline but
+   lifted half a pixel, which looks level beside the name's larger capitals. */
 .round-name {
   grid-row: 1;
   display: flex;
   align-items: baseline;
   gap: 10px;
   padding-inline: 2px;
-  font-family: var(--heading);
   font-size: var(--type-heading-size);
-  font-weight: calc(var(--type-heading-weight) + 100);
+  font-weight: var(--type-heading-weight);
   line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
   white-space: nowrap;
   color: var(--ink);
   scroll-snap-align: start;
 }
 .round-name .best-of {
   translate: 0 -0.5px;
-  font-family: var(--text);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   letter-spacing: 0.06em;
@@ -1904,14 +1901,9 @@ th[aria-sort="ascending"] .roster-caret {
 .updates-list .what {
   line-height: calc(1.3 * var(--leading));
 }
-.updates > .updates-list .what b {
-  font-family: var(--team-name);
-  font-size: var(--type-body-size);
-  font-weight: calc(var(--type-body-weight) + 100);
-  letter-spacing: 0.02em;
-}
-/* A release note's word that should stand out stays in its text's font, a step heavier. */
-.updates-notes .what b {
+/* A final's team names and a release note's word that should stand out stay in the line's font, a
+   step heavier. */
+.updates-list .what b {
   font-weight: calc(var(--type-body-weight) + 100);
 }
 
@@ -1930,11 +1922,15 @@ th[aria-sort="ascending"] .roster-caret {
   height: var(--control-height);
   padding: 0 var(--control-room) 2px;
   align-content: center;
+  text-box: trim-both cap alphabetic;
+}
+/* Every button's words, a pill's names and the gate's Open alike. */
+.pager-tabs button,
+.open-button {
   font-size: var(--type-detail-size);
   font-weight: calc(var(--type-detail-weight) + 100);
   letter-spacing: 0.01em;
   text-transform: none;
-  text-box: trim-both cap alphabetic;
 }
 
 /* Standings: one table at a phone's width for the league and each conference, side by side under

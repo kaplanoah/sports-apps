@@ -6,8 +6,8 @@
  * leads or recedes within its role, as calc(var(--type-label-weight) - 100).
  *
  *   title         the app's name at the top
- *   headline      a news story's title, the access gate's title
- *   heading       a sheet's title, a bracket round
+ *   headline      a news story's title
+ *   heading       a sheet's title, a bracket round, the access gate's title
  *   team-large    the team or player a sheet is about, the teams facing off on a game's sheet
  *   team          team names in game rows, standings, and comparisons
  *   team-compact  team names over a game sheet's tables

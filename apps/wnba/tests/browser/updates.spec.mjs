@@ -47,12 +47,16 @@ test.describe("on a phone", () => {
     );
   });
 
-  test("a final's team names are set in Barlow Condensed a step over their sentence", async ({
+  test("a final's team names are set in their sentence's font, a step heavier", async ({
     page,
   }) => {
     await openApp(page, { isShowingUpdates: true });
-    const team = page.locator("#updates .updates-list .what b").first();
-    await expect(team).toHaveCSS("font-family", /^"Barlow Condensed"/);
+    const what = page.locator("#updates .updates-list .what").first();
+    const team = what.locator("b").first();
+    await expect(team).toHaveCSS(
+      "font-family",
+      await what.evaluate((element) => getComputedStyle(element).fontFamily),
+    );
     await expect(team).toHaveCSS(
       "font-weight",
       String((await readRole(page, "body")).weight + 100),
@@ -192,7 +196,7 @@ test.describe("on a phone, in full motion", () => {
 test.describe("on a phone, with a release note out", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test("the note sits under the finals, headed New in the app, its word in bold a step heavier than its text in the same font, unlike the finals' team names, and closes with them", async ({
+  test("the note sits under the finals, headed New in the app, its word in bold a step heavier than its text in the same font, as the finals' team names are, and closes with them", async ({
     page,
   }) => {
     await serveReleaseNote(page);
@@ -209,10 +213,12 @@ test.describe("on a phone, with a release note out", () => {
       "font-weight",
       String((await readRole(page, "body")).weight + 100),
     );
-    await expect(bold).not.toHaveCSS("font-family", /Condensed/);
+    const font = await bold.evaluate((element) => getComputedStyle(element).fontFamily);
+    await expect(updates.locator(".updates-notes .what")).toHaveCSS("font-family", font);
+    await expect(updates.locator(".updates-list .what b").first()).toHaveCSS("font-family", font);
     await expect(updates.locator(".updates-list .what b").first()).toHaveCSS(
-      "font-family",
-      /Barlow Condensed/,
+      "font-weight",
+      String((await readRole(page, "body")).weight + 100),
     );
     const finals = await updates.locator(".updates-list").first().boundingBox();
     const notes = await updates.locator(".updates-notes").boundingBox();
