@@ -1,8 +1,9 @@
 // The Game section's Runs so far, above its innings: each half inning that scored, under its
 // heading, and a line for each change of the score with the score after it, the runners who got on
-// since the last one on a lighter row over the play that scored. Then, while the game is being
-// played, the field with each runner by his base and how he got on, and who's up against whom, or,
-// between halves, the empty field and who's due up. Once the game is final, it's the game's Runs.
+// since the last one on a lighter row over the play that scored, a pinch runner who scored named
+// with whom he ran for. Then, while the game is being played, who's pinch running for whom, the
+// field with each runner by his base and how he got on, and who's up against whom, or, between
+// halves, the empty field and who's due up. Once the game is final, it's the game's Runs.
 
 import { html } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
@@ -89,7 +90,8 @@ const NAME_PADDING_PX = 3;
 
 /** @typedef {{ away: string, home: string }} RunsGame */
 /** @typedef {{ away: number, home: number }} Score */
-/** @typedef {{ name: string, event: string }} Scorer */
+/** @typedef {{ name: string, event: string, pinchRunnerFor?: string | null }} Scorer */
+/** @typedef {{ base: string, name: string, reached: string | null, pinchRunnerFor?: string | null }} Runner */
 /** @typedef {{ batter: string, event: string, reached: boolean, filledBases: boolean, scorers: Scorer[], score: Score | null }} HalfPlay */
 /** @typedef {{ side: "away" | "home", inning: number, plays: HalfPlay[] }} ScoringHalf */
 /** @typedef {{ setup: HalfPlay[], play: HalfPlay }} ScoreChange */
@@ -102,6 +104,13 @@ function joinWithAnd(items) {
   if (items.length <= 2) return items.join(" and ");
   return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
 }
+
+/**
+ * A runner who scored, and whom he ran for if he came in to pinch run.
+ * @param {Scorer} scorer
+ */
+const nameScorer = ({ name, pinchRunnerFor }) =>
+  pinchRunnerFor ? `${name} (pinch runner for ${pinchRunnerFor})` : name;
 
 /** @param {HalfPlay} play */
 const describeWhatBatterDid = (play) =>
@@ -140,17 +149,11 @@ export function describeScoringPlay(play, isLoadedSaid = false) {
     scoredOn.set(scorer.event, [...(scoredOn.get(scorer.event) ?? []), scorer]);
   const batter =
     drivenIn.length > 0 || play.event === "Home Run"
-      ? describeDrivenIn(
-          play,
-          drivenIn.map((scorer) => scorer.name),
-          isLoadedSaid,
-        )
-          .filter(Boolean)
-          .join(", ")
+      ? describeDrivenIn(play, drivenIn.map(nameScorer), isLoadedSaid).filter(Boolean).join(", ")
       : play.reached && `${play.batter} ${describeWhatBatterDid(play)}`;
   const others = [...scoredOn].map(
     ([event, scorers]) =>
-      `${joinWithAnd(scorers.map((scorer) => scorer.name))} scored on ${SCORED_ON[event] ?? event.toLowerCase()}`,
+      `${joinWithAnd(scorers.map(nameScorer))} scored on ${SCORED_ON[event] ?? event.toLowerCase()}`,
   );
   return joinWithAnd([batter, ...others].filter(Boolean));
 }
@@ -258,7 +261,7 @@ function placeRunnerName(base) {
   return { left: base === "1B" ? x + besideBase : x - besideBase, top: y };
 }
 
-/** @param {{ base: string, name: string, reached: string | null }} runner */
+/** @param {Runner} runner */
 function renderRunner({ base, name, reached }) {
   const { left, top } = placeRunnerName(base);
   const wayOn = reached && (WAYS_ON[reached] ?? reached.toLowerCase());
@@ -284,7 +287,19 @@ function renderBase(base, isTaken) {
   return html`<path d="M${corners.join("L")}Z" class="runs-base ${isTaken ? "taken" : ""}" />`;
 }
 
-/** @param {any[]} runners */
+/** @param {Runner[]} runners */
+function renderPinchRunners(runners) {
+  const pinchRunners = runners.filter((runner) => runner.pinchRunnerFor);
+  if (pinchRunners.length === 0) return html``;
+  return html`<p class="runs-pinch-runners">
+    ${pinchRunners.map(
+      (runner) =>
+        html`<span><b>${runner.name}</b> pinch running for <b>${runner.pinchRunnerFor}</b></span>`,
+    )}
+  </p>`;
+}
+
+/** @param {Runner[]} runners */
 function renderField(runners) {
   const taken = new Set(runners.map((runner) => runner.base));
   const height = FIELD_BOTTOM - FIELD_TOP;
@@ -319,7 +334,7 @@ function renderNow(bases) {
     : renderOutLights({ state: "live", outs: bases.outs });
   return html`<div class="runs-now">
     <p class="runs-now-head"><span class="runs-now-label">Now</span><span class="runs-now-inning">${inning}${outs}</span></p>
-    ${renderField(bases.runners)}${renderUp(bases)}
+    ${renderPinchRunners(bases.runners)}${renderField(bases.runners)}${renderUp(bases)}
   </div>`;
 }
 

@@ -164,7 +164,7 @@ test("a game being played has each half inning that scored so far, with who got 
         createPlay("Ohtani", "Walk"),
         createPlay("Hern\u00e1ndez", "Single"),
         createPlay("Pages", "Single", {
-          scorers: [{ name: "Ohtani", event: "Single" }],
+          scorers: [{ name: "Ohtani", event: "Single", pinchRunnerFor: null }],
           score: { away: 1, home: 0 },
         }),
         createPlay("Tucker", "Walk", { filledBases: true }),
@@ -175,7 +175,7 @@ test("a game being played has each half inning that scored so far, with who got 
     half: "top",
     inning: 3,
     outs: 1,
-    runners: [{ base: "1B", name: "Betts", reached: "Single" }],
+    runners: [{ base: "1B", name: "Betts", reached: "Single", pinchRunnerFor: null }],
     batter: "Smith",
     pitcher: "Misiorowski",
   });
@@ -203,12 +203,12 @@ test("a final has every half inning that scored in the order they came, a homer'
     createPlay("Meidroth", "Double"),
     createPlay("Vargas", "Walk", { filledBases: true }),
     createPlay("Murakami", "Walk", {
-      scorers: [{ name: "Montgomery", event: "Walk" }],
+      scorers: [{ name: "Montgomery", event: "Walk", pinchRunnerFor: null }],
       score: { away: 0, home: 1 },
     }),
     createPlay("Antonacci", "Sac Fly", {
       reached: false,
-      scorers: [{ name: "Meidroth", event: "Sac Fly" }],
+      scorers: [{ name: "Meidroth", event: "Sac Fly", pinchRunnerFor: null }],
       score: { away: 0, home: 2 },
     }),
   ]);
@@ -217,7 +217,7 @@ test("a final has every half inning that scored in the order they came, a homer'
     createPlay("Kwan", "Single"),
     createPlay("Ram\u00edrez", "Home Run", {
       reached: false,
-      scorers: [{ name: "Kwan", event: "Home Run" }],
+      scorers: [{ name: "Kwan", event: "Home Run", pinchRunnerFor: null }],
       score: { away: 3, home: 2 },
     }),
   ]);
@@ -234,7 +234,9 @@ test("a run scored on something during a play other than its result, like a wild
 
   const [bottomOfThird] = describeBoxScore(GUARDIANS_AT_WHITE_SOX_FINAL, feed).scoringHalves;
 
-  assert.deepEqual(bottomOfThird.plays[3].scorers, [{ name: "Montgomery", event: "Wild Pitch" }]);
+  assert.deepEqual(bottomOfThird.plays[3].scorers, [
+    { name: "Montgomery", event: "Wild Pitch", pinchRunnerFor: null },
+  ]);
 });
 
 test("a pinch runner leaves no one behind on the base he took over, so the bases load only when they fill", () => {
@@ -269,7 +271,7 @@ test("a runner whose way on the half inning's plays don't say, like a pinch runn
 
   const { runners } = describeBoxScore(DODGERS_AT_BREWERS, feed).bases;
 
-  assert.deepEqual(runners, [{ base: "1B", name: "Smith", reached: null }]);
+  assert.deepEqual(runners, [{ base: "1B", name: "Smith", reached: null, pinchRunnerFor: null }]);
 });
 
 test("between halves of an inning no one is on base, the third out still counts, and the next half's leadoff man is due up", () => {
