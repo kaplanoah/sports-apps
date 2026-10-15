@@ -44,8 +44,8 @@ import { describeError } from "../../../../shared/worker/responses.js";
 // list of every player, with his facts, once a day, and ESPN's injury report, which says why each
 // player on the injured list is there, for the whole league once an hour. Each player's last games
 // are read, a
-// batch at a time, as his games add up, and once more as they settle. Each roster and player is
-// saved again only when it changed.
+// batch at a time, as his games add up, and once more as they settle, and his totals wait for them.
+// Each roster and player is saved again only when it changed.
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -89,15 +89,40 @@ export const nameGameLogReadsKey = (season) => `game-log-reads:${season}:v${LAST
 /** @param {number} season */
 const nameLastGamesPrefix = (season) => `last-games:${season}:`;
 
+const TOTALS = /** @type {const} */ ([
+  "hitting",
+  "pitching",
+  "postseasonHitting",
+  "postseasonPitching",
+]);
+
 /**
  * A player's games in every table, regular season and postseason, which grows as he plays.
  * @param {import("./players.js").PlayerNumbers} numbers
  * @param {number} id
  */
 const countGames = (numbers, id) =>
-  [numbers.hitting, numbers.pitching, numbers.postseasonHitting, numbers.postseasonPitching]
-    .map((table) => table.get(id)?.gamesPlayed ?? 0)
-    .reduce((total, games) => total + games, 0);
+  TOTALS.map((table) => numbers[table].get(id)?.gamesPlayed ?? 0).reduce(
+    (total, games) => total + games,
+    0,
+  );
+
+// A player's totals and his last games tell one story, so totals that count a game his log hasn't
+// been read with yet wait for a later run to read it, unless MLB didn't answer the last read of it,
+// when they show rather than wait on MLB.
+/**
+ * @param {PlayerRead} read his log's last read
+ * @param {number} games the games his totals count now
+ */
+const isLogBehind = (read, games) => games > read.games && read.failedAt === undefined;
+
+/**
+ * Puts a player's totals in a table as his doc keeps them, or takes him out where it keeps none.
+ * @param {Map<number, any>} table
+ * @param {number} id
+ * @param {any} kept
+ */
+const putTotals = (table, id, kept) => (kept ? table.set(id, kept) : table.delete(id));
 
 /**
  * @param {number} season
@@ -157,7 +182,7 @@ const logFailure = (what) => (/** @type {unknown} */ error) => {
 function createStoreUpdate() {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
   let keeper = null;
-  const { saveDoc } = createSavedDocs();
+  const { readDoc, saveDoc } = createSavedDocs();
 
   /**
    * @param {JobContext} context
@@ -322,10 +347,12 @@ function createStoreUpdate() {
 
   /**
    * Reads the last games of the rostered players who have played since they were last read, a
-   * few batches a run, and keeps each one's. A batch MLB doesn't answer is read on a later run.
+   * few batches a run, and keeps each one's, and answers when each player's was last read. A batch
+   * MLB doesn't answer is read on a later run.
    * @param {JobContext} context
    * @param {number} season
    * @param {SeasonNumbers} numbers
+   * @returns {Promise<Record<string, PlayerRead>>}
    */
   async function readDueGameLogs(context, season, numbers) {
     /** @type {Record<string, PlayerRead>} */
@@ -335,7 +362,7 @@ function createStoreUpdate() {
       isPlayerReadDue(reads[id], countGames(numbers, id), now),
     );
     const batches = splitIntoBatches(due).slice(0, GAME_LOG_BATCHES_PER_RUN);
-    if (!batches.length) return;
+    if (!batches.length) return reads;
     const today = readEasternDay(now).date;
     const results = await Promise.allSettled(
       batches.map((batch) => fetchJson(context, listGameLogRequest(season, batch, today))),
@@ -343,6 +370,7 @@ function createStoreUpdate() {
     for (const [index, result] of results.entries()) {
       if (result.status === "rejected") {
         console.error(`Reading players' last games failed: ${describeError(result.reason)}`);
+        for (const id of batches[index]) if (reads[id]) reads[id] = { ...reads[id], failedAt: now };
         continue;
       }
       const people = new Map(
@@ -357,6 +385,36 @@ function createStoreUpdate() {
       }
     }
     await context.storage.put(nameGameLogReadsKey(season), reads);
+    return reads;
+  }
+
+  /**
+   * Every player's numbers, but with the totals of each whose last games are behind them as his
+   * doc keeps them, so his Roster row and his sheet hold them together.
+   * @param {JobContext} context
+   * @param {number} season
+   * @param {SeasonNumbers} numbers
+   * @param {Record<string, PlayerRead>} gameLogReads
+   * @returns {Promise<SeasonNumbers>}
+   */
+  async function holdTotals(context, season, numbers, gameLogReads) {
+    const heldIds = Object.entries(gameLogReads)
+      .map(([id, read]) => /** @type {const} */ ([Number(id), read]))
+      .filter(([id, read]) => isLogBehind(read, countGames(numbers, id)))
+      .map(([id]) => id);
+    if (!heldIds.length) return numbers;
+    const held = {
+      ...numbers,
+      hitting: new Map(numbers.hitting),
+      pitching: new Map(numbers.pitching),
+      postseasonHitting: new Map(numbers.postseasonHitting),
+      postseasonPitching: new Map(numbers.postseasonPitching),
+    };
+    for (const id of heldIds) {
+      const kept = await readDoc(context.docs, namePlayerKey(season, id));
+      if (kept) for (const table of TOTALS) putTotals(held[table], id, kept[table]);
+    }
+    return held;
   }
 
   /**
@@ -406,8 +464,8 @@ function createStoreUpdate() {
     if (!isSameJson(stored, reads)) await context.storage.put(nameReadsKey(season), reads);
     const numbers = await readSeasonNumbers(context, season);
     if (!numbers) return;
-    await readDueGameLogs(context, season, numbers);
-    await saveRosters(context, season, numbers);
+    const gameLogReads = await readDueGameLogs(context, season, numbers);
+    await saveRosters(context, season, await holdTotals(context, season, numbers, gameLogReads));
   }
 
   /** @param {JobContext} context */

@@ -65,11 +65,15 @@ export const renderStatCells = (row, columns) =>
  * player kept without his id, whose name shows plainly.
  * @param {{ id?: number, name: string, number?: string }} player
  * @param {string} club
- * @param {{ lead?: Markup | string, note?: Markup | string }} [beside]
+ * @param {{ lead?: Markup | string, note?: Markup | string, isPlayingNow?: boolean }} [beside]
  */
-export const renderPlayerCell = (player, club, { lead = "", note = "" } = {}) =>
+export const renderPlayerCell = (
+  player,
+  club,
+  { lead = "", note = "", isPlayingNow = false } = {},
+) =>
   player.id
-    ? html`<td class="team row-button-cell">${lead}${renderPlayerButton(/** @type {{ id: number, name: string }} */ (player), club)}${note}</td>`
+    ? html`<td class="team row-button-cell">${lead}${renderPlayerButton(/** @type {{ id: number, name: string }} */ (player), club, { isPlayingNow })}${note}</td>`
     : html`<td class="team">${lead}<span class="box-name">${player.name}</span>${note}</td>`;
 
 /**

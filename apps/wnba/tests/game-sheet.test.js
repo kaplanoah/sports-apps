@@ -195,6 +195,26 @@ test("each team's top five scorers show in one table, minutes last, a tie going 
   assert.ok(!finalWings.some((row) => /fouls/.test(row)));
 });
 
+/** @param {any} markup */
+const countPlaying = (markup) => (markup.text.match(/data-player-playing="1"/g) ?? []).length;
+
+test("a box score of a game under way or ended today marks each top scorer who has played as playing now, and one from before today marks none", () => {
+  const live = readLiveBoxScore();
+  assert.equal(countPlaying(renderBoxScore(live)), 10);
+  const [leader] = [...live.home.players].sort((first, second) => second.points - first.points);
+  leader.minutes = 0;
+  const unplayed = renderBoxScore(live);
+  assert.equal(countPlaying(unplayed), 9);
+  assert.match(
+    unplayed.text,
+    new RegExp(`data-player="${leader.id}" data-player-team="[A-Z]+" data-player-name="[^"]+">`),
+  );
+
+  const final = readBoxScore("1042600112");
+  assert.equal(countPlaying(renderBoxScore(final, {}, true)), 10);
+  assert.equal(countPlaying(renderBoxScore(final)), 0);
+});
+
 /**
  * The preview of the Fever at the Aces, with the season and meetings it would have.
  * @param {Partial<Parameters<typeof renderPreview>[0]>} [parts]

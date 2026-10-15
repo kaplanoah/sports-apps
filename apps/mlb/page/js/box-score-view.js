@@ -4,6 +4,7 @@
 // and pitchers.
 
 import { html } from "#shared/html.js";
+import { isPlayingNow } from "#shared/playing-now.js";
 import { renderPlainClub, renderTeamDot } from "./clubs.js";
 import { renderRuns } from "./runs-view.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
@@ -34,7 +35,7 @@ const LINEUP_COLUMNS = /** @type {const} */ ([
   ["RBI", "rbi"],
 ]);
 
-/** @typedef {{ away: string, home: string }} BoxScoreGame */
+/** @typedef {{ away: string, home: string, state?: string, today?: boolean }} BoxScoreGame */
 
 /** @param {any} batter */
 const renderPosition = (batter) => html`<span class="box-pos">${batter.position}</span>`;
@@ -51,8 +52,9 @@ const sumBatting = (batters) =>
 /**
  * @param {any[]} batters
  * @param {string} club
+ * @param {boolean} isPlayingNow whether the game's players are playing now
  */
-const renderBatting = (batters, club) =>
+const renderBatting = (batters, club, isPlayingNow) =>
   renderStatTable(
     "Batters",
     BATTING_COLUMNS,
@@ -60,7 +62,7 @@ const renderBatting = (batters, club) =>
       ...batters.map(
         (batter) =>
           html`<tr class="${batter.isSub ? "box-sub" : ""}">
-            ${renderPlayerCell(batter, club, { note: renderPosition(batter) })}${renderStatCells(batter, BATTING_COLUMNS)}
+            ${renderPlayerCell(batter, club, { note: renderPosition(batter), isPlayingNow })}${renderStatCells(batter, BATTING_COLUMNS)}
           </tr>`,
       ),
       html`<tr class="box-total">
@@ -78,15 +80,16 @@ const renderDecision = (pitcher) =>
 /**
  * @param {any[]} pitchers
  * @param {string} club
+ * @param {boolean} isPlayingNow whether the game's players are playing now
  */
-const renderPitching = (pitchers, club) =>
+const renderPitching = (pitchers, club, isPlayingNow) =>
   renderStatTable(
     "Pitchers",
     PITCHING_COLUMNS,
     pitchers.map(
       (pitcher) =>
         html`<tr>
-          ${renderPlayerCell(pitcher, club, { note: renderDecision(pitcher) })}${renderStatCells(pitcher, PITCHING_COLUMNS)}
+          ${renderPlayerCell(pitcher, club, { note: renderDecision(pitcher), isPlayingNow })}${renderStatCells(pitcher, PITCHING_COLUMNS)}
         </tr>`,
     ),
     { opensRows: true },
@@ -166,13 +169,16 @@ function renderInnings(game, boxScore) {
  * @param {BoxScoreGame} game
  * @param {any} boxScore
  */
-const renderClubs = (game, boxScore) =>
-  SIDES.map((side) =>
+const renderClubs = (game, boxScore) => {
+  // A box score lists only the batters and pitchers who have played in its game.
+  const isPlaying = isPlayingNow(game.state, !!game.today);
+  return SIDES.map((side) =>
     renderSheetPart(
       renderPlainClub(game[side]),
-      html`${renderBatting(boxScore[side].batters, game[side])}${renderPitching(boxScore[side].pitchers, game[side])}`,
+      html`${renderBatting(boxScore[side].batters, game[side], isPlaying)}${renderPitching(boxScore[side].pitchers, game[side], isPlaying)}`,
     ),
   );
+};
 
 /**
  * @param {BoxScoreGame} game

@@ -20,8 +20,9 @@ const FINALS_KEY = "finals";
  */
 
 /**
- * When a player's numbers were last read, and how many games he had then.
- * @typedef {{ games: number, at: number, isSettled: boolean }} PlayerRead
+ * When a player's numbers were last read, how many games he had then, and, until a read of them
+ * answers again, when the last one failed.
+ * @typedef {{ games: number, at: number, isSettled: boolean, failedAt?: number }} PlayerRead
  */
 
 /**
