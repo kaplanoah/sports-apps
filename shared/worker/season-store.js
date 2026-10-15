@@ -485,6 +485,15 @@ export function forwardToStore(request, env, storePath) {
 }
 
 /**
+ * Whether the store answers, for the Worker's health.
+ * @param {any} env the Worker's bindings
+ */
+export async function isStoreAnswering(env) {
+  const response = await findStore(env).fetch(`https://store/store/${STATUS_KEY}`);
+  return response.ok;
+}
+
+/**
  * A document the store keeps, as null when it has none, for the Worker's own reads.
  * @param {any} env the Worker's bindings
  * @param {string} key a document's path, as rosters/2026-NYL

@@ -6,6 +6,7 @@
 // reads them again.
 
 import { setHtml } from "#shared/html.js";
+import { readPlayingNow } from "#shared/playing-now.js";
 import { watchRetries } from "#shared/retry.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
 import {
@@ -73,7 +74,10 @@ function renderSheet() {
   const subject = shownPlayer;
   if (!subject) return;
   const { player, isLoading, failure } = readPlayer(subject, session.year);
-  const showsOut = !isPastSeason() && isStillPlaying(session.season?.series ?? [], subject.team);
+  const showsOut =
+    !isPastSeason() &&
+    !subject.isPlayingNow &&
+    isStillPlaying(session.season?.series ?? [], subject.team);
   setHtml(findElement("playerTitle"), renderPlayerHeading(subject, player));
   setHtml(findElement("playerNote"), describePlayerNote(subject, player));
   setHtml(findElement("playerFacts"), renderPlayerFacts(player, isLoading) || "");
@@ -127,7 +131,12 @@ function keepSavedPlayer(subject, { year, player }) {
 function reopenPlayer(saved) {
   if (!saved || !isText(saved.id) || !isText(saved.name)) return false;
   if (typeof saved.team !== "string" || !Object.hasOwn(TEAMS, saved.team)) return false;
-  const subject = { id: saved.id, team: saved.team, name: saved.name };
+  const subject = {
+    id: saved.id,
+    team: saved.team,
+    name: saved.name,
+    isPlayingNow: saved.isPlayingNow === true,
+  };
   keepSavedPlayer(subject, saved);
   showPlayer(subject);
   return true;
@@ -152,10 +161,11 @@ function findPlayerButton(target) {
 function openOnTap(event) {
   const button = findPlayerButton(/** @type {Element} */ (event.target));
   const { player: id, playerTeam: team, playerName: name } = button?.dataset ?? {};
-  if (!id || !team || !name) return;
+  if (!button || !id || !team || !name) return;
+  const isPlayingNow = readPlayingNow(button.dataset);
   openSheet(findSheet(), {
     key: `${id}:${team}`,
-    show: () => showPlayer({ id, team, name }),
+    show: () => showPlayer({ id, team, name, isPlayingNow }),
   });
 }
 

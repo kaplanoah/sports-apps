@@ -5,7 +5,7 @@ import { composeState, session } from "../page/js/session.js";
 import { renderDivisionBlock, renderFieldBlock, renderNextCell } from "../page/js/standings.js";
 import { describeTeamStatus, findSeries, nameSeries } from "../page/js/bracket.js";
 import { renderCardNote, renderMatchupRow } from "../page/js/bracket-view.js";
-import { describeDrought, listRankedOrder } from "../page/js/clubs.js";
+import { describeDrought, listRankedOrder, listTitles } from "../page/js/clubs.js";
 import { keepRanking, keepSeenAt } from "../page/js/kept-on-device.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
 import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
@@ -769,6 +769,34 @@ test("the page shows the season's record, with a final fresh for ten minutes aft
     assert.equal(session.state.slate, undefined);
   } finally {
     Object.assign(session, { season });
+  }
+});
+
+test("this year's champion has its title, and is reigning, as soon as the season's bracket crowns it, without reading the seasons again", () => {
+  const final2025 = JSON.parse(
+    readFileSync(`${import.meta.dirname}/fixtures/2025-final.json`, "utf8"),
+  );
+  const shown2025 = buildSnapshot(final2025.responses, {
+    season: 2025,
+    now: Date.parse(final2025.now),
+  });
+  const bluejaysWin = {
+    ...shown2025,
+    series: { ...shown2025.series, WS: { winsA: 4, winsB: 3, started: true } },
+  };
+  const { currentSeason, activeYear, state } = session;
+  try {
+    Object.assign(session, {
+      currentSeason: 2025,
+      activeYear: 2025,
+      state: bluejaysWin,
+      trackedTitles: {},
+    });
+    assert.equal(listTitles("TOR")[0], 2025);
+    assert.equal(describeDrought("TOR"), "Reigning");
+    assert.equal(describeDrought("NYY"), "16 yrs ago");
+  } finally {
+    Object.assign(session, { currentSeason, activeYear, state, trackedTitles: {} });
   }
 });
 
@@ -1819,13 +1847,14 @@ const listScheduledGame = (game) => ({
   ...game,
 });
 
-test("games list: away from today, each club shows its record as of the game, and each starter with his arm, but no seed or race", () =>
+test("games list: away from today, a game played shows each club's record as of the game, one still to come its record now from the standings, as today's rows do, and each starter with his arm, but no seed or race", () =>
   checkInTimeZone(EASTERN, () => {
     session.state = { teams: { NYY: { league: "AL", seed: 4 } } };
     session.standings = {
       divisions: {
         "AL East": [
           { id: "NYY", w: 93, l: 68, gb: "-", wcgb: "-", elim: "-", wce: "-", clinch: "y" },
+          { id: "BAL", w: 80, l: 81, gb: "13", wcgb: "9", elim: "E", wce: "E" },
         ],
       },
     };
@@ -1844,7 +1873,6 @@ test("games list: away from today, each club shows its record as of the game, an
         date: "2026-09-26",
         state: "pre",
         start: "2026-09-26T17:05:00Z",
-        records: ["79-82", "93-68"],
         starters: [null, { id: 3, name: "Rodón", hand: "L" }],
       }),
     ];
@@ -1854,11 +1882,11 @@ test("games list: away from today, each club shows its record as of the game, an
     ]);
     assert.deepEqual(describeGameList(SEASON_SLATE, "2026-09-26", schedule), [
       "Sat, Sep 26",
-      "Orioles 79-82 1:05 PM Yankees 93-68 Rodón L",
+      "Orioles 80-81 1:05 PM Yankees 93-68 Rodón L",
     ]);
     assert.deepEqual(describeGameList(SEASON_SLATE, "2026-09-24", schedule), [
       "Today • Thu, Sep 24",
-      "Orioles 7:05 PM Yankees 4 seed 93-68 y TBD TBD",
+      "Orioles 80-81 7:05 PM Yankees 4 seed 93-68 y TBD TBD",
     ]);
   }));
 
@@ -1909,6 +1937,30 @@ test("games list: a game the slate carries keeps the schedule's records under th
       "Yesterday • Wed, Sep 23",
       "Orioles 79-81 2 - 6 Final Yankees 93-67",
     ]);
+  }));
+
+test("a coming game's sheet heads its Game section with each club's record now, from the standings, as its row does", () =>
+  checkInTimeZone(EASTERN, () => {
+    session.state = { teams: {}, slate: SEASON_SLATE };
+    session.standings = {
+      divisions: {
+        "AL East": [
+          { id: "NYY", w: 93, l: 68, gb: "-", wcgb: "-", elim: "-", wce: "-" },
+          { id: "BAL", w: 80, l: 81, gb: "13", wcgb: "9", elim: "E", wce: "E" },
+        ],
+      },
+    };
+    const game = listScheduledGame({
+      date: "2026-09-26",
+      state: "pre",
+      start: "2026-09-26T17:05:00Z",
+    });
+    assert.equal(
+      stripTags(String(renderGameFaceOff(game)))
+        .replace(/\s+/g, " ")
+        .trim(),
+      "Orioles80-81 1:05 PM Yankees93-68",
+    );
   }));
 
 test("a past game's sheet heads its Game section with each club's record as of the game", () => {

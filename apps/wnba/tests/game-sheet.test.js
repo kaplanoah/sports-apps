@@ -145,6 +145,22 @@ test("team stats face off with each side's shooting, and the better side leads e
   assert.deepEqual(readTapeBars(markup, "Points in the paint"), ["45", "lead 100"]);
 });
 
+test("with the lead through the game on the sheet, Biggest lead says what its chart marks, not the league's count", () => {
+  /** @type {import("../page/js/lead-chart.js").Lead} */
+  const lead = {
+    periods: 4,
+    isOver: true,
+    scores: [
+      [0, 0, 0],
+      [60, 5, 0],
+      [120, 5, 9],
+      [200, 20, 9],
+    ],
+  };
+  const text = readText(renderBoxScore(readBoxScore("1042600122"), { lead }));
+  assert.match(text, /Biggest lead: Aces 11, Fever 4 \| Lead changes: 4/);
+});
+
 test("fewer turnovers lead, and a tie leads neither way", () => {
   assert.deepEqual(readTapeBars(renderBoxScore(readBoxScore("1042600122")), "Turnovers"), [
     "100",
@@ -177,6 +193,26 @@ test("each team's top five scorers show in one table, minutes last, a tie going 
   assert.match(readText(renderBoxScore(readLiveBoxScore())), /Timeouts left: Valkyries 0, Wings 1/);
   const [, finalWings] = listPlayerGroups(renderBoxScore(readBoxScore("1042600112")));
   assert.ok(!finalWings.some((row) => /fouls/.test(row)));
+});
+
+/** @param {any} markup */
+const countPlaying = (markup) => (markup.text.match(/data-player-playing="1"/g) ?? []).length;
+
+test("a box score of a game under way or ended today marks each top scorer who has played as playing now, and one from before today marks none", () => {
+  const live = readLiveBoxScore();
+  assert.equal(countPlaying(renderBoxScore(live)), 10);
+  const [leader] = [...live.home.players].sort((first, second) => second.points - first.points);
+  leader.minutes = 0;
+  const unplayed = renderBoxScore(live);
+  assert.equal(countPlaying(unplayed), 9);
+  assert.match(
+    unplayed.text,
+    new RegExp(`data-player="${leader.id}" data-player-team="[A-Z]+" data-player-name="[^"]+">`),
+  );
+
+  const final = readBoxScore("1042600112");
+  assert.equal(countPlaying(renderBoxScore(final, {}, true)), 10);
+  assert.equal(countPlaying(renderBoxScore(final)), 0);
 });
 
 /**

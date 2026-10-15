@@ -1,9 +1,10 @@
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
+import { isPlayingNow } from "#shared/playing-now.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderPendingTapeRow, renderTapeRow } from "#shared/tape.js";
 import { renderClub } from "./clubs.js";
-import { renderLeadChart, renderPendingLeadChart } from "./lead-chart.js";
+import { measureBiggestLeads, renderLeadChart, renderPendingLeadChart } from "./lead-chart.js";
 import { renderPlayerButton } from "./player-button.js";
 import {
   findLeader,
@@ -158,10 +159,25 @@ function describeCount(box, { key, label, isLowerBetter }) {
   };
 }
 
-/** @param {BoxScore} box */
-function describeGameFlow(box) {
-  const leads = SIDES.filter((place) => box[place].stats.biggestLead > 0).map(
-    (place) => `${nameTeam(box[place].team)} ${box[place].stats.biggestLead}`,
+/**
+ * The biggest lead each side had: as the lead chart marks them while the sheet has the lead, so
+ * the two agree, and otherwise as the league counts them.
+ * @param {BoxScore} box
+ * @param {import("./lead-chart.js").Lead | null} lead
+ */
+function readBiggestLeads(box, lead) {
+  if (lead && lead.scores.length > 1) return measureBiggestLeads(lead);
+  return { away: box.away.stats.biggestLead, home: box.home.stats.biggestLead };
+}
+
+/**
+ * @param {BoxScore} box
+ * @param {import("./lead-chart.js").Lead | null} lead
+ */
+function describeGameFlow(box, lead) {
+  const biggest = readBiggestLeads(box, lead);
+  const leads = SIDES.filter((place) => biggest[place] > 0).map(
+    (place) => `${nameTeam(box[place].team)} ${biggest[place]}`,
   );
   const timeouts = SIDES.map((place) => `${nameTeam(box[place].team)} ${box[place].timeouts}`);
   return [
@@ -172,8 +188,11 @@ function describeGameFlow(box) {
   ].filter(Boolean);
 }
 
-/** @param {BoxScore} box */
-function renderTeamStats(box) {
+/**
+ * @param {BoxScore} box
+ * @param {import("./lead-chart.js").Lead | null} lead
+ */
+function renderTeamStats(box, lead) {
   const rows = [
     ...SHOOTING.map((measure) => describeShooting(box, measure)),
     ...COUNTS.map((measure) => describeCount(box, measure)),
@@ -181,7 +200,7 @@ function renderTeamStats(box) {
   return html`${renderTapeTeams(box.away.team, box.home.team)}
     <div class="tape">
       ${rows.map(renderTapeRow)}
-      <p class="tape-note">${joinWithSeparator(describeGameFlow(box))}</p>
+      <p class="tape-note">${joinWithSeparator(describeGameFlow(box, lead))}</p>
     </div>`;
 }
 
@@ -214,16 +233,19 @@ const pickTopScorers = (players) =>
     .slice(0, TOP_PERFORMERS);
 
 /**
+ * A box score lists every player on a team, so only one with minutes has played in its game.
  * @param {BoxTeam} side
  * @param {boolean} isLive
+ * @param {boolean} isPlaying whether the game's players are playing now
  */
-function renderTopScorers(side, isLive) {
+function renderTopScorers(side, isLive, isPlaying) {
   const rows = pickTopScorers(side.players).map(
     (player) => html`<tr>
       <th scope="row">
         ${renderPlayerButton(
           { ...player, team: side.team },
           html`<span class="first-name">${player.firstName}</span> ${player.lastName}`,
+          { isPlayingNow: isPlaying && player.minutes > 0 },
         )}${renderFouls(player, isLive)}
       </th>
       <td>${player.points}</td>
@@ -270,16 +292,18 @@ function renderLeadPart(teams, { lead = null, isLeadLoading = false }) {
 /**
  * @param {BoxScore} box
  * @param {LeadState} [leadState]
+ * @param {boolean} [isToday] whether the game is today's
  */
-export function renderBoxScore(box, leadState = {}) {
+export function renderBoxScore(box, leadState = {}, isToday = false) {
   const isLive = box.state === "live";
+  const isPlaying = isPlayingNow(box.state, isToday);
   const teams = { away: box.away.team, home: box.home.team };
   return html`${renderSheetPart("By quarter", renderLineScore(box))}
     ${renderLeadPart(teams, leadState)}
-    ${renderSheetPart("Team stats", renderTeamStats(box), isLive && "So far")}
+    ${renderSheetPart("Team stats", renderTeamStats(box, leadState.lead ?? null), isLive && "So far")}
     ${renderSheetPart(
       "Top scorers",
-      renderScorersTable(SIDES.map((place) => renderTopScorers(box[place], isLive))),
+      renderScorersTable(SIDES.map((place) => renderTopScorers(box[place], isLive, isPlaying))),
     )}`;
 }
 

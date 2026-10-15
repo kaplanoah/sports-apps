@@ -139,7 +139,7 @@ function renderDetails(opened, game) {
     return renderSheetMessage("The league hasn't posted a box score for this game yet");
   if (opened.error) return renderRetryBlock("box score", classifyReadFailure(opened.error));
   return opened.details
-    ? renderBoxScore(opened.details, opened)
+    ? renderBoxScore(opened.details, opened, isToday(game))
     : renderPendingBoxScore(teams, opened);
 }
 

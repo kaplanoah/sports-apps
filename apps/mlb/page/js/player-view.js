@@ -19,6 +19,7 @@ import {
   describePlateAppearancesToQualify,
   measureInningsProgress,
   measurePlateAppearancesProgress,
+  readInnings,
 } from "./qualifying.js";
 import { describeGamePitching, formatInnings } from "./stat-table.js";
 
@@ -33,7 +34,9 @@ import { describeGamePitching, formatInnings } from "./stat-table.js";
  * starter, the qualified starters and his side of a pitching matchup. `isUnkept` says the store
  * keeps no sheet for him, as for a player on no club's roster. `clubGames` counts his club's games,
  * which a starter needs as many innings as to qualify.
- * @typedef {{ player: Player | null, hitters: any, starters: any, side: any, isUnkept: boolean, isLoading: boolean, failure?: import("#shared/retry.js").ReadFailure | null, clubGames?: number | null }} ShownPlayer
+ * @typedef {{ player: Player | null, hitters: any, starters: any, side: any, isUnkept: boolean, isLoading: boolean, failure?: import("#shared/retry.js").ReadFailure | null, clubGames?: number | null, isPlayingNow?: boolean }} ShownPlayer
+ *   `isPlayingNow` says a box score showed him playing now, so the sheet leaves out his injured
+ *   list box (`#shared/playing-now.js`)
  */
 
 /**
@@ -246,7 +249,27 @@ function renderHitting(player, hitters, clubGames) {
 }
 
 /**
- * A starter's ranked numbers, among the qualified starters, from his matchup side.
+ * A starter's ERA, K/9, and BB/9 from his season's line, the one his totals row shows, so the sheet
+ * has one of each, and his fastball from his matchup side, which alone has it.
+ * @param {any} pitching his season's pitching line
+ * @param {any} side his matchup side
+ */
+function readRankedLine(pitching, side) {
+  const innings = readInnings(pitching.inningsPitched ?? 0);
+  const per9 = (/** @type {number | undefined} */ count) =>
+    innings > 0 && count != null ? Math.round(((count * 9) / innings) * 10) / 10 : null;
+  const era = Number(pitching.era);
+  return {
+    era: Number.isFinite(era) ? era : null,
+    k9: per9(pitching.strikeOuts),
+    bb9: per9(pitching.baseOnBalls),
+    speed: side?.line?.speed ?? null,
+  };
+}
+
+/**
+ * A starter's ranked numbers, among the qualified starters, from his season's line and his
+ * matchup side.
  * @param {Player} player
  * @param {any} starters the store's qualified starters
  * @param {any} side his matchup side
@@ -256,8 +279,9 @@ function renderStarterRanks(player, starters, side, clubGames) {
   const pool = starters?.starters ?? [];
   const isRanked = pool.some((/** @type {any} */ starter) => starter.id === player.id);
   const progress = measureInningsProgress(player.pitching.inningsPitched, clubGames);
+  const line = readRankedLine(player.pitching, side);
   const rows = STARTER_RANKS.flatMap(({ label, key, write, isFewestFirst }) => {
-    const value = side?.line?.[key] == null ? null : Number(side.line[key]);
+    const value = line[key] == null ? null : Number(line[key]);
     if (value == null || Number.isNaN(value)) return [];
     const values = pool
       .map((/** @type {any} */ starter) => starter[key])
@@ -420,12 +444,13 @@ export function renderPlayerBody(shown) {
   const pitching = player.pitching
     ? renderPitching(player, shown, isTwoWay ? "Pitching" : "Regular season")
     : html``;
+  const outBox = shown.isPlayingNow ? html`` : renderOutBox(player);
   if (
     !player.hitting &&
     !player.pitching &&
     !player.postseasonHitting &&
     !player.postseasonPitching
   )
-    return html`${renderOutBox(player)}<p class="sheet-message">No games yet this season</p>`;
-  return html`${renderOutBox(player)}${renderPostseason(player)}${hitting}${pitching}`;
+    return html`${outBox}<p class="sheet-message">No games yet this season</p>`;
+  return html`${outBox}${renderPostseason(player)}${hitting}${pitching}`;
 }

@@ -63,6 +63,22 @@ function findBiggestLead(margins, sign) {
   );
 }
 
+/** @param {Lead} lead */
+const listMargins = (lead) => lead.scores.map(([at, away, home]) => ({ at, margin: away - home }));
+
+/**
+ * The biggest lead each side had, as the chart marks them, each as the points it led by, so the
+ * box score's Biggest lead says what the chart shows.
+ * @param {Lead} lead
+ */
+export function measureBiggestLeads(lead) {
+  const margins = listMargins(lead);
+  return {
+    away: findBiggestLead(margins, 1).margin,
+    home: -findBiggestLead(margins, -1).margin,
+  };
+}
+
 /**
  * @param {string} name
  * @param {number} margin
@@ -160,7 +176,7 @@ export const renderPendingLeadChart = (teams) =>
  */
 export function renderLeadChart(lead, teams) {
   const length = measureGame(lead.periods);
-  const margins = lead.scores.map(([at, away, home]) => ({ at, margin: away - home }));
+  const margins = listMargins(lead);
   const awayBest = findBiggestLead(margins, 1);
   const homeBest = findBiggestLead(margins, -1);
   const reach = chooseReach(Math.max(awayBest.margin, -homeBest.margin));

@@ -61,7 +61,11 @@ import { readTeamPlayoffs, renderChip, renderFinishedGame, renderNextGame } from
  * @property {Record<string, number>} playoffPoints her points in each playoff game she played
  * @property {RegularSeason | null} regularSeason
  */
-/** @typedef {{ id: string, team: string, name: string }} PlayerSubject */
+/**
+ * Who the sheet shows, from the row that opened it. `isPlayingNow` says a box score showed her
+ * playing now (`#shared/playing-now.js`).
+ * @typedef {{ id: string, team: string, name: string, isPlayingNow?: boolean }} PlayerSubject
+ */
 
 const POSITION_WORDS = { G: "Guard", F: "Forward", C: "Center" };
 
@@ -414,7 +418,8 @@ const renderPending = () =>
 /**
  * The sheet's parts under her name, or stand-ins while they load, or why they didn't.
  * @param {{ player: Player | null, isLoading: boolean, failure?: import("#shared/retry.js").ReadFailure | null, season: Season | null, isPastSeason: boolean, showsOut: boolean, now: number }} shown
- *   `showsOut` says whether she shows as out, as she does only while her team still plays
+ *   `showsOut` says whether she shows as out, as she does only while her team still plays and
+ *   no box score showed her playing now
  */
 export function renderPlayerBody({
   player,

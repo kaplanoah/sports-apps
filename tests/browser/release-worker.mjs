@@ -16,6 +16,7 @@ export function buildReleaseServer(app, release) {
     pageFiles: listBundledFiles(app, release),
     serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
+    isStoreAnswering: async () => false,
   });
   return async (url) =>
     worker.fetch(new Request(new URL(`/${APP_KEY}${url.pathname}${url.search}`, url)), {

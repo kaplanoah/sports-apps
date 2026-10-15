@@ -25,6 +25,10 @@
   so a Node test reaches them, as `shared/page/search-reading.js` does for what search shows as words are typed.
 - A rule or a limit two places share lives in one place,
   like the two minutes away that closes a sheet or the search, so the places can't drift apart.
+- A fact two places show, like a game's inning or a club's record, comes from one read, kept in one document,
+  so the places can't trail each other, as a game's row and its field did while one read MLB's schedule and the other its live feed.
+  Where one read would cost more than the store's request budget allows, the later place waits for the earlier, or hides, rather than reading on its own.
+  A fix of two places that trailed adds a test that they agree.
 - Name variables with full words that are reasonable for their types.
   No opaque abbreviations.
 - Default to no comments.
@@ -125,10 +129,15 @@
   or on a starter's name in a matchup, opens over the sheet it's in,
   with his facts, then, while he's on the injured list, a box with his stay and why,
   from ESPN's injury report, read for the whole league once an hour (`worker/src/injuries.js`,
-  with the shared `injury-report.js` the WNBA's reads too), his postseason,
+  with the shared `injury-report.js` the WNBA's reads too),
+  but not when the box score that opened him shows him playing in a game under way or ended today,
+  which the report hasn't caught up with (the shared `playing-now.js`), his postseason,
   and his regular season, a hitter's ranked among MLB's ranked hitters and a starter's among its qualified starters,
   with what he throws, and his last few games, from the last few weeks of his game log,
-  read only as his games add up, which the same job keeps for each player on a roster (`page/js/player-sheet.js`,
+  read only as his games add up, which the same job keeps for each player on a roster,
+  holding his season's totals, on his sheet and his club's Roster,
+  as they were while his game log is still to read the game they count,
+  so the two never show different games, unless that read failed (`page/js/player-sheet.js`,
   `player-view.js`, and `worker/src/players.js`), and each game's sheet from its row,
   whose Game section shows the game, its starters on a line that slides to its Matchup,
   before first pitch its clubs' season series (`page/js/season-series.js`),
@@ -153,7 +162,9 @@
   newest first, and reads with each update for a game a page has open (`worker/src/box-score.js`,
   `game-details-updater.js`, and `watched-games.js`), whose Games tab lists every game of the season,
   the All-Star Game too, under a strip of its days, each day's heading held under the strip while its games pass,
-  and only the days near the screen drawn whole, each game away from today showing each club's record as of the game and its starter with his arm,
+  and only the days near the screen drawn whole, each game away from today showing its starter with his arm,
+  and each club's record: as of the game once it's been played, from the schedule,
+  and its record now for a game still to come, from the standings, as today's rows show it,
   each postseason game its series as it stood at the game, or its game until both clubs are known,
   and If necessary under one MLB may not need, and each final its inning when it didn't end in the ninth (`page/js/series-games.js`),
   from the season's whole schedule, which the store keeps a month to a document in `schedules-<year>`,
@@ -204,7 +215,10 @@
   `page/js/roster-section.js`, and `roster-view.js`), and each player's sheet,
   which a tap on her name in a roster, a box score, or a list of leaders opens over the sheet it's in,
   with her facts from that roster, then, while she is out, a box saying why,
-  with RotoWire's sentence on it, her last game and her points in each playoff game from every player's game logs,
+  with RotoWire's sentence on it,
+  but not when the box score that opened her shows her playing in a game under way or ended today,
+  which the injury report hasn't caught up with (the shared `playing-now.js`),
+  her last game and her points in each playoff game from every player's game logs,
   and her regular season's averages ranked among the players who meet the WNBA's rule for its leaders,
   from every player's totals (`worker/src/player.js`, `page/js/player-sheet.js`,
   and `player-view.js`), both of which the store keeps for the current season and each one it keeps from before,
@@ -323,7 +337,9 @@
   and colors from its `page/styles.css` instead of inventing new ones.
 - Worker:
   `worker/src/`.
-  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` is a 404 without the key.
+  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key.
+  `health` says whether the Worker and its store answer, 200 or 503 with the release's commit,
+  so an uptime monitor can watch it without holding a secret, and asks the store once a minute at most however often it's hit (`shared/worker/health.js`).
   An alarm in its Durable Object (`worker/src/season-updater.js`) keeps the current season's saved data up to date from the league,
   less often while no page has its socket open, and a page that opens brings the next update forward; the page only reads it.
   When the Worker has an `ACCESS_CODE` secret, the page's address shows the app's `page/gate.html`,
@@ -430,7 +446,9 @@
   in `spring-scroll.js`, each game's row and its button that opens the game wherever the row is tapped in `game-row.js`,
   a row that opens something tinting while a finger or the mouse presses it,
   a moment after a finger lands so a scroll never tints one, and a tapped search row's search waiting for its tint to show,
-  as an iPhone's lists do, in `press.js`, an All-Star team's star,
+  as an iPhone's lists do, in `press.js`,
+  a player a box score shows in a game under way or ended today marked on his button for the sheet it opens,
+  which then leaves out the injury report's box, in `playing-now.js`, an All-Star team's star,
   in its uniform's color and set in as a dot is, in `all-star.js`,
   the line of channels a game's sheet says it's on, with their logos,
   in `network-logos.js` and `networks/`, opening a sheet at its top,
@@ -607,7 +625,7 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
 7. **Docs.** Add the app to the README's table and its setup section's list of apps, and to the "Apps" bullet above.
 8. **Ship it.** Open it as a `feat:` PR.
    The app starts at version 1.0.0, and the merge's deploy creates its Worker,
-   which answers nothing but `robots.txt` until `npm run set-app-key -- <app>` gives it a key and prints the page's address.
+   which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app>` gives it a key and prints the page's address.
    Ask the owner to add that address, and the page's code once it has one, as its secrets in the `production` environment,
    so each deploy and the `Watch apps` workflow open its page.
 
