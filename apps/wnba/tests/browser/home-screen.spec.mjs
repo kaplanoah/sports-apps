@@ -1,5 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 const IPHONE_AGENT =
@@ -147,12 +148,12 @@ test.describe("on an Android phone, in the browser", () => {
 
   test("the standings' pill holds just under the bar as the page scrolls", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const barHeight = (await page.locator("#homeScreenBar").boundingBox()).height;
 
     await page.evaluate(() => scrollTo({ top: 400, behavior: "instant" }));
-    await expect(page.locator("#standings-bar")).toHaveClass(/stuck/);
-    const pillBar = await page.locator("#standings-bar").boundingBox();
+    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+    const pillBar = await page.locator("#bracketStandingsPill").boundingBox();
     expect(Math.round(pillBar.y)).toBe(Math.round(barHeight));
   });
 

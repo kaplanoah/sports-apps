@@ -53,6 +53,7 @@ import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { fillSeasonPicker } from "#shared/season-picker.js";
 import { startAppearance } from "#shared/appearance.js";
+import { showSeasonPart, startBracketStandings } from "#shared/bracket-standings.js";
 import { LOOKS } from "./looks.js";
 import { SNAPSHOT_VERSION } from "./snapshot.js";
 
@@ -129,15 +130,19 @@ function openGameAt(id, section) {
 }
 
 /**
- * Opens a place a search lists: a tab, one of the Standings tab's parts, a game's section, or
- * settings at one of its rows.
+ * Opens a place a search lists: a tab, the bracket or standings in theirs, one of the standings'
+ * parts, a game's section, or settings at one of its rows.
  * @param {string} key
  */
 function openSearchPlace(key) {
   const [place, detail] = key.split(":");
   if (place === "tab") openPageTab(detail);
-  else if (place === "standings") {
-    openPageTab("standings");
+  else if (place === "season") {
+    openPageTab("bracket-standings");
+    showSeasonPart(/** @type {import("#shared/bracket-standings.js").SeasonPart} */ (detail));
+  } else if (place === "standings") {
+    openPageTab("bracket-standings");
+    showSeasonPart("standings");
     showStandingsPart(detail);
   } else if (place === "highlights" || place === "matchup") openGameAt(detail, place);
   else openSettings(key);
@@ -180,6 +185,7 @@ const listSearchDays = (found, now) =>
 
 function wireControls() {
   startPageTabs();
+  startBracketStandings();
   setTabStart("games", returnGamesToToday);
   startDayStrip(/** @type {HTMLElement} */ (document.getElementById("seasonGames")));
   startGameSearch(/** @type {HTMLElement} */ (document.getElementById("gameSearch")), {

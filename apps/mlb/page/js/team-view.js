@@ -38,7 +38,7 @@ import { renderLeaders } from "./leaders-view.js";
 import { countClubGames } from "./qualifying.js";
 import { findClubRoster } from "./roster-section.js";
 import { nameRound } from "./series-games.js";
-import { session } from "./session.js";
+import { isFieldSet, session } from "./session.js";
 import { listSlateGames } from "./slate.js";
 import { SEASON_GAMES } from "./snapshot.js";
 import { describeDivisionLead } from "./standings.js";
@@ -67,8 +67,6 @@ function findDivision(id) {
 }
 
 const countGamesLeft = (row) => SEASON_GAMES - row.w - row.l;
-
-const isFieldSet = () => session.state?.projected === false;
 
 const isInSetField = (id) => isFieldSet() && !!session.state.teams?.[id];
 

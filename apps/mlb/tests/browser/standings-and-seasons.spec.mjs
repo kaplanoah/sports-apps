@@ -2,6 +2,7 @@ import {
   test,
   expect,
   openApp,
+  openBracket,
   openSettings,
   buildFixtureSnapshot,
   chooseSeason,
@@ -15,6 +16,7 @@ import { listAnimations } from "../../../../tests/browser/animations.mjs";
 import { measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -44,7 +46,7 @@ test("renders the bracket, standings and stamp from the season's record the Work
   await expect(stampLines.first()).toHaveText(/^NOW\s*Reds @ Braves 5-5 in the 5th/);
   await expect(stampLines.nth(1)).toHaveText(/^Next first pitch /);
 
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap .div-block")).toHaveCount(8);
   await expect(page.locator("#standingsWrap")).toContainText("AL East");
   expect(app.countSnapshotRequests()).toBe(0);
@@ -54,7 +56,7 @@ test("standings open on each league's playoff field, and every table lines up", 
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
 
   const fields = page.locator("#standingsWrap .field-grid .div-block");
   await expect(fields).toHaveCount(2);
@@ -76,7 +78,7 @@ test("the standings show each club's game under way, and a delay in gold", async
   const delayedGame = snapshot.slate.today.games.find((game) => game.home === "BOS");
   delayedGame.delay = "Delayed: Rain";
   await openApp(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const cells = page.locator("#standingsWrap td.next-cell");
 
   const leading = cells.filter({ hasText: /^Up 3 @ NYY in the 6th$/ });
@@ -93,7 +95,7 @@ test("the leagues' standings sit side by side only when a game under way fits", 
 }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const fields = page.locator("#standingsWrap .field-grid .div-block");
   const readTops = () =>
     fields.evaluateAll((blocks) => blocks.map((block) => block.getBoundingClientRect().top));
@@ -192,7 +194,7 @@ test("a warning MLB's feed brings eases the header to its new height", async ({ 
 });
 
 test("with no field yet, the bracket says it fills in once MLB projects one", async ({ page }) => {
-  await openApp(page, { liveAvailable: false });
+  await openBracket(page, { liveAvailable: false });
 
   await expect(page.getByRole("heading", { name: "No playoff field yet" })).toBeVisible();
   expect(await listStrayPeriods(page)).toEqual([]);
@@ -204,10 +206,10 @@ test("with no field yet, the bracket says it fills in once MLB projects one", as
 });
 
 test("the bracket and standings scroll from the keyboard, even in Safari", async ({ page }) => {
-  await openApp(page);
+  await openBracket(page);
   await expect(page.getByRole("region", { name: "Bracket" })).toHaveAttribute("tabindex", "0");
 
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.getByRole("region", { name: "AL East standings" })).toHaveAttribute(
     "tabindex",
     "0",
@@ -255,7 +257,7 @@ test("a stored field short a league says there's no field instead of breaking th
   const teams = Object.fromEntries(
     clubs.map((id, index) => [id, { league: index < 7 ? "AL" : "NL", seed: (index % 6) + 1 }]),
   );
-  await openApp(page, {
+  await openBracket(page, {
     liveAvailable: false,
     store: { "seasons/2026": { year: 2026, teams, series: {}, log: [] } },
   });
@@ -288,7 +290,7 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
 });
 
 test("the page shows the season the store says is current", async ({ page }) => {
-  await openApp(page, {
+  await openBracket(page, {
     now: "2027-02-19T15:00:00Z",
     store: {
       "live/current": { season: 2027 },
@@ -302,7 +304,7 @@ test("the page shows the season the store says is current", async ({ page }) => 
 });
 
 test("a page left open turns over when the store moves on to a new season", async ({ page }) => {
-  const app = await openApp(page, {
+  const app = await openBracket(page, {
     now: "2027-02-19T15:00:00Z",
     store: { "live/current": { season: 2026 } },
     snapshots: { 2027: buildEmptySeasonSnapshot(2027, "2027-02-19") },

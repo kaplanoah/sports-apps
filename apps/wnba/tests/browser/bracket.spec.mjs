@@ -1,5 +1,6 @@
 import { TEAMS } from "../../page/js/teams.js";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -94,7 +95,7 @@ test.describe("on a phone, the bracket", () => {
     await expect(page.locator('.round-dots [data-round="1"]')).toHaveClass("on");
 
     await page.getByRole("tab", { name: "Games" }).click();
-    await page.getByRole("tab", { name: "Bracket" }).click();
+    await openSeasonPart(page, "Bracket");
     await expect(readRoundName(page, 2)).toBeInViewport({ ratio: 1 });
   });
 
@@ -142,10 +143,10 @@ test.describe("on a phone, the bracket", () => {
   test("spreads its cards alike to reach the round dots, with each round's name just above them", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: PHONE.width, height: 800 });
+    await page.setViewportSize({ width: PHONE.width, height: 860 });
     await openApp(page);
     const gaps = await readCardGaps(page);
-    expect(gaps.aboveCards).toBeCloseTo(14, 0);
+    expect(gaps.aboveCards).toBeCloseTo(16, 0);
     expect(gaps.between[0]).toBeGreaterThan(TIGHTEST_CARD_GAP);
     for (const gap of gaps.between) expect(gap).toBeCloseTo(gaps.between[0], 0);
     expect(gaps.lastNoteToDots).toBeGreaterThanOrEqual(12);

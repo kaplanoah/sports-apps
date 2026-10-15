@@ -4,9 +4,9 @@ import {
   expectAtRest,
   forgetResizeLoops,
   listResizeLoops,
-  swipeToNextList,
   waitForLoadToSettle,
 } from "../../../../tests/browser/at-rest.mjs";
+import { findSeasonPill } from "../../../../tests/browser/season-tab.mjs";
 
 // In full motion, every slide ends, and then nothing moves or asks for a frame. Each test counts
 // ResizeObserver loops from its first gesture, since what the page does as it loads isn't theirs.
@@ -42,26 +42,22 @@ test("a tab tap, a tap on a day, and a tap on Today each leave the page at rest,
   expect(await readResizeLoops()).toEqual([]);
 });
 
-test("a pill tap and a swipe between the standings' lists each leave the page at rest", async ({
+test("a tap on the pill between the bracket and the standings leaves the page at rest each way", async ({
   page,
-  browserName,
 }) => {
   const readResizeLoops = await listResizeLoops(page);
   await openApp(page);
   await waitForLoadToSettle(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  await expect(page.locator("#standings-league")).toBeInViewport();
+  await expect(page.locator("#bracketWrap .bracket")).toBeInViewport();
   await expectAtRest(page);
   await forgetResizeLoops(page);
 
-  await page.getByRole("tab", { name: "East" }).click();
-  await expect(page.locator("#standings-east")).toBeInViewport();
-  await expect(page.locator("#standings-pages")).toHaveAttribute("data-settled-by", "scrollend");
+  await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
+  await expect(page.locator("#standings-league")).toBeInViewport();
   await expectAtRest(page);
 
-  await swipeToNextList(page, browserName, { x: 340, y: 500 });
-  await expect(page.getByRole("tab", { name: "West" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("#standings-west")).toBeInViewport();
+  await findSeasonPill(page).getByRole("tab", { name: "Bracket" }).click();
+  await expect(page.locator("#bracketWrap .bracket")).toBeInViewport();
   await expectAtRest(page);
 
   expect(await readResizeLoops()).toEqual([]);

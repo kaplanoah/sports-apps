@@ -1,5 +1,6 @@
 import { test, expect, openApp, openGameSheet, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -11,7 +12,7 @@ const SHEET_READS = ["/box-score", "/preview", "/lead", "/roster", "/player", "/
  * @param {string} name
  */
 async function openTeamRoster(page, name) {
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page
     .getByRole("button", { name: `Team details: ${name}` })
     .first()

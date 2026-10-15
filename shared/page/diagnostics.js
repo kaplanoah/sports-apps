@@ -18,7 +18,7 @@ import {
 } from "./days.js";
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
 import { html, joinWithSeparator, setHtml } from "./html.js";
-import { describeAnimations, describeShownDayLists, describeShownPagers } from "./pager-log.js";
+import { describeAnimations, describeShownDayLists } from "./list-log.js";
 import { loadRelease } from "./release.js";
 import { watchTimeAway } from "./resume.js";
 import { forgetServiceWorkerSteps, readServiceWorkerSteps } from "./service-worker.js";
@@ -238,11 +238,7 @@ function finishRecord() {
  */
 const listRecords = () => [...readRecords(), ...(record ? [sortLines(record)] : [])].toReversed();
 
-const describeShownLists = () => [
-  ...describeShownPagers(),
-  ...describeShownDayLists(),
-  describeAnimations(),
-];
+const describeShownLists = () => [...describeShownDayLists(), describeAnimations()];
 
 function sampleParts() {
   if (!record) return;
@@ -285,8 +281,11 @@ function watchTimings() {
   for (const type of ["paint", "resource"]) observer.observe({ type, buffered: true });
 }
 
+// A tab named for what it opens on holds a face for each, only one of them shown.
 const readShownTab = () =>
-  document.querySelector("nav.tabs [role=tab][aria-selected=true]")?.textContent?.trim() ?? "";
+  document
+    .querySelector("nav.tabs [role=tab][aria-selected=true] .tab-label:not([hidden] *)")
+    ?.textContent?.trim() ?? "";
 
 /**
  * A line for each sheet in an open dialog's row, saying which one its dialog shows.

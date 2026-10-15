@@ -104,6 +104,11 @@ nav.tabs {
 .edge-fade {
   display: none;
 }
+/* A tab named for what it opens on, like Standings or Bracket, holds a face for each, its icon and
+   name, which lays them out as the tab's own while it shows (bracket-standings.js). */
+.tab-face:not([hidden]) {
+  display: contents;
+}
 /* Only the tabs themselves, and search, a tab beside them: the tabs' row can hold other buttons
    too. */
 .tab-list button,

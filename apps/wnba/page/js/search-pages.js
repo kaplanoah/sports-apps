@@ -1,8 +1,8 @@
 // What the WNBA's search finds besides games: each team's sheet, with its record, and its Roster,
 // each player on a team's roster in the season shown, and who is out, from the list of players the
-// store keeps for the season, a final's Highlights, the Bracket and News tabs, with each team's
-// newest stories, the Standings tab's lists, and settings and each setting the page shows. Runs in
-// the page and in Node, so it uses no DOM.
+// store keeps for the season, a final's Highlights, the Bracket, the News tab, with each team's
+// newest stories, the standings' lists, and settings and each setting the page shows. Runs in the
+// page and in Node, so it uses no DOM.
 
 import { TEAMS } from "./teams.js";
 
@@ -43,7 +43,7 @@ const NEWS_TAB = {
 /** @type {PagePlace[]} */
 const TABS = [
   {
-    key: "tab:bracket",
+    key: "season:bracket",
     name: ["Bracket"],
     words: ["bracket", "playoffs", ...PLAYOFF_PICTURE],
     icon: "bracket",

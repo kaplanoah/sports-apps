@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { readPillNames } from "../../../../tests/browser/pill-names.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -108,13 +109,13 @@ test("a Read button is raised like a card, a button's height, its words centered
   expect(look.roomAbove).toBe(look.roomBelow);
 });
 
-test("a pill's names are buttons, in sentence case at a button's weight and height, centered on their capitals, the pill 10px under the header and 9px over its lists, and its bar held at the top ends in a line, not a fade", async ({
+test("a pill's names are buttons, in sentence case at a button's weight and height, centered on their capitals, the pill 10px under the header and 9px over what it shows, and its bar held at the top ends in a line, not a fade", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  const name = page.locator("#standings-bar .pager-tabs button").first();
+  await openSeasonPart(page, "Standings");
+  const name = page.locator("#bracketStandingsPill .pager-tabs button").first();
   await expect(name).toHaveCSS("text-transform", "none");
   await expect(name).toHaveCSS("font-weight", "500");
   await expect(name).toHaveCSS("height", "30px");
@@ -123,14 +124,14 @@ test("a pill's names are buttons, in sentence case at a button's weight and heig
     const readBox = (/** @type {string} */ selector) =>
       /** @type {Element} */ (document.querySelector(selector)).getBoundingClientRect();
     const header = readBox("header.top");
-    const pill = readBox("#standings-bar .pager-tabs");
-    const lists = readBox("#standings-pages");
-    return { above: pill.top - header.bottom, height: pill.height, below: lists.top - pill.bottom };
+    const pill = readBox("#bracketStandingsPill .pager-tabs");
+    const parts = readBox("#bracketStandingsParts");
+    return { above: pill.top - header.bottom, height: pill.height, below: parts.top - pill.bottom };
   });
   expect(room).toEqual({ above: 10, height: 30, below: 9 });
 
   await page.evaluate(() => scrollTo({ top: 400, behavior: "instant" }));
-  const bar = page.locator("#standings-bar");
+  const bar = page.locator("#bracketStandingsPill");
   await expect(bar).toHaveClass(/stuck/);
   const divider = await readTokenColor(page, "--divider");
   await expect(bar).toHaveCSS("box-shadow", `${divider} 0px 1px 0px 0px`);
@@ -162,23 +163,23 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
   }) => {
     await page.emulateMedia({ colorScheme });
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    const chosen = page.locator("#standings-bar .pager-tabs button.active");
-    await expect(chosen).toHaveText("League");
+    await openSeasonPart(page, "Standings");
+    const chosen = page.locator("#bracketStandingsPill .pager-tabs button.active");
+    await expect(chosen).toHaveText("Standings");
     const [orange, onOrange, ink] = await Promise.all(
       ["--orange", "--orange-ink", "--ink"].map(async (token) =>
         readChannels(page, await readTokenColor(page, token)),
       ),
     );
-    const [league, ...others] = await readPillNames(page.locator("#standings-bar [role=tablist]"));
-    expect(league.name).toBe("League");
-    expect(await readChannels(page, league.fill)).toEqual(orange);
-    expect(await readChannels(page, league.textColor)).toEqual(onOrange);
-    for (const other of others) {
+    const names = await readPillNames(page.locator("#bracketStandingsPill [role=tablist]"));
+    const standings = names.find((each) => each.name === "Standings");
+    expect(await readChannels(page, standings.fill)).toEqual(orange);
+    expect(await readChannels(page, standings.textColor)).toEqual(onOrange);
+    for (const other of names.filter((each) => each !== standings)) {
       expect(other.fill, other.name).toBe("rgba(0, 0, 0, 0)");
       expect(await readChannels(page, other.textColor), other.name).toEqual(ink);
     }
-    await expect(page.locator("#standings-bar .pager-tabs button:not(.active)").first()).toHaveCSS(
+    await expect(page.locator("#bracketStandingsPill .pager-tabs button:not(.active)")).toHaveCSS(
       "font-weight",
       "500",
     );

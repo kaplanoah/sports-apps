@@ -2,6 +2,7 @@ import { test, expect, openLockedApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 const findCodeField = (page) => page.getByRole("textbox", { name: "Access code" });
@@ -44,7 +45,7 @@ test("the page asks for its code, and the right one, however it's typed, opens t
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expect(findGate(page)).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Bracket" })).toHaveCount(0);
+  await expect(findSeasonTab(page)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Open" }).click();
   await expect(page.getByRole("alert")).toHaveText("Type the code first");
@@ -60,10 +61,10 @@ test("the page asks for its code, and the right one, however it's typed, opens t
 
   await findCodeField(page).fill("fast break");
   await findCodeField(page).press("Enter");
-  await expect(page.getByRole("tab", { name: "Bracket" })).toBeVisible();
+  await expect(findSeasonTab(page)).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("tab", { name: "Bracket" })).toBeVisible();
+  await expect(findSeasonTab(page)).toBeVisible();
   await expect(findGate(page)).toHaveCount(0);
 });
 
@@ -79,7 +80,7 @@ test("a new code signs the phone out, and the gate says the code has changed", a
     "The code has changed. Ask whoever sent you the link for the new one.",
   );
   await sendCode(page, "layup");
-  await expect(page.getByRole("tab", { name: "Bracket" })).toBeVisible();
+  await expect(findSeasonTab(page)).toBeVisible();
 });
 
 test("a page left open when the code changes goes back to the gate on its next read", async ({

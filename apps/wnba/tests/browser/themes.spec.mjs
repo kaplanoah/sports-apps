@@ -1,6 +1,7 @@
 import { test, expect, openApp, openGameSheet, keepHighlights } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listLayoutChanges, readLayout } from "../../../../tests/browser/theme-layout.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -48,7 +49,7 @@ const FINAL_WITH_HIGHLIGHTS = "Game details: Aces at Fever, First Round Game 2";
 const VIEWS = [
   {
     name: "Bracket",
-    open: (page) => page.getByRole("tab", { name: "Bracket" }).click(),
+    open: (page) => openSeasonPart(page, "Bracket"),
     shown: (page) => page.locator('[data-series="1-0"] .team-line.won'),
   },
   {
@@ -84,7 +85,7 @@ const VIEWS = [
   },
   {
     name: "Standings",
-    open: (page) => page.getByRole("tab", { name: "Standings" }).click(),
+    open: (page) => openSeasonPart(page, "Standings"),
     shown: (page) => page.locator("#standings-league tr").nth(2),
   },
   {

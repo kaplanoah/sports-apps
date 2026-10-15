@@ -1550,11 +1550,11 @@ th[aria-sort="ascending"] .roster-caret {
   display: grid;
   grid-template-columns: repeat(3, var(--round-width));
   grid-template-rows:
-    auto 14px auto var(--card-gap) auto var(--card-gap) auto var(--card-gap)
+    auto 16px auto var(--card-gap) auto var(--card-gap) auto var(--card-gap)
     auto;
   column-gap: var(--round-gap);
   margin-inline: calc(-1 * var(--page-gutter));
-  padding: 2px calc((100cqw - var(--round-width)) / 2 + var(--page-gutter)) 20px
+  padding: 10px calc((100cqw - var(--round-width)) / 2 + var(--page-gutter)) 20px
     calc(var(--page-gutter) + var(--seed-room));
   scroll-padding-inline: var(--page-gutter);
   overflow-x: auto;
@@ -1858,7 +1858,7 @@ th[aria-sort="ascending"] .roster-caret {
    words a pixel above center on their capitals, where they look centered in the fill. The pill sits
    a little closer under the header than a view's first card, as the control it is, with the bar's
    reach up under the status bar kept inside it. */
-.pager {
+section.bracket-standings.active {
   display: flow-root;
   margin-top: calc(10px - var(--header-gap));
 }
@@ -1876,10 +1876,22 @@ th[aria-sort="ascending"] .roster-caret {
   text-box: trim-both cap alphabetic;
 }
 
-/* Standings: one table at a phone's width for the league and each conference, side by side under
-   a pill like the Games view's. W-L and GB lead as the season; L10 and Strk follow as recent
-   form, until the playoffs' first round and where each team's run stands take their place. The
-   column names sit on the page, like a day's date beside its games, and the teams on one card. */
+/* Standings: one table at a phone's width for the league and each conference, one under another,
+   each named in its team column's head, where its teams' names start, in the teal of the column
+   groups above it. W-L and GB lead as the season; L10 and Strk follow as recent form, until the
+   playoffs' first round and where each team's run stands take their place. The column names sit on
+   the page, like a day's date beside its games, and the teams on one card. */
+#standingsWrap {
+  max-width: 560px;
+  padding-top: 3.5px;
+}
+/* Each table lays out in a grid, where its clip's max-content fits the table to the list's width. */
+.standings-list {
+  display: grid;
+}
+.standings-list + .standings-list {
+  margin-top: 30px;
+}
 table.standings {
   width: 100%;
   border-collapse: separate;
@@ -1900,6 +1912,11 @@ table.standings tr.groups th {
   padding-bottom: 6px;
   font-size: var(--size-small);
   letter-spacing: 0.1em;
+  color: var(--structure);
+}
+table.standings th.list-title {
+  padding-left: 0;
+  text-align: left;
   color: var(--structure);
 }
 table.standings td {

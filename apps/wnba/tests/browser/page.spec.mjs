@@ -11,6 +11,11 @@ import { listNeverShownWords } from "../../../../tests/browser/never-shown-words
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 import { chooseAppearance, readTokenColor } from "./theme.mjs";
+import {
+  findSeasonPill,
+  findSeasonTab,
+  openSeasonPart,
+} from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -40,15 +45,12 @@ test("the page opens on the bracket the Worker saved, and each tab shows its vie
   await expect(page.locator("#seasonGames .game-day.is-today .game-row").first()).toContainText(
     "7:00",
   );
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league tr.playoff-line + tr")).toContainText("Fire");
-  await expect(page.locator("nav.tabs").getByRole("tab")).toHaveText([
-    "Bracket",
-    "Games",
-    "Standings",
-    "News",
-    "Search",
-  ]);
+  const tabs = page.locator("nav.tabs").getByRole("tab");
+  await expect(tabs).toHaveCount(4);
+  for (const [index, name] of ["Bracket", "Games", "News", "Search"].entries())
+    await expect(tabs.nth(index)).toHaveAccessibleName(name);
 });
 
 test("every font the page's views draw with is preloaded", async ({ page }) => {
@@ -57,7 +59,7 @@ test("every font the page's views draw with is preloaded", async ({ page }) => {
   await expect(page.locator("#seasonGames .game-day.is-today .game-row").first()).toBeVisible();
   await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 0 }));
   await expect(page.locator("#seasonGames .scoreboard").first()).toBeVisible();
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league tr").nth(2)).toBeVisible();
 
   expect(await listFontsNotPreloaded(page)).toEqual([]);
@@ -81,7 +83,7 @@ test("every piece of text keeps to the type scale, in every view", async ({ page
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league tr").nth(2)).toBeVisible();
   expect(await listOffScaleText(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
@@ -167,7 +169,7 @@ test("a tap shows only the page's own states: no gray flash, and no hover left b
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   expect(await listTapFlashes(page)).toEqual([]);
   expect(await listTouchHoverRules(page)).toEqual([]);
 });
@@ -213,7 +215,7 @@ test.describe("on a phone, the text", () => {
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
 
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const standings = page.locator("#standings-league");
     await expect(standings.locator("tbody tr").first()).toBeVisible();
     expect(await listOffScaleText(page)).toEqual([]);
@@ -340,54 +342,68 @@ test("a day of games and a series in the bracket share one thin outline, lighter
   );
 });
 
-test("on a wide screen, the Games and Standings lists keep to one phone's width, in the middle of the page", async ({
+test("on a wide screen, the Games list keeps to one phone's width, in the middle of the page", async ({
   page,
 }) => {
   await openApp(page);
   const pageMiddle = page.viewportSize().width / 2;
-  for (const { tab, pill, list } of [
-    { tab: "Games", pill: "#seasonGames .day-bar-head", list: "#seasonGames .game-day.is-today" },
-    {
-      tab: "Standings",
-      pill: "#standingsPager .pager-tabs",
-      list: "#standings-league table.standings",
-    },
-  ]) {
-    await page.getByRole("tab", { name: tab }).click();
-    for (const selector of [pill, list].filter(Boolean)) {
-      const box = await page.locator(selector).first().boundingBox();
-      expect(Math.abs(box.x + box.width / 2 - pageMiddle), selector).toBeLessThanOrEqual(1);
-    }
-    const listBox = await page.locator(list).first().boundingBox();
-    expect(listBox.width, tab).toBe(560);
+  await page.getByRole("tab", { name: "Games" }).click();
+  for (const selector of ["#seasonGames .day-bar-head", "#seasonGames .game-day.is-today"]) {
+    const box = await page.locator(selector).first().boundingBox();
+    expect(Math.abs(box.x + box.width / 2 - pageMiddle), selector).toBeLessThanOrEqual(1);
+  }
+  const listBox = await page.locator("#seasonGames .game-day.is-today").first().boundingBox();
+  expect(listBox.width).toBe(560);
+});
+
+test("on a wide screen, the standings keep to one phone's width, under the pill's left edge", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const pill = await findSeasonPill(page).boundingBox();
+  for (const list of ["league", "east", "west"]) {
+    const table = await page.locator(`#standings-${list} table.standings`).boundingBox();
+    expect(table.width, list).toBe(560);
+    expect(Math.abs(table.x - pill.x), list).toBeLessThanOrEqual(1);
   }
 });
 
 test("clicking the tab that's showing scrolls back to the top", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 400 });
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league tbody tr").first()).toBeVisible();
   await page.mouse.wheel(0, 800);
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
 
-  await page.getByRole("tab", { name: "Standings" }).dispatchEvent("click");
+  await findSeasonTab(page).dispatchEvent("click");
 
   await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
 });
 
-test("the page reopens on the tab it was last on", async ({ page }) => {
+test("the page reopens on the tab it was last on, showing the part of it last shown", async ({
+  page,
+}) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await page.getByRole("tab", { name: "Games" }).click();
 
   await page.reload();
 
-  await expect(page.getByRole("tab", { name: "Standings" })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: "Games" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#view-games")).toBeVisible();
+  await expect(page.locator("#view-bracket-standings")).toHaveCSS("display", "none");
+
+  await openSeasonPart(page, "Standings");
+  await page.reload();
+
+  await expect(findSeasonTab(page)).toHaveAttribute("aria-selected", "true");
+  await expect(findSeasonPill(page).getByRole("tab", { name: "Standings" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  await expect(page.locator("#view-standings")).toHaveCSS("display", "block");
-  await expect(page.locator("#view-bracket")).toHaveCSS("display", "none");
+  await expect(page.locator("#standingsWrap")).toBeVisible();
+  await expect(page.locator("#bracketWrap")).toBeHidden();
 });
 
 test("a page last left on a tab it no longer has, like Teams, opens on the bracket", async ({
@@ -396,8 +412,8 @@ test("a page last left on a tab it no longer has, like Teams, opens on the brack
   await page.addInitScript(() => localStorage.setItem("lastTab", "teams"));
   await openApp(page);
 
-  await expect(page.getByRole("tab", { name: "Bracket" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("#view-bracket")).toBeVisible();
+  await expect(findSeasonTab(page)).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#bracketWrap")).toBeVisible();
 });
 
 test.describe("on a phone", () => {
@@ -413,8 +429,12 @@ test.describe("on a phone", () => {
     const headerBottom = await page
       .locator("header.top")
       .evaluate((header) => header.getBoundingClientRect().bottom);
-    for (const tab of ["Bracket", "Games", "Standings"]) {
-      await page.getByRole("tab", { name: tab }).click();
+    for (const { tab, show } of [
+      { tab: "Bracket", show: () => openSeasonPart(page, "Bracket") },
+      { tab: "Games", show: () => page.getByRole("tab", { name: "Games" }).click() },
+      { tab: "Standings", show: () => openSeasonPart(page, "Standings") },
+    ]) {
+      await show();
       const width = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(width, tab).toBeLessThanOrEqual(390);
       const view = await page.locator(".view.active").boundingBox();
@@ -481,12 +501,10 @@ test.describe("on a phone", () => {
     await expect(page.locator("#seasonGames .scoreboard").first()).toBeVisible();
     expect(await listTapsOffButtons(page)).toEqual([]);
 
-    await page.getByRole("tab", { name: "Standings" }).click();
-    for (const list of ["League", "East", "West"]) {
-      await page.getByRole("tab", { name: list }).click();
-      await expect(
-        page.locator(`#standings-${list.toLowerCase()} tbody tr`).first(),
-      ).toBeInViewport();
+    await openSeasonPart(page, "Standings");
+    for (const list of ["league", "east", "west"]) {
+      await page.locator(`#standings-${list}`).scrollIntoViewIfNeeded();
+      await expect(page.locator(`#standings-${list} tbody tr`).first()).toBeInViewport();
       expect(await listTapsOffButtons(page)).toEqual([]);
     }
 
@@ -513,16 +531,16 @@ test.describe("on a phone", () => {
 });
 
 test("the page shows the tab it was last on before its modules have loaded", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("lastTab", "standings"));
+  await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
   await page.route(matchPath("/js/app.js"), (route) => route.abort());
 
   await openApp(page);
 
-  const tab = page.getByRole("tab", { name: "Standings" });
+  const tab = page.getByRole("tab", { name: "Games" });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   await expect(tab).toHaveClass(/\bactive\b/);
-  await expect(page.locator("#view-standings")).toHaveCSS("display", "block");
-  await expect(page.locator("#view-bracket")).toHaveCSS("display", "none");
+  await expect(page.locator("#view-games")).toBeVisible();
+  await expect(page.locator("#view-bracket-standings")).toHaveCSS("display", "none");
 });
 
 test("on a wide screen, Walnut's selected tab reads heavier, Maple's doesn't, and the tabs keep Maple's size and place", async ({
@@ -550,7 +568,7 @@ test("on a wide screen, Walnut's selected tab reads heavier, Maple's doesn't, an
   expect(await readBoxes()).toEqual(mapleBoxes);
   await games.click();
   await expect(games).toHaveCSS("font-weight", "500");
-  await expect(page.getByRole("tab", { name: "Bracket" })).toHaveCSS("font-weight", "400");
+  await expect(findSeasonTab(page)).toHaveCSS("font-weight", "400");
   expect(await readBoxes()).toEqual(mapleBoxes);
 
   await page.emulateMedia({ colorScheme: "light" });

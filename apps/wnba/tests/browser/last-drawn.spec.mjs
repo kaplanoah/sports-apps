@@ -1,6 +1,7 @@
 import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
+import { findSeasonPill, findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -36,13 +37,15 @@ test("a reload shows what the page last drew before its code arrives", async ({ 
 
 test("a saved part the page doesn't draw whole keeps the markup the page has", async ({ page }) => {
   await storeBeforeLoad(page, {
-    lastDrawn: JSON.stringify({ "view-bracket": { markup: "<p>Old</p>", hidden: false } }),
+    lastDrawn: JSON.stringify({
+      "view-bracket-standings": { markup: "<p>Old</p>", hidden: false },
+    }),
   });
 
   await openApp(page);
 
   await expect(findFinalWinner(page)).toContainText("Liberty");
-  await expect(page.locator("#view-bracket")).not.toContainText("Old");
+  await expect(page.locator("#view-bracket-standings")).not.toContainText("Old");
 });
 
 test("saved markup that can't be read leaves the page to open as it would", async ({ page }) => {
@@ -165,23 +168,29 @@ test.describe("on a phone", () => {
     await expect(page.locator('#seasonGames .listed-day[data-day="2026-10-01"]')).toBeInViewport();
   });
 
-  test("the standings sit as far under their pill before the page's code arrives as after", async ({
+  test("the tab's name, its pill on the part last chosen, and the standings under it, as far down as after, show before the page's code arrives", async ({
     page,
   }) => {
-    await storeBeforeLoad(page, { lastTab: "standings" });
     await openApp(page);
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
     const readGap = async () => {
-      const pill = await page.locator("#standingsPager [role=tablist]").boundingBox();
-      const table = await page.locator("#standingsPager table").first().boundingBox();
+      const pill = await findSeasonPill(page).boundingBox();
+      const table = await page.locator("#standingsWrap table").first().boundingBox();
       return table.y - (pill.y + pill.height);
     };
-    await expect(page.locator("#standingsPager table").first()).toBeVisible();
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
     const placedGap = await readGap();
     const release = await holdPageCode(page);
 
     await page.reload({ waitUntil: "commit" });
 
-    await expect(page.locator("#standingsPager table").first()).toBeVisible();
+    await expect(findSeasonTab(page)).toHaveAccessibleName("Bracket");
+    await expect(findSeasonPill(page).getByRole("tab", { name: "Standings" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await expect(page.locator("#bracketWrap")).toBeHidden();
     expect(await readGap()).toBeCloseTo(placedGap, 0);
     release();
   });

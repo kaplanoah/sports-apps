@@ -1,8 +1,8 @@
 // What MLB's search finds besides games: each club's sheet and its Roster, each player on a club's
 // roster this season, from the list of players the store keeps for it, a final's Highlights and the
-// next game's Matchup, the Bracket and News tabs, the Standings tab's playoff fields and each
-// league's divisions, and settings and each setting the page shows. Runs in the page and in Node, so
-// it uses no DOM.
+// next game's Matchup, the Bracket, the News tab, the standings' playoff fields and each league's
+// divisions, and settings and each setting the page shows. Runs in the page and in Node, so it uses
+// no DOM.
 
 import { nameClubFully } from "./clubs.js";
 import { TEAMS } from "./teams.js";
@@ -33,7 +33,7 @@ const EXAMPLES = ["Yamamoto", "Mets roster"];
 /** @type {PagePlace[]} */
 const TABS = [
   {
-    key: "tab:bracket",
+    key: "season:bracket",
     name: ["Bracket"],
     words: ["bracket", "playoffs", "postseason"],
     icon: "bracket",
@@ -45,7 +45,7 @@ const LEAGUE_NAMES = { AL: "American League", NL: "National League" };
 const DIVISIONS = ["East", "Central", "West"];
 
 /**
- * A part of the Standings tab, by its key and name, and the words that find it.
+ * A part of the standings, by its key and name, and the words that find it.
  * @param {string} part
  * @param {string} name
  * @param {string[]} words

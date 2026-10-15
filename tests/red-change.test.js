@@ -76,7 +76,7 @@ test("any change to the shared code that moves, layers, or draws the page is red
     "sheet-swipe.js",
     "sheet-sections.js",
     "side-swipe.js",
-    "pager.js",
+    "bracket-standings.js",
     "pager.css",
     "pill-thumb.js",
     "tab-bar.js",
@@ -266,7 +266,7 @@ test("tests, docs, and the Worker's code are never red", () => {
 });
 
 const RED_DIFF =
-  createDiff("shared/page/pager.js", ["export const x = 1;"]) +
+  createDiff("shared/page/bracket-standings.js", ["export const x = 1;"]) +
   createDiff("apps/wnba/page/styles.css", ["  will-change: transform;"]);
 
 /**
@@ -287,7 +287,7 @@ test("a red change is held until it has the phone-ok label, and says why", () =>
   const diff = RED_DIFF;
   const held = decideGate(diff, { labels: ["bug"] });
   assert.equal(held.isHeld, true);
-  assert.match(held.message, /shared\/page\/pager\.js is shared code/);
+  assert.match(held.message, /shared\/page\/bracket-standings\.js is shared code/);
   assert.match(
     held.message,
     /apps\/wnba\/page\/styles\.css:10 adds a CSS declaration that sets will-change/,

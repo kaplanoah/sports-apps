@@ -1,14 +1,16 @@
 import { test, expect, findGameButton, openApp } from "./harness.mjs";
 import { expectWithinBudgets } from "../../../../tests/browser/layer-count.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // Each layer a phone keeps takes its memory, and an iPhone short of it leaves parts undrawn. Each
 // budget is the view's count in CI's Chromium once nothing asked for a layer ahead. A change that
 // should add a layer re-records its view's budget from the count this test names, once the owner's
 // phone has drawn it on beta.
-// Search's round button beside the tab bar is a layer of its own on every view.
+// Search's round button beside the tab bar is a layer of its own on every view, and the pill held
+// over the bracket and standings one on each of theirs.
 const BUDGETS = {
-  Bracket: 12,
+  Bracket: 13,
   // The strip of days and the list of games each scroll on their own.
   Games: 14,
   Standings: 12,
@@ -50,10 +52,11 @@ test("each view, a team's sheet on each section, and a sheet over a sheet keep w
   await expectWithinBudgets(
     page,
     [
-      ...["Bracket", "Games", "Standings", "News", "Search"].map((name) => ({
+      .../** @type {const} */ (["Bracket", "Standings"]).map((name) => ({
         view: name,
-        show: showTab(name),
+        show: () => openSeasonPart(page, name),
       })),
+      ...["Games", "News", "Search"].map((name) => ({ view: name, show: showTab(name) })),
       {
         view: "Team sheet over the game's",
         show: async () => {

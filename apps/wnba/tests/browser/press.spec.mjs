@@ -1,5 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // A row that opens something tints while it's pressed, as an iPhone's lists do (press.js).
 
@@ -129,7 +130,7 @@ test.describe("under a mouse", () => {
 
   test("a press tints a team's row in the standings at once", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const row = page.locator("#standings-league tr:has(.team-open)").nth(2);
     await expect(row).toBeVisible();
     const middle = await findMiddle(row);

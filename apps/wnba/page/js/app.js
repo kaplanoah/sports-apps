@@ -34,6 +34,11 @@ import { fillStamp } from "#shared/stamp.js";
 import { chooseTitleYear, showTitleYear } from "#shared/title-year.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { startAppearance } from "#shared/appearance.js";
+import {
+  showSeasonPart,
+  showSeasonPhase,
+  startBracketStandings,
+} from "#shared/bracket-standings.js";
 import { LOOKS } from "./looks.js";
 import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
@@ -46,9 +51,9 @@ import { fillRoster, readShownRoster, reopenRoster, startRosterSection } from ".
 import { loadSeason, loadSeasonYears, showYear, startSeasonData } from "./season-data.js";
 import { isPastSeason, session } from "./session.js";
 import { SNAPSHOT_VERSION } from "./snapshot.js";
-import { isPlayoffsOver } from "./series.js";
+import { isFieldSet, isPlayoffsOver } from "./series.js";
 import { describeStampProblem, renderStampLines } from "./stamp.js";
-import { drawStandings, showStandingsList, startStandings } from "./standings-view.js";
+import { drawStandings, showStandingsList } from "./standings-view.js";
 import { listSearchPages } from "./search-pages.js";
 import { createSearchTerms, readSearchGame } from "./search-terms.js";
 import { renderTeamSheet } from "./team-view.js";
@@ -82,6 +87,7 @@ function renderTitleYear() {
 
 function renderAll() {
   const now = Date.now();
+  showSeasonPhase(isFieldSet(session.season?.series ?? []));
   const keptLeft = readBracketScroll();
   setHtml(findElement("bracketWrap"), renderBracket(session.season, now));
   placeBracket(keptLeft);
@@ -196,15 +202,19 @@ const readSearchPages = () =>
   });
 
 /**
- * Opens a place a search lists: a tab, one of the Standings tab's lists, a game's section, or
- * settings at one of its rows.
+ * Opens a place a search lists: a tab, the bracket or standings in theirs, one of the standings'
+ * lists, a game's section, or settings at one of its rows.
  * @param {string} key
  */
 function openSearchPlace(key) {
   const [place, detail] = key.split(":");
   if (place === "tab") openPageTab(detail);
-  else if (place === "standings") {
-    openPageTab("standings");
+  else if (place === "season") {
+    openPageTab("bracket-standings");
+    showSeasonPart(/** @type {import("#shared/bracket-standings.js").SeasonPart} */ (detail));
+  } else if (place === "standings") {
+    openPageTab("bracket-standings");
+    showSeasonPart("standings");
     showStandingsList(detail);
   } else if (place === "highlights") openGameSection(detail, "highlights");
   else openSettings(key);
@@ -291,7 +301,7 @@ async function boot() {
     switchSeason(Number(findSeasonPicker().value)),
   );
   startBracket();
-  startStandings();
+  startBracketStandings();
   session.db = createWorkerStore();
   showJobStatuses(session.db, ["news", "players"]);
   drawLastSeen();

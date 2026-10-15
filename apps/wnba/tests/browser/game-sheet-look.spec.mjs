@@ -21,6 +21,7 @@ import {
   finishValkyriesAtWings,
   liveBoxScore,
 } from "./game-sheet-games.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // A players table's number column, while the names leave it room.
 const NUMBER_COLUMN_PX = 52;
@@ -431,7 +432,7 @@ test("a team's sheet marks the team in its mark color on each theme, on its curv
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
   const sheet = page.locator("#teamSheet");
   const ownDot = sheet.locator(".placed-line .own").first();

@@ -137,29 +137,7 @@ test("a reload's first reading is what the page put back from its last showing, 
   const record = findRecords(page).locator(".diagnostics-record").first();
   await expect(record).toContainText(/Shows .*seasonGames \d+\/\d+px/);
   await expect(record).not.toContainText("seasonGames: text");
-  await expect(record).not.toContainText("standingsPager: text");
-});
-
-test("a record ends with where the shown pager's lists are and what a tap on each one's first item lands on", async ({
-  page,
-}) => {
-  await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  await turnOnDiagnostics(page);
-
-  await reloadAndRecord(page);
-  await openSettings(page);
-
-  const record = findRecords(page).locator(".diagnostics-record").first();
-  await expect(record).toContainText(/standings-pages scrolled \d+ of \d+, 390 wide, /);
-  await expect(record).toContainText(
-    /standings-league at -?\d+,\d+ \d+x\d+, opacity 1, visible, transform none, first item at .*, opacity 1, a tap there lands on /,
-  );
-  await expect(record).toContainText(
-    /standings-east at .*, inert, first item at .*, off the screen/,
-  );
-  await expect(record).toContainText(/Animations: /);
-  await expect(record).not.toContainText("seasonGames scrolled");
+  await expect(record).not.toContainText("standingsWrap: text");
 });
 
 test("a record ends with where the season's list of days is, where its strip's box sits, the day at its top, and what a tap on it lands on", async ({
@@ -176,7 +154,6 @@ test("a record ends with where the season's list of days is, where its strip's b
   await expect(record).toContainText(
     /seasonGames scrolled \d+ of \d+, \d+ tall; strip on 2026-09-30, strip scrolled \d+ of \d+, its box on the strip; 2026-09-30 at the top, first item at .*, opacity 1, a tap there lands on /,
   );
-  await expect(record).not.toContainText("standings-pages");
 });
 
 test("a reload is recorded with its first paint and when each font file arrived", async ({
@@ -574,29 +551,6 @@ const stubShare = (page) =>
 /** @param {import("@playwright/test").Page} page */
 const readShares = (page) =>
   page.evaluate(() => /** @type {ShareData[]} */ (Reflect.get(window, "diagnosticsShares")));
-
-test("a report names the list the pager's lists went back from after a move no one made", async ({
-  page,
-}) => {
-  await stubShare(page);
-  await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  await turnOnDiagnostics(page);
-  const pages = page.locator("#standings-pages");
-  await pages.evaluate((element) =>
-    element.scrollTo({ left: element.clientWidth, behavior: "instant" }),
-  );
-  await expect(pages).toHaveAttribute("data-put-back-from", "east");
-
-  await openSettings(page);
-  await findReportButton(page).click();
-
-  await expect(findReportButton(page)).toHaveText("Shared");
-  const [{ text: report }] = await readShares(page);
-  expect(report).toMatch(
-    /standings-pages scrolled 0 of \d+, \d+ wide, last settled by scrollend, last put back from east, a move no one made;/,
-  );
-});
 
 test("on a phone, Share report shares the report at once, then offers it again", async ({
   page,

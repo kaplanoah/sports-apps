@@ -74,6 +74,12 @@ export function readPlayoffRuns(allSeries) {
 }
 
 /**
+ * Whether the playoff field is set, which the league's series say once they name their teams.
+ * @param {Series[]} allSeries
+ */
+export const isFieldSet = (allSeries) => readPlayoffRuns(allSeries).size > 0;
+
+/**
  * Whether a team still has games to play this season: every team until the playoff field is set,
  * then a team in the field until it goes out or wins it all.
  * @param {Series[]} allSeries

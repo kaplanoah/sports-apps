@@ -14,6 +14,11 @@ import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import {
+  findSeasonPill,
+  findSeasonTab,
+  openSeasonPart,
+} from "../../../../tests/browser/season-tab.mjs";
 
 // What Search finds and opens, and how it comes and goes, on a phone.
 
@@ -115,7 +120,7 @@ test("Search beside the tab bar opens its own view, an empty field ready to type
     "Aces roster",
   ]);
 
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
 
   await expect(page.locator("#tabBar")).not.toHaveClass(/is-unselected/);
   await expect(page.locator("#tabBar .tab-pill")).toBeVisible();
@@ -385,7 +390,7 @@ test("a half-typed name finds the player, with her number and team and no games,
   await expectShown(page.locator("#rosterSection"));
 });
 
-test("a standings list's words find it, and its row opens Standings on that list", async ({
+test("a standings list's words find it, and its row opens the standings at that list", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -397,11 +402,18 @@ test("a standings list's words find it, and its row opens Standings on that list
 
   await findRows(page).filter({ hasText: "East" }).tap();
 
-  await expect(page.locator("#view-standings")).toBeVisible();
-  await expect(page.locator("#view-standings").getByRole("tab", { name: "East" })).toHaveAttribute(
+  await expect(findSeasonPill(page).getByRole("tab", { name: "Standings" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
+  await expect(page.locator("#standings-east")).toBeInViewport();
+  const pillBottom = await findSeasonPill(page).evaluate(
+    (pill) => pill.closest(".pager-bar").getBoundingClientRect().bottom,
+  );
+  const eastTop = await page
+    .locator("#standings-east")
+    .evaluate((list) => list.getBoundingClientRect().top);
+  expect(Math.abs(eastTop - pillBottom)).toBeLessThanOrEqual(1);
 });
 
 test("highlights with a team finds its latest final, marked with a film strip, and its row opens that game's sheet on its Highlights", async ({
@@ -432,8 +444,12 @@ test("the Bracket tab's words find it, and its row opens it", async ({ page }) =
 
   await findRows(page).tap();
 
-  await expect(page.locator("#view-bracket")).toBeVisible();
-  await expect(page.locator("#tab-bracket")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#bracketWrap")).toBeVisible();
+  await expect(findSeasonTab(page)).toHaveAttribute("aria-selected", "true");
+  await expect(findSeasonPill(page).getByRole("tab", { name: "Bracket" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
 });
 
 test("a setting's words find it, and its row opens settings with the setting in sight", async ({
@@ -477,7 +493,7 @@ test("Cancel empties the search and goes back to the tab before it; another tab 
   page,
 }) => {
   await openSeasonGames(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await tapSearch(page);
   await sendSearch(page, "Liberty");
 

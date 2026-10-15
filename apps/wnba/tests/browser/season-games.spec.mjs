@@ -1,5 +1,6 @@
 import { test, expect, expectDayAtTop, openApp } from "./harness.mjs";
 import { readStripEdges, scrollStripBy } from "../../../../tests/browser/day-strip-edges.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // The Games view as one season: a strip of its days over every game day, opening on today.
 
@@ -413,7 +414,7 @@ test.describe("with reduced motion", () => {
     await openSeasonGames(page);
     await findCell(page, "2026-09-20").click();
     await expectDayAtTop(page, "2026-09-20");
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await expect(page.locator("#standings-league")).toBeInViewport();
 
     await page.evaluate(() => {
@@ -476,7 +477,7 @@ test.describe("with reduced motion", () => {
     await findCell(page, "2026-09-20").click();
     await expectDayAtTop(page, "2026-09-20");
 
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await expect(page.locator("#standings-league")).toBeInViewport();
     await page.getByRole("tab", { name: "Games" }).click();
 

@@ -6,6 +6,7 @@ import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -13,7 +14,7 @@ const PHONE = { width: 390, height: 844 };
 
 /** @param {import("@playwright/test").Page} page */
 async function openLibertyRoster(page) {
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
   await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
   const roster = page.locator("#rosterSection");
@@ -322,7 +323,7 @@ test("a top scorer's name in a box score opens her sheet over the game's, and a 
   await sheet.getByRole("button", { name: "Back to Game" }).click();
   await expect(sheet).toBeHidden();
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
   await page.locator("#teamSection").getByRole("button", { name: "Breanna Stewart" }).click();
   await expect(sheet.locator("#playerTitle")).toHaveText("Breanna Stewart");

@@ -2,6 +2,7 @@ import {
   test,
   expect,
   openApp,
+  openBracket,
   buildFixtureSnapshot,
   EVENING_FIXTURE,
   keepFromEarlierVisit,
@@ -19,7 +20,7 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 test("a computer shows no Updates box, since each device keeps its own dismissal", async ({
   page,
 }) => {
-  await openApp(page, {
+  await openBracket(page, {
     liveAvailable: false,
     store: {
       "seasons/2026": {
@@ -106,7 +107,7 @@ test.describe("on a phone", () => {
     const [shownUntil] = Object.values(await readKept(page, "releaseNotesShownUntil"));
     expect(shownUntil).toBeLessThanOrEqual(await page.evaluate(() => Date.now()));
     await page.reload();
-    await expect(page.locator("#bracketWrap")).toBeVisible();
+    await expect(page.locator("#standingsWrap")).toBeVisible();
     await expect(updates).toBeHidden();
   });
 

@@ -414,9 +414,8 @@ test("the examples are three searches for games, then a player and a club's Rost
 // out. A new one fails the test below until it's here, so it's made searchable, or left out on
 // purpose.
 const COVERAGE = {
-  "tab:bracket": { search: "bracket", opens: "tab:bracket" },
+  "tab:bracket-standings": { search: "bracket", opens: "season:bracket" },
   "tab:games": { leftOut: "Typing games already searches every game" },
-  "tab:standings": { search: "standings", opens: "standings:playoffs" },
   "tab:news": { search: "news", opens: "tab:news" },
   "tab:search": { leftOut: "It's the search itself" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },

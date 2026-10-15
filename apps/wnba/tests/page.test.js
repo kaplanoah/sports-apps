@@ -11,10 +11,10 @@ import {
   renderHeadline,
 } from "../page/js/games-view.js";
 import { renderScoreboard } from "../page/js/scoreboard.js";
-import { describeSeriesStanding, isPlayoffsOver } from "../page/js/series.js";
+import { describeSeriesStanding, isFieldSet, isPlayoffsOver } from "../page/js/series.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { describeStampProblem, renderStampLines } from "../page/js/stamp.js";
-import { renderStandings } from "../page/js/standings-view.js";
+import { renderStandings, renderStandingsLists } from "../page/js/standings-view.js";
 import { renderTeamSheet } from "../page/js/team-view.js";
 import { placeOnRange } from "../../../shared/page/rank-curve.js";
 import { TEAMS } from "../page/js/teams.js";
@@ -537,7 +537,7 @@ test("through the regular season, the league's standings show the season, then r
   const text = readText(renderStandings(REGULAR_SEASON));
   assert.match(
     text,
-    /^Season Recent Team W-L GB L10 Strk 1 Lynx W 33-11 - 6-4 W 1 2 Valkyries W 32-12 1\.0 7-3 W 1 /,
+    /^Season Recent League W-L GB L10 Strk 1 Lynx W 33-11 - 6-4 W 1 2 Valkyries W 32-12 1\.0 7-3 W 1 /,
   );
   const rows = readStandingsRows(renderStandings(REGULAR_SEASON));
   const line = rows.findIndex((row) => row.className === "playoff-line");
@@ -567,7 +567,7 @@ test("a conference's standings rank its own teams, note each playoff team's leag
 
 test("once the playoff field is set, each team's first round and where its run stands replace recent form", () => {
   const text = readText(renderStandings(SEASON));
-  assert.match(text, /^Season Playoffs Team W-L GB Rd 1 Now 1 Lynx W 33-11 - L 0-2 Out /);
+  assert.match(text, /^Season Playoffs League W-L GB Rd 1 Now 1 Lynx W 33-11 - L 0-2 Out /);
   assert.match(text, / Aces W 31-13 2\.0 1-1 Game 3 /, "a first round still being played");
   assert.match(text, / Liberty E 26-18 7\.0 W 2-0 Semis /);
   const rows = readStandingsRows(renderStandings(SEASON));
@@ -612,6 +612,25 @@ test("a team's run reads the round it won its way to, even before the bracket li
 
 test("each standings table names the view it shows", () => {
   assert.match(renderStandings(SEASON, "West").text, /aria-label="West standings"/);
+});
+
+test("the league's table, then the East's and the West's, one under another, each named in its team column's head, where its teams' names start", () => {
+  const { text } = renderStandingsLists(SEASON);
+  assert.deepEqual(
+    [...text.matchAll(/<div class="standings-list" id="([^"]+)">/g)].map(([, id]) => id),
+    ["standings-league", "standings-east", "standings-west"],
+  );
+  assert.deepEqual(
+    [...text.matchAll(/<th colspan="2" class="list-title">(\w+)<\/th>/g)].map(([, name]) => name),
+    ["League", "East", "West"],
+  );
+  assert.doesNotMatch(text, />Team</);
+  assert.equal(readText(renderStandingsLists(null)), "No standings yet");
+});
+
+test("the playoff field is set once the league's series name their teams", () => {
+  assert.equal(isFieldSet(REGULAR_SEASON.series), false);
+  assert.equal(isFieldSet(SEASON.series), true);
 });
 
 test("a team's next game is marked with Phosphor's caret-right icon, which reading the sheet aloud skips", () => {
