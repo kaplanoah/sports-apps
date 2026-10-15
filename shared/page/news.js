@@ -1,7 +1,6 @@
 import { setHtml } from "./html.js";
 import { readNewsChoices, startNewsChoices } from "./news-choices.js";
 import { renderNews } from "./news-view.js";
-import { readOpenedStories, startOpenedStories } from "./opened-stories.js";
 import { fitPhotoCredits, watchPhotoCredits } from "./photo-credits.js";
 
 // The News tab: the cards the Worker keeps in the store, which it pushes to the page on every
@@ -17,20 +16,15 @@ const WIDE_SCREEN = "(min-width: 900px)";
  */
 export function drawNews(list, news, league) {
   const columnCount = matchMedia(WIDE_SCREEN).matches ? 2 : 1;
-  const opened = readOpenedStories();
   setHtml(
     list,
-    renderNews(news?.cards ?? [], readNewsChoices(), Date.now(), {
-      ...league,
-      columnCount,
-      opened,
-    }),
+    renderNews(news?.cards ?? [], readNewsChoices(), Date.now(), { ...league, columnCount }),
   );
   fitPhotoCredits(list);
 }
 
 /**
- * Calls `redraw` after a News switch changes, a story is opened, or the screen widens or narrows,
+ * Calls `redraw` after a News switch changes or the screen widens or narrows,
  * and fits the photos' credits again whenever the list's width changes.
  * @param {HTMLElement} list
  * @param {() => void} redraw
@@ -38,7 +32,6 @@ export function drawNews(list, news, league) {
  */
 export function startNewsRedraws(list, redraw, league) {
   startNewsChoices(redraw, Object.keys(league.outletSwitches));
-  startOpenedStories(list, redraw);
   matchMedia(WIDE_SCREEN).addEventListener("change", redraw);
   watchPhotoCredits(list);
 }
