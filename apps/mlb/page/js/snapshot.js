@@ -890,11 +890,12 @@ const isAtNeutralSite = (listing, homeBallparks) => {
 const formatRecord = (record) =>
   isNumber(record?.wins) && isNumber(record?.losses) ? `${record.wins}-${record.losses}` : null;
 
-// A regular season game shows each club's record as it stood with the game, which MLB gives
-// after a final and before a game still to play. A postseason game's record is its series',
-// which the page doesn't show, and a game called off gives the record of the day it's made up.
+// A regular season game that has been played shows each club's record as it stood with the game,
+// which MLB gives after a final. A game still to come shows each club's record now, which the
+// standings give, so the schedule keeps none for it. A postseason game's record is its series',
+// which the page doesn't show.
 function listRecords(game) {
-  if (game.type !== "R" || game.state === "off") return null;
+  if (game.type !== "R" || game.state !== "final") return null;
   const records = [formatRecord(game.away.record), formatRecord(game.home.record)];
   return records.some(Boolean) ? records : null;
 }
