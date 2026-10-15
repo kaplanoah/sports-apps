@@ -560,6 +560,8 @@
   Types are checked from JSDoc by `npm run typecheck`; the code stays plain JavaScript.
   `npm run deadcode` runs knip, which fails on unused files, exports, and dependencies: delete them rather than ignoring them.
 - Which season is current, the store says in `live/current`, as the Worker decides it from the league's own data; a page never picks it by its own clock.
+  A new season becomes current on the day of its first game, preseason included, as MLB's spring training and the WNBA's preseason start it,
+  so through the offseason a page shows the season just played, opening on its bracket.
   Times show in the viewer's own time zone; only a league's own day is Eastern (read with the shared `readEasternDay` in `shared/page/days.js`: all of MLB's, and the WNBA's for a game without a set time).
   Pages count, read, and format days and times with `shared/page/days.js`, the one module lint lets read the machine's own calendar and clock, and its tests check each of its readings in zones on both sides of UTC;
   an app's own `readGameDay` only says which of its fields hold a game's start and its league's day.

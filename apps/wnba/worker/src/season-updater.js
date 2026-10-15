@@ -22,15 +22,17 @@ const nameSeasonKey = (year) => `seasons/${year}`;
 // so the season it watches through every live game doesn't carry them.
 const nameAveragesKey = (year) => `averages/${year}`;
 
-// The new year's season starts once it has games, or standings with games played. Until then the
-// last one's stays current, so the new year doesn't start with an empty season.
-const hasSeasonStarted = (snapshot) =>
-  snapshot.games.length > 0 || snapshot.standings.some((row) => row.wins + row.losses > 0);
+// The new year's season starts on the day of its first game, preseason included, as MLB's starts
+// with spring training, or once its standings have games played. Until then the last one's stays
+// current, its bracket and all, though the schedule already lists the new one's games.
+const hasSeasonStarted = (snapshot, now) =>
+  (!!snapshot.openingDay && readEasternDay(now).date >= snapshot.openingDay) ||
+  snapshot.standings.some((row) => row.wins + row.losses > 0);
 
 export async function loadCurrentSnapshot(loadSnapshot, now) {
   const { year } = readEasternDay(now);
   const upcoming = await loadSnapshot(year);
-  return hasSeasonStarted(upcoming) ? upcoming : loadSnapshot(year - 1);
+  return hasSeasonStarted(upcoming, now) ? upcoming : loadSnapshot(year - 1);
 }
 
 const STATE_ORDER = { pre: 0, live: 1, final: 2 };

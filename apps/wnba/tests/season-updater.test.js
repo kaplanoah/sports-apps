@@ -431,18 +431,29 @@ test("games already finished, or found finished long after, aren't news", () => 
   );
 });
 
-test("the new year's season is followed only once it has games or standings with games played", async () => {
-  // Half past midnight on New Year's Day, Eastern.
-  const newYear = Date.parse("2027-01-01T05:30:00Z");
+test("a season opens on its first preseason game's day, from the league's whole schedule, and has no opening day without one", () => {
+  assert.equal(WHOLE_SEASON.openingDay, "2026-04-25");
+  const unlisted = buildSnapshot({ ...RESPONSES, schedule: null }, { season: 2026, now: NOW });
+  assert.equal(unlisted.openingDay, null);
+});
+
+test("the new year's season is followed from its opening day, or once its standings have games played, and the last one's until then, though the schedule lists the new one's games", async () => {
   const unplayed = SNAPSHOT.standings.map((row) => ({ ...row, wins: 0, losses: 0 }));
   const seasons = {
     2026: SNAPSHOT,
-    2027: { ...SNAPSHOT, season: 2027, games: [], series: [], standings: unplayed },
+    2027: { ...WHOLE_SEASON, season: 2027, openingDay: "2027-04-24", standings: unplayed },
   };
   const loadSnapshot = async (season) => seasons[season];
+  const followAt = async (/** @type {string} */ time) =>
+    (await loadCurrentSnapshot(loadSnapshot, Date.parse(time))).season;
 
-  assert.equal((await loadCurrentSnapshot(loadSnapshot, newYear)).season, 2026);
+  // Half past midnight on New Year's Day, Eastern.
+  assert.equal(await followAt("2027-01-01T05:30:00Z"), 2026);
+  // The evening before the opening day, Eastern.
+  assert.equal(await followAt("2027-04-24T03:00:00Z"), 2026);
+  // Its first minutes, Eastern.
+  assert.equal(await followAt("2027-04-24T04:30:00Z"), 2027);
 
-  seasons[2027] = { ...seasons[2027], standings: SNAPSHOT.standings };
-  assert.equal((await loadCurrentSnapshot(loadSnapshot, newYear)).season, 2027);
+  seasons[2027] = { ...seasons[2027], openingDay: null, standings: SNAPSHOT.standings };
+  assert.equal(await followAt("2027-01-01T05:30:00Z"), 2027);
 });

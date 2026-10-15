@@ -139,6 +139,32 @@ function readGameSeason(id) {
   return season ? 2000 + Number(season) : null;
 }
 
+// The Games view leaves out the preseason, whose games are numbered 101 and then the season's last
+// two digits, but the season starts with its first game.
+const PRESEASON_GAME_ID = /^101(\d{2})\d{5}$/;
+
+/** @param {string} id */
+function readAnyGameSeason(id) {
+  const [, preseason] = String(id).match(PRESEASON_GAME_ID) ?? [];
+  return preseason ? 2000 + Number(preseason) : readGameSeason(id);
+}
+
+/**
+ * The league's day of the season's first game, its preseason's first when it has one, or null
+ * while the schedule lists none of its games.
+ * @param {any} schedule
+ * @param {number} season
+ * @returns {string | null}
+ */
+function readOpeningDay(schedule, season) {
+  const starts = (schedule?.leagueSchedule?.gameDates ?? [])
+    .flatMap((day) => day.games)
+    .filter((game) => readAnyGameSeason(game.gameId) === season)
+    .map((game) => Date.parse(game.gameDateTimeUTC))
+    .filter(Number.isFinite);
+  return starts.length ? readEasternDay(Math.min(...starts)).date : null;
+}
+
 const nameSeries = (round, series) => `${round}-${series}`;
 
 const GAME_STATES = { 1: "pre", 2: "live", 3: "final" };
@@ -663,6 +689,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     averages: listAverages(responses.players),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
+    openingDay: readOpeningDay(responses.schedule, season),
   };
 }
 
