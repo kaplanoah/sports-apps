@@ -15,13 +15,21 @@ export const readLeft = (locator) =>
 
 /**
  * Waits until the row has come to rest on the sheet, the only one of its sheets a keyboard or a
- * screen reader can reach.
+ * screen reader can reach, and its dialog has finished rising, so a finger lands where the sheet
+ * rests.
  * @param {import("@playwright/test").Locator} sheet
  */
 export async function expectShown(sheet) {
   await expect(sheet).toBeVisible();
   await expect(sheet).not.toHaveAttribute("inert");
   await expect.poll(() => readLeft(sheet)).toBe(0);
+  await expect
+    .poll(() =>
+      sheet.evaluate(
+        (element) => /** @type {Element} */ (element.closest("dialog")).getAnimations().length,
+      ),
+    )
+    .toBe(0);
 }
 
 /**
