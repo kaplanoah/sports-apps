@@ -159,6 +159,9 @@ test("switching to 2025 shows the finished bracket and its champion from its rec
   const worldSeries = page.locator('#bracketWrap .box[data-round="WS"]');
   await expect(worldSeries.locator(".matchup-row.winner")).toContainText("Dodgers");
   await expect(worldSeries.locator(".card-note")).toHaveCount(0);
+  const championships = page.locator('#bracketWrap .box[data-round="CS"]');
+  await expect(championships).toHaveCount(2);
+  await expect(championships.locator(".card-note")).toHaveCount(0);
   await expect(page.locator("#updates")).toBeHidden();
   expect(app.countSnapshotRequests()).toBe(0);
 });

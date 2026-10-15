@@ -1636,7 +1636,7 @@ const readBracketScores = (seriesIds) =>
 /** What each series' card says under it, in the order of `seriesIds`, without its markup. */
 const readCardNotes = (seriesIds = SERIES_IDS) =>
   seriesIds.map((id) => {
-    const note = String(renderCardNote(findSeries(session.state, id), ""));
+    const note = String(renderCardNote(findSeries(session.state, id)));
     return {
       text: stripTags(normalizeSpaces(note).replace(/&bull;/g, "•")),
       classes:

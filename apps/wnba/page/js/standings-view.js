@@ -45,13 +45,6 @@ function renderTeamTag(row, view) {
 }
 
 /**
- * A streak, like W 3, marked when it's a winning one.
- * @param {string | null} streak
- */
-export const renderStreak = (streak) =>
-  streak?.startsWith("W") ? html`<span class="streak-won">${streak}</span>` : (streak ?? "");
-
-/**
  * A team's first-round series from its own side: "W 2-0" once it won, "L 0-2" once it lost, and
  * "1-1" while it's still being played.
  * @param {Series} series
@@ -61,7 +54,7 @@ function renderFirstRound(series, team) {
   const [own, other] =
     series.top?.team === team ? [series.top, series.bottom] : [series.bottom, series.top];
   const score = `${own?.wins ?? 0}-${other?.wins ?? 0}`;
-  if (series.winner === team) return html`<span class="series-won">W ${score}</span>`;
+  if (series.winner === team) return `W ${score}`;
   return series.winner ? `L ${score}` : score;
 }
 
@@ -73,11 +66,10 @@ function renderFirstRound(series, team) {
  */
 function renderPlayoffNow(run, firstRound) {
   if (run.isOut) return html`<span class="playoff-out">Out</span>`;
-  if (run.isChampion) return html`<span class="still-in">Champions</span>`;
-  if (firstRound.winner)
-    return html`<span class="still-in">${ROUNDS[Math.max(run.round, 2)].shortName}</span>`;
+  if (run.isChampion) return "Champions";
+  if (firstRound.winner) return ROUNDS[Math.max(run.round, 2)].shortName;
   const nextGame = (firstRound.top?.wins ?? 0) + (firstRound.bottom?.wins ?? 0) + 1;
-  return html`<span class="still-in">Game ${nextGame}</span>`;
+  return `Game ${nextGame}`;
 }
 
 /** @param {[Cell, Cell]} cells */
@@ -89,7 +81,7 @@ const renderFormCells = ([first, second]) =>
 const RECENT_COLUMNS = {
   group: "Recent",
   heads: ["L10", "Strk"],
-  renderCells: (row) => [row.lastTen ?? "", renderStreak(row.streak)],
+  renderCells: (row) => [row.lastTen ?? "", row.streak ?? ""],
 };
 
 /**

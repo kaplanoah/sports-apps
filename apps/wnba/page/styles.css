@@ -2048,17 +2048,8 @@ table.standings th.recent {
 table.standings tr.below td {
   color: var(--ink-dim);
 }
-.streak-won,
-.series-won,
-.still-in {
-  font-weight: calc(var(--type-detail-weight) + 200);
-}
 .playoff-out {
   color: var(--ink-dim);
-}
-/* Bold reads darker, so a winning streak below the line steps paler to sit with its row. */
-tr.below .streak-won {
-  color: color-mix(in srgb, var(--ink-dim) 65%, var(--bg));
 }
 /* The chip centers on the name, rather than sharing its baseline. */
 .team-cell {
