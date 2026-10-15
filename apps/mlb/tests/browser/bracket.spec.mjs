@@ -78,23 +78,49 @@ test("once a series' first game starts, both clubs' scores show 0, at the height
   expect(empty.height).toBe(filled.height);
 });
 
-test("a series winner's digit sits higher in its gold box than a dark box's, in a box of the same height", async ({
-  page,
-}) => {
-  await openApp(page, {
-    store: { "seasons/2025": SEASON_2025 },
-  });
-  await chooseSeason(page, "2025");
-  const wildCard = page.locator("#bracketWrap .series").filter({ hasText: "Reds" });
-  const readScore = (club) =>
-    wildCard.locator(".matchup-row").filter({ hasText: club }).locator(".nscore");
+for (const { colorScheme, theme, winner, loser } of /** @type {const} */ ([
+  {
+    colorScheme: "light",
+    theme: "Ball",
+    winner: { lift: 0, digit: 0.5 },
+    loser: { lift: 0.25, digit: 1 },
+  },
+  {
+    colorScheme: "dark",
+    theme: "Night Game",
+    winner: { lift: 0.5, digit: 0.5 },
+    loser: { lift: 1.25, digit: 1.5 },
+  },
+])) {
+  test(`in ${theme}, each series' chips and their digits sit where its colors look centered, in boxes of one height`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await openApp(page, {
+      store: { "seasons/2025": SEASON_2025 },
+    });
+    await chooseSeason(page, "2025");
+    const wildCard = page.locator("#bracketWrap .series").filter({ hasText: "Reds" });
+    const readPlace = (club) =>
+      wildCard
+        .locator(".matchup-row")
+        .filter({ hasText: club })
+        .locator(".nscore")
+        .evaluate((chip) => {
+          const style = getComputedStyle(chip);
+          return {
+            lift: parseFloat(style.marginBottom) / 2,
+            digit: (parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / 2,
+            height: chip.getBoundingClientRect().height,
+          };
+        });
 
-  await expect(readScore("Dodgers")).toHaveCSS("padding-top", "2.75px");
-  await expect(readScore("Reds")).toHaveCSS("padding-top", "3.5px");
-  const gold = await readScore("Dodgers").boundingBox();
-  const dark = await readScore("Reds").boundingBox();
-  expect(gold.height).toBe(dark.height);
-});
+    const [dodgers, reds] = await Promise.all([readPlace("Dodgers"), readPlace("Reds")]);
+    expect({ lift: dodgers.lift, digit: dodgers.digit }).toEqual(winner);
+    expect({ lift: reds.lift, digit: reds.digit }).toEqual(loser);
+    expect(dodgers.height).toBe(reds.height);
+  });
+}
 
 test("on a wide screen, the whole bracket shows without round dots", async ({ page }) => {
   await page.setViewportSize(WIDE_SCREEN);

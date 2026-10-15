@@ -219,7 +219,7 @@ test.describe("on a phone", () => {
     const readStreakColor = (team) =>
       page
         .locator("#standings-league tbody tr", { hasText: team })
-        .locator(".streak-won")
+        .locator("td.recent.pair-end")
         .evaluate((streak) => getComputedStyle(streak).color);
     expect(await readStreakColor("Fire")).not.toBe(await readStreakColor("Lynx"));
   });

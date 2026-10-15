@@ -351,12 +351,22 @@ header.top {
   color: var(--ink-dim);
 }
 header.top h1 {
+  --title-tracking: 0.06em;
   font-family: var(--title-face);
   font-size: var(--type-title-size);
   font-weight: var(--type-title-weight);
   line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--title-tracking);
+}
+/* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
+   spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */
+header.top h1 .title-letter:nth-child(1),
+header.top h1 .title-letter:nth-child(2) {
+  margin-right: calc(0.025em - var(--title-tracking));
+}
+header.top h1 .title-letter:nth-child(3) {
+  margin-right: calc(0.065em - var(--title-tracking));
 }
 /* On a wide screen, the tabs that aren't open read as buttons, with a firmer outline and darker
    text than the shared chrome gives them. Phones keep their floating tab bar. */
@@ -2060,17 +2070,8 @@ table.standings th.recent {
 table.standings tr.below td {
   color: var(--ink-dim);
 }
-.streak-won,
-.series-won,
-.still-in {
-  font-weight: calc(var(--type-detail-weight) + 200);
-}
 .playoff-out {
   color: var(--ink-dim);
-}
-/* Bold reads darker, so a winning streak below the line steps paler to sit with its row. */
-tr.below .streak-won {
-  color: color-mix(in srgb, var(--ink-dim) 65%, var(--bg));
 }
 /* The chip centers on the name, rather than sharing its baseline. */
 .team-cell {
