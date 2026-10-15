@@ -50,7 +50,7 @@ export function renderMatchupRow(series, side) {
 // Card metrics must match styles.css.
 const CARD = { width: 209, height: 90, topSlotY: 41, dividerY: 57 };
 // Room beside a card for a seed's label, from styles.css's .seed-labels.
-const SEED_LABEL_ROOM = 50;
+const SEED_LABEL_ROOM = 51;
 
 /* Desktop: AL on the left and NL on the right under their league bars, meeting at the World
    Series in the middle. Each wild card card sits dividerY - topSlotY above its division card, so
