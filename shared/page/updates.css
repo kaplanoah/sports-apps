@@ -32,7 +32,7 @@
   font-weight: calc(var(--type-label-weight) - 100);
   font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--updates-head);
 }
 .updates-x {

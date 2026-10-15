@@ -203,6 +203,7 @@
   --type-headline-weight: 600;
   --type-heading-size: calc(16.5rem / 16);
   --type-heading-weight: 500;
+  --type-heading-tracking: 0.03em;
   --type-team-large-size: calc(17.75rem / 16);
   --type-team-large-weight: 500;
   --type-team-size: calc(15.5rem / 16);
@@ -221,6 +222,7 @@
   --type-detail-weight: 400;
   --type-label-size: calc(13rem / 16);
   --type-label-weight: 600;
+  --type-label-tracking: 0.075em;
   --type-caption-size: calc(13rem / 16);
   --type-caption-weight: 400;
   --type-setting-size: calc(15.75rem / 16);
@@ -417,7 +419,7 @@ header.top h1 {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--structure);
 }
 .empty-note {
@@ -578,7 +580,7 @@ header.top h1 {
   font-weight: var(--type-label-weight);
   line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--structure);
 }
 .day-number {
@@ -595,7 +597,7 @@ header.top h1 {
   font-weight: var(--type-label-weight);
   line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .game-day .game-list {
@@ -742,14 +744,13 @@ header.top h1 {
 .series-label {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
   line-height: var(--leading);
 }
 .game-status {
   font-family: var(--display);
-  font-weight: var(--type-label-weight);
-  letter-spacing: 0.08em;
 }
 /* A game that may never happen reads a weight lighter than one that's over. */
 .if-needed {
@@ -760,7 +761,6 @@ header.top h1 {
 .series-label {
   font-family: var(--text);
   font-weight: calc(var(--type-label-weight) - 100);
-  letter-spacing: 0.04em;
 }
 .series-count {
   color: var(--ink-mid);
@@ -798,7 +798,7 @@ header.top h1 {
   font-weight: var(--type-label-weight);
   line-height: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
 }
 
 /* The game sheet: the two teams across the score in its band, then the game's parts, each under a
@@ -968,6 +968,7 @@ header.top h1 {
 .game-sheet .sheet-head h2 {
   font-size: var(--type-heading-size);
   font-weight: var(--type-heading-weight);
+  letter-spacing: var(--type-heading-tracking);
 }
 .faceoff-score {
   grid-area: score;
@@ -1009,7 +1010,7 @@ header.top h1 {
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -1124,7 +1125,7 @@ header.top h1 {
   font-family: var(--numbers);
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--side-name);
 }
@@ -1192,7 +1193,7 @@ table.players .players-head th {
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   text-align: center;
   color: var(--ink-dim);
@@ -1301,7 +1302,7 @@ table.players td.quiet-stat {
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   vertical-align: 1px;
   white-space: nowrap;
@@ -1372,7 +1373,7 @@ table.roster thead th {
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   text-align: right;
   white-space: nowrap;
@@ -1543,7 +1544,7 @@ th[aria-sort="ascending"] .roster-caret {
 .roster-coach dt {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -1652,7 +1653,7 @@ th[aria-sort="ascending"] .roster-caret {
   font-weight: var(--type-heading-weight);
   line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--type-heading-tracking);
   white-space: nowrap;
   color: var(--ink);
   scroll-snap-align: start;
@@ -1661,7 +1662,7 @@ th[aria-sort="ascending"] .roster-caret {
   translate: 0 -0.5px;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-mid);
 }
 .round-name.round-1 {
@@ -1728,18 +1729,6 @@ th[aria-sort="ascending"] .roster-caret {
 .card-note.live {
   color: var(--now);
 }
-/* The Finals' champion, centered under the card in capitals, as MLB's bracket names its own. */
-.card-note.champ {
-  margin-top: 8px;
-  padding-left: 0;
-  font-size: var(--type-label-size);
-  font-style: normal;
-  font-weight: var(--type-label-weight);
-  letter-spacing: 0.05em;
-  text-align: center;
-  text-transform: uppercase;
-  color: var(--result);
-}
 .team-line {
   position: relative;
   display: flex;
@@ -1786,7 +1775,7 @@ th[aria-sort="ascending"] .roster-caret {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
   line-height: var(--leading);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ink-dim);
@@ -1962,7 +1951,7 @@ table.standings th {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   text-align: center;
   color: var(--ink-dim);
 }
@@ -1970,7 +1959,7 @@ table.standings tr.groups th {
   padding-bottom: 6px;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--structure);
 }
 table.standings td {
@@ -2044,6 +2033,7 @@ table.standings td.recent {
 table.standings th.recent {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
 }
 table.standings tr.below td {
   color: var(--ink-dim);
@@ -2197,7 +2187,7 @@ table.standings tr.playoff-line + tr td {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-mid);
 }
 .team-result {
@@ -2317,7 +2307,6 @@ table.standings tr.playoff-line + tr td {
   gap: 7px;
   font-family: var(--text);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.08em;
 }
 .news-teams .dot {
   width: 14px;
@@ -2333,7 +2322,6 @@ table.standings tr.playoff-line + tr td {
 }
 .news-more-label {
   font-weight: calc(var(--type-label-weight) - 100);
-  letter-spacing: 0.08em;
 }
 .news-more-list {
   gap: 10px;
@@ -2527,7 +2515,7 @@ body.kbd .player-open:focus {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .player-fact dd {
@@ -2600,7 +2588,7 @@ table.player-game th {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   text-align: center;
 }
@@ -2631,7 +2619,7 @@ table.player-game td {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .player-lines {
@@ -2660,7 +2648,7 @@ table.player-game td {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 
@@ -2685,7 +2673,7 @@ table.player-game td {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .player-rank-value {

@@ -98,8 +98,9 @@ export const listTextOffRoles = (page) =>
   });
 
 /**
- * A type role's size in pixels, as the page draws it, and its weight, as numbers a test can step
- * from, so a test checks a text against its role rather than the role's value of the day.
+ * A type role's size in pixels, as the page draws it, its weight, and its letter spacing in pixels,
+ * 0 for a role that sets none, as numbers a test can step from, so a test checks a text against its
+ * role rather than the role's value of the day.
  * @param {import("@playwright/test").Page} page
  * @param {string} role like "detail"
  */
@@ -108,9 +109,14 @@ export const readRole = (page, role) =>
     const probe = document.createElement("span");
     probe.style.fontSize = `var(--type-${name}-size)`;
     probe.style.fontWeight = `var(--type-${name}-weight)`;
+    probe.style.letterSpacing = `var(--type-${name}-tracking, 0px)`;
     document.body.append(probe);
     const style = getComputedStyle(probe);
-    const found = { size: parseFloat(style.fontSize), weight: Number(style.fontWeight) };
+    const found = {
+      size: parseFloat(style.fontSize),
+      weight: Number(style.fontWeight),
+      spacing: parseFloat(style.letterSpacing) || 0,
+    };
     probe.remove();
     return found;
   }, role);

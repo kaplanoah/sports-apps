@@ -5,10 +5,8 @@ import { renderRoundDots } from "#shared/round-dots.js";
 import { renderClub } from "./clubs.js";
 import { describeDayInSentence, readGameDay } from "./days.js";
 import { describePeriod } from "./games-view.js";
-import { BRACKET_ORDER, describeTitleWin } from "./series.js";
+import { BRACKET_ORDER } from "./series.js";
 import { ROUNDS } from "./snapshot.js";
-
-const FINALS_ROUND = Math.max(...Object.keys(ROUNDS).map(Number));
 
 /** @typedef {import("./series.js").Series} Series */
 /** @typedef {import("./series.js").SeriesSide} SeriesSide */
@@ -84,8 +82,8 @@ function describeNextGame(game, now) {
 
 /**
  * A card's note, as on MLB's bracket, says only when its series next plays or how the game on now
- * stands, and a finished series has none but the Finals, which names its champion. The card's wins
- * already say how the series stands, and so which game is next.
+ * stands, and a finished series has none. The card's wins already say how the series stands, and
+ * so which game is next.
  * @param {Series} series
  * @param {Game[]} games
  * @param {number} now
@@ -93,8 +91,6 @@ function describeNextGame(game, now) {
 function renderCardNote(series, games, now) {
   const live = games.find((game) => game.series === series.id && game.state === "live");
   if (live) return html`<p class="card-note live">${describeLiveGame(series, live)}</p>`;
-  if (series.winner && series.round === FINALS_ROUND)
-    return html`<p class="card-note champ">${describeTitleWin(series.winner)}</p>`;
   if (series.winner) return "";
   const next = series.top && series.bottom && games.find((game) => game.id === series.nextGame?.id);
   return html`<p class="card-note">${next ? describeNextGame(next, now) : "Next game TBD"}</p>`;

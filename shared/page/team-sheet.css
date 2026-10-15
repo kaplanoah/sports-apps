@@ -72,7 +72,7 @@ body.kbd .team-open:focus {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-mid);
 }
 .team-season {

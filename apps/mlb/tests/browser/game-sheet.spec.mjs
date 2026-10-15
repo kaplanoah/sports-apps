@@ -362,6 +362,12 @@ test("a game still to come lists its clubs' meetings so far under its starters, 
     [sheet.locator(".starters-open"), series].map((each) => each.boundingBox()),
   );
   expect(part.y).toBeGreaterThan(starters.y + starters.height);
+  const [club, score] = await Promise.all(
+    [".meeting-result > .team-open", ".meeting-score"].map((selector) =>
+      series.locator(selector).first().boundingBox(),
+    ),
+  );
+  expect(score.y + score.height / 2 - (club.y + club.height / 2)).toBeCloseTo(0.25, 2);
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);

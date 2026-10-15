@@ -247,8 +247,6 @@ function renderSeriesCard(
 
 const describeAdvance = (champion) => (champion ? `${nameTeam(champion)} advance` : "");
 
-const describeWorldSeriesWin = (ws) => (ws.winner ? `${nameTeam(ws.winner)} win` : "");
-
 function drawWideConnectors() {
   const left = (index) => findColumnLeft(WIDE, index);
   const right = (index) => findColumnRight(WIDE, index);
@@ -285,7 +283,7 @@ function renderWideCards(bracket) {
     renderSeriesCard(al.ds[0], WIDE.division1Y, left(1)),
     renderSeriesCard(al.ds[1], WIDE.division2Y, left(1)),
     renderSeriesCard(al.cs[0], WIDE.middleY, left(2), { champLine: describeAdvance(al.champion) }),
-    renderSeriesCard(ws, WIDE.middleY, left(3), { champLine: describeWorldSeriesWin(ws) }),
+    renderSeriesCard(ws, WIDE.middleY, left(3)),
     renderSeriesCard(nl.cs[0], WIDE.middleY, left(4), { champLine: describeAdvance(nl.champion) }),
     renderSeriesCard(nl.ds[0], WIDE.division1Y, left(5), nlSide),
     renderSeriesCard(nl.ds[1], WIDE.division2Y, left(5), nlSide),
@@ -434,7 +432,6 @@ function renderStackedStage(bracket, growth, fits) {
     <svg class="bracket-lines" width="${STACKED_LINES_WIDTH}" height="${height}" viewBox="0 0 ${STACKED_LINES_WIDTH} ${height}">${drawStackedConnectors([al, nl], worldSeriesY)}</svg>
     ${renderLeague("al", bracket.al, al)}
     ${renderSeriesCard(bracket.ws, worldSeriesY, worldSeriesLeft, {
-      champLine: describeWorldSeriesWin(bracket.ws),
       width: STACKED.worldSeriesWidth,
     })}
     ${renderLeague("nl", bracket.nl, nl)}

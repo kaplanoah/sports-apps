@@ -277,6 +277,7 @@
   matched by eye so a role looks as big and as heavy in every app, and a new league sets its own.
   A rule that sets a role's size sets its weight from the same role,
   or a step from it where its text leads or recedes within the role, as `calc(var(--type-label-weight) - 100)`,
+  and a heading's or label's letter spacing from `--type-heading-tracking` or `--type-label-tracking`,
   and every line height set by its text's size is a share of the app's `--leading`,
   which MLB's Libre Franklin sets a little apart, while one in pixels keeps its pixels.
   The root's `tests/type-roles.test.js` checks the stylesheets for each.
