@@ -105,6 +105,33 @@ const GAME_FIELDS = [
   "isNational",
   "homeAway",
 ].join(",");
+// A game being played is read from MLB's live feed, which runs ahead of the schedule's copy of it
+// by half a minute or more, so every part shows the same inning, outs, and score.
+const LIVE_GAME_FIELDS = [
+  "gameData",
+  "status",
+  "abstractGameState",
+  "codedGameState",
+  "detailedState",
+  "reason",
+  "liveData",
+  "linescore",
+  "currentInning",
+  "inningState",
+  "outs",
+  "teams",
+  "away",
+  "home",
+  "runs",
+  "defense",
+  "offense",
+  "pitcher",
+  "team",
+  "id",
+].join(",");
+/** @param {number | string} id */
+export const nameLiveGameRequest = (id) =>
+  `/api/v1.1/game/${id}/feed/live?fields=${LIVE_GAME_FIELDS}`;
 // The season's whole schedule, which only the Games view lists, needs only who plays when and where,
 // each club's record and starter with the game, and how it ended, in which inning.
 const SEASON_GAME_FIELDS = [
@@ -531,6 +558,56 @@ async function fetchPitchers(getJson, season, ids) {
 
 const readUnlessFailed = (promise) => promise.catch(() => null);
 
+const listScheduleGames = (schedule) => (schedule?.dates ?? []).flatMap((day) => day.games ?? []);
+
+/**
+ * Each game the schedule says is being played, as MLB's live feed has it, by id. One whose read
+ * fails is left out, so the schedule's copy of it stands.
+ * @param {(path: string, name: string) => Promise<any>} getJson
+ * @param {any} schedule
+ */
+async function readLiveGames(getJson, schedule) {
+  const live = listScheduleGames(schedule).filter(isLive);
+  const feeds = await Promise.all(
+    live.map((game) => readUnlessFailed(getJson(nameLiveGameRequest(game.gamePk), "liveGame"))),
+  );
+  return Object.fromEntries(
+    live.map((game, index) => [String(game.gamePk), feeds[index]]).filter(([, feed]) => feed),
+  );
+}
+
+/**
+ * The schedule with each game being played as its live feed has it: its status, its line score,
+ * and its score.
+ * @param {any} schedule
+ * @param {Record<string, any> | undefined} liveGames
+ */
+function applyLiveGames(schedule, liveGames) {
+  if (!schedule || !liveGames) return schedule;
+  const applyGame = (/** @type {any} */ game) => {
+    const feed = liveGames[String(game.gamePk)];
+    const linescore = feed?.liveData?.linescore;
+    if (!linescore) return game;
+    const readSide = (/** @type {"away" | "home"} */ side) => {
+      const runs = linescore.teams?.[side]?.runs;
+      return { ...game.teams?.[side], ...(isNumber(runs) && { score: runs }) };
+    };
+    return {
+      ...game,
+      status: { ...game.status, ...feed.gameData?.status },
+      linescore,
+      teams: { ...game.teams, away: readSide("away"), home: readSide("home") },
+    };
+  };
+  return {
+    ...schedule,
+    dates: (schedule.dates ?? []).map((day) => ({
+      ...day,
+      games: (day.games ?? []).map(applyGame),
+    })),
+  };
+}
+
 // The season's dates come first because they decide how far back the schedule reaches, and the
 // games come before the standings, since a game that just ended is what makes them worth reading
 // again. The starters come last, since which games the slate lists depends on the standings,
@@ -547,11 +624,19 @@ export async function fetchResponses(getJson, season, now = Date.now()) {
     getJson(requests.postseason, "postseason"),
     requests.schedule ? getJson(requests.schedule, "schedule") : null,
   ]);
-  const [standings, seasonGames] = await Promise.all([
+  const [liveGames, standings, seasonGames] = await Promise.all([
+    readLiveGames(getJson, schedule),
     readUnlessFailed(getJson(requests.standings, "standings")),
     readUnlessFailed(getJson(requests.seasonGames, "seasonGames")),
   ]);
-  const responses = { season: seasonDates, standings, postseason, schedule, seasonGames };
+  const responses = {
+    season: seasonDates,
+    standings,
+    postseason,
+    schedule,
+    liveGames,
+    seasonGames,
+  };
   const { slate } = buildSnapshot(responses, { season, now });
   const pitchers = await fetchPitchers(getJson, season, listStarterIds(slate));
   return { ...responses, pitchers };
@@ -561,10 +646,7 @@ export async function fetchResponses(getJson, season, now = Date.now()) {
  * How many of the schedule's games have ended.
  * @param {any} schedule MLB's schedule
  */
-export const countFinals = (schedule) =>
-  (schedule?.dates ?? [])
-    .flatMap((day) => day.games ?? [])
-    .filter((game) => readGameState(game.status ?? {}) === "final").length;
+export const countFinals = (schedule) => listScheduleGames(schedule).filter(isFinal).length;
 
 export async function fetchSnapshot(getJson, season, now = Date.now()) {
   return buildSnapshot(await fetchResponses(getJson, season, now), { season, now });
@@ -1457,7 +1539,11 @@ function buildSlateWithAllStar(responses, games, clubGames, now) {
   return allStar ? { ...slate, allStar } : slate;
 }
 
-export function buildSnapshot(responses, { season, now = Date.now() }) {
+export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
+  const responses = {
+    ...rawResponses,
+    schedule: applyLiveGames(rawResponses.schedule, rawResponses.liveGames),
+  };
   const games = responses.schedule ? listScheduledGames(responses.schedule) : [];
   const postseasonGames = listPostseasonGames(responses);
   const { records, clinches } = readRecords(responses.standings);

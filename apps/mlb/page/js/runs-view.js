@@ -314,7 +314,9 @@ function renderUp(bases) {
 /** @param {any} bases where the game stands, from the box score */
 function renderNow(bases) {
   const inning = describeInning(bases);
-  const outs = renderOutLights({ state: "live", outs: bases.outs });
+  const outs = isBetweenHalves(bases)
+    ? html``
+    : renderOutLights({ state: "live", outs: bases.outs });
   return html`<div class="runs-now">
     <p class="runs-now-head"><span class="runs-now-label">Now</span><span class="runs-now-inning">${inning}${outs}</span></p>
     ${renderField(bases.runners)}${renderUp(bases)}

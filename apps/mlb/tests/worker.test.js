@@ -20,7 +20,27 @@ function nameRequest(url) {
   if (url.includes("/seasons/")) return "season";
   if (url.includes("/standings")) return "standings";
   if (url.includes("/postseason")) return "postseason";
+  if (url.includes("/feed/live")) return "liveGame";
   return url.includes("gameType=") ? "seasonGames" : "schedule";
+}
+
+const LIVE_GAME_IDS = RESPONSES.schedule.dates
+  .flatMap((/** @type {any} */ day) => day.games)
+  .filter((/** @type {any} */ game) => MLBSnapshot.readGameState(game.status) === "live")
+  .map((/** @type {any} */ game) => String(game.gamePk));
+
+// MLB's live feed for a game, saying what its schedule's copy says.
+/** @param {string} url */
+function answerLiveGame(url) {
+  const id = /\/game\/(\d+)\//.exec(url)?.[1];
+  const game = RESPONSES.schedule.dates
+    .flatMap((/** @type {any} */ day) => day.games)
+    .find((/** @type {any} */ each) => String(each.gamePk) === id);
+  const teams = { away: { runs: game.teams.away.score }, home: { runs: game.teams.home.score } };
+  return {
+    gameData: { status: game.status },
+    liveData: { linescore: { ...game.linescore, teams } },
+  };
 }
 
 /** @param {{ status?: number, answers?: Record<string, any> }} [options] */
@@ -29,7 +49,8 @@ function createFakeMlb({ status = 200, answers = {} } = {}) {
   const fetchImpl = async (url, init) => {
     calls.push({ url, init });
     const kind = nameRequest(url);
-    return new Response(JSON.stringify(answers[kind] ?? RESPONSES[kind]), { status });
+    const answer = kind === "liveGame" ? answerLiveGame(url) : (answers[kind] ?? RESPONSES[kind]);
+    return new Response(JSON.stringify(answer), { status });
   };
   /** @param {string} kind */
   const countCalls = (kind) => calls.filter((call) => nameRequest(call.url) === kind).length;
@@ -59,9 +80,31 @@ test("the snapshot is built from MLB, with a timeout and a short edge cache", as
   assert.equal(response.headers.get("cache-control"), "no-store");
   const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
   assert.deepEqual(await response.json(), expected);
-  assert.equal(mlb.calls.length, 5);
+  assert.equal(mlb.calls.length, 5 + LIVE_GAME_IDS.length);
   assert.equal(mlb.calls[0].init.cf.cacheTtl, 15);
   assert.ok(mlb.calls[0].init.signal);
+});
+
+test("each game being played is read from MLB's live feed, reused only moments, and one that doesn't answer keeps the schedule's copy", async () => {
+  const { mlb, requestSnapshot } = createTestServer();
+  await requestSnapshot();
+  const liveCalls = mlb.calls.filter((call) => nameRequest(call.url) === "liveGame");
+
+  assert.equal(liveCalls.length, LIVE_GAME_IDS.length);
+  assert.ok(LIVE_GAME_IDS.length > 0);
+  assert.ok(liveCalls.every((call) => call.init.cf.cacheTtl === 5));
+
+  const down = createFakeMlb();
+  const fetchImpl = (/** @type {string} */ url, /** @type {any} */ init) =>
+    nameRequest(url) === "liveGame"
+      ? Promise.resolve(new Response("", { status: 503 }))
+      : down.fetchImpl(url, init);
+  const server = createSnapshotServer({ fetchImpl, now: () => NOW });
+  const response = await server.serveSnapshot(
+    new URL("https://mlb-app.example/k3y/snapshot?season=2026"),
+  );
+  const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
+  assert.deepEqual(await response.json(), expected);
 });
 
 test("season defaults to this year", async () => {
@@ -72,10 +115,11 @@ test("season defaults to this year", async () => {
 test("pages polling together share one trip to MLB", async () => {
   const { mlb, requestSnapshot, advanceClock } = createTestServer();
   await Promise.all([1, 2, 3].map(() => requestSnapshot()));
-  assert.equal(mlb.calls.length, 5);
+  const firstTrip = 5 + LIVE_GAME_IDS.length;
+  assert.equal(mlb.calls.length, firstTrip);
   advanceClock(11000);
   await requestSnapshot();
-  assert.equal(mlb.calls.length, 6);
+  assert.equal(mlb.calls.length, firstTrip + 1 + LIVE_GAME_IDS.length);
 });
 
 const HOUR_MS = 60 * 60 * 1000;

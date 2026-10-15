@@ -121,7 +121,7 @@ test("between halves of an inning, the field is empty and says who's due up", ()
     "Smith due up against Misiorowski",
   ]);
   assert.match(markup, /runs-field/);
-  assert.match(markup, /aria-label="3 outs"/);
+  assert.doesNotMatch(markup, /out-lights/, "no outs between halves, as a game's row shows it");
   assert.doesNotMatch(markup, /class="runs-base taken"/);
 });
 
