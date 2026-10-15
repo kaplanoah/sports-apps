@@ -286,3 +286,14 @@ test("the league and each conference stack one under another, each named at its 
     .evaluate((bar) => bar.getBoundingClientRect().bottom);
   expect(lists[0].top - pillBottom).toBeCloseTo(3.5, 1);
 });
+
+test("on a narrow phone, a table wider than the room is cut off at the screen's edge rather than scrolling the page sideways", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-west")).toBeAttached();
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+});
