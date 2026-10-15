@@ -12,6 +12,19 @@ test("an error names its file by its own name, and its line and column", () => {
   assert.equal(describeError(event), "TypeError: list is null at games-view.js:12:7");
 });
 
+test("an error from the page itself names it page, never its address, which holds its key", () => {
+  const event = /** @type {ErrorEvent} */ ({
+    message: "ResizeObserver loop completed with undelivered notifications.",
+    filename: "https://example-subdomain.workers.dev/k3y/",
+    lineno: 0,
+    colno: 0,
+  });
+  assert.equal(
+    describeError(event),
+    "ResizeObserver loop completed with undelivered notifications. at page:0:0",
+  );
+});
+
 test("an error from nowhere the page can name says only what it was", () => {
   const event = /** @type {ErrorEvent} */ ({
     message: "Script error.",

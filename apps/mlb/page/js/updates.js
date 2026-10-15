@@ -1,4 +1,4 @@
-import { renderClub, renderRankTag } from "./clubs.js";
+import { renderClubName } from "./clubs.js";
 import { isPastMidnight, readMlbDay } from "./dates.js";
 import { describeEntry, describeUpdate } from "./entry-text.js";
 import { readCalendarDate } from "#shared/days.js";
@@ -12,12 +12,12 @@ import { TEAMS } from "./teams.js";
 import { renderGameButton } from "./games-view.js";
 import { describeGame, findCommonGames, groupUpdates, isResult } from "./update-groups.js";
 
-function renderClubChip(id) {
-  return TEAMS[id] ? html`${renderRankTag(id)}${renderClub(id)}` : html``;
+function renderUpdateClub(id) {
+  return TEAMS[id] ? html`<b>${renderClubName(id)}</b>` : html``;
 }
 
 const readTextContext = () => ({
-  renderClub: renderClubChip,
+  renderClub: renderUpdateClub,
   teams: session.state?.teams,
   standings: session.standings,
 });

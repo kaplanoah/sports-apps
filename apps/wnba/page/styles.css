@@ -1898,8 +1898,6 @@ th[aria-sort="ascending"] .roster-caret {
   }
 }
 
-/* The Updates box's count is a label like the sheets' titles, and its team names are in the team
-   font, a step lighter than elsewhere, so they stand out in the sentence without outweighing it. */
 /* The Updates box is a card like any other, raised off the floor inside an edge. */
 .updates {
   border-color: var(--edge);

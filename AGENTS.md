@@ -724,6 +724,8 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
   Nothing a change logs or posts where the public can read it, like a workflow's log or an issue,
   carries a page's address, its key, an access code, or the account's id either,
   masked as `hideAddress` in `worker/check-page.mjs` masks a check's reason.
+  Nor does a Diagnostics report, which a viewer shares wherever they like:
+  each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
   Reviewing a change, check what it commits, logs, and posts for any of these.
 - The Cloudflare token lives only in the cloud environment's API credentials and the repo's `production` GitHub environment.
   Never ask for it in chat or put it in environment variables, code, or commits.

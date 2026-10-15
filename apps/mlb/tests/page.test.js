@@ -39,10 +39,9 @@ function checkAt(isoTime, check) {
   }
 }
 
-const RANK_CHIP = /<span class="rank-slot">.*?<\/span><\/span>/g;
-const describeEntry = (entry) => stripTags(String(renderEntryText(entry)).replace(RANK_CHIP, ""));
+const describeEntry = (entry) => stripTags(String(renderEntryText(entry)));
 const describeUpdate = (entries) =>
-  stripTags(String(renderUpdateText(entries)).replace(RANK_CHIP, ""))
+  stripTags(String(renderUpdateText(entries)))
     .replace(/&mdash;/g, "--")
     .replace(/&#39;/g, "'");
 
@@ -285,6 +284,26 @@ test("update log: a series game's result and where the series stands join with a
     describeGame({ won: "TOR", lost: "NYY", runs: [4, 1], game: 3, score: [1, 2] }),
     "Blue Jays beat the Yankees 4-1 in Game&nbsp;3, trail the ALDS 1&ndash;2",
   );
+});
+
+test("update log: each club is its name in bold, without its rank or dot", () => {
+  session.state = { teams: { NYY: {}, TOR: {} } };
+  const rendered = String(
+    renderEntryText({
+      kind: "game",
+      series: "AL_DS1",
+      won: "NYY",
+      lost: "TOR",
+      runs: [5, 3],
+      game: 2,
+      score: [2, 0],
+    }),
+  );
+  assert.deepEqual(
+    [...rendered.matchAll(/<b><button [^>]*>([^<]+)<\/button><\/b>/g)].map(([, name]) => name),
+    ["Yankees", "Blue Jays"],
+  );
+  assert.doesNotMatch(rendered, /rank-tag|class="dot"/);
 });
 
 test("update log: clinches", () => {

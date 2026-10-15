@@ -66,6 +66,29 @@ test("a step is logged only while Diagnostics is on", () => {
   assert.deepEqual(log.readLines(), []);
 });
 
+test("no line holds an address, which holds the page's key, even one kept before: a file goes by its name, and the page by page", () => {
+  const page = "https://example-subdomain.workers.dev/k3y/";
+  stored.set("addressLog", JSON.stringify([{ at: 1, text: `an error at ${page}:0:0` }]));
+  const log = createStepLog({ key: "addressLog", title: "Errors", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+
+  log.noteStep(`Failed to fetch dynamically imported module: ${page}c9c63e6/js/games-view.js`);
+  log.noteStep(`a promise failed: Load failed for ${page}`);
+
+  assert.deepEqual(
+    log.readLines().map((line) => line.text),
+    [
+      "an error at page",
+      "Failed to fetch dynamically imported module: games-view.js",
+      "a promise failed: Load failed for page",
+    ],
+  );
+  assert.doesNotMatch(stored.get("addressLog") ?? "", /k3y|example-subdomain/);
+});
+
 test("a touch or click on the log's part is logged with where it landed and on what, and one elsewhere isn't", () => {
   const log = createLog();
   log.watchSteps(

@@ -9,6 +9,19 @@ const KEPT_LINES = 200;
 /** @typedef {{ at: number, text: string }} StepLine */
 
 /**
+ * A file by its own name, and the page by "page", never by an address, whose path holds the page's
+ * key, so a report shared from Diagnostics can't open the page.
+ * @param {string} url
+ */
+export function nameFile(url) {
+  const name = URL.canParse(url) ? new URL(url).pathname.split("/").at(-1) : "";
+  return name?.includes(".") ? name : "page";
+}
+
+/** @param {string} text */
+const hideAddresses = (text) => text.replace(/\bhttps?:\/\/[^\s"'<>]+/g, nameFile);
+
+/**
  * A log's lines as text under its title, or nothing when it has none.
  * @param {string} title
  * @param {StepLine[]} lines newest first
@@ -68,7 +81,9 @@ export function createStepLog({ key, title, isWatched }) {
   function readLines() {
     try {
       const lines = JSON.parse(localStorage.getItem(key) ?? "[]");
-      return Array.isArray(lines) ? lines : [];
+      return Array.isArray(lines)
+        ? lines.map((line) => ({ ...line, text: hideAddresses(String(line.text)) }))
+        : [];
     } catch {
       return [];
     }
@@ -97,7 +112,7 @@ export function createStepLog({ key, title, isWatched }) {
    */
   function noteStep(text) {
     if (!isOn()) return;
-    saveLines([...readLines(), { at: Date.now(), text }]);
+    saveLines([...readLines(), { at: Date.now(), text: hideAddresses(text) }]);
     onLogged();
   }
 

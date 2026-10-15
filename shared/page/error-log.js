@@ -1,4 +1,4 @@
-import { createStepLog } from "./step-log.js";
+import { createStepLog, nameFile } from "./step-log.js";
 
 // Each error the page's code throws and nothing catches, and each promise it lets fail, with where
 // it came from, since a phone shows the page's errors nowhere.
@@ -7,9 +7,6 @@ export const errorLog = createStepLog({
   title: "Errors",
   isWatched: () => false,
 });
-
-/** @param {string} url */
-const nameFile = (url) => url.split("/").at(-1) || url;
 
 /**
  * @param {ErrorEvent} event
