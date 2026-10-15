@@ -240,7 +240,6 @@
   with the stories under each lead in a quiet More on this list,
   from the outlets the settings' News switches include, kept per device (`shared/page/news.js`,
   `news-picks.js`, `news-view.js`, and `news-choices.js`, which `page/js/news-league.js` hands its teams and the switches for its outlets),
-  with a check on each story's Read button once the device has opened it (`opened-stories.js`),
   and whose game sheet, once a game is over, has pills that slide between its box score and its Highlights,
   ESPN's recap video, its story, and its clips, from ESPN's game summary,
   each leaving once ESPN takes it down, which the store keeps for each of the current season's finals,
@@ -504,10 +503,9 @@
   its record, which a page reads only in the version it knows,
   reloading once a newer release is out, and the store's status,
   and moving on to the next season when the store does, in `season-reader.js`,
-  the News tab, its cards and the outlets each device reads, its switches,
-  and the stories a device has opened, from the cards a league's news job keeps,
-  in `news.js`, `news-view.js`, `news-picks.js`, `news-choices.js`,
-  and `opened-stories.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through `package.json`'s imports.
+  the News tab, its cards and the outlets each device reads, and its switches,
+  from the cards a league's news job keeps,
+  in `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through `package.json`'s imports.
   Its `type.css` holds the type scale's sizes, `chrome.css` styles the tab bar,
   settings sheet and its Diagnostics, round dots, Home Screen bar and box,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,

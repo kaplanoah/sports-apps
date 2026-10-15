@@ -90,7 +90,7 @@ const renderStory = (story) =>
     html`<article class="highlights-story">
       <h4 class="highlights-story-title" data-quoted>${story.title}</h4>
       <p class="highlights-story-lead" data-quoted>${story.lead}</p>
-      ${renderReadButton(/** @type {any} */ (story), {})}
+      ${renderReadButton(story)}
     </article>`,
   );
 

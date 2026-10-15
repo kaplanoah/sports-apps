@@ -119,16 +119,6 @@
   text-decoration: none;
   white-space: nowrap;
 }
-/* A hidden copy at the unread weight keeps the label as wide once its story is opened. */
-.read-label {
-  display: inline-grid;
-}
-.read-label::after {
-  content: attr(data-label);
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-}
 @media (hover: hover) {
   .news-title a,
   .news-more-title a,

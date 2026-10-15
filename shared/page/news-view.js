@@ -11,7 +11,6 @@ import { isWebAddress, pickReadCards } from "./news-picks.js";
 
 /** @typedef {import("./news-picks.js").NewsStory} NewsStory */
 /** @typedef {import("./news-picks.js").NewsCard} NewsCard */
-/** @typedef {import("./opened-stories.js").OpenedStories} OpenedStories */
 
 /**
  * What a league hands the News view.
@@ -28,9 +27,6 @@ const MAX_CARD_TEAMS = 2;
 
 // Phosphor's arrow-up-right, at its Regular weight.
 const READ_ARROW = html`<svg class="read-arrow" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg>`;
-
-// Phosphor's check, at its Regular weight.
-const READ_CHECK = html`<svg class="read-check" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>`;
 
 /**
  * @param {Date} date
@@ -86,24 +82,19 @@ const renderStoryLink = (story, content) =>
   html`<a href="${story.url}" target="_blank" rel="noopener noreferrer">${content}</a>`;
 
 /**
- * The button that opens the story, with a check in place of its arrow once this device has opened
- * it. Its label keeps room for itself at its unread weight, so the button keeps its width.
- * @param {NewsStory} story
- * @param {OpenedStories} opened
+ * The button that opens the story.
+ * @param {Pick<NewsStory, "url" | "outlet" | "title">} story
  */
-export function renderReadButton(story, opened) {
-  const isOpened = Object.hasOwn(opened, story.url);
+export function renderReadButton(story) {
   const label = `Read on ${story.outlet}`;
   return html`<div class="news-foot">
     <a
-      class="read-button${isOpened ? " opened" : ""}"
+      class="read-button"
       href="${story.url}"
       target="_blank"
       rel="noopener noreferrer"
       aria-label="${label}: ${story.title}"
-      ><span class="read-label" data-label="${label}">${label}</span>${
-        isOpened ? READ_CHECK : READ_ARROW
-      }</a
+      ><span class="read-label">${label}</span>${READ_ARROW}</a
     >
   </div>`;
 }
@@ -195,16 +186,15 @@ const renderMore = (more, now) =>
 /**
  * @param {NewsCard} card
  * @param {number} now
- * @param {OpenedStories} opened
  * @param {NewsLeague["renderTeam"]} renderTeam
  */
-function renderCard({ lead, more }, now, opened, renderTeam) {
+function renderCard({ lead, more }, now, renderTeam) {
   return html`<article class="news-card">
     ${renderPhoto(lead.photo)}
     <div class="news-body">
       ${renderCardTop(lead.teams.slice(0, MAX_CARD_TEAMS), lead.photo, renderTeam)}
       <h3 class="news-title" data-quoted>${renderStoryLink(lead, lead.title)}</h3>
-      ${renderMeta(lead, now)} ${renderSummary(lead)} ${renderReadButton(lead, opened)}
+      ${renderMeta(lead, now)} ${renderSummary(lead)} ${renderReadButton(lead)}
       ${renderMore(more, now)}
     </div>
   </article>`;
@@ -250,19 +240,13 @@ function placeInColumns(cards, columnCount) {
 }
 
 /**
- * The cards the Worker saved, with only the outlets `choices` reads, in `columnCount` columns, each
- * lead this device has opened marked with a check.
+ * The cards the Worker saved, with only the outlets `choices` reads, in `columnCount` columns.
  * @param {NewsCard[]} cards
  * @param {import("./news-picks.js").NewsChoices} choices
  * @param {number} now
- * @param {NewsLeague & { columnCount?: number, opened?: OpenedStories }} options
+ * @param {NewsLeague & { columnCount?: number }} options
  */
-export function renderNews(
-  cards,
-  choices,
-  now,
-  { renderTeam, outletSwitches, columnCount = 1, opened = {} },
-) {
+export function renderNews(cards, choices, now, { renderTeam, outletSwitches, columnCount = 1 }) {
   const read = pickReadCards(cards, choices, outletSwitches);
   if (!read.length) return html`<p class="empty-note">No news yet</p>`;
   return html`<div class="news-cards">
@@ -271,7 +255,7 @@ export function renderNews(
           html`<ul class="news-column">
             ${column.map(
               (card) =>
-                html`<li data-key="${card.lead.id}">${renderCard(card, now, opened, renderTeam)}</li>`,
+                html`<li data-key="${card.lead.id}">${renderCard(card, now, renderTeam)}</li>`,
             )}
           </ul>`,
       )}
