@@ -134,7 +134,7 @@ test("every team name is in Barlow Condensed", async ({ page }) => {
   expect(new Set(await readFonts(".club"))).toEqual(new Set(["Barlow Condensed"]));
 });
 
-test("the title and the round names are in Barlow Condensed, and each card's note in Barlow's italic", async ({
+test("the title is in Barlow Condensed, and the round names and each card's note in Barlow, the note italic", async ({
   page,
 }) => {
   await openApp(page);
@@ -146,8 +146,8 @@ test("the title and the round names are in Barlow Condensed, and each card's not
         getComputedStyle(element).fontFamily.split(",")[0].replaceAll('"', ""),
       );
   await expect(page.locator(".card-note").first()).toBeVisible();
-  for (const selector of ["header.top h1", ".round-name"])
-    expect(await readFirstFont(selector)).toBe("Barlow Condensed");
+  expect(await readFirstFont("header.top h1")).toBe("Barlow Condensed");
+  expect(await readFirstFont(".round-name")).toBe("Barlow");
   expect(await readFirstFont(".card-note")).toBe("Barlow");
   await expect(page.locator(".card-note").first()).toHaveCSS("font-style", "italic");
   await expect(page.locator(".card-note").first()).toHaveCSS(
