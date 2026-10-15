@@ -25,7 +25,12 @@ import { describeInningsToQualify, measureInningsProgress } from "./qualifying.j
 import { describeGamePitching, formatInnings } from "./stat-table.js";
 import { TEAMS } from "./teams.js";
 import { formatOrdinal } from "#shared/ordinal.js";
-import { describeWouldRank, rankAmong, renderSpreadCurve } from "#shared/rank-curve.js";
+import {
+  describeFewestFirst,
+  describeWouldRank,
+  rankAmong,
+  renderSpreadCurve,
+} from "#shared/rank-curve.js";
 import { pickSideColors } from "#shared/team-colors.js";
 
 const SIDES = ["away", "home"];
@@ -252,16 +257,20 @@ const isUnranked = (side) => Boolean(side.pitcher?.line && !side.pitcher.ranks);
  * @param {(club: string) => number | null} countClubGames
  */
 function renderTapeNotes(sides, countClubGames) {
-  const rankNote =
+  const fewestFirst = TAPE.filter((measure) => measure.isFewestFirst).map(
+    (measure) => measure.label,
+  );
+  const rankNotes =
     sides.some((side) => side.pitcher?.ranks) &&
-    html`<p class="tape-note">Rank among qualified starters</p>`;
+    html`<p class="tape-note">Rank among qualified starters</p>
+      <p class="tape-note">${describeFewestFirst(fewestFirst)}</p>`;
   const unrankedNotes = sides
     .filter(isUnranked)
     .map(
       ({ pitcher, club }) =>
         html`<p class="tape-note">${describeInningsToQualify(pitcher.lastName, pitcher.line.ip, countClubGames(club))}</p>`,
     );
-  return html`${rankNote}${unrankedNotes}`;
+  return html`${rankNotes}${unrankedNotes}`;
 }
 
 /**

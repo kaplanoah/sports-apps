@@ -149,6 +149,12 @@ function renderCurve(stat, isFewestFirst) {
  */
 export const describeWouldRank = (rank) => `would be ${formatOrdinal(rank)}`;
 
+/**
+ * The note under ranks that says which stats rank from the fewest, like ERA or turnovers.
+ * @param {string[]} labels
+ */
+export const describeFewestFirst = (labels) => `${labels.join(" and ")} ranked by fewest`;
+
 /** @param {RankedStat} stat */
 function describeRank(stat) {
   if (stat.rank != null) return `${formatOrdinal(stat.rank)} of ${stat.count}`;
