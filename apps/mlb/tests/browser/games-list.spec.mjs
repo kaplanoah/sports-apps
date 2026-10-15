@@ -548,6 +548,45 @@ test("the Games tab bolds each winner, and shows a club that's out as any other"
   await expect(loserOut.locator(".dot")).toHaveCSS("opacity", "1");
 });
 
+test("a final's losing score is dimmed, a step lighter than the winner's in Ball but not in Night Game, at the same width in both", async ({
+  page,
+}) => {
+  await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  const score = page
+    .locator("#seasonGames .game-day:not(.is-today) .game-row")
+    .filter({ hasText: "Nationals" })
+    .filter({ hasText: "Tigers" })
+    .locator(".game-score");
+  const readScore = () =>
+    score.evaluate((element) => {
+      const lost = /** @type {Element} */ (element.querySelector(".lost"));
+      return {
+        winner: getComputedStyle(element).fontWeight,
+        loser: getComputedStyle(lost).fontWeight,
+        width: lost.getBoundingClientRect().width,
+      };
+    });
+  const scoreWeight = (await readRole(page, "stat-large")).weight;
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(score.locator(".lost")).toHaveCSS("color", await readColor(page, "--ink-dim"));
+  const ball = await readScore();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(score.locator(".lost")).toHaveCSS("color", await readColor(page, "--ink-dim"));
+  const nightGame = await readScore();
+
+  expect(ball).toEqual({ ...ball, winner: String(scoreWeight), loser: String(scoreWeight - 100) });
+  expect(nightGame).toEqual({
+    ...nightGame,
+    winner: String(scoreWeight),
+    loser: String(scoreWeight),
+  });
+  expect(nightGame.width).toBeCloseTo(ball.width, 2);
+});
+
 test("on a wide screen, the Games strip and list sit in the middle of the page", async ({
   page,
 }) => {

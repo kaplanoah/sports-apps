@@ -146,6 +146,10 @@
   --credit-ink: color-mix(in srgb, var(--ink-dim) 84%, var(--card));
   /* Runs set the plays that changed the score apart from the runners who got on before them. */
   --runs-setup-ink: var(--credit-ink);
+  /* A final's losing score, a step lighter in Ball, where its dim ink alone sets it apart from the
+     winner less than in Night Game. Chivo Mono draws every weight at the same width, so both
+     themes still lay out the same. */
+  --lost-score-weight: calc(var(--type-stat-large-weight) - 100);
   --focus-ring: var(--now);
   --gate-heading-font: var(--text);
   --gate-code-font: var(--numbers);
@@ -238,6 +242,7 @@
   --all-star-light: rgba(241, 234, 212, 0.13);
   --out: #998b7d;
   --credit-ink: var(--ink-dim);
+  --lost-score-weight: var(--type-stat-large-weight);
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-ink: #fff;
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
@@ -842,7 +847,7 @@ table.st .seed-cell {
 }
 .game-score .lost {
   color: var(--ink-dim);
-  font-weight: var(--type-stat-large-weight);
+  font-weight: var(--lost-score-weight);
 }
 .game-row.off .game-side,
 .game-row.off .game-time {
