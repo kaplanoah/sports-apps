@@ -1,7 +1,6 @@
 /* The News view: a card for each piece of news, its lead's photo across the top, and the stories
-   that add to it in a quiet list under the lead. A story's Read button turns quieter, with a check in
-   place of its arrow, once this device has opened it. This lays the view out; each app's own
-   styles set its cards' colors, type, spacing, and Read button. */
+   that add to it in a quiet list under the lead. This lays the view out; each app's own styles set
+   its cards' colors, type, spacing, and Read button. */
 /* The columns news-view.js fills, one on a phone and two on a wide screen, each stacking its own
    cards as far apart as the page's sides. */
 .news-cards {
@@ -124,16 +123,6 @@
   border-radius: var(--radius-control);
   text-decoration: none;
   white-space: nowrap;
-}
-/* A hidden copy at the unread weight keeps the label as wide once its story is opened. */
-.read-label {
-  display: inline-grid;
-}
-.read-label::after {
-  content: attr(data-label);
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
 }
 @media (hover: hover) {
   .news-title a,

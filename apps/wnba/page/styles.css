@@ -2348,33 +2348,11 @@ table.standings tr.playoff-line + tr td {
   font-weight: calc(var(--type-detail-weight) + 100);
   color: var(--ink);
 }
-.read-button.opened {
-  padding-right: calc(var(--control-room) - 5px);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--divider);
-  color: var(--ink-mid);
-}
-.read-label {
-  text-box: trim-both cap alphabetic;
-}
-.read-label::after {
-  font-weight: calc(var(--type-detail-weight) + 100);
-}
-.read-button.opened .read-label {
-  font-weight: var(--type-detail-weight);
-}
 .read-arrow {
   width: 16.5px;
   height: 16.5px;
   margin-left: 3px;
   color: var(--action);
-}
-.read-check {
-  width: 16px;
-  height: 16px;
-  margin-left: 4.5px;
-  translate: 0 -0.5px;
-  color: var(--ink-dim);
 }
 
 /* Try again, raised and outlined like the Read button, its arrow in orange, and filled orange where

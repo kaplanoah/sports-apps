@@ -329,7 +329,7 @@ header.top h1 {
   align-items: center;
   gap: 10px;
 }
-/* Chivo Mono at 350 reads as Barlow at 400, the lightest the type scale allows at this size. */
+/* The season's year recedes a step beside the app's name. */
 .season-year {
   font-weight: calc(var(--type-title-weight) - 50);
   color: var(--ink-dim);
@@ -2691,20 +2691,10 @@ body.kbd .player-open:focus {
   text-transform: uppercase;
   color: var(--ink);
 }
-.read-button.opened {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--divider);
-  color: var(--ink-dim);
-}
 .read-arrow {
   width: 14px;
   height: 14px;
   color: var(--highlight);
-}
-.read-check {
-  width: 14px;
-  height: 14px;
-  color: var(--ink-dim);
 }
 /* The News switches sit in a group under their own label, apart from the settings above them. */
 .settings-news {

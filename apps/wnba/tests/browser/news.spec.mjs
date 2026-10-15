@@ -408,41 +408,24 @@ test("a page leaving the screen has its service worker keep the photos from othe
   });
 });
 
-test("a story opened from its Read button shows a check in place of its arrow, as wide a label, and keeps it after a reload", async ({
+test("a story's Read button looks the same after it's opened, and after a reload", async ({
   page,
 }) => {
   await page.context().route("https://example.com/**", (route) => route.fulfill({ body: "" }));
   await openNewsWithStories(page);
   const espn = page.getByRole("link", { name: /^Read on ESPN/ });
-  const athletic = page.getByRole("link", { name: /^Read on The Athletic/ });
-  const unreadLabel = await espn.locator(".read-label").boundingBox();
+  const before = await espn.evaluate((button) => button.outerHTML);
 
   const popup = page.waitForEvent("popup");
   await espn.click();
   await (await popup).close();
 
-  await expect(espn.locator(".read-check")).toBeVisible();
-  await expect(espn.locator(".read-arrow")).toHaveCount(0);
-  await expect(athletic.locator(".read-arrow")).toBeVisible();
-  const openedLabel = await espn.locator(".read-label").boundingBox();
-  expect(Math.abs(openedLabel.width - unreadLabel.width)).toBeLessThan(0.5);
-  expect(await listTextOffRoles(page)).toEqual([]);
-  expect(await listLowContrastText(page)).toEqual([]);
+  await expect(espn.locator(".read-arrow")).toBeVisible();
+  expect(await espn.evaluate((button) => button.outerHTML)).toBe(before);
 
   await page.reload();
-  await expect(findCard(page, "Film review").locator(".read-check")).toHaveCount(1);
-});
-
-test("a story opened in another tab shows its check in this one", async ({ page }) => {
-  await openNewsWithStories(page);
-  const espn = page.getByRole("link", { name: /^Read on ESPN/ });
   await expect(espn.locator(".read-arrow")).toBeVisible();
-
-  await keepInOtherTab(page, "openedStories", {
-    [await espn.getAttribute("href")]: await page.evaluate(() => Date.now()),
-  });
-
-  await expect(espn.locator(".read-check")).toBeVisible();
+  expect(await espn.evaluate((button) => button.outerHTML)).toBe(before);
 });
 
 /**

@@ -102,7 +102,7 @@ test("every choice the page makes is listed by its key", () => {
 
 test("a device whose storage refuses access keeps a choice until the page reloads", () => {
   useStorage({ getItem: refuseAccess, setItem: refuseAccess });
-  const choice = createViewerChoice("openedStories", readAsIs);
+  const choice = createViewerChoice("refused", readAsIs);
 
   assert.equal(choice.read(), null);
   choice.keep({ "https://example.com/story": 1 });

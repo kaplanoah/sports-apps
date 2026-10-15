@@ -183,25 +183,6 @@ test("a photo's credit splits before the agency it came through, one without an 
   );
 });
 
-test("a story this device has opened shows a check in place of its arrow, and the others keep theirs", () => {
-  const stories = [
-    createStory({ id: "opened", publishedAt: "2026-10-05T12:00:00.000Z" }),
-    createStory({ id: "unread", outlet: "The IX", source: "ix" }),
-  ];
-  const opened = { "https://example.com/opened": NOW };
-
-  const buttons =
-    renderNews(createCards(stories), ALL_ON, NOW, { opened }).text.match(
-      /<a\s+class="read-button[\s\S]*?<\/a\s*>/g,
-    ) ?? [];
-
-  assert.equal(buttons.length, 2);
-  assert.match(buttons[0], /class="read-button opened"[\s\S]*class="read-check"/);
-  assert.doesNotMatch(buttons[0], /read-arrow/);
-  assert.match(buttons[1], /class="read-button"[\s\S]*class="read-arrow"/);
-  assert.doesNotMatch(buttons[1], /read-check/);
-});
-
 test("a story's day is today, yesterday, its weekday within the week, and its date before that", () => {
   const readDay = (publishedAt) =>
     checkInTimeZone(
