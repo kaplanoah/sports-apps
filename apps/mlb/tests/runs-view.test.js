@@ -88,7 +88,7 @@ test("a game being played has its Runs so far, then who's on base, how each got 
     "Ohtani walked and Hernández singledPages singled home Ohtani1-0",
     "NowTop 3rd",
     "Bettssingled",
-    "Smith is up against Misiorowski",
+    "Smith up against Misiorowski",
   ]);
   assert.match(markup, /aria-label="1 out"/);
   assert.equal([...markup.matchAll(/class="runs-base taken"/g)].length, 1, "only 1st is taken");

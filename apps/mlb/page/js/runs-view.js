@@ -304,7 +304,7 @@ function renderField(runners) {
 /** @param {any} bases */
 function renderUp({ batter, pitcher }) {
   if (!batter || !pitcher) return html``;
-  return html`<p class="runs-up"><b>${batter}</b> is up against <b>${pitcher}</b></p>`;
+  return html`<p class="runs-up"><b>${batter}</b> up against <b>${pitcher}</b></p>`;
 }
 
 /** @param {any} bases the half inning under way, from the box score */
