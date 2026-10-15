@@ -72,6 +72,17 @@ function restoreScrolls(part, scrolls, savedAt) {
   }
 }
 
+// A part's style comes back only for the colors its code hands it as custom properties, like a game
+// sheet's teams'. The rest was the page's for a moment, like the hold of a pull to refresh that
+// reloaded the page, and would stay for good.
+/** @param {string} style */
+const keepCustomProperties = (style) =>
+  style
+    .split(";")
+    .map((declaration) => declaration.trim())
+    .filter((declaration) => declaration.startsWith("--"))
+    .join("; ");
+
 /**
  * @param {string} id
  * @param {{ markup: string, hidden: boolean, classes?: unknown, style?: unknown, scrolls?: unknown, savedAt?: unknown }} part
@@ -82,7 +93,7 @@ function showPart(id, { markup, hidden, classes, style, scrolls, savedAt }) {
   const isBackToStart = element.hasAttribute("data-start-hidden") && isLongAwayFrom(savedAt);
   element.hidden = hidden === true || isBackToStart;
   if (typeof classes === "string") element.classList.add(...classes.split(" ").filter(Boolean));
-  if (typeof style === "string") element.setAttribute("style", style);
+  if (typeof style === "string") element.setAttribute("style", keepCustomProperties(style));
   restoreScrolls(element, scrolls, savedAt);
 }
 
