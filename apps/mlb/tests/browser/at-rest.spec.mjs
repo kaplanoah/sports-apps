@@ -1,4 +1,11 @@
-import { test, expect, openApp, ON_A_PHONE } from "./harness.mjs";
+import {
+  test,
+  expect,
+  openApp,
+  buildFixtureSnapshot,
+  BROADCASTS_FIXTURE,
+  ON_A_PHONE,
+} from "./harness.mjs";
 import {
   expectAtRest,
   forgetResizeLoops,
@@ -62,4 +69,52 @@ test("a shown list that grows loops no ResizeObserver", async ({ page }) => {
     .poll(() => page.locator("#seasonGames .day-list").evaluate((list) => list.scrollHeight))
     .toBeGreaterThan(3000);
   expect(await readResizeLoops()).toEqual([]);
+});
+
+/**
+ * How far the shown view starts above the Updates box's end, which is nothing when it's under it.
+ * @param {import("@playwright/test").Page} page
+ */
+const measureOverlap = (page) =>
+  page.evaluate(() => {
+    const updates = /** @type {Element} */ (document.getElementById("updates"));
+    const view = /** @type {Element} */ (document.querySelector(".view.active"));
+    return Math.max(0, updates.getBoundingClientRect().bottom - view.getBoundingClientRect().top);
+  });
+
+test("a reload on Games, then Bracket, leaves each view under the Updates box", async ({
+  page,
+}) => {
+  const at = new Date(Date.parse(BROADCASTS_FIXTURE.now) - 60 * 60 * 1000).toISOString();
+  const log = [
+    { won: "CLE", lost: "TB", game: 3 },
+    { won: "MIL", lost: "LAD", series: "NL_DS1", game: 2 },
+    { won: "TB", lost: "CLE", game: 1 },
+  ].map(({ series = "AL_DS1", ...game }) => ({
+    at,
+    ended: at,
+    kind: "game",
+    series,
+    score: [2, 1],
+    runs: [3, 2],
+    ...game,
+  }));
+  await openApp(page, {
+    now: BROADCASTS_FIXTURE.now,
+    snapshots: { 2026: buildFixtureSnapshot(BROADCASTS_FIXTURE) },
+    store: { "seasons/2026": { log } },
+  });
+  await expect(page.locator("#updates")).toContainText("Brewers beat the");
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+
+  await page.reload();
+  await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+  await waitForLoadToSettle(page);
+  expect(await measureOverlap(page)).toBe(0);
+
+  await page.getByRole("tab", { name: "Bracket" }).click();
+  await expect(page.locator("#bracketWrap .bracket-stage")).toBeVisible();
+  await expectAtRest(page);
+  expect(await measureOverlap(page)).toBe(0);
 });
