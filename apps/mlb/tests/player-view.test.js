@@ -347,6 +347,32 @@ test("a player on the injured list ESPN says nothing of shows his stay alone, an
   assert.doesNotMatch(renderText(kwan), /IL/);
 });
 
+test("a player a box score shows playing now opens without his injured list box, which the store's report hasn't caught up with", () => {
+  const shown = {
+    hitters: HITTERS,
+    starters: null,
+    side: null,
+    isUnkept: false,
+    isLoading: false,
+    isPlayingNow: true,
+  };
+  const markup = String(renderPlayerBody({ ...shown, player: describeTreinen() }));
+  assert.doesNotMatch(markup, /out-box/);
+  assert.match(markup, /<h3>Regular season<\/h3>/);
+
+  const gameless = {
+    ...describeTreinen(),
+    hitting: null,
+    pitching: null,
+    postseasonHitting: null,
+    postseasonPitching: null,
+  };
+  assert.equal(
+    readText(String(renderPlayerBody({ ...shown, player: gameless }))),
+    "No games yet this season",
+  );
+});
+
 test("a player on the injured list without a game this season still shows his box, over the note that he has none", () => {
   const player = {
     ...describeTreinen(),

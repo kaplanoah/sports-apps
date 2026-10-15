@@ -1,5 +1,6 @@
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
+import { isPlayingNow } from "#shared/playing-now.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderPendingTapeRow, renderTapeRow } from "#shared/tape.js";
 import { renderClub } from "./clubs.js";
@@ -232,16 +233,19 @@ const pickTopScorers = (players) =>
     .slice(0, TOP_PERFORMERS);
 
 /**
+ * A box score lists every player on a team, so only one with minutes has played in its game.
  * @param {BoxTeam} side
  * @param {boolean} isLive
+ * @param {boolean} isPlaying whether the game's players are playing now
  */
-function renderTopScorers(side, isLive) {
+function renderTopScorers(side, isLive, isPlaying) {
   const rows = pickTopScorers(side.players).map(
     (player) => html`<tr>
       <th scope="row">
         ${renderPlayerButton(
           { ...player, team: side.team },
           html`<span class="first-name">${player.firstName}</span> ${player.lastName}`,
+          { isPlayingNow: isPlaying && player.minutes > 0 },
         )}${renderFouls(player, isLive)}
       </th>
       <td>${player.points}</td>
@@ -288,16 +292,18 @@ function renderLeadPart(teams, { lead = null, isLeadLoading = false }) {
 /**
  * @param {BoxScore} box
  * @param {LeadState} [leadState]
+ * @param {boolean} [isToday] whether the game is today's
  */
-export function renderBoxScore(box, leadState = {}) {
+export function renderBoxScore(box, leadState = {}, isToday = false) {
   const isLive = box.state === "live";
+  const isPlaying = isPlayingNow(box.state, isToday);
   const teams = { away: box.away.team, home: box.home.team };
   return html`${renderSheetPart("By quarter", renderLineScore(box))}
     ${renderLeadPart(teams, leadState)}
     ${renderSheetPart("Team stats", renderTeamStats(box, leadState.lead ?? null), isLive && "So far")}
     ${renderSheetPart(
       "Top scorers",
-      renderScorersTable(SIDES.map((place) => renderTopScorers(box[place], isLive))),
+      renderScorersTable(SIDES.map((place) => renderTopScorers(box[place], isLive, isPlaying))),
     )}`;
 }
 

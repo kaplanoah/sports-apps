@@ -6,6 +6,7 @@ import { namePlayerIndexKey } from "#shared/page-search.js";
 import { listClubs, readMlbTeamId } from "../page/js/snapshot.js";
 import {
   describeHitters,
+  listGameLogRequest,
   listPeopleRequest,
   nameHittersKey,
   namePlayerKey,
@@ -146,6 +147,8 @@ function createRun() {
   };
   /** Takes the requests made since the last take. */
   const takeRequests = () => mlb.requests.splice(0);
+  /** The day the next run reads game logs through. */
+  const readToday = () => readEasternDay(clock.now).date;
   /** @param {number} finals */
   const endGames = (finals) =>
     docs.write(`seasons/${SEASON}`, { year: SEASON, slate: createSlate(finals) });
@@ -158,6 +161,7 @@ function createRun() {
     runJob,
     wait,
     takeRequests,
+    readToday,
     endGames,
   };
 }
@@ -502,6 +506,135 @@ test("a run reads at most four batches of thirty players' last games", async () 
     run.wait(5);
   }
   assert.ok(Math.max(...batches) === 4, `at most four a run: ${batches}`);
+});
+
+const KWAN = 680757;
+
+/**
+ * Kwan's line in MLB's regular season hitting, which a test can change.
+ * @param {ReturnType<typeof createRun>} run
+ */
+const findKwanLine = (run) =>
+  run.answers[HITTING].stats[0].splits.find((/** @type {any} */ split) => split.player.id === KWAN);
+
+/**
+ * Fills each club listed before the Guardians with a copy of their roster, each player hitting as
+ * Kwan has, so their last games come before his in a run's batches, and answers each copy's line.
+ * @param {ReturnType<typeof createRun>} run
+ */
+function addPlayersAhead(run) {
+  const guardians = FIXTURE.answers[listRosterRequest(RECORDED.CLE, SEASON)];
+  const lines = [];
+  for (const [index, club] of listClubs().slice(0, listClubs().indexOf("CLE")).entries()) {
+    const roster = guardians.roster.map((/** @type {any} */ entry) => ({
+      ...entry,
+      person: { ...entry.person, id: entry.person.id + (index + 1) * 10_000_000 },
+    }));
+    run.answers[nameClubRequest(club)] = { roster };
+    for (const entry of roster)
+      lines.push({
+        player: { id: entry.person.id },
+        stat: structuredClone(findKwanLine(run).stat),
+      });
+  }
+  run.answers[HITTING].stats[0].splits.push(...lines);
+  return lines;
+}
+
+/**
+ * Runs the job, five minutes apart, until every roster is read and every player's last games
+ * have settled.
+ * @param {ReturnType<typeof createRun>} run
+ */
+async function settleRosters(run) {
+  await fillRosters(run);
+  for (let index = 0; index < 20; index += 1) {
+    await run.runJob();
+    run.wait(5);
+    if (!run.takeRequests().some(isGameLogRequest)) break;
+  }
+  run.docs.writes.length = 0;
+}
+
+/**
+ * A player's row in his club's Roster.
+ * @param {ReturnType<typeof createRun>} run
+ * @param {string} club
+ * @param {number} id
+ */
+const findRosterRow = (run, club, id) =>
+  run.docs.stored
+    .get(nameRosterKey(club))
+    .players.find((/** @type {any} */ player) => player.id === id);
+
+/**
+ * Plays a game: one more game and four more plate appearances in each line.
+ * @param {any[]} lines
+ */
+function addGame(lines) {
+  for (const line of lines) {
+    line.stat.gamesPlayed += 1;
+    line.stat.plateAppearances += 4;
+  }
+}
+
+test("a player's totals, on his sheet and his club's Roster, wait for a run to read his last games with the game they count", async () => {
+  const run = createRun();
+  const ahead = addPlayersAhead(run);
+  await settleRosters(run);
+  const kept = run.docs.stored.get(namePlayerKey(SEASON, KWAN)).hitting;
+
+  addGame([...ahead, findKwanLine(run)]);
+  await run.endGames(1);
+  await run.runJob();
+  const requests = run.takeRequests();
+  assert.deepEqual(
+    listLeagueRequests(requests).filter((path) => !NUMBERS.includes(path) && path !== TRANSACTIONS),
+    [],
+    "holding reads nothing more from MLB",
+  );
+  assert.equal(requests.filter(isGameLogRequest).length, 4);
+  assert.ok(!requests.filter(isGameLogRequest).flatMap(readGameLogIds).includes(KWAN));
+  assert.deepEqual(run.docs.stored.get(namePlayerKey(SEASON, KWAN)).hitting, kept);
+  assert.equal(findRosterRow(run, "CLE", KWAN).hitting.plateAppearances, kept.plateAppearances);
+
+  let isRead = false;
+  for (let index = 0; index < 4 && !isRead; index += 1) {
+    run.wait(5);
+    await run.runJob();
+    isRead = run.takeRequests().filter(isGameLogRequest).flatMap(readGameLogIds).includes(KWAN);
+  }
+  assert.ok(isRead, "a later run reads his last games");
+  const kwan = run.docs.stored.get(namePlayerKey(SEASON, KWAN));
+  assert.equal(kwan.hitting.gamesPlayed, kept.gamesPlayed + 1);
+  assert.equal(findRosterRow(run, "CLE", KWAN).hitting.plateAppearances, kept.plateAppearances + 4);
+});
+
+test("a player's totals show without his last games when MLB didn't answer for them, rather than wait on MLB", async () => {
+  const run = createRun();
+  await fillRosters(run);
+  const kept = run.docs.stored.get(namePlayerKey(SEASON, KWAN)).hitting;
+  addGame([findKwanLine(run)]);
+  await run.endGames(1);
+  const logRequest = listGameLogRequest(SEASON, [KWAN], run.readToday());
+  run.refused.add(logRequest);
+  await run.runJob();
+
+  assert.ok(run.takeRequests().includes(logRequest));
+  const reads = await run.storage.get(nameGameLogReadsKey(SEASON));
+  assert.equal(typeof reads[KWAN].failedAt, "number");
+  assert.equal(
+    run.docs.stored.get(namePlayerKey(SEASON, KWAN)).hitting.gamesPlayed,
+    kept.gamesPlayed + 1,
+  );
+  assert.equal(findRosterRow(run, "CLE", KWAN).hitting.plateAppearances, kept.plateAppearances + 4);
+
+  run.refused.clear();
+  run.wait(5);
+  await run.runJob();
+  assert.deepEqual(run.takeRequests().filter(isGameLogRequest).map(readGameLogIds), [[KWAN]]);
+  const answered = await run.storage.get(nameGameLogReadsKey(SEASON));
+  assert.equal(answered[KWAN].failedAt, undefined, "a read that answers clears the failure");
 });
 
 const TREINEN = namePlayerKey(SEASON, 595014);

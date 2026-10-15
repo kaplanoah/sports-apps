@@ -1498,6 +1498,19 @@ test("a regular season game's records are each club's as MLB lists them with it,
   assert.equal(postponed.records, undefined);
 });
 
+test("a game still to come keeps no records, since each club's record now comes from the standings", () => {
+  const fixture = structuredClone(SEASON_GAMES);
+  const listing = findListing(fixture.responses.seasonGames, 823244);
+  listing.status = {
+    abstractGameState: "Preview",
+    codedGameState: "S",
+    detailedState: "Scheduled",
+  };
+  const game = listScheduled(buildSnapshot(fixture)).find((each) => each.id === "823244");
+  assert.equal(game.state, "pre");
+  assert.equal(game.records, undefined);
+});
+
 test("each club's standings row keeps its runs scored and allowed and its records at home and on the road, and leaves out any MLB didn't answer with", () => {
   const responses = structuredClone(EVENING.responses);
   const rays = responses.standings.records

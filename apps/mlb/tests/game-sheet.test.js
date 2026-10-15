@@ -182,6 +182,33 @@ test("each batter's and pitcher's name in a box score, and each batter's in a li
   assert.match(lineup, /data-player="650490" data-player-team="TB" data-player-name="Díaz, Y"/);
 });
 
+/** @param {string} markup */
+const countPlaying = (markup) => (markup.match(/data-player-playing="1"/g) ?? []).length;
+
+test("a box score of a game under way or ended today marks every batter and pitcher in it as playing now, subs too, and one from before today or a lineup marks none", () => {
+  const boxScore = describeGame("849819");
+  const players = ["away", "home"].flatMap((side) => [
+    ...boxScore[side].batters,
+    ...boxScore[side].pitchers,
+  ]);
+  const clubs = { away: "LAD", home: "ATL" };
+
+  const today = String(renderBoxScore({ ...clubs, state: "final", today: true }, boxScore));
+  assert.equal(countPlaying(today), players.length);
+  assert.match(today, /data-player-name="Muncy" data-player-number="" data-player-playing="1">/);
+  const live = String(renderBoxScore({ ...clubs, state: "live", today: true }, boxScore));
+  assert.equal(countPlaying(live), players.length);
+
+  assert.equal(countPlaying(String(renderBoxScore({ ...clubs, state: "final" }, boxScore))), 0);
+  const lineup = describeGame("849838");
+  assert.equal(
+    countPlaying(
+      String(renderBoxScore({ away: "TB", home: "NYY", state: "pre", today: true }, lineup)),
+    ),
+    0,
+  );
+});
+
 test("a box score kept without its players' ids names them plainly", () => {
   const boxScore = describeGame("849819");
   for (const side of ["away", "home"])
