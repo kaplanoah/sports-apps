@@ -21,7 +21,7 @@ import { nameClubFully } from "../../page/js/clubs.js";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
@@ -308,7 +308,7 @@ test("a club's sheet title is its dot and name with its city, and no rank tag, i
   await expect(title.locator(".dot")).toBeVisible();
   await expect(title).toHaveText("Seattle Mariners");
   await expect(title.locator(".rank-tag")).toHaveCount(0);
-  await expect(title).toHaveCSS("font-family", /^"Chivo Mono"/);
+  await expect(title).toHaveCSS("font-family", /^"Libre Franklin"/);
   await expect(title).toHaveCSS("text-transform", "none");
   await expect(page.locator("#teamSheet .sheet-part h3").first()).toHaveCSS(
     "color",
@@ -546,7 +546,7 @@ test("a player's sheet that didn't load says so over Try again, which shows his 
   const block = playerSheet.locator("#playerBody .retry-block");
   await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
   await expect(block.locator(".retry-next")).toHaveText("Try again to load his numbers");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -570,7 +570,7 @@ test("a roster that didn't load says so over Try again, and reads again as the p
   const block = sheet.locator("#rosterBody .retry-block");
   await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
   await expect(block.locator(".retry-next")).toHaveText("Try again to load roster");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -654,7 +654,7 @@ test("a club's playoff lines run dashed past the regular season's range, each a 
     expect(dash.meets).toBeCloseTo(0, 1);
     expect(dash.isGapFirst).toBe(true);
   }
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });

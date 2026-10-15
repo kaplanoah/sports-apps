@@ -176,21 +176,26 @@ test("the standings' ranks sit 10px in from the card's edge and 6px before the n
         })
         .evaluate((row) => {
           const place = /** @type {HTMLElement} */ (row.querySelector("td.place"));
-          const card = place.getBoundingClientRect().left;
+          const cell = place.getBoundingClientRect();
+          const room = cell.right - parseFloat(getComputedStyle(place).paddingRight);
           const number = document.createRange();
           number.selectNodeContents(place);
           const shown = number.getBoundingClientRect();
           const name = row.querySelector(".club").getBoundingClientRect().left;
           return {
-            numberIn: shown.left - card,
-            numberToName: name - shown.right,
-            nameIn: name - card,
+            numberIn: shown.left - cell.left,
+            spareAfterNumber: room - shown.right,
+            roomToName: name - room,
+            nameIn: name - cell.left,
           };
         }),
     ),
   );
   expect(ten.numberIn).toBeCloseTo(11, 0);
-  expect(ten.numberToName).toBeCloseTo(6, 0);
+  expect(ten.spareAfterNumber).toBeGreaterThanOrEqual(0);
+  // A browser may draw a table's column up to a pixel wider than its widest content.
+  expect(ten.spareAfterNumber).toBeLessThanOrEqual(1);
+  expect(ten.roomToName).toBeCloseTo(6, 0);
   expect(one.numberIn).toBeCloseTo(11, 0);
   expect(one.nameIn).toBeCloseTo(ten.nameIn, 0);
 });

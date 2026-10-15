@@ -2,7 +2,7 @@
  * A season's search, as game-search-view.js draws it in a .search-view, in a view of its own,
  * sharing a .day-view's layout. Apps link it after day-strip.css, before their own styles.css.
  *
- * Beside type.css's sizes, chrome.css's --ink, --ink-dim, --divider, and --radius-control, and
+ * Beside type.css's roles, chrome.css's --ink, --ink-dim, --divider, and --radius-control, and
  * day-strip.css's --reach-left and --reach-right, an app's :root defines these tokens:
  *   --raised       the field's fill, as a card's
  *   --edge         the line inside the field's edge
@@ -10,7 +10,8 @@
  *   --ink-hover    an example, a row, or the line over the games under the mouse
  * and a pressed row tints in chrome.css's --ink.
  *   --text         the rows' face
- *   --search-face  the field's face, drawn at --size-field as big as --text at --size-read
+ *   --search-face  the field's face, drawn at --type-field-size as big as --text at
+ *                  --type-body-size
  *   --search-words-lift  the room under a row's words that looks them centered in the row, in
  *                  the --text face
  */
@@ -69,7 +70,8 @@
   outline: none;
   background: none;
   font-family: var(--search-face);
-  font-size: var(--size-field);
+  font-size: var(--type-field-size);
+  font-weight: var(--type-body-weight);
   color: var(--ink);
   caret-color: var(--action);
   appearance: none;
@@ -106,22 +108,23 @@
   border: 0;
   background: none;
   font-family: var(--text);
-  font-size: var(--size-read);
-  font-weight: 500;
+  font-size: var(--type-body-size);
+  font-weight: calc(var(--type-body-weight) + 100);
   color: var(--action);
   cursor: pointer;
 }
 .search-read {
   margin: 9px 0 0;
   padding-inline: var(--reach-left) var(--reach-right);
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 .search-read:empty {
   display: none;
 }
 .search-read b {
-  font-weight: 600;
+  font-weight: calc(var(--type-detail-weight) + 200);
   color: var(--ink);
 }
 
@@ -165,7 +168,8 @@
   border: 0;
   background: none;
   font-family: var(--text);
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   text-align: left;
   cursor: pointer;
@@ -194,7 +198,8 @@
   border: 0;
   background: none;
   font-family: var(--text);
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
   color: var(--ink);
   text-align: left;
   text-decoration: none;
@@ -229,7 +234,8 @@
 }
 .search-detail {
   flex: none;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 /* A place's row names the places it's in dimmed, each followed by a smaller caret, 4px from the
@@ -268,7 +274,8 @@
   border: 0;
   background: none;
   font-family: var(--text);
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   text-align: left;
   cursor: pointer;
@@ -278,7 +285,7 @@
   min-width: 0;
 }
 .search-games-line b {
-  font-weight: 600;
+  font-weight: calc(var(--type-detail-weight) + 200);
   color: var(--ink);
 }
 

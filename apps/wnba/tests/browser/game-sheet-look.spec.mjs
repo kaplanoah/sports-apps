@@ -9,7 +9,7 @@ import {
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { readOklab } from "../../../../shared/page/team-colors.js";
 import { TEAMS } from "../../page/js/teams.js";
@@ -76,15 +76,17 @@ const readPaintedBackground = (locator) =>
     return `#${[red, green, blue].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
   });
 
-test("a game's title is 16.5px at the sheets' title weight, over its series and day at the glance size", async ({
-  page,
-}) => {
+test("a game's title is a heading, over its series and day as details", async ({ page }) => {
   await openApp(page);
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
 
-  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-size", "16.5px");
-  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-weight", "500");
-  await expect(sheet.locator("#gameWhen")).toHaveCSS("font-size", "14px");
+  const heading = await readRole(page, "heading");
+  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-size", `${heading.size}px`);
+  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-weight", String(heading.weight));
+  await expect(sheet.locator("#gameWhen")).toHaveCSS(
+    "font-size",
+    `${(await readRole(page, "detail")).size}px`,
+  );
 });
 
 test("only the team rows of By quarter have a line above them, not its heading row", async ({
@@ -475,29 +477,29 @@ for (const { screen, viewport } of [
       const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
       await expect(page.locator(".bonus").first()).toBeAttached();
       await expect(sheet.locator(".line-score th.now")).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator(".clock").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       const final = await openGameSheet(page, ACES_AT_FEVER);
       await expect(final.locator(".line-score")).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await final.getByRole("tab", { name: "Highlights" }).click();
       await expect(final.locator("#highlightsBody .clip-row").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(final).toBeHidden();
       const preview = await openGameSheet(page, FEVER_AT_ACES);
       await expect(preview.locator(".meeting-score").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
     });
@@ -613,7 +615,7 @@ test("a game yet to end whose channels aren't listed yet says to check back, und
   await expect(note).toHaveText("Check back for where to watch");
   const faceOff = await sheet.locator(".faceoff-score").boundingBox();
   expect((await note.boundingBox()).y).toBeGreaterThan(faceOff.y + faceOff.height);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });

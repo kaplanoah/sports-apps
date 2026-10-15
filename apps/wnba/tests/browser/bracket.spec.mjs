@@ -1,6 +1,7 @@
 import { TEAMS } from "../../page/js/teams.js";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -514,8 +515,9 @@ test("a series' winner has its wins on a teal block, the color of a result, cut 
     expect(await readBlock(won)).toEqual({ face: result, number: floor });
     expect((await readBlock(out)).face).not.toBe(result);
   }
-  await expect(won.locator(".club")).toHaveCSS("font-weight", "600");
-  await expect(out.locator(".club")).toHaveCSS("font-weight", "600");
+  const { weight } = await readRole(page, "team-large");
+  await expect(won.locator(".club")).toHaveCSS("font-weight", String(weight));
+  await expect(out.locator(".club")).toHaveCSS("font-weight", String(weight));
 });
 
 test("a series' winner's row is washed in teal, more on Walnut, and its loser's name and wins dim a step beside a dimmer dot", async ({

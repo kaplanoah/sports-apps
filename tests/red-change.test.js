@@ -105,7 +105,7 @@ const SHARED_STYLESHEETS = [
 
 test("a shared stylesheet's change to how text looks, or to its spacing, sizes, and colors, isn't red", () => {
   const quietLines = [
-    "  font-size: var(--size-glance);",
+    "  font-size: var(--type-detail-size);",
     "  font-weight: 600;",
     "  font-family: var(--heading);",
     "  letter-spacing: 0.02em;",

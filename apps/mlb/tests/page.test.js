@@ -1794,14 +1794,13 @@ test("bracket: a delayed start shows its delay instead of a countdown", () =>
     ]);
   }));
 
-test("Chivo Mono draws 6% smaller than its size, so it looks as big as Barlow", () => {
-  const faces = readFontFaces(`${import.meta.dirname}/../page/styles.css`).filter(
-    (face) => face["font-family"] === "Chivo Mono",
-  );
-  assert.deepEqual(
-    faces.map((face) => face["size-adjust"]),
-    ["94%", "94%"],
-  );
+test("Chivo Mono draws a little smaller than its size, so its numbers look as big as Libre Franklin's words", () => {
+  const readAdjusts = (/** @type {string} */ family) =>
+    readFontFaces(`${import.meta.dirname}/../page/styles.css`)
+      .filter((face) => face["font-family"] === family)
+      .map((face) => face["size-adjust"] ?? "100%");
+  assert.deepEqual(readAdjusts("Chivo Mono"), ["97.48%", "97.48%"]);
+  assert.deepEqual(readAdjusts("Libre Franklin"), ["100%", "100%"]);
 });
 
 test("Updates box: each update shows when it happened, not when the page noticed it", (t) => {

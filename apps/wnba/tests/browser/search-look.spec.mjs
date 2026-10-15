@@ -7,19 +7,19 @@ import {
   sendSearch,
   tapSearch,
 } from "./search-page.mjs";
-import { measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
+import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 
 // How Search looks on a phone: where its field, examples, and rows sit, and how a row is drawn.
 
 test.use({ ...ON_A_PHONE, contextOptions: { reducedMotion: "reduce" } });
 
-test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-read", async ({
+test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the body role's text", async ({
   page,
 }) => {
   await openSeasonGames(page);
   await expect(findInput(page)).toHaveCSS("font-size", "16px");
-  const widths = await measureFieldFace(findInput(page), "--size-read");
-  expect(widths.field).toBeCloseTo(widths.step, 0);
+  const widths = await measureFieldFace(findInput(page), "--type-body-size");
+  expect(widths.field).toBeCloseTo(widths.role, 0);
 });
 
 test("the examples sit 4.5px under the field, their words 1.5px right of where its text starts, their lines from 2px right of it to 1px short of its right edge", async ({

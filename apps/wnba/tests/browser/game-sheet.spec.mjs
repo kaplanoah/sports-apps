@@ -22,6 +22,7 @@ import {
   finishValkyriesAtWings,
   countBoxScoreReads,
 } from "./game-sheet-games.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 // Most of these tests are about what a sheet shows, so they skip the eased scrolling between the
 // Games lists. The ones about how a sheet moves ask for full motion.
@@ -373,7 +374,7 @@ test("a game's row names its teams in their own type, and a tap anywhere on it, 
   const row = gameButton.locator("xpath=..");
   const fever = row.locator(".game-side.home .team-name");
   await expect(fever).toHaveCSS("font-family", /^"Barlow Condensed"/);
-  await expect(fever).toHaveCSS("font-weight", "600");
+  await expect(fever).toHaveCSS("font-weight", String((await readRole(page, "team")).weight));
   await expect(row.getByRole("button", { name: /^Team details/ })).toHaveCount(0);
 
   // The row's button lies over its names, so a click on a name lands on it.

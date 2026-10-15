@@ -248,8 +248,7 @@ function renderSeriesCard(
 
 const describeAdvance = (champion) => (champion ? `${nameTeam(champion)} advance` : "");
 
-const describeWorldSeriesWin = (ws) =>
-  ws.winner ? `${nameTeam(ws.winner)} win the World Series` : "";
+const describeWorldSeriesWin = (ws) => (ws.winner ? `${nameTeam(ws.winner)} win` : "");
 
 function drawWideConnectors() {
   const left = (index) => findColumnLeft(WIDE, index);

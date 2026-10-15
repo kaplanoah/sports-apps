@@ -2,6 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { readPillNames } from "../../../../tests/browser/pill-names.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -219,9 +220,10 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
     expect(await readChannels(page, await readColor(weekday, "color"))).toEqual(inkDim);
     const quietNumber = page.locator('#seasonGames .day-cell[data-day="2026-09-28"] .cell-number');
     expect(await readChannels(page, await readColor(quietNumber, "color"))).toEqual(inkDim);
-    await expect(quietNumber).toHaveCSS("font-weight", "500");
+    const body = await readRole(page, "body");
+    await expect(quietNumber).toHaveCSS("font-weight", String(body.weight + 100));
     const gameNumber = page.locator('#seasonGames .day-cell[data-day="2026-09-29"] .cell-number');
-    await expect(gameNumber).toHaveCSS("font-weight", "600");
+    await expect(gameNumber).toHaveCSS("font-weight", String(body.weight + 200));
     const goToday = page.locator("#seasonGames .go-today");
     await expect(goToday).toHaveText("Today");
     expect(await readChannels(page, await readColor(goToday, "color"))).toEqual(orange);

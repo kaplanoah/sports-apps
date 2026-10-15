@@ -1,6 +1,6 @@
 import { test, expect, openLockedApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 
@@ -33,7 +33,7 @@ test("the gate's text keeps to the type scale, with its code light only because 
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expect(findGate(page)).toBeVisible();
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   await expect(page.locator(".code-field")).toHaveCSS("font-size", "24px");
@@ -144,21 +144,39 @@ test("the code field shows it's ready with its cursor, not an outline", async ({
   await expect(findCodeField(page)).toHaveCSS("outline-style", "none");
 });
 
-test("the gate's heading, code, and Open each draw in their own weight of Barlow Condensed", async ({
+test("the gate's heading is set as a sheet's title, and Open as the app's other buttons", async ({
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
-  await expect(findGate(page)).toHaveCSS("font-weight", "500");
-  await expect(findCodeField(page)).toHaveCSS("font-weight", "300");
-  await expect(page.getByRole("button", { name: "Open" })).toHaveCSS("font-weight", "600");
+  const heading = await readRole(page, "heading");
+  const detail = await readRole(page, "detail");
+  await expect(findGate(page)).toHaveCSS("font-family", /^Barlow,/);
+  await expect(findGate(page)).toHaveCSS("font-size", `${heading.size}px`);
+  await expect(findGate(page)).toHaveCSS("font-weight", String(heading.weight));
+  await expect(findGate(page)).toHaveCSS("text-transform", "uppercase");
+  const spacing = await findGate(page).evaluate((element) =>
+    parseFloat(getComputedStyle(element).letterSpacing),
+  );
+  expect(spacing).toBeCloseTo(heading.size * 0.05);
 
-  const loadedWeights = await page.evaluate(async () => {
-    await document.fonts.ready;
-    return [...document.fonts]
-      .filter((face) => face.family.includes("Barlow Condensed") && face.status === "loaded")
-      .map((face) => face.weight);
-  });
-  expect(loadedWeights).toEqual(expect.arrayContaining(["300", "500", "600"]));
+  const open = page.getByRole("button", { name: "Open" });
+  await expect(open).toHaveCSS("font-family", /^Barlow,/);
+  await expect(open).toHaveCSS("font-size", `${detail.size}px`);
+  await expect(open).toHaveCSS("font-weight", String(detail.weight + 100));
+  await expect(open).toHaveCSS("text-transform", "none");
+});
+
+test("the gate's code draws in light Barlow Condensed, and its faces are loaded up front", async ({
+  page,
+}) => {
+  await openLockedApp(page, { accessCode: "FASTBREAK" });
+  await expect(findCodeField(page)).toHaveCSS("font-family", /^"Barlow Condensed"/);
+  await expect(findCodeField(page)).toHaveCSS("font-weight", "300");
+
+  const preloaded = await page
+    .locator('link[rel="preload"][as="font"]')
+    .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+  expect(preloaded.sort()).toEqual(["fonts/barlow-500.woff2", "fonts/barlow-condensed-300.woff2"]);
 });
 
 /**

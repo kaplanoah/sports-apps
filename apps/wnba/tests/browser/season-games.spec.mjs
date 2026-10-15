@@ -1,6 +1,7 @@
 import { test, expect, expectDayAtTop, openApp } from "./harness.mjs";
 import { readStripEdges, scrollStripBy } from "../../../../tests/browser/day-strip-edges.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 // The Games view as one season: a strip of its days over every game day, opening on today.
 
@@ -225,7 +226,7 @@ test.describe("with reduced motion", () => {
     await expectDayAtTop(page, "2026-09-20");
 
     expect(await readLook()).toEqual(onToday);
-    await expect(goToday).toHaveCSS("font-size", "14px");
+    await expect(goToday).toHaveCSS("font-size", `${(await readRole(page, "detail")).size}px`);
     const icon = await goToday.locator("svg").boundingBox();
     expect(icon.width).toBe(14);
   });

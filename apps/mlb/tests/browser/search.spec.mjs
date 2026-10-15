@@ -10,7 +10,7 @@ import {
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
-import { listOffScaleText, measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
@@ -125,13 +125,13 @@ async function leaveForTwoMinutes(page) {
   await page.clock.runFor(2 * 60_000);
 }
 
-test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-read", async ({
+test("the field sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the body role's text", async ({
   page,
 }) => {
   await openSeasonGames(page);
   await expect(findInput(page)).toHaveCSS("font-size", "16px");
-  const widths = await measureFieldFace(findInput(page), "--size-read");
-  expect(widths.field).toBeCloseTo(widths.step, 0);
+  const widths = await measureFieldFace(findInput(page), "--type-body-size");
+  expect(widths.field).toBeCloseTo(widths.role, 0);
 });
 
 test("Search beside the tab bar opens its own view, an empty field ready to type with examples under it, and hides the bar's pill", async ({
@@ -708,7 +708,7 @@ test("every search state keeps to the type scale, its periods, and AA contrast, 
 }) => {
   await openSeasonGames(page);
   const expectReadable = async () => {
-    expect(await listOffScaleText(page)).toEqual([]);
+    expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listTapsOffButtons(page)).toEqual([]);

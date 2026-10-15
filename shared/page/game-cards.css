@@ -73,8 +73,8 @@
   outline-offset: 2px;
 }
 .game-card-when {
-  font-size: var(--size-small);
-  font-weight: 500;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -95,12 +95,12 @@
   row-gap: 6.5px;
 }
 .game-card-score {
-  font-size: var(--size-glance);
-  font-weight: 600;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 200);
 }
 .game-card-result,
 .game-card-margin {
-  font-weight: 500;
+  font-weight: calc(var(--type-detail-weight) + 100);
 }
 .game-card-result.won {
   color: var(--game-card-won);
@@ -109,8 +109,8 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--size-glance);
-  font-weight: 400;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .game-card-at {
   color: var(--ink-dim);
@@ -124,6 +124,6 @@
 .game-card-score,
 .game-card-at,
 .game-card-name {
-  line-height: 1;
+  line-height: var(--leading);
   text-box: trim-both cap alphabetic;
 }

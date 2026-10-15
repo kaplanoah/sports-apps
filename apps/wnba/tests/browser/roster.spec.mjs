@@ -8,7 +8,7 @@ import {
 } from "../../../../tests/browser/pill-names.mjs";
 import { expectShown, readLeft } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
@@ -100,7 +100,7 @@ test("a team's Roster pill shows its roster beside its stats: each player by las
   await expect(section.locator(".roster-coach")).toHaveText(/Head coach\s*Chris DeMarco/);
   const astier = await findRows(section, "Astier");
   await expect(astier.facts.locator(".roster-country")).toHaveText("France");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -109,7 +109,7 @@ test("a team's Roster pill shows its roster beside its stats: each player by las
   await expect(section).toHaveAttribute("inert");
 });
 
-test("a roster's player numbers sit a half step over the facts beside them, in dim ink", async ({
+test("a roster's player numbers are facts like the ones beside them, in dim ink", async ({
   page,
 }) => {
   await openApp(page);
@@ -124,12 +124,13 @@ test("a roster's player numbers sit a half step over the facts beside them, in d
       return { fontSize, isDimInk: color === dimInk };
     });
 
+  const detail = `${(await readRole(page, "detail")).size}px`;
   expect(await readStyle(section.locator("tbody td.roster-number").first())).toEqual({
-    fontSize: "14.5px",
+    fontSize: detail,
     isDimInk: true,
   });
   const fact = section.locator("table.roster:not(.roster-pinned) tbody td").first();
-  expect((await readStyle(fact)).fontSize).toBe("14px");
+  expect((await readStyle(fact)).fontSize).toBe(detail);
 });
 
 test("a team's still top keeps its band's line as it is while a section scrolls under it", async ({
@@ -564,7 +565,7 @@ test("a roster that didn't load says so over Try again, which holds its shape as
   const block = section.locator(".retry-block");
   await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
   await expect(block.locator(".retry-next")).toHaveText("Try again to load roster");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -609,12 +610,13 @@ test("a roster that didn't load sets its icon, why, what comes next, and Try aga
       ),
     };
   });
+  const detail = `${(await readRole(page, "detail")).size}px`;
   expect(layout).toEqual({
     icon: [22, 22],
     underIcon: 10,
     underTitle: 3,
     overButton: 14,
-    sizes: ["14px", "14px"],
+    sizes: [detail, detail],
   });
 });
 
@@ -635,7 +637,7 @@ test("a roster read offline says so with a crossed-out signal, and loads once th
   await expect(block.locator(".retry-title")).toHaveText("Couldn't connect to the internet");
   await expect(block.locator(".retry-next")).toHaveText("Will load roster when back online");
   await expect(block.locator(".retry-art path")).toHaveAttribute("d", /^M86,152v48/);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
