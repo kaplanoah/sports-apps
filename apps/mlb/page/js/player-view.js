@@ -19,6 +19,7 @@ import {
   describePlateAppearancesToQualify,
   measureInningsProgress,
   measurePlateAppearancesProgress,
+  readInnings,
 } from "./qualifying.js";
 import { describeGamePitching, formatInnings } from "./stat-table.js";
 
@@ -246,7 +247,27 @@ function renderHitting(player, hitters, clubGames) {
 }
 
 /**
- * A starter's ranked numbers, among the qualified starters, from his matchup side.
+ * A starter's ERA, K/9, and BB/9 from his season's line, the one his totals row shows, so the sheet
+ * has one of each, and his fastball from his matchup side, which alone has it.
+ * @param {any} pitching his season's pitching line
+ * @param {any} side his matchup side
+ */
+function readRankedLine(pitching, side) {
+  const innings = readInnings(pitching.inningsPitched ?? 0);
+  const per9 = (/** @type {number | undefined} */ count) =>
+    innings > 0 && count != null ? Math.round(((count * 9) / innings) * 10) / 10 : null;
+  const era = Number(pitching.era);
+  return {
+    era: Number.isFinite(era) ? era : null,
+    k9: per9(pitching.strikeOuts),
+    bb9: per9(pitching.baseOnBalls),
+    speed: side?.line?.speed ?? null,
+  };
+}
+
+/**
+ * A starter's ranked numbers, among the qualified starters, from his season's line and his
+ * matchup side.
  * @param {Player} player
  * @param {any} starters the store's qualified starters
  * @param {any} side his matchup side
@@ -256,8 +277,9 @@ function renderStarterRanks(player, starters, side, clubGames) {
   const pool = starters?.starters ?? [];
   const isRanked = pool.some((/** @type {any} */ starter) => starter.id === player.id);
   const progress = measureInningsProgress(player.pitching.inningsPitched, clubGames);
+  const line = readRankedLine(player.pitching, side);
   const rows = STARTER_RANKS.flatMap(({ label, key, write, isFewestFirst }) => {
-    const value = side?.line?.[key] == null ? null : Number(side.line[key]);
+    const value = line[key] == null ? null : Number(line[key]);
     if (value == null || Number.isNaN(value)) return [];
     const values = pool
       .map((/** @type {any} */ starter) => starter[key])

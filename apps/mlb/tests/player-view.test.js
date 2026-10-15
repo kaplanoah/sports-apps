@@ -172,14 +172,28 @@ test("a starter's season ranks his numbers among the qualified starters, and sho
   assert.match(text, /What he throws/);
 });
 
+test("a starter's rank rows show the ERA, K/9, and BB/9 his totals show, not his matchup side's, so the sheet has one of each", () => {
+  const staleSide = { ...BIBEE_SIDE, line: { ...BIBEE_SIDE.line, era: "4.52", k9: 6.9, bb9: 2.9 } };
+  const text = renderText(describeRostered(114, "CLE", "Tanner Bibee"), {
+    starters: STARTERS,
+    side: staleSide,
+  });
+  assert.match(text, /IP 188 ERA 4\.36 K 148 BB 55/);
+  assert.match(
+    text,
+    /ERA 4\.36 2nd of 4 K\/9 7\.1 2nd of 4 BB\/9 2\.6 2nd of 4 Velo 94\.0 2nd of 4/,
+  );
+  assert.doesNotMatch(text, /4\.52|6\.9|2\.9/);
+});
+
 test("a starter outside the qualified starters has his innings set against the ones he needs, and where he would rank once he has a quarter of them", () => {
   const ohtani = describeRostered(119, "LAD", "Shohei Ohtani");
-  const side = { line: { starts: 14, era: "1.79", k9: 10.5, bb9: 2.4, speed: 98.4 } };
+  const side = { line: { speed: 98.4 } };
   const text = renderText(ohtani, { starters: STARTERS, side, clubGames: 162 });
   assert.match(text, /He has pitched 85 2\/3 of the 162 innings needed to qualify/);
   assert.match(
     text,
-    /ERA 1\.79 would be 1st K\/9 10\.5 would be 1st BB\/9 2\.4 would be 2nd Velo 98\.4 would be 1st/,
+    /ERA 1\.79 would be 1st K\/9 10\.0 would be 1st BB\/9 2\.7 would be 3rd Velo 98\.4 would be 1st/,
   );
   assert.doesNotMatch(renderText(ohtani, { starters: STARTERS, side, clubGames: 400 }), /would be/);
   const unknown = renderText(ohtani, { starters: STARTERS, side });

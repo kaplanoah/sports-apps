@@ -8,9 +8,19 @@ import { session, readSeasonYear } from "./session.js";
 // A page saved before tracked titles were lists kept only a club's latest one, as a number.
 const listTrackedTitles = (id) => [].concat(session.trackedTitles[id] ?? []);
 
+// The club that won this season's World Series, from the season as the store has it now, so its
+// title shows as soon as the bracket does, without waiting for the page to read the seasons again.
+function findCurrentChampion() {
+  const { state } = session;
+  const isCurrentShown = session.activeYear === readSeasonYear() && state && state.teams;
+  return isCurrentShown ? (buildBracket(state).ws?.winner ?? null) : null;
+}
+
+const listCurrentTitle = (id) => (findCurrentChampion() === id ? [readSeasonYear()] : []);
+
 /** Every World Series a club won, newest first. */
 export const listTitles = (id) =>
-  [...new Set([...TEAMS[id].titles, ...listTrackedTitles(id)])].sort(
+  [...new Set([...TEAMS[id].titles, ...listTrackedTitles(id), ...listCurrentTitle(id)])].sort(
     (first, second) => second - first,
   );
 
@@ -21,10 +31,7 @@ export function describeDrought(id) {
   if (!won) return `Since ${TEAMS[id].firstSeason}`;
   const year = readSeasonYear();
   if (won >= year) return "Reigning";
-  const { state } = session;
-  const isCurrentShown = session.activeYear === year && state && state.teams;
-  const crowned = isCurrentShown ? buildBracket(state).ws?.winner : null;
-  if (won === year - 1 && !crowned) return "Defending";
+  if (won === year - 1 && !findCurrentChampion()) return "Defending";
   const years = year - won;
   return `${years} ${years === 1 ? "yr" : "yrs"} ago`;
 }

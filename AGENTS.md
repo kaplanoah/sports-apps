@@ -25,6 +25,10 @@
   so a Node test reaches them, as `shared/page/search-reading.js` does for what search shows as words are typed.
 - A rule or a limit two places share lives in one place,
   like the two minutes away that closes a sheet or the search, so the places can't drift apart.
+- A fact two places show, like a game's inning or a club's record, comes from one read, kept in one document,
+  so the places can't trail each other, as a game's row and its field did while one read MLB's schedule and the other its live feed.
+  Where one read would cost more than the store's request budget allows, the later place waits for the earlier, or hides, rather than reading on its own.
+  A fix of two places that trailed adds a test that they agree.
 - Name variables with full words that are reasonable for their types.
   No opaque abbreviations.
 - Default to no comments.

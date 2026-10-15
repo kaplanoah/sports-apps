@@ -36,7 +36,7 @@ export const hasInningsToQualify = (innings, clubGames) => countOuts(innings) >=
  * Innings as MLB writes them, like 28.1 for 28 and a third, as a number.
  * @param {string | number} innings
  */
-function readInnings(innings) {
+export function readInnings(innings) {
   const [whole, thirds = "0"] = String(innings).split(".");
   return Number(whole) + Number(thirds) / 3;
 }
