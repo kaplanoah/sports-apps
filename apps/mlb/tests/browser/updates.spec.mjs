@@ -88,7 +88,7 @@ test.describe("on a phone", () => {
     const what = updates.locator(".what").first();
     await expect(what).toHaveCSS("font-size", `${body.size}px`);
     await expect(what).toHaveCSS("font-weight", String(body.weight - 50));
-    const team = what.locator(".team-name").first();
+    const team = what.locator("b").first();
     await expect(team).toHaveCSS(
       "font-family",
       await what.evaluate((element) => getComputedStyle(element).fontFamily),

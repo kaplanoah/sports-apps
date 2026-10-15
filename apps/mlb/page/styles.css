@@ -892,25 +892,8 @@ table.st .seed-cell {
 .updates-list .what {
   font-weight: calc(var(--type-body-weight) - 50);
 }
-.updates-list .what b,
-.updates-list .what .team-name {
+.updates-list .what b {
   font-weight: calc(var(--type-body-weight) + 50);
-}
-.updates .rank-slot {
-  width: auto;
-  margin: 0 6px 0 0;
-  vertical-align: 1px;
-}
-.updates .rank-tag {
-  height: 16px;
-  min-width: 0;
-  padding: 0 4px;
-  font-size: var(--type-caption-size);
-  font-weight: var(--type-caption-weight);
-  line-height: 12px;
-}
-.updates .club {
-  gap: 7px;
 }
 
 .no-field-note {
