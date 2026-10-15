@@ -681,4 +681,38 @@ test.describe("on a computer", () => {
     await page.clock.runFor(2000);
     await expect(button).toHaveText("Copy report");
   });
+
+  test("the report never holds the page's address, whose path is its key, even where the page itself failed", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await stubShare(page);
+    await openApp(page);
+    await turnOnDiagnostics(page);
+    await page.evaluate((address) => {
+      dispatchEvent(
+        new ErrorEvent("error", {
+          message: "ResizeObserver loop completed with undelivered notifications.",
+          filename: address,
+        }),
+      );
+      dispatchEvent(
+        new PromiseRejectionEvent("unhandledrejection", {
+          promise: Promise.resolve(),
+          reason: new TypeError(`Load failed for ${address}`),
+        }),
+      );
+    }, "https://example-subdomain.workers.dev/k3y/");
+    await openSettings(page);
+    await findReportButton(page).click();
+    await expect(findReportButton(page)).toHaveText("Copied");
+
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain(
+      "ResizeObserver loop completed with undelivered notifications. at page",
+    );
+    expect(copied).toContain("a promise failed: TypeError: Load failed for page");
+    expect(copied).not.toMatch(/k3y|example-subdomain/);
+  });
 });
