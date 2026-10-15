@@ -38,6 +38,7 @@ const PERSON_FIELDS = [
   "gamesStarted",
   "inningsPitched",
   "era",
+  "whip",
   "strikeoutsPer9Inn",
   "walksPer9Inn",
   "percentage",
@@ -69,6 +70,7 @@ const QUALIFIED_FIELDS = [
   "id",
   "stat",
   "era",
+  "whip",
   "strikeoutsPer9Inn",
   "walksPer9Inn",
 ].join(",");
@@ -198,6 +200,7 @@ export const describeStarters = (qualifiedResponse, speeds) => ({
   starters: readLeagueRows(qualifiedResponse).map((row) => ({
     id: row.player.id,
     era: Number(row.stat.era),
+    whip: Number(row.stat.whip),
     k9: Number(row.stat.strikeoutsPer9Inn),
     bb9: Number(row.stat.walksPer9Inn),
     speed: speeds.get(row.player.id) ?? null,
@@ -213,7 +216,7 @@ export const readSpeeds = (people) =>
     people.map((person) => [person.id, readFastballSpeed(readStats(person, "pitchArsenal"))]),
   );
 
-const MEASURES = { era: "low", k9: "high", bb9: "low", speed: "high" };
+const MEASURES = { era: "low", whip: "low", k9: "high", bb9: "low", speed: "high" };
 
 /**
  * A rank counts only the starters strictly better, so tied starters share one.
@@ -254,6 +257,7 @@ function describeLine(line, arsenal) {
     starts: line.gamesStarted ?? 0,
     ip: line.inningsPitched ?? null,
     era: line.era,
+    whip: line.whip,
     k9: roundTo(Number(line.strikeoutsPer9Inn), 1),
     bb9: roundTo(Number(line.walksPer9Inn), 1),
     speed: readFastballSpeed(arsenal),

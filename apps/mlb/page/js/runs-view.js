@@ -7,6 +7,7 @@
 import { html } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
+import { joinWithAnd } from "#shared/word-list.js";
 import { renderTeamDot } from "./clubs.js";
 import { describeInning, renderOutLights } from "./games-view.js";
 
@@ -96,12 +97,6 @@ const NAME_PADDING_PX = 3;
 
 /** @param {string} name */
 const makePossessive = (name) => (name.endsWith("s") ? `${name}'` : `${name}'s`);
-
-/** @param {string[]} items */
-function joinWithAnd(items) {
-  if (items.length <= 2) return items.join(" and ");
-  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
-}
 
 /** @param {HalfPlay} play */
 const describeWhatBatterDid = (play) =>

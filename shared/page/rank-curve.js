@@ -12,6 +12,7 @@
 // from its own stylesheet.
 
 import { html } from "./html.js";
+import { joinWithAnd } from "./word-list.js";
 import { formatOrdinal } from "./ordinal.js";
 
 // The curve's drawing is 100 wide and 20 tall, its peak kept CURVE_HEADROOM below the top.
@@ -153,7 +154,7 @@ export const describeWouldRank = (rank) => `would be ${formatOrdinal(rank)}`;
  * The note under ranks that says which stats rank from the fewest, like ERA or turnovers.
  * @param {string[]} labels
  */
-export const describeFewestFirst = (labels) => `${labels.join(" and ")} ranked by fewest`;
+export const describeFewestFirst = (labels) => `${joinWithAnd(labels)} ranked by fewest`;
 
 /** @param {RankedStat} stat */
 function describeRank(stat) {

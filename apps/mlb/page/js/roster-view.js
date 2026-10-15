@@ -41,6 +41,7 @@ const INNINGS_COLUMN = [
 /** @type {StatColumn[]} */
 const STARTER_COLUMNS = [
   ["ERA", (player) => player.pitching?.era],
+  ["WHIP", (player) => player.pitching?.whip],
   ["W-L", (player) => player.pitching && `${player.pitching.wins}-${player.pitching.losses}`],
   INNINGS_COLUMN,
   ["K", (player) => player.pitching?.strikeOuts],
@@ -48,6 +49,7 @@ const STARTER_COLUMNS = [
 /** @type {StatColumn[]} */
 const BULLPEN_COLUMNS = [
   ["ERA", (player) => player.pitching?.era],
+  ["WHIP", (player) => player.pitching?.whip],
   ["SV", (player) => player.pitching?.saves],
   INNINGS_COLUMN,
   ["K", (player) => player.pitching?.strikeOuts],

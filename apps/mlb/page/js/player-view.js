@@ -65,6 +65,7 @@ const HITTER_RANKS = [
  */
 const STARTER_RANKS = [
   { label: "ERA", key: "era", write: (value) => value.toFixed(2), isFewestFirst: true },
+  { label: "WHIP", key: "whip", write: (value) => value.toFixed(2), isFewestFirst: true },
   { label: "K/9", key: "k9", write: (value) => value.toFixed(1) },
   { label: "BB/9", key: "bb9", write: (value) => value.toFixed(1), isFewestFirst: true },
   { label: "Velo", key: "speed", write: (value) => value.toFixed(1) },
@@ -155,6 +156,7 @@ const describePitchingLine = (pitching) =>
     `${pitching.wins}-${pitching.losses}`,
     `${formatInnings(pitching.inningsPitched)} IP`,
     `${pitching.era} ERA`,
+    `${pitching.whip} WHIP`,
     `${pitching.strikeOuts} K`,
     `${pitching.baseOnBalls} BB`,
   ]);
@@ -278,7 +280,7 @@ function renderStarterRanks(player, starters, side, clubGames) {
   return html`<div class="player-ranks">
     ${rows}
     <div class="player-rank-notes">
-      ${isRanked && renderFewestNote(["ERA", "BB/9"])}
+      ${isRanked && renderFewestNote(["ERA", "WHIP", "BB/9"])}
       <p class="player-rank-note">${note}</p>
     </div>
   </div>`;
@@ -352,10 +354,10 @@ function renderPitching(player, { starters, side, clubGames = null }, title) {
       title,
       renderTotals([
         ["ERA", pitching.era],
+        ["WHIP", pitching.whip],
         ["SV", pitching.saves],
         ["IP", formatInnings(pitching.inningsPitched)],
         ["K", pitching.strikeOuts],
-        ["BB", pitching.baseOnBalls],
       ]),
       countWord(pitching.gamesPlayed, "game"),
     )}${renderLastGames("Last games", games, describePitchingGame)}`;

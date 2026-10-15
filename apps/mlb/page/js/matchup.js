@@ -41,6 +41,7 @@ const PENDING_ROTATION = 5;
 // A lower ERA and fewer walks rank first.
 const TAPE = [
   { key: "era", label: "ERA", format: (line) => line.era, isFewestFirst: true },
+  { key: "whip", label: "WHIP", format: (line) => line.whip, isFewestFirst: true },
   { key: "k9", label: "K/9", format: (line) => line.k9.toFixed(1) },
   { key: "bb9", label: "BB/9", format: (line) => line.bb9.toFixed(1), isFewestFirst: true },
   { key: "speed", label: "Fastball mph", format: (line) => line.speed.toFixed(1) },

@@ -105,6 +105,13 @@ const PITCHING = [
     isFewestFirst: true,
   },
   {
+    label: "WHIP",
+    canLead: isQualifiedPitcher,
+    measure: (player) => Number(player.pitching.whip),
+    write: (player) => player.pitching.whip,
+    isFewestFirst: true,
+  },
+  {
     label: "K",
     canLead: hasPitched,
     measure: (player) => player.pitching.strikeOuts ?? 0,

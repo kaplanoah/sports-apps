@@ -35,6 +35,7 @@ const PITCHING_COLUMNS = [
   "gamesPlayed",
   "gamesStarted",
   "era",
+  "whip",
   "wins",
   "losses",
   "inningsPitched",
