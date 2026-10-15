@@ -5,6 +5,7 @@ import {
   respondAccessRequired,
   serveAccess,
 } from "./access-gate.js";
+import { createHealthServer } from "./health.js";
 
 const PAGE_HEADERS = {
   "cache-control": "no-cache",
@@ -109,8 +110,8 @@ function createPageServer(pageFiles, releaseCommit) {
   };
 }
 
-// robots.txt is the one path that answers without the key, so it names the commit the Worker
-// was built from, for the deploy to tell its new version from the one before.
+// robots.txt answers without the key, so it names the commit the Worker was built from, for the
+// deploy to tell its new version from the one before.
 const RELEASE_COMMIT_HEADER = "x-release-commit";
 
 /** @param {Parameters<typeof decodePageFiles>[0]} pageFiles */
@@ -127,7 +128,7 @@ const serveRobots = (commit) =>
     commit ? { [RELEASE_COMMIT_HEADER]: commit } : {},
   );
 
-// The page and its store answer only under the APP_KEY secret; nothing else does.
+// The page and its store answer only under the APP_KEY secret; only robots.txt and health don't.
 function findAppPath(pathname, appKey) {
   if (!appKey) return null;
   const prefix = `/${appKey}`;
@@ -149,12 +150,20 @@ const GATE_PATH = "/gate.html";
  * @param {Parameters<typeof decodePageFiles>[0]} app.pageFiles
  * @param {(url: URL) => Response | Promise<Response>} app.serveSnapshot
  * @param {(request: Request, env: any, storePath: string) => Response | Promise<Response>} app.forwardToStore
+ * @param {(env: any) => Promise<boolean>} app.isStoreAnswering
  * @param {Record<string, (url: URL, env: any) => Response | Promise<Response>>} [app.reads] more GET
  *   paths, each handed the Worker's bindings, so it can read the store
  */
-export function createAppWorker({ pageFiles, serveSnapshot, forwardToStore, reads = {} }) {
+export function createAppWorker({
+  pageFiles,
+  serveSnapshot,
+  forwardToStore,
+  isStoreAnswering,
+  reads = {},
+}) {
   const releaseCommit = readReleaseCommit(pageFiles);
   const servePageFile = createPageServer(pageFiles, releaseCommit);
+  const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
   const isDataPath = (appPath) =>
     isStorePath(appPath) || appPath === "/snapshot" || Object.hasOwn(reads, appPath);
 
@@ -179,6 +188,7 @@ export function createAppWorker({ pageFiles, serveSnapshot, forwardToStore, read
     async fetch(request, env = {}) {
       const url = new URL(request.url);
       if (url.pathname === "/robots.txt") return serveRobots(releaseCommit);
+      if (url.pathname === "/health") return serveHealth(env);
       const appPath = findAppPath(url.pathname, env.APP_KEY);
       if (appPath === null) return serveNotFound();
       if (appPath === "") return redirectToFolder(url);

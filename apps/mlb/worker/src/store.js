@@ -19,6 +19,7 @@ import { createWatchedGameLoader } from "./watched-games.js";
 export {
   addToJobCount,
   forwardToStore,
+  isStoreAnswering,
   readStoreDoc,
 } from "../../../../shared/worker/season-store.js";
 

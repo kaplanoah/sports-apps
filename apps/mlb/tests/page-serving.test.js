@@ -136,7 +136,7 @@ test("without the key, or without an APP_KEY, there is no page", async () => {
   assert.equal(await head.text(), "");
 });
 
-test("nothing but robots.txt answers outside the key", async () => {
+test("nothing but robots.txt and health answers outside the key", async () => {
   for (const path of [
     "/",
     "/mcp",
@@ -149,6 +149,10 @@ test("nothing but robots.txt answers outside the key", async () => {
     assert.equal(response.status, 404, path);
     assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow", path);
   }
+  const health = await requestPage("/health", { env: {} });
+  assert.equal(health.status, 503);
+  assert.equal((await health.json()).store, "no answer");
+  assert.equal(health.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
 test("the page's snapshot route checks the season before reading MLB", async () => {

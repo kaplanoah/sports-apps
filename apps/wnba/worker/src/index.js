@@ -8,7 +8,13 @@ import { LEAGUE_READS_COUNT, PLAYER_JOB } from "./player-updater.js";
 import { createPreviewServer } from "./preview.js";
 import { createRosterServer } from "./roster.js";
 import { createSnapshotServer } from "./snapshot.js";
-import { SeasonStore, addToJobCount, forwardToStore, readStoreDoc } from "./store.js";
+import {
+  SeasonStore,
+  addToJobCount,
+  forwardToStore,
+  isStoreAnswering,
+  readStoreDoc,
+} from "./store.js";
 
 const snapshots = createSnapshotServer();
 const boxScores = createBoxScoreServer();
@@ -22,6 +28,7 @@ export default createAppWorker({
   pageFiles: PAGE_FILES,
   serveSnapshot: (url) => snapshots.serveSnapshot(url),
   forwardToStore,
+  isStoreAnswering,
   reads: {
     "/box-score": (url, env) => boxScores.serveBoxScore(url, (key) => readStoreDoc(env, key)),
     "/highlights": (url, env) => highlights.serveHighlights(url, (key) => readStoreDoc(env, key)),
