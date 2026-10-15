@@ -1,5 +1,5 @@
 import { readGameState } from "../../page/js/snapshot.js";
-import { fetchMlbJson } from "./mlb.js";
+import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
 
 // One game's box score for the Game section of its sheet, read from MLB's live feed in one request
@@ -12,8 +12,6 @@ import { describeError, respondJson } from "../../../../shared/worker/responses.
 
 /** @typedef {(key: string) => Promise<any>} ReadDoc */
 
-// A live game's box score changes with every play, so it's kept as briefly as the scoreboard.
-const BOX_SCORE_CACHE_SECONDS = 5;
 const GAME_ID = /^\d{1,9}$/;
 const FEED_FIELDS = [
   "gameData",
@@ -394,7 +392,7 @@ export function describeBoxScore(id, feed) {
 export async function fetchBoxScore(fetchImpl, id) {
   return describeBoxScore(
     id,
-    await fetchMlbJson(fetchImpl, nameFeedRequest(id), BOX_SCORE_CACHE_SECONDS),
+    await fetchMlbJson(fetchImpl, nameFeedRequest(id), LIVE_FEED_CACHE_SECONDS),
   );
 }
 

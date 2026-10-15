@@ -1,6 +1,6 @@
 import * as MLBSnapshot from "../../page/js/snapshot.js";
 import { guessSeasonYear } from "../../page/js/session.js";
-import { fetchMlbJson, SEASON_PARAM } from "./mlb.js";
+import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS, SEASON_PARAM } from "./mlb.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { serveSeasonSnapshot } from "../../../../shared/worker/seasons.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
@@ -51,6 +51,7 @@ export function createSnapshotServer({
    */
   function fetchSnapshotJson(path, name) {
     if (name === "schedule") return fetchSchedule(path);
+    if (name === "liveGame") return fetchMlbJson(fetchImpl, path, LIVE_FEED_CACHE_SECONDS);
     if (Object.hasOwn(SLOW_FEEDS, name))
       return slowFeeds.readFeed(name, path, () => fetchFeed(path));
     return fetchFeed(path);
