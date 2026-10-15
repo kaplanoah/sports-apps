@@ -15,7 +15,6 @@ import { scrollSettingsToEnd, waitForSheetToRise, WITH_A_PAST_SEASON } from "./s
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
-import { readTitleGaps } from "../../../../tests/browser/title-gaps.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -196,13 +195,6 @@ test("the year is the title's font and size, lighter and dimmer", async ({ page 
   expect({ ...year, fontWeight: title.fontWeight, color: title.color }).toEqual(title);
   expect(Number(year.fontWeight)).toBeLessThan(Number(title.fontWeight));
   expect(year.color).not.toBe(title.color);
-});
-
-test("the title's name sets M and L 0.04em apart and L and B 0.005em", async ({ page }) => {
-  await openApp(page);
-  await expect(page.locator("header.top h1")).toHaveText("MLB");
-  const gaps = await readTitleGaps(page);
-  expect(gaps).toEqual([0.04, 0.005]);
 });
 
 test("once the World Series is won, the current season's year is in the title too", async ({

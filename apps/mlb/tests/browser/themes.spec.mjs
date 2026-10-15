@@ -61,8 +61,7 @@ async function listThemeLayoutChanges(page) {
   await showTheme(page, "dark");
   const nightGame = await readLayout(page);
   await showTheme(page, "light");
-  // A bracket chip sits where its theme's colors look centered, set by eye in styles.css.
-  return listLayoutChanges(ball, nightGame).filter((change) => !/^\w+\.nscore\b/.test(change));
+  return listLayoutChanges(ball, nightGame);
 }
 
 /**
