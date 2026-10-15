@@ -373,7 +373,7 @@ section.view.active {
   font-size: var(--type-heading-size);
   font-weight: var(--type-heading-weight);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--type-heading-tracking);
 }
 .settings-version {
   margin: 0;
@@ -479,7 +479,7 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
   margin: 0;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -704,7 +704,7 @@ body:has(> .home-screen-bar:not([hidden])) {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   cursor: pointer;
 }
 /* The icon sits near the page's edge, and its tap area runs past it. */
@@ -826,6 +826,7 @@ body:has(> .home-screen-bar:not([hidden])) {
   .sheet-head h2 {
     font-size: var(--type-heading-size);
     font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
   }
 
   /*

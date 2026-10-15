@@ -65,6 +65,7 @@
 .news-teams .club {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -94,6 +95,7 @@
   margin: 0;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }

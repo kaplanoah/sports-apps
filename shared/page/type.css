@@ -3,7 +3,9 @@
  * weight for its own fonts, so a role looks as big and as heavy in every app:
  *   --type-<role>-size and --type-<role>-weight.
  * A rule that sets a role's size sets its weight from the role too, or a step from it where the text
- * leads or recedes within its role, as calc(var(--type-label-weight) - 100).
+ * leads or recedes within its role, as calc(var(--type-label-weight) - 100). Headings and labels
+ * also take their letter spacing from their role, --type-heading-tracking and --type-label-tracking,
+ * so each looks as open everywhere it shows.
  *
  *   title         the app's name at the top
  *   headline      a news story's title

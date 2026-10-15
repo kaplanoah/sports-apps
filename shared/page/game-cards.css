@@ -75,7 +75,7 @@
 .game-card-when {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ink-dim);

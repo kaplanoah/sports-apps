@@ -83,7 +83,7 @@
   font-weight: var(--type-label-weight);
   line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--strip-month);
 }
 /* Today looks the same wherever the list is, so it reads as a shortcut, never as where the list
@@ -151,7 +151,7 @@
   font-weight: calc(var(--type-label-weight) - 100);
   line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .cell-month {

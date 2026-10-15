@@ -157,7 +157,7 @@ test("the gate's heading is set as a sheet's title, and Open as the app's other 
   const spacing = await findGate(page).evaluate((element) =>
     parseFloat(getComputedStyle(element).letterSpacing),
   );
-  expect(spacing).toBeCloseTo(heading.size * 0.05);
+  expect(spacing).toBeCloseTo(heading.spacing);
 
   const open = page.getByRole("button", { name: "Open" });
   await expect(open).toHaveCSS("font-family", /^Barlow,/);

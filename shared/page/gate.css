@@ -35,7 +35,7 @@ body.gate-page {
   font-weight: var(--type-heading-weight);
   line-height: calc(1.1 * var(--leading));
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--type-heading-tracking);
   text-wrap: balance;
 }
 .gate-form {
@@ -83,7 +83,7 @@ body.gate-page {
   font: inherit;
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   cursor: pointer;
 }

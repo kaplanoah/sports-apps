@@ -22,13 +22,6 @@ export const BRACKET_FEEDERS = {
 export const nameTeam = (code) => (code && TEAMS[code]?.name) || "TBD";
 
 /**
- * A team winning the title, its verb agreeing with its name.
- * @param {string} code
- */
-export const describeTitleWin = (code) =>
-  `${nameTeam(code)} ${TEAMS[code] && "isNameSingular" in TEAMS[code] ? "wins" : "win"}`;
-
-/**
  * A series' two sides, the one with more wins first.
  * @param {SeriesSide} top
  * @param {SeriesSide} bottom

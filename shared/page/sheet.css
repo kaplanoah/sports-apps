@@ -155,6 +155,7 @@
 .sheet-content .sheet-head h2 {
   font-size: var(--type-heading-size);
   font-weight: var(--type-heading-weight);
+  letter-spacing: var(--type-heading-tracking);
 }
 /* A sheet's sections are named by pills under its title. */
 .sheet-top .pager-tabs {
@@ -182,7 +183,7 @@
 .sheet-part-head h3 {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--sheet-part-head);
 }
@@ -202,7 +203,7 @@
   font-weight: var(--type-label-weight);
   line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   white-space: nowrap;
 }
 
@@ -222,7 +223,7 @@
   text-wrap: balance;
   text-align: center;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   font-weight: calc(var(--type-label-weight) - 100);
 }

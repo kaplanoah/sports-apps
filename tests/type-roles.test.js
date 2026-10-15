@@ -62,6 +62,22 @@ const listStrayWeights = (path) =>
     return fromRole.test(weight) ? [] : [`${rule} { ${role}: font-weight ${weight || "unset"} }`];
   });
 
+const TRACKED_ROLES = ["heading", "label"];
+
+/**
+ * Each rule that sets a tracked role's size without the same role's letter spacing.
+ * @param {string} path
+ */
+const listStrayTracking = (path) =>
+  readBlocks(path).flatMap(({ rule, properties }) => {
+    const role = ROLE_SIZE.exec(properties.get("font-size") ?? "")?.[1];
+    if (!role || !TRACKED_ROLES.includes(role)) return [];
+    const spacing = properties.get("letter-spacing") ?? "unset";
+    return spacing === `var(--type-${role}-tracking)`
+      ? []
+      : [`${rule} { ${role}: letter-spacing ${spacing} }`];
+  });
+
 /** The roles a stylesheet sizes or weighs text with. @param {string} path */
 const listRolesUsed = (path) =>
   new Set(
@@ -82,6 +98,21 @@ test("every size the stylesheets set comes from a type role", () => {
 test("every rule that sets a role's size sets its weight from the same role", () => {
   for (const path of [...listSharedStylesheets(), ...listAppStylesheets()])
     assert.deepEqual(listStrayWeights(path), [], path);
+});
+
+test("every rule that sets a heading's or label's size sets its role's letter spacing", () => {
+  for (const path of [...listSharedStylesheets(), ...listAppStylesheets()])
+    assert.deepEqual(listStrayTracking(path), [], path);
+});
+
+test("every app sets the letter spacing of each tracked role", () => {
+  for (const path of listAppStylesheets()) {
+    const tokens = listRootTokens(path);
+    const missing = TRACKED_ROLES.map((role) => `--type-${role}-tracking`).filter(
+      (token) => !tokens.has(token),
+    );
+    assert.deepEqual(missing, [], path);
+  }
 });
 
 test("every app sets the size and weight of each role its page uses", () => {

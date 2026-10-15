@@ -83,6 +83,7 @@
   --type-headline-weight: 525;
   --type-heading-size: calc(15.75rem / 16);
   --type-heading-weight: 525;
+  --type-heading-tracking: 0.035em;
   --type-team-large-size: calc(16rem / 16);
   --type-team-large-weight: 525;
   --type-team-size: calc(13.5rem / 16);
@@ -99,6 +100,7 @@
   --type-detail-weight: 400;
   --type-label-size: calc(12rem / 16);
   --type-label-weight: 400;
+  --type-label-tracking: 0.055em;
   --type-caption-size: calc(12.25rem / 16);
   --type-caption-weight: 350;
   --type-setting-size: calc(14.75rem / 16);
@@ -269,7 +271,7 @@ body {
   padding-inline: max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right));
   padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
   /* WIDE_STAGE_WIDTH in bracket-view.js, plus .tree-scroll's 18px each side. */
-  max-width: 1791px;
+  max-width: 1793px;
   margin: 0 auto;
 }
 h1,
@@ -311,12 +313,21 @@ header.top {
   margin-bottom: var(--header-gap);
 }
 header.top h1 {
+  --title-tracking: 0.06em;
   font-size: var(--type-title-size);
   font-weight: var(--type-title-weight);
   line-height: var(--leading);
   color: var(--ink);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--title-tracking);
+}
+/* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
+   spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */
+header.top h1 .title-letter:nth-child(1) {
+  margin-right: calc(0.04em - var(--title-tracking));
+}
+header.top h1 .title-letter:nth-child(2) {
+  margin-right: calc(0.005em - var(--title-tracking));
 }
 .head-right {
   display: flex;
@@ -375,7 +386,7 @@ header.top h1 {
   font-weight: var(--type-label-weight);
   font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.11em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   margin: 21px 0 15px;
   padding-bottom: 7px;
@@ -421,7 +432,7 @@ header.top h1 {
   gap: 10px;
   font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--type-label-tracking);
   background: var(--card);
   border-bottom: 1px solid var(--divider);
   padding: 7px 10px;
@@ -477,7 +488,7 @@ table.st th {
   font-weight: var(--type-label-weight);
   font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   padding: 7px 0 4px 10px;
   border-bottom: 1px solid var(--divider);
@@ -607,7 +618,7 @@ table.st .seed-cell {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   white-space: nowrap;
 }
 /* text-indent balances the letter-spacing added after the last letter. */
@@ -615,7 +626,7 @@ table.st .seed-cell {
   width: 24px;
   padding-left: 0;
   padding-right: 0;
-  text-indent: 0.07em;
+  text-indent: var(--type-label-tracking);
 }
 .clinch-tag {
   color: var(--highlight);
@@ -683,7 +694,7 @@ table.st .seed-cell {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 /* On a wide screen, the strip's line stops at the column's edges, and so does a held heading's. */
@@ -823,7 +834,7 @@ table.st .seed-cell {
   font-weight: var(--type-label-weight);
   font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .series-count {
@@ -967,7 +978,7 @@ table.st .seed-cell {
   font-size: var(--type-label-size);
   line-height: 16px;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
 }
 /* Its offset counts from inside .tree-scroll's padding, so 0 keeps it where it rests. */
 .league-name {
@@ -1006,6 +1017,7 @@ table.st .seed-cell {
   align-items: center;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ink-dim);
@@ -1033,9 +1045,10 @@ table.st .seed-cell {
 .stacked .box {
   scroll-snap-align: start;
 }
-/* A division card stops with its bye's seed label still on screen. */
+/* A division card stops with its bye's seed label still on screen, in SEED_LABEL_ROOM in
+   bracket-view.js. */
 .stacked .box:has(.seed-labels) {
-  scroll-margin-left: 50px;
+  scroll-margin-left: 51px;
 }
 .stacked .box:has(.world) {
   scroll-snap-align: center;
@@ -1088,7 +1101,7 @@ table.st .seed-cell {
   color: var(--highlight);
   text-align: center;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--type-label-tracking);
 }
 
 .series {
@@ -1106,7 +1119,7 @@ table.st .seed-cell {
   height: 24px;
   font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   padding: 0 8px;
   border-bottom: 1px solid var(--divider);
@@ -1338,6 +1351,7 @@ body.kbd .rank-item .grip:focus {
   grid-area: league;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
 }
 .rank-drought {
   display: none;
@@ -1363,6 +1377,7 @@ body.kbd .rank-item .grip:focus {
   padding: 0 7px;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
 }
 @container (max-height: 47px) {
   .rank-id {
@@ -1583,7 +1598,10 @@ body.kbd .rank-item .grip:focus {
 .meeting-result .club {
   color: var(--ink);
 }
+/* Chivo Mono's digits ride a little high beside Libre Franklin's names when both are centered. */
 .meeting-score {
+  position: relative;
+  top: 0.25px;
   font-size: var(--type-stat-size);
   font-weight: var(--type-stat-weight);
   color: var(--ink);
@@ -1627,7 +1645,7 @@ body.kbd .rank-item .grip:focus {
 .starters-versus {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) + 50);
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -1720,7 +1738,7 @@ table.st.line-score td.team .club {
   margin: 0;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -1780,7 +1798,7 @@ table.st.line-score td.team .club {
 .runs-now-label {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) + 100);
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
 }
 .runs-now-inning {
@@ -1981,7 +1999,7 @@ body.kbd .player-open:focus {
 .player-fact dt {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) + 50);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -2051,7 +2069,7 @@ body.kbd .player-open:focus {
   padding-right: 15px;
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) + 50);
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -2299,6 +2317,7 @@ body.kbd .player-open:focus {
 .matchup-body .tape .tape-label {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) + 50);
+  letter-spacing: var(--type-label-tracking);
 }
 .matchup-body .tape .player-curve > span {
   inset-inline: calc(7px / 2);
@@ -2331,7 +2350,7 @@ body.kbd .player-open:focus {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .scout h4 {
@@ -2339,7 +2358,7 @@ body.kbd .player-open:focus {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .scout-note {
@@ -2641,7 +2660,7 @@ body.kbd .player-open:focus {
   font: inherit;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
 }
 .news-title {
   font-size: var(--type-headline-size);
@@ -2654,10 +2673,6 @@ body.kbd .player-open:focus {
 }
 .news-more {
   gap: 9px;
-}
-.news-more-label {
-  font-weight: var(--type-label-weight);
-  letter-spacing: 0.06em;
 }
 .news-more-list {
   gap: 11px;
@@ -2682,7 +2697,7 @@ body.kbd .player-open:focus {
   box-shadow: inset 0 0 0 1px var(--card-border);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink);
 }
@@ -2698,7 +2713,6 @@ body.kbd .player-open:focus {
 }
 .settings-news .settings-group-label {
   font-weight: var(--type-label-weight);
-  letter-spacing: 0.06em;
 }
 
 /* Try again, outlined in capitals like Diagnostics' buttons, and filled gold where it stands alone
@@ -2714,7 +2728,7 @@ body.kbd .player-open:focus {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
 }
 .retry-button .retry-icon {
   width: 14px;
@@ -2798,11 +2812,6 @@ body.kbd .player-open:focus {
 .sheet-head .team-note .AL {
   color: var(--al);
 }
-.sheet-part-head h3,
-.team-label {
-  font-weight: var(--type-label-weight);
-  letter-spacing: 0.09em;
-}
 .team-label {
   color: var(--ink-dim);
 }
@@ -2849,7 +2858,7 @@ body.kbd .player-open:focus {
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .series-opp {
