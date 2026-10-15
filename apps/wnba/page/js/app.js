@@ -11,7 +11,6 @@ import {
 } from "#shared/news.js";
 import { readNewsChoices } from "#shared/news-choices.js";
 import { pickReadCards } from "#shared/news-picks.js";
-import { keepOpenedStories } from "#shared/opened-stories.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
@@ -274,7 +273,6 @@ async function boot() {
     openPlace: openSearchPlace,
     placeholder: "Teams, players, and games",
   });
-  keepOpenedStories(findElement("gameSearch"), drawNews);
   startGameSheet();
   startTeamSheet({
     isTeam: (team) => team in TEAMS,
