@@ -43,11 +43,17 @@ async function expectPartShown(page, part) {
   );
 }
 
-/** @param {import("@playwright/test").Page} page */
-const scrollBracketToEnd = (page) =>
-  page
+/**
+ * Scrolls the bracket to its last round, and waits for its dot to light, which the bracket's
+ * scroll event does, so nothing the scroll changes lands later.
+ * @param {import("@playwright/test").Page} page
+ */
+async function scrollBracketToEnd(page) {
+  await page
     .locator("#bracketWrap .bracket")
     .evaluate((tree) => tree.scrollTo({ left: tree.scrollWidth, behavior: "instant" }));
+  await expect(page.locator("#bracketWrap .round-dots [data-round]").last()).toHaveClass(/\bon\b/);
+}
 
 /** @param {import("@playwright/test").Page} page */
 const readBracketScroll = (page) =>
