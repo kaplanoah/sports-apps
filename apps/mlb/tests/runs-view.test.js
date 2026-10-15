@@ -12,6 +12,12 @@ const PLAYS = JSON.parse(
 );
 const DODGERS_AT_BREWERS = { id: "849809", away: "LAD", home: "MIL" };
 const GUARDIANS_AT_WHITE_SOX = { id: "849832", away: "CLE", home: "CWS" };
+// MLB's live feed for NLCS Game 3, once it was final and as it stood after Yelich came in to run
+// for Vaughn at 1st in the top of the 7th, before Bauers homered.
+const PINCH_RUNNER = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-14-pinch-runner.json`, "utf8"),
+);
+const BREWERS_AT_DODGERS = { id: "849811", away: "MIL", home: "LAD" };
 const PART_LINES =
   /<(h3|p|li)\b[^>]*>([\s\S]*?)<\/\1>|<span class="runs-runner-name">([\s\S]*?)<\/span>\s*<\/div>/g;
 
@@ -200,4 +206,105 @@ test("runners who got on after a half inning's last change of the score aren't i
 
   assert.ok(bottomOfFifth.plays.some((/** @type {any} */ play) => play.batter === "Teel"));
   assert.doesNotMatch(lines.join("\n"), /Teel/);
+});
+
+test("a pinch runner who scored is named with whom he ran for", () => {
+  const boxScore = describeBoxScore(BREWERS_AT_DODGERS.id, PINCH_RUNNER.feeds.final);
+  const lines = readRuns(BREWERS_AT_DODGERS, boxScore);
+
+  assert.deepEqual(lines.slice(lines.indexOf("Top 7th"), lines.indexOf("Top 7th") + 3), [
+    "Top 7th",
+    "Vaughn walkedBauers homered, scoring Yelich (pinch runner for Vaughn)3-2",
+    "Mitchell homered4-2",
+  ]);
+});
+
+test("a game being played says who's pinch running for whom over the field, and the runner's name stands alone", () => {
+  const boxScore = describeBoxScore(BREWERS_AT_DODGERS.id, PINCH_RUNNER.feeds.topOf7th);
+  const lines = readRuns(BREWERS_AT_DODGERS, boxScore);
+
+  assert.deepEqual(lines.slice(lines.indexOf("NowTop 7th")), [
+    "NowTop 7th",
+    "Yelich pinch running for Vaughn",
+    "Yelich",
+    "Bauers up against Snell",
+  ]);
+});
+
+test("a pinch runner is named with whom he ran for however he scored", () => {
+  const score = { away: 1, home: 0 };
+  const scorers = (/** @type {string} */ event) => [
+    { name: "Yelich", event, pinchRunnerFor: "Vaughn" },
+  ];
+
+  assert.deepEqual(
+    [
+      describeScoringPlay(createPlay({ event: "Double", scorers: scorers("Double"), score })),
+      describeScoringPlay(
+        createPlay({ event: "Strikeout", reached: false, scorers: scorers("Wild Pitch"), score }),
+      ),
+    ],
+    [
+      "Kwan doubled home Yelich (pinch runner for Vaughn)",
+      "Yelich (pinch runner for Vaughn) scored on a wild pitch",
+    ],
+  );
+});
+
+test("a pinch runner who comes up to bat later in the half scores as any batter does", () => {
+  const players = { ID1: "Vaughn", ID2: "Yelich", ID3: "Bauers", ID4: "Mitchell" };
+  const runner = (id, start, end, event) => ({
+    movement: { start, end, isOut: false },
+    details: { runner: { id }, event },
+  });
+  const play = ({ batter, event, runners, score = null, playEvents = [] }) => ({
+    about: { inning: 7, halfInning: "top", isScoringPlay: Boolean(score) },
+    result: { event, ...score },
+    matchup: { batter: { id: batter } },
+    runners,
+    playEvents,
+  });
+  const yelichRunsForVaughn = {
+    isSubstitution: true,
+    position: { abbreviation: "PR" },
+    player: { id: 2 },
+    replacedPlayer: { id: 1 },
+  };
+  const feed = {
+    gameData: {
+      status: { abstractGameState: "Final", codedGameState: "F", detailedState: "Final" },
+      players: Object.fromEntries(
+        Object.entries(players).map(([key, lastName]) => [key, { lastName }]),
+      ),
+    },
+    liveData: {
+      plays: {
+        allPlays: [
+          play({ batter: 1, event: "Walk", runners: [runner(1, null, "1B", "Walk")] }),
+          play({
+            batter: 3,
+            event: "Double",
+            runners: [runner(2, "1B", "score", "Double"), runner(3, null, "2B", "Double")],
+            score: { awayScore: 1, homeScore: 0 },
+            playEvents: [yelichRunsForVaughn],
+          }),
+          play({ batter: 2, event: "Single", runners: [runner(2, null, "1B", "Single")] }),
+          play({
+            batter: 4,
+            event: "Double",
+            runners: [runner(2, "1B", "score", "Double"), runner(4, null, "2B", "Double")],
+            score: { awayScore: 2, homeScore: 0 },
+          }),
+        ],
+      },
+    },
+  };
+  const boxScore = describeBoxScore("1", feed);
+
+  assert.deepEqual(readRuns({ away: "MIL", home: "LAD" }, boxScore), [
+    "Runs",
+    "Top 7th",
+    "Vaughn walkedBauers doubled home Yelich (pinch runner for Vaughn)1-0",
+    "Yelich singledMitchell doubled home Yelich2-0",
+  ]);
 });
