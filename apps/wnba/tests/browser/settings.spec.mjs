@@ -1,6 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
-import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
+import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
@@ -242,11 +242,19 @@ test.describe("on a phone", () => {
   }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const readSize = (locator) => locator.evaluate((element) => getComputedStyle(element).fontSize);
+    const readSize = (locator) =>
+      locator.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    const [setting, note, body, detail] = await Promise.all(
+      ["setting", "setting-note", "body", "detail"].map(
+        async (role) => (await readRole(page, role)).size,
+      ),
+    );
 
-    expect(await readSize(page.getByText("Include content from The Athletic"))).toBe("17px");
-    expect(await readSize(page.getByText("Most stories need a subscription"))).toBe("15px");
-    expect(await readSize(page.locator(".appearance-choice").first())).toBe("15px");
+    expect(await readSize(page.getByText("Include content from The Athletic"))).toBe(setting);
+    expect(await readSize(page.getByText("Most stories need a subscription"))).toBe(note);
+    expect(await readSize(page.locator(".appearance-choice").first())).toBe(note);
+    expect(setting).toBeGreaterThan(body);
+    expect(note).toBeGreaterThan(detail);
     const icon = await page.locator(".appearance-icon").first().boundingBox();
     expect(icon.width).toBe(60);
   });

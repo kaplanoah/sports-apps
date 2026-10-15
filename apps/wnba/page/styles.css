@@ -203,17 +203,17 @@
   --type-headline-weight: 600;
   --type-heading-size: calc(16.5rem / 16);
   --type-heading-weight: 500;
-  --type-team-large-size: calc(18rem / 16);
+  --type-team-large-size: calc(17.75rem / 16);
   --type-team-large-weight: 500;
   --type-team-size: calc(15.5rem / 16);
   --type-team-weight: 500;
-  --type-team-compact-size: calc(15rem / 16);
+  --type-team-compact-size: calc(15.25rem / 16);
   --type-team-compact-weight: 500;
   --type-score-size: calc(22rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(18.25rem / 16);
   --type-stat-large-weight: 600;
-  --type-stat-size: calc(16rem / 16);
+  --type-stat-size: calc(15.75rem / 16);
   --type-stat-weight: 500;
   --type-body-size: calc(14.75rem / 16);
   --type-body-weight: 300;
@@ -223,9 +223,9 @@
   --type-label-weight: 600;
   --type-caption-size: calc(13rem / 16);
   --type-caption-weight: 400;
-  --type-setting-size: calc(17rem / 16);
+  --type-setting-size: calc(15.75rem / 16);
   --type-setting-weight: 400;
-  --type-setting-note-size: calc(15rem / 16);
+  --type-setting-note-size: calc(13.75rem / 16);
   --type-setting-note-weight: 400;
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
@@ -1727,6 +1727,18 @@ th[aria-sort="ascending"] .roster-caret {
 }
 .card-note.live {
   color: var(--now);
+}
+/* The Finals' champion, centered under the card in capitals, as MLB's bracket names its own. */
+.card-note.champ {
+  margin-top: 8px;
+  padding-left: 0;
+  font-size: var(--type-label-size);
+  font-style: normal;
+  font-weight: var(--type-label-weight);
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--result);
 }
 .team-line {
   position: relative;

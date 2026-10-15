@@ -10,13 +10,15 @@
 // its own hue; where that takes it lighter than text needs, `nameColors` keeps the shade of it the
 // team's name and numbers read in. `markColors` mark a player on the curves of her sheet, on each theme: the color its first chart color comes from, made only as dark or light as a mark needs to stand out, so it stays as near the team's own as it can. `titles` are the seasons the franchise won the WNBA Finals
 // before the current one, which the page counts from its bracket, and `titlesAs` names the team
-// the franchise was when it won them, if it has since moved.
+// the franchise was when it won them, if it has since moved. `isNameSingular` marks a name that
+// takes a verb as one thing does, as the Liberty wins where the Aces win.
 export const TEAMS = {
   ATL: {
     id: 1611661330,
     espnId: 20,
     city: "Atlanta",
     name: "Dream",
+    isNameSingular: true,
     color: "#e3173e",
     color2: "#4891ce",
     dotSplit: 51,
@@ -29,6 +31,7 @@ export const TEAMS = {
     espnId: 19,
     city: "Chicago",
     name: "Sky",
+    isNameSingular: true,
     color: "#4d90cd",
     color2: "#ffd520",
     dotSplit: 51,
@@ -41,6 +44,7 @@ export const TEAMS = {
     espnId: 18,
     city: "Connecticut",
     name: "Sun",
+    isNameSingular: true,
     color: "#f05023",
     color2: "#0a2240",
     dotSplit: 49,
@@ -78,6 +82,7 @@ export const TEAMS = {
     espnId: 5,
     city: "Indiana",
     name: "Fever",
+    isNameSingular: true,
     color: "#20305d",
     color2: "#fad412",
     dotSplit: 52,
@@ -126,6 +131,7 @@ export const TEAMS = {
     espnId: 9,
     city: "New York",
     name: "Liberty",
+    isNameSingular: true,
     color: "#87d5b5",
     color2: "#100f0d",
     dotSplit: 48,
@@ -138,6 +144,7 @@ export const TEAMS = {
     espnId: 132052,
     city: "Portland",
     name: "Fire",
+    isNameSingular: true,
     color: "#c8102e",
     color2: "#ffffff",
     dotSplit: 52,
@@ -150,6 +157,7 @@ export const TEAMS = {
     espnId: 11,
     city: "Phoenix",
     name: "Mercury",
+    isNameSingular: true,
     color: "#fa4b0a",
     color2: "#3c286e",
     dotSplit: 50,
@@ -162,6 +170,7 @@ export const TEAMS = {
     espnId: 14,
     city: "Seattle",
     name: "Storm",
+    isNameSingular: true,
     color: "#2c5235",
     color2: "#fee11a",
     dotSplit: 52,
@@ -175,6 +184,7 @@ export const TEAMS = {
     espnId: 131935,
     city: "Toronto",
     name: "Tempo",
+    isNameSingular: true,
     color: "#441e36",
     color2: "#b3c7e7",
     dotSplit: 51,

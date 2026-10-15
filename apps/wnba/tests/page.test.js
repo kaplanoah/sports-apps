@@ -428,6 +428,48 @@ test("every series still to finish has a note under its card, which leaves out t
     assert.doesNotMatch(markup, /Game \d|win 2-0|Waits on|Starts after/);
   }));
 
+// How each team's title reads, the verb agreeing with its name.
+const TITLE_WINS = {
+  ATL: "Dream wins",
+  CHI: "Sky wins",
+  CON: "Sun wins",
+  DAL: "Wings win",
+  GSV: "Valkyries win",
+  IND: "Fever wins",
+  LAS: "Sparks win",
+  LVA: "Aces win",
+  MIN: "Lynx win",
+  NYL: "Liberty wins",
+  PDX: "Fire wins",
+  PHX: "Mercury wins",
+  SEA: "Storm wins",
+  TOR: "Tempo wins",
+  WAS: "Mystics win",
+};
+
+test("the Finals' card names its champion under it, as every team's name reads, and no other finished series has a note", () =>
+  inEastern(() => {
+    assert.deepEqual(Object.keys(TITLE_WINS).sort(), Object.keys(TEAMS).sort());
+    for (const [team, line] of Object.entries(TITLE_WINS)) {
+      const opponent = team === "NYL" ? "MIN" : "NYL";
+      const finals = {
+        id: "3-0",
+        round: 3,
+        top: { team, seed: 1, wins: 4 },
+        bottom: { team: opponent, seed: 2, wins: 1 },
+        winner: team,
+        status: "",
+        nextGame: null,
+      };
+      const series = [...SEASON.series.filter((one) => one.id !== "3-0"), finals];
+      const markup = renderBracket({ ...SEASON, series }, NOW).text;
+      const notes = [...markup.matchAll(/class="card-note champ">([^<]*)</g)].map(
+        (note) => note[1],
+      );
+      assert.deepEqual(notes, [line]);
+    }
+  }));
+
 test("a series still waiting on a team says its next game is TBD", () =>
   inEastern(() => {
     const text = readText(renderBracket(SEASON, NOW));

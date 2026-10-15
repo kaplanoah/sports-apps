@@ -85,9 +85,9 @@
   --type-heading-weight: 525;
   --type-team-large-size: calc(16rem / 16);
   --type-team-large-weight: 525;
-  --type-team-size: calc(13.75rem / 16);
-  --type-team-weight: 450;
-  --type-score-size: calc(16rem / 16);
+  --type-team-size: calc(13.5rem / 16);
+  --type-team-weight: 400;
+  --type-score-size: calc(15.75rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(15.5rem / 16);
   --type-stat-large-weight: 400;
@@ -103,8 +103,8 @@
   --type-caption-weight: 350;
   --type-setting-size: calc(14.75rem / 16);
   --type-setting-weight: 425;
-  --type-setting-note-size: calc(13.5rem / 16);
-  --type-setting-note-weight: 425;
+  --type-setting-note-size: calc(13.25rem / 16);
+  --type-setting-note-weight: 400;
   /* Libre Franklin sets its lines a little apart. */
   --leading: 1.01;
   --bg: #f5f1e6;

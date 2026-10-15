@@ -156,7 +156,9 @@ test("switching to 2025 shows the finished bracket and its champion from its rec
 
   await chooseSeason(page, "2025");
 
-  await expect(page.locator("#bracketWrap")).toContainText("Dodgers win the World Series");
+  await expect(page.locator('#bracketWrap .box[data-round="WS"] .card-note.champ')).toHaveText(
+    "Dodgers win",
+  );
   await expect(page.locator("#updates")).toBeHidden();
   expect(app.countSnapshotRequests()).toBe(0);
 });
