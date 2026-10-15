@@ -197,7 +197,7 @@
   --team-name: "Barlow Condensed", "Arial Narrow", sans-serif;
   /* Each type role's size and weight in Barlow, and Barlow Condensed where a role sets it
      (shared/page/type.css). */
-  --type-title-size: calc(23.75rem / 16);
+  --type-title-size: calc(23.5rem / 16);
   --type-title-weight: 500;
   --type-headline-size: calc(17.75rem / 16);
   --type-headline-weight: 600;
