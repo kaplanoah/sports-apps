@@ -7,6 +7,7 @@ import {
   buildFixtureSnapshot,
   buildSnapshotWithStarters,
   LIVE_BOX_SCORE,
+  readColor,
   swipeSheetDown,
 } from "./harness.mjs";
 import {
@@ -288,32 +289,25 @@ test("on a phone, the matchup rises only when the viewer allows motion", async (
   await expect(dialog).toHaveCSS("animation-name", "sheet-rise");
 });
 
-test("on a desktop, a game lights up under the pointer, past the row's sides, and goes back after", async ({
+test("on a desktop, a game's team names take the hover color under the pointer, with no fill, and go back after", async ({
   page,
 }) => {
   await openApp(page, { snapshots: { 2026: buildSnapshotWithStarters() } });
   await page.getByRole("tab", { name: "Games" }).click();
-  const readHighlight = (row) =>
-    row.evaluate((element) => {
-      const { backgroundColor, boxShadow } = getComputedStyle(element);
-      return { backgroundColor, boxShadow };
-    });
   const [first, second] = [0, 1].map((index) =>
     page.locator("#seasonGames .game-day.is-today .game-row").nth(index),
   );
-  const resting = await readHighlight(first);
-
-  // The highlight's color fills the row and both 12px reaches beyond its sides.
-  const isReachingPast = async () => {
-    const { backgroundColor, boxShadow } = await readHighlight(first);
-    const reach = `${backgroundColor} -12px 0px 0px 0px, ${backgroundColor} 12px 0px 0px 0px`;
-    return backgroundColor !== resting.backgroundColor && boxShadow === reach;
-  };
+  const [away, home] = [first.locator(".team-name").first(), first.locator(".team-name").last()];
+  const hoverColor = await readColor(page, "--ink-hover");
+  const restingColor = await away.evaluate((name) => getComputedStyle(name).color);
 
   await first.hover();
-  await expect.poll(isReachingPast).toBe(true);
+  await expect(away).toHaveCSS("color", hoverColor);
+  await expect(home).toHaveCSS("color", hoverColor);
+  await expect(first).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+
   await second.hover();
-  await expect.poll(() => readHighlight(first)).toEqual(resting);
+  await expect(away).toHaveCSS("color", restingColor);
 });
 
 for (const { screen, viewport } of [

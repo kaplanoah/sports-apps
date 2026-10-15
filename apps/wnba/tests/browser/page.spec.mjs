@@ -172,15 +172,14 @@ test("a tap shows only the page's own states: no gray flash, and no hover left b
   expect(await listTouchHoverRules(page)).toEqual([]);
 });
 
-test("hovering the settings button shades a square with a button's corners around its icon", async ({
+test("hovering the settings button gives its icon the hover color, with no square behind it", async ({
   page,
 }) => {
   await openApp(page);
   const button = page.locator("#settingsBtn");
   await button.hover();
-  // The square sits inside the button's 4px of padding, which trims its corners to a button's 3px.
-  await expect(button).toHaveCSS("border-radius", "7px");
-  await expect(button).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(button).toHaveCSS("color", await readTokenColor(page, "--ink-hover"));
+  await expect(button).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 });
 
 test.describe("on a phone, the text", () => {

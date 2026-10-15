@@ -1216,7 +1216,7 @@ table.st td.team .team-name {
 }
 @media (hover: hover) {
   .grip:hover {
-    color: var(--ink);
+    color: var(--ink-hover);
   }
 }
 .grip:active {
@@ -2638,8 +2638,8 @@ body.kbd .player-open:focus {
    parts under gold titles like the Updates box's and its labels in the green of the page's. A club's name or dot opens it wherever it shows,
    and in the standings so does the rest of its row. */
 @media (hover: hover) {
-  table.st tr[data-team]:hover td {
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  table.st tr[data-team]:hover :is(.team-open, .team-name) {
+    color: var(--ink-hover);
   }
 }
 .sheet-head h2.team-title {

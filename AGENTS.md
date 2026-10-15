@@ -872,7 +872,8 @@ When a step says to go back to an earlier step, continue in order from there.
 - Smooth above all.
   Nothing flickers, jumps, or flashes on open, return, reload, or redraw, and a new release arrives without anyone swiping the app closed.
 - Follow general best practices for web development code and app UI.
-- Desktop hover is a subtle change of text color only: never an underline, border, or highlight.
+- Desktop hover is a subtle change of text color only, to the app's `--ink-hover`: never an underline, border, or highlight,
+  which the root's `tests/hover-color.test.js` checks.
 - Simple beats configurable.
   Pick good defaults rather than adding settings.
 - Readable before elegant.

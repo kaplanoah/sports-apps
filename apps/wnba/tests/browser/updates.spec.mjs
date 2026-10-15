@@ -75,6 +75,65 @@ test.describe("on a phone", () => {
     ]);
   });
 
+  test("a pressed final tints across the box's whole width, halfway to what's above and below it", async ({
+    page,
+  }) => {
+    await openApp(page, { isShowingUpdates: true });
+    const finals = page.locator("#updates .updates-list li");
+    await expect(finals).toHaveCount(2);
+
+    /** @param {number} index */
+    const pressAndMeasure = (index) =>
+      finals.nth(index).evaluate((final) => {
+        final.querySelector(".game-open")?.classList.add("is-pressed");
+        const box = /** @type {HTMLElement} */ (final.closest(".updates"));
+        const boxStyle = getComputedStyle(box);
+        const fill = getComputedStyle(final, "::before");
+        const line = final.getBoundingClientRect();
+        const area = box.getBoundingClientRect();
+        return {
+          fill: {
+            top: line.top + parseFloat(fill.top),
+            bottom: line.bottom - parseFloat(fill.bottom),
+            left: line.left + parseFloat(fill.left),
+            right: line.right - parseFloat(fill.right),
+            color: fill.backgroundColor,
+          },
+          lineTop: line.top,
+          inside: {
+            top: area.top + parseFloat(boxStyle.borderTopWidth),
+            bottom: area.bottom - parseFloat(boxStyle.borderBottomWidth),
+            left: area.left + parseFloat(boxStyle.borderLeftWidth),
+            right: area.right - parseFloat(boxStyle.borderRightWidth),
+          },
+          head: /** @type {Element} */ (box.querySelector(".updates-head")).getBoundingClientRect()
+            .bottom,
+          texts: [...box.querySelectorAll(".updates-list .what")].map((text) => {
+            const { top, bottom } = text.getBoundingClientRect();
+            return { top, bottom };
+          }),
+        };
+      });
+
+    const first = await pressAndMeasure(0);
+    expect(first.fill.color).not.toBe("rgba(0, 0, 0, 0)");
+    expect(first.fill.left).toBeCloseTo(first.inside.left, 1);
+    expect(first.fill.right).toBeCloseTo(first.inside.right, 1);
+    expect(first.fill.top - first.head).toBeCloseTo(first.lineTop - first.fill.top, 0);
+    expect(first.fill.bottom - first.texts[0].bottom).toBeCloseTo(
+      first.texts[1].top - first.fill.bottom,
+      0,
+    );
+
+    await finals
+      .nth(0)
+      .locator(".game-open")
+      .evaluate((open) => open.classList.remove("is-pressed"));
+    const last = await pressAndMeasure(1);
+    expect(last.fill.bottom).toBeCloseTo(last.inside.bottom, 1);
+    expect(last.fill.top).toBeCloseTo(first.fill.bottom, 1);
+  });
+
   test("dismissing the Updates box in another tab hides it in this one", async ({ page }) => {
     await openApp(page, { isShowingUpdates: true });
     const updates = page.locator("#updates");

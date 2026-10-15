@@ -111,7 +111,9 @@ test("settings left off the screen two minutes are closed as the page comes back
   await expect(settings).toBeHidden();
 });
 
-test("the sliders icon takes the stamp's time color and brightens on hover", async ({ page }) => {
+test("the sliders icon takes the stamp's time color and the hover color under a mouse", async ({
+  page,
+}) => {
   await openApp(page);
   const button = page.getByRole("button", { name: "Settings", exact: true });
   const timeColor = await page.locator("#stamp").evaluate((stamp) => {
@@ -124,7 +126,7 @@ test("the sliders icon takes the stamp's time color and brightens on hover", asy
 
   await expect(button).toHaveCSS("color", timeColor);
   await button.hover();
-  await expect(button).toHaveCSS("color", await readColor(page, "--ink"));
+  await expect(button).toHaveCSS("color", await readColor(page, "--ink-hover"));
 });
 
 test("the sliders icon sits close to the stamp", async ({ page }) => {
