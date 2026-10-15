@@ -35,16 +35,19 @@
     height: calc(100% + env(safe-area-inset-top) + 1px);
   }
 }
+/* The view and its list grow from nothing into the room left, rather than shrink from the whole
+   season's height, which rounds to a slightly different height as the list's days draw and would
+   resize the list for no change on the screen. */
 .view.active:has(> .day-view) {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
 }
 .day-view {
   --reach-left: calc(var(--page-gutter) + 1px);
   --reach-right: var(--page-gutter);
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
   width: 100%;
   max-width: 560px;
@@ -227,7 +230,7 @@
    scroll anchor, so the list's code keeps the day at its top itself, in every browser. */
 .day-list {
   position: relative;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
   padding: var(--day-gap) var(--reach-right) max(48px, var(--end-room, 0px)) var(--reach-left);

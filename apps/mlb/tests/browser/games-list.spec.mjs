@@ -163,6 +163,21 @@ test("a day far from the list's top stands in for its games at the height they t
   ).toHaveClass(/is-stand-in/);
 });
 
+test("the Games view keeps its height as the season's days change the list's height", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  const heights = await page.locator("#seasonGames").evaluate((view) => {
+    const day = /** @type {HTMLElement} */ (view.querySelector('[data-day="2026-04-01"]'));
+    return Array.from({ length: 40 }, (_, step) => {
+      day.style.paddingTop = `${step * 0.37}px`;
+      return view.getBoundingClientRect().height;
+    });
+  });
+
+  expect(new Set(heights).size).toBe(1);
+});
+
 test("scrolling the list draws each day whole as it nears the top, before it shows", async ({
   page,
 }) => {
