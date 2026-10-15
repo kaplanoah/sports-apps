@@ -1,7 +1,7 @@
 /*
  * A pill whose names choose what shows under it, like a sheet's sections (sheet-sections.js) or a
- * season's standings and bracket (bracket-standings.js). Apps link it after chrome.css, before
- * their own styles.css, which styles what shows under it.
+ * season's standings and bracket (bracket-standings.js), each beside the other as it slides in.
+ * Apps link it after chrome.css, before their own styles.css, which styles what shows under it.
  *
  * Beside chrome.css's --bg, --accent, and --accent-ink, an app's :root defines these tokens:
  *   --page-gutter          the body's side padding, which the pill's bar reaches past to the
@@ -16,15 +16,42 @@
 
 /* A season's standings and bracket under one pill, as wide as the view. Its bar reaches past the
    body's gutter to the screen's edges, and on the left past the 1px chrome.css pads each view with
-   too. The part whose name isn't chosen hides, so the pill a reload puts back (show-last-drawn.js)
-   shows the part it names before the first paint. */
+   too. */
 .bracket-standings {
   --reach-left: calc(var(--page-gutter) + 1px);
   --reach-right: var(--page-gutter);
 }
-.bracket-standings:has([data-tab="standings"][aria-selected="false"]) [data-part="standings"],
-.bracket-standings:has([data-tab="bracket"][aria-selected="false"]) [data-part="bracket"] {
-  display: none;
+/* The parts sit side by side in one row, as slide-panels.js moves them, which reaches the screen's
+   edges, so a part slides off the screen rather than the gutter. While bracket-standings.js holds
+   the room under the pill for a part a swipe brought in, the row is never shorter than it. Each
+   part keeps its own height, so the bracket, which spreads its cards over the room it has, never
+   stretches to the standings' beside it. */
+.season-parts {
+  display: grid;
+  align-items: start;
+  margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
+  overflow-x: clip;
+}
+.season-parts[data-holding-room] {
+  min-height: var(--room-under-pill, 0px);
+}
+.season-part {
+  grid-area: 1 / 1;
+  min-width: 0;
+  padding-inline: var(--reach-left) var(--reach-right);
+}
+/* At rest, the part whose name isn't chosen takes no room and doesn't show, so the pill a reload
+   puts back (show-last-drawn.js) shows the part it names before the first paint. While the parts
+   slide, both show. */
+.bracket-standings:has([data-tab="standings"][aria-selected="false"])
+  .season-parts:not([data-sliding])
+  > [data-part="standings"],
+.bracket-standings:has([data-tab="bracket"][aria-selected="false"])
+  .season-parts:not([data-sliding])
+  > [data-part="bracket"] {
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 /* The pill stays at the top of the screen while what it shows scrolls under it, under the Home

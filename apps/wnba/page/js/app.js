@@ -210,10 +210,12 @@ function openSearchPlace(key) {
   if (place === "tab") openPageTab(detail);
   else if (place === "season") {
     openPageTab("bracket-standings");
-    showSeasonPart(/** @type {import("#shared/bracket-standings.js").SeasonPart} */ (detail));
+    showSeasonPart(/** @type {import("#shared/bracket-standings.js").SeasonPart} */ (detail), {
+      isInstant: true,
+    });
   } else if (place === "standings") {
     openPageTab("bracket-standings");
-    showSeasonPart("standings");
+    showSeasonPart("standings", { isInstant: true });
     showStandingsList(detail);
   } else if (place === "highlights") openGameSection(detail, "highlights");
   else openSettings(key);

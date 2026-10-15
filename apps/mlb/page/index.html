@@ -212,13 +212,22 @@
         </button>
       </div>
     </div>
-    <div id="bracketStandingsParts" role="tabpanel" aria-label="Bracket and standings">
-      <div id="standingsWrap" data-part="standings" data-last-drawn></div>
-      <div id="noFieldNote" class="no-field-note" data-part="bracket" hidden>
-        <h2>No playoff field yet</h2>
-        <p>The bracket fills in once MLB's standings project a field</p>
+    <div
+      id="bracketStandingsParts"
+      class="season-parts"
+      role="tabpanel"
+      aria-label="Bracket and standings"
+    >
+      <div class="season-part" data-part="standings">
+        <div id="standingsWrap" data-last-drawn></div>
       </div>
-      <div id="bracketWrap" data-part="bracket" data-last-drawn></div>
+      <div class="season-part" data-part="bracket">
+        <div id="noFieldNote" class="no-field-note" hidden>
+          <h2>No playoff field yet</h2>
+          <p>The bracket fills in once MLB's standings project a field</p>
+        </div>
+        <div id="bracketWrap" data-last-drawn></div>
+      </div>
     </div>
   </section>
 

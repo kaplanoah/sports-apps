@@ -167,8 +167,8 @@ test("the page reopens on the tab it was last on, showing the part of it last ch
     "aria-selected",
     "true",
   );
-  await expect(page.locator("#bracketWrap")).toHaveCSS("display", "block");
-  await expect(page.locator("#standingsWrap")).toHaveCSS("display", "none");
+  await expect(page.locator("#bracketWrap")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
 test("the page shows the tab it was last on before its modules have loaded", async ({ page }) => {

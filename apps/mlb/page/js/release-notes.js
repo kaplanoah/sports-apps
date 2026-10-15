@@ -6,6 +6,10 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
+    at: "2026-10-15T21:00:00Z",
+    text: html`<b>Bracket</b> and <b>Standings</b> are combined into one page. Tap the buttons at the top of the page to switch between them. In the regular season, standings show by default. In the playoffs, the bracket shows by default.`,
+  },
+  {
     at: "2026-10-13T15:23:00Z",
     text: html`Search for teams, players, games, and highlights, with the <b>Search</b> button at the bottom. (Includes the old game search, which works the same as before.)`,
   },
