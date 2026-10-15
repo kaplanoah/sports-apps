@@ -101,24 +101,35 @@ function renderRace(row) {
   return html`<span class="race ${race.standing}"${title && html` title="${title}"`}>${race.label}</span>`;
 }
 
+// A club's record now comes from the standings wherever it shows, so no two places can differ.
+/** @param {string} id */
+function describeStandingsRecord(id) {
+  const row = findStandingsRow(id);
+  return row ? `${row.w}-${row.l}` : null;
+}
+
+const renderRecord = (record) => record && html`<span class="tabular">${record}</span>`;
+
 function renderFacts(id) {
   if (!id) return html``;
   const row = findStandingsRow(id);
-  return html`<span class="game-facts">${renderSeed(id)}${row && html`<span class="tabular">${row.w}-${row.l}</span>`}${renderRace(row)}</span>`;
+  return html`<span class="game-facts">${renderSeed(id)}${renderRecord(describeStandingsRecord(id))}${renderRace(row)}</span>`;
 }
 
 // Away from today, a club's standing then isn't its standing now, so a regular season game shows
-// only each club's record as of the game, and a postseason game its seed, which never changes.
+// only each club's record: as of the game once it's been played, which the schedule keeps with it,
+// and its record now for a game still to come, and a postseason game its seed, which never changes.
 /**
  * @param {any} game
  * @param {number} index 0 for the away club, 1 for the home club
+ * @param {boolean} isAhead whether the game is after today
  */
-function renderFactsThen(game, index) {
+function renderFactsThen(game, index, isAhead) {
   const id = index ? game.home : game.away;
   if (!id) return html``;
   if (game.postseason) return html`<span class="game-facts">${renderSeed(id)}</span>`;
-  const record = game.records?.[index];
-  return html`<span class="game-facts">${record && html`<span class="tabular">${record}</span>`}</span>`;
+  const record = isAhead ? describeStandingsRecord(id) : game.records?.[index];
+  return html`<span class="game-facts">${renderRecord(record)}</span>`;
 }
 
 const isNamed = (starter) => Boolean(starter?.name);
@@ -210,11 +221,16 @@ const isAwaitingStarter = (game, id, starter) => game.state === "pre" && Boolean
 /**
  * @param {any} game
  * @param {Map<string, any[]>} seriesFinals each postseason series' finals, which its label counts
- * @param {{ isToday: boolean, isAwaitingStarters: boolean }} when whether the game is today's, and
- *   whether a club yet to name its starter says so
+ * @param {{ isToday: boolean, isAhead: boolean, isAwaitingStarters: boolean }} when whether the
+ *   game is today's or after today, and whether a club yet to name its starter says so
  * @param {(id: string) => any} renderClubLine
  */
-function describeGameRow(game, seriesFinals, { isToday, isAwaitingStarters }, renderClubLine) {
+function describeGameRow(
+  game,
+  seriesFinals,
+  { isToday, isAhead, isAwaitingStarters },
+  renderClubLine,
+) {
   const [awayScore, homeScore] = game.score || [];
   const isFinal = game.state === "final";
   const awayLost = isFinal && awayScore < homeScore;
@@ -224,7 +240,7 @@ function describeGameRow(game, seriesFinals, { isToday, isAwaitingStarters }, re
   const isHomePending = isAwaitingStarters && isAwaitingStarter(game, game.home, homeStarter);
   const [awayFacts, homeFacts] = isToday
     ? [renderFacts(game.away), renderFacts(game.home)]
-    : [renderFactsThen(game, 0), renderFactsThen(game, 1)];
+    : [renderFactsThen(game, 0, isAhead), renderFactsThen(game, 1, isAhead)];
   return {
     classes: [game.state, game.delay && "delayed"],
     away: describeSide(
@@ -254,14 +270,14 @@ function describeGameRow(game, seriesFinals, { isToday, isAwaitingStarters }, re
 /**
  * @param {any} game
  * @param {Map<string, any[]>} seriesFinals
- * @param {boolean} isToday
+ * @param {{ isToday: boolean, isAhead: boolean }} when
  */
-function renderGame(game, seriesFinals, isToday) {
+function renderGame(game, seriesFinals, { isToday, isAhead }) {
   return renderGameRow({
     ...describeGameRow(
       game,
       seriesFinals,
-      { isToday, isAwaitingStarters: isToday },
+      { isToday, isAhead, isAwaitingStarters: isToday },
       renderSideClub,
     ),
     action: renderGameButton(game),
@@ -310,12 +326,21 @@ function renderAllStarGame(game) {
 /**
  * @param {any} game
  * @param {Map<string, any[]>} seriesFinals
- * @param {boolean} isToday
+ * @param {{ isToday: boolean, isAhead: boolean }} when
  */
-function renderListedGame(game, seriesFinals, isToday) {
+function renderListedGame(game, seriesFinals, when) {
   if (game.allStar) return renderAllStarGame(game);
-  return renderGame(game, seriesFinals, isToday);
+  return renderGame(game, seriesFinals, when);
 }
+
+/** @param {number} now */
+const readTodayDate = (now) => session.state?.slate?.today.date ?? readEasternDay(now).date;
+
+/**
+ * @param {string} date a game's or a day's date
+ * @param {string} today
+ */
+const describeWhen = (date, today) => ({ isToday: date === today, isAhead: date > today });
 
 /** Each postseason series' finals among the season's games the page has. */
 export const groupShownSeriesFinals = () =>
@@ -324,7 +349,11 @@ export const groupShownSeriesFinals = () =>
 // A game's sheet heads its Game section with the game's row, whose clubs each open their own
 // sheet, and leaves its starters to the line under it.
 export function renderGameFaceOff(game) {
-  const when = { isToday: !!game.today, isAwaitingStarters: false };
+  const when = {
+    isToday: !!game.today,
+    isAhead: game.date > readTodayDate(Date.now()),
+    isAwaitingStarters: false,
+  };
   const seriesFinals = groupShownSeriesFinals();
   const row = describeGameRow({ ...game, starters: [] }, seriesFinals, when, renderClub);
   return html`<ul class="game-list game-faceoff">${renderGameRow(row)}</ul>`;
@@ -398,7 +427,7 @@ const listGameDays = (games, seriesFinals, today) =>
     day: day.date,
     count: day.games.length,
     games: html`<ul class="game-list">
-      ${day.games.map((game) => renderListedGame(game, seriesFinals, day.date === today))}
+      ${day.games.map((game) => renderListedGame(game, seriesFinals, describeWhen(day.date, today)))}
     </ul>`,
   }));
 
@@ -430,7 +459,7 @@ export function listSeasonDays(slate, schedule, now) {
  * @param {number} now
  */
 export function listFoundGameDays(found, allGames, now) {
-  const today = session.state?.slate?.today.date ?? readEasternDay(now).date;
+  const today = readTodayDate(now);
   return listFoundDays({
     gameDays: listGameDays(found, groupSeriesFinals(allGames), today),
     today,
