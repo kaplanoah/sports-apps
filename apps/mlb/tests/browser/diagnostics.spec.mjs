@@ -237,6 +237,11 @@ test("with Diagnostics on, a slide of the strip's dates that leaves the strip sh
     const next = /** @type {HTMLElement} */ (list.querySelector('[data-day="2026-09-25"]'));
     list.scrollTop = next.offsetTop;
   });
+  // The scroll that starts the slide comes with the browser's next frame, which a slow machine
+  // can draw after the clock has moved.
+  await expect(page.locator('#seasonGames .day-cell[data-day="2026-09-25"]')).toHaveClass(
+    /is-chosen/,
+  );
   await page.clock.runFor(1500);
   await expect(page.locator("#seasonGames .strip-lens")).toHaveCount(0);
 
