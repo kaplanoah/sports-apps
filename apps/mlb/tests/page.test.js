@@ -5,7 +5,7 @@ import { composeState, session } from "../page/js/session.js";
 import { renderDivisionBlock, renderFieldBlock, renderNextCell } from "../page/js/standings.js";
 import { describeTeamStatus, findSeries, nameSeries } from "../page/js/bracket.js";
 import { renderCardNote, renderMatchupRow } from "../page/js/bracket-view.js";
-import { describeDrought, listRankedOrder } from "../page/js/clubs.js";
+import { describeDrought, listRankedOrder, listTitles } from "../page/js/clubs.js";
 import { keepRanking, keepSeenAt } from "../page/js/kept-on-device.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
 import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
@@ -769,6 +769,34 @@ test("the page shows the season's record, with a final fresh for ten minutes aft
     assert.equal(session.state.slate, undefined);
   } finally {
     Object.assign(session, { season });
+  }
+});
+
+test("this year's champion has its title, and is reigning, as soon as the season's bracket crowns it, without reading the seasons again", () => {
+  const final2025 = JSON.parse(
+    readFileSync(`${import.meta.dirname}/fixtures/2025-final.json`, "utf8"),
+  );
+  const shown2025 = buildSnapshot(final2025.responses, {
+    season: 2025,
+    now: Date.parse(final2025.now),
+  });
+  const bluejaysWin = {
+    ...shown2025,
+    series: { ...shown2025.series, WS: { winsA: 4, winsB: 3, started: true } },
+  };
+  const { currentSeason, activeYear, state } = session;
+  try {
+    Object.assign(session, {
+      currentSeason: 2025,
+      activeYear: 2025,
+      state: bluejaysWin,
+      trackedTitles: {},
+    });
+    assert.equal(listTitles("TOR")[0], 2025);
+    assert.equal(describeDrought("TOR"), "Reigning");
+    assert.equal(describeDrought("NYY"), "16 yrs ago");
+  } finally {
+    Object.assign(session, { currentSeason, activeYear, state, trackedTitles: {} });
   }
 });
 

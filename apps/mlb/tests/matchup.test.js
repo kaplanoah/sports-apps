@@ -1,6 +1,6 @@
 import { mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { listSides, renderMatchupBody, updateSides } from "../page/js/matchup.js";
+import { isNewStarter, listSides, renderMatchupBody, updateSides } from "../page/js/matchup.js";
 import { Markup, convertToText } from "../../../shared/page/html.js";
 import { normalizeSpaces } from "../../../tests/text.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
@@ -504,6 +504,27 @@ test("a club's starter changed after the sheet read its sides takes his side's p
   const [away, home] = updateSides(sides, changed);
   assert.deepEqual(away.starter, { id: 3, name: "Brown" });
   assert.equal(home, sides[1]);
+});
+
+test("a starter pulled from the game keeps his side's numbers but loses his Now, and isn't a new starter to read again", () => {
+  const live = {
+    ...AT_ATHLETICS,
+    state: "live",
+    starters: [{ id: 1, name: "Blubaugh", pitching: true }, AT_ATHLETICS.starters[1]],
+  };
+  const sides = listSides(live).map((side) => ({
+    ...side,
+    pitcher: { lastName: side.starter.name },
+  }));
+  const pulled = { ...live, starters: [{ id: 1, name: "Blubaugh" }, AT_ATHLETICS.starters[1]] };
+
+  const [away, home] = updateSides(sides, pulled);
+
+  assert.deepEqual(away.starter, { id: 1, name: "Blubaugh" });
+  assert.equal(away.pitcher, sides[0].pitcher);
+  assert.equal(home, sides[1]);
+  assert.ok(!isNewStarter(sides[0].starter, away.starter));
+  assert.deepEqual(updateSides(sides, live), sides);
 });
 
 test("a starter the store has only by his id keeps the side that names him", () => {

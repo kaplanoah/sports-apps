@@ -23,7 +23,14 @@ import { describeDay, readCalendarDate } from "#shared/days.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
-import { isLoadingSide, listSides, loadSide, renderMatchupBody, updateSides } from "./matchup.js";
+import {
+  isLoadingSide,
+  isNewStarter,
+  listSides,
+  loadSide,
+  renderMatchupBody,
+  updateSides,
+} from "./matchup.js";
 import { renderNetworks } from "#shared/network-logos.js";
 import { watchRetries } from "#shared/retry.js";
 import { countClubGames } from "./qualifying.js";
@@ -314,10 +321,11 @@ async function retryFailedSides() {
 function updateStarters(opened) {
   const game = readCurrentGame(opened.game);
   const sides = updateSides(opened.sides, game);
-  const named = sides.filter((side, index) => side !== opened.sides[index]);
-  if (named.length === 0) return;
+  const named = sides.filter((side, index) =>
+    isNewStarter(opened.sides[index].starter, side.starter),
+  );
   opened.sides = sides;
-  loadSides(opened, named, game);
+  if (named.length > 0) loadSides(opened, named, game);
 }
 
 /**

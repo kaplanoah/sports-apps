@@ -500,18 +500,31 @@ export const listSides = (game) =>
   }));
 
 // A starter the store has only by his id, when MLB couldn't describe him, keeps the name shown.
-const isNewStarter = (shown, current) =>
+export const isNewStarter = (shown, current) =>
   current?.id !== shown?.id || (!!current?.name && !shown?.name);
 
+const isPulledOrBackIn = (shown, current) => !!shown?.pitching !== !!current?.pitching;
+
+// The starter as the game has him now, pitching or pulled, with the name shown when the store
+// has him only by his id.
+const refreshStarter = (shown, current) =>
+  current.name
+    ? current
+    : { ...current, name: shown.name, ...(shown.firstName && { firstName: shown.firstName }) };
+
 /**
- * The sides, with a fresh one wherever the game now has another starter, or names one it couldn't.
+ * The sides, with a fresh one wherever the game now has another starter, or names one it couldn't,
+ * and the same side, with its starter as the game has him now, where he's been pulled or is back.
  * @param {any[]} sides
  * @param {MatchupGame} game
  */
 export const updateSides = (sides, game) =>
-  listSides(game).map((current, index) =>
-    isNewStarter(sides[index].starter, current.starter) ? current : sides[index],
-  );
+  listSides(game).map((current, index) => {
+    const shown = sides[index];
+    if (isNewStarter(shown.starter, current.starter)) return current;
+    if (!isPulledOrBackIn(shown.starter, current.starter)) return shown;
+    return { ...shown, starter: refreshStarter(shown.starter, current.starter) };
+  });
 
 /**
  * @param {any} side
