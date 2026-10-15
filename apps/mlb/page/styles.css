@@ -271,7 +271,7 @@ body {
   padding-inline: max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right));
   padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
   /* WIDE_STAGE_WIDTH in bracket-view.js, plus .tree-scroll's 18px each side. */
-  max-width: 1791px;
+  max-width: 1793px;
   margin: 0 auto;
 }
 h1,
@@ -1050,9 +1050,10 @@ table.st .seed-cell {
 .stacked .box {
   scroll-snap-align: start;
 }
-/* A division card stops with its bye's seed label still on screen. */
+/* A division card stops with its bye's seed label still on screen, in SEED_LABEL_ROOM in
+   bracket-view.js. */
 .stacked .box:has(.seed-labels) {
-  scroll-margin-left: 50px;
+  scroll-margin-left: 51px;
 }
 .stacked .box:has(.world) {
   scroll-snap-align: center;
