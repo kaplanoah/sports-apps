@@ -15,6 +15,7 @@ import { scrollSettingsToEnd, waitForSheetToRise, WITH_A_PAST_SEASON } from "./s
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { readTitleGaps } from "../../../../tests/browser/title-gaps.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -199,29 +200,9 @@ test("the year is the title's font and size, lighter and dimmer", async ({ page 
 
 test("the title's name sets M and L 0.04em apart and L and B 0.005em", async ({ page }) => {
   await openApp(page);
-  const title = page.locator("header.top h1");
-  await expect(title).toHaveText("MLB");
-  const { lefts, size } = await title.evaluate((element) => {
-    const name = /** @type {Text} */ (
-      [...element.childNodes].find((node) => node.nodeType === 3 && node.textContent?.trim())
-    );
-    const letters = [...element.querySelectorAll(".title-letter")].map(
-      (letter) => letter.firstChild,
-    );
-    const range = document.createRange();
-    const readLeft = (node, offset) => {
-      range.setStart(node, offset);
-      range.setEnd(node, offset + 1);
-      return range.getBoundingClientRect().left;
-    };
-    return {
-      lefts: [readLeft(letters[0], 0), readLeft(letters[1], 0), readLeft(name, 0)],
-      size: parseFloat(getComputedStyle(element).fontSize),
-    };
-  });
-  const [afterM, afterL] = [lefts[1] - lefts[0], lefts[2] - lefts[1]];
-  // Chivo Mono draws every letter at one width, so the steps differ only by their gaps.
-  expect(afterM - afterL).toBeCloseTo((0.04 - 0.005) * size, 1);
+  await expect(page.locator("header.top h1")).toHaveText("MLB");
+  const gaps = await readTitleGaps(page);
+  expect(gaps).toEqual([0.04, 0.005]);
 });
 
 test("once the World Series is won, the current season's year is in the title too", async ({

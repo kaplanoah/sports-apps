@@ -1,6 +1,7 @@
 import { test, expect, expectDayAtTop, openApp, matchPath } from "./harness.mjs";
 import { SNAPSHOT_VERSION } from "../../page/js/snapshot.js";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { readTitleGaps } from "../../../../tests/browser/title-gaps.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -159,6 +160,15 @@ test("once the Finals are won, the current season's year is in the title too", a
   }));
 
   await expect(findTitle(page)).toHaveText("WNBA 2026");
+});
+
+test("the title's name sets W and N, and N and B, 0.025em apart, and B and A 0.065em", async ({
+  page,
+}) => {
+  await openApp(page);
+  await expect(page.locator("header.top h1")).toHaveText("WNBA");
+  const gaps = await readTitleGaps(page);
+  expect(gaps).toEqual([0.025, 0.025, 0.065]);
 });
 
 test("the year is the title's font and size, lighter and dimmer", async ({ page }) => {
