@@ -6,6 +6,7 @@
 // sheet keeps what it read with him, so a reload draws it again while it reads again.
 
 import { setHtml } from "#shared/html.js";
+import { readPlayingNow } from "#shared/playing-now.js";
 import { classifyReadFailure, watchRetries } from "#shared/retry.js";
 import { openSheet, wireSheet } from "#shared/sheet.js";
 import {
@@ -28,7 +29,11 @@ import { session } from "./session.js";
 
 /** @typedef {import("./player-view.js").Player} Player */
 /** @typedef {import("./player-view.js").ShownPlayer} ShownPlayer */
-/** @typedef {{ id: number, club: string, name: string, number: string }} PlayerSubject */
+/**
+ * Who the sheet shows, from the row that opened it. `isPlayingNow` says a box score showed him
+ * playing now (`#shared/playing-now.js`).
+ * @typedef {{ id: number, club: string, name: string, number: string, isPlayingNow?: boolean }} PlayerSubject
+ */
 /** @typedef {Omit<ShownPlayer, "isLoading" | "failure">} PlayerFound */
 /** @typedef {import("#shared/sheet-reads.js").SheetRead<PlayerFound>} PlayerRead */
 
@@ -127,7 +132,10 @@ function renderSheet() {
   setHtml(findElement("playerPlace"), shown.player?.facts?.birthplace ?? "");
   setHtml(findElement("playerFacts"), renderPlayerFacts(shown.player, shown.isLoading) || "");
   const clubGames = countClubGames(person.club, session.currentSeason);
-  setHtml(findElement("playerBody"), renderPlayerBody({ ...shown, clubGames }));
+  setHtml(
+    findElement("playerBody"),
+    renderPlayerBody({ ...shown, clubGames, isPlayingNow: !!subject.isPlayingNow }),
+  );
 }
 
 // A read that failed is dropped, so the sheet shows its placeholders while it reads again.
@@ -159,10 +167,21 @@ const isSavedSubject = (saved) =>
 /** @param {any} saved what readShownPlayer found */
 function reopenPlayer(saved) {
   if (!isSavedSubject(saved)) return false;
-  const { id, club, name, number = "", year, player, hitters, starters, side } = saved;
+  const {
+    id,
+    club,
+    name,
+    number = "",
+    isPlayingNow,
+    year,
+    player,
+    hitters,
+    starters,
+    side,
+  } = saved;
   if (typeof year === "number" && player)
     reads.keepShown(nameRead(id, year), { player, hitters, starters, side });
-  showPlayer({ id, club, name, number });
+  showPlayer({ id, club, name, number, isPlayingNow: isPlayingNow === true });
   return true;
 }
 
@@ -177,9 +196,13 @@ function openOnTap(event) {
     playerName: name,
     playerNumber: number = "",
   } = button?.dataset ?? {};
-  if (!player || !club || !name) return;
+  if (!button || !player || !club || !name) return;
   const id = Number(player);
-  openSheet(findSheet(), { key: player, show: () => showPlayer({ id, club, name, number }) });
+  const isPlayingNow = readPlayingNow(button.dataset);
+  openSheet(findSheet(), {
+    key: player,
+    show: () => showPlayer({ id, club, name, number, isPlayingNow }),
+  });
 }
 
 export function startPlayerSheet() {
