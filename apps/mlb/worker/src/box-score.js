@@ -5,10 +5,10 @@ import { describeError, respondJson } from "../../../../shared/worker/responses.
 // One game's box score for the Game section of its sheet, read from MLB's live feed in one request
 // trimmed to what the sheet shows: each club's runs by inning, its runs, hits, and errors, each
 // batter and pitcher who got in, each half inning that scored, play by play, and, while a half
-// inning is under way, who's on base and how each got there, and who's up. Before first pitch, once
-// a club posts its lineup, its batters are that lineup, each with his season so far. The store
-// keeps each game's (game-details-updater.js), so the route reads MLB only for a game the store
-// hasn't kept yet.
+// inning is under way, who's on base and how each got there or whom he's pinch running for, and
+// who's up. Before first pitch, once a club posts its lineup, its batters are that lineup, each
+// with his season so far. The store keeps each game's (game-details-updater.js), so the route
+// reads MLB only for a game the store hasn't kept yet.
 
 /** @typedef {(key: string) => Promise<any>} ReadDoc */
 
@@ -81,6 +81,10 @@ const FEED_FIELDS = [
   "first",
   "second",
   "third",
+  "playEvents",
+  "isSubstitution",
+  "player",
+  "replacedPlayer",
 ].join(",");
 // A pitcher's note reads like "(W, 4-2)" or "(S, 3)"; the sheet shows only the decision.
 const DECISIONS = new Set(["W", "L", "S"]);
@@ -244,12 +248,38 @@ function moveRunners(bases, play) {
 }
 
 /**
- * Each runner who scored on a play, with what scored him: the play itself, like a single, or
- * something during it, like a wild pitch. A batter who scored on his own homer isn't one.
+ * Notes who each pinch runner a play sent in ran for, by the pinch runner's id. A pinch runner who
+ * comes up to bat later in the half is a batter again.
+ * @param {Map<number, number>} pinchRunners
  * @param {any} play
+ */
+function trackPinchRunners(pinchRunners, play) {
+  pinchRunners.delete(play.matchup?.batter?.id);
+  for (const event of play.playEvents ?? [])
+    if (event.isSubstitution && event.position?.abbreviation === "PR")
+      pinchRunners.set(event.player?.id, event.replacedPlayer?.id);
+}
+
+/**
+ * Who each pinch runner in the half's plays so far ran for, by his id.
+ * @param {any[]} halfPlays
+ */
+function listPinchRunners(halfPlays) {
+  /** @type {Map<number, number>} */
+  const pinchRunners = new Map();
+  for (const play of halfPlays) trackPinchRunners(pinchRunners, play);
+  return pinchRunners;
+}
+
+/**
+ * Each runner who scored on a play, with what scored him: the play itself, like a single, or
+ * something during it, like a wild pitch, and who he ran for if he came in to pinch run. A batter
+ * who scored on his own homer isn't one.
+ * @param {any} play
+ * @param {Map<number, number>} pinchRunners
  * @param {(id: number) => string} lastNameOf
  */
-function listScorers(play, lastNameOf) {
+function listScorers(play, pinchRunners, lastNameOf) {
   const batter = play.matchup?.batter?.id;
   return (play.runners ?? [])
     .filter(
@@ -260,7 +290,22 @@ function listScorers(play, lastNameOf) {
       event: runner.details?.event ?? play.result?.event ?? "",
     }))
     .filter((scorer) => !(scorer.id === batter && scorer.event === play.result?.event))
-    .map((scorer) => ({ name: lastNameOf(scorer.id), event: scorer.event }));
+    .map((scorer) => ({
+      name: lastNameOf(scorer.id),
+      event: scorer.event,
+      pinchRunnerFor: describePinchRunnerFor(scorer.id, pinchRunners, lastNameOf),
+    }));
+}
+
+/**
+ * The last name of the player a pinch runner ran for, or null for any other runner.
+ * @param {number} id
+ * @param {Map<number, number>} pinchRunners
+ * @param {(id: number) => string} lastNameOf
+ */
+function describePinchRunnerFor(id, pinchRunners, lastNameOf) {
+  const replaced = pinchRunners.get(id);
+  return replaced == null ? null : lastNameOf(replaced);
 }
 
 /**
@@ -273,9 +318,12 @@ function listScorers(play, lastNameOf) {
 function describeHalf(halfPlays, lastNameOf) {
   /** @type {Map<string, number>} */
   const bases = new Map();
+  /** @type {Map<number, number>} */
+  const pinchRunners = new Map();
   const plays = [];
   for (const play of halfPlays) {
     const wereFull = bases.size === BASE_SET.size;
+    trackPinchRunners(pinchRunners, play);
     moveRunners(bases, play);
     const batter = play.matchup?.batter?.id;
     const reached = [...bases.values()].includes(batter);
@@ -286,7 +334,7 @@ function describeHalf(halfPlays, lastNameOf) {
       event: play.result?.event ?? "",
       reached,
       filledBases: !wereFull && bases.size === BASE_SET.size,
-      scorers: listScorers(play, lastNameOf),
+      scorers: listScorers(play, pinchRunners, lastNameOf),
       score: scored ? { away: play.result?.awayScore, home: play.result?.homeScore } : null,
     });
   }
@@ -338,9 +386,15 @@ function describeBases(linescore, plays, lastNameOf) {
     (/** @type {any} */ play) => play.about?.inning === inning && play.about?.halfInning === half,
   );
   const waysOn = listWaysOn(halfPlays);
+  const pinchRunners = listPinchRunners(halfPlays);
   const runners = BASES.filter((base) => linescore.offense?.[base]?.id != null).map((base) => {
     const id = linescore.offense[base].id;
-    return { base: BASE_CODES[base], name: lastNameOf(id), reached: waysOn.get(id) ?? null };
+    return {
+      base: BASE_CODES[base],
+      name: lastNameOf(id),
+      reached: waysOn.get(id) ?? null,
+      pinchRunnerFor: describePinchRunnerFor(id, pinchRunners, lastNameOf),
+    };
   });
   return {
     half,

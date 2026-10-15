@@ -1796,6 +1796,19 @@ table.st.line-score td.team .club {
 .runs-now-inning .out-lights {
   margin-left: 0.6em;
 }
+/* Who's pinch running for whom, a line each, set like who's up. */
+.runs-pinch-runners {
+  display: grid;
+  margin: 9px 0 0;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.4 * var(--leading));
+  text-align: center;
+  color: var(--ink-dim);
+}
+.runs-pinch-runners + .runs-field {
+  margin-top: 6px;
+}
 /* The field's drawing, 240 units across, ends at the foot of the dirt around home plate. Empty
    bases and home plate are outlined in its line color, so only a taken base stands out. */
 .runs-field {
@@ -1882,6 +1895,7 @@ table.st.line-score td.team .club {
   line-height: calc(1.4 * var(--leading));
   color: var(--ink-dim);
 }
+.runs-pinch-runners b,
 .runs-up b {
   font-weight: calc(var(--type-detail-weight) + 150);
   color: var(--ink);

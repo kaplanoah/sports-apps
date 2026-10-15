@@ -446,6 +446,42 @@ test("a live game's Runs so far set each runner's name by his base on the field,
   expect(await listTapsOffButtons(page)).toEqual([]);
 });
 
+test("a live game's Runs so far center who's pinch running for whom between the Now line and the field, as the design spaces it", async ({
+  page,
+}) => {
+  const raysAtYankees = "823493";
+  const runners = [{ base: "1B", name: "Yelich", reached: null, pinchRunnerFor: "Vaughn" }];
+  const boxScore = { ...LIVE_BOX_SCORE, id: raysAtYankees };
+  await openApp(page, {
+    snapshots: { 2026: buildSnapshotWithStarters() },
+    boxScores: { [raysAtYankees]: { ...boxScore, bases: { ...boxScore.bases, runners } } },
+  });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page.getByRole("button", { name: /^Game details: Rays at Yankees, Thu, Sep 24/ }).click();
+  const now = page.locator("#gameBody .runs-now");
+  await expect(now.locator(".runs-pinch-runners")).toHaveText("Yelich pinch running for Vaughn");
+  await expect(now.locator(".runs-runner")).toHaveText("Yelich");
+
+  const layout = await now.evaluate((element) => {
+    const measure = (/** @type {string} */ selector) =>
+      /** @type {Element} */ (element.querySelector(selector)).getBoundingClientRect();
+    const middle = (/** @type {DOMRect} */ box) => (box.left + box.right) / 2;
+    const line = measure(".runs-pinch-runners");
+    return {
+      above: line.top - measure(".runs-now-head").bottom,
+      below: measure(".runs-field").top - line.bottom,
+      offCenter: middle(line) - middle(measure(".runs-field")),
+    };
+  });
+  const expected = { above: 9, below: 6, offCenter: 0 };
+  for (const [name, value] of Object.entries(expected))
+    expect(layout[name], name).toBeCloseTo(value, 1);
+  expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listLowContrastText(page)).toEqual([]);
+  expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listTapsOffButtons(page)).toEqual([]);
+});
+
 test("a game's Runs set the runners who got on in a lighter ink than the play that scored them, at one weight in both themes", async ({
   page,
 }) => {
