@@ -197,15 +197,17 @@ test("the year is the title's font and size, lighter and dimmer", async ({ page 
   expect(year.color).not.toBe(title.color);
 });
 
-test("the title's name sets M and L 0.04em apart and L and B 0.005em", async ({
-  page,
-}) => {
+test("the title's name sets M and L 0.04em apart and L and B 0.005em", async ({ page }) => {
   await openApp(page);
   const title = page.locator("header.top h1");
   await expect(title).toHaveText("MLB");
   const { lefts, size } = await title.evaluate((element) => {
-    const name = /** @type {Text} */ ([...element.childNodes].find((node) => node.nodeType === 3));
-    const letters = [...element.querySelectorAll(".title-letter")].map((letter) => letter.firstChild);
+    const name = /** @type {Text} */ (
+      [...element.childNodes].find((node) => node.nodeType === 3 && node.textContent?.trim())
+    );
+    const letters = [...element.querySelectorAll(".title-letter")].map(
+      (letter) => letter.firstChild,
+    );
     const range = document.createRange();
     const readLeft = (node, offset) => {
       range.setStart(node, offset);
