@@ -313,12 +313,21 @@ header.top {
   margin-bottom: var(--header-gap);
 }
 header.top h1 {
+  --title-tracking: 0.06em;
   font-size: var(--type-title-size);
   font-weight: var(--type-title-weight);
   line-height: var(--leading);
   color: var(--ink);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--title-tracking);
+}
+/* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
+   spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */
+header.top h1 .title-letter:nth-child(1) {
+  margin-right: calc(0.04em - var(--title-tracking));
+}
+header.top h1 .title-letter:nth-child(2) {
+  margin-right: calc(0.005em - var(--title-tracking));
 }
 .head-right {
   display: flex;
