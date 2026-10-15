@@ -317,7 +317,7 @@ test("a starter outside the qualified starters and short of a quarter of their i
   ]);
 });
 
-test("with neither starter ranked, the sheet says why and drops the note about the curves", () => {
+test("with neither starter ranked, the sheet says why, keeps the note on what ranks by fewest, and drops the note about the curves", () => {
   const markup = renderStarters(
     { ...BLUBAUGH, ranks: null, line: { ...BLUBAUGH.line, ip: "88.0" } },
     { ...SPRINGS, ranks: null },
@@ -328,6 +328,7 @@ test("with neither starter ranked, the sheet says why and drops the note about t
     ),
   );
   assert.deepEqual(readClass(markup, "tape-note"), [
+    "ERA and BB/9 ranked by fewest",
     "Blubaugh has pitched 88 of the 157 innings needed to qualify",
     "Springs has pitched 128 2/3 of the 158 innings needed to qualify",
   ]);

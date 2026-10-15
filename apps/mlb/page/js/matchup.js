@@ -260,17 +260,17 @@ function renderTapeNotes(sides, countClubGames) {
   const fewestFirst = TAPE.filter((measure) => measure.isFewestFirst).map(
     (measure) => measure.label,
   );
-  const rankNotes =
+  const rankNote =
     sides.some((side) => side.pitcher?.ranks) &&
-    html`<p class="tape-note">Rank among qualified starters</p>
-      <p class="tape-note">${describeFewestFirst(fewestFirst)}</p>`;
+    html`<p class="tape-note">Rank among qualified starters</p>`;
+  const fewestNote = html`<p class="tape-note">${describeFewestFirst(fewestFirst)}</p>`;
   const unrankedNotes = sides
     .filter(isUnranked)
     .map(
       ({ pitcher, club }) =>
         html`<p class="tape-note">${describeInningsToQualify(pitcher.lastName, pitcher.line.ip, countClubGames(club))}</p>`,
     );
-  return html`${rankNotes}${unrankedNotes}`;
+  return html`${rankNote}${fewestNote}${unrankedNotes}`;
 }
 
 /**

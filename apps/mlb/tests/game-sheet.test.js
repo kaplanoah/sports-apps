@@ -155,6 +155,35 @@ test("the box score follows the game's row and its starters", () => {
   assert.ok(markup.indexOf("starters-open") < markup.indexOf("Lineup"));
 });
 
+test("while a game is played, its row takes the score, inning, half, and outs from its box score, which runs ahead of the slate", () => {
+  const game = { ...slate.today.games.find((each) => each.id === "849833"), today: true };
+  const bases = {
+    half: "middle",
+    inning: 8,
+    outs: 3,
+    runners: [],
+    batter: "Kwan",
+    pitcher: "Peralta",
+  };
+  const readRow = (/** @type {any} */ boxScore) => {
+    const markup = String(renderGameBody(game, listSides(game), boxScore));
+    return markup.slice(0, markup.indexOf("</ul>"));
+  };
+  const fromSlate = readRow(describeGame("849833"));
+  const fromBoxScore = readRow({ ...describeGame("849833"), bases });
+
+  assert.match(
+    fromSlate,
+    /<span class="">5<\/span><span class="score-dash">-<\/span><span class="">3<\/span>/,
+  );
+  assert.match(fromSlate, /Top 8th<span class="out-lights" role="img" aria-label="2 outs"/);
+  assert.match(
+    fromBoxScore,
+    /<span class="">7<\/span><span class="score-dash">-<\/span><span class="">3<\/span>/,
+  );
+  assert.match(fromBoxScore, /Mid 8th<span class="out-lights" role="img" aria-label="3 outs"/);
+});
+
 test("a box score from before the one shown is passed over, and one from after it, or the same, is taken", () => {
   const live = describeGame("849822");
   const later = structuredClone(live);
