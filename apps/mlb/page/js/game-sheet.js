@@ -126,7 +126,27 @@ const listKnownGames = () =>
  * @param {any} [boxScore]
  */
 export const renderGameBody = (game, sides, boxScore = null) =>
-  html`${renderGameFaceOff(game)}${renderWhereToWatch(game)}${renderStarters(sides)}${renderSeasonSeries(game, listKnownGames())}${renderBoxScore(game, boxScore)}`;
+  html`${renderGameFaceOff(followBoxScore(game, boxScore))}${renderWhereToWatch(game)}${renderStarters(sides)}${renderSeasonSeries(game, listKnownGames())}${renderBoxScore(game, boxScore)}`;
+
+/**
+ * The game with its score, inning, half, and outs from its box score while both say it's being
+ * played: the box score is read from MLB's live feed as the sheet opens, and the slate's copy,
+ * from MLB's schedule through the store, can trail it by a minute or two, so the row over the
+ * field would otherwise say a half is still on after the field says it ended.
+ * @param {MatchupGame} game
+ * @param {any} boxScore
+ */
+function followBoxScore(game, boxScore) {
+  const bases = game.state === "live" && boxScore?.state === "live" ? boxScore.bases : null;
+  if (!bases) return game;
+  return {
+    ...game,
+    score: [boxScore.totals.away.runs, boxScore.totals.home.runs],
+    half: bases.half,
+    inning: bases.inning,
+    outs: bases.outs,
+  };
+}
 
 /**
  * How far a box score has come: its game's state, then its plate appearances, then its players,
