@@ -272,11 +272,21 @@ test("a runner whose way on the half inning's plays don't say, like a pinch runn
   assert.deepEqual(runners, [{ base: "1B", name: "Smith", reached: null }]);
 });
 
-test("between halves of an inning no one is on base", () => {
+test("between halves of an inning no one is on base, the third out still counts, and the next half's leadoff man is due up", () => {
   const feed = readPlaysFeed(DODGERS_AT_BREWERS);
-  feed.liveData.linescore.inningState = "Middle";
+  const { linescore } = feed.liveData;
+  linescore.inningState = "Middle";
+  linescore.outs = 3;
+  delete linescore.offense.first;
 
-  assert.equal(describeBoxScore(DODGERS_AT_BREWERS, feed).bases, null);
+  assert.deepEqual(describeBoxScore(DODGERS_AT_BREWERS, feed).bases, {
+    half: "middle",
+    inning: 3,
+    outs: 3,
+    runners: [],
+    batter: "Smith",
+    pitcher: "Misiorowski",
+  });
 });
 
 test("a feed without plays says nothing of how the runs scored", () => {

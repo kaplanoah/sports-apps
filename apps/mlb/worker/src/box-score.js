@@ -1,5 +1,5 @@
 import { readGameState } from "../../page/js/snapshot.js";
-import { fetchMlbJson } from "./mlb.js";
+import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
 
 // One game's box score for the Game section of its sheet, read from MLB's live feed in one request
@@ -12,8 +12,6 @@ import { describeError, respondJson } from "../../../../shared/worker/responses.
 
 /** @typedef {(key: string) => Promise<any>} ReadDoc */
 
-// A live game's box score changes with every play, so it's kept as briefly as the scoreboard.
-const BOX_SCORE_CACHE_SECONDS = 5;
 const GAME_ID = /^\d{1,9}$/;
 const FEED_FIELDS = [
   "gameData",
@@ -88,7 +86,9 @@ const FEED_FIELDS = [
 const DECISIONS = new Set(["W", "L", "S"]);
 const SIDES_BATTING = { top: "away", bottom: "home" };
 // MLB's linescore names the half being played; between halves it's "Middle" or "End".
-const HALVES_UNDER_WAY = { Top: "top", Bottom: "bottom" };
+// Between halves MLB says "Middle" or "End", with the third out still counted and the next half's
+// leadoff man up.
+const HALVES = { Top: "top", Middle: "middle", Bottom: "bottom", End: "end" };
 const BASES = /** @type {const} */ (["first", "second", "third"]);
 const BASE_CODES = { first: "1B", second: "2B", third: "3B" };
 const BASE_SET = new Set(Object.values(BASE_CODES));
@@ -324,14 +324,14 @@ function listWaysOn(halfPlays) {
 }
 
 /**
- * While a half inning is under way, who's on each base and what put him on it, how many are out,
- * and who's up against whom; otherwise null.
+ * Where the game stands: who's on each base and what put him on it, how many are out, and who's up
+ * against whom, or, between halves, who's due up; null until MLB's line score says.
  * @param {any} linescore MLB's line score for the game
  * @param {any} plays MLB's plays for the game
  * @param {(id: number) => string} lastNameOf
  */
 function describeBases(linescore, plays, lastNameOf) {
-  const half = HALVES_UNDER_WAY[linescore?.inningState];
+  const half = HALVES[linescore?.inningState];
   const inning = linescore?.currentInning;
   if (!half || !inning) return null;
   const halfPlays = (plays?.allPlays ?? []).filter(
@@ -392,7 +392,7 @@ export function describeBoxScore(id, feed) {
 export async function fetchBoxScore(fetchImpl, id) {
   return describeBoxScore(
     id,
-    await fetchMlbJson(fetchImpl, nameFeedRequest(id), BOX_SCORE_CACHE_SECONDS),
+    await fetchMlbJson(fetchImpl, nameFeedRequest(id), LIVE_FEED_CACHE_SECONDS),
   );
 }
 

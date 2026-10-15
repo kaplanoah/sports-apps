@@ -735,10 +735,66 @@ test("fetchSnapshot asks for exactly the requests it builds", async () => {
     2026,
     Date.parse(fixture.now),
   );
-  assert.equal(asked.length, 5);
+  const liveIds = listFixtureLiveGameIds(fixture);
+  assert.ok(liveIds.length > 0);
+  assert.equal(asked.length, 5 + liveIds.length);
   assert.equal(asked[0], requests.season);
   assert.ok(asked.includes(requests.seasonGames));
+  for (const id of liveIds) assert.ok(asked.includes(MLBSnapshot.nameLiveGameRequest(id)));
   assert.deepEqual(snapshot, buildSnapshot(fixture));
+});
+
+/** @param {any} fixture */
+const listFixtureLiveGameIds = (fixture) =>
+  fixture.responses.schedule.dates
+    .flatMap((/** @type {any} */ day) => day.games)
+    .filter((/** @type {any} */ game) => MLBSnapshot.readGameState(game.status) === "live")
+    .map((/** @type {any} */ game) => String(game.gamePk));
+
+test("a game being played takes its inning, outs, and score from MLB's live feed, which runs ahead of the schedule's copy, and keeps the copy when the feed didn't answer", () => {
+  const fixture = EVENING;
+  const [ahead, behind] = listFixtureLiveGameIds(fixture);
+  const fromSchedule = buildSnapshot(fixture).slate.today.games;
+  const liveFeed = {
+    gameData: { status: { abstractGameState: "Live", codedGameState: "I" } },
+    liveData: {
+      linescore: {
+        currentInning: 12,
+        inningState: "Bottom",
+        outs: 2,
+        teams: { away: { runs: 9 }, home: { runs: 8 } },
+      },
+    },
+  };
+  const games = buildSnapshot({
+    ...fixture,
+    responses: { ...fixture.responses, liveGames: { [ahead]: liveFeed } },
+  }).slate.today.games;
+  const findGame = (/** @type {any[]} */ list, /** @type {string} */ id) =>
+    list.find((game) => game.id === id);
+
+  assert.deepEqual(
+    [findGame(games, ahead).inning, findGame(games, ahead).half, findGame(games, ahead).outs],
+    [12, "bottom", 2],
+  );
+  assert.deepEqual(findGame(games, ahead).score, [9, 8]);
+  assert.notDeepEqual(findGame(fromSchedule, ahead).score, [9, 8]);
+  assert.deepEqual(findGame(games, behind), findGame(fromSchedule, behind));
+});
+
+test("a game whose live feed says it ended is final, before the schedule says so", () => {
+  const fixture = EVENING;
+  const [id] = listFixtureLiveGameIds(fixture);
+  const liveFeed = {
+    gameData: { status: { abstractGameState: "Final", codedGameState: "F" } },
+    liveData: { linescore: { currentInning: 9, inningState: "Bottom", outs: 3 } },
+  };
+  const games = buildSnapshot({
+    ...fixture,
+    responses: { ...fixture.responses, liveGames: { [id]: liveFeed } },
+  }).slate.today.games;
+
+  assert.equal(games.find((game) => game.id === id).state, "final");
 });
 
 // Starters as MLB names them on the schedule, keyed by game, and its answer about them.

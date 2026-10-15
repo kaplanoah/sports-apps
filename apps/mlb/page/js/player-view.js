@@ -8,7 +8,7 @@
 import { formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
-import { rankAmong, renderRankRow } from "#shared/rank-curve.js";
+import { describeFewestFirst, rankAmong, renderRankRow } from "#shared/rank-curve.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTeamStats } from "#shared/team-sheet.js";
@@ -179,8 +179,7 @@ function renderPostseason(player) {
  * @param {string[]} labels the stats ranked by fewest
  */
 const renderFewestNote = (labels) =>
-  labels.length > 0 &&
-  html`<p class="player-rank-note">${labels.join(" and ")} ranked by fewest</p>`;
+  labels.length > 0 && html`<p class="player-rank-note">${describeFewestFirst(labels)}</p>`;
 
 /**
  * A hitter's rates as the ranked hitters' list keeps them, from his season's line, for a hitter

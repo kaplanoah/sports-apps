@@ -6,7 +6,7 @@
 import { describeDay, formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
-import { rankAmong, renderRankRow } from "#shared/rank-curve.js";
+import { describeFewestFirst, rankAmong, renderRankRow } from "#shared/rank-curve.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTeamDetail } from "#shared/team-sheet.js";
@@ -389,12 +389,15 @@ function renderRegularSeason(team, season, isPastSeason) {
   const isRankedInTurnovers = season.stats.some(
     (stat) => stat.key === "turnovers" && stat.rank != null,
   );
+  const turnoversNote =
+    isRankedInTurnovers &&
+    html`<p class="player-rank-note">${describeFewestFirst(["Turnovers"])}</p>`;
   return renderSheetPart(
     "Regular season",
     html`<div class="player-ranks" style="${formatMarkColors(team)}">
       ${rows}
       <div class="player-rank-notes">
-        ${isRankedInTurnovers && html`<p class="player-rank-note">Turnovers ranked by fewest</p>`}
+        ${turnoversNote}
         <p class="player-rank-note">${describeRankNote(season, isPastSeason)}</p>
       </div>
     </div>`,

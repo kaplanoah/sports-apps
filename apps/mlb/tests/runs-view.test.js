@@ -88,7 +88,7 @@ test("a game being played has its Runs so far, then who's on base, how each got 
     "Ohtani walked and Hernández singledPages singled home Ohtani1-0",
     "NowTop 3rd",
     "Bettssingled",
-    "Smith is up against Misiorowski",
+    "Smith up against Misiorowski",
   ]);
   assert.match(markup, /aria-label="1 out"/);
   assert.equal([...markup.matchAll(/class="runs-base taken"/g)].length, 1, "only 1st is taken");
@@ -104,7 +104,28 @@ test("a game being played with no runs yet says so over the field", () => {
   ]);
 });
 
-test("between halves of an inning, the Runs so far have no field", () => {
+test("between halves of an inning, the field is empty and says who's due up", () => {
+  const bases = {
+    half: "middle",
+    inning: 3,
+    outs: 3,
+    runners: [],
+    batter: "Smith",
+    pitcher: "Misiorowski",
+  };
+  const boxScore = { ...describeGame(DODGERS_AT_BREWERS), bases };
+  const markup = String(renderRuns(DODGERS_AT_BREWERS, boxScore));
+
+  assert.deepEqual(readRuns(DODGERS_AT_BREWERS, boxScore).slice(3), [
+    "NowMid 3rd",
+    "Smith due up against Misiorowski",
+  ]);
+  assert.match(markup, /runs-field/);
+  assert.doesNotMatch(markup, /out-lights/, "no outs between halves, as a game's row shows it");
+  assert.doesNotMatch(markup, /class="runs-base taken"/);
+});
+
+test("a box score that doesn't say where the game stands has no field", () => {
   const boxScore = { ...describeGame(DODGERS_AT_BREWERS), bases: null };
 
   assert.doesNotMatch(String(renderRuns(DODGERS_AT_BREWERS, boxScore)), /runs-field/);

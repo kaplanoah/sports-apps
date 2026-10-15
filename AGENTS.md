@@ -109,7 +109,9 @@
 - Apps: one per league, each in `apps/<app>/` with its own `page/`,
   `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`.
   `apps/mlb/` is baseball, Worker `mlb-app`, whose page reads each season's one record from the store,
-  which the Worker saves as it reads MLB, as the WNBA's does, and opens each club's sheet from its name or dot,
+  which the Worker saves as it reads MLB, as the WNBA's does,
+  reading each game being played from MLB's live feed with each update, since the schedule's copy of it runs half a minute or more behind,
+  so every part shows the same inning, outs, and score (`page/js/snapshot.js`), and opens each club's sheet from its name or dot,
   with cards of its nearest games from the slate, its season's runs,
   runs allowed, and records at home and on the road ranked among every club's on curves,
   and its postseason's as dots against the playoff field's (`page/js/team-view.js` and the shared `team-numbers.js`),

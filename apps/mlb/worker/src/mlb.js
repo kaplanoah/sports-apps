@@ -4,6 +4,8 @@ import { createSeasonParam, LAST_SEASON } from "../../../../shared/worker/season
 import { fetchUpstream } from "../../../../shared/worker/upstream.js";
 
 const FIRST_SEASON = 1995;
+// MLB's live feed changes with every pitch, so a read of it is reused only moments.
+export const LIVE_FEED_CACHE_SECONDS = 5;
 const MLB_HEADERS = { accept: "application/json", "user-agent": "mlb-postseason-page/1.0" };
 export const SEASON_PARAM = createSeasonParam({
   firstSeason: FIRST_SEASON,

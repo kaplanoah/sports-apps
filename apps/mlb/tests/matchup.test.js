@@ -186,7 +186,10 @@ test("each measure shows each starter's number and rank under his side, the high
       ],
     ],
   );
-  assert.deepEqual(readClass(markup, "tape-note"), ["Rank among qualified starters"]);
+  assert.deepEqual(readClass(markup, "tape-note"), [
+    "Rank among qualified starters",
+    "ERA and BB/9 ranked by fewest",
+  ]);
 });
 
 test("both starters are marked on one curve of every qualified starter's number, the better one always further right", () => {
@@ -309,11 +312,12 @@ test("a starter outside the qualified starters and short of a quarter of their i
   assert.ok(readProvisionalMarks(markup).every((line) => line.home === undefined));
   assert.deepEqual(readClass(markup, "tape-note"), [
     "Rank among qualified starters",
+    "ERA and BB/9 ranked by fewest",
     "Springs has pitched 39 1/3 of the 158 innings needed to qualify",
   ]);
 });
 
-test("with neither starter ranked, the sheet says why and drops the note about the curves", () => {
+test("with neither starter ranked, the sheet says why, keeps the note on what ranks by fewest, and drops the note about the curves", () => {
   const markup = renderStarters(
     { ...BLUBAUGH, ranks: null, line: { ...BLUBAUGH.line, ip: "88.0" } },
     { ...SPRINGS, ranks: null },
@@ -324,6 +328,7 @@ test("with neither starter ranked, the sheet says why and drops the note about t
     ),
   );
   assert.deepEqual(readClass(markup, "tape-note"), [
+    "ERA and BB/9 ranked by fewest",
     "Blubaugh has pitched 88 of the 157 innings needed to qualify",
     "Springs has pitched 128 2/3 of the 158 innings needed to qualify",
   ]);
@@ -337,6 +342,7 @@ test("an unranked starter whose innings or club's games aren't known yet still s
   ])
     assert.deepEqual(readClass(markup, "tape-note"), [
       "Rank among qualified starters",
+      "ERA and BB/9 ranked by fewest",
       "Springs hasn't pitched the innings needed to qualify",
     ]);
 });

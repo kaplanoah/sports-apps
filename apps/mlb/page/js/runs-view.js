@@ -1,8 +1,8 @@
 // The Game section's Runs so far, above its innings: each half inning that scored, under its
 // heading, and a line for each change of the score with the score after it, the runners who got on
-// since the last one on a lighter row over the play that scored. Then, while a half inning is under
-// way, the field with each runner by his base and how he got on, and who's up against whom. Once
-// the game is final, it's the game's Runs.
+// since the last one on a lighter row over the play that scored. Then, while the game is being
+// played, the field with each runner by his base and how he got on, and who's up against whom, or,
+// between halves, the empty field and who's due up. Once the game is final, it's the game's Runs.
 
 import { html } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
@@ -301,16 +301,22 @@ function renderField(runners) {
   </div>`;
 }
 
+const isBetweenHalves = (bases) => bases.half === "middle" || bases.half === "end";
+
 /** @param {any} bases */
-function renderUp({ batter, pitcher }) {
+function renderUp(bases) {
+  const { batter, pitcher } = bases;
   if (!batter || !pitcher) return html``;
-  return html`<p class="runs-up"><b>${batter}</b> is up against <b>${pitcher}</b></p>`;
+  const up = isBetweenHalves(bases) ? "due up against" : "up against";
+  return html`<p class="runs-up"><b>${batter}</b> ${up} <b>${pitcher}</b></p>`;
 }
 
-/** @param {any} bases the half inning under way, from the box score */
+/** @param {any} bases where the game stands, from the box score */
 function renderNow(bases) {
   const inning = describeInning(bases);
-  const outs = renderOutLights({ state: "live", outs: bases.outs });
+  const outs = isBetweenHalves(bases)
+    ? html``
+    : renderOutLights({ state: "live", outs: bases.outs });
   return html`<div class="runs-now">
     <p class="runs-now-head"><span class="runs-now-label">Now</span><span class="runs-now-inning">${inning}${outs}</span></p>
     ${renderField(bases.runners)}${renderUp(bases)}
