@@ -6,7 +6,13 @@ import { LEAGUE_READS_COUNT, PITCHER_JOB } from "./pitcher-updater.js";
 import { createPitcherServer } from "./pitchers.js";
 import { createRotationServer } from "./rotations.js";
 import { createSnapshotServer } from "./snapshot.js";
-import { SeasonStore, addToJobCount, forwardToStore, readStoreDoc } from "./store.js";
+import {
+  SeasonStore,
+  addToJobCount,
+  forwardToStore,
+  isStoreAnswering,
+  readStoreDoc,
+} from "./store.js";
 
 const boxScores = createBoxScoreServer();
 const highlights = createHighlightsServer();
@@ -21,6 +27,7 @@ export default createAppWorker({
   pageFiles: PAGE_FILES,
   serveSnapshot: (url) => snapshots.serveSnapshot(url),
   forwardToStore,
+  isStoreAnswering,
   reads: {
     "/box-score": (url, env) => boxScores.serveBoxScore(url, (key) => readStoreDoc(env, key)),
     "/highlights": (url, env) => highlights.serveHighlights(url, (key) => readStoreDoc(env, key)),

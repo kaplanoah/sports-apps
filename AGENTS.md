@@ -335,7 +335,9 @@
   and colors from its `page/styles.css` instead of inventing new ones.
 - Worker:
   `worker/src/`.
-  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` is a 404 without the key.
+  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key.
+  `health` says whether the Worker and its store answer, 200 or 503 with the release's commit,
+  so an uptime monitor can watch it without holding a secret, and asks the store once a minute at most however often it's hit (`shared/worker/health.js`).
   An alarm in its Durable Object (`worker/src/season-updater.js`) keeps the current season's saved data up to date from the league,
   less often while no page has its socket open, and a page that opens brings the next update forward; the page only reads it.
   When the Worker has an `ACCESS_CODE` secret, the page's address shows the app's `page/gate.html`,
@@ -621,7 +623,7 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
 7. **Docs.** Add the app to the README's table and its setup section's list of apps, and to the "Apps" bullet above.
 8. **Ship it.** Open it as a `feat:` PR.
    The app starts at version 1.0.0, and the merge's deploy creates its Worker,
-   which answers nothing but `robots.txt` until `npm run set-app-key -- <app>` gives it a key and prints the page's address.
+   which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app>` gives it a key and prints the page's address.
    Ask the owner to add that address, and the page's code once it has one, as its secrets in the `production` environment,
    so each deploy and the `Watch apps` workflow open its page.
 

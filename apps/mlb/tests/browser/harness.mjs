@@ -584,6 +584,7 @@ export function serveLockedApp(page, { accessCode }) {
     pageFiles: PAGE_FILES,
     serveSnapshot: () => Response.json(snapshot),
     forwardToStore,
+    isStoreAnswering: async () => true,
   });
   return serveLockedPage(page, { worker, testStore, accessCode, now: EVENING_FIXTURE.now });
 }

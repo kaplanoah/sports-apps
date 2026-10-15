@@ -388,7 +388,7 @@ function isFromCommit(response, commit) {
   return !!served && commit.startsWith(served);
 }
 
-// robots.txt is the one path that answers without the page's key.
+// robots.txt answers without the page's key, and names the release the Worker serves.
 async function isRobotsAnswered(url, fetchImpl, commit) {
   try {
     const response = await fetchImpl(new URL("robots.txt", url).href, {
