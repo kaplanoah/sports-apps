@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { waitForPressesToEnd } from "./tap-states.mjs";
 
 /**
  * Waits until no row is pressed and no color is mid-transition, so a press a test's own tap left
@@ -6,12 +7,12 @@ import { expect } from "@playwright/test";
  * or hovered row's colors measures that state on purpose.
  * @param {import("@playwright/test").Page} page
  */
-const waitForSettledColors = (page) =>
-  expect
+async function waitForSettledColors(page) {
+  await waitForPressesToEnd(page);
+  await expect
     .poll(() =>
       page.evaluate(
         () =>
-          !document.querySelector(".is-pressed") &&
           !document
             .getAnimations()
             .some(
@@ -21,6 +22,7 @@ const waitForSettledColors = (page) =>
       ),
     )
     .toBe(true);
+}
 
 /**
  * Every piece of shown text that stands out from what's behind it by less than WCAG's AA level
