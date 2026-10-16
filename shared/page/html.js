@@ -80,6 +80,16 @@ const NAME_LISTS = {
 export const joinNames = (names, joiner) => NAME_LISTS[joiner].format(names);
 
 /**
+ * Items of markup or text joined as `joinNames` joins names, each kept as it is.
+ * @param {unknown[]} items
+ * @param {"and" | "or"} joiner
+ */
+export const joinItems = (items, joiner) =>
+  html`${NAME_LISTS[joiner]
+    .formatToParts(items.map((_, index) => String(index)))
+    .map((part) => (part.type === "element" ? items[Number(part.value)] : part.value))}`;
+
+/**
  * Joins items with the page's one separator, so every list of facts reads the same way. Each fact
  * holds the separator after it, so a line that keeps its facts whole breaks after a dot.
  * @param {unknown[]} items

@@ -19,7 +19,13 @@ import {
   readSearch,
 } from "./game-search.js";
 import { findNeverShownWords } from "./league-words.js";
-import { findForgivenStarts, normalizeText, readTokens } from "./search-words.js";
+import {
+  findForgivenStarts,
+  findKind,
+  hasKind,
+  normalizeText,
+  readTokens,
+} from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
 /** @typedef {import("./search-words.js").Meaning} Meaning */
@@ -543,7 +549,7 @@ function writeToken(token) {
  * @returns {string[]}
  */
 function listPlaceTeamNames(token, context) {
-  const place = token.meanings.find((meaning) => meaning.kind === "place");
+  const place = findKind(token, "place");
   if (!place) return [];
   return listPlaceTeams(place.value, context)
     .sort(
@@ -563,7 +569,7 @@ export function listOtherReadings(text, context) {
   const tokens = readTokens(text, context.dictionary);
   const asRead = new Set(findGames(text, context).found.games);
   return tokens.flatMap((token, index) => {
-    const isAfterIn = tokens[index - 1]?.meanings.some((meaning) => meaning.kind === "in");
+    const isAfterIn = hasKind(tokens[index - 1], "in");
     if (isAfterIn) return [];
     return listPlaceTeamNames(token, context).flatMap((team) => {
       const reading = tokens.map((each, at) => (at === index ? team : writeToken(each))).join(" ");

@@ -5,6 +5,7 @@ import {
   convertToText,
   html,
   isWebAddress,
+  joinItems,
   joinNames,
   joinWithSeparator,
 } from "../shared/page/html.js";
@@ -42,4 +43,11 @@ test("names join as a sentence does, and text starts with a capital", () => {
   assert.equal(joinNames(["Mets", "Yankees"], "or"), "Mets or Yankees");
   assert.equal(joinNames(["'a'", "'b'", "'c'"], "and"), "'a', 'b', and 'c'");
   assert.equal(capitalize("opening Day"), "Opening Day");
+});
+
+test("markup joins as names do, each item kept as markup", () => {
+  const clubs = ["Mets", "Braves", "Phillies"].map((club) => html`<b>${club}</b>`);
+  assert.equal(joinItems(clubs, "and").text, "<b>Mets</b>, <b>Braves</b>, and <b>Phillies</b>");
+  assert.equal(joinItems(clubs.slice(0, 2), "or").text, "<b>Mets</b> or <b>Braves</b>");
+  assert.equal(joinItems(["A & B"], "and").text, "A &amp; B");
 });

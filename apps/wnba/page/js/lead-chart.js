@@ -1,4 +1,4 @@
-import { html } from "#shared/html.js";
+import { capitalize, html } from "#shared/html.js";
 import { nameTeam } from "./series.js";
 
 // The game sheet's chart of the lead through a game: the visitors' lead above the middle line and
@@ -230,7 +230,7 @@ export function renderLeadChart(lead, teams) {
     describeBiggestLead(homeName, -homeBest.margin),
   ].join(", ");
 
-  const plot = html`<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${label.charAt(0).toUpperCase()}${label.slice(1)}">
+  const plot = html`<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${capitalize(label)}">
       ${renderTile("lead-tile")}
       ${reachLines}
       <path class="lead-area away" d="${awayArea}"></path>

@@ -50,7 +50,7 @@ function describeTeams(search, context, sides) {
   const side = sides[search.side] ?? "";
   const labels = {
     one: () => `${names[0]}${search.group ? ` vs ${search.group.name}` : ""}${side}`,
-    at: () => (names[0] ? `${names[0]} @ ${names[1]}` : `${names[1]} at home`),
+    at: () => (names[0] ? `${names[0]} @ ${names[1]}` : `${names[1]}${sides.home}`),
     vs: () => `${names[0]} vs ${names[1]}${side}`,
     or: () => `${joinNames(/** @type {string[]} */ (names), "or")}${side}`,
   };

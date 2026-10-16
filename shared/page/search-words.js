@@ -197,6 +197,13 @@ function matchPhrase(words, start, dictionary) {
 export const hasKind = (token, kind) => !!token?.meanings.some((meaning) => meaning.kind === kind);
 
 /**
+ * The meaning of a kind a phrase of a search can have, if it has one.
+ * @param {Token | undefined} token
+ * @param {string} kind
+ */
+export const findKind = (token, kind) => token?.meanings.find((meaning) => meaning.kind === kind);
+
+/**
  * A search's phrases, in order, each with what it can mean.
  * @param {string} text
  * @param {Dictionary} dictionary

@@ -76,7 +76,7 @@ const RANGES = {
   "this-month": ["this month"],
   "next-month": ["next month"],
   "last-month": ["last month"],
-  "past-week": ["past week", "the past week", "past 7 days", "last 7 days"],
+  "past-week": ["past week", "the past week"],
   "so-far": ["so far", "this season so far"],
   "rest-of-season": ["rest of the season", "rest of season", "rest of the year"],
 };

@@ -18,7 +18,7 @@ import {
   readPartOfMonth,
   readTimeOfDay,
 } from "./search-dates.js";
-import { hasKind, readTokens } from "./search-words.js";
+import { findKind, hasKind, readTokens } from "./search-words.js";
 
 /** @typedef {import("./search-words.js").Meaning} Meaning */
 /** @typedef {import("./search-words.js").Token} Token */
@@ -87,12 +87,6 @@ function chooseMeaning(meanings, before) {
 /** @param {Token | undefined} token */
 const readNumber = (token) =>
   token && /^\d{1,2}(st|nd|rd|th)?$/.test(token.text) ? Number.parseInt(token.text, 10) : null;
-
-/**
- * @param {Token | undefined} token
- * @param {string} kind
- */
-const findKind = (token, kind) => token?.meanings.find((meaning) => meaning.kind === kind);
 
 /**
  * The year a month of the season falls in: the year the season starts, or, for a season that runs
@@ -223,7 +217,17 @@ function readClockAt(state, side) {
 }
 
 /**
- * A count of days ahead or gone by after the word before it, as "next 7 days" or "last 10 days".
+ * Adds a game's state to what a search asks, once however many words name it.
+ * @param {Search} search
+ * @param {string} value
+ */
+function addState(search, value) {
+  if (!search.states.includes(value)) search.states.push(value);
+}
+
+/**
+ * A count of days ahead after the word before it, as "next 7 days", or the finals of the days
+ * gone by, as "last 10 days".
  * @param {ReadState} state
  * @param {"next" | "last"} which
  */
@@ -232,6 +236,7 @@ function readCountedDaysAt(state, which) {
   const count = readNumber(tokens[at + 1]);
   if (count === null || !/^days?$/.test(tokens[at + 2]?.text ?? "")) return 0;
   search.ranges.push(readCountedDays(count, context.today, which));
+  if (which === "last") addState(search, "final");
   return 3;
 }
 
@@ -262,14 +267,14 @@ function readPickAt(state, which) {
 
 /**
  * A game's state, as "live" or "results", or, for a word for games gone by before a count of days,
- * as "past 10 days", those days.
+ * as "past 10 days", the finals of those days.
  * @param {ReadState} state
  * @param {Meaning} meaning
  */
 function readStateAt(state, meaning) {
   const days = meaning.value === "final" ? readCountedDaysAt(state, "last") : 0;
   if (days) return days;
-  state.search.states.push(meaning.value);
+  addState(state.search, meaning.value);
   return 1;
 }
 

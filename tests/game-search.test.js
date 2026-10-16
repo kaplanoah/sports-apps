@@ -216,6 +216,7 @@ test("two teams find their games either way, and at or @ only the second's home 
   assert.deepEqual(search("Owls vs Hawks").ids, search("Hawks and Owls").ids);
   assert.deepEqual(search("at Owls").ids, ["g1", "g8", "g10"]);
   assert.equal(search("at Owls").line, "Owls at home | 3 games");
+  assert.equal(search("at Owls in March").empty, "No Owls home games in March");
 });
 
 test("either of two teams, and a team against a conference", () => {
@@ -346,7 +347,7 @@ test("a date the calendar doesn't have is named as a search's words it couldn't 
   assert.equal(search("30th").line, "Wed, Sep 30 | No games");
 });
 
-test("the next, last, or past days a count names are those days, never a count of games or a time", () => {
+test("the next days a count names are those days, and the last or past days their finals, never a count of games or a time", () => {
   assert.deepEqual(search("next 3 days"), {
     ids: ["g8", "g6", "g7"],
     line: "Sep 30\u2013Oct 2 | 3 games",
@@ -355,13 +356,22 @@ test("the next, last, or past days a count names are those days, never a count o
   for (const text of ["last 6 days", "past 6 days", "Hawks last 6 days", "results past 6 days"]) {
     const asked = readSearch(text, createContext());
     assert.deepEqual(
-      [asked.ranges.map(({ from, to }) => [from, to]), asked.pick, asked.times, asked.skipped],
-      [[["2026-09-25", "2026-09-30"]], null, [], []],
+      [
+        asked.ranges.map(({ from, to }) => [from, to]),
+        asked.states,
+        asked.pick,
+        asked.times,
+        asked.skipped,
+      ],
+      [[["2026-09-25", "2026-09-30"]], ["final"], null, [], []],
       text,
     );
   }
-  assert.deepEqual(search("last 6 days").ids, ["g5"]);
-  assert.equal(search("past 6 days").line, "Sep 25\u201330 | 1 game");
+  const tonight = makeGame("g12", "2026-09-30", 21 * 60, "HOR", "OWL");
+  const withTonight = [...GAMES, tonight];
+  for (const text of ["last 6 days", "past 6 days", "last 7 days"])
+    assert.deepEqual(search(text, NOW, withTonight).ids, ["g5"], text);
+  assert.equal(search("past 6 days").line, "Sep 25\u201330 | Results | 1 game");
 });
 
 test("the All-Star break is its days, from the last games before the All-Star Game to the first after it", () => {
