@@ -292,6 +292,12 @@
   as both apps' searches and Season pickers do, never a viewport that stops a pinch.
   The root's `tests/browser/type-roles.mjs` lists every shown text off its app's role sizes,
   or in a weight its font has no face for, and each app's browser tests check every view with it.
+  Each role draws in one font and one case,
+  and in a second only where the app's `tests/browser/role-looks.spec.mjs` names the text and why,
+  like MLB's numbers in Chivo Mono and the WNBA Games list's dates in Barlow, as a wall calendar's;
+  it walks the theme specs' views from the app's `tests/browser/views.mjs`,
+  the gate, the Updates box, and the bracket before the playoff field is set,
+  and fails on any look its tables don't name, and on any they name that nothing draws.
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pill, and `--radius-sheet` for a sheet on a wide screen,
@@ -526,6 +532,7 @@
   `game-cards.css` the cards of its nearest games, `updates.css` the Updates box,
   `news.css` the News view's layout, `retry.css` what a sheet shows where a read failed,
   `highlights.css` a final's Highlights, `rank-curve.css` a rank curve and each player's mark on it,
+  `no-field-note.css` the bracket before the playoff field is set,
   and `gate.css` the access code's gate; pages link them before their own `styles.css` and theme them with the tokens their top comments list.
   The Worker serves all of it under `shared/`.
   `shared/worker/` holds the Worker's routing under the key (`app-worker.js`),
