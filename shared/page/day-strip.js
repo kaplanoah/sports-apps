@@ -59,6 +59,9 @@ import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
 // Phosphor's calendar-dot, at its Regular weight, beside the word on the Today button.
 const CALENDAR_DOT = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Zm-64-56a16,16,0,1,1-16-16A16,16,0,0,1,144,152Z"/></svg>`;
 
+// The touches that move the list or the strip, a finger's or a wheel's.
+const MOVING_EVENTS = ["touchstart", "wheel"];
+
 // A tap on Today while the list is already there grows the date this much and back, this fast.
 const PULSE_SCALE = 1.04;
 const PULSE_MS = 290;
@@ -824,16 +827,18 @@ function letGoOfHeldDay(taker) {
 }
 
 // A finger, wheel, click, or key on the list takes it over, even on its way to a day, as anything
-// that stops its spring does, and one on the strip has the month follow it.
+// that stops its spring does. Only a finger or wheel moves the list or the strip itself, which
+// then has the strip's dates slide or its month follow.
 /** @param {Event} event */
 function noteTouch(event) {
   const target = /** @type {Node} */ (event.target);
+  const isMoving = MOVING_EVENTS.includes(event.type);
   followStartUntil = 0;
   if (findList()?.contains(target)) {
-    isListInHand = true;
+    if (isMoving) isListInHand = true;
     letGoOfHeldDay(`the list's ${event.type}`);
   }
-  if (findStrip()?.contains(target)) {
+  if (isMoving && findStrip()?.contains(target)) {
     endStripSlide();
     isStripSwiped = true;
   }

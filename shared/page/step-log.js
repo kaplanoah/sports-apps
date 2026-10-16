@@ -115,10 +115,11 @@ export function createStepLog({ key, title, isWatched }) {
   /** @returns {StepLine[]} oldest first */
   const readLines = () => [...holdLines()];
 
-  // Lines storage won't take are lost once the page goes.
+  // Lines storage won't take are lost once the page goes. A log turned off, here or in another
+  // tab, has forgotten its lines, so they never go back.
   function saveLines() {
     clearTimeout(saveTimer);
-    if (held) storeJson(key, held);
+    if (held && isOn()) storeJson(key, held);
   }
 
   function forgetLines() {

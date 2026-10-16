@@ -522,6 +522,28 @@ test("on a network that refuses sockets, the page was current as each read of ev
   assert.deepEqual(moves, [START + RECONNECT_FIRST_MS]);
 });
 
+test("a read that answers after the page caught up and fell behind again never moves when it was current back", async () => {
+  const { store, reads, sockets, openSocket } = startStore();
+  /** @type {(number | null)[]} */
+  const moves = [];
+  store.watchSyncedAt(() => moves.push(store.readSyncedAt()));
+  store.doc("seasons/2026").onSnapshot(() => {});
+  sockets[0].close();
+  mock.timers.tick(RECONNECT_FIRST_MS);
+  const slowRead = reads[0];
+
+  openSocket();
+  reads[1].answer({ data: {} });
+  await settle();
+  mock.timers.tick(5000);
+  sockets[1].close();
+  slowRead.answer({ data: {} });
+  await settle();
+
+  assert.equal(store.readSyncedAt(), START + RECONNECT_FIRST_MS + 5000);
+  assert.deepEqual(moves, []);
+});
+
 test("waiting for a store that doesn't catch up gives up after ten seconds", async () => {
   const { store } = startStore();
   store.doc("seasons/2026").onSnapshot(() => {});

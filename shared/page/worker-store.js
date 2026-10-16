@@ -161,9 +161,11 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
   }
 
   // A page whose socket isn't open, as on a network that refuses sockets, had what the store held
-  // as its reads began, once they have all answered.
+  // as its reads began, once they have all answered, unless it has since had it later, as a slow
+  // read can answer after the page caught up and fell behind again.
   /** @param {number} at */
   function noteReadWhileBehind(at) {
+    if (syncedAt !== null && at <= syncedAt) return;
     syncedAt = at;
     for (const listener of syncedAtListeners) listener();
   }

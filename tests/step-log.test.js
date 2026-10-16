@@ -125,6 +125,22 @@ test("a log holds its lines as it logs, reading the device once, and keeps them 
   assert.equal(log.readLines().length, 50);
 });
 
+test("a log turned off, which forgets its lines, never keeps them again as the page leaves the screen", () => {
+  const log = createStepLog({ key: "offLog", title: "Errors", isWatched: () => false });
+  let isOn = true;
+  log.watchSteps(
+    () => isOn,
+    () => {},
+  );
+  log.noteStep("an error");
+
+  isOn = false;
+  log.forgetLines();
+  hidePage();
+
+  assert.equal(stored.has("offLog"), false);
+});
+
 test("a log keeps its lines on the device a moment after the last one, once for a burst, as a page that crashes never hides", (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const log = createStepLog({ key: "burstLog", title: "Errors", isWatched: () => false });
