@@ -3,19 +3,17 @@
 // before. That's any change to the shared JavaScript that moves and draws the page, a change to
 // its shared stylesheets in what decides how parts layer, stack, scroll, and show, and an added
 // line anywhere in a page that makes the browser draw a part on a layer of its own. A red change
-// merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone who can label a pull request could
-// add the label, so the gate reads who last added it and lets the change through only from the
-// repository's owner.
+// merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone who can
+// label a pull request could add the label, so the gate reads who last added it and lets the
+// change through only from the repository's owner, and only when the label came after the pull
+// request's last commit, which the owner hasn't used on the phone otherwise.
 // Usage: git diff --no-renames <base> <head> | node worker/red-change.mjs '<labels as JSON>'
 // with PR, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets the last two.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createGitHub, readAllPages } from "./github-api.mjs";
 
 export const PHONE_OK_LABEL = "phone-ok";
-
-const API = "https://api.github.com";
-const EVENTS_PAGE_SIZE = 100;
-const REQUEST_TIMEOUT_MS = 10000;
 
 const RED_FILES = new Set(
   [
@@ -43,6 +41,11 @@ const RED_FILES = new Set(
 
 const LAYER_PROPERTIES = [
   "transform",
+  "translate",
+  "rotate",
+  "scale",
+  "perspective",
+  "backface-visibility",
   "filter",
   "backdrop-filter",
   "mask",
@@ -63,11 +66,15 @@ const CAMEL_PROPERTY_NAMES = LAYER_PROPERTIES.map(toCamelCase)
   .flatMap((name) => [name, name[0].toUpperCase() + name.slice(1)])
   .join("|");
 
-// A property's longhands set it too, as transition-duration and -webkit-mask-image do.
+// A property's longhands set it too, as transition-duration and -webkit-mask-image do. A number an
+// object keys by one of their names, as in { scale: 1.2 }, sets no style, since Prettier ends each
+// of a stylesheet's declarations with a semicolon.
 const LAYER_SETTINGS = [
   {
     name: "a CSS declaration",
-    pattern: new RegExp(`(?:^|[\\s{;"'\`])(?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*\\s*:(?!:)`),
+    pattern: new RegExp(
+      `(?:^|[\\s{;"'\`])(?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))`,
+    ),
   },
   {
     name: "a style property",
@@ -102,6 +109,7 @@ const STACK_PROPERTIES = [
   "scroll-snap-align",
   "scroll-snap-stop",
   "touch-action",
+  "pointer-events",
   "z-index",
   "opacity",
   "visibility",
@@ -257,104 +265,127 @@ function findFileReasons(file) {
  */
 export const findRedReasons = (files) => files.flatMap(findFileReasons);
 
-/** @typedef {{ event: string, created_at: string, label?: { name: string }, actor?: { login: string } | null }} IssueEvent */
+/**
+ * @typedef {object} TimelineEvent
+ * @property {string} event
+ * @property {string} [created_at] when GitHub recorded it, which a commit has no field for
+ * @property {{ date?: string }} [committer] a commit's
+ * @property {{ name: string }} [label]
+ * @property {{ login: string } | null} [actor]
+ */
+
+/** @typedef {{ labeler: string | null, isAfterLastCommit: boolean }} Labeling */
+
+/** @param {TimelineEvent} event */
+const readEventTime = (event) => Date.parse(event.committer?.date ?? event.created_at ?? "");
+
+/** @param {TimelineEvent} event */
+const isCodeChange = (event) =>
+  event.event === "committed" || event.event === "head_ref_force_pushed";
 
 /**
- * Who last added `label` to a pull request, from its issue events, or null when nobody has.
- * @param {IssueEvent[]} events
+ * Who last added `label` to a pull request, and whether they added it after its last commit or
+ * force push, from its timeline.
+ * @param {TimelineEvent[]} events
  * @param {string} label
- * @returns {string | null}
+ * @returns {Labeling}
  */
-export function findLabeler(events, label) {
-  const additions = events
+export function findLabeling(events, label) {
+  const lastAdded = events
     .filter((event) => event.event === "labeled" && event.label?.name === label)
-    .toSorted((first, second) => Date.parse(first.created_at) - Date.parse(second.created_at));
-  return additions.at(-1)?.actor?.login ?? null;
-}
-
-/**
- * Every issue event on a pull request, page by page.
- * @param {object} options
- * @param {string} options.repository as owner/name
- * @param {string} options.pullNumber
- * @param {string} options.token
- * @param {typeof fetch} [options.fetchImpl]
- * @returns {Promise<IssueEvent[]>}
- */
-export async function readIssueEvents({ repository, pullNumber, token, fetchImpl = fetch }) {
-  /** @type {IssueEvent[]} */
-  const events = [];
-  for (let page = 1; ; page += 1) {
-    const url = `${API}/repos/${repository}/issues/${pullNumber}/events?per_page=${EVENTS_PAGE_SIZE}&page=${page}`;
-    const response = await fetchImpl(url, {
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${token}`,
-        "x-github-api-version": "2022-11-28",
-      },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok)
-      throw new Error(`GitHub answered ${response.status} for the events of #${pullNumber}`);
-    const batch = await response.json();
-    events.push(...batch);
-    if (batch.length < EVENTS_PAGE_SIZE) return events;
-  }
-}
-
-/**
- * The gate's verdict on a pull request, given its diff, its labels, who last added the phone-ok
- * label, and the repository's owner.
- * @param {string} diff
- * @param {{ labels: string[], labeler?: string | null, owner?: string }} pullRequest
- * @returns {{ isHeld: boolean, message: string }}
- */
-export function decideGate(diff, { labels, labeler = null, owner = "" }) {
-  const reasons = findRedReasons(readDiff(diff));
-  if (!reasons.length) return { isHeld: false, message: "Not a red change." };
-  const listed = reasons.map((reason) => `- ${reason}`).join("\n");
-  const isLabeled = labels.includes(PHONE_OK_LABEL);
-  if (isLabeled && owner && labeler === owner)
-    return {
-      isHeld: false,
-      message: `A red change, labeled ${PHONE_OK_LABEL} by the owner after using it on beta:\n${listed}`,
-    };
-  if (isLabeled)
-    return {
-      isHeld: true,
-      message:
-        `A red change labeled ${PHONE_OK_LABEL} by ${labeler ?? "someone GitHub doesn't name"}, but the label ` +
-        `has to come from the repository's owner, ${owner}, after using it on the beta app.\n${listed}`,
-    };
+    .toSorted((first, second) => readEventTime(first) - readEventTime(second))
+    .at(-1);
+  if (!lastAdded) return { labeler: null, isAfterLastCommit: false };
+  const lastCodeChange = Math.max(...events.filter(isCodeChange).map(readEventTime));
   return {
-    isHeld: true,
-    message:
-      `A red change: it needs the owner's iPhone, which no CI browser stands in for.\n${listed}\n` +
-      `Deploy it to beta (git push -f origin <branch>:beta). The owner adds the ${PHONE_OK_LABEL} ` +
-      "label after using it on the beta app, which runs this check again.",
+    labeler: lastAdded.actor?.login ?? null,
+    isAfterLastCommit: readEventTime(lastAdded) > lastCodeChange,
   };
 }
 
 /**
- * Who last added the phone-ok label, read only when the pull request has it.
+ * Every event on a pull request's timeline, its commits among them, page by page.
+ * @param {object} options
+ * @param {string} options.repository as owner/name
+ * @param {string} options.pullNumber
+ * @param {typeof fetch} [options.fetchImpl]
+ * @param {NodeJS.ProcessEnv} [options.env] holds GH_TOKEN
+ * @returns {Promise<TimelineEvent[]>}
+ */
+export const readTimeline = ({ repository, pullNumber, fetchImpl = fetch, env = process.env }) =>
+  readAllPages(createGitHub({ repository, fetchImpl, env }), `/issues/${pullNumber}/timeline`);
+
+/**
+ * Why a red change labeled phone-ok is still held, or null when the label lets it through.
+ * @param {Labeling} labeling
+ * @param {string} owner
+ */
+function findLabelProblem({ labeler, isAfterLastCommit }, owner) {
+  if (!owner || labeler !== owner)
+    return (
+      `A red change labeled ${PHONE_OK_LABEL} by ${labeler ?? "someone GitHub doesn't name"}, but the label ` +
+      `has to come from the repository's owner, ${owner}, after using it on the beta app.`
+    );
+  if (!isAfterLastCommit)
+    return (
+      `A red change labeled ${PHONE_OK_LABEL} before its last commit, which the owner hasn't used on the ` +
+      `phone. Deploy it to beta (git push -f origin <branch>:beta). The owner takes the label off and adds ` +
+      "it again after using it on the beta app."
+    );
+  return null;
+}
+
+/**
+ * The gate's verdict on a pull request, given its diff, its labels, who last added the phone-ok
+ * label and whether that came after its last commit, and the repository's owner.
+ * @param {string} diff
+ * @param {{ labels: string[], labeling?: Labeling, owner?: string }} pullRequest
+ * @returns {{ isHeld: boolean, message: string }}
+ */
+export function decideGate(
+  diff,
+  { labels, labeling = { labeler: null, isAfterLastCommit: false }, owner = "" },
+) {
+  const reasons = findRedReasons(readDiff(diff));
+  if (!reasons.length) return { isHeld: false, message: "Not a red change." };
+  const listed = reasons.map((reason) => `- ${reason}`).join("\n");
+  if (!labels.includes(PHONE_OK_LABEL))
+    return {
+      isHeld: true,
+      message:
+        `A red change: it needs the owner's iPhone, which no CI browser stands in for.\n${listed}\n` +
+        `Deploy it to beta (git push -f origin <branch>:beta). The owner adds the ${PHONE_OK_LABEL} ` +
+        "label after using it on the beta app, which runs this check again.",
+    };
+  const problem = findLabelProblem(labeling, owner);
+  if (problem) return { isHeld: true, message: `${problem}\n${listed}` };
+  return {
+    isHeld: false,
+    message: `A red change, labeled ${PHONE_OK_LABEL} by the owner after using it on beta:\n${listed}`,
+  };
+}
+
+/**
+ * Who last added the phone-ok label and when, read only when the pull request has it.
  * @param {string[]} labels
  * @param {NodeJS.ProcessEnv} env
+ * @returns {Promise<Labeling | undefined>}
  */
-async function readPhoneOkLabeler(labels, env) {
-  if (!labels.includes(PHONE_OK_LABEL)) return null;
-  const events = await readIssueEvents({
+async function readPhoneOkLabeling(labels, env) {
+  if (!labels.includes(PHONE_OK_LABEL)) return undefined;
+  const events = await readTimeline({
     repository: env.GITHUB_REPOSITORY ?? "",
     pullNumber: env.PR ?? "",
-    token: env.GH_TOKEN ?? "",
+    env,
   });
-  return findLabeler(events, PHONE_OK_LABEL);
+  return findLabeling(events, PHONE_OK_LABEL);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const labels = JSON.parse(process.argv[2] || "[]");
-  const labeler = await readPhoneOkLabeler(labels, process.env);
+  const labeling = await readPhoneOkLabeling(labels, process.env);
   const owner = process.env.GITHUB_REPOSITORY_OWNER ?? "";
-  const { isHeld, message } = decideGate(readFileSync(0, "utf8"), { labels, labeler, owner });
+  const { isHeld, message } = decideGate(readFileSync(0, "utf8"), { labels, labeling, owner });
   console.log(isHeld ? `::error::${message.split("\n")[0]}\n${message}` : message);
   if (isHeld) process.exit(1);
 }

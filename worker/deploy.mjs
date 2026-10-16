@@ -8,6 +8,7 @@ import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
 import { checkAppPage } from "./check-page.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
+import { createGitHub } from "./github-api.mjs";
 
 export const API = "https://api.cloudflare.com/client/v4";
 const root = new URL("../", import.meta.url);
@@ -48,7 +49,20 @@ export const readAppWorkerConfig = (app, channel) =>
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 
-function isAncestor(git, commit, of) {
+/** @typedef {(args: string[]) => string} Git */
+
+/** @type {Git} */
+export const runGit = (args) =>
+  execFileSync("git", args, { cwd: fileURLToPath(root), encoding: "utf8" }).trim();
+
+/**
+ * Whether `commit` is `of` or comes before it in its history, and false when git doesn't know
+ * either one.
+ * @param {Git} git
+ * @param {string} commit
+ * @param {string} of
+ */
+export function isAncestor(git, commit, of) {
   try {
     git(["merge-base", "--is-ancestor", commit, of]);
     return true;
@@ -57,25 +71,22 @@ function isAncestor(git, commit, of) {
   }
 }
 
-// A commit its channel's branch has since moved past isn't deployed: the newer one's deploy
-// covers it, and deploying it would put older code live.
+// A commit its channel's branch has since moved past is a release a newer one may cover. On a
+// branch each push replaces, as beta's force pushes do, any other commit is the newer one.
 /**
- * @param {(args: string[]) => string} [git]
+ * @param {Git} [git]
  * @param {string} [channel]
  * @returns {{ commit: string, newer: string | null }}
  */
-export function checkRelease(
-  git = (args) => execFileSync("git", args, { cwd: fileURLToPath(root), encoding: "utf8" }).trim(),
-  channel = "production",
-) {
-  const { branch, howToShip } = findChannel(channel);
+export function checkRelease(git = runGit, channel = "production") {
+  const { branch, howToShip, isForcePushed } = findChannel(channel);
   if (git(["status", "--porcelain"]))
     throw new Error(`There are uncommitted changes. Deploy only what is on ${branch}.`);
   git(["fetch", "--quiet", "origin", branch]);
   const local = git(["rev-parse", "HEAD"]);
   const remote = git(["rev-parse", `origin/${branch}`]);
   if (local === remote) return { commit: local, newer: null };
-  if (isAncestor(git, local, remote)) return { commit: local, newer: remote };
+  if (isForcePushed || isAncestor(git, local, remote)) return { commit: local, newer: remote };
   const checkout = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   throw new Error(
     `This checkout (${checkout} at ${local.slice(0, 7)}) isn't ${branch} as GitHub has it (${remote.slice(0, 7)}). ${howToShip}, or check out origin/${branch}, and try again.`,
@@ -235,6 +246,8 @@ export function createDeploymentsClient({ base, name, callCloudflare }) {
  * @param {typeof console.log} [options.log]
  * @param {(milliseconds: number) => Promise<unknown>} [options.pause]
  * @param {typeof checkAppPage} [options.checkPage] Opens the new version's page.
+ * @param {(commit: string, of: string) => boolean} [options.isEarlier] Whether a commit comes
+ *   before another in main's history.
  * @returns {Promise<string | null>} the Worker's address, or null when nothing needed deploying
  */
 export async function deploy({
@@ -248,9 +261,11 @@ export async function deploy({
   log = console.log,
   pause = waitFor,
   checkPage = checkAppPage,
+  isEarlier = (earlier, of) => isAncestor(runGit, earlier, of),
 }) {
   const account = readAccount(env);
   const { name, compatibilityDate } = readAppWorkerConfig(app, channel);
+  const { isForcePushed } = findChannel(channel);
   const base = findWorkersApi(account);
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const deployments = createDeploymentsClient({ base, name, callCloudflare });
@@ -260,11 +275,23 @@ export async function deploy({
     return newest ?? null;
   }
 
+  // A newer merge's deploy can go live before an older merge's run gets here, which would
+  // otherwise put older code back. Each push to beta replaces what it held, whatever it was.
+  /** @param {string} liveCommit */
+  const isLiveNewer = (liveCommit) =>
+    !isForcePushed && !!commit && liveCommit !== commit && isEarlier(commit, liveCommit);
+
   // Without a recorded commit, there's nothing to compare with, so it deploys.
   async function isDeployNeeded(previousVersions) {
     const liveCommit =
       previousVersions && (await deployments.readCommit(previousVersions, "live commit"));
     if (!liveCommit) return true;
+    if (isLiveNewer(liveCommit)) {
+      log(
+        `::notice::The live version is at ${liveCommit.slice(0, 7)}, which already has ${commit?.slice(0, 7)}, so nothing was deployed.`,
+      );
+      return false;
+    }
     const { isNeeded, reason } = decideDeploy(findChanges(liveCommit), app);
     log(isNeeded ? reason : `::notice::${reason}`);
     return isNeeded;
@@ -336,9 +363,13 @@ export async function deploy({
     await restoreAfter("The Worker didn't answer as the new version", previousVersions);
   }
 
-  // A Worker can answer while its page throws or never draws, which a phone would show.
+  // A Worker can answer while its page throws or never draws, which a phone would show. A check
+  // that itself fails is no proof the page draws.
   async function confirmPageDraws(previousVersions) {
-    const check = await checkPage({ app, channel, commit, env });
+    const check = await checkPage({ app, channel, commit, env }).catch((error) => ({
+      status: /** @type {const} */ ("broken"),
+      reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
+    }));
     if (check.status === "drawn") log("page check: ok");
     if (check.status === "unchecked") log(`::notice::page check: skipped, ${check.reason}`);
     if (check.status === "broken")
@@ -459,16 +490,56 @@ function readCommandLineOrExit(args) {
   }
 }
 
+/**
+ * Whether CI on main passed on a commit, which GitHub answers only to a run in Actions that holds
+ * GH_TOKEN, and false when it can't tell.
+ * @param {string} commit
+ * @param {{ fetchImpl?: typeof fetch, env?: NodeJS.ProcessEnv }} [options]
+ */
+export async function hasMainCiPassed(commit, { fetchImpl = fetch, env = process.env } = {}) {
+  if (!env.GH_TOKEN || !env.GITHUB_REPOSITORY) return false;
+  const github = createGitHub({ repository: env.GITHUB_REPOSITORY, fetchImpl, env });
+  try {
+    const { workflow_runs: runs } = await github(
+      `/actions/workflows/ci.yml/runs?head_sha=${commit}&event=push&per_page=1`,
+    );
+    return runs[0]?.conclusion === "success";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Why a commit its branch has moved past deploys or not. A push to a force-pushed branch deploys at
+ * once, so it covers the commit before it. A merge to main deploys only once CI passes on it, so
+ * until then the commit before it deploys, in case it never does.
+ * @param {{ commit: string, newer: string, channel: string }} release
+ * @param {(commit: string) => Promise<boolean>} hasCiPassed
+ * @returns {Promise<{ isCovered: boolean, message: string }>}
+ */
+export async function decideMovedOn({ commit, newer, channel }, hasCiPassed) {
+  const { branch, isForcePushed } = findChannel(channel);
+  const [shortCommit, shortNewer] = [commit.slice(0, 7), newer.slice(0, 7)];
+  if (isForcePushed || (await hasCiPassed(newer)))
+    return {
+      isCovered: true,
+      message: `::notice::${branch} has moved on to ${shortNewer}, whose deploy covers ${shortCommit}, so nothing was deployed.`,
+    };
+  return {
+    isCovered: false,
+    message: `::notice::${branch} has moved on to ${shortNewer}, but CI on ${branch} hasn't passed on it, so ${shortCommit} deploys.`,
+  };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { positionals, channel } = readCommandLineOrExit(process.argv.slice(2));
   const apps = listAppsOrExit(positionals[0]);
   const { branch } = findChannel(channel);
   const { commit, newer } = readReleaseOrExit(channel);
   if (newer) {
-    console.log(
-      `::notice::${branch} has moved on to ${newer.slice(0, 7)}, whose deploy covers ${commit.slice(0, 7)}, so nothing was deployed.`,
-    );
-    process.exit(0);
+    const { isCovered, message } = await decideMovedOn({ commit, newer, channel }, hasMainCiPassed);
+    console.log(message);
+    if (isCovered) process.exit(0);
   }
   console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
   const isDeployed = await deployApps(apps, async (app) =>

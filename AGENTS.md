@@ -739,19 +739,23 @@ Delete it once the app's first PR merges.
   added or removed, in a selector or at-rule, which says which parts a rule reaches,
   or in a property that decides how parts layer, stack, scroll,
   take a touch, or show (any below, any `position`, `overflow`,
-  `overscroll-behavior`, `scroll-snap`, `touch-action`, `z-index`,
+  `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
   `opacity`, `visibility`, `display`, `isolation`, or `mix-blend-mode`),
   but not in their fonts, colors, spacing, or sizes, which CI checks;
   or an added line in a page's CSS or JavaScript that sets a property that gives a part a layer of its own (`transform`,
+  `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`).
   Tests are never red.
-  The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label.
+  The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label,
+  added by the owner after the PR's last commit.
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     When you ask the owner to add `phone-ok`, link the PR in the same message.
     Never add `phone-ok`.
     Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push.
+    A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
+    so deploy it to beta and ask.
     Merge a red PR once `check` passes with `phone-ok` on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again.
     An OK in chat never stands in for the label.
     Merge it yourself: the owner doesn't.
@@ -873,7 +877,10 @@ When a step says to go back to an earlier step, continue in order from there.
       tell the user that too.
     - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
       Tell the user which.
-    - It says "has moved on": another merge landed first, and its Deploy run covers this one.
+    - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
+      Read that run's log instead.
+      Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.
+    - It says "already has": a newer merge's deploy went live first, and covers this one.
       Read that run's log instead.
     - The run was skipped:
       CI failed on `main`.

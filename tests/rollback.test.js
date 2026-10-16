@@ -42,6 +42,23 @@ function createFakeCloudflare(deployed, { refuseRollback = false } = {}) {
 const findRollback = (calls) =>
   calls.find((call) => call.url.endsWith("/deployments") && call.init.method === "POST");
 
+/**
+ * A git whose main has `history`, oldest first, and knows no other commit.
+ * @param {string[]} history
+ */
+const createFakeGit =
+  (history = [COMMIT_A, COMMIT_B, COMMIT_C]) =>
+  (/** @type {string[]} */ args) => {
+    if (args[0] === "fetch") return "";
+    const [command, flag, commit, of] = args;
+    if (command !== "merge-base" || flag !== "--is-ancestor")
+      throw new Error(`unexpected git ${args.join(" ")}`);
+    const [commitAt, ofAt] = [history.indexOf(commit), history.indexOf(of)];
+    if (commitAt === -1 || ofAt === -1 || commitAt > ofAt) throw new Error("not an ancestor");
+    return "";
+  };
+const git = createFakeGit();
+
 test("the version before the live one goes back to all of the traffic", async () => {
   const cloudflare = createFakeCloudflare([
     { id: "v1", at: "2026-10-01T10:00:00Z", commit: COMMIT_A },
@@ -52,6 +69,7 @@ test("the version before the live one goes back to all of the traffic", async ()
   const result = await rollBack({
     app: "mlb",
     fetchImpl: cloudflare.fetchImpl,
+    git,
     env: ENV,
     log: (line) => printed.push(line),
   });
@@ -79,6 +97,7 @@ test("a secret change's version deploys the same code, so it's passed over", asy
   const result = await rollBack({
     app: "mlb",
     fetchImpl: cloudflare.fetchImpl,
+    git,
     env: ENV,
     log: () => {},
   });
@@ -86,6 +105,64 @@ test("a secret change's version deploys the same code, so it's passed over", asy
   assert.deepEqual(JSON.parse(findRollback(cloudflare.calls).init.body).versions, [
     { version_id: "v1", percentage: 100 },
   ]);
+});
+
+test("a version a rollback took down is passed over, so the one before the live one goes back", async () => {
+  const COMMIT_D = "d".repeat(40);
+  const takenDown = [
+    { id: "v1", at: "2026-10-01T10:00:00Z", commit: COMMIT_A },
+    { id: "v2", at: "2026-10-02T10:00:00Z", commit: COMMIT_B },
+    { id: "v3", at: "2026-10-03T10:00:00Z", commit: COMMIT_C },
+    { id: "v4", at: "2026-10-04T10:00:00Z", commit: COMMIT_B },
+  ];
+  /** @param {{ id: string, at: string, commit?: string }[]} deployed */
+  const rollBackFrom = async (deployed) => {
+    const cloudflare = createFakeCloudflare(deployed);
+    const result = await rollBack({
+      app: "mlb",
+      fetchImpl: cloudflare.fetchImpl,
+      env: ENV,
+      log: () => {},
+      git,
+    });
+    return { result, versions: JSON.parse(findRollback(cloudflare.calls).init.body).versions };
+  };
+
+  assert.deepEqual(await rollBackFrom(takenDown), {
+    result: { from: COMMIT_B, to: COMMIT_A },
+    versions: [{ version_id: "v1", percentage: 100 }],
+  });
+  // Without the first deployment of the live commit, only history tells the broken one apart.
+  assert.deepEqual((await rollBackFrom(takenDown.slice(0, 1).concat(takenDown.slice(2)))).result, {
+    from: COMMIT_B,
+    to: COMMIT_A,
+  });
+  const unknown = [
+    { id: "v1", at: "2026-10-01T10:00:00Z", commit: COMMIT_A },
+    { id: "v2", at: "2026-10-02T10:00:00Z", commit: COMMIT_D },
+    { id: "v3", at: "2026-10-03T10:00:00Z", commit: COMMIT_B },
+  ];
+  assert.equal((await rollBackFrom(unknown)).result.to, COMMIT_A);
+});
+
+test("beta's force pushes leave it no history to check, so only its repeats are passed over", async () => {
+  const cloudflare = createFakeCloudflare([
+    { id: "v1", at: "2026-10-01T10:00:00Z", commit: COMMIT_C },
+    { id: "v2", at: "2026-10-02T10:00:00Z", commit: COMMIT_A },
+    { id: "v3", at: "2026-10-03T10:00:00Z", commit: COMMIT_B },
+    { id: "v4", at: "2026-10-04T10:00:00Z", commit: COMMIT_A },
+  ]);
+  const result = await rollBack({
+    app: "mlb",
+    channel: "beta",
+    fetchImpl: cloudflare.fetchImpl,
+    env: ENV,
+    log: () => {},
+    git: () => {
+      throw new Error("beta needs no git");
+    },
+  });
+  assert.deepEqual(result, { from: COMMIT_A, to: COMMIT_C });
 });
 
 test("the beta channel rolls back its own Worker", async () => {
@@ -97,6 +174,7 @@ test("the beta channel rolls back its own Worker", async () => {
     app: "wnba",
     channel: "beta",
     fetchImpl: cloudflare.fetchImpl,
+    git,
     env: ENV,
     log: () => {},
   });
@@ -122,7 +200,7 @@ test("with no earlier version, nothing changes", async () => {
   for (const { deployed, reason } of cases) {
     const cloudflare = createFakeCloudflare(deployed);
     await assert.rejects(
-      rollBack({ app: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {} }),
+      rollBack({ app: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {}, git }),
       reason,
     );
     assert.equal(findRollback(cloudflare.calls), undefined);
@@ -138,7 +216,7 @@ test("a refused rollback says so", async () => {
     { refuseRollback: true },
   );
   await assert.rejects(
-    rollBack({ app: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {} }),
+    rollBack({ app: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {}, git }),
     /rollback failed: 10000: Refused/,
   );
 });

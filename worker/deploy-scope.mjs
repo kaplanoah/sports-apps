@@ -1,6 +1,8 @@
 // Decides whether main needs a deploy. Only when nothing but the docs, tests, and tooling listed
 // here changed since the live version does it skip one, so a new kind of file deploys until it
 // is listed. An app's own folder deploys only that app; anything outside apps/ deploys them all.
+// What deploys, like worker/deploy.mjs and .github/workflows/deploy.yml, isn't listed: only a
+// deploy shows that a change to how the apps deploy still works.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 

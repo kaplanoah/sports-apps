@@ -1,9 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 /** @param {string} path from the repo's root */
 const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+const WORKFLOWS = readdirSync(new URL("../.github/workflows/", import.meta.url)).filter((name) =>
+  name.endsWith(".yml"),
+);
+
+// A tag can be moved to other code, so each action is named by its commit, which can't.
+test("every workflow's actions are pinned to a commit", () => {
+  assert.ok(WORKFLOWS.length > 0);
+  for (const workflow of WORKFLOWS) {
+    const actions = [
+      ...readRepoFile(`.github/workflows/${workflow}`).matchAll(/^\s*-?\s*uses:\s*(\S+)/gm),
+    ].map(([, action]) => action);
+    for (const action of actions)
+      assert.match(action, /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/, `${workflow}: ${action}`);
+  }
+});
 
 const readInstalledPlaywright = () =>
   JSON.parse(readRepoFile("package-lock.json")).packages["node_modules/playwright"].version;

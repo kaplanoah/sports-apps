@@ -26,7 +26,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   # Playwright's own image holds Chromium and WebKit and the system libraries they need, so one
@@ -40,6 +39,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref }}
+          persist-credentials: false
       - id: node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -63,16 +63,12 @@ jobs:
           options=(--repeat-each="$REPEAT" --retries=0 --max-failures=0)
           if [ -n "$PROJECT" ]; then options+=(--project="$PROJECT"); fi
           npm run test:browser -- "${options[@]}" "${tests[@]}"
-      # Only the nightly run of main reports, since a run by hand may test a branch. A test new to
-      # the issue starts the routine that fixes flaky tests, through its API trigger.
-      - name: Name each test that failed in the open issue
+      # Only the nightly run of main reports, since a run by hand may test a branch.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ !cancelled() && github.event_name == 'schedule' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          FLAKY_ROUTINE_URL: ${{ secrets.FLAKY_ROUTINE_URL }}
-          FLAKY_ROUTINE_TOKEN: ${{ secrets.FLAKY_ROUTINE_TOKEN }}
-        run: node worker/report-flaky-tests.mjs test-results/report.json
+        with:
+          name: nightly-report
+          path: test-results/report.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()
         with:
@@ -80,3 +76,36 @@ jobs:
           path: |
             playwright-report/
             test-results/
+
+  # Each report reads the issue's table and writes it back, so the reports of every workflow take
+  # turns, in a group of their own that a newer report replaces a waiting one in. A test new to
+  # the issue starts the routine that fixes flaky tests, through its API trigger.
+  report:
+    needs: browser
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: flaky-tests-issue
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: nightly-report
+          path: nightly-report/
+      - name: Name each test that failed in the open issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FLAKY_ROUTINE_URL: ${{ secrets.FLAKY_ROUTINE_URL }}
+          FLAKY_ROUTINE_TOKEN: ${{ secrets.FLAKY_ROUTINE_TOKEN }}
+        run: node worker/report-flaky-tests.mjs nightly-report/report.json

@@ -137,23 +137,39 @@ function pinImportMap(importMap, folder) {
   return `\n    ${JSON.stringify({ imports: Object.fromEntries(pinned) })}\n  `;
 }
 
+// The page and the access code's gate, which the page's address shows until the phone signs in.
+/** @param {string} path */
+const isPage = (path) => path.endsWith(".html") && !path.includes("/");
+
 /**
- * The page reading its code and styles from its release's folder, with its release guard written
- * in, since the guard has to run when a file from that folder goes missing.
- * @param {Record<string, { contentType: string, text?: string, base64?: string }>} files
- * @param {string} commit
+ * A page reading its code and styles from the release's folder, with its release guard written in.
+ * @param {string} page
+ * @param {string} guard
+ * @param {string} folder
  */
-export function pinPageFiles(files, commit) {
-  const page = files["index.html"]?.text;
-  const guard = files["shared/release-guard.js"]?.text;
-  if (!page?.includes(RELEASE_GUARD) || !guard)
-    throw new Error("The page's head must load shared/release-guard.js.");
-  const folder = nameReleaseFolder(commit);
-  const text = page
+const pinPage = (page, guard, folder) =>
+  page
     .replace(RELEASE_GUARD, () => `<script>\n${guard}</script>`)
     .replace(IMPORT_MAP, (tag, importMap) =>
       tag.replace(importMap, pinImportMap(importMap, folder)),
     )
     .replace(LOADING_TAG, (tag) => pinTag(tag, folder));
-  return { ...files, "index.html": { ...files["index.html"], text } };
+
+/**
+ * Each page reading its code and styles from its release's folder, with its release guard
+ * written in, since the guard has to run when a file from that folder goes missing.
+ * @param {Record<string, { contentType: string, text?: string, base64?: string }>} files
+ * @param {string} commit
+ */
+export function pinPageFiles(files, commit) {
+  const guard = files["shared/release-guard.js"]?.text;
+  const folder = nameReleaseFolder(commit);
+  const pinned = Object.entries(files)
+    .filter(([path]) => isPage(path))
+    .map(([path, file]) => {
+      if (!file.text?.includes(RELEASE_GUARD) || !guard)
+        throw new Error(`The head of ${path} must load shared/release-guard.js.`);
+      return [path, { ...file, text: pinPage(file.text, guard, folder) }];
+    });
+  return { ...files, ...Object.fromEntries(pinned) };
 }

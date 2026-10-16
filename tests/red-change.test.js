@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   decideGate,
-  findLabeler,
+  findLabeling,
   findRedReasons,
   readDiff,
-  readIssueEvents,
+  readTimeline,
 } from "../worker/red-change.mjs";
 
 /**
@@ -166,6 +166,8 @@ test("a shared stylesheet's change to how parts layer, stack, scroll, or show is
     "  -webkit-overflow-scrolling: touch;",
     "  scroll-snap-type: x mandatory;",
     "  touch-action: pan-y;",
+    "  pointer-events: none;",
+    "  translate: 0 -1px;",
     "  z-index: 20;",
     "  opacity: 0;",
     "  visibility: hidden;",
@@ -214,6 +216,13 @@ test("an added line that makes a layer is red in any page's CSS or JavaScript", 
     "  transition-duration: 200ms;",
     "  contain: paint;",
     "  content-visibility: auto;",
+    "  translate: 0 var(--game-side-offset);",
+    "  rotate: 45deg;",
+    "  scale: 1.2;",
+    "  perspective: 800px;",
+    "  perspective-origin: center;",
+    "  backface-visibility: hidden;",
+    "  -webkit-backface-visibility: hidden;",
     "  position: fixed;",
     "  position:sticky;",
     ".bar { top: 0; position: sticky }",
@@ -225,6 +234,14 @@ test("an added line that makes a layer is red in any page's CSS or JavaScript", 
     '  element.style.position = "sticky";',
     "  element.animate([{ opacity: 0 }, { opacity: 1 }], 200);",
     '  const style = html`<div style="transform: scale(2)"></div>`;',
+    '  const style = html`<div style="scale: 2"></div>`;',
+    "  part.style.translate = offset > 0 ? `0 ${offset}px` : '';",
+    "  element.style.rotate = '45deg';",
+    "  element.style.scale = '1.1';",
+    "  element.style.perspective = '800px';",
+    "  element.style.backfaceVisibility = 'hidden';",
+    "  element.style.webkitBackfaceVisibility = 'hidden';",
+    '  element.style.setProperty("translate", value);',
   ];
   for (const path of [
     "shared/page/stamp.js",
@@ -241,6 +258,10 @@ test("lines that only read or name those properties aren't red", () => {
     "  const live = games.filter((game) => game.isLive);",
     "  if (list.contains(target)) return;",
     "  item.transformed = true;",
+    '  { name: "ABC", file: "abc.png", names: [], scale: 1.22, nudge: 0.02 },',
+    "    scale: 0.99,",
+    "  const scale = size / (Math.max(...xs) - Math.min(...xs));",
+    "  const translated = translate(text);",
     "  position: relative;",
     "  position: absolute;",
     '  const isFixed = element.style.position === "fixed";',
@@ -295,40 +316,101 @@ test("a red change is held until it has the phone-ok label, and says why", () =>
   assert.match(held.message, /git push -f origin <branch>:beta/);
   assert.match(held.message, /owner adds the phone-ok label after using it on the beta app/);
 
-  const labeled = decideGate(diff, { labels: ["phone-ok"], labeler: "owner", owner: "owner" });
+  const labeled = decideGate(diff, {
+    labels: ["phone-ok"],
+    labeling: { labeler: "owner", isAfterLastCommit: true },
+    owner: "owner",
+  });
   assert.equal(labeled.isHeld, false);
   assert.match(labeled.message, /labeled phone-ok/);
 });
 
 test("a red change labeled phone-ok by anyone but the owner is held, and says the label has to come from the owner", () => {
-  const held = decideGate(RED_DIFF, { labels: ["phone-ok"], labeler: "helper", owner: "owner" });
+  /** @param {string | null} labeler @param {string} owner */
+  const decideLabeledBy = (labeler, owner) =>
+    decideGate(RED_DIFF, {
+      labels: ["phone-ok"],
+      labeling: { labeler, isAfterLastCommit: true },
+      owner,
+    });
+  const held = decideLabeledBy("helper", "owner");
   assert.equal(held.isHeld, true);
   assert.match(held.message, /labeled phone-ok by helper/);
   assert.match(held.message, /has to come from the repository's owner, owner/);
 
-  const unnamed = decideGate(RED_DIFF, { labels: ["phone-ok"], labeler: null, owner: "owner" });
-  assert.equal(unnamed.isHeld, true);
-  assert.equal(decideGate(RED_DIFF, { labels: ["phone-ok"], labeler: "", owner: "" }).isHeld, true);
+  assert.equal(decideLabeledBy(null, "owner").isHeld, true);
+  assert.equal(decideLabeledBy("", "").isHeld, true);
+  assert.equal(decideGate(RED_DIFF, { labels: ["phone-ok"], owner: "owner" }).isHeld, true);
 });
+
+test("a red change the owner labeled phone-ok before its last commit is held until they label it again", () => {
+  const held = decideGate(RED_DIFF, {
+    labels: ["phone-ok"],
+    labeling: { labeler: "owner", isAfterLastCommit: false },
+    owner: "owner",
+  });
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, /labeled phone-ok before its last commit/);
+  assert.match(held.message, /git push -f origin <branch>:beta/);
+  assert.match(held.message, /takes the label off and adds it again/);
+});
+
+/**
+ * A commit on a pull request's timeline, committed at `at`.
+ * @param {string} at
+ */
+const createCommit = (at) => ({ event: "committed", committer: { date: at } });
 
 test("the phone-ok label's adder is whoever added it last, whatever else was labeled", () => {
   const events = [
+    createCommit("2026-10-07T09:00:00Z"),
     createEvent("labeled", "phone-ok", "owner", "2026-10-07T10:00:00Z"),
     createEvent("unlabeled", "phone-ok", "owner", "2026-10-07T11:00:00Z"),
     createEvent("labeled", "phone-ok", "helper", "2026-10-07T12:00:00Z"),
     createEvent("labeled", "bug", "owner", "2026-10-07T13:00:00Z"),
-    {
-      event: "head_ref_force_pushed",
-      created_at: "2026-10-07T14:00:00Z",
-      actor: { login: "owner" },
-    },
   ];
-  assert.equal(findLabeler(events, "phone-ok"), "helper");
-  assert.equal(findLabeler(events.toReversed(), "phone-ok"), "helper");
-  assert.equal(findLabeler(events.slice(3), "phone-ok"), null);
+  assert.deepEqual(findLabeling(events, "phone-ok"), {
+    labeler: "helper",
+    isAfterLastCommit: true,
+  });
+  assert.deepEqual(findLabeling(events.toReversed(), "phone-ok"), {
+    labeler: "helper",
+    isAfterLastCommit: true,
+  });
+  assert.deepEqual(findLabeling(events.slice(4), "phone-ok"), {
+    labeler: null,
+    isAfterLastCommit: false,
+  });
 });
 
-test("a pull request's events are read page by page, with the token, until a short page", async () => {
+test("a commit or a force push after the phone-ok label leaves it before the last commit", () => {
+  const labeled = [
+    createCommit("2026-10-07T09:00:00Z"),
+    createEvent("labeled", "phone-ok", "owner", "2026-10-07T10:00:00Z"),
+  ];
+  const forcePush = {
+    event: "head_ref_force_pushed",
+    created_at: "2026-10-07T11:00:00Z",
+    actor: { login: "owner" },
+  };
+  for (const change of [createCommit("2026-10-07T11:00:00Z"), forcePush])
+    assert.deepEqual(findLabeling([...labeled, change], "phone-ok"), {
+      labeler: "owner",
+      isAfterLastCommit: false,
+    });
+  const labeledAgain = createEvent("labeled", "phone-ok", "owner", "2026-10-07T12:00:00Z");
+  assert.equal(
+    findLabeling([...labeled, forcePush, labeledAgain], "phone-ok").isAfterLastCommit,
+    true,
+  );
+  assert.equal(
+    findLabeling([...labeled, { event: "committed", committer: {} }], "phone-ok").isAfterLastCommit,
+    false,
+    "a commit with no date may be the last",
+  );
+});
+
+test("a pull request's timeline is read page by page, with the token, until a short page", async () => {
   const pages = [
     Array.from({ length: 100 }, (_, index) =>
       createEvent(
@@ -349,30 +431,35 @@ test("a pull request's events are read page by page, with the token, until a sho
     return Response.json(pages[requests.length - 1]);
   };
 
-  const events = await readIssueEvents({
+  const events = await readTimeline({
     repository: "owner/repo",
     pullNumber: "408",
-    token: "token",
     fetchImpl,
+    env: { GH_TOKEN: "token" },
   });
 
   assert.equal(events.length, 101);
   assert.deepEqual(
     requests.map(({ url }) => url),
     [
-      "https://api.github.com/repos/owner/repo/issues/408/events?per_page=100&page=1",
-      "https://api.github.com/repos/owner/repo/issues/408/events?per_page=100&page=2",
+      "https://api.github.com/repos/owner/repo/issues/408/timeline?per_page=100&page=1",
+      "https://api.github.com/repos/owner/repo/issues/408/timeline?per_page=100&page=2",
     ],
   );
   assert.ok(requests.every(({ authorization }) => authorization === "Bearer token"));
 });
 
-test("events GitHub won't give fail the gate's read", async () => {
+test("a timeline GitHub won't give fails the gate's read", async () => {
   /** @type {typeof fetch} */
   const fetchImpl = async () => new Response("", { status: 403 });
   await assert.rejects(
-    readIssueEvents({ repository: "owner/repo", pullNumber: "408", token: "token", fetchImpl }),
-    /GitHub answered 403 for the events of #408/,
+    readTimeline({
+      repository: "owner/repo",
+      pullNumber: "408",
+      fetchImpl,
+      env: { GH_TOKEN: "token" },
+    }),
+    /GitHub answered 403 for GET \/issues\/408\/timeline/,
   );
 });
 

@@ -41,8 +41,17 @@ function skipHeredocBody(command, from, delimiter) {
 }
 
 /**
+ * Whether a lone `&` at `at` runs what's before it in the background, rather than redirecting, as
+ * `2>&1` and `&>` do, or piping, as `|&` does.
+ * @param {string} text
+ * @param {number} at
+ */
+const isBackgroundAmpersand = (text, at) =>
+  text[at] === "&" && !/[<>|]/.test(text[at - 1] ?? "") && text[at + 1] !== ">";
+
+/**
  * The first operator outside quotes, heredocs, and `$(...)` that starts another command: `&&`,
- * `||`, `;`, or a line break, or null when the command is one.
+ * `||`, `;`, a lone `&`, or a line break, or null when the command is one.
  * @param {string} command
  */
 export function findSeparator(command) {
@@ -70,6 +79,7 @@ export function findSeparator(command) {
       continue;
     }
     if (depth > 0) {
+      if (char === "(") depth += 1;
       if (char === ")") depth -= 1;
       continue;
     }
@@ -82,17 +92,29 @@ export function findSeparator(command) {
     if (pair === "&&" || pair === "||") return pair;
     if (char === ";") return ";";
     if (char === "\n") return "a line break";
+    if (isBackgroundAmpersand(text, at)) return "&";
   }
   return null;
 }
+
+// A shell handed its commands as one quoted string, as `bash -c "a; b"` is, still runs each.
+const SHELL_SCRIPT =
+  /(?:^|[\s(|])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\w*\s+(["'])((?:\\.|(?!\1)[^\\])*)\1/g;
+
+/**
+ * The commands a call hands a shell to run as a string.
+ * @param {string} command
+ */
+const listShellScripts = (command) =>
+  [...command.matchAll(SHELL_SCRIPT)].map(([, , script]) => script);
 
 /**
  * Why a Bash command breaks the rule, or null when it keeps it.
  * @param {string} command
  */
 export function findCommandProblem(command) {
-  if (/^\s*cd(\s|$)/.test(command)) return `It starts with cd. ${RULE}`;
-  const separator = findSeparator(command);
+  if (/^[\s(]*cd(\s|\)|$)/.test(command)) return `It starts with cd. ${RULE}`;
+  const separator = [command, ...listShellScripts(command)].map(findSeparator).find(Boolean);
   return separator ? `It joins commands with ${separator}. ${RULE}` : null;
 }
 

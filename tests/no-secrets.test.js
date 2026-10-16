@@ -4,12 +4,16 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 // The repo is public, so nothing in it may name a real Worker, a page's key, the Cloudflare
-// account, or an API key. Tests and docs use placeholders: `example` or `example-subdomain` for
-// the Worker's subdomain, `k3y` or `<key>` for a page's key.
+// account, or a token or key. Tests and docs use placeholders: `example` or `example-subdomain`
+// for the account's workers.dev subdomain, `k3y` or `<key>` for a page's key, and a run of one
+// character, as "7".repeat(32) writes, for an account id or a token.
 
 const REPO_ROOT = `${import.meta.dirname}/..`;
 const BINARY_FILES = /\.(?:png|woff2)$/;
 const SUBDOMAIN_PLACEHOLDERS = new Set(["example", "example-subdomain", "<subdomain>"]);
+
+/** @param {string} text */
+const isOneCharacterRun = (text) => new Set(text).size === 1;
 
 /**
  * What each pattern finds, and whether a match is a placeholder.
@@ -22,12 +26,37 @@ const SECRETS = [
     isPlaceholder: (match) => SUBDOMAIN_PLACEHOLDERS.has(match[1]),
   },
   {
+    name: "an account's real workers.dev subdomain",
+    pattern: /(?<![\w.-])([a-z0-9-]+)\.workers\.dev\b/g,
+    isPlaceholder: (match) => SUBDOMAIN_PLACEHOLDERS.has(match[1]),
+  },
+  {
     name: "a page's key in its address",
     pattern: /workers\.dev\/([A-Za-z0-9_-]{16,})/g,
   },
   {
+    name: "a page's key",
+    pattern: /\bAPP_KEY\b["']?\s*[=:]\s*["'`]?([A-Za-z0-9_-]{16,})/g,
+    isPlaceholder: (match) => isOneCharacterRun(match[1]),
+  },
+  {
     name: "a Cloudflare account id",
     pattern: /accounts\/[0-9a-f]{32}\b/g,
+  },
+  {
+    // An id inside an address or a file's name, as a feed's links hold, is the feed's own.
+    name: "a Cloudflare account id",
+    pattern: /(?<![\w/.-])([0-9a-f]{32})(?![\w/.-])/g,
+    isPlaceholder: (match) => isOneCharacterRun(match[1]),
+  },
+  {
+    name: "a Cloudflare API token",
+    pattern: /\b(?:CLOUDFLARE_API_TOKEN\b["']?\s*[=:]\s*|Bearer\s+)["'`]?([A-Za-z0-9_-]{40})\b/g,
+    isPlaceholder: (match) => isOneCharacterRun(match[1]),
+  },
+  {
+    name: "a GitHub token",
+    pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,})\b/g,
   },
   {
     name: "an Anthropic API key",
@@ -76,5 +105,32 @@ test("the scan knows a real address from a placeholder", () => {
   assert.deepEqual(scan(`accounts/${"7".repeat(32)}/workers`), ["a Cloudflare account id"]);
   assert.deepEqual(scan(["sk", "ant", "api03", "a".repeat(20)].join("-")), [
     "an Anthropic API key",
+  ]);
+});
+
+test("the scan finds an account's own subdomain, a key, an id, and a token wherever they stand", () => {
+  const scan = (text) =>
+    SECRETS.flatMap(({ name, pattern, isPlaceholder }) =>
+      [...text.matchAll(pattern)].filter((match) => !isPlaceholder?.(match)).map(() => name),
+    );
+  const accountSubdomain = ["someone", "workers", "dev"].join(".");
+  assert.deepEqual(scan(`https://${accountSubdomain}/`), [
+    "an account's real workers.dev subdomain",
+  ]);
+  assert.deepEqual(scan("the example.workers.dev subdomain"), []);
+  const key = "a1B2".repeat(8);
+  assert.deepEqual(scan(`APP_KEY=${key}`), ["a page's key"]);
+  assert.deepEqual(scan(`{ "APP_KEY": "${key}" }`), ["a page's key"]);
+  assert.deepEqual(scan(`APP_KEY=${"k".repeat(32)} APP_KEY=k3y`), []);
+  const accountId = "0123456789abcdef".repeat(2);
+  assert.deepEqual(scan(`CLOUDFLARE_ACCOUNT_ID=${accountId}`), ["a Cloudflare account id"]);
+  assert.deepEqual(scan(`"${"7".repeat(32)}" and /feed/${accountId}.mp3 and ${accountId}-x`), []);
+  const token = "Ab3_".repeat(10);
+  assert.deepEqual(scan(`CLOUDFLARE_API_TOKEN=${token}`), ["a Cloudflare API token"]);
+  assert.deepEqual(scan(`authorization: Bearer ${token}`), ["a Cloudflare API token"]);
+  assert.deepEqual(scan(`Bearer ${"t".repeat(40)} and Bearer t0k`), []);
+  assert.deepEqual(scan(["ghp", "A1b2".repeat(9)].join("_")), ["a GitHub token"]);
+  assert.deepEqual(scan(["github", "pat", "11ABCDEFG0123456789abc", "xyz"].join("_")), [
+    "a GitHub token",
   ]);
 });
