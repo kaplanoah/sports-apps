@@ -265,7 +265,7 @@
   and settings and each setting (`page/js/search-pages.js`), whose settings pick any season the store keeps once it keeps more than one,
   whose page saves nothing to the store, lists each playoff final in an Updates box only on phones and tablets,
   and only for the current season, each keeping its own dismissal (`page/js/updates.js`),
-  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings (`page/js/appearance.js`, kept per device), in its own self-hosted fonts.
+  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings (the shared `appearance.js`, kept per device), in its own self-hosted fonts.
   Paths below are inside an app's folder, except `shared/` and the ones named as the root's.
 - Page:
   `page/`.
@@ -592,7 +592,18 @@
 ## Adding a league
 
 A new league is a new app.
-Copy the WNBA's: it's the newest, and every file below has a working example in `apps/wnba/`.
+Copy the WNBA's: it was built on the shared code from its start,
+while MLB still carries pieces from before it, and every file below has a working example in `apps/wnba/`.
+
+A league ships in parts.
+Its first PR holds what a fan opens the app for, by the steps below:
+the Worker and its store, the Games tab, the standings and bracket,
+each game's sheet with its box score, each team's sheet with its numbers,
+search, settings, the gate, the page's copy on the phone, both themes, and the beta channel.
+Each later PR adds one more of the WNBA's parts, copying it,
+like rosters and players' sheets, a final's Highlights, a game's preview and lead chart,
+the News tab and its notifications, or the Updates box,
+with its tests and its places in search.
 
 While a league is being built, a sandbox Worker may try its feeds from Cloudflare,
 since a league can answer Cloudflare differently than it answers a cloud session.
@@ -600,7 +611,9 @@ Name it `<app>-sandbox`, upload it from a scratch folder outside git with Cloudf
 and give it no page, store, key, or secret.
 Delete it once the app's first PR merges.
 
-1. **Worker config.** `apps/<app>/worker/wrangler.toml` names the Worker and binds the store, as the WNBA's does.
+1. **Worker config.** `apps/<app>/worker/wrangler.toml` names the Worker `<app>-app`,
+   binds the store and the gate's rate limit, and names the beta channel's Worker `<app>-app-beta` under `[env.beta]`,
+   as the WNBA's does, which the root's `tests/deploy.test.js` checks for every app.
    The tooling finds apps by this file, and `package.json`'s `#page-files/*` import,
    the lint, type, and dead code globs, and Playwright's projects all pick the new folder up from `apps/*`.
    Add `worker/page-files.mjs`, a one-line call to the root's `readPageFiles`.
@@ -618,19 +631,22 @@ Delete it once the app's first PR merges.
    `worker/src/index.js` builds the Worker with `createAppWorker` and exports the store's class.
 5. **The page.** `index.html` keeps the shared tab bar and settings markup, its element IDs, and the import map for `#shared/`.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
-   It links `shared/type.css`, `shared/chrome.css`, `shared/game-row.css`,
-   `shared/pager.css`, and `shared/day-strip.css` before its own `styles.css`,
-   which sets every token their top comments list, loads `shared/release-guard.js` first in its head and `shared/open-last-tab.js`,
-   `shared/show-last-drawn.js`, and `shared/slow-load.js` after its stylesheets,
-   marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
-   with `data-last-drawn`, keeps the empty `#loadNote` above its views,
+   It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
+   around its own `styles.css`, which sets every token their top comments list,
    and calls `openLastTab()`, `showLastDrawn()`, and `watchSlowLoad()` right after its views and sheets,
    in that order, so a part on the shown tab can take back its sideways scroll.
-   `gate.html` asks for the access code: copy the WNBA's, with the league's icon and colors,
-   which `styles.css` hands `shared/gate.css`, linked after `shared/type.css`, through the tokens its top comment lists.
-   `sw.js` sets `self.pageName` and imports `shared/service-worker-steps.js`, `shared/push-worker.js`, and `shared/offline-worker.js`, in that order.
-   Give it a manifest, icons, and an `apple-mobile-web-app-title` of the league's short name.
-   Choose the league's All-Star colors with the owner: each All-Star team's star takes its uniform's color,
+   Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
+   load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
+   It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
+   with `data-last-drawn`, and keeps the empty `#loadNote` above its views.
+   Give it a manifest, icons, and an `apple-mobile-web-app-title` of the league's short name,
+   which its manifest's `name` and `short_name` match.
+   Agree on the league's look with the owner from a mockup first: its fonts,
+   self-hosted in `page/fonts/`, with each type role's size and weight set in its `:root`, as "Repo" says,
+   and its light and dark themes, each a set of colors, the dark one under `:root[data-theme="dark"]`,
+   with an icon and a bar color of its own, which `page/js/looks.js` hands the shared `appearance.js`
+   for the page and, through `page/js/gate-theme.js`, for the gate.
+   Choose the league's All-Star colors with the owner too: each All-Star team's star takes its uniform's color,
    as the WNBA's orange West and white East do, its visitors orange and its home team white in a year of captains' teams,
    and MLB's American and National League colors do, through `renderAllStarMark` in `shared/page/all-star.js`,
    and `styles.css` sets the star's tokens that `game-row.css` lists from the league's own dot.
@@ -638,15 +654,30 @@ Delete it once the app's first PR merges.
    as "Writing" below says, and its search terms hand it to the shared search as `words`.
 6. **Tests.** Record a real afternoon of the league's feeds as a fixture in `tests/fixtures/`,
    and test the snapshot, the Worker, the season updater, and the page's views against it.
-   Browser tests in `tests/browser/` run the page against the real store, as the WNBA's harness does,
-   and its `release-check.spec.mjs` opens the page with the release check, as the WNBA's does.
-   Hand the deploy and the `Watch apps` workflow the page's secrets in `.github/workflows/deploy.yml` and `watch.yml`,
-   which the root's `tests/deploy.test.js` checks.
+   Copy each of the WNBA's tests of what the PR builds, since they run the shared checks:
+   its browser harness, which runs the page against the real store,
+   `page.spec.mjs`, `themes.spec.mjs`, and `role-looks.spec.mjs`,
+   which check every view for type roles, contrast, periods, words, taps, and theme layout,
+   the last two walking the views listed in `tests/browser/views.mjs`,
+   `at-rest.spec.mjs`, which runs in WebKit too,
+   and `release-check.spec.mjs`, `access.spec.mjs`, and `offline.spec.mjs`.
+   Its `tests/search.test.js` names each place in `COVERAGE`, as "Search finds every place" says,
+   and its `tests/search-typing.test.js` types every team, place, and player with the root's `tests/search-sweep.js`,
+   from a recorded list of the league's players.
+   Each sheet joins `sheet-stack.spec.mjs` and `sheet-reload.spec.mjs` in the PR that adds it.
+   Hand the deploy each channel's page secrets in `.github/workflows/deploy.yml`,
+   and the `Watch apps` workflow production's in `watch.yml`, which the root's `tests/deploy.test.js` checks.
 7. **Docs.** Add the app to the README's table and its setup section's list of apps, and to the "Apps" bullet above.
-8. **Ship it.** Open it as a `feat:` PR.
-   The app starts at version 1.0.0, and the merge's deploy creates its Worker,
-   which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app>` gives it a key and prints the page's address.
-   Ask the owner to add that address, and the page's code once it has one, as its secrets in the `production` environment,
+8. **Ship it.** Open it as a `feat:` PR, which starts the app at version 1.0.0.
+   Its page adds lines that give parts layers of their own, so it's a red change,
+   tried on the owner's phone from beta before it merges, as "Workflow" says.
+   Once its CI passes, push it to `beta`, whose deploy creates `<app>-app-beta`,
+   which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
+   Give the owner that address, and ask them to set its code with `npm run set-access-code -- <app> <code> --channel beta`,
+   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `production` environment's secrets,
+   add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
+   The merge's deploy then creates `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
+   and the owner adds its address and code as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
 
 ## Workflow

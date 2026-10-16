@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { listApps } from "../worker/apps.mjs";
 
 const loadDeployModule = () => import("../worker/deploy.mjs");
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123" };
@@ -86,7 +87,7 @@ test("the name and compatibility date come from wrangler.toml", async () => {
 
 test("the beta channel's Worker is named by its environment, with the top level's date", async () => {
   const { readAppWorkerConfig, readWorkerConfig } = await loadDeployModule();
-  for (const app of ["mlb", "wnba"])
+  for (const app of listApps())
     assert.deepEqual(readAppWorkerConfig(app, "beta"), {
       name: `${app}-app-beta`,
       compatibilityDate: "2026-09-01",
@@ -264,7 +265,7 @@ test("a migration already applied isn't sent again", async () => {
 
 test("each app's wrangler.toml declares the same bindings and migrations", async () => {
   const { MIGRATIONS } = await loadDeployModule();
-  for (const app of ["mlb", "wnba"]) {
+  for (const app of listApps()) {
     const toml = readFileSync(`${import.meta.dirname}/../apps/${app}/worker/wrangler.toml`, "utf8");
     assert.match(
       toml,
@@ -576,7 +577,6 @@ test("a new version passes once its Worker answers and its page draws, or has no
 });
 
 test("each deploy and each watch of the apps opens every app's page with its own secrets", async () => {
-  const { listApps } = await import("../worker/apps.mjs");
   const { nameAccessSecrets } = await import("../worker/check-page.mjs");
   const readWorkflow = (name) =>
     readFileSync(`${import.meta.dirname}/../.github/workflows/${name}`, "utf8");
