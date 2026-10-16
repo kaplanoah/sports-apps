@@ -189,15 +189,19 @@ export const orderListedDays = (days, isNewestFirst) =>
   isNewestFirst ? [...days].reverse() : days;
 
 /**
- * The day a new search places the list on: the first from today, or the last when every one is
- * past, or the first when rows sit over the games.
+ * Where a new search places the list, and the day it rests on, which the days drawn whole are
+ * around: at its top on its first day when rows sit over the games, on its first day from today,
+ * or at its end on its last day when every one is past.
  * @param {{ day: string }[]} days in the order the list shows them
  * @param {string} today
  * @param {boolean} isOverGames
+ * @returns {{ at: "top" | "day" | "end", day: string | null }}
  */
-export function findStartDay(days, today, isOverGames) {
-  if (isOverGames) return days[0]?.day ?? null;
-  return (days.find(({ day }) => day >= today) ?? days.at(-1))?.day ?? null;
+export function findListPlace(days, today, isOverGames) {
+  if (isOverGames) return { at: "top", day: days[0]?.day ?? null };
+  const ahead = days.find(({ day }) => day >= today);
+  if (ahead) return { at: "day", day: ahead.day };
+  return { at: "end", day: days.at(-1)?.day ?? null };
 }
 
 /**

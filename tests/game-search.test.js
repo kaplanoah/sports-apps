@@ -16,7 +16,11 @@ import {
   listOtherReadings,
   listSuggestions,
 } from "../shared/page/search-suggestions.js";
-import { findStartDay, listShownExamples, readTypedSearch } from "../shared/page/search-reading.js";
+import {
+  findListPlace,
+  listShownExamples,
+  readTypedSearch,
+} from "../shared/page/search-reading.js";
 import { isOneEditApart, normalizeText, readTokens } from "../shared/page/search-words.js";
 import { addDays } from "../shared/page/days.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "./time-zone.js";
@@ -603,12 +607,12 @@ test("before typing, the league's searches that find a game come first, then its
   assert.deepEqual(listShownExamples(context, null), listExamples(context));
 });
 
-test("a new search's list opens on its first day from today, or its last when all are past, or its first under rows", () => {
+test("a new search's list rests on its first day from today, at its end on its last when all are past, or at its top on its first under rows", () => {
   const days = [{ day: "2026-09-28" }, { day: "2026-10-02" }, { day: "2026-10-05" }];
-  assert.equal(findStartDay(days, "2026-09-30", false), "2026-10-02");
-  assert.equal(findStartDay(days, "2026-10-06", false), "2026-10-05");
-  assert.equal(findStartDay(days, "2026-09-30", true), "2026-09-28");
-  assert.equal(findStartDay([], "2026-09-30", false), null);
+  assert.deepEqual(findListPlace(days, "2026-09-30", false), { at: "day", day: "2026-10-02" });
+  assert.deepEqual(findListPlace(days, "2026-10-06", false), { at: "end", day: "2026-10-05" });
+  assert.deepEqual(findListPlace(days, "2026-09-30", true), { at: "top", day: "2026-09-28" });
+  assert.deepEqual(findListPlace([], "2026-09-30", false), { at: "end", day: null });
 });
 
 test("a last word still being typed is left out of the line, however it's typed, as a search reads it", () => {

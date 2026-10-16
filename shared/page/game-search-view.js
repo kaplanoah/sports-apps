@@ -20,7 +20,7 @@ import { openPageTab, readShownTab, readTabBefore, setTabEnter, setTabStart } fr
 import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
 import {
-  findStartDay,
+  findListPlace,
   listShownExamples,
   orderListedDays,
   readSentWords,
@@ -36,6 +36,7 @@ import {
 /** @typedef {import("./page-search.js").GamePart} GamePart */
 /** @typedef {import("./day-strip.js").ListedDay} ListedDay */
 /** @typedef {import("./search-reading.js").ShownRow} ShownRow */
+/** @typedef {ReturnType<typeof findListPlace>} ListPlace */
 /**
  * What a league hands its search.
  * @typedef {object} SearchLeague
@@ -420,22 +421,21 @@ const renderRead = ({ lead, facts }) => joinWithSeparator([html`<b>${lead}</b>`,
 const renderReadLine = (read) => (read ? renderRead(read) : html``);
 
 /**
- * Places the list on the first day found from today, with room after the last day for it to reach
- * the top, or, when every day found is past, or rows sit over the games, at its end or its top.
- * @param {string} today
- * @param {boolean} isOverGames
+ * Places the list where `findListPlace` says: on its day, with room after the last day for that
+ * day to reach the top, or at its top or its end.
+ * @param {ListPlace} place
  */
-function placeList(today, isOverGames) {
+function placeList({ at, day }) {
   const list = findList();
   if (!list) return;
-  const days = /** @type {HTMLElement[]} */ ([...list.querySelectorAll(".listed-day")]);
   const gap = Number.parseFloat(getComputedStyle(list).paddingTop) || 0;
-  const ahead = isOverGames ? null : days.find((each) => (each.dataset.day ?? "") >= today);
-  const last = days.at(-1);
-  const room = ahead && last ? list.clientHeight - last.offsetHeight - gap : 0;
+  const start = at === "day" && day ? findListedDay(day) : null;
+  const lastDay = listedDays.at(-1)?.day;
+  const last = lastDay ? findListedDay(lastDay) : null;
+  const room = start && last ? list.clientHeight - last.offsetHeight - gap : 0;
   list.style.setProperty("--end-room", `${Math.max(0, room)}px`);
-  if (ahead) list.scrollTop = Math.max(0, ahead.offsetTop - gap);
-  else list.scrollTop = isOverGames ? 0 : list.scrollHeight;
+  if (start) list.scrollTop = Math.max(0, start.offsetTop - gap);
+  else list.scrollTop = at === "top" ? 0 : list.scrollHeight;
   markStuck();
 }
 
@@ -471,7 +471,7 @@ function draw() {
     setHtml(readLine, html``);
     listedDays = [];
     setHtml(list, renderExamples(listShownExamples(context, pages)));
-    placeOnce({ text: "", isOverGames: false }, context.today);
+    placeOnce({ text: "", isOverGames: false }, findListPlace([], context.today, false));
     return;
   }
   const {
@@ -493,13 +493,14 @@ function draw() {
     games.length ? league.listDays(games, Date.now()) : [],
     isNewestFirst,
   );
-  keepListedDays(days, findStartDay(days, context.today, isOverGames), shown);
+  const place = findListPlace(days, context.today, isOverGames);
+  keepListedDays(days, place.day, shown);
   if (!isOverGames) {
     const gameList = days.length
       ? renderDays(days)
       : html`<p class="empty-note">${search && describeNoGames(search, context)}</p>`;
     setHtml(list, gameList);
-    showDays(shown, context.today);
+    showDays(shown, place);
     return;
   }
   setHtml(
@@ -510,18 +511,18 @@ function draw() {
       read && days.length > 0 && html`${renderGamesLine(read, readText)}${renderDays(days)}`
     }`,
   );
-  showDays(shown, context.today);
+  showDays(shown, place);
 }
 
 /**
  * Brings each day the list draws up to date, places a new search, and draws whole the days it put
  * near the screen.
  * @param {Shown} shown
- * @param {string} today
+ * @param {ListPlace} place
  */
-function showDays(shown, today) {
+function showDays(shown, place) {
   writeListedDays(listedDays);
-  placeOnce(shown, today);
+  placeOnce(shown, place);
   drawNearDays();
 }
 
@@ -536,12 +537,12 @@ const isPlacedFor = (shown) =>
  * Places the list once for each search and whether rows sit over its games, so a redraw, as each
  * minute, keeps where it's been scrolled.
  * @param {Shown} shown
- * @param {string} today
+ * @param {ListPlace} place
  */
-function placeOnce(shown, today) {
+function placeOnce(shown, place) {
   if (isPlacedFor(shown)) return;
   placedFor = shown;
-  placeList(today, shown.isOverGames);
+  placeList(place);
 }
 
 /**
