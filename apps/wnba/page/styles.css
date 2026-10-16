@@ -110,12 +110,13 @@
  * screen both lift off the page by a soft shadow. A bar held at the top of the page is the floor's
  * color, with a line under it only once something scrolls under it, never a fade.
  *
- * Buttons say what they do in sentence case, as capitals are only for labels and chips. The one
- * that's on, like the list a pill shows, is filled orange, inside a darker edge, and the rest are
- * raised and outlined, in ink, with any icon in orange, but for a pill's other names, which are
- * plain words, and a sheet's close and back buttons, which are just their orange icons. A switch
- * stays round, like the phone's own.
- * Each is --control-height tall, its words centered on their capitals.
+ * Buttons say what they do in sentence case, as capitals are only for labels and chips, and for the
+ * tabs a wide screen shows, which sit in one track of the divider's color, as a segmented control.
+ * The one that's on, like the list a pill shows or the open tab, is filled orange, inside a darker
+ * edge, and the rest are raised and outlined, in ink, with any icon in orange, but for a pill's
+ * other names and the other tabs, which are plain words, and a sheet's close and back buttons,
+ * which are just their orange icons. A switch stays round, like the phone's own.
+ * Each is --control-height tall, its words the setting role's, centered on their capitals.
  *
  * Text stops at 600.
  */
@@ -167,9 +168,10 @@
   --radius-card: 2px;
   --radius-chip: 2px;
   --radius-control: 3px;
+  --radius-tabs: 3px;
   --radius-sheet: 14px;
-  --control-height: 30px;
-  --control-room: 13px;
+  --control-height: 36px;
+  --control-room: 15px;
   --scoreboard: #24180e;
   --led: #f84434;
   --led-dim: #e8291c;
@@ -240,6 +242,11 @@
   --header-gap: 14px;
   --pager-label: var(--ink);
   --pager-chosen-edge: color-mix(in srgb, var(--action) 70%, var(--shadow-ink));
+  --tabs-track: var(--divider);
+  --tabs-track-edge: var(--edge);
+  --tabs-chosen: var(--action);
+  --tabs-chosen-edge: var(--pager-chosen-edge);
+  --tabs-chosen-ink: var(--action-ink);
   --strip-month: var(--structure);
   --strip-today: var(--now);
   --strip-chosen: var(--action);
@@ -368,15 +375,6 @@ header.top h1 .title-letter:nth-child(2) {
 }
 header.top h1 .title-letter:nth-child(3) {
   margin-right: calc(0.065em - var(--title-tracking));
-}
-/* On a wide screen, the tabs that aren't open read as buttons, with a firmer outline and darker
-   text than the shared chrome gives them. Phones keep their floating tab bar. */
-@media (min-width: 780px) {
-  .tab-list button:not(.active),
-  nav.tabs .search-tab:not(.active) {
-    border-color: color-mix(in srgb, var(--card-border), var(--ink) 35%);
-    color: color-mix(in srgb, var(--ink-dim), var(--ink) 60%);
-  }
 }
 .head-right {
   display: flex;
@@ -1911,10 +1909,8 @@ th[aria-sort="ascending"] .roster-caret {
   font-weight: calc(var(--type-body-weight) + 200);
 }
 
-/* A pill's names are buttons, so they're in sentence case at a button's weight and height, their
-   words a pixel above center on their capitals, where they look centered in the fill. The pill sits
-   a little closer under the header than a view's first card, as the control it is, with the bar's
-   reach up under the status bar kept inside it. */
+/* The pill sits a little closer under the header than a view's first card, as the control it is,
+   with the bar's reach up under the status bar kept inside it. */
 section.bracket-standings.active {
   display: flow-root;
   margin-top: calc(10px - var(--header-gap));
@@ -1922,19 +1918,22 @@ section.bracket-standings.active {
 .pager-bar {
   padding-bottom: 9px;
 }
-.pager-tabs button {
-  height: var(--control-height);
-  padding: 0 var(--control-room) 2px;
-  align-content: center;
-  text-box: trim-both cap alphabetic;
-}
-/* Every button's words, a pill's names and the gate's Open alike. */
+/* Every button's words, from a wide screen's tabs to the gate's Open, in sentence case but for the
+   tabs. */
+.tab-list button,
+nav.tabs .search-tab,
 .pager-tabs button,
+.read-button,
+.retry-button,
 .open-button {
-  font-size: var(--type-detail-size);
-  font-weight: calc(var(--type-detail-weight) + 100);
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
   letter-spacing: 0.01em;
-  text-transform: none;
+}
+.tab-list button,
+nav.tabs .search-tab {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 /* Standings: one table at a phone's width for the league and each conference, one under another,
@@ -2368,8 +2367,6 @@ table.standings tr.playoff-line + tr td {
   padding: 0 calc(var(--control-room) - 5.5px) 0 var(--control-room);
   background: var(--raised);
   box-shadow: inset 0 0 0 1px var(--edge);
-  font-size: var(--type-detail-size);
-  font-weight: calc(var(--type-detail-weight) + 100);
   color: var(--ink);
 }
 .read-arrow {
@@ -2389,11 +2386,6 @@ table.standings tr.playoff-line + tr td {
   background: var(--raised);
   box-shadow: inset 0 0 0 1px var(--edge);
   color: var(--ink);
-  font-size: var(--type-detail-size);
-  font-weight: calc(var(--type-detail-weight) + 100);
-}
-.retry-button span {
-  text-box: trim-both cap alphabetic;
 }
 .retry-button .retry-icon {
   width: 16px;
@@ -2415,34 +2407,6 @@ table.standings tr.playoff-line + tr td {
 }
 .retry-block .retry-title {
   font-weight: calc(var(--type-detail-weight) + 100);
-}
-
-/* On a wide screen, Walnut's selected tab reads a step heavier on its bright orange. Each tab's
-   label keeps room for itself at both weights, in hidden copies under it, in both themes, so
-   choosing a tab never changes its width and the tabs lay out the same in each. */
-@media (min-width: 780px) {
-  :root[data-theme="dark"] .tab-list button.active,
-  :root[data-theme="dark"] nav.tabs .search-tab.active {
-    font-weight: 500;
-  }
-  /* Its hidden copies come first and last, so the label lines up by its top, not their baselines. */
-  .tab-label {
-    display: inline-grid;
-    vertical-align: top;
-  }
-  .tab-label::before,
-  .tab-label::after {
-    content: attr(data-label);
-    height: 0;
-    overflow: hidden;
-    visibility: hidden;
-  }
-  .tab-label::before {
-    font-weight: 400;
-  }
-  .tab-label::after {
-    font-weight: 500;
-  }
 }
 
 /* The Home Screen bar and box show the icon the theme showing would give the Home Screen. */

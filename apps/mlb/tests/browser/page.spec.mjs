@@ -9,7 +9,9 @@ import {
   PLAYER_DOCS,
   RECORDED_HIGHLIGHTS,
   ROSTER_DOCS,
+  readColor,
 } from "./harness.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -182,6 +184,37 @@ test("the page shows the tab it was last on before its modules have loaded", asy
   await expect(tab).toHaveClass(/\bactive\b/);
   await expect(page.locator("#view-games")).toHaveCSS("display", "flex");
   await expect(page.locator("#view-bracket-standings")).toHaveCSS("display", "none");
+});
+
+test("on a wide screen, the tabs are one segmented control, each as tall as a pill's names in a track of the divider's color just around them, the open one raised in the card's color, and every name centered on its capitals", async ({
+  page,
+}) => {
+  await openApp(page);
+  const track = page.locator("nav.tabs");
+  const pillName = findSeasonPill(page).getByRole("tab").first();
+  await page.evaluate(() => document.fonts.ready);
+  const pillHeight = /** @type {{ height: number }} */ (await pillName.boundingBox()).height;
+  expect(pillHeight).toBe(36);
+  expect(/** @type {{ height: number }} */ (await track.boundingBox()).height).toBe(pillHeight + 4);
+  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme });
+    await expect(track).toHaveCSS("background-color", await readColor(page, "--divider"));
+    const chosen = page.locator("nav.tabs [role=tab][aria-selected=true]");
+    await expect(chosen).toHaveCSS("background-color", await readColor(page, "--card"));
+    await expect(chosen).toHaveCSS(
+      "box-shadow",
+      `${await readColor(page, "--card-border")} 0px 0px 0px 1px inset`,
+    );
+    for (const other of await page.locator("nav.tabs [role=tab][aria-selected=false]").all()) {
+      await expect(other).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(other).toHaveCSS("color", await readColor(page, "--ink"));
+    }
+  }
+  for (const name of [...(await track.getByRole("tab").all()), pillName]) {
+    const box = /** @type {{ y: number, height: number }} */ (await name.boundingBox());
+    expect(box.height).toBe(pillHeight);
+    expect((await readCapitals(name)).middle - (box.y + box.height / 2)).toBeCloseTo(0, 0);
+  }
 });
 
 test("a tap shows only the page's own states: no gray flash, and no hover left behind", async ({

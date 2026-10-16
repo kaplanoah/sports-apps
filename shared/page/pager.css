@@ -11,7 +11,8 @@
  *   --held-bar-fade        how far the page's color fades out under the pill's bar while it's held
  *                          at the top, or 0px for a bar that ends sharply
  *   --held-bar-line        the line under the held bar, or transparent for none
- * and chrome.css's --radius-control for each name's corners.
+ * and chrome.css's --radius-control for each name's corners, and --control-height and
+ * --control-room for its size. An app's styles.css sets the names' words as its other buttons'.
  */
 
 /* A season's standings and bracket under one pill, as wide as the view. Its bar reaches past the
@@ -89,16 +90,15 @@
 }
 .pager-tabs button {
   font: inherit;
-  font-size: var(--type-label-size);
-  font-weight: calc(var(--type-label-weight) - 100);
-  text-transform: uppercase;
-  letter-spacing: var(--type-label-tracking);
+  height: var(--control-height);
   border: 0;
   border-radius: var(--radius-control);
   background-color: transparent;
   box-shadow: inset 0 0 0 1px transparent;
   color: var(--pager-label);
-  padding: 8px 14px;
+  padding: 0 var(--control-room);
+  align-content: center;
+  text-box: trim-both cap alphabetic;
   cursor: pointer;
 }
 .pager-tabs button[aria-selected="true"] {

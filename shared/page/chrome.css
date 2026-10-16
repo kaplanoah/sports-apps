@@ -13,13 +13,19 @@
  *   --sheet-shadow                             their shadow on wide screens, or none
  *   --ink, --ink-mid, --ink-dim                text, from brightest to dimmest
  *   --ink-hover                                text under a mouse, the one change a hover makes
- *   --accent, --accent-ink                     the selected tab and a switch that is on, and text on it
+ *   --accent, --accent-ink                     a sheet's close and back buttons, a switch that is on,
+ *                                              and the Home Screen bar's button, and text on it
  *   --focus-ring                               the keyboard focus ring
  *   --radius-card                              a card's corners, like the Updates box's
  *   --radius-chip                              a chip's corners, like a status beside a title
  *   --radius-control                           a button's or a field's corners
+ *   --radius-tabs                              the corners of a wide screen's track of tabs
  *   --radius-sheet                             a sheet's corners, and the settings dialog's, on wide
  *                                              screens; on phones they fill the screen
+ *   --control-height, --control-room           a button's height, and the room beside its words
+ *   --tabs-track, --tabs-track-edge            a wide screen's track of tabs, and the line inside it
+ *   --tabs-chosen, --tabs-chosen-edge          the open tab's fill, and the line inside it
+ *   --tabs-chosen-ink                          the open tab's words
  *   --switch-knob                              a switch's knob, one light color in every theme, as the
  *                                              phone keeps its own
  *   --select-arrow                             a url() of a select field's down arrow, in --ink-dim, if
@@ -79,18 +85,13 @@
 
 nav.tabs {
   display: flex;
-  gap: 8px;
   margin-bottom: 28px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 .tab-bar {
   display: contents;
 }
 .tab-list {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 .tab-backing,
 .tab-pill,
@@ -104,26 +105,39 @@ nav.tabs {
   display: contents;
 }
 /* Only the tabs themselves, and search, a tab beside them: the tabs' row can hold other buttons
-   too. */
+   too. An app's styles.css sets their words as its other buttons'. */
 .tab-list button,
 nav.tabs .search-tab {
   font: inherit;
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: none;
-  border: 1px solid var(--card-border);
-  color: var(--ink-dim);
-  padding: 6px 18px;
-  border-radius: var(--radius-control);
   cursor: pointer;
 }
-.tab-list button.active,
-nav.tabs .search-tab.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+/* On a wide screen, the tabs are one segmented control: each as tall as any other button, in a
+   track just around them, the open one filled. */
+@media (min-width: 780px) {
+  nav.tabs {
+    width: max-content;
+    padding: 2px;
+    border-radius: var(--radius-tabs);
+    background: var(--tabs-track);
+    box-shadow: inset 0 0 0 1px var(--tabs-track-edge);
+  }
+  .tab-list button,
+  nav.tabs .search-tab {
+    height: var(--control-height);
+    padding: 0 var(--control-room);
+    border: 0;
+    border-radius: var(--radius-control);
+    background: none;
+    color: var(--ink);
+    align-content: center;
+    text-box: trim-both cap alphabetic;
+  }
+  .tab-list button.active,
+  nav.tabs .search-tab.active {
+    background: var(--tabs-chosen);
+    box-shadow: inset 0 0 0 1px var(--tabs-chosen-edge);
+    color: var(--tabs-chosen-ink);
+  }
 }
 
 /* A sideways bracket's round dots, as round-dots.js draws them, sit under it. */
@@ -890,8 +904,6 @@ body:has(> .home-screen-bar:not([hidden])) {
     position: absolute;
     z-index: 1;
     inset: 0;
-    flex-wrap: nowrap;
-    gap: 0;
     padding: 5px 9px;
     touch-action: none;
     user-select: none;
