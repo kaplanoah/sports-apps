@@ -19,3 +19,20 @@ test("the welcome is kept closed under one key wherever it's read or written", (
     drawn,
   );
 });
+
+// For the same reason, the plain script makes device.js's tests of the device itself.
+test("the welcome tells a phone, its Home Screen, and an iPhone or iPad as device.js does", () => {
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  const drawing = read("shared/page/draw-home-screen-asks.js");
+  const device = read("shared/page/device.js");
+  for (const check of [
+    '"(hover: none) and (pointer: coarse)"',
+    '"(display-mode: standalone)"',
+    ".standalone",
+    "/iPhone|iPad|iPod/.test(navigator.userAgent)",
+    'navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1',
+  ]) {
+    assert.ok(device.includes(check), `device.js: ${check}`);
+    assert.ok(drawing.includes(check), `draw-home-screen-asks.js: ${check}`);
+  }
+});
