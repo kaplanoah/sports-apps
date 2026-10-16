@@ -10,6 +10,7 @@ import {
   RECORDED_HIGHLIGHTS,
   ROSTER_DOCS,
 } from "./harness.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // Highlights for a final on the evening's slate, Brewers at Phillies, as MLB cut them for another.
 const SEP_23_HIGHLIGHTS = {
@@ -43,7 +44,7 @@ const NEWS_DOCS = {
  * @param {string} club
  */
 async function openRoster(page, club) {
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator(`.div-grid tr[data-team="${club}"] .team-open`).click();
   await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
 }
@@ -77,7 +78,7 @@ export const VIEW_GROUPS = {
   "the page's tabs": [
     {
       name: "Bracket",
-      open: (page) => page.getByRole("tab", { name: "Bracket" }).click(),
+      open: (page) => openSeasonPart(page, "Bracket"),
       shown: (page) => page.locator("#bracketWrap .card-note").first(),
     },
     {
@@ -103,7 +104,7 @@ export const VIEW_GROUPS = {
     },
     {
       name: "Standings",
-      open: (page) => page.getByRole("tab", { name: "Standings" }).click(),
+      open: (page) => openSeasonPart(page, "Standings"),
       shown: (page) => page.locator("table.st tbody tr").first(),
     },
     {
@@ -155,7 +156,7 @@ export const VIEW_GROUPS = {
     {
       name: "a club's sheet",
       open: async (page) => {
-        await page.getByRole("tab", { name: "Standings" }).click();
+        await openSeasonPart(page, "Standings");
         await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
       },
       shown: (page) => page.locator("#teamSheet .leader-stat").first(),

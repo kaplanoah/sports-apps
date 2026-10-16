@@ -2,6 +2,7 @@ import {
   test,
   expect,
   openApp,
+  openBracket,
   buildFixtureSnapshot,
   chooseSeason,
   EVENING_FIXTURE,
@@ -64,7 +65,7 @@ test("once a series' first game starts, both clubs' scores show 0, at the height
 }) => {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   snapshot.series.AL_WC1.started = true;
-  await openApp(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
+  await openBracket(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
   const scores = page.locator("#bracketWrap .nscore");
   const started = page
     .locator("#bracketWrap .series")
@@ -135,7 +136,7 @@ for (const width of [360, 390]) {
     test.use({ viewport: { width, height: 844 }, hasTouch: true, isMobile: true });
 
     test("every card's next game fits on one line under it", async ({ page }) => {
-      await openApp(page);
+      await openBracket(page);
       const notes = page.locator("#bracketWrap .card-note");
       await expect(notes.first()).toBeVisible();
       const lineCounts = await notes.evaluateAll((elements) =>
@@ -182,7 +183,7 @@ test("under a card whose game is under way, the score, inning, and outs show ins
       delay: "Delayed: Rain",
     },
   );
-  await openApp(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
+  await openBracket(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
   const notes = page.locator("#bracketWrap .card-note");
 
   const batting = notes.filter({ hasText: /^3-2 Top 4th$/ });
@@ -238,7 +239,7 @@ test("in the half hour before first pitch, a card counts down the minutes on the
 });
 
 test("redrawing the bracket each minute keeps keyboard focus on it", async ({ page }) => {
-  await openApp(page);
+  await openBracket(page);
   const bracket = page.getByRole("region", { name: "Bracket" });
   await bracket.focus();
 
@@ -250,7 +251,7 @@ test("on a wide screen, the AL and NL face each other across the World Series", 
   page,
 }) => {
   await page.setViewportSize(WIDE_SCREEN);
-  await openApp(page);
+  await openBracket(page);
   const bracket = page.locator("#bracketWrap");
   const championships = bracket.locator(".box").filter({ hasText: "Championship Series" });
   await expect(championships).toHaveCount(2);
@@ -277,7 +278,7 @@ test("on a wide screen, the AL and NL face each other across the World Series", 
 
 test("on a wide screen, each league's seed labels sit on its outer side", async ({ page }) => {
   await page.setViewportSize(WIDE_SCREEN);
-  await openApp(page);
+  await openBracket(page);
   const bracket = page.locator("#bracketWrap");
   const findOuterGap = async (index) => {
     const wildCard = bracket.locator('.box[data-round="WC"]').nth(index);
@@ -298,7 +299,7 @@ test("on a wide screen, a centered league bar spans each league's three columns 
   page,
 }) => {
   await page.setViewportSize(WIDE_SCREEN);
-  await openApp(page);
+  await openBracket(page);
   const bracket = page.locator("#bracketWrap");
   const findBox = (round, index) =>
     bracket.locator(".box").filter({ hasText: round }).nth(index).boundingBox();

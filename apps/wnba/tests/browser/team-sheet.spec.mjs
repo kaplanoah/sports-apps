@@ -3,6 +3,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -17,7 +18,7 @@ test.describe("on a phone, a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator("table.players")).toBeVisible();
@@ -75,7 +76,7 @@ test.describe("a team's sheet in each theme", () => {
     }) => {
       await page.emulateMedia({ colorScheme });
       await openApp(page);
-      await page.getByRole("tab", { name: "Standings" }).click();
+      await openSeasonPart(page, "Standings");
       await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
       const titles = page.locator("#teamSheet .team-titles");
       await expect(titles).toHaveText("None yet");
@@ -108,7 +109,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     const app = await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="LVA"] .team-open').click();
     const sheet = page.locator("#teamSheet");
 
@@ -129,7 +130,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator("table.players")).toBeVisible();
@@ -161,7 +162,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
     const next = page.locator("#teamSheet .team-game.next");
     const icon = next.locator(".next-game-icon");
@@ -178,7 +179,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     const rows = await sheet
@@ -202,7 +203,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const club = page.locator("#teamSheet .team-numbers .tape-teams .club").first();
     const record = club.locator(".team-record");
@@ -229,7 +230,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     const numbers = await sheet.locator(".team-ranks").last().boundingBox();
@@ -246,7 +247,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator(".team-ranks .player-curve svg").first()).toBeVisible();
@@ -294,7 +295,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator(".placed-legend")).toHaveText(
@@ -332,7 +333,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const name = page
       .locator('#standings-league tr[data-team="LVA"] .team-open')
       .locator(".team-name");
@@ -361,7 +362,7 @@ test.describe("a team's sheet", () => {
 
   test("a team's name in the standings opens its sheet from the keyboard", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const fever = page.locator("#standings-league").getByRole("button", {
       name: "Team details: Indiana Fever",
     });
@@ -375,7 +376,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const aces = page.locator("#standings-league").getByRole("button", {
       name: "Team details: Las Vegas Aces",
     });
@@ -390,7 +391,7 @@ test("a team's leading scorers set their shooting and minutes a step back, a sma
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
   const quiet = page
     .locator("#teamSheet table.players tbody tr:not(.players-head)")
@@ -438,7 +439,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const sheet = page.locator("#teamSheet");
     for (const code of ["LVA", "LAS", "CON", "CHI"]) {
       await page.locator(`#standings-league tr[data-team="${code}"] .team-open`).click();

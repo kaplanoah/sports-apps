@@ -1,6 +1,7 @@
 import { test, expect, openApp, openLockedApp } from "./harness.mjs";
 import { ON_A_PHONE } from "./search-page.mjs";
 import { checkEachView, openWithNews } from "./views.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" }, viewport: { width: 390, height: 844 } });
@@ -53,6 +54,7 @@ const OTHER_PLACES = [
     open: async (page) => {
       const app = await openApp(page);
       await app.changeSeason((season) => ({ ...season, series: [] }));
+      await openSeasonPart(page, "Bracket");
     },
     shown: (page) => page.getByRole("heading", { name: "No playoff field yet" }),
   },

@@ -5,7 +5,7 @@ import { html } from "#shared/html.js";
 import { fillStamp, renderStampLine, renderStampWhen } from "#shared/stamp.js";
 import { readRanking } from "./kept-on-device.js";
 import { findStandingsRow } from "./race.js";
-import { session } from "./session.js";
+import { isFieldSet, session } from "./session.js";
 import { formatStampName, describeLastStamp, describeUpNextGame } from "./stamp.js";
 
 function isAliveInStandings(id) {
@@ -26,7 +26,7 @@ function describeSeriesAfter(game) {
 }
 
 function buildStampContext() {
-  const projected = !session.state || session.state.projected !== false;
+  const projected = !isFieldSet();
   const isAliveInBracket = (id) =>
     !!(session.state.teams && session.state.teams[id]) && !isEliminated(session.state, id);
   return {

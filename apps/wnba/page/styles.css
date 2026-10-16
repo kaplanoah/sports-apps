@@ -976,11 +976,6 @@ header.top h1 .title-letter:nth-child(3) {
   font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
-.game-sheet .sheet-head h2 {
-  font-size: var(--type-heading-size);
-  font-weight: var(--type-heading-weight);
-  letter-spacing: var(--type-heading-tracking);
-}
 .faceoff-score {
   grid-area: score;
   display: grid;
@@ -1621,11 +1616,11 @@ th[aria-sort="ascending"] .roster-caret {
   display: grid;
   grid-template-columns: repeat(3, var(--round-width));
   grid-template-rows:
-    auto 14px auto var(--card-gap) auto var(--card-gap) auto var(--card-gap)
+    auto 16px auto var(--card-gap) auto var(--card-gap) auto var(--card-gap)
     auto;
   column-gap: var(--round-gap);
   margin-inline: calc(-1 * var(--page-gutter));
-  padding: 2px calc((100cqw - var(--round-width)) / 2 + var(--page-gutter)) 20px
+  padding: 10px calc((100cqw - var(--round-width)) / 2 + var(--page-gutter)) 20px
     calc(var(--page-gutter) + var(--seed-room));
   scroll-padding-inline: var(--page-gutter);
   overflow-x: auto;
@@ -1920,7 +1915,7 @@ th[aria-sort="ascending"] .roster-caret {
    words a pixel above center on their capitals, where they look centered in the fill. The pill sits
    a little closer under the header than a view's first card, as the control it is, with the bar's
    reach up under the status bar kept inside it. */
-.pager {
+section.bracket-standings.active {
   display: flow-root;
   margin-top: calc(10px - var(--header-gap));
 }
@@ -1942,11 +1937,32 @@ th[aria-sort="ascending"] .roster-caret {
   text-transform: none;
 }
 
-/* Standings: one table at a phone's width for the league and each conference, side by side under
-   a pill like the Games view's. W-L and GB lead as the season; L10 and Strk follow as recent
-   form, until the playoffs' first round and where each team's run stands take their place. The
-   column names sit on the page, like a day's date beside its games, and the teams on one card. */
+/* Standings: one table at a phone's width for the league and each conference, one under another,
+   each named in its team column's head, where its teams' names start, in the teal of the column
+   groups above it. W-L and GB lead as the season; L10 and Strk follow as recent form, until the
+   playoffs' first round and where each team's run stands take their place. The column names sit on
+   the page, like a day's date beside its games, and the teams on one card. */
+#standingsWrap {
+  max-width: 560px;
+  padding-top: 3.5px;
+}
+/* Each table lays out in a grid, where its clip's max-content fits the table to the list's width.
+   A table wider than the room reaches into the gutter and is cut off at the screen's edge, rather
+   than scrolling the page sideways. */
+.standings-list {
+  display: grid;
+  margin-right: calc(-1 * var(--page-gutter));
+  padding-right: var(--page-gutter);
+  overflow-x: clip;
+}
+.standings-list + .standings-list {
+  margin-top: 30px;
+}
+/* The gaps before each column, before the second of a pair, and before the playoffs. */
 table.standings {
+  --column-gap: 12px;
+  --pair-gap: 16px;
+  --group-gap: 21px;
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
@@ -1954,7 +1970,7 @@ table.standings {
   font-weight: var(--type-detail-weight);
 }
 table.standings th {
-  padding: 0 0 6px 12px;
+  padding: 0 0 6px var(--column-gap);
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
@@ -1970,8 +1986,13 @@ table.standings tr.groups th {
   letter-spacing: var(--type-label-tracking);
   color: var(--structure);
 }
+table.standings th.list-title {
+  padding-left: 0;
+  text-align: left;
+  color: var(--structure);
+}
 table.standings td {
-  padding: 10px 0 10px 12px;
+  padding: 10px 0 10px var(--column-gap);
   border-top: 1px solid var(--divider);
   background: var(--raised);
   text-align: center;
@@ -2024,10 +2045,18 @@ table.standings th:last-child {
   padding-right: 11px;
 }
 table.standings .pair-end {
-  padding-left: 16px;
+  padding-left: var(--pair-gap);
 }
 table.standings .recent-start {
-  padding-left: 21px;
+  padding-left: var(--group-gap);
+}
+/* On a phone narrower than 390px, the gaps close so every table ends inside the screen. */
+@media (max-width: 389px) {
+  table.standings {
+    --column-gap: 8px;
+    --pair-gap: 11px;
+    --group-gap: 14px;
+  }
 }
 table.standings td.season {
   font-size: var(--type-detail-size);
@@ -2102,11 +2131,9 @@ table.standings tr.playoff-line + tr td {
    name and its parts under teal titles. A team's name or dot opens it wherever it shows, and in
    the standings and the bracket so does the rest of its row. */
 @media (hover: hover) {
-  table.standings tr[data-team]:hover td {
-    background: color-mix(in srgb, var(--ink) 5%, var(--raised));
-  }
-  .team-line[data-team]:hover {
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  table.standings tr[data-team]:hover :is(.team-open, .team-name),
+  .team-line[data-team]:hover :is(.team-open, .team-name) {
+    color: var(--ink-hover);
   }
 }
 .sheet-head h2.team-title {

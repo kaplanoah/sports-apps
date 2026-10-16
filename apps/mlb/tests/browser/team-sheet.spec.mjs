@@ -2,6 +2,7 @@ import {
   test,
   expect,
   openApp,
+  openBracket,
   openSettings,
   buildFixtureSnapshot,
   buildSnapshotWithStarters,
@@ -24,6 +25,7 @@ import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
+import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -114,7 +116,7 @@ test.describe("on a phone", () => {
   }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const clubs = await page
       .locator(".div-grid tr[data-team]")
       .evaluateAll((rows) =>
@@ -175,7 +177,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const row = page.locator('.div-grid tr[data-team="SEA"]');
     await row.scrollIntoViewIfNeeded();
     const spots = await row.locator("td").evaluateAll((cells) =>
@@ -223,7 +225,7 @@ test("a club's row in the standings opens its sheet, with its nearest games, rac
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('.div-grid tr[data-team="SEA"] .team-open').click();
   const sheet = page.locator("#teamSheet");
 
@@ -243,7 +245,7 @@ test("a club's row in the standings opens its sheet, with its nearest games, rac
 });
 
 test("a club in the bracket opens its sheet", async ({ page }) => {
-  await openApp(page);
+  await openBracket(page);
   const club = page.locator("#bracketWrap .team-id .team-open").first();
   const name = await club.locator(".team-name").textContent();
   await club.click();
@@ -299,7 +301,7 @@ test("a club's sheet title is its dot and name with its city, and no rank tag, i
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('.div-grid tr[data-team="SEA"] .team-open').click();
   const title = page.locator("#teamSheet #teamTitle");
 
@@ -318,21 +320,21 @@ test("a club's sheet title is its dot and name with its city, and no rank tag, i
   );
 });
 
-test("a page last left on the Teams tab, which it no longer has, opens on the bracket", async ({
+test("a page last left on the Teams tab, which it no longer has, opens on its first tab", async ({
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem("lastTab", "reference"));
   await openApp(page);
 
-  await expect(page.getByRole("tab", { name: "Bracket" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("#view-bracket")).toBeVisible();
+  await expect(findSeasonTab(page)).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#view-bracket-standings")).toBeVisible();
 });
 
 test("a club's name under the pointer shifts its color a little toward the accent, with no underline", async ({
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const name = page.locator('.div-grid tr[data-team="SEA"] .team-open').locator(".team-name");
   const readNameColor = () => name.evaluate((element) => getComputedStyle(element).color);
   const before = await readNameColor();
@@ -349,7 +351,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await openApp(page, { snapshots: { 2026: buildSnapshotWithStarters() } });
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('.div-grid tr[data-team="HOU"] .team-open').click();
     const teamSheet = page.locator("#teamSheet");
     await expect(teamSheet.locator(".game-card h3")).toHaveText(["Last game", "Next game"]);
@@ -384,7 +386,7 @@ test.describe("on a phone", () => {
  */
 async function openClub(page, club, { store = ROSTER_DOCS } = {}) {
   await openApp(page, { store });
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator(`.div-grid tr[data-team="${club}"] .team-open`).click();
   return page.locator("#teamSheet");
 }
@@ -439,7 +441,7 @@ test("a reload shows the open roster as it was while the page reads it again", a
 test("a past season's club says rosters show for the current season only", async ({ page }) => {
   await openApp(page, { store: { ...ROSTER_DOCS, "seasons/2025": SEASON_2025 } });
   await chooseSeason(page, "2025");
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
   const sheet = page.locator("#teamSheet");
   await sheet.getByRole("tab", { name: "Roster" }).click();
@@ -453,7 +455,7 @@ test("a past season's club says rosters show for the current season only", async
  */
 async function openRoster(page, club) {
   await openApp(page, { store: { ...ROSTER_DOCS, ...PLAYER_DOCS }, pitchers: PITCHER_SIDES });
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator(`.div-grid tr[data-team="${club}"] .team-open`).click();
   const sheet = page.locator("#teamSheet");
   await sheet.getByRole("tab", { name: "Roster" }).click();
@@ -561,7 +563,7 @@ test("a roster that didn't load says so over Try again, and reads again as the p
 }) => {
   await openApp(page, { store: { ...ROSTER_DOCS, ...PLAYER_DOCS }, pitchers: PITCHER_SIDES });
   const answer = await failStoreReads(page, "/store/rosters/CLE");
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
   const sheet = page.locator("#teamSheet");
   await sheet.getByRole("tab", { name: "Roster" }).click();
@@ -586,7 +588,7 @@ test("a club's leaders show under its season once its roster is read, and a tap 
   page,
 }) => {
   await openApp(page, { store: { ...ROSTER_DOCS, ...PLAYER_DOCS }, pitchers: PITCHER_SIDES });
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('.div-grid tr[data-team="LAD"] .team-open').click();
   const sheet = page.locator("#teamSheet");
   const leaders = sheet.locator(".leaders");
@@ -636,7 +638,7 @@ test("a club's playoff lines run dashed past the regular season's range, each a 
       row.ra = Math.round((5.45 - index / 20) * games);
     });
   await openApp(page, { now: BROADCASTS_FIXTURE.now, snapshots: { 2026: snapshot } });
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('.div-grid tr[data-team="NYY"] .team-open').click();
   const sheet = page.locator("#teamSheet");
   await expect(sheet.locator(".placed-legend")).toHaveText(

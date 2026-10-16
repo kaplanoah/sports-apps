@@ -1,10 +1,11 @@
+import { showSeasonPhase } from "#shared/bracket-standings.js";
 import { chooseTitleYear, showTitleYear } from "#shared/title-year.js";
 import { buildBracket } from "./bracket.js";
 import { renderBracket } from "./bracket-view.js";
 import { refreshGameSheet } from "./game-sheet.js";
 import { renderGames } from "./games-view.js";
 import { renderRanking } from "./ranking.js";
-import { session } from "./session.js";
+import { isFieldSet, session } from "./session.js";
 import { renderStamp } from "./stamp-view.js";
 import { renderStandings } from "./standings.js";
 import { refreshGameSearch } from "#shared/game-search-view.js";
@@ -25,6 +26,7 @@ function renderTitleYear() {
 }
 
 export function renderAll() {
+  showSeasonPhase(isFieldSet());
   renderStamp();
   renderUpdates();
   renderBracket();

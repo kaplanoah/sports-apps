@@ -26,7 +26,7 @@ const RED_FILES = new Set(
     "sheet-swipe.js",
     "sheet-sections.js",
     "side-swipe.js",
-    "pager.js",
+    "bracket-standings.js",
     "pager.css",
     "pill-thumb.js",
     "tab-bar.js",

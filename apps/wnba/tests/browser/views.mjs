@@ -1,4 +1,5 @@
 import { expect, openApp, openGameSheet, keepHighlights } from "./harness.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // A week of news with a card of each shape: one with a photo and stories under its lead, and one
 // with neither.
@@ -23,7 +24,7 @@ const FINAL_WITH_HIGHLIGHTS = "Game details: Aces at Fever, First Round Game 2";
 const VIEWS = [
   {
     name: "Bracket",
-    open: (page) => page.getByRole("tab", { name: "Bracket" }).click(),
+    open: (page) => openSeasonPart(page, "Bracket"),
     shown: (page) => page.locator('[data-series="1-0"] .team-line.won'),
   },
   {
@@ -59,7 +60,7 @@ const VIEWS = [
   },
   {
     name: "Standings",
-    open: (page) => page.getByRole("tab", { name: "Standings" }).click(),
+    open: (page) => openSeasonPart(page, "Standings"),
     shown: (page) => page.locator("#standings-league tr").nth(2),
   },
   {

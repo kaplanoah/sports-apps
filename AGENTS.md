@@ -180,8 +180,8 @@
   and the app's own pages as the WNBA's does: each club's sheet and its Roster,
   each player on a club's roster this season, by the names MLB uses for him,
   from the list of players the store keeps beside its rosters (`worker/src/player-index.js`),
-  the latest final's Highlights and the next game's Matchup, the Bracket and News tabs,
-  the Standings tab's playoff fields and each league's divisions, and settings and each setting (`page/js/search-pages.js`),
+  the latest final's Highlights and the next game's Matchup, the bracket and the News tab,
+  the standings' playoff fields and each league's divisions, and settings and each setting (`page/js/search-pages.js`),
   apart from the slate the header, the Updates box, and the store follow (`page/js/slate.js`),
   whose ranking each device keeps for itself, in name order until its first drag,
   with its dismissal of the Updates box (`page/js/kept-on-device.js`),
@@ -261,7 +261,7 @@
   with suggestions as they type, from the league's names for its teams,
   places, and rounds (`page/js/search-terms.js`), and the app's own pages: each team's sheet and its Roster,
   each player on a roster of the season shown, from the list of its players the store keeps beside its rosters (`worker/src/player-index.js`),
-  the latest final's Highlights, the Bracket and News tabs, the Standings lists,
+  the latest final's Highlights, the bracket and the News tab, the standings' lists,
   and settings and each setting (`page/js/search-pages.js`), whose settings pick any season the store keeps once it keeps more than one,
   whose page saves nothing to the store, lists each playoff final in an Updates box only on phones and tablets,
   and only for the current season, each keeping its own dismissal (`page/js/updates.js`),
@@ -300,7 +300,7 @@
   and fails on any look its tables don't name, and on any they name that nothing draws.
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
-  like each name in a pager's pill, and `--radius-sheet` for a sheet on a wide screen,
+  like each name in a pill, and `--radius-sheet` for a sheet on a wide screen,
   with `--held-bar-fade` and `--held-bar-line` under a bar held at the top.
   A dot is round, a switch is round like the phone's own, an app icon keeps its own shape,
   and the floating tab bar, tinted in the app's own color, stays a capsule like the phone's own;
@@ -422,9 +422,12 @@
   and each error the page's code doesn't catch, in `error-log.js`,
   each a log made with `step-log.js`, the bar across the top and the box at the bottom of settings that ask a phone's browser to add the page to the Home Screen in `home-screen.js`,
   telling a phone or tablet from a computer, and the Home Screen from the browser,
-  in `device.js`, lists side by side under a pill that a swipe moves between in `pager.js`,
-  the accent block under a pill's shown name, which never travels between names but hands off from one to the next once a tap or a finger's lift sets the lists off,
-  in `pill-thumb.js`, as the WNBA's standings are, a season's games as one list of its game days under a strip of every day,
+  in `device.js`, one tab for a season's standings and its bracket,
+  named Standings and opening on them until the playoff field is set, and Bracket from then on,
+  with the one it opens on first in the pill over them, side by side, which a tap on a name or a swipe slides between,
+  a swipe on the bracket scrolling it to its end first, as a team's Roster does, in `bracket-standings.js`,
+  the accent block under a pill's shown name, which never travels between names but hands off from one to the next once a tap or a finger's lift sets what's under it off,
+  in `pill-thumb.js`, a season's games as one list of its game days under a strip of every day,
   whose chosen day is the one at the list's top, its box holding still while the list's scroll slides the dates behind it on a spring (`strip-slide.js`),
   today's named Today, which a tap on a day or on Today brings to the top,
   a day's gap under the bar, a tap on a date without games bringing in its No games row until it's out of sight,
@@ -520,7 +523,7 @@
   Its `type.css` lists the type roles, `chrome.css` styles the tab bar,
   settings sheet and its Diagnostics, round dots, Home Screen bar and box,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,
-  `pager.css` a pager's pill and lists, `day-strip.css` a season's list of days and its strip,
+  `pager.css` a pill's names and the standings and bracket under one, `day-strip.css` a season's list of days and its strip,
   `game-search.css` the search's view, `game-row.css` lays out a game row and colors an All-Star team's star,
   `sheet.css` a sheet a tap opens, like MLB's pitching matchup,
   with its face-off rows and line of channels, titled parts, and status chips,
@@ -570,6 +573,8 @@
   Types are checked from JSDoc by `npm run typecheck`; the code stays plain JavaScript.
   `npm run deadcode` runs knip, which fails on unused files, exports, and dependencies: delete them rather than ignoring them.
 - Which season is current, the store says in `live/current`, as the Worker decides it from the league's own data; a page never picks it by its own clock.
+  A new season becomes current on the day of its first game, preseason included, as MLB's spring training and the WNBA's preseason start it,
+  so through the offseason a page shows the season just played, opening on its bracket.
   Times show in the viewer's own time zone; only a league's own day is Eastern (read with the shared `readEasternDay` in `shared/page/days.js`: all of MLB's, and the WNBA's for a game without a set time).
   Pages count, read, and format days and times with `shared/page/days.js`, the one module lint lets read the machine's own calendar and clock, and its tests check each of its readings in zones on both sides of UTC;
   an app's own `readGameDay` only says which of its fields hold a game's start and its league's day.
@@ -686,7 +691,7 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
   scrolls, layers, and draws as an iPhone does, or that touches what iOS has drawn wrong before: parts left undrawn by how layers and sheets stack.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
-  `side-swipe.js`, `pager.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
+  `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
   `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`);
   a change to its shared stylesheets (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),
@@ -886,7 +891,8 @@ When a step says to go back to an earlier step, continue in order from there.
 - Smooth above all.
   Nothing flickers, jumps, or flashes on open, return, reload, or redraw, and a new release arrives without anyone swiping the app closed.
 - Follow general best practices for web development code and app UI.
-- Desktop hover is a subtle change of text color only: never an underline, border, or highlight.
+- Desktop hover is a subtle change of text color only, to the app's `--ink-hover`: never an underline, border, or highlight,
+  which the root's `tests/hover-color.test.js` checks.
 - Simple beats configurable.
   Pick good defaults rather than adding settings.
 - Readable before elegant.

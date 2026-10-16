@@ -9,6 +9,7 @@ import {
   ON_A_PHONE,
 } from "./harness.mjs";
 import { VIEW_GROUPS, checkEachView, openWithEverything } from "./views.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" }, viewport: { width: 390, height: 844 } });
@@ -39,8 +40,7 @@ const SECOND_LOOKS = {
   "caption: Chivo Mono": "numbers, and the letters set among them, like a starter's arm",
 };
 
-// The Mariners out, a day after this device last dismissed the Updates box, before MLB's
-// standings project a field.
+// The Mariners out, a day after this device last dismissed the Updates box.
 const SEASON_WITH_A_CLUB_OUT = {
   year: 2026,
   teams: {},
@@ -74,15 +74,24 @@ const OTHER_PLACES = [
   },
   {
     name: "a bracket with a series under way",
-    open: (page) => {
+    open: async (page) => {
       const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
       snapshot.series.AL_WC1.started = true;
-      return openApp(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
+      await openApp(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
+      await openSeasonPart(page, "Bracket");
     },
     shown: (page) => page.locator("#bracketWrap .nscore", { hasText: "0" }).first(),
   },
   {
-    name: "the Updates box, with a club out and a release note, over a bracket with no field yet",
+    name: "the bracket before the playoff field is set",
+    open: async (page) => {
+      await openApp(page, { liveAvailable: false });
+      await openSeasonPart(page, "Bracket");
+    },
+    shown: (page) => page.getByRole("heading", { name: "No playoff field yet" }),
+  },
+  {
+    name: "the Updates box, with a club out and a release note",
     device: ON_A_PHONE,
     open: async (page) => {
       await page.route("**/js/release-notes.js", (route) =>

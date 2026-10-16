@@ -2,6 +2,7 @@ import { test, expect, openLockedApp, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 const findCodeField = (page) => page.getByRole("textbox", { name: "Access code" });
@@ -47,7 +48,7 @@ test("the page asks for its code in the theme's accent, and the right one opens 
 }) => {
   await openLockedApp(page, { accessCode: "FASTBALL" });
   await expect(findGate(page)).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Standings" })).toHaveCount(0);
+  await expect(findSeasonTab(page)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Open" })).toHaveCSS(
     "background-color",
     await readColor(page, "--accent"),
@@ -60,10 +61,10 @@ test("the page asks for its code in the theme's accent, and the right one opens 
   await expect(page.getByRole("alert")).toHaveCSS("color", await readColor(page, "--now"));
 
   await sendCode(page, "fast ball");
-  await expect(page.getByRole("tab", { name: "Standings" })).toBeVisible();
+  await expect(findSeasonTab(page)).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("tab", { name: "Standings" })).toBeVisible();
+  await expect(findSeasonTab(page)).toBeVisible();
   await expect(findGate(page)).toHaveCount(0);
 });
 

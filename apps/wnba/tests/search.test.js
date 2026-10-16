@@ -317,9 +317,8 @@ test("the examples are three searches for games, then a player and a team's Rost
 // out. A new one fails the test below until it's here, so it's made searchable, or left out on
 // purpose.
 const COVERAGE = {
-  "tab:bracket": { search: "bracket", opens: "tab:bracket" },
+  "tab:bracket-standings": { search: "bracket", opens: "season:bracket" },
   "tab:games": { leftOut: "Typing games already searches every game" },
-  "tab:standings": { search: "standings", opens: "standings:league" },
   "tab:news": { search: "news", opens: "tab:news" },
   "tab:search": { leftOut: "It's the search itself" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },
@@ -557,7 +556,7 @@ test("the playoff picture lists the Bracket and the league's standings beside th
   for (const text of ["playoff picture", "seeds", "who clinched"])
     assert.deepEqual(
       findListedPages(text).rows.map((row) => (row.kind === "place" ? row.place.key : row.kind)),
-      ["tab:bracket", "standings:league"],
+      ["season:bracket", "standings:league"],
       text,
     );
   assert.equal(findListedPages("playoff picture").gameText, "playoff");

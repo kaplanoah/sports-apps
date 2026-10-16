@@ -81,9 +81,10 @@ const STACKED = {
   minGrowth: 0.5,
   maxGrowth: 3,
 };
-/* The spaces, which all grow or shrink by one factor to fit the screen's height. The header's
-   margin in styles.css supplies the first aboveLeague, which never shrinks, since the stage can't
-   reach above its scroller. The NL's line sits betweenRows below the AL's last note. */
+/* The spaces, which all grow or shrink by one factor to fit the screen's height. The room under
+   the pill over the bracket (pager.css) supplies the first aboveLeague, which never shrinks, since
+   the stage can't reach above its scroller. The NL's line sits betweenRows below the AL's last
+   note. */
 const SPACES = { aboveLeague: 13, belowLine: 11, betweenRows: 13 };
 // A row of level cards and their notes.
 const SERIES_HEIGHT = CARD.height + STACKED.noteHeight;
