@@ -4,7 +4,7 @@
 // averages rank in the WNBA, each on a small curve of how every ranked player's numbers spread.
 
 import { describeDay, formatShortDate, readCalendarDate } from "#shared/days.js";
-import { html, joinWithSeparator } from "#shared/html.js";
+import { html, joinNames, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
 import { describeFewestFirst, rankAmong, renderRankRow } from "#shared/rank-curve.js";
 import { renderRetryBlock } from "#shared/retry.js";
@@ -333,12 +333,6 @@ const listUnrankedShares = (season) =>
   );
 
 /**
- * Words joined as either one, as "3-pointers or free throws".
- * @param {string[]} words
- */
-const listEither = (words) => new Intl.ListFormat("en", { type: "disjunction" }).format(words);
-
-/**
  * Why a stat may have no rank, or why the number ranked varies by stat.
  * @param {RegularSeason} season
  * @param {boolean} isPastSeason
@@ -349,8 +343,14 @@ export function describeRankNote(season, isPastSeason) {
   if (season.games < season.gamesNeeded)
     return `The WNBA only ranks players who've played ${season.gamesNeeded} games or, for shooting percentages, made a certain number of shots. She's played ${season.games} ${season.games === 1 ? "game" : "games"}.`;
   const unranked = listUnrankedShares(season);
-  const shots = listEither(unranked.map((stat) => stat.shots ?? ""));
-  const shares = listEither(unranked.map((stat) => stat.label));
+  const shots = joinNames(
+    unranked.map((stat) => stat.shots ?? ""),
+    "or",
+  );
+  const shares = joinNames(
+    unranked.map((stat) => stat.label),
+    "or",
+  );
   const shortfall = isPastSeason
     ? `She didn't make enough ${shots} to be ranked in ${shares}.`
     : `She hasn't made enough ${shots} to be ranked in ${shares}.`;
