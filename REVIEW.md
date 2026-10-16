@@ -1,0 +1,90 @@
+# Reviewing a pull request
+
+What a review of a pull request here reads, looks for, and reports.
+AGENTS.md holds the rules the code keeps; this file says how to check a change against them.
+
+## Read all of it
+
+- Read every changed file's diff in full.
+  A recorded fixture (`tests/fixtures/`) or `package-lock.json` needs only its name and size,
+  and whether a test reads it.
+- Read past the diff: each caller of a function the change touches,
+  and each place that holds a copy of what it changes.
+  Search for the name, the constant, or the words before taking a new one as the only one.
+- A finding can be in a line the change didn't touch, when the change makes that line wrong.
+  Put it on the nearest changed line and name the line it's about.
+- On a push after the first review, read what changed since the commit the last summary names,
+  and the whole diff again for anything the push makes wrong.
+- For a stacked pull request, review against its own base, not `main`.
+- Say what you didn't read.
+  The summary lists every changed file you didn't read in full, and why.
+  Never say a change has no issues when you read only part of it.
+
+## What to look for
+
+In order of what has mattered here.
+
+1. **Bugs.** State and edge cases above all:
+   empty and missing values (a `null` or `NaN` that reaches the screen),
+   a game whose teams aren't known yet, doubleheaders, the playoffs, a season's first and last day,
+   a time zone on each side of UTC, a read that fails or answers late,
+   two reads that finish out of order, and a listener or timer that's never removed.
+2. **One fact, one rule, one place.**
+   AGENTS.md: "A rule or a limit two places share lives in one place",
+   and "A fact two places show ... comes from one read, kept in one document".
+   Flag a new constant, helper, wording, or rule that copies one the repo already has,
+   and logic one app adds that the other already has, which belongs in `shared/`.
+3. **Both apps, every place.**
+   AGENTS.md: "When fixing a bug, look for the same bug in all apps and in every view, sheet, and theme, and fix those in the same PR."
+   Check the other app and the other views for what the change fixes or changes.
+4. **Budgets and outside services.**
+   Count the requests a run makes against Cloudflare's per-run cap, and check the reading stays lean ("Read ahead of the page" in AGENTS.md).
+   Count the work a key press does over a whole season.
+   Never trust a league's feed or Claude to answer in the shape the code expects without checking it.
+   A link from a feed reaches an `href` only through `isWebAddress`.
+5. **Security.**
+   Text reaching the page without the `html` template, anything that weakens the `APP_KEY` check or the access gate,
+   and a secret, key, account ID, page address, or access code in code, docs, logs, issues, or a Diagnostics report.
+   In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
+   wider `permissions` than the job needs, an action not pinned to a commit,
+   and a pull request's own code run with a secret.
+6. **Red changes.**
+   A property that gives a part a layer of its own or changes how it takes a touch,
+   like `translate`, `rotate`, `scale`, or `pointer-events`, that `worker/red-change.mjs` doesn't list yet.
+7. **Tests.**
+   AGENTS.md: "Every change to behavior comes with tests that fail without it, in the same PR."
+   Flag a change to behavior whose tests would still pass with it reverted.
+   Flag a browser test that would pass only some of the time:
+   one that reads the page right after an action without waiting, with `expect` or `expect.poll`, for what the action shows;
+   one that depends on how fast the machine is; or one that measures while a press, hover, transition, or scroll may still be going.
+8. **Leftovers.**
+   AGENTS.md says the review flags what earlier rounds of a change left behind:
+   values no longer chosen, a setting kept only to compare, a case that can no longer happen,
+   a name for an earlier version, a branch kept for data the store no longer holds,
+   and old code next to what replaced it.
+9. **Search.**
+   Each place a change adds is searchable from the app's `page/js/search-pages.js` and named in `COVERAGE`,
+   or is left out for a reason a fan would agree with, and a place it removes leaves search too.
+10. **Docs and comments the change makes wrong.**
+    AGENTS.md or README.md describing what the code no longer does, a comment naming a file that's gone,
+    and a comment that tells history or restates the code.
+11. **Any other rule in AGENTS.md** the changed lines break.
+
+Skip what lint, Prettier, TypeScript, knip, and the repo's guard tests already catch, and matters of taste.
+Don't run the tests: CI runs them all.
+
+## How to report
+
+- Post each finding as an inline comment on the line it's about.
+  Say what is wrong, when it goes wrong (the input or state that shows it), and how to fix it, in a few sentences.
+- Start each with its weight:
+  **Important** for a bug, a security hole, or a broken AGENTS.md rule;
+  **Nit** for something worth fixing that doesn't block;
+  **Pre-existing** for a problem in code the change didn't make worse.
+- Before posting, check the finding by reading more of the code.
+  If it would matter and you still can't settle it, post it as **Unsure** with what would settle it, rather than leaving it out.
+- Never post a finding already on the pull request, whether it was fixed, answered, or left open.
+- No praise.
+- Last, update the one summary comment: the commit reviewed, the findings by weight,
+  how many of the changed files you read in full out of how many,
+  each one you didn't and why, and anything you couldn't check.
