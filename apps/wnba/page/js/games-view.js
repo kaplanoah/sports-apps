@@ -188,8 +188,10 @@ function renderSideClub(game, place) {
 }
 
 /** @param {Game} game */
-export const nameGame = (game) =>
-  game.round ? `${ROUNDS[game.round].name} Game ${game.number}` : "Game";
+export function nameGame(game) {
+  if (isCupFinal(game)) return CUP_FINAL;
+  return game.round ? `${ROUNDS[game.round].name} Game ${game.number}` : "Game";
+}
 
 /** @param {Game} game */
 function nameOpenButton(game) {

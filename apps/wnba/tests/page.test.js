@@ -8,6 +8,7 @@ import {
   describeFinalInSeries,
   listSeasonDays,
   listSeasonGames,
+  nameGame,
   renderHeadline,
 } from "../page/js/games-view.js";
 import { renderScoreboard } from "../page/js/scoreboard.js";
@@ -256,13 +257,18 @@ test("the All-Star Game's row names it, and shows each team's name beside its st
     assert.doesNotMatch(markup.text, /class="game-open"|class="dot/);
   }));
 
-test("the Commissioner's Cup final's row names it, as the All-Star Game's does, and opens the game", () =>
+test("the Commissioner's Cup final's row names it, as the All-Star Game's does, and opens a sheet named the same", () =>
   inEastern(() => {
     const { days } = listDays(WHOLE_SEASON, { schedule: WHOLE_SCHEDULE });
     const { markup } = days.find(({ day }) => day === "2026-06-30") ?? {};
     const [, cupFinal] = markup.text.match(/(<li[^>]*data-game="1052600001"[\s\S]*?<\/li>)/) ?? [];
     assert.match(readText({ text: cupFinal }), /^Aces Cup Final \d+ \d+ Final Liberty$/);
-    assert.match(cupFinal, /class="game-open"/);
+    const game = WHOLE_SCHEDULE.games.find((each) => each.id === "1052600001");
+    assert.equal(nameGame(game), "Cup Final");
+    assert.match(
+      cupFinal,
+      /class="game-open" aria-label="Game details: Aces at Liberty, Cup Final"/,
+    );
   }));
 
 test("a game the league plays away from its home team's arena names the city in its label, and one at home names nothing", () =>
