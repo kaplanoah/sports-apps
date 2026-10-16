@@ -976,11 +976,6 @@ header.top h1 .title-letter:nth-child(3) {
   font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
-.game-sheet .sheet-head h2 {
-  font-size: var(--type-heading-size);
-  font-weight: var(--type-heading-weight);
-  letter-spacing: var(--type-heading-tracking);
-}
 .faceoff-score {
   grid-area: score;
   display: grid;

@@ -152,11 +152,6 @@
   margin-inline: -18px;
   padding-inline: 18px;
 }
-.sheet-content .sheet-head h2 {
-  font-size: var(--type-heading-size);
-  font-weight: var(--type-heading-weight);
-  letter-spacing: var(--type-heading-tracking);
-}
 /* A sheet's sections are named by pills under its title. */
 .sheet-top .pager-tabs {
   margin-top: 14px;
