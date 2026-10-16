@@ -25,8 +25,6 @@ import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // A players table's number column, while the names leave it room.
 const NUMBER_COLUMN_PX = 52;
-// The type scale's smallest size, which the lead chart's words show at with no room above or below.
-const SMALLEST_TEXT_PX = 13;
 // The room between the band's line and the first part's title, above each later title, below each
 // title, below By quarter's, and between a tape's rows.
 const FIRST_TITLE_SPACE_PX = 20;
@@ -171,7 +169,9 @@ for (const { screen, viewport } of [
   test.describe(`on ${screen}`, () => {
     test.use({ viewport });
 
-    test("the lead chart's words show at the type scale's smallest size", async ({ page }) => {
+    test("the lead chart's words sit on lines as tall as their text, with no room above or below", async ({
+      page,
+    }) => {
       const app = await openApp(page);
       await app.changeSeason(finishValkyriesAtWings);
       const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
@@ -179,10 +179,13 @@ for (const { screen, viewport } of [
         ".lead-chart :is(.lead-side, .lead-reach, .lead-peak-label, .lead-period)",
       );
       await expect(words).toHaveCount(11);
-      const heights = await words.evaluateAll((elements) =>
-        elements.map((element) => element.getBoundingClientRect().height),
+      const lines = await words.evaluateAll((elements) =>
+        elements.map((element) => ({
+          height: element.getBoundingClientRect().height,
+          size: parseFloat(getComputedStyle(element).fontSize),
+        })),
       );
-      for (const height of heights) expect(height).toBeCloseTo(SMALLEST_TEXT_PX, 0);
+      for (const { height, size } of lines) expect(height).toBeCloseTo(size, 0);
     });
   });
 }
@@ -468,7 +471,7 @@ for (const { screen, viewport } of [
   test.describe(`on ${screen}`, () => {
     test.use({ viewport });
 
-    test("every piece of text in a live game's row, its sheet, a final's sheet and its Highlights, and a preview keeps to the type scale", async ({
+    test("every piece of text in a live game's row, its sheet, a final's sheet and its Highlights, and a preview keeps to its type role", async ({
       page,
     }) => {
       const app = await openApp(page, { league: { boxScores: { 1042600112: liveBoxScore } } });

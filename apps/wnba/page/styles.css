@@ -248,6 +248,7 @@
   --strip-action: var(--action);
   --strip-edge-inset: 2px;
   --day-gap: 8px;
+  --date-one-shift: 0.065em;
   --held-bar-fade: 0px;
   --held-bar-line: var(--divider);
   --updates-head: var(--structure);
@@ -1069,8 +1070,8 @@ header.top h1 .title-letter:nth-child(3) {
 
 /*
  * The lead through the game: a fine step line on a tile, each team's half shaded faintly in its
- * color, and named and its biggest lead marked in it. The words sit over the drawing at the type
- * scale's size, placed by the shares of its width and height that lead-chart.js hands them.
+ * color, and named and its biggest lead marked in it. The words sit over the drawing at their
+ * roles' sizes, placed by the shares of its width and height that lead-chart.js hands them.
  */
 .lead-chart {
   display: grid;
@@ -1462,7 +1463,6 @@ table.roster .roster-number {
   padding-right: var(--roster-number-gap);
   text-align: center;
 }
-/* A half step over the facts beside it, so a player's number reads at a glance. */
 table.roster td.roster-number {
   font-size: var(--type-detail-size);
   font-weight: var(--type-detail-weight);
@@ -1910,10 +1910,10 @@ th[aria-sort="ascending"] .roster-caret {
 .updates-list .what {
   line-height: calc(1.3 * var(--leading));
 }
-/* A final's team names and a release note's word that should stand out stay in the line's font, a
-   step heavier. */
+/* A final's team names and a release note's word that should stand out stay in the line's font, at
+   500, as MLB's do. */
 .updates-list .what b {
-  font-weight: calc(var(--type-body-weight) + 100);
+  font-weight: calc(var(--type-body-weight) + 200);
 }
 
 /* A pill's names are buttons, so they're in sentence case at a button's weight and height, their
@@ -2137,15 +2137,13 @@ table.standings tr.playoff-line + tr td {
 }
 /* A team's sheet's parts are spaced like the game sheet's: --part-space-first under the band, --part-space-above each later title, and
    --part-space-below each title. Last 10 and Streak sit --form-space-above under the numbers
-   before them, --form-space-between apart, and the two sides over its playoff numbers are named at
-   --side-name-size. */
+   before them, --form-space-between apart. */
 .team-sheet-body {
   --part-space-first: 20px;
   --part-space-above: 29px;
   --part-space-below: 11px;
   --form-space-above: 20px;
   --form-space-between: 14px;
-  --side-name-size: 16px;
   --game-row-height: 25px;
   --field-space-above: 13px;
   --field-space-below: 10px;

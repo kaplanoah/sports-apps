@@ -25,12 +25,16 @@ const listAppStylesheets = () =>
 
 const ROLE_SIZE = /^var\(--type-([a-z-]+)-size\)$/;
 
+// A font face, or the page's tokens in a theme or not, as against a theme's rule for a part.
+/** @param {string} rule */
+const isTokenRule = (rule) => /^(@font-face|:root(\[[^\]]*\]|:not\(\[[^\]]*\]\))*)$/.test(rule);
+
 /** @param {string} path */
 const readBlocks = (path) => {
   /** @type {Map<string, Map<string, string>>} */
   const blocks = new Map();
   for (const declaration of readDeclarations(path)) {
-    if (declaration.selectors.some((selector) => /^(@font-face|:root)/.test(selector))) continue;
+    if (isTokenRule(readRule(declaration))) continue;
     const key = declaration.selectors.join(" ");
     if (!blocks.has(key)) blocks.set(key, new Map());
     blocks.get(key)?.set(declaration.property, declaration.value);
@@ -42,7 +46,7 @@ const readBlocks = (path) => {
 const listStraySizes = (path) =>
   readDeclarations(path)
     .filter((declaration) => declaration.property === "font-size")
-    .filter((declaration) => !readRule(declaration).startsWith(":root"))
+    .filter((declaration) => !isTokenRule(readRule(declaration)))
     .map((declaration) => `${readRule(declaration)} { font-size: ${declaration.value} }`)
     .filter((text) => !OWN_SIZES.has(text))
     .filter((text) => !/font-size: var\(--type-[a-z-]+-size\) }$/.test(text));
@@ -82,7 +86,7 @@ const listStrayTracking = (path) =>
 const listRolesUsed = (path) =>
   new Set(
     readDeclarations(path)
-      .filter((declaration) => !readRule(declaration).startsWith(":root"))
+      .filter((declaration) => !isTokenRule(readRule(declaration)))
       .flatMap((declaration) => [
         ...declaration.value.matchAll(/--type-([a-z-]+?)-(?:size|weight)\b/g),
       ])

@@ -703,7 +703,7 @@ test("a reload shows the search as it was before the page's code arrives", async
   await expect(page.locator('#gameSearch .listed-day[data-day="2026-09-24"]')).toBeInViewport();
 });
 
-test("every search state keeps to the type scale, its periods, and AA contrast, and every tap lands on a button", async ({
+test("every search state keeps to its type roles, its periods, and AA contrast, and every tap lands on a button", async ({
   page,
 }) => {
   await openSeasonGames(page);

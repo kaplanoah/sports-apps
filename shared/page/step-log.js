@@ -14,8 +14,21 @@ const KEPT_LINES = 200;
  * @param {string} url
  */
 export function nameFile(url) {
-  const name = URL.canParse(url) ? new URL(url).pathname.split("/").at(-1) : "";
-  return name?.includes(".") ? name : "page";
+  const name = readLastPathPart(url);
+  return name.includes(".") ? name : "page";
+}
+
+/**
+ * The last part of an address's path, or nothing for text that isn't an address. It catches what
+ * `URL.canParse` would test, which iOS 16 lacks.
+ * @param {string} url
+ */
+function readLastPathPart(url) {
+  try {
+    return new URL(url).pathname.split("/").at(-1) ?? "";
+  } catch {
+    return "";
+  }
 }
 
 /** @param {string} text */

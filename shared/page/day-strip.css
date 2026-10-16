@@ -13,6 +13,7 @@
  *   --strip-action         Today, the way back to the start day
  *   --strip-edge-inset     on a wide screen, the month's and Today's way in from the view's edges
  *   --day-gap              the gap between days, kept above a day brought to the top
+ *   --date-one-shift       how far right of its box's middle a 1's stem sits in the dates' font
  */
 
 /* The page and the view fill the screen, and the list takes what's left under the bar. A phone on
@@ -172,6 +173,12 @@
 }
 .day-cell.is-today .cell-number {
   color: var(--strip-today);
+}
+/* The eye centers a 1 on its stem rather than its box, so a date that starts with one moves left
+   until the stem would sit at the middle, beside its games as in the strip. */
+:is(.day-number, .cell-number).leads-with-one {
+  position: relative;
+  left: calc(-1 * var(--date-one-shift));
 }
 /* The chosen day's box. While the list's scroll slides the dates behind it (strip-slide.js), the box
    is its own, over the strip, the chosen date looks like any other, and the box shows a copy of

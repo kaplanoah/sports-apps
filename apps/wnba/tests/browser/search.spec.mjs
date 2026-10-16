@@ -68,7 +68,7 @@ async function leaveForTwoMinutes(page) {
 }
 
 /**
- * Checks that what the search shows keeps to the type scale and its periods, and that every tap
+ * Checks that what the search shows keeps to its type roles and its periods, and that every tap
  * lands on a button.
  * @param {import("@playwright/test").Page} page
  */
@@ -608,7 +608,7 @@ test("a search put back from an earlier release names its field as this one does
   await expect(findInput(page)).toHaveAttribute("aria-label", "Teams, players, and games");
 });
 
-test("every search state keeps to the type scale and its periods, and every tap lands on a button", async ({
+test("every search state keeps to its type roles and its periods, and every tap lands on a button", async ({
   page,
 }) => {
   await openSeasonGames(page);

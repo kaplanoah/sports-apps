@@ -82,7 +82,7 @@
   A theme may also change a weight where its font keeps its width at every weight,
   as MLB's Ball sets a final's losing score a step lighter in Chivo Mono,
   to stand apart from the winner as much as its dim ink does in Night Game,
-  and may lift a part a fraction of a pixel where its colors look off center otherwise,
+  and may lift a part a pixel or two where its colors look off center otherwise,
   as MLB's bracket chips and their digits sit as each theme's set them by eye, which the root's `tests/browser/theme-layout.mjs` leaves out.
   The WNBA's `tests/browser/themes.spec.mjs` checks every view in Walnut against Maple,
   on a phone and a wide screen, with the root's `tests/browser/theme-layout.mjs`; a new view joins its list.
@@ -671,7 +671,7 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
   with a note out by the box's last dismissal dismissed (`listNotesToShow` in `shared/page/updates.js`).
   Add a note only when the user asks for one, whatever the PR's type, in the words they approve, with an `at` just before the PR merges.
   A word that should stand out, like a button's name, goes in `<b>`,
-  in a note built with the `html` template, which the Updates box sets a step heavier than the note's text.
+  in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.
 - Each app has a beta channel: a second Worker, `<app>-app-beta`,
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
   key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`).

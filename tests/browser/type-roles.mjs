@@ -122,6 +122,17 @@ export const readRole = (page, role) =>
   }, role);
 
 /**
+ * A shown text's size, weight, and letter spacing, as the page draws them, to check two texts that
+ * should look alike against each other.
+ * @param {import("@playwright/test").Locator} text
+ */
+export const readType = (text) =>
+  text.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { size: style.fontSize, weight: style.fontWeight, spacing: style.letterSpacing };
+  });
+
+/**
  * How wide a field's face draws a line at the field's size, and the face it stands for at a role's
  * size, so a test can check that a field set at 16px still looks as big as the role it stands for.
  * @param {import("@playwright/test").Locator} field

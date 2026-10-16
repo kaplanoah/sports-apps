@@ -19,7 +19,7 @@ async function sendCode(page, code) {
   await page.getByRole("button", { name: "Open" }).click();
 }
 
-test("the gate's text keeps to the type scale", async ({ page }) => {
+test("the gate's text keeps to its type roles", async ({ page }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expect(findGate(page)).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);

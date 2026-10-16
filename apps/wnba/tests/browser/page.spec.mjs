@@ -65,7 +65,7 @@ test("every font the page's views draw with is preloaded", async ({ page }) => {
   expect(await listFontsNotPreloaded(page)).toEqual([]);
 });
 
-test("every piece of text keeps to the type scale, in every view", async ({ page }) => {
+test("every piece of text keeps to its type role, in every view", async ({ page }) => {
   await openApp(page);
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
@@ -195,7 +195,7 @@ test.describe("on a phone, the text", () => {
     isMobile: true,
   });
 
-  test("keeps to the type scale in the header, the Updates box, the games, the standings, a team's sheet, and settings", async ({
+  test("keeps to its type roles in the header, the Updates box, the games, the standings, a team's sheet, and settings", async ({
     page,
   }) => {
     await openApp(page, { isShowingUpdates: true });

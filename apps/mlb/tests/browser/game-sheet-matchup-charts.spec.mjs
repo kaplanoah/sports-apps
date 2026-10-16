@@ -317,7 +317,7 @@ for (const viewport of [
   { width: 1280, height: 720 },
   { width: 320, height: 640 },
 ]) {
-  test(`at ${viewport.width}px wide, the speed labels stay at the caption's size, each number on its speed, over the pitches`, async ({
+  test(`at ${viewport.width}px wide, the speed labels stay at the caption's size in Chivo Mono, each number on its speed, over the pitches`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -327,6 +327,7 @@ for (const viewport of [
     await expect(labels).toHaveText(["70 mph", "80", "90", "100"]);
     const caption = await readRole(page, "caption");
     await expect(labels.first()).toHaveCSS("font-size", `${caption.size}px`);
+    await expect(labels.first()).toHaveCSS("font-family", /^"Chivo Mono"/);
     const { lineStart, lineEnd } = await measurePitchMix(chart);
     const readCenters = () =>
       labels.evaluateAll((elements) =>

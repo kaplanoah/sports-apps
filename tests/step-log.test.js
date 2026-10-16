@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createStepLog, writeStepsAsText } from "../shared/page/step-log.js";
+import { createStepLog, nameFile, writeStepsAsText } from "../shared/page/step-log.js";
 import { normalizeSpaces } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
@@ -87,6 +87,17 @@ test("no line holds an address, which holds the page's key, even one kept before
     ],
   );
   assert.doesNotMatch(stored.get("addressLog") ?? "", /k3y|example-subdomain/);
+});
+
+test("a file is named on a phone without URL.canParse, as on iOS 16", (context) => {
+  const canParse = /** @type {PropertyDescriptor} */ (
+    Object.getOwnPropertyDescriptor(URL, "canParse")
+  );
+  Reflect.deleteProperty(URL, "canParse");
+  context.after(() => Object.defineProperty(URL, "canParse", canParse));
+  assert.equal(nameFile("https://example-subdomain.workers.dev/k3y/c9c63e6/js/app.js"), "app.js");
+  assert.equal(nameFile("https://example-subdomain.workers.dev/k3y/"), "page");
+  assert.equal(nameFile("https://"), "page");
 });
 
 test("a touch or click on the log's part is logged with where it landed and on what, and one elsewhere isn't", () => {

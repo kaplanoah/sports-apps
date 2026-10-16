@@ -734,20 +734,12 @@ body:has(> .home-screen-bar:not([hidden])) {
 .home-screen-tip .home-screen-copy {
   gap: 3px;
 }
-.home-screen-tip .home-screen-title {
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
-}
 .home-screen-tip .home-screen-steps {
-  font-size: var(--type-caption-size);
-  font-weight: var(--type-caption-weight);
   line-height: calc(1.45 * var(--leading));
 }
 .home-screen-tip .home-screen-install {
   margin-top: 7px;
   padding: 7px 12px;
-  font-size: var(--type-caption-size);
-  font-weight: var(--type-caption-weight);
 }
 
 /* A sheet rises and slides away at the pace and easing of the phone's own sheets, as

@@ -22,7 +22,7 @@ import {
   finishValkyriesAtWings,
   countBoxScoreReads,
 } from "./game-sheet-games.mjs";
-import { readRole } from "../../../../tests/browser/type-roles.mjs";
+import { readRole, readType } from "../../../../tests/browser/type-roles.mjs";
 
 // Most of these tests are about what a sheet shows, so they skip the eased scrolling between the
 // Games lists. The ones about how a sheet moves ask for full motion.
@@ -466,7 +466,7 @@ test("going back from a team's sheet to a game's leaves no focus ring around the
   await expect(gameSheet).toHaveCSS("outline-style", "none");
 });
 
-test("a final's sheet offers Game and Highlights pills, and its Highlights show ESPN's recap video, its story, and each clip", async ({
+test("a final's sheet offers Game and Highlights pills, and its Highlights show ESPN's recap video, its title as heavy as each clip's, its story, and each clip", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -489,6 +489,9 @@ test("a final's sheet offers Game and Highlights pills, and its Highlights show 
   await expect(body.locator(".clip-row")).toHaveCount(13);
   await expect(body.locator(".clip-row").first().locator(".clip-title")).toHaveText(
     "Chelsea Gray knocks down the mid-range jumper",
+  );
+  expect((await readType(body.locator(".clip-feature .clip-title"))).weight).toBe(
+    (await readType(body.locator(".clip-row .clip-title").first())).weight,
   );
   await expect(body.locator(".clip-meta")).toHaveCount(0);
 });

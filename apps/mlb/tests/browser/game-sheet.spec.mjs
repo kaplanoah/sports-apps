@@ -324,7 +324,7 @@ for (const { screen, viewport } of [
   test.describe(`on ${screen}`, () => {
     test.use({ viewport });
 
-    test("every piece of text in a game's sheet keeps to the type scale, in both its sections", async ({
+    test("every piece of text in a game's sheet keeps to its type role, in both its sections", async ({
       page,
     }) => {
       const sheet = await openGame(page);
@@ -488,7 +488,7 @@ test("a live game's Runs so far center who's pinch running for whom between the 
   expect(await listTapsOffButtons(page)).toEqual([]);
 });
 
-test("a game's Runs set the runners who got on in a lighter ink than the play that scored them, at one weight in both themes", async ({
+test("a game's Runs set the runners who got on in a lighter ink than the play that scored them, at one weight in both themes, and the score after it in Chivo Mono", async ({
   page,
 }) => {
   const raysAtYankees = "823493";
@@ -500,6 +500,7 @@ test("a game's Runs set the runners who got on in a lighter ink than the play th
   await page.getByRole("button", { name: /^Game details: Rays at Yankees, Thu, Sep 24/ }).click();
   const change = page.locator("#gameBody .runs-change");
   await expect(change.locator(".runs-play")).toHaveText("Pages singled home Ohtani");
+  await expect(change.locator(".runs-score")).toHaveCSS("font-family", /^"Chivo Mono"/);
 
   const looks = [];
   for (const theme of ["light", "dark"]) {

@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { readType } from "../../../../tests/browser/type-roles.mjs";
 
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 const IPHONE_AGENT =
@@ -105,7 +106,7 @@ test.describe("on an Android phone, in the browser", () => {
     );
   });
 
-  test("Chrome's install dialog takes the place of the steps, and Chrome's own banner", async ({
+  test("Chrome's install dialog takes the place of the steps, and Chrome's own banner, set in Settings as in the bar", async ({
     page,
   }) => {
     await openApp(page);
@@ -119,6 +120,8 @@ test.describe("on an Android phone, in the browser", () => {
     await expect(tip).toHaveText(
       "Use this site like an app It opens full screen, without the browser's bars Install",
     );
+    for (const part of [".home-screen-title", ".home-screen-install"])
+      expect(await readType(tip.locator(part)), part).toEqual(await readType(bar.locator(part)));
     expect(await listStrayPeriods(page)).toEqual([]);
   });
 
