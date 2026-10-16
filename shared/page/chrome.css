@@ -1,8 +1,9 @@
 /*
  * The chrome every app's page shares: the settings button, the tabs (a floating tinted bar on
  * phones), the settings dialog (the whole screen on phones), its Appearance choices, and the lines
- * at its foot, a sideways bracket's round dots (pinned above the tab bar on phones), the bar and
- * settings box that ask a phone's browser to add the page to the Home Screen, the note a slow load
+ * at its foot, a sideways bracket's round dots (pinned above the tab bar on phones), the welcome
+ * and settings box that ask a phone's browser to add the page to the Home Screen, with the title
+ * and button the access code's page takes from gate.css, which apps link too, the note a slow load
  * shows, the header's line while the page catches up and the sweep through its lines once it has,
  * the spokes a pull to refresh shows. Diagnostics, at the very end of settings, are diagnostics.css's. Apps link it
  * before their own styles.css, which lays out the rest of the page and may refine these rules.
@@ -14,7 +15,8 @@
  *   --ink, --ink-mid, --ink-dim                text, from brightest to dimmest
  *   --ink-hover                                text under a mouse, the one change a hover makes
  *   --accent, --accent-ink                     a sheet's close and back buttons, a switch that is on,
- *                                              and the Home Screen bar's button, and text on it
+ *                                              the Home Screen asks' buttons and step numbers, and
+ *                                              text on them
  *   --focus-ring                               the keyboard focus ring
  *   --radius-card                              a card's corners, like the Updates box's
  *   --radius-chip                              a chip's corners, like a status beside a title
@@ -621,34 +623,8 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   cursor: default;
   opacity: 0.5;
 }
-/* home-screen.js fills these. The bar stays at the top of the screen while the page scrolls under
-   it, and the page starts below it, so it never covers the settings button. */
-.home-screen-bar {
-  position: fixed;
-  z-index: 21;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  height: var(--home-screen-bar-height);
-  padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0
-    max(16px, env(safe-area-inset-left));
-  background: var(--card);
-  border-bottom: 1px solid var(--card-border);
-  box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.5);
-  color: var(--ink);
-}
-/* Whatever else holds to the top of the screen, and a scroll to bring something into view, stop
-   under the bar. */
-:root:has(.home-screen-bar:not([hidden])) {
-  --home-screen-bar-height: calc(44px + env(safe-area-inset-top));
-  scroll-padding-top: var(--home-screen-bar-height);
-}
-body:has(> .home-screen-bar:not([hidden])) {
-  margin-top: var(--home-screen-bar-height);
-}
+/* The box at the bottom of settings that keeps the steps to add the page to the Home Screen
+   (draw-home-screen-asks.js). */
 .home-screen-tip {
   display: flex;
   align-items: flex-start;
@@ -658,15 +634,14 @@ body:has(> .home-screen-bar:not([hidden])) {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-card);
 }
-.home-screen-bar[hidden],
 .home-screen-tip[hidden] {
   display: none;
 }
 .home-screen-icon {
   flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   background-position: center;
   background-size: cover;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
@@ -676,7 +651,7 @@ body:has(> .home-screen-bar:not([hidden])) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1px;
+  gap: 3px;
   min-width: 0;
 }
 .home-screen-title {
@@ -687,7 +662,7 @@ body:has(> .home-screen-bar:not([hidden])) {
 .home-screen-steps {
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
-  line-height: calc(1.3 * var(--leading));
+  line-height: calc(1.45 * var(--leading));
   color: var(--ink-dim);
 }
 .home-screen-steps b {
@@ -703,7 +678,8 @@ body:has(> .home-screen-bar:not([hidden])) {
 }
 .home-screen-install {
   flex: none;
-  padding: 5px 9px;
+  margin-top: 7px;
+  padding: 7px 12px;
   border: 0;
   border-radius: var(--radius-control);
   background: var(--accent);
@@ -715,39 +691,109 @@ body:has(> .home-screen-bar:not([hidden])) {
   letter-spacing: var(--type-label-tracking);
   cursor: pointer;
 }
-/* The icon sits near the page's edge, and its tap area runs past it. */
-.home-screen-close {
-  flex: none;
+
+/* The welcome a phone's or tablet's browser opens on (draw-home-screen-asks.js), over the whole
+   screen, whose numbered steps pick the theme the Home Screen icon takes and add the page there.
+   Its title and Install are the access code page's own, from gate.css. */
+.welcome {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  border: 0;
+  background: var(--bg);
+  color: var(--ink);
+  overscroll-behavior: none;
+}
+.welcome[open] {
+  display: flex;
+  flex-direction: column;
+}
+.welcome::backdrop {
+  background: var(--bg);
+}
+.welcome .gate-title {
+  margin: 28px 0 22px;
+}
+.welcome-steps {
+  display: grid;
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.welcome-steps > li {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  column-gap: 12px;
+  counter-increment: step;
+}
+.welcome-steps > li[hidden] {
+  display: none;
+}
+.welcome-steps > li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 200);
+}
+.welcome-step {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin: -6px -12px -6px -4px;
-  padding: 0;
+  min-height: 28px;
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
+  line-height: calc(1.3 * var(--leading));
+}
+.welcome-step svg {
+  width: 16px;
+  height: 16px;
+  margin: 0 4px;
+}
+.welcome-note {
+  grid-column: 2;
+  margin-top: -4px;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.4 * var(--leading));
+  color: var(--ink-dim);
+}
+.welcome-step-body {
+  grid-column: 2;
+  display: grid;
+  justify-items: start;
+  margin-top: 8px;
+}
+.welcome .appearance-choices {
+  gap: 22px;
+}
+.welcome-continue {
+  align-self: center;
+  margin-top: auto;
+  min-height: 44px;
+  padding: 0 12px;
   border: 0;
   background: none;
-  color: var(--ink-dim);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
   cursor: pointer;
 }
-.home-screen-close svg {
-  width: 15px;
-  height: 15px;
-}
-.home-screen-tip .home-screen-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-}
-.home-screen-tip .home-screen-copy {
-  gap: 3px;
-}
-.home-screen-tip .home-screen-steps {
-  line-height: calc(1.45 * var(--leading));
-}
-.home-screen-tip .home-screen-install {
-  margin-top: 7px;
-  padding: 7px 12px;
+body.kbd .welcome-continue:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 /* A sheet rises and slides away at the pace and easing of the phone's own sheets, as

@@ -234,12 +234,12 @@ async function createAfternoonStore(league = {}) {
  * the afternoon's feeds, and the game and team sheets' routes reading the store, and the recorded
  * answers for what it doesn't keep, unless the league is down by the time the page opens. On a
  * phone, the afternoon's finals would fill the Updates box above every view, so it starts
- * dismissed unless a test is about it.
+ * dismissed unless a test is about it, as the welcome a phone's browser opens on starts closed.
  * @param {import("@playwright/test").Page} page
  * A past season's record is built from the afternoon's by its change in `pastSeasons`, by year.
  * The store keeps the afternoon's list of the season's games, its playoffs', or every game of the
  * season, regular season and all, for `isWholeSeason`.
- * @param {{ league?: Parameters<typeof listLeagueAnswers>[0], isLeagueDownForPage?: boolean, isShowingUpdates?: boolean, pastSeasons?: Record<number, (season: any) => any>, isWholeSeason?: boolean }} [options]
+ * @param {{ league?: Parameters<typeof listLeagueAnswers>[0], isLeagueDownForPage?: boolean, isShowingUpdates?: boolean, isShowingWelcome?: boolean, pastSeasons?: Record<number, (season: any) => any>, isWholeSeason?: boolean }} [options]
  */
 export async function openApp(
   page,
@@ -247,6 +247,7 @@ export async function openApp(
     league = {},
     isLeagueDownForPage = false,
     isShowingUpdates = false,
+    isShowingWelcome = false,
     pastSeasons = {},
     isWholeSeason = false,
   } = {},
@@ -292,7 +293,7 @@ export async function openApp(
   await page.route(matchPath("/player"), (route) =>
     answerFromWorker(route, (url) => players.servePlayer(url, readDoc)),
   );
-  await loadPageAt(page, NOW);
+  await loadPageAt(page, NOW, { isShowingWelcome });
 
   return {
     countOpenSockets: () => openSockets.length,

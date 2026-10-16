@@ -61,7 +61,7 @@ function describeIconProblem(svg) {
 const HAND_DRAWN_ICONS = {
   "apps/mlb/page/js/games-view.js": 1,
   "shared/page/catch-up-note.js": 1,
-  "shared/page/home-screen.js": 2,
+  "shared/page/draw-home-screen-asks.js": 2,
 };
 
 /** @param {string} source */

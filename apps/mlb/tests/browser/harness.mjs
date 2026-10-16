@@ -349,6 +349,8 @@ const isWriteRequest = (request) => request.method() !== "GET";
  *   game id, MLB's recorded ones unless a test says otherwise, and for any other game none
  * @param {boolean} [options.isWholeSeason] whether the store keeps the season's whole schedule,
  *   which most tests can do without
+ * @param {boolean} [options.isShowingWelcome] whether a phone's browser opens on the welcome,
+ *   which starts closed unless a test is about it
  */
 export async function openApp(
   page,
@@ -363,6 +365,7 @@ export async function openApp(
     boxScores = {},
     highlights = RECORDED_HIGHLIGHTS,
     isWholeSeason = false,
+    isShowingWelcome = false,
   } = {},
 ) {
   const snapshotsBySeason = {
@@ -433,7 +436,7 @@ export async function openApp(
       return route.fulfill({ contentType: "text/html", body: "<h1>Sign in to Wi-Fi</h1>" });
     return route.fallback();
   });
-  await loadPageAt(page, now);
+  await loadPageAt(page, now, { isShowingWelcome });
 
   const readDocument = async (path) => (await context.ctx.storage.get(path)) ?? null;
   // The Worker finding the official bracket set, which the Updates box lists.

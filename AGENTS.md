@@ -323,7 +323,7 @@
   Light for the page's controls, like the tab bar and close buttons,
   and Regular in a line of text, and name the icon and weight in a comment where the code holds it, as `team-view.js` does for its caret-right.
   Never draw an icon by hand or take one from another set, but for the four drawn for their place: the Home Screen steps' Share and menu glyphs,
-  which copy the browser's own buttons so people find them (`shared/page/home-screen.js`),
+  which copy the browser's own buttons so people find them (`shared/page/draw-home-screen-asks.js`),
   MLB's seed lock (`games-view.js`), and the catching-up ring,
   Phosphor's circle-notch at its Light weight with a 55-degree gap, set in a line of text (`shared/page/catch-up-note.js`).
   The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four,
@@ -422,7 +422,11 @@
   any day that changes height as it's drawn whole or as a stand-in,
   and a strip that doesn't scroll where it's told, in `day-strip-log.js`,
   and each error the page's code doesn't catch, in `error-log.js`,
-  each a log made with `step-log.js`, the bar across the top and the box at the bottom of settings that ask a phone's browser to add the page to the Home Screen in `home-screen.js`,
+  each a log made with `step-log.js`, the welcome over the whole screen that a phone's or tablet's browser opens on,
+  whose numbered steps pick the theme the Home Screen icon takes and say how to add the page there,
+  until the page is added or the viewer goes on in the browser, which keeps it closed on that device,
+  and the box at the bottom of settings that keeps the steps, both drawn before the first paint in `draw-home-screen-asks.js`,
+  so the welcome never arrives over the page, and run from then on in `home-screen.js`,
   telling a phone or tablet from a computer, and the Home Screen from the browser,
   in `device.js`, one tab for a season's standings and its bracket,
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
@@ -535,7 +539,8 @@
   `news.css` the News view's layout, `retry.css` what a sheet shows where a read failed,
   `highlights.css` a final's Highlights, `rank-curve.css` a rank curve and each player's mark on it,
   `no-field-note.css` the bracket before the playoff field is set,
-  and `gate.css` the access code's gate; pages link them before their own `styles.css` and theme them with the tokens their top comments list.
+  and `gate.css` the access code's gate, whose title and button the welcome takes too;
+  pages link them before their own `styles.css` and theme them with the tokens their top comments list.
   The Worker serves all of it under `shared/`.
   `shared/worker/` holds the Worker's routing under the key (`app-worker.js`),
   the store's Durable Object (`season-store.js`, which each app's `worker/src/store.js` hands its league: how it loads and saves a snapshot,
@@ -635,8 +640,8 @@ Delete it once the app's first PR merges.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
    around its own `styles.css`, which sets every token their top comments list,
-   and calls `openLastTab()`, `showLastDrawn()`, and `watchSlowLoad()` right after its views and sheets,
-   in that order, so a part on the shown tab can take back its sideways scroll.
+   and calls `openLastTab()`, `showLastDrawn()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
+   in that order, so a part on the shown tab can take back its sideways scroll, and the welcome opens over any sheet put back.
    Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
    load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
    It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,

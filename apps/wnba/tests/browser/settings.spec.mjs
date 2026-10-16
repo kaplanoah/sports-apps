@@ -252,10 +252,10 @@ test.describe("on a phone", () => {
 
     expect(await readSize(page.getByText("Include content from The Athletic"))).toBe(setting);
     expect(await readSize(page.getByText("Most stories need a subscription"))).toBe(note);
-    expect(await readSize(page.locator(".appearance-choice").first())).toBe(note);
+    expect(await readSize(page.locator("#settingsDialog .appearance-choice").first())).toBe(note);
     expect(setting).toBeGreaterThan(body);
     expect(note).toBeGreaterThan(detail);
-    const icon = await page.locator(".appearance-icon").first().boundingBox();
+    const icon = await page.locator("#settingsDialog .appearance-icon").first().boundingBox();
     expect(icon.width).toBe(60);
   });
 

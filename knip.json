@@ -11,6 +11,7 @@
     "shared/page/push-worker.js",
     "shared/page/offline-worker.js",
     "shared/page/service-worker-steps.js",
+    "shared/page/draw-home-screen-asks.js",
     "shared/page/open-last-tab.js",
     "shared/page/show-last-drawn.js",
     "shared/page/slow-load.js",

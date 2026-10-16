@@ -1401,10 +1401,14 @@ body.kbd .rank-item .grip:focus {
   background: var(--accent);
   color: var(--accent-ink);
 }
+/* The Home Screen box shows the icon the theme showing would give the Home Screen. */
 .home-screen-icon {
+  background-image: url(icon-light-180.png);
+}
+:root[data-theme="dark"] .home-screen-icon {
   background-image: url(icon-180.png);
 }
-/* The Home Screen bar and box and Diagnostics, each a step from its role of MLB's own. */
+/* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
 .home-screen-title {
   font-weight: calc(var(--type-detail-weight) + 100);
 }

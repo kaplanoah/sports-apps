@@ -75,21 +75,23 @@ function checkSavedChoice(choices) {
 }
 
 /**
- * Wires the settings' Appearance choices to the look they pick.
+ * Wires the settings' Appearance choices, and the welcome's copy of them
+ * (draw-home-screen-asks.js), to the look they pick.
  * @param {Looks} looks
  */
 export function startAppearance(looks) {
   const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
-    document.querySelectorAll('input[name="appearance"]')
+    document.querySelectorAll('input[name="appearance"], input[name="welcomeAppearance"]')
   );
-  const readPicked = () => [...choices].find((choice) => choice.checked)?.value ?? "auto";
   checkSavedChoice(choices);
-  const showChosenTheme = followTheme(looks, readPicked);
+  const showChosenTheme = followTheme(looks, appearance.read);
   for (const choice of choices) {
     choice.addEventListener("change", () => {
-      appearance.keep(readPicked());
+      appearance.keep(choice.value);
+      checkSavedChoice(choices);
       showChosenTheme();
-      findElement("appearanceNote").textContent = HOME_SCREEN_NOTE;
+      if (choice.name === "appearance")
+        findElement("appearanceNote").textContent = HOME_SCREEN_NOTE;
     });
   }
   appearance.watch(() => {

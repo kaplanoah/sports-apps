@@ -147,6 +147,7 @@ export default [
   {
     // A plain script the page loads before its modules, whose functions the page calls.
     files: [
+      "shared/page/draw-home-screen-asks.js",
       "shared/page/open-last-tab.js",
       "shared/page/show-last-drawn.js",
       "shared/page/slow-load.js",

@@ -323,6 +323,10 @@ const COVERAGE = {
   "tab:search": { leftOut: "It's the search itself" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },
   "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
+  "dialog:homeScreenWelcome": {
+    leftOut:
+      "It shows once, before the page is added, and Settings keeps its steps, which search finds",
+  },
   "sheet:gameSheet": { games: "Liberty at Lynx" },
   "section:game": { games: "Liberty at Lynx" },
   "section:highlights": { search: "highlights", opens: "highlights" },

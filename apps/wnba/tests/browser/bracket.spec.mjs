@@ -144,7 +144,7 @@ test.describe("on a phone, the bracket", () => {
   test("spreads its cards alike to reach the round dots, with each round's name just above them", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: PHONE.width, height: 860 });
+    await page.setViewportSize({ width: PHONE.width, height: 816 });
     await openApp(page);
     const gaps = await readCardGaps(page);
     expect(gaps.aboveCards).toBeCloseTo(16, 0);

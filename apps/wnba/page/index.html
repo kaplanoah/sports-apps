@@ -72,16 +72,18 @@
   <link rel="stylesheet" href="shared/highlights.css" />
   <link rel="stylesheet" href="shared/rank-curve.css" />
   <link rel="stylesheet" href="shared/no-field-note.css" />
+  <link rel="stylesheet" href="shared/gate.css" />
   <link rel="stylesheet" href="styles.css" />
   <script src="shared/pick-theme.js"></script>
   <script src="shared/open-last-tab.js"></script>
+  <script src="shared/draw-home-screen-asks.js"></script>
   <script src="shared/show-last-drawn.js"></script>
   <script src="shared/slow-load.js"></script>
   <script type="importmap">
     { "imports": { "#shared/": "./shared/" } }
   </script>
 
-  <div class="home-screen-bar" id="homeScreenBar" hidden></div>
+  <dialog id="homeScreenWelcome" class="welcome" aria-labelledby="welcomeTitle"></dialog>
   <header class="top">
     <div class="title-row">
       <h1>
@@ -583,6 +585,7 @@
     openLastTab();
     showLastDrawn();
     watchSlowLoad();
+    drawHomeScreenAsks();
   </script>
 
   <script type="module" src="js/app.js"></script>

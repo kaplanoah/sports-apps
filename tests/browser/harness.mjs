@@ -157,11 +157,15 @@ export async function connectToStore(page, { context, store }) {
 }
 
 /**
- * Loads the page with its clock set to `now`.
+ * Loads the page with its clock set to `now`. A phone's browser opens on the welcome until it's
+ * closed, so a page not about it starts with it closed.
  * @param {import("@playwright/test").Page} page
  * @param {string} now
+ * @param {{ isShowingWelcome?: boolean }} [options]
  */
-export async function loadPageAt(page, now) {
+export async function loadPageAt(page, now, { isShowingWelcome = false } = {}) {
+  if (!isShowingWelcome)
+    await page.addInitScript(() => localStorage.setItem("homeScreenWelcomeClosed", "closed"));
   await page.clock.install({ time: new Date(now) });
   await page.goto("/");
 }
