@@ -559,6 +559,7 @@ test("on a wide screen, the tabs are one segmented control, each as tall as a pi
   const games = page.getByRole("tab", { name: "Games" });
   for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
     await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     await expect(track).toHaveCSS("background-color", await readTokenColor(page, "--divider"));
     const chosen = page.locator("nav.tabs [role=tab][aria-selected=true]");
     await expect(chosen).toHaveCSS("background-color", await readTokenColor(page, "--orange"));

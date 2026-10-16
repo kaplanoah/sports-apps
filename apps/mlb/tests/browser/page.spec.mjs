@@ -198,6 +198,7 @@ test("on a wide screen, the tabs are one segmented control, each as tall as a pi
   expect(/** @type {{ height: number }} */ (await track.boundingBox()).height).toBe(pillHeight + 4);
   for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
     await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     await expect(track).toHaveCSS("background-color", await readColor(page, "--divider"));
     const chosen = page.locator("nav.tabs [role=tab][aria-selected=true]");
     await expect(chosen).toHaveCSS("background-color", await readColor(page, "--card"));
