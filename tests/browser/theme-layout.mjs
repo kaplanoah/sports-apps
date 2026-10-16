@@ -1,14 +1,19 @@
+import { waitForPressesToEnd } from "./tap-states.mjs";
+
 // The parts a theme may lift a fraction of a pixel, where its colors look off center otherwise.
 const PLACED_BY_EYE = ".nscore";
 
 /**
- * Where every shown element sits, keyed by its path of child indexes from the body, rounded to the
- * half pixel. A theme changes only colors, so two themes' layouts of the same view are the same.
+ * Where every shown element sits, keyed by its tag, its classes, and its path of child indexes
+ * from the body, rounded to the half pixel, once no row is pressed, since a pressed row's class
+ * would name its button differently from one read to the next. A theme changes only colors, so two
+ * themes' layouts of the same view are the same.
  * @param {import("@playwright/test").Page} page
  * @returns {Promise<Record<string, string>>}
  */
-export const readLayout = (page) =>
-  page.evaluate((placedByEye) => {
+export async function readLayout(page) {
+  await waitForPressesToEnd(page);
+  return page.evaluate((placedByEye) => {
     /** @param {number} value */
     const round = (value) => Math.round(value * 2) / 2;
     /** @param {Element} element */
@@ -32,6 +37,7 @@ export const readLayout = (page) =>
     }
     return layout;
   }, PLACED_BY_EYE);
+}
 
 /**
  * The elements whose place or size differs between two layouts, each with both.
