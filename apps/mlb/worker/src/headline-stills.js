@@ -1,5 +1,5 @@
 import { requestClaude } from "../../../../shared/worker/claude.js";
-import { describeError } from "../../../../shared/worker/responses.js";
+import { noteFailure } from "../../../../shared/worker/job-status.js";
 import { isSameJson } from "../../../../shared/page/compare.js";
 
 // Which of MLB's stills for a game's plays have a headline laid over them, like "WAVE IT
@@ -9,8 +9,9 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 // one run and a game has dozens, so a game with more isn't finished, and the store's job reads it
 // again next run for the next few. A still Claude doesn't answer for shows as MLB's own until it
 // does, and is asked about again a few minutes later, as the job tries again a read that failed,
-// until it has gone unanswered a few times, when it counts as clean. Without the Worker's API key,
-// each still counts as clean. The answers are kept for the current season's games only, since the
+// until it has gone unanswered a few times, when it counts as clean. Claude turning the Worker's
+// key away isn't a still going unanswered, so a key that stopped working never clears one. Without
+// the Worker's API key, each still counts as clean. The answers are kept for the current season's games only, since the
 // job reads no other season's.
 
 export const STILL_MODEL = "claude-haiku-5-5";
@@ -29,9 +30,12 @@ export const STILL_SCHEMA = {
 };
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
+/** @typedef {import("../../../../shared/worker/job-status.js").RunContext} RunContext */
 
 // How many reads a still may go unanswered before it counts as clean.
 export const MAX_STILL_TRIES = 3;
+// Claude turning the Worker's key away, which says nothing about the still.
+const REFUSED_KEY_STATUSES = new Set([401, 403]);
 const CHECKS_PREFIX = "headline-stills:";
 const MISSES_PREFIX = "headline-still-misses:";
 // The season whose games' answers are kept.
@@ -69,28 +73,35 @@ export async function hasHeadline({ apiKey, fetchImpl, still }) {
 }
 
 /**
- * Asks Claude about each still, and leaves out a still it couldn't answer for.
+ * Claude's answer for each still it answered for, the stills it didn't, and those it turned away
+ * for the Worker's key, with the first error.
  * @param {object} options
  * @param {string} options.apiKey
  * @param {typeof fetch} options.fetchImpl
- * @param {string} id the game's
  * @param {string[]} stills
- * @returns {Promise<Record<string, boolean>>}
  */
-async function checkStills({ apiKey, fetchImpl }, id, stills) {
-  const answers = await Promise.all(
-    stills.map((still) =>
-      hasHeadline({ apiKey, fetchImpl, still }).catch((error) => {
-        console.error(
-          `Checking a still of game ${id} for a headline failed: ${describeError(error)}`,
-        );
-        return null;
-      }),
-    ),
+async function checkStills({ apiKey, fetchImpl }, stills) {
+  const results = await Promise.allSettled(
+    stills.map((still) => hasHeadline({ apiKey, fetchImpl, still })),
   );
-  return Object.fromEntries(
-    stills.flatMap((still, index) => (answers[index] === null ? [] : [[still, answers[index]]])),
-  );
+  /** @type {Record<string, boolean>} */
+  const answers = {};
+  /** @type {string[]} */
+  const missed = [];
+  /** @type {string[]} */
+  const refused = [];
+  /** @type {unknown} */
+  let firstError;
+  for (const [index, result] of results.entries()) {
+    if (result.status === "fulfilled") {
+      answers[stills[index]] = result.value;
+      continue;
+    }
+    firstError ??= result.reason;
+    const isKeyRefused = REFUSED_KEY_STATUSES.has(result.reason?.status);
+    (isKeyRefused ? refused : missed).push(stills[index]);
+  }
+  return { answers, missed, refused, firstError };
 }
 
 /**
@@ -109,16 +120,19 @@ function chooseStillsToAsk(stills, kept, missed) {
 /**
  * How many reads each still without an answer has gone unanswered, counting this one.
  * @param {string[]} stills
- * @param {{ answered: Record<string, boolean>, missed: Record<string, number>, asked: string[] }} read
+ * @param {{ answered: Record<string, boolean>, missed: Record<string, number>, missedNow: string[] }} read
  * @returns {Record<string, number>}
  */
-const countMisses = (stills, { answered, missed, asked }) =>
+const countMisses = (stills, { answered, missed, missedNow }) =>
   Object.fromEntries(
     stills
       .filter((still) => !Object.hasOwn(answered, still))
       .map(
         (still) =>
-          /** @type {const} */ ([still, (missed[still] ?? 0) + (asked.includes(still) ? 1 : 0)]),
+          /** @type {const} */ ([
+            still,
+            (missed[still] ?? 0) + (missedNow.includes(still) ? 1 : 0),
+          ]),
       )
       .filter(([, count]) => count > 0),
   );
@@ -150,9 +164,10 @@ async function saveWhenChanged(storage, key, { before, after }) {
 /**
  * The game's stills that have a headline on them, asking Claude only about the first few it hasn't
  * answered for, and keeping its answers for the game's stills of now, with whether every still has
- * been asked about this round, and whether any went unanswered. A still that has gone unanswered
- * too often is kept as clean.
- * @param {JobContext} context
+ * been asked about this round, and whether any went unanswered, which the run's failures name. A
+ * still that has gone unanswered too often is kept as clean. A read Claude turned the key away for
+ * is tried again later, as one that went unanswered is, without counting against its stills.
+ * @param {RunContext} context
  * @param {string} id the game's
  * @param {string[]} stills
  * @returns {Promise<{ withHeadlines: Set<string>, isFinished: boolean, hasMisses: boolean }>}
@@ -165,11 +180,16 @@ export async function findHeadlineStills(context, id, stills) {
   /** @type {Record<string, number>} */
   const missed = (await context.storage.get(nameMissesKey(id))) ?? {};
   const asked = chooseStillsToAsk(stills, kept, missed);
-  const answered = {
-    ...kept,
-    ...(await checkStills({ apiKey, fetchImpl: context.fetchImpl }, id, asked)),
-  };
-  const counted = countMisses(stills, { answered, missed, asked });
+  const checked = await checkStills({ apiKey, fetchImpl: context.fetchImpl }, asked);
+  const unanswered = checked.missed.length + checked.refused.length;
+  if (unanswered)
+    noteFailure(
+      context.failures,
+      `Asking Claude about ${unanswered} of game ${id}'s stills`,
+      checked.firstError,
+    );
+  const answered = { ...kept, ...checked.answers };
+  const counted = countMisses(stills, { answered, missed, missedNow: checked.missed });
   const isGivenUp = (/** @type {string} */ still) => counted[still] >= MAX_STILL_TRIES;
   const checks = Object.fromEntries(
     stills
@@ -179,10 +199,11 @@ export async function findHeadlineStills(context, id, stills) {
   const misses = Object.fromEntries(Object.entries(counted).filter(([still]) => !isGivenUp(still)));
   await saveWhenChanged(context.storage, nameChecksKey(id), { before: kept, after: checks });
   await saveWhenChanged(context.storage, nameMissesKey(id), { before: missed, after: misses });
+  const isKeyRefused = checked.refused.length > 0;
   return {
     withHeadlines: new Set(stills.filter((still) => checks[still])),
-    isFinished: isRoundAsked(stills, { checks, misses }),
-    hasMisses: Object.keys(misses).length > 0,
+    isFinished: isKeyRefused || isRoundAsked(stills, { checks, misses }),
+    hasMisses: isKeyRefused || Object.keys(misses).length > 0,
   };
 }
 

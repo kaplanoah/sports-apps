@@ -470,6 +470,27 @@ test("a job's run lost with the store, as when a deploy restarts it, runs again 
   assert.equal(contexts.length, 2);
 });
 
+test("a run lost again as it ran for one lost before waits for the job's next turn", async () => {
+  const context = createDurableObjectContext();
+  const contexts = [];
+  const { league } = createJobLeague(contexts);
+  const SeasonStore = createSeasonStore({ ...league, choosePollDelay: () => MINUTE_MS });
+  const clock = { now: NOW };
+  const restart = () => new SeasonStore(context.ctx, {}, { now: () => clock.now });
+  await restart().alarm();
+  await fireNextAlarm(restart(), context, clock);
+  assert.equal(contexts.length, 2);
+
+  const third = restart();
+  await fireNextAlarm(third, context, clock);
+  await fireNextAlarm(third, context, clock);
+  assert.equal(contexts.length, 2);
+
+  clock.now = NOW + 16 * MINUTE_MS;
+  await third.alarm();
+  assert.equal(contexts.length, 3);
+});
+
 test("an alarm whose storage fails is set again for a retry", async (t) => {
   const context = createDurableObjectContext();
   const logged = t.mock.method(console, "error", () => {});

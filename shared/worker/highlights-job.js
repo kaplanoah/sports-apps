@@ -45,7 +45,7 @@ const STATUS_KEY = "highlights/status";
  * @property {(context: JobContext) => Promise<{ season: number, games: any[] } | null>} listFinals
  *   the current season's finals, newest first
  * @property {number} gameLengthMs about how long a game lasts, for one the store didn't see end
- * @property {(context: JobContext, game: any) => Promise<GameHighlights>} readHighlights
+ * @property {(context: RunContext, game: any) => Promise<GameHighlights>} readHighlights
  * @property {(id: string) => string} nameKey where the store keeps a game's highlights
  * @property {number} [edition] how the league reads a game's highlights, raised when that changes
  */

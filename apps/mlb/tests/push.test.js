@@ -6,6 +6,7 @@ import worker from "../worker/src/index.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
 import { NEWS_FEEDS } from "../worker/src/news-feeds.js";
 import { SeasonStore } from "../worker/src/store.js";
+import { createPushService } from "../../../shared/worker/push.js";
 import { decodeBase64Url } from "../../../shared/worker/web-push.js";
 import {
   createDurableObjectContext,
@@ -193,6 +194,31 @@ test("a device whose push service turns every message away for a week is forgott
   clock.now += 7 * DAY_MS;
   await sendTest(env);
   assert.deepEqual(listSubscriptions(context), []);
+});
+
+test("a device that gets a message through after a week of failures is kept, though the next message fails", async () => {
+  const context = createDurableObjectContext();
+  const keys = await createBrowserKeys();
+  const statuses = [201, 500];
+  const push = createPushService({
+    storage: context.ctx.storage,
+    now: () => NOW,
+    fetchImpl: /** @type {any} */ (async () => new Response(null, { status: statuses.shift() })),
+  });
+  const key = "push:subscription:device";
+  await context.ctx.storage.put(key, {
+    endpoint: ENDPOINT,
+    keys: { p256dh: keys.p256dh, auth: keys.auth },
+    subject: ORIGIN,
+    failingSince: NOW - 8 * 24 * 60 * 60 * 1000,
+  });
+
+  await push.sendToAll([
+    { title: "First", body: "", tag: "first" },
+    { title: "Second", body: "", tag: "second" },
+  ]);
+
+  assert.equal(context.stored.get(key)?.failingSince, NOW);
 });
 
 test("unsubscribing removes the device", async () => {

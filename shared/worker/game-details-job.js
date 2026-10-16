@@ -37,8 +37,11 @@ const STATUS_KEY = "games/status";
  * @property {number} [version] how much of a game the league keeps, raised when that grows
  */
 
-/** @param {number} season */
-const nameReadsKey = (season) => `final-reads:${season}`;
+/**
+ * Where the job keeps when each of a season's finals was read.
+ * @param {number} season
+ */
+export const nameReadsKey = (season) => `final-reads:${season}`;
 
 /** @param {number} season */
 const nameKeptKey = (season) => `finals-kept:${season}`;

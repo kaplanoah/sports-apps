@@ -19,7 +19,7 @@ const NEW_STILL = "https://img.mlbstatic.com/mlb-images/image/upload/w_480,h_270
 /**
  * Claude, answering for each still with `answer(still)`: whether it has a headline, or how Claude
  * fails to say.
- * @param {(still: string) => boolean | "overloaded" | "refusal"} answer
+ * @param {(still: string) => boolean | "overloaded" | "refusal" | "unauthorized"} answer
  */
 function createClaude(answer) {
   /** @type {any[]} */
@@ -35,6 +35,10 @@ function createClaude(answer) {
     const headline = answer(body.messages[0].content[0].source.url);
     if (headline === "overloaded")
       return new Response(JSON.stringify({ error: { message: "Overloaded" } }), { status: 529 });
+    if (headline === "unauthorized")
+      return new Response(JSON.stringify({ error: { message: "invalid x-api-key" } }), {
+        status: 401,
+      });
     if (headline === "refusal")
       return new Response(JSON.stringify({ content: [], stop_reason: "refusal", usage: {} }));
     const text = JSON.stringify({ headline });
@@ -52,6 +56,7 @@ function createContext({ apiKey = "key", fetchImpl = /** @type {any} */ (null) }
     env: apiKey ? { ANTHROPIC_API_KEY: apiKey } : {},
     fetchImpl,
     storage,
+    failures: [],
   });
 }
 
@@ -124,6 +129,39 @@ test("a still Claude doesn't answer for counts as clean for now, keeping the ans
   assert.deepEqual([...found.withHeadlines], [STILL, OTHER_STILL]);
   assert.equal(fake.requests.length, 3);
   assert.equal(context.stored.has("headline-still-misses:849826"), false);
+});
+
+test("a still Claude doesn't answer for is named in the run's failures", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const fake = createClaude((still) => (still === STILL ? "overloaded" : false));
+  const context = createContext({ fetchImpl: fake.fetchImpl });
+
+  await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
+
+  assert.deepEqual(context.failures, [
+    "Asking Claude about 1 of game 849826's stills failed: Claude answered 529: Overloaded",
+  ]);
+});
+
+test("a key Claude turns away never clears a still, and the read is tried again later", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const claude = { isKeyRefused: true };
+  const fake = createClaude((still) => (claude.isKeyRefused ? "unauthorized" : still === STILL));
+  const context = createContext({ fetchImpl: fake.fetchImpl });
+
+  for (let read = 0; read < MAX_STILL_TRIES + 2; read += 1) {
+    const refused = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
+    assert.deepEqual([refused.isFinished, refused.hasMisses], [true, true]);
+  }
+  assert.equal(context.stored.has("headline-stills:849826"), false);
+  assert.match(
+    context.failures[0],
+    /^Asking Claude about 2 of game 849826's stills failed: Claude answered 401/,
+  );
+
+  claude.isKeyRefused = false;
+  const found = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
+  assert.deepEqual([...found.withHeadlines], [STILL]);
 });
 
 test("a still Claude never answers for is asked about a few reads, then counts as clean and is never asked about again", async () => {

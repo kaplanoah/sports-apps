@@ -378,6 +378,11 @@ test("a game whose stills Claude didn't answer for saves its highlights with MLB
   const { stored, wait } = run;
   mlb.claude.isDown = true;
 
+  await run.runJob();
+  assert.match(
+    stored.get("highlights/status").lastFailure.message,
+    /Asking Claude about \d+ of game 849826's stills failed: Claude answered 529/,
+  );
   await runUntilChecked(run, mlb);
   assert.deepEqual(
     stored.get(nameHighlightsKey(BREWERS_AT_PADRES)),

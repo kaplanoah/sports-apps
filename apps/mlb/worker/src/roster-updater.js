@@ -68,7 +68,8 @@ const FEEDS = {
   injuries: { maxAgeMs: HOUR_MS, changesWithGames: false },
 };
 
-/** @typedef {import("../../../../shared/worker/job-status.js").RunContext} JobContext */
+/** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
+/** @typedef {import("../../../../shared/worker/job-status.js").RunContext} RunContext */
 /** @typedef {import("../../../../shared/worker/feed-keeper.js").PlayerRead} PlayerRead */
 /**
  * Every player's numbers this season, by id, and his facts, the hitters MLB ranks, and why each
@@ -196,7 +197,7 @@ function createStoreUpdate() {
   const forgetEarlierVersions = createVersionForgetter();
 
   /**
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {string} path
    */
   const fetchJson = (context, path) => fetchMlbJson(context.fetchImpl, path, null);
@@ -210,7 +211,7 @@ function createStoreUpdate() {
     /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(name, key, load);
 
   /**
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {string} path
    */
   const readStats = (context, path) =>
@@ -220,7 +221,7 @@ function createStoreUpdate() {
    * Every player's numbers and facts, and why those on the injured list are there, or null when
    * MLB hasn't answered the regular season's. The postseason's, the ranked hitters', the facts, and
    * the injury report stand empty while they don't answer.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    * @returns {Promise<SeasonNumbers | null>}
    */
@@ -258,7 +259,7 @@ function createStoreUpdate() {
   }
 
   /**
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    */
   async function readTransactions(context, season) {
@@ -287,7 +288,7 @@ function createStoreUpdate() {
   /**
    * Reads the due clubs' rosters, keeping each answer, and notes when each was read. A roster MLB
    * doesn't answer is read on a later run.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    * @param {RosterReads} reads
    * @returns {Promise<RosterReads>}
@@ -316,7 +317,7 @@ function createStoreUpdate() {
 
   /**
    * Saves each player on a club's roster, as his numbers are now.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    * @param {string} club
    * @param {any} roster MLB's answer for the club's roster
@@ -345,7 +346,7 @@ function createStoreUpdate() {
 
   /**
    * The players on every roster read so far, by id, from each club's kept answer.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    */
   async function listRosteredIds(context, season) {
@@ -361,7 +362,7 @@ function createStoreUpdate() {
    * Reads the last games of the rostered players who have played since they were last read, a
    * few batches a run, and keeps each one's, and answers when each player's was last read. A batch
    * MLB doesn't answer is read on a later run.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    * @param {SeasonNumbers} numbers
    * @returns {Promise<Record<string, PlayerRead>>}
@@ -408,7 +409,7 @@ function createStoreUpdate() {
   /**
    * Every player's numbers, but with the totals of each whose last games are behind them as his
    * doc keeps them, so his Roster row and his sheet hold them together.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    * @param {SeasonNumbers} numbers
    * @param {Record<string, PlayerRead>} gameLogReads
@@ -438,7 +439,7 @@ function createStoreUpdate() {
    * Saves each club's roster that has been read, and each player on it, with every player's
    * numbers as they are now, the hitters MLB ranks, and, once every club's roster has been read,
    * the season's list of players.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    * @param {SeasonNumbers} numbers
    */
@@ -468,7 +469,7 @@ function createStoreUpdate() {
   }
 
   /**
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    */
   async function updateRosters(context, season) {
@@ -487,7 +488,7 @@ function createStoreUpdate() {
     await saveRosters(context, season, await holdTotals(context, season, numbers, gameLogReads));
   }
 
-  /** @param {JobContext} context */
+  /** @param {RunContext} context */
   async function keepRosters(context) {
     keeper ??= createFeedKeeper({
       feeds: FEEDS,
@@ -503,7 +504,7 @@ function createStoreUpdate() {
     );
   }
 
-  /** @param {import("../../../../shared/worker/season-store.js").JobContext} context */
+  /** @param {JobContext} context */
   return (context) => runWithStatus(context, { statusKey: STATUS_KEY, updateStore: keepRosters });
 }
 

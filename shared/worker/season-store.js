@@ -331,26 +331,31 @@ export function createSeasonStore(league) {
 
     // The next run is set before this one starts, so a run that never ends can't stop the next. A
     // run marked as under way that this object isn't running was lost with an earlier one, as when
-    // a deploy restarts it, so it runs again at once rather than at its next turn.
+    // a deploy restarts it, so it runs again at once rather than at its next turn, but only once,
+    // so a run that takes the object down each time waits for its turns.
     async startJobWhenDue(name, job, now) {
       const dueKey = `job-due:${name}`;
       const dueAt = (await this.ctx.storage.get(dueKey)) ?? now;
-      if (dueAt > now && !(await this.isRunLost(name))) return dueAt;
+      const isLost = await this.isRunLost(name);
+      if (dueAt > now && !isLost) return dueAt;
       const nextAt = now + job.chooseDelay(now);
       await this.ctx.storage.put(dueKey, nextAt);
-      if (!this.jobRuns.has(name)) this.jobRuns.set(name, this.runJob(name, job));
+      if (!this.jobRuns.has(name))
+        this.jobRuns.set(name, this.runJob(name, job, { isRerun: dueAt > now }));
       return nextAt;
     }
 
+    // A lost run that was itself the rerun of a lost one waits for the job's next turn.
     async isRunLost(name) {
       if (this.jobRuns.has(name)) return false;
-      return (await this.ctx.storage.get(nameRunningKey(name))) !== undefined;
+      const running = await this.ctx.storage.get(nameRunningKey(name));
+      return running !== undefined && !running.isRerun;
     }
 
-    async runJob(name, job) {
+    async runJob(name, job, { isRerun }) {
       const runningKey = nameRunningKey(name);
       try {
-        await this.ctx.storage.put(runningKey, this.now());
+        await this.ctx.storage.put(runningKey, { at: this.now(), isRerun });
         await job.updateStore({
           docs: this.docs,
           storage: this.createJobStorage(name),

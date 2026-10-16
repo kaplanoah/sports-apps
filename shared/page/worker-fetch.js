@@ -9,17 +9,14 @@ import { reloadWhenSignedOut } from "./access.js";
 const recentReads = new Map();
 
 /**
- * What the Worker said went wrong: a sheet's route says it in words, and the store and the access
- * gate as `{ code, message }`.
+ * What the Worker said went wrong, which every one of its routes says as `{ code, message }`.
  * @param {any} body
  * @param {number} status
  * @returns {string}
  */
 function readFailure(body, status) {
-  const error = body?.error;
-  if (typeof error === "string" && error) return error;
-  if (typeof error?.message === "string" && error.message) return error.message;
-  return `The Worker answered ${status}`;
+  const message = body?.error?.message;
+  return typeof message === "string" && message ? message : `The Worker answered ${status}`;
 }
 
 /**

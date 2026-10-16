@@ -19,7 +19,7 @@ const EDITION = 1;
 const GAME_LENGTH_MS = 3 * 60 * 60 * 1000;
 
 /**
- * @param {import("../../../../shared/worker/season-store.js").JobContext} context
+ * @param {import("../../../../shared/worker/job-status.js").RunContext} context
  * @param {any} game
  */
 async function readHighlights(context, game) {

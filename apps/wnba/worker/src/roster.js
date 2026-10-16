@@ -12,7 +12,7 @@ import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } fro
 // each. ESPN's injury report says who is out and why, and only for today's roster, so a past
 // season's has no one out. The store keeps each season's rosters (player-updater.js), so a sheet
 // reads the league itself only for a season the store doesn't keep. The page takes each player's
-// averages from the store, which the season updater keeps.
+// averages from the store, which the player job keeps (player-updater.js).
 
 const WNBA_STATS = "https://stats.wnba.com/stats";
 // A roster changes with a signing or an injury, a past season's never, and the list of every

@@ -1,13 +1,15 @@
 import { fetchBoxScore } from "./box-score.js";
 import { createLeadReader } from "./lead.js";
 import { nameGameDetailsKey } from "./store-docs.js";
-import { createGameDetailsJob } from "../../../../shared/worker/game-details-job.js";
+import { createGameDetailsJob, nameReadsKey } from "../../../../shared/worker/game-details-job.js";
 
 // Keeps each finished game's box score and lead, as the shared job reads each final
 // (game-details-job.js), until the league and ESPN have both caught up: a season's playoff games
 // and each team's last, newest first.
 
 const NO_DETAILS = { boxScore: null, lead: null };
+// Where the WNBA's own job kept each season's reads, before the shared job kept them.
+const OWN_READS_PREFIX = "reads:";
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
 
@@ -77,5 +79,27 @@ async function readDetails(context, game, stored) {
   };
 }
 
-export const createWnbaGameDetailsJob = () =>
-  createGameDetailsJob({ listFinals, readDetails, nameKey: nameGameDetailsKey });
+/**
+ * Moves each season's reads from where the WNBA's own job kept them to where the shared job does,
+ * so a final read before isn't read again.
+ * @param {JobContext["storage"]} storage
+ */
+async function moveOwnReads(storage) {
+  for (const [key, reads] of await storage.list(OWN_READS_PREFIX)) {
+    const sharedKey = nameReadsKey(Number(key.slice(OWN_READS_PREFIX.length)));
+    if ((await storage.get(sharedKey)) === undefined) await storage.put(sharedKey, reads);
+    await storage.delete(key);
+  }
+}
+
+/** @returns {import("../../../../shared/worker/season-store.js").BackgroundJob} */
+export function createWnbaGameDetailsJob() {
+  const job = createGameDetailsJob({ listFinals, readDetails, nameKey: nameGameDetailsKey });
+  return {
+    chooseDelay: job.chooseDelay,
+    async updateStore(context) {
+      await moveOwnReads(context.storage);
+      await job.updateStore(context);
+    },
+  };
+}

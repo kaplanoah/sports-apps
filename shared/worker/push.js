@@ -101,7 +101,8 @@ export function createPushService({ storage, now, fetchImpl }) {
 
   /**
    * Keeps when the device's messages started failing, and forgets it once they have failed long
-   * enough. A message that goes through clears it.
+   * enough. A message that goes through clears it. Answers the device as it's now kept, or null
+   * once it's forgotten.
    * @param {string} key
    * @param {any} subscription
    * @param {boolean} isDelivered
@@ -110,13 +111,25 @@ export function createPushService({ storage, now, fetchImpl }) {
     const { failingSince, ...kept } = subscription;
     if (isDelivered) {
       if (failingSince !== undefined) await storage.put(key, kept);
-    } else if (failingSince === undefined) {
-      await storage.put(key, { ...kept, failingSince: now() });
-    } else if (now() - failingSince >= FAILING_FOR_MS) {
-      await storage.delete(key);
+      return kept;
     }
+    if (failingSince === undefined) {
+      const failing = { ...kept, failingSince: now() };
+      await storage.put(key, failing);
+      return failing;
+    }
+    if (now() - failingSince < FAILING_FOR_MS) return subscription;
+    await storage.delete(key);
+    return null;
   }
 
+  /**
+   * Sends the device a message, and answers the push service's status with the device as it's
+   * now kept, or null once it's forgotten.
+   * @param {string} key
+   * @param {any} subscription
+   * @param {object} message
+   */
   async function deliver(key, subscription, message) {
     let status;
     try {
@@ -132,9 +145,10 @@ export function createPushService({ storage, now, fetchImpl }) {
       await noteDelivery(key, subscription, false);
       throw error;
     }
-    if (GONE_STATUSES.has(status)) await storage.delete(key);
-    else await noteDelivery(key, subscription, isDelivered(status));
-    return status;
+    if (!GONE_STATUSES.has(status))
+      return { status, kept: await noteDelivery(key, subscription, isDelivered(status)) };
+    await storage.delete(key);
+    return { status, kept: null };
   }
 
   async function serveKey() {
@@ -175,7 +189,7 @@ export function createPushService({ storage, now, fetchImpl }) {
     if (!subscription) return respondError(404, "not_found", "This device isn't subscribed.");
     let status;
     try {
-      status = await deliver(key, subscription, TEST_MESSAGE);
+      ({ status } = await deliver(key, subscription, TEST_MESSAGE));
     } catch {
       return respondError(502, "push_failed", "The push service didn't answer.");
     }
@@ -195,9 +209,10 @@ export function createPushService({ storage, now, fetchImpl }) {
 
   // Each device gets its messages in order, and one device failing doesn't stop the others.
   async function sendInOrder(key, subscription, messages) {
+    let kept = subscription;
     for (const message of messages) {
-      const status = await deliver(key, subscription, message);
-      if (GONE_STATUSES.has(status)) return;
+      ({ kept } = await deliver(key, kept, message));
+      if (!kept) return;
     }
   }
 

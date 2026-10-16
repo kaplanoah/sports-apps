@@ -349,6 +349,24 @@ test("only a season's finals keep their reads, so a team's game no longer among 
   assert.deepEqual(Object.keys(storage.stored.get("final-reads:2026")), [ACES_AT_FEVER.id]);
 });
 
+test("the reads the WNBA's own job kept are taken as the shared job's, so no final is read again, and then forgotten", async () => {
+  const { storage, runJob, takeRequests } = createRun();
+  const doneRead = { firstReadAt: 0, readAt: 0, isDone: true };
+  await storage.put("reads:2026", {
+    [VALKYRIES_AT_WINGS.id]: doneRead,
+    [ACES_AT_FEVER.id]: doneRead,
+  });
+
+  await runJob();
+
+  assert.deepEqual(takeRequests(), []);
+  assert.equal(storage.stored.has("reads:2026"), false);
+  assert.deepEqual(
+    Object.keys(storage.stored.get("final-reads:2026")).sort(),
+    [ACES_AT_FEVER.id, VALKYRIES_AT_WINGS.id].sort(),
+  );
+});
+
 test("a past season whose every final is read isn't looked through again", async () => {
   const { docs, runJob, wait, takeRequests } = createRun({
     seasons: { 2026: [], 2025: listFinals(2025, 1) },
