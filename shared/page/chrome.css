@@ -351,7 +351,10 @@ section.view.active {
   min-height: 100%;
   padding: 0 22px var(--bottom-padding);
 }
+/* The room above and below a header on a phone, which a sheet's band keeps on every screen. */
 .sheet-top {
+  --top-room-above: 8px;
+  --top-room-below: 6px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -821,7 +824,7 @@ body:has(> .home-screen-bar:not([hidden])) {
   .sheet-top {
     justify-content: flex-start;
     margin-inline: -18px;
-    padding: calc(env(safe-area-inset-top) + 8px) 18px 6px;
+    padding: calc(env(safe-area-inset-top) + var(--top-room-above)) 18px var(--top-room-below);
   }
 
   /*
