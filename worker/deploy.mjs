@@ -497,45 +497,51 @@ function readCommandLineOrExit(args) {
   }
 }
 
+/** @typedef {"passed" | "not passed" | "unknown"} CiState */
+
 /**
- * Whether CI on main passed on a commit, which GitHub answers only to a run in Actions that holds
- * GH_TOKEN, and false when it can't tell.
+ * Whether CI on main passed on a commit, or "unknown" when GitHub couldn't be asked: it answers
+ * only a run that holds GH_TOKEN and names GITHUB_REPOSITORY, as Actions does, and a read can fail.
  * @param {string} commit
  * @param {{ fetchImpl?: typeof fetch, env?: NodeJS.ProcessEnv }} [options]
+ * @returns {Promise<CiState>}
  */
-export async function hasMainCiPassed(commit, { fetchImpl = fetch, env = process.env } = {}) {
-  if (!env.GH_TOKEN || !env.GITHUB_REPOSITORY) return false;
+export async function readMainCiState(commit, { fetchImpl = fetch, env = process.env } = {}) {
+  if (!env.GH_TOKEN || !env.GITHUB_REPOSITORY) return "unknown";
   const github = createGitHub({ repository: env.GITHUB_REPOSITORY, fetchImpl, env });
   try {
     const { workflow_runs: runs } = await github(
       `/actions/workflows/ci.yml/runs?head_sha=${commit}&event=push&per_page=1`,
     );
-    return runs[0]?.conclusion === "success";
+    return runs[0]?.conclusion === "success" ? "passed" : "not passed";
   } catch {
-    return false;
+    return "unknown";
   }
 }
 
 /**
  * Why a commit its branch has moved past deploys or not. A push to a force-pushed branch deploys at
  * once, so it covers the commit before it. A merge to main deploys only once CI passes on it, so
- * until then the commit before it deploys, in case it never does.
+ * until then, or while GitHub can't say, the commit before it deploys, in case it never does.
  * @param {{ commit: string, newer: string, channel: string }} release
- * @param {(commit: string) => Promise<boolean>} hasCiPassed
+ * @param {(commit: string) => Promise<CiState>} readCiState
  * @returns {Promise<{ isCovered: boolean, message: string }>}
  */
-export async function decideMovedOn({ commit, newer, channel }, hasCiPassed) {
+export async function decideMovedOn({ commit, newer, channel }, readCiState) {
   const { branch, isForcePushed } = findChannel(channel);
   const [shortCommit, shortNewer] = [commit.slice(0, 7), newer.slice(0, 7)];
-  if (isForcePushed || (await hasCiPassed(newer)))
+  const movedOn = `::notice::${branch} has moved on to ${shortNewer}`;
+  const ciState = isForcePushed ? "passed" : await readCiState(newer);
+  if (ciState === "passed")
     return {
       isCovered: true,
-      message: `::notice::${branch} has moved on to ${shortNewer}, whose deploy covers ${shortCommit}, so nothing was deployed.`,
+      message: `${movedOn}, whose deploy covers ${shortCommit}, so nothing was deployed.`,
     };
-  return {
-    isCovered: false,
-    message: `::notice::${branch} has moved on to ${shortNewer}, but CI on ${branch} hasn't passed on it, so ${shortCommit} deploys.`,
-  };
+  const why =
+    ciState === "unknown"
+      ? `but GitHub couldn't be asked whether CI on ${branch} passed on it`
+      : `but CI on ${branch} hasn't passed on it`;
+  return { isCovered: false, message: `${movedOn}, ${why}, so ${shortCommit} deploys.` };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -544,7 +550,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { branch } = findChannel(channel);
   const { commit, newer } = readReleaseOrExit(channel);
   if (newer) {
-    const { isCovered, message } = await decideMovedOn({ commit, newer, channel }, hasMainCiPassed);
+    const { isCovered, message } = await decideMovedOn({ commit, newer, channel }, readMainCiState);
     console.log(message);
     if (isCovered) process.exit(0);
   }

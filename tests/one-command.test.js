@@ -55,6 +55,17 @@ test("commands a shell is handed as one string are blocked as if typed", () => {
     assert.match(findCommandProblem(command) ?? "", /^It joins commands with /, command);
   assert.equal(findCommandProblem('bash -c "npm test"'), null);
   assert.equal(findCommandProblem(`node -e "a(); b()"`), null);
+  assert.match(findCommandProblem('echo $(bash -c "a; b")') ?? "", /^It joins commands with ;/);
+});
+
+test("a message or heredoc that only mentions a shell's script runs nothing, so it passes", () => {
+  for (const command of [
+    `git commit -m "fix: bash -c \\"a; b\\" is now blocked"`,
+    `git commit -m "fix: sh -c 'a; b' is now blocked"`,
+    "git commit -F - <<'EOF'\nfix: block bash -c \"a; b\"\nEOF",
+    "gh pr comment 1 --body-file - <<EOF\nsh -c 'a && b' and bash -c \"c; d\"\nEOF",
+  ])
+    assert.equal(findCommandProblem(command), null, command);
 });
 
 test("parentheses inside $(...) nest, so what follows them is still inside it", () => {

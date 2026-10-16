@@ -49,20 +49,32 @@ function skipHeredocBody(command, from, delimiter) {
 const isBackgroundAmpersand = (text, at) =>
   text[at] === "&" && !/[<>|]/.test(text[at - 1] ?? "") && text[at + 1] !== ">";
 
+// A shell handed its commands as one quoted string, as `bash -c "a; b"` is, still runs each.
+const SHELL_BEFORE_SCRIPT = /(?:^|[\s(|])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\w*\s+$/;
+
 /**
  * The first operator outside quotes, heredocs, and `$(...)` that starts another command: `&&`,
- * `||`, `;`, a lone `&`, or a line break, or null when the command is one.
+ * `||`, `;`, a lone `&`, or a line break, or null when the command is one, and each quoted
+ * script the command hands a shell before it. Text inside other quotes or a heredoc's body,
+ * like a commit message, runs nothing.
  * @param {string} command
+ * @returns {{ separator: string | null, scripts: string[] }}
  */
-export function findSeparator(command) {
+function scanCommand(command) {
   let quote = "";
+  let scriptStart = -1;
   let depth = 0;
+  /** @type {string[]} */
+  const scripts = [];
   const text = command.trim();
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
     if (quote) {
       if (char === "\\" && quote === '"') at += 1;
-      else if (char === quote) quote = "";
+      else if (char === quote) {
+        if (scriptStart !== -1) scripts.push(text.slice(scriptStart, at));
+        quote = "";
+      }
       continue;
     }
     if (char === "\\") {
@@ -71,6 +83,7 @@ export function findSeparator(command) {
     }
     if (char === "'" || char === '"') {
       quote = char;
+      scriptStart = SHELL_BEFORE_SCRIPT.test(text.slice(0, at)) ? at + 1 : -1;
       continue;
     }
     if (char === "$" && text[at + 1] === "(") {
@@ -88,25 +101,34 @@ export function findSeparator(command) {
       at = skipHeredocBody(text, heredoc.end, heredoc.delimiter) - 1;
       continue;
     }
-    const pair = text.slice(at, at + 2);
-    if (pair === "&&" || pair === "||") return pair;
-    if (char === ";") return ";";
-    if (char === "\n") return "a line break";
-    if (isBackgroundAmpersand(text, at)) return "&";
+    const separator = readSeparatorAt(text, at);
+    if (separator) return { separator, scripts };
   }
-  return null;
+  return { separator: null, scripts };
 }
 
-// A shell handed its commands as one quoted string, as `bash -c "a; b"` is, still runs each.
-const SHELL_SCRIPT =
-  /(?:^|[\s(|])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\w*\s+(["'])((?:\\.|(?!\1)[^\\])*)\1/g;
+/**
+ * The operator that starts at `at` and starts another command, or null.
+ * @param {string} text
+ * @param {number} at
+ */
+function readSeparatorAt(text, at) {
+  const pair = text.slice(at, at + 2);
+  if (pair === "&&" || pair === "||") return pair;
+  if (text[at] === ";") return ";";
+  if (text[at] === "\n") return "a line break";
+  return isBackgroundAmpersand(text, at) ? "&" : null;
+}
 
 /**
- * The commands a call hands a shell to run as a string.
+ * The first separator a command or any script it hands a shell holds, or null when it's one.
  * @param {string} command
+ * @returns {string | null}
  */
-const listShellScripts = (command) =>
-  [...command.matchAll(SHELL_SCRIPT)].map(([, , script]) => script);
+export function findSeparator(command) {
+  const { separator, scripts } = scanCommand(command);
+  return separator ?? scripts.map(findSeparator).find(Boolean) ?? null;
+}
 
 /**
  * Why a Bash command breaks the rule, or null when it keeps it.
@@ -114,7 +136,7 @@ const listShellScripts = (command) =>
  */
 export function findCommandProblem(command) {
   if (/^[\s(]*cd(\s|\)|$)/.test(command)) return `It starts with cd. ${RULE}`;
-  const separator = [command, ...listShellScripts(command)].map(findSeparator).find(Boolean);
+  const separator = findSeparator(command);
   return separator ? `It joins commands with ${separator}. ${RULE}` : null;
 }
 

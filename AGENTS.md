@@ -881,6 +881,7 @@ When a step says to go back to an earlier step, continue in order from there.
     - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
       Read that run's log instead.
       Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.
+      Saying "couldn't be asked", it deploys this merge because GitHub couldn't say how CI went on the newer one, so read on in this run's log too.
     - It says "already has": a newer merge's deploy went live first, and covers this one.
       Read that run's log instead.
     - The run was skipped:

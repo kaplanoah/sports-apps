@@ -623,60 +623,80 @@ test("a merge main has moved past deploys unless CI passed on the newer one, and
   const release = { commit: LIVE_COMMIT, newer: NEW_COMMIT };
   /** @type {string[]} */
   const asked = [];
-  /** @param {boolean} hasPassed */
-  const answerCi = (hasPassed) => async (/** @type {string} */ commit) => {
+  /** @param {"passed" | "not passed" | "unknown"} state */
+  const answerCi = (state) => async (/** @type {string} */ commit) => {
     asked.push(commit);
-    return hasPassed;
+    return state;
   };
 
-  assert.deepEqual(await decideMovedOn({ ...release, channel: "production" }, answerCi(true)), {
+  assert.deepEqual(await decideMovedOn({ ...release, channel: "production" }, answerCi("passed")), {
     isCovered: true,
     message:
       "::notice::main has moved on to 2222222, whose deploy covers 1111111, so nothing was deployed.",
   });
   assert.deepEqual(asked, [NEW_COMMIT]);
-  assert.deepEqual(await decideMovedOn({ ...release, channel: "production" }, answerCi(false)), {
-    isCovered: false,
-    message:
-      "::notice::main has moved on to 2222222, but CI on main hasn't passed on it, so 1111111 deploys.",
-  });
-  const beta = await decideMovedOn({ ...release, channel: "beta" }, answerCi(false));
+  assert.deepEqual(
+    await decideMovedOn({ ...release, channel: "production" }, answerCi("not passed")),
+    {
+      isCovered: false,
+      message:
+        "::notice::main has moved on to 2222222, but CI on main hasn't passed on it, so 1111111 deploys.",
+    },
+  );
+  assert.deepEqual(
+    await decideMovedOn({ ...release, channel: "production" }, answerCi("unknown")),
+    {
+      isCovered: false,
+      message:
+        "::notice::main has moved on to 2222222, but GitHub couldn't be asked whether CI on main passed on it, so 1111111 deploys.",
+    },
+  );
+  const beta = await decideMovedOn({ ...release, channel: "beta" }, answerCi("not passed"));
   assert.equal(beta.isCovered, true);
-  assert.equal(asked.length, 2, "beta asks nothing");
+  assert.equal(asked.length, 3, "beta asks nothing");
 });
 
-test("whether CI on main passed on a commit comes from its newest push run, and is no when GitHub can't say", async () => {
-  const { hasMainCiPassed } = await loadDeployModule();
+test("whether CI on main passed on a commit comes from its newest push run, and is unknown when GitHub can't be asked", async () => {
+  const { readMainCiState } = await loadDeployModule();
   const env = { GH_TOKEN: "token", GITHUB_REPOSITORY: "owner/repo" };
   /** @type {string[]} */
   const urls = [];
-  /** @param {Response | (() => Response)} answer */
+  /** @param {Response} answer */
   const createFetch = (answer) => async (/** @type {string} */ url) => {
     urls.push(url);
-    return typeof answer === "function" ? answer() : answer;
+    return answer;
   };
   /** @param {(string | null)[]} conclusions */
   const answerRuns = (conclusions) =>
     Response.json({ workflow_runs: conclusions.map((conclusion) => ({ conclusion })) });
 
   assert.equal(
-    await hasMainCiPassed(NEW_COMMIT, { fetchImpl: createFetch(answerRuns(["success"])), env }),
-    true,
+    await readMainCiState(NEW_COMMIT, { fetchImpl: createFetch(answerRuns(["success"])), env }),
+    "passed",
   );
   assert.deepEqual(urls, [
     `https://api.github.com/repos/owner/repo/actions/workflows/ci.yml/runs?head_sha=${NEW_COMMIT}&event=push&per_page=1`,
   ]);
-  for (const answer of [
-    answerRuns(["failure"]),
-    answerRuns([null]),
-    answerRuns([]),
-    new Response("", { status: 500 }),
-  ])
-    assert.equal(await hasMainCiPassed(NEW_COMMIT, { fetchImpl: createFetch(answer), env }), false);
+  for (const answer of [answerRuns(["failure"]), answerRuns([null]), answerRuns([])])
+    assert.equal(
+      await readMainCiState(NEW_COMMIT, { fetchImpl: createFetch(answer), env }),
+      "not passed",
+    );
   assert.equal(
-    await hasMainCiPassed(NEW_COMMIT, { fetchImpl: createFetch(answerRuns(["success"])), env: {} }),
-    false,
+    await readMainCiState(NEW_COMMIT, {
+      fetchImpl: createFetch(new Response("", { status: 500 })),
+      env,
+    }),
+    "unknown",
   );
+  for (const unnamed of [{}, { GH_TOKEN: "token" }, { GITHUB_REPOSITORY: "owner/repo" }])
+    assert.equal(
+      await readMainCiState(NEW_COMMIT, {
+        fetchImpl: createFetch(answerRuns(["success"])),
+        env: unnamed,
+      }),
+      "unknown",
+    );
 });
 
 test("a new version passes once its Worker answers and its page draws, or has no page to open", async () => {
