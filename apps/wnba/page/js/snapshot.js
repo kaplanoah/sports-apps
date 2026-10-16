@@ -1,8 +1,8 @@
 // Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 // The league's own feeds: today's scoreboard and the season's schedule from its CDN, and the
-// playoff bracket, the standings, and the players' season averages from its stats site. When the
-// scoreboard doesn't answer, ESPN's stands in for today's scores and clocks, and for a game the
-// schedule still holds as under way once the scoreboard no longer lists it. The league's feeds
+// playoff bracket and the standings from its stats site. When the scoreboard doesn't answer,
+// ESPN's stands in for today's scores and clocks, and for a game the schedule still holds as under
+// way once the scoreboard no longer lists it. The league's feeds
 // don't say where a game is on, so ESPN's scoreboard does, and it says when a game starts while the
 // league's schedule still has its time to be decided.
 
@@ -25,7 +25,7 @@ const WNBA_STATS = "https://stats.wnba.com";
 const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/wnba";
 const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba";
 
-const LEAGUE_FEEDS = ["bracket", "players", "schedule", "scoreboard", "standings"];
+const LEAGUE_FEEDS = ["bracket", "schedule", "scoreboard", "standings"];
 
 export const REQUESTS = {
   scoreboard: `${WNBA_CDN}/static/json/liveData/scoreboard/todaysScoreboard_10.json`,
@@ -36,45 +36,6 @@ export const REQUESTS = {
   /** @param {number} season */
   standings: (season) =>
     `${WNBA_STATS}/stats/leaguestandingsv3?LeagueID=10&Season=${season}&SeasonType=Regular+Season`,
-  /** @param {number} season */
-  players: (season) =>
-    `${WNBA_STATS}/stats/leaguedashplayerstats?${new URLSearchParams({
-      College: "",
-      Conference: "",
-      Country: "",
-      DateFrom: "",
-      DateTo: "",
-      Division: "",
-      DraftPick: "",
-      DraftYear: "",
-      GameScope: "",
-      GameSegment: "",
-      Height: "",
-      LastNGames: "0",
-      LeagueID: "10",
-      Location: "",
-      MeasureType: "Base",
-      Month: "0",
-      OpponentTeamID: "0",
-      Outcome: "",
-      PORound: "0",
-      PaceAdjust: "N",
-      PerMode: "PerGame",
-      Period: "0",
-      PlayerExperience: "",
-      PlayerPosition: "",
-      PlusMinus: "N",
-      Rank: "N",
-      Season: String(season),
-      SeasonSegment: "",
-      SeasonType: "Regular Season",
-      ShotClockRange: "",
-      StarterBench: "",
-      TeamID: "0",
-      VsConference: "",
-      VsDivision: "",
-      Weight: "",
-    })}`,
 };
 
 export const BACKUP_REQUESTS = {
@@ -283,64 +244,6 @@ function readStandingsRows(response) {
     .filter((row) => row.team)
     .sort((first, second) => first.place - second.place);
 }
-
-// The feed gives a player's name whole; everything after the first space is her last name.
-function splitName(name) {
-  const [firstName, ...rest] = String(name).split(" ");
-  return { firstName, lastName: rest.join(" ") };
-}
-
-/**
- * A team's best scorers by points a game. A player who has missed most of the team's games
- * doesn't lead it, however well she scores.
- * @param {any} players the stats site's season averages
- * @param {string} team
- * @param {number} count
- */
-function listTeamLeaders(players, team, count) {
-  const rows = readStatsTable(players).filter((row) => findTeamCode(row.TEAM_ID) === team);
-  const most = Math.max(0, ...rows.map((row) => row.GP));
-  return rows
-    .filter((row) => row.GP >= most / 2)
-    .sort((first, second) => second.PTS - first.PTS)
-    .slice(0, count)
-    .map((row) => ({
-      id: row.PLAYER_ID,
-      ...splitName(row.PLAYER_NAME),
-      games: row.GP,
-      minutes: row.MIN,
-      points: row.PTS,
-      rebounds: row.REB,
-      assists: row.AST,
-      fieldGoalShare: row.FG_PCT,
-    }));
-}
-
-// A team's sheet shows its leading five, and a game's preview the first three of them.
-const LEADERS_PER_TEAM = 5;
-
-const listLeaders = (players) =>
-  Object.keys(TEAMS).flatMap((team) =>
-    listTeamLeaders(players, team, LEADERS_PER_TEAM).map((leader) => ({ team, ...leader })),
-  );
-
-/**
- * Every player's averages a game, for her team's Roster page.
- * @param {any} players the stats site's season averages
- */
-const listAverages = (players) =>
-  readStatsTable(players)
-    .map((row) => ({
-      team: findTeamCode(row.TEAM_ID),
-      id: row.PLAYER_ID,
-      ...splitName(row.PLAYER_NAME),
-      games: row.GP,
-      minutes: row.MIN,
-      points: row.PTS,
-      rebounds: row.REB,
-      assists: row.AST,
-    }))
-    .filter((player) => player.team);
 
 // The schedule and the scoreboard hold the last season's games until the league starts the next.
 const listSeasonGames = (games, season) =>
@@ -654,7 +557,7 @@ export function listScheduledStarts(schedule, season) {
 }
 
 /**
- * @param {{ scoreboard?: any, schedule?: any, bracket?: any, standings?: any, players?: any, backup?: { games: any[] } | null, networks?: any[] | null }} responses
+ * @param {{ scoreboard?: any, schedule?: any, bracket?: any, standings?: any, backup?: { games: any[] } | null, networks?: any[] | null }} responses
  * @param {{ season: number, now?: number }} options
  */
 export function buildSnapshot(responses, { season, now = Date.now() }) {
@@ -685,8 +588,6 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     schedule: seasonGames.map(readScheduledGame),
     series,
     standings: readStandingsRows(responses.standings),
-    leaders: listLeaders(responses.players),
-    averages: listAverages(responses.players),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
     openingDay: readOpeningDay(responses.schedule, season),

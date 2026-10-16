@@ -11,12 +11,11 @@ const EDGE_CACHE_SECONDS = 5;
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
 const SNAPSHOT_REUSE_MS = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-// The schedule, bracket, standings, and players' averages change as games end, and otherwise
+// The schedule, bracket, and standings change as games end, and otherwise
 // hardly at all, and the stats site is slow and quick to turn away a busy caller.
 const SLOW_FEEDS = {
   schedule: { maxAgeMs: DAY_MS, changesWithGames: true },
   standings: { maxAgeMs: DAY_MS, changesWithGames: true },
-  players: { maxAgeMs: DAY_MS, changesWithGames: true },
   bracket: { maxAgeMs: DAY_MS, changesWithGames: true },
 };
 
@@ -26,7 +25,6 @@ const FEED_DATA = {
   schedule: (answer) => answer?.leagueSchedule?.gameDates,
   bracket: (answer) => answer?.bracket?.playoffBracketSeries,
   standings: (answer) => answer?.resultSets?.[0]?.rowSet,
-  players: (answer) => answer?.resultSets?.[0]?.rowSet,
 };
 
 const hasFeedData = (name, answer) => Array.isArray(FEED_DATA[name](answer));
@@ -172,11 +170,10 @@ export function createSnapshotServer({
     await slowFeeds.noteFinalCount(scoreboard ? countFinals(scoreboard) : null);
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
-    const [schedule, bracket, standings, players] = await Promise.all([
+    const [schedule, bracket, standings] = await Promise.all([
       readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, hasGamesLeftLive).catch(() => null),
       readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season)).catch(() => null),
       readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season)).catch(() => null),
-      readSlowFeed("players", WNBASnapshot.REQUESTS.players(season)).catch(() => null),
     ]);
     if (!scoreboard && !schedule && !bracket)
       throw new Error("None of the WNBA's feeds answered with data");
@@ -185,7 +182,7 @@ export function createSnapshotServer({
       needsBackup ? fetchBackup().catch(() => null) : null,
       readNetworks(schedule, season),
     ]);
-    return { scoreboard, schedule, bracket, standings, players, backup, networks };
+    return { scoreboard, schedule, bracket, standings, backup, networks };
   }
 
   /**

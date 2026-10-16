@@ -1,4 +1,3 @@
-import { REQUESTS } from "../../page/js/snapshot.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
 import { noteLeagueRead } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
@@ -107,6 +106,8 @@ export const TOTALS_COLUMNS = [
   "FTM",
   "FTA",
 ];
+// The totals are read with each player's team too, for her team's Roster and its leading scorers.
+export const TOTALS_FEED_COLUMNS = [...TOTALS_COLUMNS, "TEAM_ID"];
 export const GAME_LOG_COLUMNS = [
   ...TOTALS_COLUMNS.filter((column) => column !== "GP"),
   "TEAM_ID",
@@ -147,14 +148,48 @@ export const nameTeamGameLogRequest = (season, seasonType) =>
   })}`;
 
 /**
- * Every player's totals in a regular season, from the feed the season's averages come from.
+ * Every player's totals in a regular season, which her sheet, her team's Roster, and its leading
+ * scorers are all worked out from.
  * @param {number} season
  */
-export function nameTotalsRequest(season) {
-  const url = new URL(REQUESTS.players(season));
-  url.searchParams.set("PerMode", "Totals");
-  return String(url);
-}
+export const nameTotalsRequest = (season) =>
+  `${WNBA_STATS}/leaguedashplayerstats?${new URLSearchParams({
+    College: "",
+    Conference: "",
+    Country: "",
+    DateFrom: "",
+    DateTo: "",
+    Division: "",
+    DraftPick: "",
+    DraftYear: "",
+    GameScope: "",
+    GameSegment: "",
+    Height: "",
+    LastNGames: "0",
+    LeagueID: "10",
+    Location: "",
+    MeasureType: "Base",
+    Month: "0",
+    OpponentTeamID: "0",
+    Outcome: "",
+    PORound: "0",
+    PaceAdjust: "N",
+    PerMode: "Totals",
+    Period: "0",
+    PlayerExperience: "",
+    PlayerPosition: "",
+    PlusMinus: "N",
+    Rank: "N",
+    Season: String(season),
+    SeasonSegment: "",
+    SeasonType: "Regular Season",
+    ShotClockRange: "",
+    StarterBench: "",
+    TeamID: "0",
+    VsConference: "",
+    VsDivision: "",
+    Weight: "",
+  })}`;
 
 /**
  * Where the store keeps a player's numbers for a season.

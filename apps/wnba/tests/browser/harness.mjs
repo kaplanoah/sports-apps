@@ -35,7 +35,7 @@ import {
   LOCKED_PAGE_PATH,
 } from "../../../../tests/browser/harness.mjs";
 import { holdStore } from "../../../../tests/browser/hold-store.mjs";
-import { joinGameLogs } from "../player-fixtures.js";
+import { joinGameLogs, readSeasonAverages } from "../player-fixtures.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(new URL("../fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
@@ -171,7 +171,6 @@ function readAfternoonSnapshot(season) {
       buildSnapshot(
         {
           ...AFTERNOON.responses,
-          players: GAMES.preview.players,
           networks: Object.values(ESPN_SCOREBOARD.answers),
         },
         { season, now: Date.parse(NOW) },
@@ -207,8 +206,8 @@ export function readWholeSeasonSchedule() {
 
 /**
  * The Worker's store, already updated once from the afternoon's feeds, with each upcoming game's
- * meetings from the schedule, and what its jobs keep: the rosters, players' numbers, and finals'
- * box scores and leads.
+ * meetings from the schedule, and what its jobs keep: every player's averages, as an earlier run
+ * saved them, the rosters, players' numbers, and finals' box scores and leads.
  * @param {Parameters<typeof listLeagueAnswers>[0]} [league]
  */
 async function createAfternoonStore(league = {}) {
@@ -220,6 +219,7 @@ async function createAfternoonStore(league = {}) {
   const testStore = createTestStore(SeasonStore, {
     loadSnapshot,
     now: NOW,
+    stored: { "averages/2026": { year: 2026, players: readSeasonAverages().averages } },
     fetchImpl: createStoreFetch(league),
   });
   await testStore.store.alarm();

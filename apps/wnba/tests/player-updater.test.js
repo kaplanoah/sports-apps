@@ -22,6 +22,8 @@ import {
   namePlayerListRequest,
 } from "../worker/src/roster.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
+import { buildSnapshot } from "../page/js/snapshot.js";
+import { saveSnapshot } from "../worker/src/season-updater.js";
 
 // Every player's totals and every team's games as the league answered the morning after the
 // Liberty's last game, with the game logs of a few players standing in for every player's, beside
@@ -34,6 +36,9 @@ const ROSTERS = JSON.parse(
 );
 const INJURIES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-11-espn-injuries.json`, "utf8"),
+);
+const AFTERNOON = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
 );
 const NOW = Date.parse(ROSTERS.recordedAt);
 const MINUTE_MS = 60 * 1000;
@@ -199,6 +204,34 @@ test("a player's sheet from the store is the one the league's feeds make, and re
     assert.equal(fromStore.status, 200);
     assert.deepEqual(fromStore.body, fromLeague.body);
     assert.deepEqual(fromStore.requests, []);
+  }
+});
+
+test("a player's Roster averages, her team's leading scorers, and her sheet show the same numbers, from one read of the season's totals", async () => {
+  const { docs, runJob } = createRun();
+  await runJob();
+  await saveSnapshot(docs, {
+    ...buildSnapshot(AFTERNOON.responses, { season: 2026, now: NOW }),
+    missing: [],
+  });
+
+  const averages = docs.stored.get("averages/2026").players;
+  const leaders = docs.stored.get("seasons/2026").leaders;
+  const liberty = leaders.filter((/** @type {any} */ leader) => leader.team === "NYL");
+  assert.equal(liberty.length, 5);
+  assert.ok(liberty.some((/** @type {any} */ leader) => String(leader.id) === STEWART));
+  for (const leader of liberty) {
+    const sheet = (await askForPlayer(`id=${leader.id}&team=NYL&season=2026`, { docs })).body;
+    const onRoster = averages.find((/** @type {any} */ player) => player.id === leader.id);
+    const { games, averages: onSheet } = sheet.regularSeason;
+    const read = (/** @type {any} */ numbers) => [
+      numbers.points,
+      numbers.rebounds,
+      numbers.assists,
+    ];
+    assert.deepEqual(read(onRoster), read(onSheet), leader.lastName);
+    assert.deepEqual(read(leader), read(onSheet), leader.lastName);
+    assert.deepEqual([onRoster.games, leader.games], [games, games], leader.lastName);
   }
 });
 
@@ -483,6 +516,7 @@ test("each run saves its status: the requests it made by feed, what it saved, an
     out: 1,
   });
   assert.deepEqual(Object.keys(first.saved).sort(), [
+    "averages",
     "overtimes",
     "player-index",
     "players",

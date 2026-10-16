@@ -13,7 +13,7 @@ import {
   PLAYOFFS,
   REGULAR_SEASON,
   TEAM_GAME_COLUMNS,
-  TOTALS_COLUMNS,
+  TOTALS_FEED_COLUMNS,
   describeSeasonPlayers,
   nameGameLogRequest,
   nameNumbersKey,
@@ -26,6 +26,7 @@ import { namePlayerIndexKey } from "#shared/page-search.js";
 import { nameOvertimesKey } from "../../page/js/search-pages.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { describeOvertimes } from "./overtimes.js";
+import { describeAverages, nameAveragesKey } from "./season-averages.js";
 import { indexRosters } from "./player-index.js";
 import {
   describeRoster,
@@ -42,10 +43,10 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 // once for the whole league, every hour while a team still plays. It keeps each feed trimmed to the
 // columns the sheets read, and saves only the documents that changed: each team's roster, each
 // player's numbers, and the season's ranked numbers, which go after them, so a season that has them
-// is whole, the finals that went to overtime, for search, and, once every team's roster has
-// answered, the season's list of players. Each run also
-// fills one season the store keeps from before the current one, newest first, and a filled season
-// is never read again, since a past season doesn't change, unless the sheets come to read a column
+// is whole, every player's averages, for her team's Roster and its leading scorers, from the totals
+// her sheet is worked out from, the finals that went to overtime, for search, and, once every
+// team's roster has answered, the season's list of players. Each run also fills one season the
+// store keeps from before the current one, newest first, and a filled season is never read again, since a past season doesn't change, unless the sheets come to read a column
 // it was filled without. Each run ends by saving how it went in `players/status`, with how often a
 // sheet had to read the league for a player the store hadn't saved.
 
@@ -118,7 +119,7 @@ const addOne = (counts, name) => {
 const nameFilledKey = (season) => `filled:${season}`;
 // What a filled season was kept with, so one filled with fewer columns is filled again.
 const FILLED_COLUMNS = [
-  ...new Set([...TOTALS_COLUMNS, ...GAME_LOG_COLUMNS, ...TEAM_GAME_COLUMNS]),
+  ...new Set([...TOTALS_FEED_COLUMNS, ...GAME_LOG_COLUMNS, ...TEAM_GAME_COLUMNS]),
 ].join(" ");
 // Says every past season was filled with these columns, and has its list of players, while this
 // one was current, so a run lists the store's seasons again only once the store moves on, which
@@ -195,7 +196,7 @@ function createStoreUpdate() {
         "totals",
         nameTotalsRequest(season),
         "LeagueDashPlayerStats",
-        TOTALS_COLUMNS,
+        TOTALS_FEED_COLUMNS,
       ),
       ...[REGULAR_SEASON, PLAYOFFS].map((seasonType) =>
         readStats(
@@ -291,6 +292,10 @@ function createStoreUpdate() {
     for (const [id, numbers] of players)
       await saveDoc(context, nameNumbersKey(season, id), numbers);
     await saveDoc(context, nameRanksKey(season), ranks);
+    await saveDoc(context, nameAveragesKey(season), {
+      year: season,
+      players: describeAverages(totals),
+    });
     await saveDoc(
       context,
       nameOvertimesKey(season),

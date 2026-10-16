@@ -11,11 +11,11 @@ const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
 );
 const NOW = Date.parse(AFTERNOON.now);
-// The afternoon's recording has no players' averages, so the next day's stand in for them.
+// The next day's games, with the whole season's schedule.
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
-const RESPONSES = { ...AFTERNOON.responses, players: GAMES.preview.players };
+const RESPONSES = AFTERNOON.responses;
 // ESPN's answers the next afternoon, with both games of Sep 30 finished.
 const ESPN = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-espn-core.json`, "utf8"),
@@ -31,10 +31,8 @@ const FEEDS = {
   [REQUESTS.schedule]: "schedule",
   [REQUESTS.bracket(2026)]: "bracket",
   [REQUESTS.standings(2026)]: "standings",
-  [REQUESTS.players(2026)]: "players",
   [REQUESTS.bracket(2025)]: "bracket",
   [REQUESTS.standings(2025)]: "standings",
-  [REQUESTS.players(2025)]: "players",
 };
 
 const NETWORKS_PATH = new URL(NETWORKS_REQUEST("")).pathname;
@@ -101,7 +99,6 @@ test("the Worker reads every feed as the league's own site would", async () => {
   const leagueReads = league.reads.filter((read) => read.feed !== "networks");
   assert.deepEqual(leagueReads.map((read) => read.feed).sort(), [
     "bracket",
-    "players",
     "schedule",
     "scoreboard",
     "standings",
@@ -277,10 +274,10 @@ test("a feed that answers JSON without its data counts as missing", async () => 
   assert.deepEqual(snapshot.missing, ["scoreboard"]);
 });
 
-const SLOW_FEEDS = ["schedule", "bracket", "standings", "players"];
+const SLOW_FEEDS = ["schedule", "bracket", "standings"];
 const HOUR_MS = 60 * 60 * 1000;
 
-test("the schedule, bracket, standings, and players' averages are read again only after a day", async () => {
+test("the schedule, bracket, and standings are read again only after a day", async () => {
   const league = createLeague();
   let now = NOW;
   const server = createSnapshotServer({ fetchImpl: league.fetchImpl, now: () => now });
@@ -288,11 +285,11 @@ test("the schedule, bracket, standings, and players' averages are read again onl
   await server.loadSnapshot(2026);
   now += 23 * HOUR_MS;
   await server.loadSnapshot(2026);
-  assert.deepEqual(["scoreboard", ...SLOW_FEEDS].map(league.countReads), [2, 1, 1, 1, 1]);
+  assert.deepEqual(["scoreboard", ...SLOW_FEEDS].map(league.countReads), [2, 1, 1, 1]);
 
   now += HOUR_MS;
   await server.loadSnapshot(2026);
-  assert.deepEqual(["scoreboard", ...SLOW_FEEDS].map(league.countReads), [3, 2, 2, 2, 2]);
+  assert.deepEqual(["scoreboard", ...SLOW_FEEDS].map(league.countReads), [3, 2, 2, 2]);
 });
 
 /** @param {{ reads: { feed: string, url?: string }[] }} league */
@@ -422,19 +419,19 @@ test("a game that ends has the slow feeds read again at once, and once more ten 
   answers.scoreboard = finishFirstGame(AFTERNOON.responses.scoreboard);
   now += 11 * 1000;
   await server.loadSnapshot(2026);
-  assert.deepEqual(countSlowReads(league), [2, 2, 2, 2]);
+  assert.deepEqual(countSlowReads(league), [2, 2, 2]);
 
   now += 5 * 60 * 1000;
   await server.loadSnapshot(2026);
-  assert.deepEqual(countSlowReads(league), [2, 2, 2, 2]);
+  assert.deepEqual(countSlowReads(league), [2, 2, 2]);
 
   now += 5 * 60 * 1000;
   await server.loadSnapshot(2026);
-  assert.deepEqual(countSlowReads(league), [3, 3, 3, 3]);
+  assert.deepEqual(countSlowReads(league), [3, 3, 3]);
 
   now += 10 * 60 * 1000;
   await server.loadSnapshot(2026);
-  assert.deepEqual(countSlowReads(league), [3, 3, 3, 3]);
+  assert.deepEqual(countSlowReads(league), [3, 3, 3]);
 });
 
 test("a game seen live and then final ends when ESPN logged its last play, as each team's last game too, looked up once", async () => {
@@ -484,7 +481,7 @@ test("a scoreboard that misses a read doesn't look like a game ending once it's 
   now += 11 * 1000;
   await server.loadSnapshot(2026);
 
-  assert.deepEqual(countSlowReads(league), [1, 1, 1, 1]);
+  assert.deepEqual(countSlowReads(league), [1, 1, 1]);
 });
 
 test("each season's slow feeds are kept apart", async () => {
@@ -494,7 +491,7 @@ test("each season's slow feeds are kept apart", async () => {
   await server.loadSnapshot(2026);
   await server.loadSnapshot(2025);
 
-  for (const feed of ["bracket", "standings", "players"]) assert.equal(league.countReads(feed), 2);
+  for (const feed of ["bracket", "standings"]) assert.equal(league.countReads(feed), 2);
   assert.equal(league.countReads("schedule"), 1);
 });
 

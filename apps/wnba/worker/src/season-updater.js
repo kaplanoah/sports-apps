@@ -8,6 +8,7 @@ import {
 } from "../../../../shared/worker/notifications.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { nameMeetingsKey } from "./preview.js";
+import { listLeaders, nameAveragesKey } from "./season-averages.js";
 
 // Keeps the current season's saved data up to date from the league, whether or not a page is
 // open, and says which finished games and series are news. `docs` reads and writes the store's
@@ -18,10 +19,6 @@ const SAVED_FIELDS = ["version", "games", "nearestGames", "series", "standings",
 const RECENT_MS = 12 * 60 * 60 * 1000;
 
 const nameSeasonKey = (year) => `seasons/${year}`;
-// Every player's averages keep a document of their own, which a page reads only for a Roster page,
-// so the season it watches through every live game doesn't carry them.
-const nameAveragesKey = (year) => `averages/${year}`;
-
 // The new year's season starts on the day of its first game, preseason included, as MLB's starts
 // with spring training, or once its standings have games played. Until then the last one's stays
 // current, its bracket and all, though the schedule already lists the new one's games.
@@ -85,7 +82,6 @@ function prepareGames(savedGames, games, { isStandIn, asOf }) {
 export async function saveSnapshot(docs, snapshot) {
   await saveSeason(docs, snapshot);
   await saveSchedule(docs, snapshot);
-  if (!snapshot.missing.includes("players")) await saveAverages(docs, snapshot);
   if (!snapshot.missing.includes("schedule")) await saveMeetings(docs, snapshot);
 }
 
@@ -96,17 +92,6 @@ async function saveMeetings(docs, snapshot) {
     const key = nameMeetingsKey(pair.season, pair.teams);
     if (!isSameJson(await docs.read(key), pair)) await docs.write(key, pair);
   }
-}
-
-async function saveAverages(docs, snapshot) {
-  const key = nameAveragesKey(snapshot.season);
-  const doc = await docs.read(key);
-  if (isSameJson(doc?.players, snapshot.averages)) return;
-  await docs.write(key, {
-    year: snapshot.season,
-    players: snapshot.averages,
-    updatedAt: snapshot.asOf,
-  });
 }
 
 // The season's games need the same feeds as the record's.
@@ -138,16 +123,20 @@ function readGameFeeds(snapshot) {
 
 // The games need both of their feeds: the schedule alone can be behind on today's, and the
 // scoreboard alone has only today's, unless ESPN stood in for the scoreboard. Series counted from
-// games ESPN may lack wait for the bracket.
+// games ESPN may lack wait for the bracket. The leading scorers come from every player's averages,
+// which the player job saves from the totals each player's sheet is worked out from, so they wait
+// for its next save rather than read the league apart from it.
 async function saveSeason(docs, snapshot) {
   const key = nameSeasonKey(snapshot.season);
   const doc = (await docs.read(key)) ?? { year: snapshot.season };
+  const averages = await docs.read(nameAveragesKey(snapshot.season));
   const { missing, isStandIn, hasGames } = readGameFeeds(snapshot);
   const update = { isStandIn, asOf: snapshot.asOf };
   const saving = {
     ...snapshot,
     games: prepareGames(doc.games, snapshot.games, update),
     nearestGames: prepareGames(doc.nearestGames, snapshot.nearestGames, update),
+    leaders: averages && listLeaders(averages.players),
   };
   const answered = {
     version: true,
@@ -155,7 +144,7 @@ async function saveSeason(docs, snapshot) {
     nearestGames: hasGames,
     series: !missing.has("bracket") || (hasGames && !isStandIn),
     standings: !missing.has("standings"),
-    leaders: !missing.has("players"),
+    leaders: !!averages,
   };
   const changed = SAVED_FIELDS.filter(
     (field) => answered[field] && !isSameJson(doc[field], saving[field]),
