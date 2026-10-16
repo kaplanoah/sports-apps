@@ -327,7 +327,6 @@ jobs:
         id: decision
         env:
           EVENT: ${{ github.event_name }}
-          ACTION: ${{ github.event.action }}
           PASSED_RUN: ${{ needs.passed.outputs.run }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           AUTHOR: ${{ github.event.pull_request.user.login }}

@@ -315,7 +315,7 @@ test("a change of only recorded data passes, naming what it left unread", () => 
   assert.match(body, /- `a.json`: a test's recorded data/);
 });
 
-test("the summary updates the one an earlier review posted, or posts one", async () => {
+test("the summary updates the one an earlier review posted, or posts one, never another's comment", async () => {
   /** @type {{ path: string, method?: string, body?: any }[]} */
   const calls = [];
   /** @param {any[]} comments */
@@ -327,18 +327,25 @@ test("the summary updates the one an earlier review posted, or posts one", async
     };
   await postSummary(
     fakeGitHub([
-      { id: 1, body: "Claude reviewed an older commit" },
-      { id: 2, body: `${SUMMARY_MARKER}\nold` },
+      { id: 1, user: { login: "someone" }, body: `${SUMMARY_MARKER}\nnot the review's` },
+      { id: 2, user: { login: "claude[bot]" }, body: "Claude reviewed an older commit" },
+      { id: 3, user: { login: "github-actions[bot]" }, body: `${SUMMARY_MARKER}\nold` },
     ]),
     "7",
     "new",
   );
   assert.deepEqual(calls.at(-1), {
-    path: "/issues/comments/2",
+    path: "/issues/comments/3",
     method: "PATCH",
     body: { body: "new" },
   });
-  await postSummary(fakeGitHub([]), "7", "new");
+  await postSummary(
+    fakeGitHub([
+      { id: 1, user: { login: "someone" }, body: `${SUMMARY_MARKER}\nnot the review's` },
+    ]),
+    "7",
+    "new",
+  );
   assert.deepEqual(calls.at(-1), {
     path: "/issues/7/comments",
     method: "POST",

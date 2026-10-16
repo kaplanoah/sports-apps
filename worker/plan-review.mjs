@@ -1,8 +1,9 @@
 // Splits a pull request's change into shares small enough for one reviewer to read in full, so CI
 // reviews a change of any size with one reviewer per share at once (the review jobs in ci.yml). A
 // share holds changed files in path order, so a folder's files stay together, up to a share's
-// worth of changed lines; a file bigger than that is a share of its own. Recorded data, like a
-// test's fixture, the lockfile, and a binary file, goes unread, named in the summary instead.
+// worth of changed lines; a file bigger than that is a share of its own. A test's recorded data,
+// the lockfile, a binary file, and a drawing or minified library a tool wrote go unread, named in
+// the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a checkout of the pull request's merge commit,
 // whose first parent is the base branch. It prints shares=<JSON> and count=<shares> for

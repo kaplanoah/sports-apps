@@ -231,14 +231,17 @@ export function judgeReview({ sha, plan, records, across, weights }) {
 }
 
 /**
- * Posts the summary, or updates the one an earlier review posted.
+ * Posts the summary, or updates the one an earlier review posted, never anyone else's comment
+ * that starts the same way.
  * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
  * @param {string} pullNumber
  * @param {string} body
  */
 export async function postSummary(callGitHub, pullNumber, body) {
   const comments = await readAllPages(callGitHub, `/issues/${pullNumber}/comments`);
-  const earlier = comments.find((comment) => comment.body?.startsWith(SUMMARY_MARKER));
+  const earlier = comments.find(
+    (comment) => comment.user?.login === REVIEWER && comment.body?.startsWith(SUMMARY_MARKER),
+  );
   if (earlier)
     await callGitHub(`/issues/comments/${earlier.id}`, { method: "PATCH", body: { body } });
   else await callGitHub(`/issues/${pullNumber}/comments`, { method: "POST", body: { body } });
