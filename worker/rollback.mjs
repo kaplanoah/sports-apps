@@ -1,9 +1,9 @@
 // Puts an app's previous version back at all of its traffic, with the call a deploy makes when its
 // new version doesn't answer. The previous version is the newest deployment before the live code
 // whose version records another commit, since a secret change deploys the same code again, and
-// a rollback keeps the secrets as they are. A version a rollback already took down is passed
-// over: one deployed between two deployments of the live commit, and, on main, one whose commit
-// the live one doesn't build on.
+// a rollback keeps the secrets as they are. On main, a version a rollback already took down is
+// passed over: one deployed between two deployments of the live commit, and one whose commit the
+// live one doesn't build on.
 import { fileURLToPath } from "node:url";
 import { checkAppName } from "./apps.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
@@ -37,15 +37,18 @@ async function listRecordedDeployments(deployments, readCommit) {
 }
 
 /**
- * The deployment to go back to: the newest older than every deployment of the live commit, whose
- * commit `isEarlier` than the live one.
+ * The deployment to go back to. On main, a deployment of the live commit after another one is a
+ * rollback, so it's the newest older than every deployment of the live commit, whose commit the
+ * live one builds on. A force-pushed branch deploys any commit again as it's pushed again, so
+ * there it's the newest whose commit isn't the live one.
  * @param {RecordedDeployment[]} recorded newest first, the live one first of all
- * @param {(commit: string) => boolean} isEarlier
+ * @param {{ isForcePushed: boolean, isBuiltOn: (commit: string) => boolean }} channel
  */
-function findEarlier(recorded, isEarlier) {
+function findEarlier(recorded, { isForcePushed, isBuiltOn }) {
   const live = recorded[0].commit;
+  if (isForcePushed) return recorded.find(({ commit }) => commit !== live) ?? null;
   const oldestLive = recorded.findLastIndex(({ commit }) => commit === live);
-  return recorded.slice(oldestLive + 1).find(({ commit }) => isEarlier(commit)) ?? null;
+  return recorded.slice(oldestLive + 1).find(({ commit }) => isBuiltOn(commit)) ?? null;
 }
 
 /**
@@ -78,12 +81,11 @@ export async function rollBack({
   const [live] = recorded;
   if (!live)
     throw new Error(`No version of ${name} records its commit, so there's none to go back to.`);
-  // A force-pushed branch's commits needn't build on each other.
   if (!isForcePushed) git(["fetch", "--quiet", "origin", branch]);
-  const earlier = findEarlier(
-    recorded,
-    (commit) => isForcePushed || isAncestor(git, commit, live.commit),
-  );
+  const earlier = findEarlier(recorded, {
+    isForcePushed,
+    isBuiltOn: (commit) => isAncestor(git, commit, live.commit),
+  });
   if (!earlier)
     throw new Error(
       `${name} has no earlier version than ${live.commit.slice(0, 7)} to go back to.`,

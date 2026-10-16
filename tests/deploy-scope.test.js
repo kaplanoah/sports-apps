@@ -1,6 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decideDeploy, listChangedFiles } from "../worker/deploy-scope.mjs";
+import { readFileSync } from "node:fs";
+import { decideDeploy, findDeployedChanges, listChangedFiles } from "../worker/deploy-scope.mjs";
+
+/** @param {string} path from the repo's root */
+const readRepoFile = (path) => readFileSync(`${import.meta.dirname}/../${path}`, "utf8");
+
+/**
+ * The root worker/ modules a script imports, and the ones they import, with the script.
+ * @param {string} script
+ */
+function listImported(script) {
+  const found = [script];
+  for (const path of found)
+    for (const [, name] of readRepoFile(path).matchAll(/from "\.\/([\w-]+\.mjs)"/g))
+      if (!found.includes(`worker/${name}`)) found.push(`worker/${name}`);
+  return found;
+}
+
+test("every script the deploy runs, and every module those import, deploys when it changes", () => {
+  const workflow = readRepoFile(".github/workflows/deploy.yml");
+  const scripts = [...workflow.matchAll(/node (worker\/[\w-]+\.mjs)/g)].map(([, path]) => path);
+  assert.ok(scripts.includes("worker/deploy.mjs"));
+  const run = [".github/workflows/deploy.yml", ...new Set(scripts.flatMap(listImported))];
+  assert.deepEqual(
+    run.filter((path) => !findDeployedChanges([path]).length),
+    [],
+  );
+});
 
 test("a merge of only docs, tests, and tooling skips the deploy", () => {
   const decision = decideDeploy([
@@ -13,8 +40,6 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".github/workflows/flaky.yml",
     ".github/workflows/flaky-report.yml",
     "eslint.config.mjs",
-    "worker/find-passed-ci.mjs",
-    "worker/github-api.mjs",
     "worker/report-flaky-tests.mjs",
     "worker/set-app-key.mjs",
   ]);
@@ -35,6 +60,9 @@ test("a merge that changes what the Worker runs, or how it deploys, deploys", ()
     "worker/apps.mjs",
     "worker/build.mjs",
     "worker/deploy.mjs",
+    "worker/check-page.mjs",
+    "worker/find-passed-ci.mjs",
+    "worker/github-api.mjs",
     "package-lock.json",
     ".nvmrc",
     ".github/workflows/deploy.yml",

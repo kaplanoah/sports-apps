@@ -145,12 +145,14 @@ test("a version a rollback took down is passed over, so the one before the live 
   assert.equal((await rollBackFrom(unknown)).result.to, COMMIT_A);
 });
 
-test("beta's force pushes leave it no history to check, so only its repeats are passed over", async () => {
+test("beta, pushed back to a branch it held before, goes back to what it held just before that", async () => {
+  // Beta held A, then B, then A again, pushed back to it: B ran just before.
   const cloudflare = createFakeCloudflare([
     { id: "v1", at: "2026-10-01T10:00:00Z", commit: COMMIT_C },
     { id: "v2", at: "2026-10-02T10:00:00Z", commit: COMMIT_A },
     { id: "v3", at: "2026-10-03T10:00:00Z", commit: COMMIT_B },
     { id: "v4", at: "2026-10-04T10:00:00Z", commit: COMMIT_A },
+    { id: "v5", at: "2026-10-05T10:00:00Z" },
   ]);
   const result = await rollBack({
     app: "mlb",
@@ -159,10 +161,13 @@ test("beta's force pushes leave it no history to check, so only its repeats are 
     env: ENV,
     log: () => {},
     git: () => {
-      throw new Error("beta needs no git");
+      throw new Error("beta's commits needn't build on each other, so it asks git nothing");
     },
   });
-  assert.deepEqual(result, { from: COMMIT_A, to: COMMIT_C });
+  assert.deepEqual(result, { from: COMMIT_A, to: COMMIT_B });
+  assert.deepEqual(JSON.parse(findRollback(cloudflare.calls).init.body).versions, [
+    { version_id: "v3", percentage: 100 },
+  ]);
 });
 
 test("the beta channel rolls back its own Worker", async () => {

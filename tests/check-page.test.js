@@ -47,19 +47,18 @@ test("an app without its page's secret goes unchecked, naming the secret", async
   });
 });
 
-test("a browser that doesn't start leaves the page unchecked, saying why", async () => {
-  const check = await checkAppPage({
-    app: "mlb",
-    channel: "production",
-    env: { MLB_PAGE_URL: PAGE_URL },
-    launchBrowser: async () => {
-      throw new Error("Executable doesn't exist at /ms-playwright/chromium");
-    },
-  });
-  assert.deepEqual(check, {
-    status: "unchecked",
-    reason: "the browser didn't start: Executable doesn't exist at /ms-playwright/chromium",
-  });
+test("a browser that doesn't start fails the check rather than skipping it", async () => {
+  await assert.rejects(
+    checkAppPage({
+      app: "mlb",
+      channel: "production",
+      env: { MLB_PAGE_URL: PAGE_URL },
+      launchBrowser: async () => {
+        throw new Error("Executable doesn't exist at /ms-playwright/chromium");
+      },
+    }),
+    /Executable doesn't exist/,
+  );
 });
 
 test("a page is the release whose commit its scripts' folder starts", () => {

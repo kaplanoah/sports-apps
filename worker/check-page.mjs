@@ -209,8 +209,8 @@ async function launchChromium(env) {
 
 /**
  * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
- * broken, up to `attempts` times. A browser that doesn't start opens no page, which says
- * nothing about the release.
+ * broken, up to `attempts` times. Only a page with no address goes unchecked: a browser that
+ * doesn't start throws, so the deploy puts the version before back and the watch's run fails.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
@@ -232,15 +232,7 @@ export async function checkAppPage({
 }) {
   const access = readPageAccess(app, channel, env);
   if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
-  /** @type {import("@playwright/test").Browser} */
-  let browser;
-  try {
-    browser = await launchBrowser(env);
-  } catch (error) {
-    return markUnchecked(
-      `the browser didn't start: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  const browser = await launchBrowser(env);
   try {
     /** @type {PageCheck} */
     let check = markBroken("the page wasn't opened");

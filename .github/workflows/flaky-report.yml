@@ -15,8 +15,9 @@ permissions:
 
 jobs:
   # Each report reads the issue's table and writes it back, so every report, the nightly run's too
-  # (flaky.yml), takes its turn in one group, where a newer report replaces one still waiting. A
-  # fork's run could hand it anything, so only this repository's branches report.
+  # (flaky.yml), takes its turn in one group. GitHub keeps one report waiting in it, so a newer one
+  # replaces a report still waiting, whose runs the table never gets. A fork's run could hand it
+  # anything, so only this repository's branches report.
   report:
     if: >-
       github.event.workflow_run.event == 'pull_request' &&

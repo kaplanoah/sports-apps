@@ -77,9 +77,10 @@ jobs:
             playwright-report/
             test-results/
 
-  # Each report reads the issue's table and writes it back, so the reports of every workflow take
-  # turns, in a group of their own that a newer report replaces a waiting one in. A test new to
-  # the issue starts the routine that fixes flaky tests, through its API trigger.
+  # Each report reads the issue's table and writes it back, so this one and each pull request's
+  # (flaky-report.yml) take turns in one group. GitHub keeps one report waiting in it, so a newer
+  # one replaces a report still waiting, whose runs the table never gets. A test new to the issue
+  # starts the routine that fixes flaky tests, through its API trigger.
   report:
     needs: browser
     if: ${{ !cancelled() && github.event_name == 'schedule' }}

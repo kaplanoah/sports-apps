@@ -866,16 +866,31 @@ test("anything else is refused, with the reason", async () => {
   );
 });
 
-test("a beta release is what GitHub has as beta, and any other commit there is newer, force pushed or not", async () => {
+test("a beta release is what GitHub has as beta, and a push beta has since replaced, built on or not, is older", async () => {
   const { checkRelease } = await loadDeployModule();
   const fake = createFakeGit({ branch: "claude/some-branch" });
-  assert.deepEqual(checkRelease(fake.git, "beta"), { commit: "a".repeat(40), newer: null });
+  assert.deepEqual(checkRelease(fake.git, "beta", ""), { commit: "a".repeat(40), newer: null });
   assert.ok(fake.asked.includes("fetch --quiet origin beta"));
   assert.ok(fake.asked.includes("rev-parse origin/beta"));
-  assert.deepEqual(checkRelease(createFakeGit({ head: "b".repeat(40) }).git, "beta"), {
+  const forcePushedOver = createFakeGit({ branch: "HEAD", head: "b".repeat(40) });
+  assert.deepEqual(checkRelease(forcePushedOver.git, "beta", "b".repeat(40)), {
     commit: "b".repeat(40),
     newer: "a".repeat(40),
   });
+});
+
+test("a checkout at a commit beta never held isn't a beta release, and says how to push one", async () => {
+  const { checkRelease } = await loadDeployModule();
+  for (const pushedCommit of ["", "c".repeat(40)])
+    assert.throws(
+      () =>
+        checkRelease(
+          createFakeGit({ branch: "claude/some-branch", head: "b".repeat(40) }).git,
+          "beta",
+          pushedCommit,
+        ),
+      /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Push it with git push -f origin <branch>:beta/,
+    );
 });
 
 test("a push to beta deploys the beta channel, and main still waits for its CI", () => {

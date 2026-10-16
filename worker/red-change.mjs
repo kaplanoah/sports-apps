@@ -6,9 +6,10 @@
 // merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone who can
 // label a pull request could add the label, so the gate reads who last added it and lets the
 // change through only from the repository's owner, and only when the label came after the pull
-// request's last commit, which the owner hasn't used on the phone otherwise.
+// request's head commit reached GitHub, which the owner hasn't used on the phone otherwise.
 // Usage: git diff --no-renames <base> <head> | node worker/red-change.mjs '<labels as JSON>'
-// with PR, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets the last two.
+// with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
+// the last two.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
@@ -268,43 +269,41 @@ export const findRedReasons = (files) => files.flatMap(findFileReasons);
 /**
  * @typedef {object} TimelineEvent
  * @property {string} event
- * @property {string} [created_at] when GitHub recorded it, which a commit has no field for
- * @property {{ date?: string }} [committer] a commit's
+ * @property {string} [created_at] when GitHub recorded it
  * @property {{ name: string }} [label]
  * @property {{ login: string } | null} [actor]
  */
 
-/** @typedef {{ labeler: string | null, isAfterLastCommit: boolean }} Labeling */
+/** @typedef {{ labeler: string | null, isAfterLastPush: boolean }} Labeling */
 
 /** @param {TimelineEvent} event */
-const readEventTime = (event) => Date.parse(event.committer?.date ?? event.created_at ?? "");
-
-/** @param {TimelineEvent} event */
-const isCodeChange = (event) =>
-  event.event === "committed" || event.event === "head_ref_force_pushed";
+const readEventTime = (event) => Date.parse(event.created_at ?? "");
 
 /**
- * Who last added `label` to a pull request, and whether they added it after its last commit or
- * force push, from its timeline.
+ * Who last added `label` to a pull request, and whether they added it after its head commit
+ * reached GitHub and after its last force push, from its timeline. A commit's own date is when it
+ * was made, which can be long before it was pushed, so the head's arrival comes from GitHub.
  * @param {TimelineEvent[]} events
  * @param {string} label
+ * @param {number} headPushedAt when GitHub first saw the head commit, or NaN when it can't say
  * @returns {Labeling}
  */
-export function findLabeling(events, label) {
+export function findLabeling(events, label, headPushedAt) {
   const lastAdded = events
     .filter((event) => event.event === "labeled" && event.label?.name === label)
     .toSorted((first, second) => readEventTime(first) - readEventTime(second))
     .at(-1);
-  if (!lastAdded) return { labeler: null, isAfterLastCommit: false };
-  const lastCodeChange = Math.max(...events.filter(isCodeChange).map(readEventTime));
+  if (!lastAdded) return { labeler: null, isAfterLastPush: false };
+  const forcePushes = events.filter((event) => event.event === "head_ref_force_pushed");
+  const lastPush = Math.max(headPushedAt, ...forcePushes.map(readEventTime));
   return {
     labeler: lastAdded.actor?.login ?? null,
-    isAfterLastCommit: readEventTime(lastAdded) > lastCodeChange,
+    isAfterLastPush: readEventTime(lastAdded) > lastPush,
   };
 }
 
 /**
- * Every event on a pull request's timeline, its commits among them, page by page.
+ * Every event on a pull request's timeline, page by page.
  * @param {object} options
  * @param {string} options.repository as owner/name
  * @param {string} options.pullNumber
@@ -316,19 +315,37 @@ export const readTimeline = ({ repository, pullNumber, fetchImpl = fetch, env = 
   readAllPages(createGitHub({ repository, fetchImpl, env }), `/issues/${pullNumber}/timeline`);
 
 /**
+ * When GitHub first saw a commit: its earliest check suite, which GitHub makes as the push that
+ * brings the commit arrives, or NaN when it has none.
+ * @param {object} options
+ * @param {string} options.repository as owner/name
+ * @param {string} options.sha
+ * @param {typeof fetch} [options.fetchImpl]
+ * @param {NodeJS.ProcessEnv} [options.env] holds GH_TOKEN
+ */
+export async function readPushTime({ repository, sha, fetchImpl = fetch, env = process.env }) {
+  const github = createGitHub({ repository, fetchImpl, env });
+  const { check_suites: suites } = await github(`/commits/${sha}/check-suites?per_page=100`);
+  const times = suites.map((/** @type {{ created_at: string }} */ suite) =>
+    Date.parse(suite.created_at),
+  );
+  return times.length ? Math.min(...times) : Number.NaN;
+}
+
+/**
  * Why a red change labeled phone-ok is still held, or null when the label lets it through.
  * @param {Labeling} labeling
  * @param {string} owner
  */
-function findLabelProblem({ labeler, isAfterLastCommit }, owner) {
+function findLabelProblem({ labeler, isAfterLastPush }, owner) {
   if (!owner || labeler !== owner)
     return (
       `A red change labeled ${PHONE_OK_LABEL} by ${labeler ?? "someone GitHub doesn't name"}, but the label ` +
       `has to come from the repository's owner, ${owner}, after using it on the beta app.`
     );
-  if (!isAfterLastCommit)
+  if (!isAfterLastPush)
     return (
-      `A red change labeled ${PHONE_OK_LABEL} before its last commit, which the owner hasn't used on the ` +
+      `A red change labeled ${PHONE_OK_LABEL} before its last push, which the owner hasn't used on the ` +
       `phone. Deploy it to beta (git push -f origin <branch>:beta). The owner takes the label off and adds ` +
       "it again after using it on the beta app."
     );
@@ -337,14 +354,14 @@ function findLabelProblem({ labeler, isAfterLastCommit }, owner) {
 
 /**
  * The gate's verdict on a pull request, given its diff, its labels, who last added the phone-ok
- * label and whether that came after its last commit, and the repository's owner.
+ * label and whether that came after its last push, and the repository's owner.
  * @param {string} diff
  * @param {{ labels: string[], labeling?: Labeling, owner?: string }} pullRequest
  * @returns {{ isHeld: boolean, message: string }}
  */
 export function decideGate(
   diff,
-  { labels, labeling = { labeler: null, isAfterLastCommit: false }, owner = "" },
+  { labels, labeling = { labeler: null, isAfterLastPush: false }, owner = "" },
 ) {
   const reasons = findRedReasons(readDiff(diff));
   if (!reasons.length) return { isHeld: false, message: "Not a red change." };
@@ -373,12 +390,12 @@ export function decideGate(
  */
 async function readPhoneOkLabeling(labels, env) {
   if (!labels.includes(PHONE_OK_LABEL)) return undefined;
-  const events = await readTimeline({
-    repository: env.GITHUB_REPOSITORY ?? "",
-    pullNumber: env.PR ?? "",
-    env,
-  });
-  return findLabeling(events, PHONE_OK_LABEL);
+  const repository = env.GITHUB_REPOSITORY ?? "";
+  const [events, headPushedAt] = await Promise.all([
+    readTimeline({ repository, pullNumber: env.PR ?? "", env }),
+    readPushTime({ repository, sha: env.HEAD_SHA ?? "", env }),
+  ]);
+  return findLabeling(events, PHONE_OK_LABEL, headPushedAt);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

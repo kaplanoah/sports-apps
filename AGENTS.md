@@ -691,8 +691,9 @@ Delete it once the app's first PR merges.
 - Never push to another session's branch.
 - Run each command so it needs no approval: one command per call, from the repo's root, where every session starts.
   Never start with `cd`, never join `cd` to a `git` command, and never pipe or chain after a command `.claude/settings.json` allows, like the beta force-push.
-  A hook in `.claude/settings.json` blocks a call that starts with `cd` or joins commands with `&&`,
-  `||`, `;`, or a line break (`.claude/hooks/one-command.mjs`).
+  A hook in `.claude/settings.json` blocks a call that starts with `cd`, a subshell's `(cd` too,
+  or joins commands with `&&`, `||`, `;`, a lone `&` that runs one in the background, or a line break,
+  in the call itself or in a script it hands a shell as a string, as `bash -c "a; b"` does (`.claude/hooks/one-command.mjs`).
   When a command still asks, add it to that allow list in the same PR if it's safe for any session to run, or say why it asks.
 - Don't spend time curating commit history.
   Squash merges make it irrelevant.
@@ -748,7 +749,7 @@ Delete it once the app's first PR merges.
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`).
   Tests are never red.
   The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label,
-  added by the owner after the PR's last commit.
+  added by the owner after the PR's last push.
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     When you ask the owner to add `phone-ok`, link the PR in the same message.

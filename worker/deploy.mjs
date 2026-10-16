@@ -71,14 +71,20 @@ export function isAncestor(git, commit, of) {
   }
 }
 
-// A commit its channel's branch has since moved past is a release a newer one may cover. On a
-// branch each push replaces, as beta's force pushes do, any other commit is the newer one.
+// A commit its channel's branch has since moved past is a release a newer one may cover. A branch
+// each push replaces, as beta's force pushes do, can move past a commit without building on it,
+// so there a commit the push that started this run brought is one the branch held.
 /**
  * @param {Git} [git]
  * @param {string} [channel]
+ * @param {string} [pushedCommit] the commit the push that started this run brought, in Actions
  * @returns {{ commit: string, newer: string | null }}
  */
-export function checkRelease(git = runGit, channel = "production") {
+export function checkRelease(
+  git = runGit,
+  channel = "production",
+  pushedCommit = process.env.GITHUB_SHA,
+) {
   const { branch, howToShip, isForcePushed } = findChannel(channel);
   if (git(["status", "--porcelain"]))
     throw new Error(`There are uncommitted changes. Deploy only what is on ${branch}.`);
@@ -86,7 +92,8 @@ export function checkRelease(git = runGit, channel = "production") {
   const local = git(["rev-parse", "HEAD"]);
   const remote = git(["rev-parse", `origin/${branch}`]);
   if (local === remote) return { commit: local, newer: null };
-  if (isForcePushed || isAncestor(git, local, remote)) return { commit: local, newer: remote };
+  const wasHeld = (isForcePushed && local === pushedCommit) || isAncestor(git, local, remote);
+  if (wasHeld) return { commit: local, newer: remote };
   const checkout = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   throw new Error(
     `This checkout (${checkout} at ${local.slice(0, 7)}) isn't ${branch} as GitHub has it (${remote.slice(0, 7)}). ${howToShip}, or check out origin/${branch}, and try again.`,

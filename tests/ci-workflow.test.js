@@ -174,14 +174,6 @@ test("CI never runs the flaky report, holds the fix routine's token, or writes i
   assert.doesNotMatch(workflow, /report-flaky-tests|FLAKY_ROUTINE_TOKEN|issues: write/);
 });
 
-// A fork's pull request runs without the repository's secrets, so its review never ran.
-test("a fork's pull request fails check until it's labeled fork-ok", () => {
-  assert.match(
-    readJob("check"),
-    /name: Require every job to pass\n\s+if: >-\n(?:\s+.*\n)*?\s+\(github\.event_name == 'pull_request' &&\n\s+github\.event\.pull_request\.head\.repo\.full_name != github\.repository &&\n\s+!contains\(github\.event\.pull_request\.labels\.\*\.name, 'fork-ok'\)\)\n\s+run: exit 1/,
-  );
-});
-
 // GitHub refuses a pull request's diff past 20,000 lines, and git lists a change of any size.
 test("the title is checked against the files git lists against the base branch", () => {
   const checks = readJob("checks");

@@ -48,7 +48,8 @@ jobs:
 
   # A red change merges only once the owner has used it on the beta app and labeled it phone-ok
   # (worker/red-change.mjs), which reads the pull request's timeline for who added the label, and
-  # whether after its last commit. The merge commit's first parent is the base branch.
+  # the head commit's check suites for whether the label came after the head was pushed, so a push
+  # after phone-ok holds the pull request again. The merge commit's first parent is the base branch.
   gate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -56,6 +57,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -68,6 +70,7 @@ jobs:
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: git diff --no-renames HEAD^1 HEAD | node worker/red-change.mjs "$LABELS"
 
   # The quick checks share one machine, which leaves more of the account's runners for the browser
@@ -668,17 +671,11 @@ jobs:
           name: ci-tested-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
-      # A fork's pull request has none of the repository's secrets, so its review never ran, and it
-      # runs its own copy of this workflow. It passes only once it's labeled fork-ok, which its
-      # author can't do: labeling takes access to the repository.
       - name: Require every job to pass
         if: >-
           steps.tested.outputs.tested != 'true' ||
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
-          (github.event_name == 'pull_request' && needs.gate.result != 'success') ||
-          (github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name != github.repository &&
-          !contains(github.event.pull_request.labels.*.name, 'fork-ok'))
+          (github.event_name == 'pull_request' && needs.gate.result != 'success')
         run: exit 1
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: github.event_name == 'pull_request'

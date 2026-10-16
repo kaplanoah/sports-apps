@@ -6,6 +6,7 @@ import {
   findLabeling,
   findRedReasons,
   readDiff,
+  readPushTime,
   readTimeline,
 } from "../worker/red-change.mjs";
 
@@ -318,7 +319,7 @@ test("a red change is held until it has the phone-ok label, and says why", () =>
 
   const labeled = decideGate(diff, {
     labels: ["phone-ok"],
-    labeling: { labeler: "owner", isAfterLastCommit: true },
+    labeling: { labeler: "owner", isAfterLastPush: true },
     owner: "owner",
   });
   assert.equal(labeled.isHeld, false);
@@ -330,7 +331,7 @@ test("a red change labeled phone-ok by anyone but the owner is held, and says th
   const decideLabeledBy = (labeler, owner) =>
     decideGate(RED_DIFF, {
       labels: ["phone-ok"],
-      labeling: { labeler, isAfterLastCommit: true },
+      labeling: { labeler, isAfterLastPush: true },
       owner,
     });
   const held = decideLabeledBy("helper", "owner");
@@ -343,71 +344,95 @@ test("a red change labeled phone-ok by anyone but the owner is held, and says th
   assert.equal(decideGate(RED_DIFF, { labels: ["phone-ok"], owner: "owner" }).isHeld, true);
 });
 
-test("a red change the owner labeled phone-ok before its last commit is held until they label it again", () => {
+test("a red change the owner labeled phone-ok before its last push is held until they label it again", () => {
   const held = decideGate(RED_DIFF, {
     labels: ["phone-ok"],
-    labeling: { labeler: "owner", isAfterLastCommit: false },
+    labeling: { labeler: "owner", isAfterLastPush: false },
     owner: "owner",
   });
   assert.equal(held.isHeld, true);
-  assert.match(held.message, /labeled phone-ok before its last commit/);
+  assert.match(held.message, /labeled phone-ok before its last push/);
   assert.match(held.message, /git push -f origin <branch>:beta/);
   assert.match(held.message, /takes the label off and adds it again/);
 });
 
-/**
- * A commit on a pull request's timeline, committed at `at`.
- * @param {string} at
- */
-const createCommit = (at) => ({ event: "committed", committer: { date: at } });
+const HEAD_PUSHED_AT = Date.parse("2026-10-07T09:00:00Z");
 
 test("the phone-ok label's adder is whoever added it last, whatever else was labeled", () => {
   const events = [
-    createCommit("2026-10-07T09:00:00Z"),
     createEvent("labeled", "phone-ok", "owner", "2026-10-07T10:00:00Z"),
     createEvent("unlabeled", "phone-ok", "owner", "2026-10-07T11:00:00Z"),
     createEvent("labeled", "phone-ok", "helper", "2026-10-07T12:00:00Z"),
     createEvent("labeled", "bug", "owner", "2026-10-07T13:00:00Z"),
   ];
-  assert.deepEqual(findLabeling(events, "phone-ok"), {
+  assert.deepEqual(findLabeling(events, "phone-ok", HEAD_PUSHED_AT), {
     labeler: "helper",
-    isAfterLastCommit: true,
+    isAfterLastPush: true,
   });
-  assert.deepEqual(findLabeling(events.toReversed(), "phone-ok"), {
+  assert.deepEqual(findLabeling(events.toReversed(), "phone-ok", HEAD_PUSHED_AT), {
     labeler: "helper",
-    isAfterLastCommit: true,
+    isAfterLastPush: true,
   });
-  assert.deepEqual(findLabeling(events.slice(4), "phone-ok"), {
+  assert.deepEqual(findLabeling(events.slice(3), "phone-ok", HEAD_PUSHED_AT), {
     labeler: null,
-    isAfterLastCommit: false,
+    isAfterLastPush: false,
   });
 });
 
-test("a commit or a force push after the phone-ok label leaves it before the last commit", () => {
-  const labeled = [
-    createCommit("2026-10-07T09:00:00Z"),
-    createEvent("labeled", "phone-ok", "owner", "2026-10-07T10:00:00Z"),
-  ];
+test("a head pushed after the phone-ok label leaves it before the last push, whatever its commit's date says", () => {
+  const labeled = createEvent("labeled", "phone-ok", "owner", "2026-10-07T10:00:00Z");
+  // Committed before the label, so the timeline dates it then, but pushed after it.
+  const committedEarlier = { event: "committed", committer: { date: "2026-10-07T09:30:00Z" } };
+  assert.deepEqual(
+    findLabeling([committedEarlier, labeled], "phone-ok", Date.parse("2026-10-07T11:00:00Z")),
+    { labeler: "owner", isAfterLastPush: false },
+  );
   const forcePush = {
     event: "head_ref_force_pushed",
     created_at: "2026-10-07T11:00:00Z",
     actor: { login: "owner" },
   };
-  for (const change of [createCommit("2026-10-07T11:00:00Z"), forcePush])
-    assert.deepEqual(findLabeling([...labeled, change], "phone-ok"), {
-      labeler: "owner",
-      isAfterLastCommit: false,
-    });
+  assert.equal(
+    findLabeling([labeled, forcePush], "phone-ok", HEAD_PUSHED_AT).isAfterLastPush,
+    false,
+    "a force push back to a commit GitHub saw before the label",
+  );
   const labeledAgain = createEvent("labeled", "phone-ok", "owner", "2026-10-07T12:00:00Z");
   assert.equal(
-    findLabeling([...labeled, forcePush, labeledAgain], "phone-ok").isAfterLastCommit,
+    findLabeling([labeled, forcePush, labeledAgain], "phone-ok", HEAD_PUSHED_AT).isAfterLastPush,
     true,
   );
   assert.equal(
-    findLabeling([...labeled, { event: "committed", committer: {} }], "phone-ok").isAfterLastCommit,
+    findLabeling([labeled], "phone-ok", Number.NaN).isAfterLastPush,
     false,
-    "a commit with no date may be the last",
+    "a head GitHub can't date may be the last push",
   );
+});
+
+test("a head's push time is its earliest check suite's", async () => {
+  /** @type {string[]} */
+  const urls = [];
+  /** @param {{ created_at: string }[]} suites */
+  const createFetch = (suites) => async (/** @type {string} */ url) => {
+    urls.push(url);
+    return Response.json({ total_count: suites.length, check_suites: suites });
+  };
+  const sha = "a".repeat(40);
+  const options = { repository: "owner/repo", sha, env: { GH_TOKEN: "token" } };
+  assert.equal(
+    await readPushTime({
+      ...options,
+      fetchImpl: createFetch([
+        { created_at: "2026-10-07T11:00:00Z" },
+        { created_at: "2026-10-07T09:00:00Z" },
+      ]),
+    }),
+    HEAD_PUSHED_AT,
+  );
+  assert.deepEqual(urls, [
+    `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100`,
+  ]);
+  assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: createFetch([]) })));
 });
 
 test("a pull request's timeline is read page by page, with the token, until a short page", async () => {
@@ -487,6 +512,6 @@ test("CI's check needs the gate, which a label change runs again without a push"
   );
   assert.match(
     workflow,
-    /gate:[\s\S]*?pull-requests: read[\s\S]*?PR: \$\{\{ github\.event\.pull_request\.number \}\}/,
+    /gate:[\s\S]*?pull-requests: read\n\s+checks: read[\s\S]*?PR: \$\{\{ github\.event\.pull_request\.number \}\}\n\s+HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/,
   );
 });
