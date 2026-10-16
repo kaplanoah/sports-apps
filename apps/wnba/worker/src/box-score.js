@@ -1,6 +1,7 @@
 import { readGameState } from "../../page/js/snapshot.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
-import { nameGameDetailsKey, readKeptDoc } from "./store-docs.js";
+import { nameGameDetailsKey } from "./store-docs.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { fetchWnbaJson } from "./wnba.js";
 
 // Reads the league's box score for one game, for the game sheet: each team's points by quarter,
@@ -8,7 +9,7 @@ import { fetchWnbaJson } from "./wnba.js";
 // (game-details-updater.js), so the route reads the league only for a game still being played, or
 // one the store hasn't kept yet.
 
-/** @typedef {import("./store-docs.js").ReadDoc} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 // A live game's box score changes with every play, so it's kept as briefly as the scoreboard.
 const BOX_SCORE_CACHE_SECONDS = 5;

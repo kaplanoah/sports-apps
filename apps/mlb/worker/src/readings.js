@@ -10,7 +10,8 @@ const KEPT_DAYS = 14;
 
 export const nameReadingsCollection = (year) => `readings-${year}`;
 
-// Well under the Worker store's 64 KiB, so a busy day moves on to a new part before a write fails.
+// Each update rewrites only the part it adds to, so a busy day moves on to a new part while that
+// write is still small, far under the 2 MB a value in the store may hold.
 const MAX_PART_LENGTH = 40 * 1024;
 
 // A change before 6am Eastern comes from last night's games, even once the slate has moved on.

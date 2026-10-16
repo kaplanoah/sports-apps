@@ -1,7 +1,7 @@
 import { REQUESTS } from "../../page/js/snapshot.js";
 import { TEAMS } from "../../page/js/teams.js";
 import { respondJson } from "../../../../shared/worker/responses.js";
-import { readKeptDoc } from "./store-docs.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { fetchWnbaJson, SEASON_PARAM } from "./wnba.js";
 
 // The two teams' meetings this regular season, for the game sheet of a game that hasn't started.
@@ -10,7 +10,7 @@ import { fetchWnbaJson, SEASON_PARAM } from "./wnba.js";
 // seasons compare and their leading scorers from the store too, so opening it never waits on the
 // slow stats site.
 
-/** @typedef {import("./store-docs.js").ReadDoc} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 // The schedule changes at most a few times a day, so its answer is kept an hour once it's checked.
 // Cloudflare's edge would keep a refusal for the hour too, and the page's snapshot reads the same

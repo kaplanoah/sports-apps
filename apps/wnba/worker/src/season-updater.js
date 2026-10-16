@@ -125,11 +125,14 @@ async function saveSchedule(docs, snapshot) {
   });
 }
 
-/** @param {{ missing: string[], standIn?: string | null }} snapshot */
+// The league's schedule holds one season at a time, so once it lists the next season's games, the
+// season before has no games in it and keeps the ones it saved.
+/** @param {{ missing: string[], standIn?: string | null, openingDay: string | null }} snapshot */
 function readGameFeeds(snapshot) {
   const missing = new Set(snapshot.missing);
   const isStandIn = missing.has("scoreboard") && !!snapshot.standIn;
-  const hasGames = (!missing.has("scoreboard") || isStandIn) && !missing.has("schedule");
+  const hasSchedule = !missing.has("schedule") && !!snapshot.openingDay;
+  const hasGames = (!missing.has("scoreboard") || isStandIn) && hasSchedule;
   return { missing, isStandIn, hasGames };
 }
 

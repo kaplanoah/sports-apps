@@ -2,6 +2,7 @@ import { readEasternDay } from "#shared/days.js";
 import { readClubId } from "../../page/js/snapshot.js";
 import { fetchMlbJson, SEASON_PARAM } from "./mlb.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { noteLeagueRead } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
 // One pitcher's side of the matchup sheet: who he is, his season, what he throws, his last starts,
@@ -354,25 +355,9 @@ function readPersonId(searchParams) {
   return Number.isInteger(id) && id > 0 && id <= LARGEST_PERSON_ID ? id : null;
 }
 
-/**
- * Reads a document from the store, as null when it has none.
- * @typedef {(key: string) => Promise<any>} ReadDoc
- */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 const NOTHING_SAVED = { pitcher: null, qualified: null, current: null };
-
-/**
- * Counts a read of MLB the store should have spared, which never holds up the sheet.
- * @param {string} what what was read, as an error names it
- * @param {() => Promise<void>} countLeagueRead
- */
-export async function noteLeagueRead(what, countLeagueRead) {
-  try {
-    await countLeagueRead();
-  } catch (error) {
-    console.error(`Counting ${what} read from MLB failed: ${describeError(error)}`);
-  }
-}
 
 /**
  * @param {object} [options]

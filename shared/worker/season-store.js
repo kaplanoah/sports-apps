@@ -3,11 +3,13 @@ import { createPushService } from "./push.js";
 import { describeError, respondError, respondJson } from "./responses.js";
 
 // An app's saved data, kept in one Durable Object so every device reads the latest write.
-// Documents come back with sorted keys, and a missing one reads as null. The page can read
-// any document but writes none: what a viewer chooses stays on their own device. An alarm keeps the current season up to date from the league while no page is
-// open, and tells subscribed devices about new updates. With no page open, only notifications need
-// the updates, and those can wait a little, so updates come less often until a page opens. Each
-// page says which documents it watches, and hears only of changes to those. A league can keep
+// Documents come back with sorted keys, and a missing one reads as null. The page can read any
+// document but writes none, since what a viewer chooses stays on their own device.
+//
+// An alarm keeps the current season up to date from the league while no page is open, and tells
+// subscribed devices about new updates. With no page open, only notifications need the updates,
+// and those can wait a little, so updates come less often until a page opens. Each page says
+// which documents it watches, and hears only of changes to those. A league can keep
 // details of the games pages have open, like a box score, read with each update while they need
 // it, and run work of its own beside the season's updates, like reading the news. The Worker, and
 // never the page, can add to a count a job keeps, like how often a sheet had to read the league.
@@ -69,6 +71,12 @@ const STALE_MS = 15 * 60e3;
 // store's paths can't name.
 const SCHEDULE_KEY = "poll:schedule";
 const MAX_WATCHED = 50;
+
+/**
+ * Where the store marks a job's run as under way, until it ends.
+ * @param {string} name
+ */
+const nameRunningKey = (name) => `job-running:${name}`;
 
 /**
  * Where a job's storage keeps a count the Worker adds to.
@@ -282,12 +290,20 @@ export function createSeasonStore(league) {
       return dueTimes.some((dueAt) => dueAt === undefined);
     }
 
-    // One alarm serves the season and every background job, each when it's due.
+    // One alarm serves the season and every background job, each when it's due. An alarm whose
+    // storage failed is set again for a retry, since one never set would stop every update.
     async alarm() {
       const now = this.now();
-      const seasonDueAt = await this.updateSeasonWhenDue(now);
-      const jobDueTimes = await this.startDueJobs(now);
-      await this.ctx.storage.setAlarm(Math.min(seasonDueAt, ...jobDueTimes));
+      let nextAt = now + RETRY_MS[0];
+      try {
+        const seasonDueAt = await this.updateSeasonWhenDue(now);
+        const jobDueTimes = await this.startDueJobs(now);
+        nextAt = Math.min(seasonDueAt, ...jobDueTimes);
+      } catch (error) {
+        console.error(`The store's alarm failed: ${describeError(error)}`);
+      } finally {
+        await this.ctx.storage.setAlarm(nextAt);
+      }
     }
 
     // A schedule saved before it had a due time reads as due, as does one an earlier release saved,
@@ -313,19 +329,28 @@ export function createSeasonStore(league) {
       return Promise.all(jobs.map(([name, job]) => this.startJobWhenDue(name, job, now)));
     }
 
-    // The next run is set before this one starts, so a run that never ends can't stop the next.
+    // The next run is set before this one starts, so a run that never ends can't stop the next. A
+    // run marked as under way that this object isn't running was lost with an earlier one, as when
+    // a deploy restarts it, so it runs again at once rather than at its next turn.
     async startJobWhenDue(name, job, now) {
       const dueKey = `job-due:${name}`;
       const dueAt = (await this.ctx.storage.get(dueKey)) ?? now;
-      if (dueAt > now) return dueAt;
+      if (dueAt > now && !(await this.isRunLost(name))) return dueAt;
       const nextAt = now + job.chooseDelay(now);
       await this.ctx.storage.put(dueKey, nextAt);
       if (!this.jobRuns.has(name)) this.jobRuns.set(name, this.runJob(name, job));
       return nextAt;
     }
 
+    async isRunLost(name) {
+      if (this.jobRuns.has(name)) return false;
+      return (await this.ctx.storage.get(nameRunningKey(name))) !== undefined;
+    }
+
     async runJob(name, job) {
+      const runningKey = nameRunningKey(name);
       try {
+        await this.ctx.storage.put(runningKey, this.now());
         await job.updateStore({
           docs: this.docs,
           storage: this.createJobStorage(name),
@@ -336,9 +361,11 @@ export function createSeasonStore(league) {
         });
       } catch (error) {
         console.error(`The ${name} job failed: ${describeError(error)}`);
-      } finally {
-        this.jobRuns.delete(name);
       }
+      await this.ctx.storage
+        .delete(runningKey)
+        .catch((error) => console.error(`Ending the ${name} job failed: ${describeError(error)}`));
+      this.jobRuns.delete(name);
     }
 
     createJobStorage(name) {

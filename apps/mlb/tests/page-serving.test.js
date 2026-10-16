@@ -140,7 +140,6 @@ test("nothing but robots.txt and health answers outside the key", async () => {
   for (const path of [
     "/",
     "/mcp",
-    "/snapshot?season=2026",
     "/pitcher?id=1",
     "/rotation?club=PHI&date=2026-10-01",
     "/store/seasons/2026",
@@ -153,13 +152,6 @@ test("nothing but robots.txt and health answers outside the key", async () => {
   assert.equal(health.status, 503);
   assert.equal((await health.json()).store, "no answer");
   assert.equal(health.headers.get("x-robots-tag"), "noindex, nofollow");
-});
-
-test("the page's snapshot route checks the season before reading MLB", async () => {
-  const response = await requestPage("/k3y/snapshot?season=1800");
-  assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /season must be a whole year/);
-  assert.equal((await requestPage("/k3y/snapshot", { method: "POST" })).status, 405);
 });
 
 test("the pitcher route checks the pitcher before reading MLB, and answers only GET", async () => {

@@ -535,24 +535,13 @@ test("a slow feed that didn't answer waits five minutes before it's asked again"
   assert.deepEqual(answered.missing, []);
 });
 
-test("the page's snapshot says why it couldn't be read when no feed answers", async () => {
+test("a snapshot says why it couldn't be read when no feed answers", async () => {
   const league = createLeague({
     refuse: { scoreboard: "error", schedule: "error", bracket: "error", standings: "error" },
   });
   const server = createSnapshotServer({ fetchImpl: league.fetchImpl, now: () => NOW });
 
-  const response = await server.serveSnapshot(
-    new URL("https://app.example/k3y/snapshot?season=2026"),
-  );
-
-  assert.equal(response.status, 502);
-  assert.match((await response.json()).error, /^Couldn't read the WNBA: None of the WNBA's feeds/);
-});
-
-test("a season that isn't a year is refused", async () => {
-  const server = createSnapshotServer({ fetchImpl: createLeague().fetchImpl, now: () => NOW });
-  const response = await server.serveSnapshot(new URL("https://app.example/k3y/snapshot?season=x"));
-  assert.equal(response.status, 400);
+  await assert.rejects(server.loadSnapshot(2026), /None of the WNBA's feeds answered/);
 });
 
 test("the Worker bundles with its page, and exports its store", async () => {

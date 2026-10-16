@@ -247,6 +247,26 @@ test("the season's games stay as they were unless both the scoreboard and the sc
   assert.deepEqual(await readSchedule(docs, 2026), saved);
 });
 
+test("a season keeps its games once the league's schedule lists only the next season's", async () => {
+  const docs = createDocs();
+  await saveSnapshot(docs, WHOLE_SEASON);
+  const savedSchedule = await readSchedule(docs, 2026);
+  const savedSeason = await readUpdates(docs, 2026);
+
+  const nextSeasonsOnly = {
+    leagueSchedule: { ...GAMES.preview.schedule.leagueSchedule, gameDates: [] },
+  };
+  await saveSnapshot(
+    docs,
+    buildSnapshot({ ...RESPONSES, schedule: nextSeasonsOnly }, { season: 2026, now: NOW }),
+  );
+
+  assert.deepEqual(await readSchedule(docs, 2026), savedSchedule);
+  const season = await readUpdates(docs, 2026);
+  assert.deepEqual(season.games, savedSeason.games);
+  assert.deepEqual(season.nearestGames, savedSeason.nearestGames);
+});
+
 /**
  * @param {any} snapshot
  * @param {string} state

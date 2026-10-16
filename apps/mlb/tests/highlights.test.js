@@ -370,15 +370,19 @@ test("the store's job asks Claude about a few stills a run, saving the game's hi
   assert.equal(mlb.stillsAsked.length, stills.length);
 });
 
-test("a game whose stills Claude didn't answer for saves nothing, and is read again ten minutes later", async () => {
-  const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
+test("a game whose stills Claude didn't answer for saves its highlights with MLB's own stills, and has the moment once Claude answers ten minutes later", async () => {
+  const title = "William Contreras' solo home run";
+  const contreras = findRecordedClip(BREWERS_AT_PADRES, title);
   const mlb = createMlbFetch(new Set([contreras.still]));
   const run = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
   const { stored, wait } = run;
   mlb.claude.isDown = true;
 
-  await run.runJob();
-  assert.equal(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), undefined);
+  await runUntilChecked(run, mlb);
+  assert.deepEqual(
+    stored.get(nameHighlightsKey(BREWERS_AT_PADRES)),
+    describeRecorded(BREWERS_AT_PADRES),
+  );
 
   mlb.claude.isDown = false;
   wait(10);

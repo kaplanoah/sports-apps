@@ -1,6 +1,6 @@
 import { createHighlightsJob } from "../../../../shared/worker/highlights-job.js";
 import { listCurrentFinals } from "./game-details-updater.js";
-import { findHeadlineStills } from "./headline-stills.js";
+import { findHeadlineStills, forgetOtherSeasonsStills } from "./headline-stills.js";
 import {
   describeHighlights,
   fetchGameMedia,
@@ -24,17 +24,28 @@ const GAME_LENGTH_MS = 3 * 60 * 60 * 1000;
  */
 async function readHighlights(context, game) {
   const { content, feed } = await fetchGameMedia(context.fetchImpl, game.id);
-  const { withHeadlines, isFinished } = await findHeadlineStills(
+  const { withHeadlines, isFinished, hasMisses } = await findHeadlineStills(
     context,
     game.id,
     listStillsToCheck(content, feed),
   );
-  return { highlights: describeHighlights(game.id, content, feed, withHeadlines), isFinished };
+  return {
+    highlights: describeHighlights(game.id, content, feed, withHeadlines),
+    isFinished,
+    hasMisses,
+  };
+}
+
+/** @param {import("../../../../shared/worker/season-store.js").JobContext} context */
+async function listFinals(context) {
+  const finals = await listCurrentFinals(context);
+  if (finals) await forgetOtherSeasonsStills(context, finals);
+  return finals;
 }
 
 export const createHighlightsUpdater = () =>
   createHighlightsJob({
-    listFinals: listCurrentFinals,
+    listFinals,
     gameLengthMs: GAME_LENGTH_MS,
     readHighlights,
     nameKey: nameHighlightsKey,

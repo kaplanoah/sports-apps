@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { catchFailure, noteFailure } from "../shared/worker/job-status.js";
+import { catchFailure, noteFailure, runWithStatus } from "../shared/worker/job-status.js";
+import { createDocs, createJobStorage } from "./job-context.js";
 
 /**
  * Runs `work` with console.error held, and answers what it logged.
@@ -41,4 +42,44 @@ test("work that fails has its failure noted rather than thrown, and work that do
 
   assert.deepEqual(failures, ["Keeping 2026's players failed: The store is full"]);
   assert.deepEqual(done, ["filled"]);
+});
+
+test("a run saves its status with what the job adds, notes a failure it doesn't catch, and keeps the last failure through a run that has none", async (context) => {
+  context.mock.method(console, "error", () => {});
+  const docs = createDocs();
+  const clock = { now: Date.parse("2026-10-06T12:00:00Z") };
+  const jobContext = /** @type {any} */ ({
+    docs,
+    storage: createJobStorage(),
+    env: {},
+    fetchImpl: async () => new Response("{}"),
+    now: () => clock.now,
+  });
+  const job = {
+    statusKey: "games/status",
+    describeRun: async () => ({ saved: 1 }),
+  };
+
+  await runWithStatus(jobContext, {
+    ...job,
+    updateStore: async ({ fetchImpl }) => {
+      await fetchImpl("https://league.example/feed");
+      throw new Error("The store is full");
+    },
+  });
+  const failed = docs.stored.get("games/status");
+  assert.deepEqual(failed, {
+    ranAt: "2026-10-06T12:00:00.000Z",
+    durationMs: 0,
+    requests: 1,
+    lastFailure: { at: "2026-10-06T12:00:00.000Z", message: "The run failed: The store is full" },
+    saved: 1,
+  });
+
+  clock.now += 60_000;
+  await runWithStatus(jobContext, { ...job, updateStore: async () => {} });
+  const after = docs.stored.get("games/status");
+  assert.equal(after.ranAt, "2026-10-06T12:01:00.000Z");
+  assert.equal(after.requests, 0);
+  assert.deepEqual(after.lastFailure, failed.lastFailure);
 });

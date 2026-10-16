@@ -229,6 +229,16 @@ test("a club's starters from the store are the ones MLB's feeds make, and read n
     }
 });
 
+test("a day whose last two weeks the store's starts don't reach up to has the sheet read MLB, counted", async () => {
+  const { docs, runJob } = createRun();
+  await runJob();
+
+  const later = await askForRotation("club=CLE&date=2026-10-09", { docs });
+  assert.ok(later.requests.length > 0);
+  assert.equal(later.leagueReads, 1);
+  assert.deepEqual(later.body, (await askForRotation("club=CLE&date=2026-10-09")).body);
+});
+
 test("a club whose starters the store doesn't keep, or a day its starts don't reach back to, has the sheet read MLB, counted", async () => {
   const { docs, runJob } = createRun();
   await runJob();
@@ -306,6 +316,17 @@ test("sides saved before they gained a field are each read once more, and then n
 
   assert.equal(reread.length, 2 * Math.ceil(RECORDED_IDS.length / 30));
   assert.deepEqual(listPitcherReads(mlb.requests.slice(before)), reread);
+});
+
+test("the reads kept under an earlier version of the sides are forgotten as the job saves its own", async () => {
+  const { storage, runJob } = createRun();
+  await storage.put("reads:2026", { 1: { games: 1, at: 0, isSettled: true } });
+
+  await runJob();
+
+  assert.equal(nameReadsKey(2026, 1), "reads:2026");
+  assert.equal(await storage.get("reads:2026"), undefined);
+  assert.ok(await storage.get(nameReadsKey(2026)));
 });
 
 test("a final MLB answers the same for saves no document", async () => {

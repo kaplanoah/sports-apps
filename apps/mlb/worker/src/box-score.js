@@ -1,16 +1,17 @@
 import { readGameState } from "../../page/js/snapshot.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 
 // One game's box score for the Game section of its sheet, read from MLB's live feed in one request
 // trimmed to what the sheet shows: each club's runs by inning, its runs, hits, and errors, each
 // batter and pitcher who got in, each half inning that scored, play by play, and, while a half
 // inning is under way, who's on base and how each got there or whom he's pinch running for, and
 // who's up. Before first pitch, once a club posts its lineup, its batters are that lineup, each
-// with his season so far. The store keeps each game's (game-details-updater.js), so the route
-// reads MLB only for a game the store hasn't kept yet.
+// with his season so far. The store keeps each final's (game-details-updater.js), so the route
+// reads MLB only for a game still to finish, or a final the store hasn't kept yet.
 
-/** @typedef {(key: string) => Promise<any>} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 const GAME_ID = /^\d{1,9}$/;
 const FEED_FIELDS = [
@@ -89,9 +90,8 @@ const FEED_FIELDS = [
 // A pitcher's note reads like "(W, 4-2)" or "(S, 3)"; the sheet shows only the decision.
 const DECISIONS = new Set(["W", "L", "S"]);
 const SIDES_BATTING = { top: "away", bottom: "home" };
-// MLB's linescore names the half being played; between halves it's "Middle" or "End".
-// Between halves MLB says "Middle" or "End", with the third out still counted and the next half's
-// leadoff man up.
+// MLB's linescore names the half being played, and between halves says "Middle" or "End", with
+// the third out still counted and the next half's leadoff man up.
 const HALVES = { Top: "top", Middle: "middle", Bottom: "bottom", End: "end" };
 const BASES = /** @type {const} */ (["first", "second", "third"]);
 const BASE_CODES = { first: "1B", second: "2B", third: "3B" };
@@ -453,19 +453,6 @@ export async function fetchBoxScore(fetchImpl, id) {
 // A finished game's box score never changes, so the one the store keeps is served as it is.
 export function createBoxScoreServer({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
   /**
-   * @param {string} id
-   * @param {ReadDoc} readDoc
-   */
-  async function readKept(id, readDoc) {
-    try {
-      return await readDoc(nameGameDetailsKey(id));
-    } catch (error) {
-      console.error(`Reading game ${id} from the store failed: ${describeError(error)}`);
-      return null;
-    }
-  }
-
-  /**
    * @param {URL} url
    * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
    */
@@ -473,7 +460,7 @@ export function createBoxScoreServer({ fetchImpl = (input, init) => fetch(input,
     const id = url.searchParams.get("id") ?? "";
     if (!GAME_ID.test(id)) return respondJson({ error: "id must be an MLB game id" }, 400);
     try {
-      const kept = readDoc ? await readKept(id, readDoc) : null;
+      const kept = await readKeptDoc(readDoc, nameGameDetailsKey(id));
       return respondJson(kept?.state === "final" ? kept : await fetchBoxScore(fetchImpl, id));
     } catch (error) {
       return respondJson({ error: `Couldn't read MLB: ${describeError(error)}` }, 502);

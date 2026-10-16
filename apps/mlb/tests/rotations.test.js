@@ -81,6 +81,7 @@ const describePhilliesStarts = (from) =>
   describeClubStarts({
     club: "PHI",
     from,
+    through: "2026-10-11",
     schedule: SCHEDULE,
     pitchers: new Map(
       GAME_LOGS.people.map((person) => [person.id, describeRotationPitcher(person)]),

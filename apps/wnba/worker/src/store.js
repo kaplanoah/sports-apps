@@ -3,7 +3,7 @@ import PAGE_FILES from "#page-files/wnba";
 import { readReleaseCommit } from "../../../../shared/worker/app-worker.js";
 import { createSeasonStore } from "../../../../shared/worker/season-store.js";
 import * as SeasonUpdater from "./season-updater.js";
-import { createGameDetailsJob } from "./game-details-updater.js";
+import { createWnbaGameDetailsJob } from "./game-details-updater.js";
 import { createHighlightsUpdater } from "./highlights-updater.js";
 import { createWnbaNewsJob } from "./news-updater.js";
 import { PLAYER_JOB, createPlayerJob } from "./player-updater.js";
@@ -31,7 +31,7 @@ export const SeasonStore = createSeasonStore({
   detailsCollection: GAME_DETAILS_COLLECTION,
   createLoadDetails: () => createWatchedGameLoader(),
   backgroundJobs: {
-    games: createGameDetailsJob(),
+    games: createWnbaGameDetailsJob(),
     highlights: createHighlightsUpdater(),
     news: createWnbaNewsJob(),
     [PLAYER_JOB]: createPlayerJob(),

@@ -1,4 +1,5 @@
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { readStoryLead } from "../../../../shared/worker/story-lead.js";
 import { fetchMlbJson } from "./mlb.js";
 
@@ -13,7 +14,7 @@ import { fetchMlbJson } from "./mlb.js";
 // store's job asks Claude (headline-stills.js), when it's a frame from the play's video, or,
 // for a clip without frames, MLB.com's photo of the game.
 
-/** @typedef {(key: string) => Promise<any>} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 const GAME_ID = /^\d{1,9}$/;
 const CONTENT_CACHE_SECONDS = 60;
@@ -264,22 +265,6 @@ async function fetchHighlights(fetchImpl, id) {
 
 export function createHighlightsServer({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
   /**
-   * @param {string} id
-   * @param {ReadDoc | undefined} readDoc
-   */
-  async function readKept(id, readDoc) {
-    if (!readDoc) return null;
-    try {
-      return await readDoc(nameHighlightsKey(id));
-    } catch (error) {
-      console.error(
-        `Reading game ${id}'s highlights from the store failed: ${describeError(error)}`,
-      );
-      return null;
-    }
-  }
-
-  /**
    * @param {URL} url
    * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
    */
@@ -287,7 +272,8 @@ export function createHighlightsServer({ fetchImpl = (input, init) => fetch(inpu
     const id = url.searchParams.get("id") ?? "";
     if (!GAME_ID.test(id)) return respondJson({ error: "id must be an MLB game id" }, 400);
     try {
-      return respondJson((await readKept(id, readDoc)) ?? (await fetchHighlights(fetchImpl, id)));
+      const kept = await readKeptDoc(readDoc, nameHighlightsKey(id));
+      return respondJson(kept ?? (await fetchHighlights(fetchImpl, id)));
     } catch (error) {
       return respondJson({ error: `Couldn't read MLB: ${describeError(error)}` }, 502);
     }

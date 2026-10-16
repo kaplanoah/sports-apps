@@ -3,7 +3,7 @@ import { describeError, respondJson } from "../../../../shared/worker/responses.
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { readNameLetters } from "../../../../shared/worker/injury-report.js";
-import { readKeptDoc } from "./store-docs.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
 
 // Reads a team's roster for a season, for its sheet's Roster page: each player's number, position,
@@ -215,7 +215,7 @@ export function createRosterServer({
 
   /**
    * @param {URL} url
-   * @param {import("./store-docs.js").ReadDoc} [readDoc] the store's documents, when the Worker
+   * @param {import("../../../../shared/worker/store-reads.js").ReadDoc} [readDoc] the store's documents, when the Worker
    *   has a store
    */
   async function serveRoster(url, readDoc) {

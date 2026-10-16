@@ -452,6 +452,41 @@ test("a job still running when it's due again isn't started twice, and doesn't h
   assert.equal(seasonUpdates, 2);
 });
 
+test("a job's run lost with the store, as when a deploy restarts it, runs again at the store's next alarm rather than at its next turn", async () => {
+  const context = createDurableObjectContext();
+  const contexts = [];
+  const { league, finish } = createJobLeague(contexts);
+  const SeasonStore = createSeasonStore({ ...league, choosePollDelay: () => MINUTE_MS });
+  const clock = { now: NOW };
+  await new SeasonStore(context.ctx, {}, { now: () => clock.now }).alarm();
+
+  const restarted = new SeasonStore(context.ctx, {}, { now: () => clock.now });
+  await fireNextAlarm(restarted, context, clock);
+  assert.equal(contexts.length, 2);
+
+  finish();
+  await restarted.jobRuns.get("news");
+  await fireNextAlarm(restarted, context, clock);
+  assert.equal(contexts.length, 2);
+});
+
+test("an alarm whose storage fails is set again for a retry", async (t) => {
+  const context = createDurableObjectContext();
+  const logged = t.mock.method(console, "error", () => {});
+  const SeasonStore = createSeasonStore(QUIET_LEAGUE);
+  const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
+  const { get } = context.ctx.storage;
+  context.ctx.storage.get = async () => {
+    throw new Error("Storage is down");
+  };
+
+  await store.alarm();
+
+  context.ctx.storage.get = get;
+  assert.equal(await context.ctx.storage.getAlarm(), NOW + 30_000);
+  assert.match(String(logged.mock.calls[0].arguments[0]), /alarm failed: .*Storage is down/);
+});
+
 test("a job that fails is logged, and runs again when it's next due", async (t) => {
   const context = createDurableObjectContext();
   const logged = t.mock.method(console, "error", () => {});

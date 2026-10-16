@@ -1,12 +1,11 @@
 import * as WNBASnapshot from "../../page/js/snapshot.js";
 import { readEasternDay } from "#shared/days.js";
-import { serveSeasonSnapshot } from "../../../../shared/worker/seasons.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { createReusedLoader, fetchUpstream } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
 import { listUpcomingMeetings } from "./preview.js";
-import { ESPN_HEADERS, fetchWnbaJson, SEASON_PARAM } from "./wnba.js";
+import { ESPN_HEADERS, fetchWnbaJson } from "./wnba.js";
 
 const EDGE_CACHE_SECONDS = 5;
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
@@ -46,7 +45,7 @@ const readEventId = (link) => String(link).match(/\/events\/(\d+)/)?.[1] ?? null
 const countFinals = (scoreboard) =>
   (scoreboard?.scoreboard?.games ?? []).filter((game) => game.gameStatus === 3).length;
 
-// Reads the league for the page, so every open page shares one trip to it at a time.
+// Reads the league for the store, and reads moments apart share one trip to it.
 /**
  * @param {object} [options]
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]
@@ -222,14 +221,5 @@ export function createSnapshotServer({
 
   const loadSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
 
-  /** @param {URL} url */
-  const serveSnapshot = (url) =>
-    serveSeasonSnapshot(url, {
-      seasonParam: SEASON_PARAM,
-      loadSnapshot,
-      leagueName: "the WNBA",
-      now,
-    });
-
-  return { loadSnapshot, serveSnapshot };
+  return { loadSnapshot };
 }

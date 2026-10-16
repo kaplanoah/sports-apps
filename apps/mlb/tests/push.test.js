@@ -157,6 +157,44 @@ test("a test message to a push service that doesn't answer fails, and keeps the 
   assert.equal(listSubscriptions(context).length, 1);
 });
 
+test("the store keeps a hundred devices at most, but a device already kept can subscribe again", async () => {
+  const { env, context } = createPushStore();
+  await subscribe(env);
+  for (let index = 1; index < 100; index += 1)
+    context.stored.set(`push:subscription:${index}`, { endpoint: `${ENDPOINT}-${index}` });
+
+  const another = await subscribe(env, `${ENDPOINT}-new`);
+  assert.equal(another.response.status, 429);
+  assert.equal((await another.response.json()).error.code, "too_many_devices");
+  assert.equal((await subscribe(env)).response.status, 204);
+  assert.equal(listSubscriptions(context).length, 100);
+});
+
+/** @param {object} env */
+const sendTest = (env) =>
+  requestApp(env, "/push/test", { method: "POST", body: { endpoint: ENDPOINT } });
+
+test("a device whose push service turns every message away for a week is forgotten, and one that gets a message through starts over", async () => {
+  const { env, context, harness, clock } = createPushStore({ pushStatus: 403 });
+  await subscribe(env);
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  await sendTest(env);
+  clock.now += 6 * DAY_MS;
+  await sendTest(env);
+  assert.equal(listSubscriptions(context).length, 1);
+  harness.pushStatus = 201;
+  await sendTest(env);
+  harness.pushStatus = 403;
+  clock.now += 2 * DAY_MS;
+  await sendTest(env);
+  assert.equal(listSubscriptions(context).length, 1);
+
+  clock.now += 7 * DAY_MS;
+  await sendTest(env);
+  assert.deepEqual(listSubscriptions(context), []);
+});
+
 test("unsubscribing removes the device", async () => {
   const { env, context } = createPushStore();
   await subscribe(env);

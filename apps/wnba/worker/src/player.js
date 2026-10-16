@@ -1,5 +1,6 @@
 import { REQUESTS } from "../../page/js/snapshot.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { noteLeagueRead } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { nameRosterKey, readTeam } from "./roster.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
@@ -490,7 +491,7 @@ function readId(searchParams) {
   return /^\d{1,12}$/.test(id) ? id : null;
 }
 
-/** @typedef {import("./store-docs.js").ReadDoc} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 /**
  * @param {object} options
@@ -573,40 +574,32 @@ export function createPlayerServer({
   }
 
   /**
-   * Her sheet from what the store keeps, or undefined when it doesn't keep the season, or can't be
-   * read.
+   * Her sheet from what the store keeps, undefined when it doesn't keep the season, or can't be
+   * read, and whether the season is the store's current one.
    * @param {{ id: string, team: string, season: number }} asked
    * @param {ReadDoc} readDoc
    */
   async function readPlayerFromStore({ id, team, season }, readDoc) {
     try {
-      const [ranks, numbers, roster] = await Promise.all([
+      const [ranks, numbers, roster, current] = await Promise.all([
         readDoc(nameRanksKey(season)),
         readDoc(nameNumbersKey(season, id)),
         readDoc(nameRosterKey(season, team)),
+        readDoc("live/current"),
       ]);
-      return ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined;
+      return {
+        player: ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined,
+        isCurrentSeason: season === current?.season,
+      };
     } catch (error) {
       console.error(`Reading player ${id} from the store failed: ${describeError(error)}`);
-      return undefined;
-    }
-  }
-
-  /**
-   * Counts a read of the league the store should have spared, which never holds up the sheet.
-   * @param {() => Promise<void>} countLeagueRead
-   */
-  async function noteLeagueRead(countLeagueRead) {
-    try {
-      await countLeagueRead();
-    } catch (error) {
-      console.error(`Counting a player read from the league failed: ${describeError(error)}`);
+      return { player: undefined, isCurrentSeason: false };
     }
   }
 
   /**
    * Her sheet from the store, or from the league for a season the store hasn't saved, counted when
-   * the store could have had it.
+   * the season is the store's current one, which the store keeps as it goes.
    * @param {{ id: string, team: string, season: number }} asked
    * @param {ReadDoc} [readDoc]
    * @param {() => Promise<void>} [countLeagueRead]
@@ -614,10 +607,10 @@ export function createPlayerServer({
   async function readPlayer(asked, readDoc, countLeagueRead) {
     if (!readDoc) return readPlayerFromLeague(asked);
     const saved = await readPlayerFromStore(asked, readDoc);
-    if (saved !== undefined) return saved;
+    if (saved.player !== undefined) return saved.player;
     const [player] = await Promise.all([
       readPlayerFromLeague(asked),
-      countLeagueRead && noteLeagueRead(countLeagueRead),
+      saved.isCurrentSeason && countLeagueRead && noteLeagueRead("a player", countLeagueRead),
     ]);
     return player;
   }

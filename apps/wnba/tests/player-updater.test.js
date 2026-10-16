@@ -108,7 +108,8 @@ function createLeagueFetch(answers) {
   return { requests, fetchImpl };
 }
 
-const FINAL_GAME = { id: "1", state: "final" };
+// The season's record keeps only its playoff games, and its schedule every game.
+const FINAL_GAME = { id: "1", round: null, state: "final" };
 
 /**
  * A store whose current season is 2026, with 2025 kept from before, and the job that keeps its
@@ -118,7 +119,8 @@ const FINAL_GAME = { id: "1", state: "final" };
 function createRun({ series = [], answers = listAnswers(), job = createPlayerJob() } = {}) {
   const docs = createDocs({
     "live/current": { season: 2026 },
-    "seasons/2026": { year: 2026, games: [FINAL_GAME], series },
+    "seasons/2026": { year: 2026, games: [], series },
+    "schedules/2026": { year: 2026, games: [FINAL_GAME] },
     "seasons/2025": { year: 2025, games: [], series: [] },
   });
   const storage = createJobStorage();
@@ -139,12 +141,13 @@ function createRun({ series = [], answers = listAnswers(), job = createPlayerJob
   };
   /** @param {number} count */
   const endGames = async (count) => {
-    const season = docs.stored.get("seasons/2026");
+    const schedule = docs.stored.get("schedules/2026");
     const games = Array.from({ length: count }, (_, index) => ({
       id: String(index),
+      round: null,
       state: "final",
     }));
-    docs.stored.set("seasons/2026", { ...season, games });
+    docs.stored.set("schedules/2026", { ...schedule, games });
   };
   return { docs, storage, league, runJob, wait, endGames };
 }
@@ -559,6 +562,10 @@ test("a sheet read from the league is counted only when the store could have had
   docs.stored.delete(nameRanksKey(2026));
   assert.equal((await askWithCount(`id=${STEWART}&team=NYL&season=2026`)).status, 200);
   assert.equal(counted, 1);
+
+  docs.stored.delete(nameRanksKey(2025));
+  await askWithCount(`id=${STEWART}&team=NYL&season=2025`);
+  assert.equal(counted, 1, "a season before the current one isn't counted, as MLB's aren't");
 });
 
 test("a count the store can't take still answers the sheet", async (t) => {

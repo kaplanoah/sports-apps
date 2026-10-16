@@ -1,36 +1,45 @@
 import { hasCurrentSchedule, savePastSeason } from "./season-updater.js";
+import { runWithStatus } from "../../../../shared/worker/job-status.js";
 
 // Fills in each season before the current one that the store keeps without its standings, as one
 // followed only until it ended was, or without its games as the page reads them now, as one saved
 // before the store kept them, or before they held what they hold now, was, so the page reads every
 // season whole from the store. One season a run, newest first, and once a past season is whole, it
 // isn't read again. A season MLB answers only in part is left for the next run, and the run goes
-// on to the next season.
+// on to the next season. Each run saves how it went in `pastSeasons/status`.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const STATUS_KEY = "pastSeasons/status";
 
 const hasStandings = (season) => !!season.standings;
 
 /** @param {any} snapshot */
 const isWholeSnapshot = (snapshot) => !snapshot.missing.length && !!snapshot.schedule;
 
+/** @param {import("../../../../shared/worker/job-status.js").RunContext} context */
+async function fillPastSeason({ docs, loadSnapshot, failures }) {
+  const current = await docs.read("live/current");
+  if (!current) return;
+  const past = (await docs.list("seasons"))
+    .filter((season) => season.year < current.season)
+    .sort((first, second) => second.year - first.year);
+  for (const season of past) {
+    if (hasStandings(season) && (await hasCurrentSchedule(docs, season.year))) continue;
+    const snapshot = await loadSnapshot(season.year);
+    if (!isWholeSnapshot(snapshot)) {
+      failures.push(`Reading ${season.year} failed: MLB didn't answer it whole`);
+      continue;
+    }
+    await savePastSeason(docs, snapshot);
+    return;
+  }
+}
+
 /** @returns {import("../../../../shared/worker/season-store.js").BackgroundJob} */
 export function createPastSeasonsJob() {
   return {
     chooseDelay: () => DAY_MS,
-    async updateStore({ docs, loadSnapshot }) {
-      const current = await docs.read("live/current");
-      if (!current) return;
-      const past = (await docs.list("seasons"))
-        .filter((season) => season.year < current.season)
-        .sort((first, second) => second.year - first.year);
-      for (const season of past) {
-        if (hasStandings(season) && (await hasCurrentSchedule(docs, season.year))) continue;
-        const snapshot = await loadSnapshot(season.year);
-        if (!isWholeSnapshot(snapshot)) continue;
-        await savePastSeason(docs, snapshot);
-        return;
-      }
-    },
+    updateStore: (context) =>
+      runWithStatus(context, { statusKey: STATUS_KEY, updateStore: fillPastSeason }),
   };
 }

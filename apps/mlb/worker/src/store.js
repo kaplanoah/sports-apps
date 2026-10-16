@@ -4,11 +4,10 @@ import PAGE_FILES from "#page-files/mlb";
 import { readReleaseCommit } from "../../../../shared/worker/app-worker.js";
 import { createSeasonStore } from "../../../../shared/worker/season-store.js";
 import { GAME_DETAILS_COLLECTION } from "./box-score.js";
-import { createGameDetailsJob } from "./game-details-updater.js";
+import { createMlbGameDetailsJob } from "./game-details-updater.js";
 import { createHighlightsUpdater } from "./highlights-updater.js";
 import { createMlbNewsJob } from "./news-updater.js";
 import { findNotableUpdates, listNotifications } from "./notifications.js";
-import { createOldRecordsJob } from "./old-records.js";
 import { createPastSeasonsJob } from "./past-seasons.js";
 import { PITCHER_JOB, createPitcherJob } from "./pitcher-updater.js";
 import { createRosterJob } from "./roster-updater.js";
@@ -39,10 +38,9 @@ export const SeasonStore = createSeasonStore({
   detailsCollection: GAME_DETAILS_COLLECTION,
   createLoadDetails: () => createWatchedGameLoader(),
   backgroundJobs: {
-    games: createGameDetailsJob(),
+    games: createMlbGameDetailsJob(),
     highlights: createHighlightsUpdater(),
     pastSeasons: createPastSeasonsJob(),
-    oldRecords: createOldRecordsJob(),
     [PITCHER_JOB]: createPitcherJob(),
     rosters: createRosterJob(),
     news: createMlbNewsJob(),

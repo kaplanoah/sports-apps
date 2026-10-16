@@ -1,7 +1,7 @@
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
 import { readStoryLead } from "../../../../shared/worker/story-lead.js";
 import { createEspnGameReader, readGame } from "./lead.js";
-import { readKeptDoc } from "./store-docs.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 
 // One finished game's highlights for its sheet's Highlights section, from ESPN's game summary:
 // its recap video, its written recap, and the clips of the game's plays, in the order ESPN posted
@@ -9,7 +9,7 @@ import { readKeptDoc } from "./store-docs.js";
 // when. The store keeps each game's (highlights-updater.js), so the route reads ESPN only for a
 // game the store hasn't kept.
 
-/** @typedef {import("./store-docs.js").ReadDoc} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 const RECAP_TITLE = /game highlights$/i;
 

@@ -28,7 +28,14 @@ function createUpdatingStore({ stored = {}, snapshot = SNAPSHOT, now = NOW } = {
     return structuredClone(harness.snapshot);
   };
   const sent = [];
-  context.ctx.acceptWebSocket({ send: (message) => sent.push(JSON.parse(message)) });
+  // The background jobs' statuses, which no page watches, aren't what these tests follow.
+  const isJobStatus = (path) => path.endsWith("/status") && path !== "live/status";
+  context.ctx.acceptWebSocket({
+    send: (message) => {
+      const parsed = JSON.parse(message);
+      if (!isJobStatus(parsed.path)) sent.push(parsed);
+    },
+  });
   const clock = { now };
   // MLB, whose pitchers the store also keeps, isn't what these tests follow.
   const fetchImpl = async () => new Response(null, { status: 404 });

@@ -38,7 +38,7 @@ const PLAYOFF_FIELD_2026 = [
 test("renders the bracket, standings and stamp from the season's record the Worker saved", async ({
   page,
 }) => {
-  const app = await openApp(page);
+  await openApp(page);
 
   const bracket = page.locator("#bracketWrap");
   for (const club of PLAYOFF_FIELD_2026) await expect(bracket).toContainText(club);
@@ -49,7 +49,6 @@ test("renders the bracket, standings and stamp from the season's record the Work
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap .div-block")).toHaveCount(8);
   await expect(page.locator("#standingsWrap")).toContainText("AL East");
-  expect(app.countSnapshotRequests()).toBe(0);
 });
 
 test("standings open on each league's playoff field, and every table lines up", async ({
@@ -165,7 +164,6 @@ test("switching to 2025 shows the finished bracket and its champion from its rec
   await expect(championships).toHaveCount(2);
   await expect(championships.locator(".card-note")).toHaveCount(0);
   await expect(page.locator("#updates")).toBeHidden();
-  expect(app.countSnapshotRequests()).toBe(0);
 });
 
 test("warns under the title when MLB stops sending a field", async ({ page }) => {
@@ -341,5 +339,5 @@ test("while the store says last year's season is current, the page shows it and 
   await page.clock.fastForward("02:00:00");
 
   await expect(page.locator("#yearSel")).toHaveValue("2026");
-  expect(app.countSnapshotRequests()).toBe(0);
+  expect(app.listStoreReads().filter((path) => path.includes("2027"))).toEqual([]);
 });

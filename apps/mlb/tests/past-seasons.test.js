@@ -109,6 +109,17 @@ test("a past season MLB answers only in part is left for the next run", async ()
   assert.deepEqual(documents.get("seasons/2025"), FOLLOWED_2025);
 });
 
+test("each run saves its status, naming a past season MLB answered only in part", async () => {
+  const { documents } = await runJob(
+    { "live/current": { season: 2026 }, "seasons/2025": FOLLOWED_2025 },
+    { ...SNAPSHOT_2025, missing: ["standings"] },
+  );
+
+  const status = documents.get("pastSeasons/status");
+  assert.equal(status.ranAt, "2026-10-05T12:00:00.000Z");
+  assert.equal(status.lastFailure.message, "Reading 2025 failed: MLB didn't answer it whole");
+});
+
 test("until the store names the current season, no season counts as past", async () => {
   const { loads } = await runJob({ "seasons/2025": FOLLOWED_2025 });
 

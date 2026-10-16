@@ -79,3 +79,33 @@ export function describeJobRun({ startedAt, endedAt, requests, failure }, stored
     lastFailure: failure ? { at: ranAt, message: failure } : (stored?.lastFailure ?? null),
   };
 }
+
+/**
+ * What a job's run gets: the store's context, its fetch counted, and what failed so far.
+ * @typedef {import("./season-store.js").JobContext & { failures: string[] }} RunContext
+ */
+
+/**
+ * Does one run of a job and saves how it went in the job's status document, with what the job
+ * adds of its own. A failure the run doesn't catch is noted as the run's.
+ * @param {import("./season-store.js").JobContext} context
+ * @param {object} job
+ * @param {string} job.statusKey where the job saves its status, as `<name>/status`
+ * @param {(context: RunContext) => Promise<void>} job.updateStore one run
+ * @param {(context: RunContext) => Promise<Record<string, unknown>>} [job.describeRun] what the
+ *   job adds of its own to the status
+ */
+export async function runWithStatus(context, { statusKey, updateStore, describeRun }) {
+  const startedAt = context.now();
+  const counter = countRequests(context.fetchImpl);
+  /** @type {RunContext} */
+  const runContext = { ...context, fetchImpl: counter.fetchImpl, failures: [] };
+  await catchFailure(runContext.failures, "The run", () => updateStore(runContext));
+  const stored = await context.docs.read(statusKey);
+  const failure = runContext.failures.join("; ");
+  const requests = counter.count;
+  await context.docs.write(statusKey, {
+    ...describeJobRun({ startedAt, endedAt: context.now(), requests, failure }, stored),
+    ...(await describeRun?.(runContext)),
+  });
+}

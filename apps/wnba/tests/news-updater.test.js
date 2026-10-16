@@ -396,7 +396,7 @@ test("Claude answers in the schema, and a run whose answer Claude didn't finish 
 // with this hash.
 test("the WNBA's prompt is the one its stories were last judged by", () => {
   const hash = createHash("sha256").update(LABEL_PROMPT).digest("hex").slice(0, 16);
-  assert.equal(hash, "5a56822c8c0fb6d6");
+  assert.equal(hash, "2bb0ad1e7203fb81");
 });
 
 /** @param {{ stored: Map<string, any> }} docs */

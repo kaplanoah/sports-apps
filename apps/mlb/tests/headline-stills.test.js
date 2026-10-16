@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   STILL_MODEL,
   STILL_SCHEMA,
+  MAX_STILL_TRIES,
   STILLS_PER_READ,
   findHeadlineStills,
+  forgetOtherSeasonsStills,
   hasHeadline,
 } from "../worker/src/headline-stills.js";
 import { createJobStorage } from "../../../tests/job-context.js";
@@ -107,21 +109,76 @@ test("each still goes to Claude once: a game read again asks only about a still 
   });
 });
 
-test("when Claude doesn't answer for a still it was asked about, the read fails, keeping the answers it gave, and the next asks only about that still", async () => {
+test("a still Claude doesn't answer for counts as clean for now, keeping the answers it gave, and the next read asks only about that still", async () => {
   const claude = { isDown: true };
   const fake = createClaude((still) => (still === STILL && claude.isDown ? "overloaded" : true));
   const context = createContext({ fetchImpl: fake.fetchImpl });
 
-  await assert.rejects(
-    findHeadlineStills(context, "849826", [STILL, OTHER_STILL]),
-    /didn't answer for 1 of game 849826's stills/,
-  );
+  const missed = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
+  assert.deepEqual([...missed.withHeadlines], [OTHER_STILL]);
+  assert.equal(missed.isFinished, true);
   assert.deepEqual(context.stored.get("headline-stills:849826"), { [OTHER_STILL]: true });
 
   claude.isDown = false;
   const found = await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
   assert.deepEqual([...found.withHeadlines], [STILL, OTHER_STILL]);
   assert.equal(fake.requests.length, 3);
+  assert.equal(context.stored.has("headline-still-misses:849826"), false);
+});
+
+test("a still Claude never answers for is asked about a few reads, then counts as clean and is never asked about again", async () => {
+  const fake = createClaude((still) => (still === STILL ? "overloaded" : false));
+  const context = createContext({ fetchImpl: fake.fetchImpl });
+
+  for (let read = 0; read < MAX_STILL_TRIES + 2; read += 1)
+    await findHeadlineStills(context, "849826", [STILL, OTHER_STILL]);
+
+  const askedAbout = fake.requests.filter(
+    (request) => request.messages[0].content[0].source.url === STILL,
+  );
+  assert.equal(askedAbout.length, MAX_STILL_TRIES);
+  assert.deepEqual(context.stored.get("headline-stills:849826"), {
+    [STILL]: false,
+    [OTHER_STILL]: false,
+  });
+  assert.equal(context.stored.has("headline-still-misses:849826"), false);
+});
+
+test("a read isn't finished until each still Claude missed has been asked about as often as the rest", async () => {
+  const stills = Array.from({ length: 7 }, (_, index) => `${STILL}?play=${index}`);
+  const fake = createClaude(() => "overloaded");
+  const context = createContext({ fetchImpl: fake.fetchImpl });
+
+  const first = await findHeadlineStills(context, "849826", stills);
+  const second = await findHeadlineStills(context, "849826", stills);
+  const third = await findHeadlineStills(context, "849826", stills);
+
+  assert.deepEqual([first.isFinished, second.isFinished, third.isFinished], [false, true, false]);
+  const asked = fake.requests.map((request) => request.messages[0].content[0].source.url);
+  assert.deepEqual(asked.slice(0, 7).toSorted(), stills.toSorted());
+});
+
+test("the answers for any game but the current season's finals are forgotten once the season changes", async () => {
+  const claude = createClaude(() => true);
+  const context = createContext({ fetchImpl: claude.fetchImpl });
+  await findHeadlineStills(context, "776001", [STILL]);
+  await findHeadlineStills(context, "849826", [STILL]);
+
+  await forgetOtherSeasonsStills(context, { season: 2026, games: [{ id: "849826" }] });
+  assert.deepEqual(
+    [...context.stored.keys()].filter((key) => key.startsWith("headline-stills:")),
+    ["headline-stills:849826"],
+  );
+
+  await findHeadlineStills(context, "776001", [STILL]);
+  await forgetOtherSeasonsStills(context, { season: 2026, games: [{ id: "849826" }] });
+  assert.ok(context.stored.has("headline-stills:776001"));
+
+  await forgetOtherSeasonsStills(context, { season: 2027, games: [] });
+  assert.deepEqual(
+    [...context.stored.keys()].filter((key) => key.startsWith("headline-stills:")),
+    [],
+  );
 });
 
 test("a read asks Claude about only the first few stills it hasn't seen, and isn't finished until every still has an answer", async () => {
