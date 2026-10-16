@@ -271,7 +271,7 @@ function findSeasonGame(date, away) {
 function readWhen(game) {
   mock.timers.enable({ apis: ["Date"], now: Date.parse(SEASON.now) });
   try {
-    return convertToText(renderWhen(game)).replace(/&bull;/g, " \u2022 ");
+    return convertToText(renderWhen(game));
   } finally {
     mock.timers.reset();
   }

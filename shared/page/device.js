@@ -9,5 +9,9 @@ export const isOnHomeScreen = () =>
   matchMedia("(display-mode: standalone)").matches ||
   /** @type {{ standalone?: boolean }} */ (navigator).standalone === true;
 
+// A screen as narrow as a phone's, where sheets fill it and the shared stylesheets lay the page out
+// for a phone, as their own (max-width: 779px) rules do.
+export const PHONE_WIDTH_QUERY = "(max-width: 779px)";
+
 // A phone or tablet: touch is how it points, and nothing hovers.
 export const isTouchDevice = () => matchMedia("(hover: none) and (pointer: coarse)").matches;

@@ -37,6 +37,7 @@ const TERMS = {
     crossConference: null,
     neverShown: [],
     seasonSpansYears: false,
+    searchFiller: [],
   },
   examples: [],
   starters: [{ id: "5", name: "Pell", words: ["pell"] }],

@@ -9,7 +9,7 @@
 // games. Runs in the page and in Node, so it uses no DOM.
 
 import { shiftMonth } from "./days.js";
-import { readMonthDays } from "./search-dates.js";
+import { nameMonth } from "./search-dates.js";
 import {
   describeCount,
   findSearchGames,
@@ -19,7 +19,13 @@ import {
   readSearch,
 } from "./game-search.js";
 import { findNeverShownWords } from "./league-words.js";
-import { findForgivenStarts, readTokens, splitWords } from "./search-words.js";
+import {
+  findForgivenStarts,
+  findKind,
+  hasKind,
+  normalizeText,
+  readTokens,
+} from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
 /** @typedef {import("./search-words.js").Meaning} Meaning */
@@ -71,9 +77,6 @@ const OWN_NAME_KINDS = new Set(["team", "place"]);
 const listTypedWords = (text) =>
   [...text.matchAll(/\S+/g)].map((match) => ({ word: match[0], at: match.index ?? 0 }));
 
-/** @param {string} text */
-const readWords = (text) => splitWords(text).join(" ");
-
 /**
  * What a search finds.
  * @param {string} text
@@ -109,7 +112,7 @@ function readNextStart(context, code, rival = null) {
  * @param {SearchContext} context
  */
 function readJoin(word, context) {
-  const meanings = context.dictionary.get(readWords(word)) ?? [];
+  const meanings = context.dictionary.get(normalizeText(word)) ?? [];
   if (meanings.some((meaning) => meaning.kind === "in")) return "in";
   return (
     meanings.find((meaning) => meaning.kind === "join" && meaning.value !== "or")?.value ?? null
@@ -127,7 +130,7 @@ function readJoin(word, context) {
  * @param {string[]} neverShown
  */
 function writeFinished(phrase, meaning, fragment, neverShown) {
-  if (readWords(meaning.display).startsWith(fragment)) return meaning.display;
+  if (normalizeText(meaning.display).startsWith(fragment)) return meaning.display;
   if (findNeverShownWords(phrase, neverShown).length) return meaning.display;
   if (meaning.written) return meaning.written;
   if (OWN_NAME_KINDS.has(meaning.kind)) return meaning.display;
@@ -164,7 +167,8 @@ function listFinishedMeanings(meanings, kinds) {
  * @param {string} fragment
  */
 const rateName = (written, meaning, fragment) =>
-  (readWords(written).startsWith(fragment.trim()) ? 2 : 0) + (written === meaning.display ? 1 : 0);
+  (normalizeText(written).startsWith(fragment.trim()) ? 2 : 0) +
+  (written === meaning.display ? 1 : 0);
 
 /**
  * Each of the phrases a typed fragment starts, written whole: a city before the teams that play
@@ -235,7 +239,7 @@ function listFinishingCandidates(text, context, startsOtherName) {
     const before = typed[typed.length - length - 1];
     const kinds = KINDS_AFTER[before ? readJoin(before.word, context) : ""] ?? FINISHED_KINDS;
     const head = text.slice(0, start.at);
-    const fragment = readWords(text.slice(start.at));
+    const fragment = normalizeText(text.slice(start.at));
     const { finished, isForgiven } = listFinishedWords(
       `${fragment}${space}`,
       kinds,
@@ -266,8 +270,9 @@ const countMonthsReached = (first, last) =>
   1;
 
 /**
- * The months the season is played in, in order from the current one on, then the ones gone by.
- * Outside the season, they start at the first month after today's, or at the season's first.
+ * The months the season is played in, in order from the current one on, then the ones gone by,
+ * each by the name a search reads. Outside the season, they start at the first month after
+ * today's, or at the season's first.
  * @param {SearchContext} context
  * @returns {Meaning[]}
  */
@@ -280,10 +285,10 @@ function listSeasonMonths(context) {
   const current = months.findIndex(({ month }) => month === now);
   const later = months.findIndex(({ month }) => month > now);
   const start = [current, later].find((index) => index >= 0) ?? months.length;
-  return [...months.slice(start), ...months.slice(0, start)].map(({ month, year }) => ({
+  return [...months.slice(start), ...months.slice(0, start)].map(({ month }) => ({
     kind: "month",
     value: month,
-    display: readMonthDays(month, year).label,
+    display: nameMonth(month),
   }));
 }
 
@@ -472,11 +477,11 @@ function describeRow({ meaning }, { search, found }) {
  * @returns {Suggestion[]}
  */
 function listUseful(candidates, text, context) {
-  const seen = new Set([readWords(text)]);
+  const seen = new Set([normalizeText(text)]);
   const useful = [];
   let wholeSearches = 0;
   for (const candidate of candidates) {
-    const key = readWords(candidate.text);
+    const key = normalizeText(candidate.text);
     const isWholeSearch = !candidate.meaning;
     if (seen.has(key) || (isWholeSearch && wholeSearches === WHOLE_SEARCH_COUNT)) continue;
     seen.add(key);
@@ -544,7 +549,7 @@ function writeToken(token) {
  * @returns {string[]}
  */
 function listPlaceTeamNames(token, context) {
-  const place = token.meanings.find((meaning) => meaning.kind === "place");
+  const place = findKind(token, "place");
   if (!place) return [];
   return listPlaceTeams(place.value, context)
     .sort(
@@ -564,7 +569,7 @@ export function listOtherReadings(text, context) {
   const tokens = readTokens(text, context.dictionary);
   const asRead = new Set(findGames(text, context).found.games);
   return tokens.flatMap((token, index) => {
-    const isAfterIn = tokens[index - 1]?.meanings.some((meaning) => meaning.kind === "in");
+    const isAfterIn = hasKind(tokens[index - 1], "in");
     if (isAfterIn) return [];
     return listPlaceTeamNames(token, context).flatMap((team) => {
       const reading = tokens.map((each, at) => (at === index ? team : writeToken(each))).join(" ");
