@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   checkAppName,
   findPageRoot,
@@ -15,6 +15,32 @@ test("an app is a folder under apps/ whose Worker has a wrangler.toml", () => {
 
 test("every app's page has a gate, so any app can be given an access code", () => {
   for (const app of listApps()) assert.ok(existsSync(`${findPageRoot(app)}gate.html`), app);
+});
+
+const SHARED_LOADS = {
+  "index.html":
+    /(?:href|src)="(shared\/[^"]+|styles\.css)"|\b(openLastTab|showLastDrawn|watchSlowLoad)\(\);/g,
+  "gate.html": /(?:href|src)="(shared\/[^"]+|styles\.css)"/g,
+  "sw.js": /"(shared\/[^"]+)"/g,
+};
+
+/**
+ * @param {string} app
+ * @param {string} file
+ */
+const listSharedLoads = (app, file) =>
+  [...readFileSync(`${findPageRoot(app)}${file}`, "utf8").matchAll(SHARED_LOADS[file])].map(
+    ([, path, call]) => path ?? call,
+  );
+
+test("every app's page, gate, and service worker load the same shared files, in the same order", () => {
+  const [firstApp, ...otherApps] = listApps();
+  for (const file of Object.keys(SHARED_LOADS)) {
+    const firstLoads = listSharedLoads(firstApp, file);
+    assert.ok(firstLoads.length > 0, file);
+    for (const app of otherApps)
+      assert.deepEqual(listSharedLoads(app, file), firstLoads, `${app} ${file}`);
+  }
 });
 
 test("a command takes only an app that exists, and says which ones do", () => {

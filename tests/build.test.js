@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { listApps } from "../worker/apps.mjs";
 import { labelChannelFiles, listBundledFiles, readRelease } from "../worker/build.mjs";
 
 const BUILT_AT = new Date("2026-10-07T12:00:00Z");
@@ -10,17 +11,18 @@ const readHomeScreenTitle = (files, path) =>
   files[path].text.match(/<meta name="apple-mobile-web-app-title" content="([^"]+)"/)[1];
 
 test("a beta page names itself beta on the Home Screen, and production's doesn't", () => {
-  for (const app of ["mlb", "wnba"]) {
-    const name = app.toUpperCase();
-    const beta = listBundledFiles(app, RELEASE, "beta");
-    assert.equal(readManifest(beta).name, `${name} beta`);
-    assert.equal(readManifest(beta).short_name, `${name} beta`);
-    assert.equal(readHomeScreenTitle(beta, "index.html"), `${name} beta`);
-    assert.equal(readHomeScreenTitle(beta, "gate.html"), `${name} beta`);
-
+  for (const app of listApps()) {
     const production = listBundledFiles(app, { ...RELEASE, version: "2.32.2" });
-    assert.equal(readManifest(production).short_name, name);
-    assert.equal(readHomeScreenTitle(production, "index.html"), name);
+    const name = readManifest(production).short_name;
+    assert.equal(readManifest(production).name, name, app);
+    assert.equal(readHomeScreenTitle(production, "index.html"), name, app);
+    assert.equal(readHomeScreenTitle(production, "gate.html"), name, app);
+
+    const beta = listBundledFiles(app, RELEASE, "beta");
+    assert.equal(readManifest(beta).name, `${name} beta`, app);
+    assert.equal(readManifest(beta).short_name, `${name} beta`, app);
+    assert.equal(readHomeScreenTitle(beta, "index.html"), `${name} beta`, app);
+    assert.equal(readHomeScreenTitle(beta, "gate.html"), `${name} beta`, app);
   }
 });
 

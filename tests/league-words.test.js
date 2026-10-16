@@ -1,15 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findNeverShownWords } from "../shared/page/league-words.js";
-import { LEAGUE_WORDS as MLB_WORDS } from "../apps/mlb/page/js/league-words.js";
-import { RELEASE_NOTES as MLB_NOTES } from "../apps/mlb/page/js/release-notes.js";
-import { LEAGUE_WORDS as WNBA_WORDS } from "../apps/wnba/page/js/league-words.js";
-import { RELEASE_NOTES as WNBA_NOTES } from "../apps/wnba/page/js/release-notes.js";
+import { listApps } from "../worker/apps.mjs";
 
-const LEAGUES = [
-  { app: "mlb", words: MLB_WORDS, notes: MLB_NOTES },
-  { app: "wnba", words: WNBA_WORDS, notes: WNBA_NOTES },
-];
+const LEAGUES = await Promise.all(
+  listApps().map(async (app) => ({
+    app,
+    words: (await import(`../apps/${app}/page/js/league-words.js`)).LEAGUE_WORDS,
+    notes: (await import(`../apps/${app}/page/js/release-notes.js`)).RELEASE_NOTES,
+  })),
+);
 
 test("a never-shown word is found whole, in any case, and never inside another word", () => {
   const neverShown = ["postseason", "post-season", "wild card"];
