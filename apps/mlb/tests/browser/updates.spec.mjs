@@ -38,7 +38,7 @@ test("a computer shows no Updates box, since each device keeps its own dismissal
 test.describe("on a phone", () => {
   test.use(ON_A_PHONE);
 
-  test("rebuilds updates from the saved readings as the Worker adds to them, each club in its line's font a step heavier", async ({
+  test("rebuilds updates from the saved readings as the Worker adds to them, each club in its line's font at 500", async ({
     page,
   }) => {
     const currentSnapshot = buildFixtureSnapshot(EVENING_FIXTURE);
@@ -93,7 +93,7 @@ test.describe("on a phone", () => {
       "font-family",
       await what.evaluate((element) => getComputedStyle(element).fontFamily),
     );
-    await expect(team).toHaveCSS("font-weight", String(body.weight + 50));
+    await expect(team).toHaveCSS("font-weight", String(body.weight + 100));
   });
 
   test("a release note shows in the Updates box, headed New in the app, until it's dismissed", async ({

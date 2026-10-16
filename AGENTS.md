@@ -666,7 +666,7 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
   with a note out by the box's last dismissal dismissed (`listNotesToShow` in `shared/page/updates.js`).
   Add a note only when the user asks for one, whatever the PR's type, in the words they approve, with an `at` just before the PR merges.
   A word that should stand out, like a button's name, goes in `<b>`,
-  in a note built with the `html` template, which the Updates box sets a step heavier than the note's text.
+  in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.
 - Each app has a beta channel: a second Worker, `<app>-app-beta`,
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
   key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`).

@@ -47,7 +47,7 @@ test.describe("on a phone", () => {
     );
   });
 
-  test("a final's team names are set in their sentence's font, a step heavier", async ({
+  test("a final's team names are set in their sentence's font, at 500, two steps over Body", async ({
     page,
   }) => {
     await openApp(page, { isShowingUpdates: true });
@@ -59,7 +59,7 @@ test.describe("on a phone", () => {
     );
     await expect(team).toHaveCSS(
       "font-weight",
-      String((await readRole(page, "body")).weight + 100),
+      String((await readRole(page, "body")).weight + 200),
     );
   });
 
@@ -196,7 +196,7 @@ test.describe("on a phone, in full motion", () => {
 test.describe("on a phone, with a release note out", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test("the note sits under the finals, headed New in the app, its word in bold a step heavier than its text in the same font, as the finals' team names are, and closes with them", async ({
+  test("the note sits under the finals, headed New in the app, its word in bold at 500, over its text at Body in the same font, as the finals' team names are, and closes with them", async ({
     page,
   }) => {
     await serveReleaseNote(page);
@@ -211,14 +211,14 @@ test.describe("on a phone, with a release note out", () => {
     const bold = updates.locator(".updates-notes .what b");
     await expect(bold).toHaveCSS(
       "font-weight",
-      String((await readRole(page, "body")).weight + 100),
+      String((await readRole(page, "body")).weight + 200),
     );
     const font = await bold.evaluate((element) => getComputedStyle(element).fontFamily);
     await expect(updates.locator(".updates-notes .what")).toHaveCSS("font-family", font);
     await expect(updates.locator(".updates-list .what b").first()).toHaveCSS("font-family", font);
     await expect(updates.locator(".updates-list .what b").first()).toHaveCSS(
       "font-weight",
-      String((await readRole(page, "body")).weight + 100),
+      String((await readRole(page, "body")).weight + 200),
     );
     const finals = await updates.locator(".updates-list").first().boundingBox();
     const notes = await updates.locator(".updates-notes").boundingBox();

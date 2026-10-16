@@ -39,6 +39,12 @@ export function chooseCellLabel(day, today) {
 }
 
 /**
+ * Whether a day's date starts with a 1, whose stem the eye centers it on, right of its box's middle.
+ * @param {string} day
+ */
+export const isLedByOne = (day) => String(readDayOfMonth(day)).startsWith("1");
+
+/**
  * The days the list shows: each game day, and in its place among them a date without games a tap
  * brought in.
  * @param {ListedDay[]} days

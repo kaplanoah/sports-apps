@@ -134,6 +134,44 @@ test("a Games list's day reads its month, date, and weekday at their sizes, weig
   expect(weekday.top - date.bottom).toBeCloseTo(4.5, 1);
 });
 
+test("a date that starts with a 1 sits 0.065em left of its column's middle, so the 1's stem centers, in the strip and beside its games, each digit its own width", async ({
+  page,
+}) => {
+  await openApp(page, { isWholeSeason: true });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+  const day = page.locator('#seasonGames .day-cell[data-day="2026-10-01"]');
+  await day.click();
+  await expect(day).toHaveClass(/is-chosen/);
+  await page.clock.runFor(2000);
+  await expect(page.locator('#seasonGames .listed-day[data-day="2026-10-01"]')).toBeInViewport();
+
+  const readOffsets = () =>
+    page.evaluate(() =>
+      [
+        ['.day-cell[data-day="2026-09-30"]', ".cell-number"],
+        ['.day-cell[data-day="2026-10-01"]', ".cell-number"],
+        ['.day-cell[data-day="2026-10-11"]', ".cell-number"],
+        ['.listed-day[data-day="2026-10-01"] .day-label', ".day-number"],
+      ].map(([holder, part]) => {
+        const box = /** @type {Element} */ (document.querySelector(`#seasonGames ${holder}`));
+        const number = /** @type {HTMLElement} */ (box.querySelector(part));
+        const middle = (rect) => rect.left + rect.width / 2;
+        const { fontSize, fontVariantNumeric } = getComputedStyle(number);
+        const offset =
+          (middle(number.getBoundingClientRect()) - middle(box.getBoundingClientRect())) /
+          parseFloat(fontSize);
+        return [number.textContent, Math.round(offset * 200) / 200 + 0, fontVariantNumeric];
+      }),
+    );
+  expect(await readOffsets()).toEqual([
+    ["30", 0, "normal"],
+    ["1", -0.065, "normal"],
+    ["11", -0.065, "normal"],
+    ["1", -0.065, "normal"],
+  ]);
+});
+
 test("a game's dots, names, and time center on their capitals, level with each other, the seed on the right half a pixel lower", async ({
   page,
 }) => {

@@ -248,6 +248,7 @@
   --strip-action: var(--action);
   --strip-edge-inset: 2px;
   --day-gap: 8px;
+  --date-one-shift: 0.065em;
   --held-bar-fade: 0px;
   --held-bar-line: var(--divider);
   --updates-head: var(--structure);
@@ -1910,10 +1911,10 @@ th[aria-sort="ascending"] .roster-caret {
 .updates-list .what {
   line-height: calc(1.3 * var(--leading));
 }
-/* A final's team names and a release note's word that should stand out stay in the line's font, a
-   step heavier. */
+/* A final's team names and a release note's word that should stand out stay in the line's font, at
+   500, as MLB's do. */
 .updates-list .what b {
-  font-weight: calc(var(--type-body-weight) + 100);
+  font-weight: calc(var(--type-body-weight) + 200);
 }
 
 /* A pill's names are buttons, so they're in sentence case at a button's weight and height, their

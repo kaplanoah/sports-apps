@@ -199,6 +199,8 @@
   --select-face: "Chivo Mono Select", "JetBrains Mono", monospace;
   --strip-edge-inset: 0.5px;
   --day-gap: 18px;
+  /* Chivo Mono draws its 1 centered on its stem. */
+  --date-one-shift: 0em;
   --game-side-offset: 0px;
   --game-label-offset: -26.5px;
   --game-headline-offset: -1px;
@@ -893,7 +895,7 @@ table.st .seed-cell {
   font-weight: calc(var(--type-body-weight) - 50);
 }
 .updates-list .what b {
-  font-weight: calc(var(--type-body-weight) + 50);
+  font-weight: calc(var(--type-body-weight) + 100);
 }
 
 .no-field-note {
