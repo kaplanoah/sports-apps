@@ -7,7 +7,8 @@
 // EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> for $GITHUB_OUTPUT.
 // After the check across shares: node worker/judge-review.mjs across <folder>, with
 // STRUCTURED_OUTPUT. Last: node worker/judge-review.mjs summary <folder>, with GH_TOKEN,
-// GITHUB_REPOSITORY, PR, and SHA set, which fails when any changed file went unread.
+// GITHUB_REPOSITORY, PR, and SHA set, which counts the findings posted on the commit and fails
+// when any changed file went unread.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,8 @@ import { createGitHub, readAllPages } from "./github-api.mjs";
 
 export const SUMMARY_MARKER = "<!-- claude-review-summary -->";
 const WEIGHTS = ["Important", "Nit", "Pre-existing", "Unsure"];
+// The reviewers post with the run's own token.
+const REVIEWER = "github-actions[bot]";
 // What Claude Code's Read returns when it's given no limit.
 const READ_LINES = 2000;
 
@@ -79,22 +82,41 @@ export function findUnreadParts(parts, triesReads, readPart, folder) {
 }
 
 /**
- * A reviewer's answer, or an empty one when it gave none, as when a try ran out of time.
+ * A reviewer's answer, or an empty one when it gave none, as when a try ran out of turns.
  * @param {string | undefined} structuredOutput
- * @returns {{ findings: { weight: string, file: string, line?: number, summary: string }[], notes: string[], unjudged: { file: string, why: string }[] }}
+ * @returns {{ notes: string[], unjudged: { file: string, why: string }[] }}
  */
 export function readAnswer(structuredOutput) {
   try {
     const answer = JSON.parse(structuredOutput || "{}");
     return {
-      findings: Array.isArray(answer.findings) ? answer.findings : [],
       notes: Array.isArray(answer.notes) ? answer.notes : [],
       unjudged: Array.isArray(answer.unjudged) ? answer.unjudged : [],
     };
   } catch {
-    return { findings: [], notes: [], unjudged: [] };
+    return { notes: [], unjudged: [] };
   }
 }
+
+/**
+ * The weight of each finding the review posted on the commit, from the inline comments that
+ * start with one, leaving out replies and anyone else's comments.
+ * @param {any[]} comments the pull request's review comments, as GitHub lists them
+ * @param {{ sha: string, author: string }} review
+ * @returns {string[]}
+ */
+export const listPostedWeights = (comments, { sha, author }) =>
+  comments
+    .filter(
+      (comment) =>
+        comment.user?.login === author &&
+        !comment.in_reply_to_id &&
+        (comment.commit_id === sha || comment.original_commit_id === sha),
+    )
+    .flatMap((comment) => {
+      const weight = WEIGHTS.find((name) => comment.body?.startsWith(`**${name}`));
+      return weight ? [weight] : [];
+    });
 
 /** @param {string} path */
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -129,11 +151,9 @@ export function recordShareTry(folder, share, env) {
   return record.unread;
 }
 
-/**
- * @param {{ weight: string }[]} findings
- */
-const countByWeight = (findings) =>
-  WEIGHTS.map((weight) => [weight, findings.filter((finding) => finding.weight === weight).length])
+/** @param {string[]} weights */
+const countByWeight = (weights) =>
+  WEIGHTS.map((weight) => [weight, weights.filter((posted) => posted === weight).length])
     .filter(([, count]) => count)
     .map(([weight, count]) => `${count} ${weight}`)
     .join(", ");
@@ -151,14 +171,14 @@ const pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
  * @param {{ shares: { share: number, files: string[], partsByFile: Record<string, string[]> }[], unread: { path: string, why: string }[] }} review.plan
  * @param {Map<number, any>} review.records each share's record, missing for a share that never finished
  * @param {any | null} review.across the check across shares, or null when it didn't finish
+ * @param {string[]} review.weights each posted finding's weight
  */
-export function judgeReview({ sha, plan, records, across }) {
+export function judgeReview({ sha, plan, records, across, weights }) {
   const isAcrossDue = plan.shares.length > 1;
   const answers = [...records.values()].flatMap((record) =>
     record.tries.map((/** @type {any} */ attempt) => attempt.answer),
   );
   if (across) answers.push(across);
-  const findings = answers.flatMap((answer) => answer.findings);
   const unjudged = answers.flatMap((answer) => answer.unjudged);
   const missedShares = plan.shares.filter(({ share }) => !records.has(share));
   const unreadFiles = plan.shares.flatMap(({ share, files, partsByFile }) => {
@@ -168,8 +188,8 @@ export function judgeReview({ sha, plan, records, across }) {
   });
   const changedCount = plan.shares.flatMap((share) => share.files).length;
   const isComplete = !unreadFiles.length && (!isAcrossDue || Boolean(across));
-  const found = findings.length
-    ? `${pluralize(findings.length, "finding")} (${countByWeight(findings)})`
+  const found = weights.length
+    ? `${pluralize(weights.length, "finding")} (${countByWeight(weights)})`
     : "no findings";
   const lines = plan.shares.length
     ? [
@@ -236,16 +256,19 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     writeFileSync(join(folder, "across.json"), JSON.stringify(readAnswer(env.STRUCTURED_OUTPUT)));
   } else if (command === "summary") {
     const acrossPath = join(folder, "across.json");
-    const { isComplete, body } = judgeReview({
-      sha: env.SHA ?? "",
-      plan: readJson(join(folder, "plan.json")),
-      records: readRecords(folder),
-      across: existsSync(acrossPath) ? readJson(acrossPath) : null,
-    });
     const callGitHub = createGitHub({
       repository: env.GITHUB_REPOSITORY ?? "",
       fetchImpl: fetch,
       env,
+    });
+    const sha = env.SHA ?? "";
+    const comments = await readAllPages(callGitHub, `/pulls/${env.PR}/comments`);
+    const { isComplete, body } = judgeReview({
+      sha,
+      plan: readJson(join(folder, "plan.json")),
+      records: readRecords(folder),
+      across: existsSync(acrossPath) ? readJson(acrossPath) : null,
+      weights: listPostedWeights(comments, { sha, author: REVIEWER }),
     });
     await postSummary(callGitHub, env.PR ?? "", body);
     console.log(body);

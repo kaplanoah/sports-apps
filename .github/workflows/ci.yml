@@ -365,8 +365,10 @@ jobs:
 
   # A share's reviewer is told to read every line of its share's diffs, which a step then checks
   # from the reads it actually made, and a second try reads what the first left. The review guide
-  # comes from the default branch, so a pull request can't change how it's reviewed. The token is
-  # the run's own rather than Claude's app's, so a change to this file is reviewed by its own jobs.
+  # comes from the default branch, so a pull request can't change what its reviewers look for. The
+  # token is the run's own rather than Claude's app's, which works only while this file is as the
+  # default branch has it, so a change to the review is reviewed by its own jobs, and the guide
+  # has them flag one that lets less through.
   review-share:
     needs: review-plan
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
@@ -387,15 +389,19 @@ jobs:
           persist-credentials: false
       - *setup-node
       - &prepare-review
-        name: Write the change's diffs, the review guide, and the comments already posted
+        name: Write the change's diffs and the review guide
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           node worker/plan-review.mjs .review > /dev/null
           git fetch --depth 1 origin "$DEFAULT_BRANCH"
           git show FETCH_HEAD:REVIEW.md > .review/REVIEW.md
+      - &read-comments
+        name: Write the comments already posted
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/comments" --paginate \
             --jq '.[] | {path, line, author: .user.login, body}' > .review/comments.jsonl
       - name: Review
@@ -413,17 +419,17 @@ jobs:
             --model claude-opus-5-5
             --max-turns 150
             --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(git log:*),Bash(git show:*),Bash(git diff:*)"
-            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"weight":{"enum":["Important","Nit","Pre-existing","Unsure"]},"file":{"type":"string"},"line":{"type":"integer"},"summary":{"type":"string"}},"required":["weight","file","summary"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}},"notes":{"type":"array","items":{"type":"string"}}},"required":["findings","unjudged","notes"]}'
+            --json-schema '{"type":"object","properties":{"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}},"notes":{"type":"array","items":{"type":"string"}}},"required":["unjudged","notes"]}'
           prompt: |
             You are one of ${{ needs.review-plan.outputs.count }} reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}, each reading one share of its change in full. You review share ${{ matrix.share }}.
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps.
             2. Read `.review/files.md`, which lists every changed file, the share that reviews it, and the diff files that hold its change.
-            3. Read every diff file listed under Share ${{ matrix.share }}, each whole, with Read and no offset or limit. A step after you checks your reads, and the review fails on any line of your share's diffs you didn't read.
+            3. Read every diff file listed under Share ${{ matrix.share }}, each whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of your share's diffs you didn't read.
             4. Read what else you need to judge your share: the files as the pull request leaves them, other shares' diffs, callers, and copies, with Read, Grep, and Glob, and history with git log, git show, and git diff, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
             5. The comments already on the pull request are in `.review/comments.jsonl`. Never post a finding already there, whether it was fixed, answered, or left open.
             6. Post each finding as an inline comment on the line it's about, with confirmed=true, as the guide says.
-            7. Don't post a summary: a later step writes it. End with your answer: each finding you posted, each file of your share you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares, like anything your share relies on or changes in another share's files or the other app.
+            7. Don't post a summary: a later step writes it. End with your answer: each file of your share you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares, like anything your share relies on or changes in another share's files or the other app.
       - name: Find what the review left unread
         id: first
         if: always()
@@ -432,6 +438,7 @@ jobs:
           STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
           SHARE: ${{ matrix.share }}
         run: node worker/judge-review.mjs share .review "$SHARE" >> "$GITHUB_OUTPUT"
+      - *read-comments
       - name: Review what's left
         id: again
         if: always() && steps.first.outputs.unread != ''
@@ -449,11 +456,11 @@ jobs:
             You are one of ${{ needs.review-plan.outputs.count }} reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}, each reading one share of its change in full. You review share ${{ matrix.share }}, and an earlier try left these of its diff files unread: ${{ steps.first.outputs.unread }}
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps.
-            2. Read each of those diff files, under `.review/`, whole, with Read and no offset or limit. A step after you checks your reads, and the review fails on any line of them you didn't read.
+            2. Read each of those diff files, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read.
             3. Read what else you need to judge them, with Read, Grep, Glob, git log, git show, and git diff, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
             4. The comments already on the pull request, the earlier try's included, are in `.review/comments.jsonl`. Never post a finding already there.
             5. Post each finding as an inline comment on the line it's about, with confirmed=true, as the guide says.
-            6. Don't post a summary: a later step writes it. End with your answer: each finding you posted, each file you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares.
+            6. Don't post a summary: a later step writes it. End with your answer: each file you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares.
       - name: Find what's still unread
         if: always() && steps.first.outputs.unread != ''
         env:
@@ -482,6 +489,7 @@ jobs:
       - *review-checkout-always
       - *setup-node
       - *prepare-review
+      - *read-comments
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: review-share-*
@@ -507,7 +515,7 @@ jobs:
             3. Look for what no one share could see: a change in one share that another share's files rely on, the same fix due in the other app or another view, one fact or rule now in two places, and docs or comments a change makes wrong. Read the diffs and code you need with Read, Grep, Glob, git log, git show, and git diff, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
             4. The comments already on the pull request, the shares' included, are in `.review/comments.jsonl`. Never post a finding already there.
             5. Post each finding as an inline comment on the line it's about, with confirmed=true, as the guide says.
-            6. Don't post a summary: a later step writes it. End with your answer: each finding you posted, and anything you couldn't judge from the code and why. Leave notes empty.
+            6. Don't post a summary: a later step writes it. End with your answer: anything you couldn't judge from the code and why. Leave notes empty.
       - name: Keep the check's answer
         if: steps.review.outcome == 'success'
         env:

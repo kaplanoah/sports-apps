@@ -8,6 +8,7 @@ import {
   coversEveryLine,
   findUnreadParts,
   judgeReview,
+  listPostedWeights,
   listReads,
   postSummary,
   readAnswer,
@@ -97,10 +98,10 @@ test("a part read in pieces over two tries is read, and one never opened isn't",
 });
 
 test("a reviewer's answer is empty when it gave none or gave something else", () => {
-  const empty = { findings: [], notes: [], unjudged: [] };
+  const empty = { notes: [], unjudged: [] };
   assert.deepEqual(readAnswer(undefined), empty);
   assert.deepEqual(readAnswer("not json"), empty);
-  assert.deepEqual(readAnswer('{"findings": "many"}'), empty);
+  assert.deepEqual(readAnswer('{"notes": "many"}'), empty);
   assert.deepEqual(readAnswer('{"notes": ["see the WNBA copy"]}'), {
     ...empty,
     notes: ["see the WNBA copy"],
@@ -129,7 +130,7 @@ test("a share's tries are kept, and only the parts no try read stay unread", () 
   assert.deepEqual(
     recordShareTry(folder, 1, {
       EXECUTION_FILE: execution,
-      STRUCTURED_OUTPUT: '{"findings":[{"weight":"Nit","file":"a.js","summary":"s"}]}',
+      STRUCTURED_OUTPUT: '{"notes":["a.js reads the store the other app writes"]}',
     }),
     ["diffs/b.js.diff"],
   );
@@ -137,7 +138,7 @@ test("a share's tries are kept, and only the parts no try read stay unread", () 
   assert.deepEqual(recordShareTry(folder, 1, { EXECUTION_FILE: execution }), []);
   const record = JSON.parse(readFileSync(join(folder, "share-1.json"), "utf8"));
   assert.equal(record.tries.length, 2);
-  assert.equal(record.tries[0].answer.findings.length, 1);
+  assert.deepEqual(record.tries[0].answer.notes, ["a.js reads the store the other app writes"]);
 });
 
 test("a try that left no execution file read nothing", () => {
@@ -168,7 +169,7 @@ const PLAN = {
 
 /** @param {object} answer */
 const recordOf = (answer, unread = /** @type {string[]} */ ([])) => ({
-  tries: [{ reads: [], answer: { findings: [], notes: [], unjudged: [], ...answer } }],
+  tries: [{ reads: [], answer: { notes: [], unjudged: [], ...answer } }],
   unread,
 });
 
@@ -177,22 +178,11 @@ test("a review that read every file passes, counting its findings by weight", ()
     sha: "abc123",
     plan: PLAN,
     records: new Map([
-      [
-        1,
-        recordOf({
-          findings: [
-            { weight: "Important", file: "a.js", summary: "s" },
-            { weight: "Nit", file: "a.js", summary: "s" },
-          ],
-        }),
-      ],
+      [1, recordOf({})],
       [2, recordOf({ unjudged: [{ file: "c.js", why: "only an iPhone shows it" }] })],
     ]),
-    across: {
-      findings: [{ weight: "Important", file: "b.js", summary: "s" }],
-      notes: [],
-      unjudged: [],
-    },
+    across: { notes: [], unjudged: [] },
+    weights: ["Important", "Nit", "Important"],
   });
   assert.ok(isComplete);
   assert.ok(body.startsWith(SUMMARY_MARKER));
@@ -211,7 +201,8 @@ test("a file with a part its reviewer never read fails the review and is named",
       [1, recordOf({})],
       [2, recordOf({}, ["diffs/b.js.part-2.diff"])],
     ]),
-    across: { findings: [], notes: [], unjudged: [] },
+    across: { notes: [], unjudged: [] },
+    weights: [],
   });
   assert.ok(!isComplete);
   assert.match(body, /Read in full: 2 of 3 changed files/);
@@ -225,7 +216,8 @@ test("a share that never finished leaves its files unread and fails the review",
     sha: "abc123",
     plan: PLAN,
     records: new Map([[1, recordOf({})]]),
-    across: { findings: [], notes: [], unjudged: [] },
+    across: { notes: [], unjudged: [] },
+    weights: [],
   });
   assert.ok(!isComplete);
   assert.match(body, /1 share didn't finish/);
@@ -237,7 +229,13 @@ test("with more than one share, the review fails until the check across them fin
     [1, recordOf({})],
     [2, recordOf({})],
   ]);
-  const { isComplete, body } = judgeReview({ sha: "abc123", plan: PLAN, records, across: null });
+  const { isComplete, body } = judgeReview({
+    sha: "abc123",
+    plan: PLAN,
+    records,
+    across: null,
+    weights: [],
+  });
   assert.ok(!isComplete);
   assert.match(body, /The check across shares didn't finish/);
   const oneShare = { shares: [PLAN.shares[0]], unread: [] };
@@ -246,9 +244,34 @@ test("with more than one share, the review fails until the check across them fin
     plan: oneShare,
     records: new Map([[1, recordOf({})]]),
     across: null,
+    weights: [],
   });
   assert.ok(single.isComplete);
   assert.match(single.body, /in 1 share: no findings/);
+});
+
+test("the findings counted are the review's own comments on the commit, each by its weight", () => {
+  const reviewer = "github-actions[bot]";
+  const comment = (/** @type {object} */ fields) => ({
+    user: { login: reviewer },
+    commit_id: "abc123",
+    original_commit_id: "abc123",
+    body: "**Important** The second try reads stale comments.",
+    ...fields,
+  });
+  const weights = listPostedWeights(
+    [
+      comment({}),
+      comment({ body: "**Unsure:** A part may pass Read's token cap." }),
+      comment({ body: "**Nit** The comment overstates it.", commit_id: "def456" }),
+      comment({ commit_id: "old999", original_commit_id: "old999" }),
+      comment({ user: { login: "kaplanoah" } }),
+      comment({ in_reply_to_id: 7 }),
+      comment({ body: "A comment with no weight" }),
+    ],
+    { sha: "abc123", author: reviewer },
+  );
+  assert.deepEqual(weights, ["Important", "Unsure", "Nit"]);
 });
 
 test("a change of only recorded data passes, naming what it left unread", () => {
@@ -257,6 +280,7 @@ test("a change of only recorded data passes, naming what it left unread", () => 
     plan: { shares: [], unread: [{ path: "a.json", why: "a test's recorded data" }] },
     records: new Map(),
     across: null,
+    weights: [],
   });
   assert.ok(isComplete);
   assert.match(body, /Claude had nothing to read in abc123\.\n\nLeft unread/);

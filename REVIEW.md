@@ -45,6 +45,10 @@ In order of what has mattered here.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
+   A change to the review itself, its jobs in `.github/workflows/ci.yml`,
+   `worker/plan-review.mjs`, or `worker/judge-review.mjs`, or to a guard test,
+   that lets less through is Important, naming what it no longer catches,
+   since the pull request's own copy of them runs its review.
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
    like `translate`, `rotate`, `scale`, or `pointer-events`, that `worker/red-change.mjs` doesn't list yet.

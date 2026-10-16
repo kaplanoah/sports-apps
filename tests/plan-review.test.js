@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  PART_BYTES,
   PART_LINES,
   explainUnread,
   packShares,
@@ -129,6 +130,22 @@ test("a file's diff is one part while it fits, and splits between hunks once it 
   assert.equal(parts.length, 2);
   assert.match(parts[1], /^@@ /);
   for (const part of parts) assert.ok(countLines(part) <= PART_LINES);
+});
+
+test("a diff of long lines splits by size too, so one Read returns each part whole", () => {
+  const prose = "+" + "a long line of documentation ".repeat(4);
+  const diff = [
+    "diff --git a/AGENTS.md b/AGENTS.md",
+    "--- a/AGENTS.md",
+    "+++ b/AGENTS.md",
+    "@@ -1,0 +1,900 @@",
+    ...Array.from({ length: 900 }, () => prose),
+    "",
+  ].join("\n");
+  const parts = splitIntoParts(diff);
+  assert.ok(parts.length > 1);
+  for (const part of parts) assert.ok(Buffer.byteLength(part) <= PART_BYTES);
+  assert.equal(parts.join(""), diff);
 });
 
 test("a hunk longer than a part is cut into parts, with no line lost", () => {

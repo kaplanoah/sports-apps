@@ -14,8 +14,10 @@ import { fileURLToPath } from "node:url";
 
 const SHARE_LINES = 800;
 const MOST_SHARES = 20;
-// About half of what one Read returns, so a part never comes back cut short.
+// Half the lines one Read returns, and about half the 25,000 tokens it returns at most even for
+// prose of long lines, so a part comes back whole.
 export const PART_LINES = 1000;
+export const PART_BYTES = 48000;
 
 const RECORDED_DATA = /(^|\/)tests\/fixtures\/.*\.(json|xml)$/;
 
@@ -117,9 +119,42 @@ export function splitDiffByFile(diff) {
   return byPath;
 }
 
+/** @param {string[]} lines */
+const measureBytes = (lines) => lines.reduce((sum, line) => sum + Buffer.byteLength(line) + 1, 0);
+
 /**
- * A file's diff as its hunks, the first with the file's header, a hunk longer than a part cut into
- * pieces a part long.
+ * Whether these lines fit in one part.
+ * @param {string[]} lines
+ */
+const fitsInPart = (lines) => lines.length <= PART_LINES && measureBytes(lines) <= PART_BYTES;
+
+/**
+ * Lines gathered in order into as few groups as fit in a part each, a line too long for a part
+ * alone in its group.
+ * @param {string[][]} pieces
+ * @returns {string[][]}
+ */
+function packIntoParts(pieces) {
+  /** @type {{ lines: string[], bytes: number }[]} */
+  const parts = [];
+  for (const piece of pieces) {
+    const bytes = measureBytes(piece);
+    const last = parts.at(-1);
+    const fits =
+      last && last.lines.length + piece.length <= PART_LINES && last.bytes + bytes <= PART_BYTES;
+    if (last && fits) {
+      last.lines.push(...piece);
+      last.bytes += bytes;
+    } else {
+      parts.push({ lines: [...piece], bytes });
+    }
+  }
+  return parts.map((part) => part.lines);
+}
+
+/**
+ * A file's diff as its hunks, the first with the file's header, a hunk too big for a part cut
+ * into pieces that each fit.
  * @param {string} fileDiff
  * @returns {string[][]}
  */
@@ -135,28 +170,17 @@ function listPieces(fileDiff) {
     /** @type {string[]} */ (blocks.at(-1)).push(line);
   }
   return blocks.flatMap((block) =>
-    Array.from({ length: Math.ceil(block.length / PART_LINES) }, (_, index) =>
-      block.slice(index * PART_LINES, (index + 1) * PART_LINES),
-    ),
+    fitsInPart(block) ? [block] : packIntoParts(block.map((line) => [line])),
   );
 }
 
 /**
- * A file's diff in parts of at most a part's worth of lines, each part whole hunks where a hunk
- * fits.
+ * A file's diff in parts that each fit, each part whole hunks where a hunk fits.
  * @param {string} fileDiff
  * @returns {string[]}
  */
-export function splitIntoParts(fileDiff) {
-  /** @type {string[][]} */
-  const parts = [];
-  for (const piece of listPieces(fileDiff)) {
-    const last = parts.at(-1);
-    if (last && last.length + piece.length <= PART_LINES) last.push(...piece);
-    else parts.push([...piece]);
-  }
-  return parts.map((part) => `${part.join("\n")}\n`);
-}
+export const splitIntoParts = (fileDiff) =>
+  packIntoParts(listPieces(fileDiff)).map((part) => `${part.join("\n")}\n`);
 
 /**
  * Where each part of a file's diff is written, under the folder.
