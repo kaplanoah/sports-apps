@@ -30,6 +30,7 @@ import { renderAll } from "./render.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
 import { startServiceWorker } from "#shared/service-worker.js";
 import { keepRanking, watchKeptChoices } from "./kept-on-device.js";
+import { LEAGUE_WORDS } from "./league-words.js";
 import { NEWS_LEAGUE } from "./news-league.js";
 import {
   applyDeferredSeason,
@@ -86,7 +87,8 @@ async function listYears() {
 }
 
 /** @param {string[]} years */
-const fillYearPicker = (years) => fillSeasonPicker(findYearPicker(), years, session.activeYear);
+const fillYearPicker = (years) =>
+  fillSeasonPicker(findYearPicker(), years, session.activeYear, LEAGUE_WORDS);
 
 // A new current season changes what the stamp says, and the picker lists it.
 async function showNewCurrentYear() {
