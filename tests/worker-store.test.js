@@ -485,6 +485,15 @@ test("a hung socket that opens before it's given up is kept", async () => {
   assert.equal(sockets[0].isClosed, false);
 });
 
+test("a hung socket that closes without ever opening reconnects", async () => {
+  const { sockets } = await startHungStore();
+
+  sockets[0].close();
+  mock.timers.tick(RECONNECT_MAX_MS);
+
+  assert.equal(sockets.length, 2);
+});
+
 test("a hung socket that opens and then closes reconnects", async () => {
   const { sockets, openSocket } = await startHungStore();
 

@@ -220,7 +220,7 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
 
   // A handshake that never ends leaves its socket neither open nor closed, so once the reads made
   // without it have answered, it's given up for a new one, after a wait that grows each time, unless
-  // it opens first.
+  // it opens or closes first, which settles it.
   /** @param {WebSocket | null} hung */
   function replaceHungSocket(hung) {
     if (reconnectTimer) return;
@@ -232,6 +232,12 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
       openSocket();
     }, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
+  }
+
+  // Only a replacement for the hung socket can be waiting while the page has a socket.
+  function stopReplacingHungSocket() {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
   }
 
   // Before the first listing arrives, the listing takes the push in instead.
@@ -286,15 +292,16 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
       isSocketOpen = true;
       clearTimeout(handshakeTimer);
       handshakeTimer = null;
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
+      stopReplacingHungSocket();
       sendWatching();
       readWatchedPaths(opened);
     });
     opened.addEventListener("message", receivePush);
     opened.addEventListener("close", () => {
       noteStep("Store connection closed");
-      if (socket === opened) scheduleReconnect();
+      if (socket !== opened) return;
+      stopReplacingHungSocket();
+      scheduleReconnect();
     });
   }
 

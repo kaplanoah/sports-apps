@@ -108,7 +108,8 @@ test("no line holds an address, which holds the page's key, even one kept before
   assert.doesNotMatch(stored.get("addressLog") ?? "", /k3y|example-subdomain/);
 });
 
-test("a log holds its lines as it logs, reading the device once, and keeps them there as the page leaves the screen", () => {
+test("a log holds its lines as it logs, reading the device once, and keeps them there as the page leaves the screen", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
   const log = createLog();
   log.watchSteps(
     () => true,
@@ -122,6 +123,24 @@ test("a log holds its lines as it logs, reading the device once, and keeps them 
 
   assert.equal(storageCalls.writes, before.writes + onPageHide.length);
   assert.equal(log.readLines().length, 50);
+});
+
+test("a log keeps its lines on the device a moment after the last one, once for a burst, as a page that crashes never hides", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const log = createStepLog({ key: "burstLog", title: "Errors", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+  const before = storageCalls.writes;
+
+  for (let tap = 1; tap <= 50; tap += 1) log.noteStep(`tap ${tap}`);
+  context.mock.timers.tick(999);
+  assert.equal(storageCalls.writes, before);
+  context.mock.timers.tick(1);
+
+  assert.equal(storageCalls.writes, before + 1);
+  assert.equal(JSON.parse(stored.get("burstLog") ?? "[]").length, 50);
 });
 
 test("a file is named on a phone without URL.canParse, as on iOS 16", (context) => {

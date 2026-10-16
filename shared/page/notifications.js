@@ -76,10 +76,7 @@ function encodeBase64Url(buffer) {
 async function requestPush(path, init = {}) {
   const response = await fetch(new URL(path, location.href), { cache: "no-store", ...init });
   reloadWhenSignedOut(response);
-  if (!response.ok)
-    throw Object.assign(new Error(`The Worker answered ${response.status}`), {
-      status: response.status,
-    });
+  if (!response.ok) throw new Error(`The Worker answered ${response.status}`);
   return response.status === 204 ? null : response.json();
 }
 
@@ -88,16 +85,6 @@ const sendEndpoint = (method, endpoint) => ({
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ endpoint }),
 });
-
-// A subscription the Worker doesn't have, as one it lost, is already gone.
-/** @param {string} endpoint */
-async function forgetEndpoint(endpoint) {
-  try {
-    await requestPush("push/subscription", sendEndpoint("DELETE", endpoint));
-  } catch (error) {
-    if (/** @type {{ status?: number }} */ (error).status !== 404) throw error;
-  }
-}
 
 async function fetchPublicKey() {
   const { publicKey } = await requestPush("push/key");
@@ -127,7 +114,7 @@ async function syncSubscription() {
   const publicKey = await fetchPublicKey();
   const subscribedKey = subscription.options.applicationServerKey;
   if (subscribedKey && encodeBase64Url(subscribedKey) !== publicKey) {
-    await forgetEndpoint(subscription.endpoint);
+    await requestPush("push/subscription", sendEndpoint("DELETE", subscription.endpoint));
     await subscription.unsubscribe();
     await subscribe(publicKey);
     return;
@@ -163,7 +150,7 @@ async function turnOn() {
 
 async function turnOff() {
   try {
-    await forgetEndpoint(subscription.endpoint);
+    await requestPush("push/subscription", sendEndpoint("DELETE", subscription.endpoint));
     await subscription.unsubscribe();
     subscription = null;
     setStatus("off");

@@ -1,13 +1,15 @@
 // While Diagnostics is on, a step log keeps what one part of the page does, with each touch and
 // click on it. The last few lines stay on this device, for Diagnostics to list: the page holds
 // them as it logs, since a touch or click can come many times a second, and keeps them on the
-// device as it leaves the screen.
+// device a moment after the last one, so a burst writes once and a page that crashes still has
+// them, and as it leaves the screen.
 
 import { formatClockTimeWithSeconds } from "./days.js";
 import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
 
 // Enough for a fling through a few weeks of a season's list, each day it passes a line.
 const KEPT_LINES = 200;
+const SAVE_AFTER_MS = 1000;
 
 /** @typedef {{ at: number, text: string }} StepLine */
 
@@ -97,6 +99,8 @@ export function createStepLog({ key, title, isWatched }) {
   let onLogged = () => {};
   /** @type {StepLine[] | null} */
   let held = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let saveTimer;
 
   /** @returns {StepLine[]} */
   function loadLines() {
@@ -113,10 +117,12 @@ export function createStepLog({ key, title, isWatched }) {
 
   // Lines storage won't take are lost once the page goes.
   function saveLines() {
+    clearTimeout(saveTimer);
     if (held) storeJson(key, held);
   }
 
   function forgetLines() {
+    clearTimeout(saveTimer);
     held = [];
     forgetStored(key);
   }
@@ -130,6 +136,8 @@ export function createStepLog({ key, title, isWatched }) {
     const lines = holdLines();
     lines.push({ at: Date.now(), text: hideAddresses(text) });
     lines.splice(0, lines.length - KEPT_LINES);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveLines, SAVE_AFTER_MS);
     onLogged();
   }
 
