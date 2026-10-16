@@ -90,6 +90,8 @@
   Every sheet's top is a band, from `.sheet-page .sheet-top` in `shared/page/sheet.css`,
   never a list of sheets, as tall as what it holds: the WNBA's is the floor's color over the card's,
   ending in a line, with each title at the same height on every sheet and what goes with it, like a game's teams and score, in the band under it.
+  A title holds its name and one line under it, and anything more, like a player's facts or hometown, goes in the band under the title,
+  so the title and its close or back button, which holds the top of the title's row (`shared/page/chrome.css`), sit in one spot on every sheet and the band grows below them.
   Sheets, and a sheet's sections, slide side by side with the app's `--sheet-gap` of the sheet's color between them,
   each band's sides edged in its line while they move, so two bands never have to meet.
   Each app's `tests/browser/sheet-stack.spec.mjs` opens every sheet on the page and checks each top; a new sheet joins its list, or the test fails.

@@ -58,7 +58,7 @@ const readTokenColor = (page, token) =>
     return color;
   }, token);
 
-test("every sheet's top is a band in the band's color, ending in its line and edged on no other side at rest, with its close or back button in one spot", async ({
+test("every sheet's top is a band in the band's color, ending in its line and edged on no other side at rest, with its title and its close or back button each in one spot, whatever goes under the title", async ({
   page,
 }) => {
   const { teamSheet } = await openDodgersFromGame(page);
@@ -78,25 +78,48 @@ test("every sheet's top is a band in the band's color, ending in its line and ed
           (element) => getComputedStyle(element).display !== "none",
         )
       );
+      const title = /** @type {Element} */ (top.querySelector(".sheet-head h2"));
+      const readTop = (/** @type {Element} */ element) =>
+        element.getBoundingClientRect().top - top.getBoundingClientRect().top;
       return {
         id: sheet.id,
         band: style.backgroundColor,
         border: style.borderBottomWidth,
         shadow: style.boxShadow,
-        buttonTop: Math.round(button.getBoundingClientRect().top - top.getBoundingClientRect().top),
+        titleTop: readTop(title),
+        buttonTop: Math.round(readTop(button)),
       };
     }),
   );
 
   expect(sheets.map((sheet) => sheet.id)).toEqual(["gameSheet", "teamSheet", "playerSheet"]);
+  await expect(page.locator("#playerPlace")).toHaveText("Nashville, TN");
   for (const sheet of sheets)
     expect(sheet, sheet.id).toEqual({
       id: sheet.id,
       band,
       border: "0px",
       shadow: `${line} 0px -1px 0px 0px inset`,
+      titleTop: sheets[0].titleTop,
       buttonTop: BUTTON_TOP_PX,
     });
+});
+
+test("a title that runs to more lines leaves its close or back button where it was", async ({
+  page,
+}) => {
+  const { teamSheet } = await openDodgersFromGame(page);
+  const back = teamSheet.locator(".sheet-back");
+  const readButtonTop = () => back.evaluate((button) => button.getBoundingClientRect().top);
+  const before = await readButtonTop();
+
+  await teamSheet.locator(".sheet-title").evaluate((title) => {
+    const line = title.appendChild(document.createElement("p"));
+    line.className = "sheet-note";
+    line.textContent = "A line more under the title";
+  });
+
+  expect(await readButtonTop()).toBe(before);
 });
 
 test("on a phone, every sheet fills the screen, whatever it holds", async ({ page }) => {

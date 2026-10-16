@@ -409,17 +409,17 @@ section.view.active {
   white-space: normal;
 }
 /* A sheet's close button, a caret down, or its back button, an arrow, in place of it on a sheet
-   opened from another: just the icon, in --accent, its words only for screen readers. */
+   opened from another: just the icon, in --accent, its words only for screen readers. It holds the
+   head's top 44px, whatever the title under it holds. */
 .sheet-close,
 .sheet-back {
   position: absolute;
   left: -12px;
-  top: 50%;
+  top: 0;
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  margin-top: -22px;
   padding: 0;
   border: 0;
   background: none;
