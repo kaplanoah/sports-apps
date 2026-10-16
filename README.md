@@ -285,16 +285,24 @@ GitHub can deploy each app's Worker, page included, after each merge: at once
 when the pull request's checks passed on exactly the code `main` now has, which
 is when it was up to date with `main` as it merged, and otherwise once the
 checks pass on `main`. In the repo's **Settings > Environments**, create an
-environment named `production`, limit its deployment branches to `main` and
-`beta` (see "Trying a change on the phone" below), and add:
+environment named `production`, limit its deployment branches to `main`, and
+add:
 
-- a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare token made from the **Edit
-  Cloudflare Workers** template, with no IP filtering and a long expiry;
+- a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare account token with the
+  **Workers Scripts** permission at **Edit**, limited to the live Workers
+  (`mlb-app` and `wnba-app`), with no IP filtering and a long expiry;
 - a secret `CLOUDFLARE_ACCOUNT_ID`, so it stays out of the public deploy logs;
 - for each app, a secret `<APP>_PAGE_URL` with its page's address, key and all,
   like `WNBA_PAGE_URL`, and `<APP>_ACCESS_CODE` with its code if it asks for
-  one, and the same with `_BETA` after the app's name for its beta page, like
-  `WNBA_BETA_PAGE_URL`.
+  one.
+
+The beta channel (see "Trying a change on the phone" below) deploys from an
+environment of its own, named `beta`, limited to the `beta` branch, with the
+same secrets: a token limited to the beta Workers (`mlb-app-beta` and
+`wnba-app-beta`), the account ID, and each page's address and code with
+`_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
+change only its own channel's Workers, a branch pushed to `beta` can never
+reach the live apps.
 
 Each deploy opens its new version's page as a phone does, signed in with its
 code, and puts the version before back when the page doesn't draw what its store
@@ -327,12 +335,12 @@ the real one. To use a pull request's change on the phone before it merges:
    at once, with the same checks and rollback as `main`'s deploy.
 3. Open the beta app from the Home Screen and use the change.
 
-Before the first beta deploy, allow the `beta` branch in the `production`
-environment's deployment branches. After the first one, give each beta Worker
-its key with `npm run set-app-key -- <app> --channel beta`, which prints its
-address, and, if the real page asks for a code, set one with
-`npm run set-access-code -- <app> <code> --channel beta`. Add the page to the
-Home Screen from that address. `npm run deploy:api -- <app> --channel beta`
+Before the first beta deploy, create the `beta` environment as "Deploying on
+merge" says. After the first one, give each beta Worker its key with
+`npm run set-app-key -- <app> --channel beta`, which prints its address, and,
+if the real page asks for a code, set one with
+`npm run set-access-code -- <app> <code> --channel beta`. Add both to the `beta`
+environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <app> --channel beta`
 deploys beta by hand, from a checkout of `origin/beta`, and
 `npm run rollback -- <app> --channel beta` rolls it back.
 

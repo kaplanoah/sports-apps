@@ -567,7 +567,7 @@
   and which the `Watch apps` workflow does every 15 minutes,
   keeping one open issue for each app that isn't opening, which closes once it opens again (`watch-apps.mjs`),
   both from each page's address and code in the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
-  with `_BETA` after the app's name for its beta channel.
+  and a beta deploy from the `beta` environment's, with `_BETA` after the app's name.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" below.
 - Commands:
@@ -678,7 +678,8 @@ Delete it once the app's first PR merges.
    Once its CI passes, push it to `beta`, whose deploy creates `<app>-app-beta`,
    which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
    Give the owner that address, and ask them to set its code with `npm run set-access-code -- <app> <code> --channel beta`,
-   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `production` environment's secrets,
+   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `beta` environment's secrets,
+   and add `<app>-app-beta` to the Workers the `beta` environment's Cloudflare token can edit,
    add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
    The merge's deploy then creates `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
    and the owner adds its address and code as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
@@ -779,7 +780,8 @@ Delete it once the app's first PR merges.
   Nor does a Diagnostics report, which a viewer shares wherever they like:
   each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
   Reviewing a change, check what it commits, logs, and posts for any of these.
-- The Cloudflare token lives only in the cloud environment's API credentials and the repo's `production` GitHub environment.
+- The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
+  each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
   Never ask for it in chat or put it in environment variables, code, or commits.
 - Keep scratch work (design playgrounds, test harnesses) out of git, and never point tests at the real page.
 - When unsure, do what best serves the intent of the work, and confirm with the user.
@@ -878,7 +880,7 @@ When a step says to go back to an earlier step, continue in order from there.
     - The run was skipped:
       CI failed on `main`.
       Read the CI log, fix the failure in a new PR, and start again at step 1.
-    - It says "nothing was deployed": the `production` environment has no Cloudflare token.
+    - It says "nothing was deployed": the channel's environment has no Cloudflare token.
       Tell the user.
     - The run failed: read the log.
       If it says "the earlier version is live again", the Worker rolled back and is unchanged.

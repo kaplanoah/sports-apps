@@ -759,6 +759,11 @@ test("a push to beta deploys the beta channel, and main still waits for its CI",
     /CHANNEL: \$\{\{ github\.ref_name == 'beta' && 'beta' \|\| 'production' \}\}/,
   );
   assert.match(workflow, /group: deploy-\$\{\{ github\.ref_name \}\}/);
+  // A push to beta runs that branch's own scripts, so it gets beta's environment and token.
+  assert.match(
+    workflow,
+    /environment: \$\{\{ github\.ref_name == 'beta' && 'beta' \|\| 'production' \}\}/,
+  );
   assert.match(workflow, /if: github\.event_name == 'push' && env\.CHANNEL == 'production'\n/);
 });
 
