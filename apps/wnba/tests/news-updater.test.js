@@ -489,6 +489,29 @@ test("a photo whose size couldn't be read is read again on the next runs, three 
   assert.ok(listCardPhotos(docs).every((photo) => photo.width === undefined));
 });
 
+test("a story whose outlet moves its photo shows the photo at its new address", async () => {
+  const espnUrl = NEWS_FEEDS.find((feed) => feed.id === "espn")?.url;
+  const firstPhoto = "https://a.espncdn.com/photo/2026/1004/r1726050_1296x729_16-9.jpg";
+  const movedPhoto = "https://a.espncdn.com/photo/2026/1005/r1726050_1296x729_16-9.jpg";
+  const readFeeds = createFetch();
+  /** @type {typeof fetch} */
+  const readMovedFeeds = async (url, init) => {
+    const response = await readFeeds(url, init);
+    if (String(url) !== espnUrl) return response;
+    return new Response((await response.text()).replaceAll(firstPhoto, movedPhoto));
+  };
+  const { docs, runJob } = createRun();
+  await runJob(readFeeds);
+  const urls = () => listCardPhotos(docs).map((photo) => photo.url);
+  assert.ok(urls().includes(firstPhoto));
+
+  await runJob(readMovedFeeds);
+
+  assert.ok(!urls().includes(firstPhoto));
+  const moved = listCardPhotos(docs).find((photo) => photo.url === movedPhoto);
+  assert.equal(moved?.width, 1800);
+});
+
 test("without an API key, no photo is asked about, and one no card shows is forgotten", async () => {
   const { docs, storage } = createRun();
   const job = createWnbaNewsJob();
