@@ -32,6 +32,7 @@ const SKIPPED_FILES = new Set([
   "worker/rollback.mjs",
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
+  "worker/set-page-host.mjs",
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);

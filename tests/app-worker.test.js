@@ -291,3 +291,55 @@ test("a page served over plain http, as on a laptop, gets a cookie it can keep",
   });
   assert.ok(!response.headers.get("set-cookie").includes("Secure"));
 });
+
+const PAGE_HOST = "mlb.sports.example";
+const PAGE_HOST_ENV = { ...LOCKED_ENV, PAGE_HOST };
+
+/**
+ * @param {string} path at the page's own address, with no key
+ * @param {{ method?: string, cookie?: string, body?: unknown, env?: object }} [options]
+ */
+function requestAtPageHost(path, { method = "GET", cookie, body, env = PAGE_HOST_ENV } = {}) {
+  const headers = { "cf-connecting-ip": "203.0.113.7", ...(cookie && { cookie }) };
+  const init = { method, headers, ...(body !== undefined && { body: JSON.stringify(body) }) };
+  return createLockedWorker().fetch(new Request(`https://${PAGE_HOST}${path}`, init), env);
+}
+
+test("at the page's own address, the page and its data answer without the key, behind the code", async () => {
+  assert.equal(await (await requestAtPageHost("/")).text(), "the gate");
+  for (const path of DATA_PATHS) assert.equal((await requestAtPageHost(path)).status, 401, path);
+
+  const signedIn = await requestAtPageHost("/access", {
+    method: "POST",
+    body: { code: "FASTBREAK" },
+  });
+  assert.equal(signedIn.status, 204);
+  assert.equal(signedIn.headers.get("set-cookie").split("; ")[1], "Path=/");
+  const cookie = readCookie(signedIn);
+  const page = await requestAtPageHost("/", { cookie });
+  assert.equal(await page.text(), "the app");
+  assert.equal(page.headers.get("set-cookie").split("; ")[1], "Path=/");
+  for (const path of DATA_PATHS)
+    assert.equal((await requestAtPageHost(path, { cookie })).status, 200, path);
+});
+
+test("the page's own address answers nothing while the Worker has no code", async () => {
+  const env = { APP_KEY: "key", PAGE_HOST };
+  for (const path of ["/", "/index.html", "/styles.css", "/access", ...DATA_PATHS])
+    assert.equal((await requestAtPageHost(path, { env })).status, 404, path);
+});
+
+test("with an address of its own, the page still answers under its key, and only there on the Worker's address", async () => {
+  assert.equal(await (await requestLocked("/", { env: PAGE_HOST_ENV })).text(), "the gate");
+  const cookie = await signIn(PAGE_HOST_ENV);
+  const page = await requestLocked("/", { cookie, env: PAGE_HOST_ENV });
+  assert.equal(await page.text(), "the app");
+  assert.equal(page.headers.get("set-cookie").split("; ")[1], "Path=/key/");
+
+  const keyless = await createLockedWorker().fetch(
+    new Request("https://worker.example/"),
+    PAGE_HOST_ENV,
+  );
+  assert.equal(keyless.status, 404);
+  assert.equal((await requestAtPageHost("/key/", { cookie })).status, 404);
+});

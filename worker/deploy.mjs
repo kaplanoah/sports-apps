@@ -9,7 +9,7 @@ import { findChannel, readCommandLine } from "./channels.mjs";
 import { checkAppPage } from "./check-page.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 
-const API = "https://api.cloudflare.com/client/v4";
+export const API = "https://api.cloudflare.com/client/v4";
 const root = new URL("../", import.meta.url);
 
 // A channel's environment names its own Worker, which keeps the top level's other settings.

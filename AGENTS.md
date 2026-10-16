@@ -346,7 +346,9 @@
   and colors from its `page/styles.css` instead of inventing new ones.
 - Worker:
   `worker/src/`.
-  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key.
+  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key,
+  but at the address its `PAGE_HOST` secret names, where it serves them without the key, behind the access code alone,
+  and so only while it has one (`findAppPrefix` in `shared/worker/app-worker.js`).
   `health` says whether the Worker and its store answer, 200 or 503 with the release's commit,
   so an uptime monitor can watch it without holding a secret, and asks the store once a minute at most however often it's hit (`shared/worker/health.js`).
   An alarm in its Durable Object (`worker/src/season-updater.js`) keeps the current season's saved data up to date from the league,
@@ -556,7 +558,7 @@
   and tells a red change for CI's gate, and comments on each open pull request a merge to main leaves in conflict,
   from its own `Conflicts` workflow (`apps.mjs`, `build.mjs`, `deploy.mjs`,
   `deploy-scope.mjs`, `flag-conflicts.mjs`, `red-change.mjs`, `release.mjs`,
-  `rollback.mjs`, `set-app-key.mjs`, `set-access-code.mjs`, the secrets calls they share in `worker-secrets.mjs`,
+  `rollback.mjs`, `set-app-key.mjs`, `set-access-code.mjs`, `set-page-host.mjs`, the secrets calls they share in `worker-secrets.mjs`,
   and the channels each command's `--channel` names in `channels.mjs`); its tests are in the root `tests/`.
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`),
   which each deploy does for its new version, putting the one before back when it doesn't,
@@ -723,7 +725,7 @@ Delete it once the app's first PR merges.
   To use a PR's change on the owner's phone before it merges, reset `beta` to the PR's branch and push (`git push -f origin <branch>:beta`),
   wait for that push's Deploy run to say `worker check: ok` for each app, and tell the user to use the beta app on the Home Screen.
   `beta` is a scratch branch: never commit to it or open a PR from it.
-  Each of `deploy:api`, `rollback`, `set-app-key`, and `set-access-code` takes `--channel beta`.
+  Each of `deploy:api`, `rollback`, `set-app-key`, `set-access-code`, and `set-page-host` takes `--channel beta`.
 - A red change is one whose bugs no CI browser would show, since none touches,
   scrolls, layers, and draws as an iPhone does, or that touches what iOS has drawn wrong before: parts left undrawn by how layers and sheets stack.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
@@ -761,6 +763,10 @@ Delete it once the app's first PR merges.
 - `npm run set-access-code -- <app> <code>` sets the code an app's page asks for, with a new random `ACCESS_SIGNING_KEY`; the user picks the code.
   A new code signs every phone out, and `--remove` stops asking.
   Never commit, log, or post the code.
+- `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,
+  so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
+  The address with the key keeps working as it was, and phones stay signed in there.
+  Keep the host out of the repo, as the Worker's own address is.
 - The repo is public.
   Never commit secrets, keys, account IDs, real Worker addresses or subdomains, or personal data; use placeholders in tests and docs:
   `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
