@@ -58,7 +58,7 @@
   and stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`),
   and GitHub's reporter marks each one that passed only on its retry on the pull request's checks,
   the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
-  and the `check` job adds it to the table in the issue Flaky browser tests,
+  and, once CI ends, the `Report flaky tests` workflow adds it to the table in the issue Flaky browser tests from the default branch's code (`.github/workflows/flaky-report.yml`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,

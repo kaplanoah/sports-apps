@@ -139,7 +139,11 @@ test("burn-in runs every test ten times however many fail, and fails only on a t
 // Burn-in's machines start only for a pull request that changes a browser spec, and check
 // requires them to pass then.
 test("burn-in runs only when a pull request changes a browser spec, and check requires it then", () => {
-  assert.match(readJob("changed-specs"), /git diff --name-only --diff-filter=AM HEAD\^1 HEAD/);
+  // Without --no-renames, a spec moved or split from another reads as renamed, not added.
+  assert.match(
+    readJob("changed-specs"),
+    /git diff --name-only --no-renames --diff-filter=AM HEAD\^1 HEAD/,
+  );
   const burnIn = readJob("burn-in");
   assert.match(burnIn, /needs: changed-specs/);
   assert.match(
@@ -163,12 +167,40 @@ test("each job that needs another runs even when one before it was skipped", () 
   assert.deepEqual(skippedWithTheirChain, []);
 });
 
-test("the check job names each test burn-in found failing in the issue, and can start the fix routine", () => {
-  const check = readJob("check");
-  assert.match(check, /pattern: burn-in-flaky-\*/);
-  assert.match(check, /--retried "\$\{listed\[@\]\}"/);
-  assert.match(check, /FLAKY_ROUTINE_URL: \$\{\{ secrets\.FLAKY_ROUTINE_URL \}\}/);
-  assert.match(check, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
+// The pull request's own code runs in CI, so nothing there holds the fix routine's token or writes
+// issues: the workflow Report flaky tests does, after CI, from the default branch.
+test("CI never runs the flaky report, holds the fix routine's token, or writes issues", () => {
+  const workflow = readRepoFile(".github/workflows/ci.yml");
+  assert.doesNotMatch(workflow, /report-flaky-tests|FLAKY_ROUTINE_TOKEN|issues: write/);
+});
+
+// A fork's pull request runs without the repository's secrets, so its review never ran.
+test("a fork's pull request fails check until it's labeled fork-ok", () => {
+  assert.match(
+    readJob("check"),
+    /name: Require every job to pass\n\s+if: >-\n(?:\s+.*\n)*?\s+\(github\.event_name == 'pull_request' &&\n\s+github\.event\.pull_request\.head\.repo\.full_name != github\.repository &&\n\s+!contains\(github\.event\.pull_request\.labels\.\*\.name, 'fork-ok'\)\)\n\s+run: exit 1/,
+  );
+});
+
+// GitHub refuses a pull request's diff past 20,000 lines, and git lists a change of any size.
+test("the title is checked against the files git lists against the base branch", () => {
+  const checks = readJob("checks");
+  assert.match(checks, /uses: actions\/checkout@\S+ # v7\n\s+with:\n\s+fetch-depth: 2/);
+  assert.match(
+    checks,
+    /run: git diff --name-only --no-renames HEAD\^1 HEAD \| node worker\/check-pr-title\.mjs/,
+  );
+  assert.doesNotMatch(checks, /gh pr diff/);
+});
+
+// None of the workflows push, so none leaves git a token on disk for the code it runs to read.
+test("every checkout leaves no credentials behind", () => {
+  for (const workflow of WORKFLOWS) {
+    const text = readRepoFile(`.github/workflows/${workflow}`);
+    const checkouts = [...text.matchAll(/uses: actions\/checkout@.*\n((?: {8,}.*\n)*)/g)];
+    for (const [, settings] of checkouts)
+      assert.match(settings, /persist-credentials: false/, `${workflow}: ${settings}`);
+  }
 });
 
 // A label change, like adding phone-ok, brings no new code: once a run passed every test on
