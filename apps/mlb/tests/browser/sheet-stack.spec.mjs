@@ -13,8 +13,9 @@ import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const PHONE = { width: 390, height: 844 };
+const WIDE_SCREEN = { width: 1280, height: 844 };
 // How far under a band's top every sheet's close or back button sits.
-const BUTTON_TOP_PX = 10;
+const BUTTON_TOP_PX = 8;
 
 /**
  * Opens the Dodgers at the Braves' sheet, then the Dodgers' beside it.
@@ -120,6 +121,31 @@ test("a title that runs to more lines leaves its close or back button where it w
   });
 
   expect(await readButtonTop()).toBe(before);
+});
+
+test("a sheet's top holds its title, its close or back button, and the room under its last line alike on a phone and a wide screen", async ({
+  page,
+}) => {
+  const readBand = () =>
+    page.locator("#teamSheet .sheet-top").evaluate((top) => {
+      const band = top.getBoundingClientRect();
+      const readTop = (/** @type {string} */ selector) =>
+        /** @type {Element} */ (top.querySelector(selector)).getBoundingClientRect().top - band.top;
+      return {
+        titleTop: readTop(".sheet-head h2"),
+        buttonTop: readTop(".sheet-back"),
+        roomBelow:
+          band.bottom -
+          /** @type {Element} */ (top.lastElementChild).getBoundingClientRect().bottom,
+      };
+    });
+  await page.setViewportSize(PHONE);
+  await openDodgersFromGame(page);
+  const onPhone = await readBand();
+
+  await page.setViewportSize(WIDE_SCREEN);
+
+  expect(await readBand()).toEqual(onPhone);
 });
 
 test("on a phone, every sheet fills the screen, whatever it holds", async ({ page }) => {
