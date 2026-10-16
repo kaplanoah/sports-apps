@@ -479,6 +479,8 @@ jobs:
           name: review-share-${{ matrix.share }}
           path: .review/share-${{ matrix.share }}.json
           retention-days: 14
+          # A re-run of the job uploads its record again.
+          overwrite: true
       # So that re-running the failed jobs reviews this share again.
       - name: Fail when parts are still unread
         if: always() && steps.last.outputs.unread != ''
@@ -538,6 +540,7 @@ jobs:
           name: review-across
           path: .review/across.json
           retention-days: 14
+          overwrite: true
 
   # Fails a review that left any changed file unread, naming each in the one summary comment it
   # keeps up to date on the pull request.
