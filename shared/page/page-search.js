@@ -16,7 +16,7 @@
 // games. Runs in the page and in Node, so it uses no DOM.
 
 import { describeCount } from "./game-search.js";
-import { isForgivenTypo, readTokens, splitWords } from "./search-words.js";
+import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {{ code: string, name: string, fullName: string, record?: string }} PageTeam */
 /**
@@ -272,12 +272,6 @@ export const findPartGame = (games, part) =>
   (part.game === "latest-final"
     ? games.findLast((game) => game.state === "final")
     : games.find((game) => game.state !== "final")) ?? null;
-
-/**
- * @param {import("./search-words.js").Token} token
- * @param {string} kind
- */
-const hasKind = (token, kind) => token.meanings.some((meaning) => meaning.kind === kind);
 
 /**
  * The words left for a search of games once some have found a page: all but those the search of

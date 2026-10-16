@@ -1,6 +1,6 @@
 import { nameSeries } from "./bracket.js";
 import { nameTeam } from "./clubs.js";
-import { html } from "#shared/html.js";
+import { html, joinItems, joinNames } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import {
   describeSeriesGame,
@@ -46,7 +46,7 @@ function describeVia(entry, mover, other) {
   if (own && TEAMS[own.opp]) parts.push(describeResult(own));
   if (theirs && TEAMS[theirs.opp] && TEAMS[other])
     parts.push(`${nameTeam(other)} ${describeResult(theirs)}`);
-  return parts.join(" and ");
+  return joinNames(parts, "and");
 }
 
 function appendVia(sentence, entry, mover, other, also = "") {
@@ -206,12 +206,6 @@ export function describeEntry(entry, context) {
 const joinMarkup = (items, separator) =>
   items.flatMap((item, index) => (index ? [separator, item] : [item]));
 
-function joinWords(items) {
-  if (items.length < 2) return items;
-  const separator = items.length > 2 ? ", and " : " and ";
-  return [joinMarkup(items.slice(0, -1), ", "), separator, items[items.length - 1]];
-}
-
 const formatWinnerFirst = (score) => formatGameScore([Math.max(...score), Math.min(...score)]);
 
 // "an 8-7 loss", "an 11-2 loss": the article goes by how the score is said.
@@ -284,7 +278,7 @@ function describeWinningPart(win, credited, context) {
   const phrases = credited.map((entry, index) =>
     describeCredited(entry, index, win, target, context),
   );
-  return html`${beat}, eliminating ${joinWords(phrases)}`;
+  return html`${beat}, eliminating ${joinItems(phrases, "and")}`;
 }
 
 // An elimination the lead club's win didn't decide keeps its club first.
@@ -297,7 +291,7 @@ function describeUncredited(entry, win, { renderClub }) {
     (result) =>
       `the ${nameTeam(result.team)}' ${formatWinnerFirst(result.score)} win over the ${nameTeam(result.opp)}`,
   );
-  const by = byWins.length ? `${loss ? " and" : " by"} ${byWins.join(" and ")}` : "";
+  const by = byWins.length ? `${loss ? " and" : " by"} ${joinNames(byWins, "and")}` : "";
   return html`${renderClub(entry.team)} eliminated${withLoss}${by}${describeDespite(entry)}`;
 }
 
@@ -355,7 +349,10 @@ function describeEliminationGroup(eliminations, context) {
   const ordered = [...eliminations].sort(
     (first, second) => Number(second.team === win.opp) - Number(first.team === win.opp),
   );
-  const clubs = joinWords(ordered.map((entry) => context.renderClub(entry.team)));
+  const clubs = joinItems(
+    ordered.map((entry) => context.renderClub(entry.team)),
+    "and",
+  );
   const beat = `${nameTeam(win.team)} beat the ${nameTeam(win.opp)} ${formatGameScore(win.score)}`;
   const totals = describeTotals(ordered, win);
   return html`${clubs} eliminated &mdash; ${beat}${totals && ` ${totals}`}`;

@@ -17,7 +17,7 @@ import {
   nameDay,
 } from "./days.js";
 import { isOnHomeScreen, isTouchDevice, prefersReducedMotion } from "./device.js";
-import { html, joinWithSeparator, setHtml } from "./html.js";
+import { capitalize, html, joinWithSeparator, setHtml } from "./html.js";
 import { describeAnimations, describeShownDayLists } from "./list-log.js";
 import {
   forgetStored,
@@ -378,9 +378,6 @@ const countTimes = (count) => (count === 1 ? "1 time" : `${count} times`);
 
 /** @param {number} count */
 const countRequests = (count) => (count === 1 ? "1 request" : `${count} requests`);
-
-/** @param {string} name */
-const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
 
 /**
  * One line on a background job's last run, from the status document it saves.

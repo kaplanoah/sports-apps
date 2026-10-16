@@ -71,8 +71,8 @@ test.describe("on a phone", () => {
 
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
     await expect(updates.locator(".what")).toHaveText([
-      "Liberty beat the Lynx 87-71 to win the First Round 2\u20130",
-      "Fever beat the Aces 99-89 in Game\u00a02, tie the First Round 1\u20131",
+      "Liberty beat the Lynx 87-71 to win the First Round 2-0",
+      "Fever beat the Aces 99-89 in Game\u00a02, tie the First Round 1-1",
     ]);
 
     await page.getByRole("button", { name: "Dismiss updates" }).click();
@@ -85,7 +85,7 @@ test.describe("on a phone", () => {
 
     await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
     await expect(updates.locator(".what")).toHaveText([
-      "Dream beat the Mystics 88-80 to win the First Round 2\u20130",
+      "Dream beat the Mystics 88-80 to win the First Round 2-0",
     ]);
   });
 
@@ -247,7 +247,7 @@ test.describe("on a phone, in full motion", () => {
 
     await expect(updates).toBeVisible();
     await expect(updates.locator(".what")).toHaveText([
-      "Dream beat the Mystics 88-80 to win the First Round 2\u20130",
+      "Dream beat the Mystics 88-80 to win the First Round 2-0",
     ]);
   });
 });

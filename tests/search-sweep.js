@@ -1,6 +1,6 @@
 import { findSearchGames, readSearch } from "#shared/game-search.js";
 import { readTypedSearch } from "#shared/search-reading.js";
-import { FORGIVING_LENGTH, isOneEditApart, splitWords } from "#shared/search-words.js";
+import { FORGIVING_LENGTH, isOneEditApart, normalizeText } from "#shared/search-words.js";
 
 // Types what fans search for, the way they type it on a phone: in lowercase, a key at a time, each
 // name of a team and a place, by its city, its nickname, or its venue, a team's name after its
@@ -31,9 +31,6 @@ const KEY_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
  * and a search that finds the same, when there's one.
  * @typedef {{ head: string, name: string, sameAs?: string }} Phrasing
  */
-
-/** @param {string} text */
-const readWords = (text) => splitWords(text).join(" ");
 
 /**
  * What a search says it found, as the line over its games does.
@@ -239,7 +236,7 @@ function readFinishedTeams(suggestion, typed, context) {
 function listBrokenRules(shown, { head, name, typedName, whole }, context) {
   const typed = `${head}${typedName}`;
   const letters = typedName.replace(/\s+/g, "").length;
-  const isKnownWord = context.dictionary.has(readWords(typedName));
+  const isKnownWord = context.dictionary.has(normalizeText(typedName));
   const broken = [];
   if (letters < SHORTEST_GUESS && !isKnownWord && !head && shown.games.length)
     broken.push("finds games from fewer than three letters");
@@ -254,7 +251,8 @@ function listBrokenRules(shown, { head, name, typedName, whole }, context) {
     if (teams.length !== 1 || teams[0] !== suggestion.mark.code)
       broken.push(`suggests ${suggestion.text} for ${suggestion.mark.code}, which names ${teams}`);
   }
-  const isReadWhole = typedName !== name && readWords(shown.readText) === readWords(head + name);
+  const isReadWhole =
+    typedName !== name && normalizeText(shown.readText) === normalizeText(head + name);
   if (isReadWhole && describeFound(shown) !== describeFound(whole))
     broken.push(
       `finds ${describeFound(shown)}, but the whole search finds ${describeFound(whole)}`,
