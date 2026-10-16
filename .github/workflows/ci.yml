@@ -436,7 +436,7 @@ jobs:
             7. Don't post a summary: a later step writes it. End with your answer: each file of your share you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares, like anything your share relies on or changes in another share's files or the other app.
       - name: Find what the review left unread
         id: first
-        if: always()
+        if: ${{ !cancelled() }}
         env:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
@@ -445,7 +445,7 @@ jobs:
       - *read-comments
       - name: Review what's left
         id: again
-        if: always() && steps.first.outputs.unread != ''
+        if: ${{ !cancelled() && steps.first.outputs.unread != '' }}
         continue-on-error: true
         timeout-minutes: 15
         uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
@@ -467,13 +467,13 @@ jobs:
             6. Don't post a summary: a later step writes it. End with your answer: each file you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares.
       - name: Find what's still unread
         id: last
-        if: always() && steps.first.outputs.unread != ''
+        if: ${{ !cancelled() && steps.first.outputs.unread != '' }}
         env:
           EXECUTION_FILE: ${{ steps.again.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.again.outputs.structured_output }}
           SHARE: ${{ matrix.share }}
         run: node worker/judge-review.mjs share .review "$SHARE" >> "$GITHUB_OUTPUT"
-      - if: always()
+      - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: review-share-${{ matrix.share }}
@@ -483,7 +483,7 @@ jobs:
           overwrite: true
       # So that re-running the failed jobs reviews this share again.
       - name: Fail when parts are still unread
-        if: always() && steps.last.outputs.unread != ''
+        if: ${{ !cancelled() && steps.last.outputs.unread != '' }}
         run: |
           echo "::error::This share's reviewer didn't read every line of its diffs."
           exit 1

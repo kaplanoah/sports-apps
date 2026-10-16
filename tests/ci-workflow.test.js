@@ -170,13 +170,13 @@ test("the review reads every share in full and fails on any file left unread", (
     share,
     /node worker\/judge-review\.mjs share \.review "\$SHARE" >> "\$GITHUB_OUTPUT"/,
   );
-  assert.match(share, /if: always\(\) && steps\.first\.outputs\.unread != ''/);
+  assert.match(share, /if: \$\{\{ !cancelled\(\) && steps\.first\.outputs\.unread != '' \}\}/);
   const across = readJob("review-across");
   assert.match(across, /node worker\/judge-review\.mjs across \.review/);
   assert.match(across, /if: steps\.review\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
   assert.match(
     share,
-    /if: always\(\) && steps\.last\.outputs\.unread != ''\n\s+run: \|\n.*\n\s+exit 1/,
+    /if: \$\{\{ !cancelled\(\) && steps\.last\.outputs\.unread != '' \}\}\n\s+run: \|\n.*\n\s+exit 1/,
   );
   const review = readJob("review");
   assert.match(
