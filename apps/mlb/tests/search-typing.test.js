@@ -9,7 +9,7 @@ import {
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import { orderListedDays, readSentWords, readTypedSearch } from "#shared/search-reading.js";
 import { listPhrasings, sweepMisspellings, sweepPhrasings } from "../../../tests/search-sweep.js";
-import { listSeasonGames } from "../page/js/games-view.js";
+import { listSeasonGames } from "../page/js/season-games.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";

@@ -248,7 +248,7 @@ test("an unranked starter's note sets his innings against his club's games, a st
   const notes = sheet.locator(".tape-note");
 
   await expect(notes).toHaveText([
-    "Rank among qualified starters",
+    "Rank among qualified starters (1 inning per team game)",
     "ERA and BB/9 ranked by fewest",
     `Springs has pitched 128 2/3 of the ${athletics.w + athletics.l} innings needed to qualify`,
   ]);

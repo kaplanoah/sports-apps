@@ -21,10 +21,13 @@ import {
   startNewsRedraws,
   watchNews,
 } from "#shared/news.js";
+import { readNewsChoices } from "#shared/news-choices.js";
+import { listShownStories } from "#shared/page-places.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { isSettingShown, openSettings } from "#shared/settings-sheet.js";
 import { openGameSection, startGameSheet } from "./game-sheet.js";
-import { listFoundGameDays, listSeasonGames, nameGameKey } from "./games-view.js";
+import { listFoundGameDays } from "./games-view.js";
+import { listSeasonGames, nameGameKey } from "./season-games.js";
 import { REORDER_EVENT } from "./ranking.js";
 import { renderAll } from "./render.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
@@ -119,7 +122,13 @@ function returnGamesToToday() {
 /** Every game the Games view lists, which a search reads. */
 const listListedGames = () => listSeasonGames(session.state?.slate, session.schedule);
 
-const readSearchPages = () => listSearchPages({ index: session.playerIndex, isSettingShown });
+const readSearchPages = () =>
+  listSearchPages({
+    index: session.playerIndex,
+    isSettingShown,
+    divisions: session.standings?.divisions ?? {},
+    stories: listShownStories(session.news, readNewsChoices(), NEWS_LEAGUE.outletSwitches),
+  });
 
 /**
  * Opens a game's sheet on a section, as a search's row for a game's part asks.

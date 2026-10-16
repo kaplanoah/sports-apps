@@ -301,6 +301,24 @@ test("each month of the season's games is saved apart from its record, and only 
   assert.deepEqual(read("schedules-2026/2026-10").games, october);
 });
 
+test("a read without the standings during the playoffs leaves the playoff games' months and each club's last and next games as they were", async () => {
+  const { store, harness, read, context, clock } = createUpdatingStore({
+    snapshot: WHOLE_SEASON,
+    now: SEASON_NOW,
+  });
+  await store.alarm();
+  const october = read("schedules-2026/2026-10");
+  const { previous, next } = read("seasons/2026").slate;
+  assert.ok(next.some((game) => game.postseason));
+
+  const responses = { ...SEASON_GAMES.responses, standings: null };
+  harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: SEASON_NOW });
+  await updateSeasonAgain(store, context, clock);
+  assert.deepEqual(read("schedules-2026/2026-10"), october);
+  const slate = read("seasons/2026").slate;
+  assert.deepEqual([slate.previous, slate.next], [previous, next]);
+});
+
 test("a read without the season's whole schedule leaves its months as they were", async () => {
   const { store, harness, read, context, clock } = createUpdatingStore({
     snapshot: WHOLE_SEASON,

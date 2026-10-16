@@ -1,7 +1,7 @@
 // `since` is ten minutes before the snapshot: only a final newer than that leads the line.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { describeLastStamp, describeUpNextGame } from "../page/js/stamp.js";
+import { describeLastStamp, describeSeriesNote, describeUpNextGame } from "../page/js/stamp.js";
 import { normalizeSpaces, readStampText } from "../../../tests/text.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 
@@ -388,13 +388,25 @@ test("in October a final says what it did to the series", () => {
     since: toEasternIso(TODAY, "23:15"),
     today: { date: TODAY, games: [createFinal("CHC", "MIL", "20:08", [1, 4], "23:41")] },
   };
+  const series = { teamA: "MIL", teamB: "CHC", winsA: 2, winsB: 0, winner: null };
   const context = createContext({
-    seriesNote: (game) => (game.home === "MIL" ? " \u2014 Brewers now lead 2-0" : ""),
+    seriesNote: (game) => (game.home === "MIL" ? describeSeriesNote(series) : ""),
   });
   assert.equal(
     describeLast(slate, context),
-    "Brewers 4 Cubs 1 final at 11:41 PM \u2014 Brewers now lead 2-0",
+    "Brewers 4 Cubs 1 final at 11:41 PM \u2014 Brewers lead 2-0",
   );
+});
+
+test("the series a final leaves says it in the words of every series line: a lead, a tie, or a win", () => {
+  const series = { teamA: "MIL", teamB: "CHC", winner: null };
+  assert.equal(describeSeriesNote({ ...series, winsA: 1, winsB: 2 }), " \u2014 Cubs lead 2-1");
+  assert.equal(describeSeriesNote({ ...series, winsA: 2, winsB: 2 }), " \u2014 Tied 2-2");
+  assert.equal(
+    describeSeriesNote({ ...series, winsA: 3, winsB: 1, winner: "MIL" }),
+    " \u2014 Brewers win 3-1",
+  );
+  assert.equal(describeSeriesNote(null), "");
 });
 
 test("no sentence is ever a bare matchup or 'under way with'", () => {

@@ -19,9 +19,12 @@ import {
   describePlateAppearancesToQualify,
   measureInningsProgress,
   measurePlateAppearancesProgress,
+  QUALIFIED_HITTERS_NOTE,
+  QUALIFIED_STARTERS_NOTE,
   readInnings,
 } from "./qualifying.js";
 import { describeGamePitching, formatInnings } from "./stat-table.js";
+import { isStarter, STARTER_MEASURES } from "./starter-measures.js";
 
 /**
  * A player as the store keeps him.
@@ -62,18 +65,6 @@ const HITTER_RANKS = [
   },
 ];
 /**
- * A starter's ranked numbers, as his matchup side writes them. A lower ERA and fewer walks rank
- * first.
- * @type {{ label: string, key: string, write: (value: number) => string, isFewestFirst?: boolean }[]}
- */
-const STARTER_RANKS = [
-  { label: "ERA", key: "era", write: (value) => value.toFixed(2), isFewestFirst: true },
-  { label: "K/9", key: "k9", write: (value) => value.toFixed(1) },
-  { label: "BB/9", key: "bb9", write: (value) => value.toFixed(1), isFewestFirst: true },
-  { label: "Velo", key: "speed", write: (value) => value.toFixed(1) },
-];
-
-/**
  * A count as a share of a hitter's plate appearances, as "13.3%".
  * @param {number} count
  * @param {any} hitting
@@ -88,13 +79,6 @@ function formatShare(count, hitting) {
  * @param {string} word
  */
 const countWord = (count, word) => `${count} ${count === 1 ? word : `${word}s`}`;
-
-/**
- * A pitcher who has started at least half the games he has pitched in.
- * @param {any} pitching
- */
-export const isStarter = (pitching) =>
-  (pitching?.gamesStarted ?? 0) > 0 && pitching.gamesStarted * 2 >= pitching.gamesPlayed;
 
 /** @param {{ club: string, name: string }} player */
 export const renderPlayerHeading = (player) =>
@@ -226,7 +210,7 @@ function renderHitting(player, hitters, clubGames) {
     }),
   );
   const note = isRanked
-    ? "Rank among qualified hitters (3.1 plate appearances per team game)"
+    ? QUALIFIED_HITTERS_NOTE
     : describePlateAppearancesToQualify(hitting.plateAppearances, clubGames);
   return renderSheetPart(
     "Regular season",
@@ -280,7 +264,7 @@ function renderStarterRanks(player, starters, side, clubGames) {
   const isRanked = pool.some((/** @type {any} */ starter) => starter.id === player.id);
   const progress = measureInningsProgress(player.pitching.inningsPitched, clubGames);
   const line = readRankedLine(player.pitching, side);
-  const rows = STARTER_RANKS.flatMap(({ label, key, write, isFewestFirst }) => {
+  const rows = STARTER_MEASURES.flatMap(({ label, key, write, isFewestFirst }) => {
     const value = line[key] == null ? null : Number(line[key]);
     if (value == null || Number.isNaN(value)) return [];
     const values = pool
@@ -297,7 +281,7 @@ function renderStarterRanks(player, starters, side, clubGames) {
   });
   if (!rows.length) return html``;
   const note = isRanked
-    ? "Rank among qualified starters (1 inning per team game)"
+    ? QUALIFIED_STARTERS_NOTE
     : describeInningsToQualify("He", player.pitching.inningsPitched, clubGames);
   return html`<div class="player-ranks">
     ${rows}

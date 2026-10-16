@@ -365,7 +365,7 @@ test.describe("on a phone", () => {
       ({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.dataset.game,
       spot,
     );
-    expect(landsOn).toBe("2026-09-24 HOU ATH 1");
+    expect(landsOn).toBe("824950 2026-09-24");
     await page.touchscreen.tap(spot.x, spot.y);
 
     const gameSheet = page.locator("#gameSheet");

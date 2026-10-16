@@ -67,6 +67,7 @@ const TONIGHT = "2026-09-24";
 // Each club's games so far, which a starter needs as many innings as to qualify.
 const CLUB_GAMES = { HOU: 157, ATH: 158 };
 const AT_ATHLETICS = {
+  id: "824950",
   date: TONIGHT,
   start: "2026-09-25T01:40:00Z",
   state: "pre",
@@ -163,7 +164,7 @@ test("each measure shows each starter's number and rank under his side, the high
   const tape = readTape(markup);
   assert.deepEqual(
     tape.map((measure) => measure.label),
-    ["ERA", "K/9", "BB/9", "Fastball mph"],
+    ["ERA", "K/9", "BB/9", "Velo"],
   );
   assert.deepEqual(
     tape.map(({ away, home }) => [away, home]),
@@ -187,7 +188,7 @@ test("each measure shows each starter's number and rank under his side, the high
     ],
   );
   assert.deepEqual(readClass(markup, "tape-note"), [
-    "Rank among qualified starters",
+    "Rank among qualified starters (1 inning per team game)",
     "ERA and BB/9 ranked by fewest",
   ]);
 });
@@ -311,7 +312,7 @@ test("a starter outside the qualified starters and short of a quarter of their i
   assert.ok(tape.every(({ marks }) => marks.away !== undefined && marks.home === undefined));
   assert.ok(readProvisionalMarks(markup).every((line) => line.home === undefined));
   assert.deepEqual(readClass(markup, "tape-note"), [
-    "Rank among qualified starters",
+    "Rank among qualified starters (1 inning per team game)",
     "ERA and BB/9 ranked by fewest",
     "Springs has pitched 39 1/3 of the 158 innings needed to qualify",
   ]);
@@ -341,7 +342,7 @@ test("an unranked starter whose innings or club's games aren't known yet still s
     renderStarters(BLUBAUGH, { ...SPRINGS, ranks: null }, {}),
   ])
     assert.deepEqual(readClass(markup, "tape-note"), [
-      "Rank among qualified starters",
+      "Rank among qualified starters (1 inning per team game)",
       "ERA and BB/9 ranked by fewest",
       "Springs hasn't pitched the innings needed to qualify",
     ]);
@@ -383,6 +384,26 @@ test("a start in the game under way says Today once he's pulled", () =>
       isNow: false,
     });
   }));
+
+test("a start from last night still says Today until MLB's day ends at 6am Eastern", () => {
+  const lastNight = {
+    date: TONIGHT,
+    opp: "ATH",
+    home: false,
+    ip: "6.0",
+    runs: 1,
+    k: 7,
+    pitches: 95,
+  };
+  const pitcher = { ...BLUBAUGH, starts: [lastNight, ...BLUBAUGH.starts] };
+  const final = { ...AT_ATHLETICS, state: "final" };
+  const readFirstStartDay = () => {
+    const markup = renderLoaded(final, [{ pitcher }, { pitcher: SPRINGS }]);
+    return readText(markup.match(/<ul class="recent-starts"><li>(<span[^>]*>[^<]*<\/span>)/)[1]);
+  };
+  checkAt("2026-09-25T06:30:00Z", () => assert.equal(readFirstStartDay(), "Today"));
+  checkAt("2026-09-25T10:30:00Z", () => assert.equal(readFirstStartDay(), "Sep 24"));
+});
 
 test("both starters' speed lines share one scale, from the slowest pitch either throws to the fastest", () => {
   const markup = renderStarters();

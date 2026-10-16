@@ -56,12 +56,24 @@ function collectChangedFields(doc, snapshot, log) {
   return fields;
 }
 
+/**
+ * The slate to save: a read without the standings lists no club's last and next games, so the
+ * record keeps those it has.
+ * @param {any} slate
+ * @param {any} saved the record's
+ */
+const keepClubGames = (slate, saved) =>
+  !slate || MLBSnapshot.hasClubGames(slate)
+    ? slate
+    : { ...slate, previous: saved?.previous ?? [], next: saved?.next ?? [] };
+
 // The season's one record, which the page reads whole: its field, standings, games, and updates,
 // rebuilt from the readings as each update saves them.
 async function saveSeason(docs, year, snapshot, parts) {
   const doc = (await docs.read(nameSeasonKey(year))) ?? { year };
   const log = Readings.composeLog(doc.log ?? [], parts, snapshot.log);
-  const fields = collectChangedFields(doc, snapshot, log);
+  const shown = { ...snapshot, slate: keepClubGames(snapshot.slate, doc.slate) };
+  const fields = collectChangedFields(doc, shown, log);
   if (!Object.keys(fields).length) return;
   await docs.write(nameSeasonKey(year), { ...doc, ...fields, updatedAt: snapshot.asOf });
 }

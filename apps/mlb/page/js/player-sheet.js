@@ -19,13 +19,13 @@ import { TEAMS } from "./teams.js";
 import { fetchPitcher } from "./pitcher-fetch.js";
 import {
   describePlayerNote,
-  isStarter,
   renderPlayerBody,
   renderPlayerFacts,
   renderPlayerHeading,
 } from "./player-view.js";
 import { countClubGames } from "./qualifying.js";
 import { session } from "./session.js";
+import { isStarter } from "./starter-measures.js";
 
 /** @typedef {import("./player-view.js").Player} Player */
 /** @typedef {import("./player-view.js").ShownPlayer} ShownPlayer */

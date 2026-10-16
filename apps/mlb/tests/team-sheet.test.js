@@ -276,6 +276,7 @@ test("every World Series since the first, but for 1904 and 1994, has one champio
 const ASTROS_SLATE = {
   previous: [
     {
+      id: "910001",
       date: "2026-09-23",
       away: "HOU",
       home: "SEA",
@@ -284,6 +285,7 @@ const ASTROS_SLATE = {
       score: [5, 6],
     },
     {
+      id: "910002",
       date: "2026-09-23",
       away: "LAA",
       home: "TEX",
@@ -292,6 +294,7 @@ const ASTROS_SLATE = {
       score: [2, 1],
     },
     {
+      id: "910003",
       date: "2026-09-22",
       away: "HOU",
       home: "SEA",
@@ -304,6 +307,7 @@ const ASTROS_SLATE = {
     date: "2026-09-24",
     games: [
       {
+        id: "910004",
         away: "HOU",
         home: "ATH",
         state: "live",
@@ -312,12 +316,26 @@ const ASTROS_SLATE = {
         inning: 5,
         half: "top",
       },
-      { away: "LAA", home: "SEA", state: "pre", start: "2026-09-25T01:40:00Z" },
+      { id: "910005", away: "LAA", home: "SEA", state: "pre", start: "2026-09-25T01:40:00Z" },
     ],
   },
   next: [
-    { date: "2026-09-25", away: "HOU", home: "ATH", state: "pre", start: "2026-09-26T01:40:00Z" },
-    { date: "2026-09-26", away: "HOU", home: "ATH", state: "pre", start: "2026-09-26T20:05:00Z" },
+    {
+      id: "910006",
+      date: "2026-09-25",
+      away: "HOU",
+      home: "ATH",
+      state: "pre",
+      start: "2026-09-26T01:40:00Z",
+    },
+    {
+      id: "910007",
+      date: "2026-09-26",
+      away: "HOU",
+      home: "ATH",
+      state: "pre",
+      start: "2026-09-26T20:05:00Z",
+    },
   ],
 };
 
@@ -344,9 +362,9 @@ test("a club's sheet opens on cards of its last game, the one it's playing, and 
     "Next game Sep 25 9:40 PM @ ATH",
   ]);
   assert.deepEqual(listCardButtons(body), [
-    ["2026-09-23 HOU SEA 1", "Game details: Astros at Mariners, Wed, Sep 23"],
-    ["2026-09-24 HOU ATH 1", "Game details: Astros at Athletics, Thu, Sep 24"],
-    ["2026-09-25 HOU ATH 1", "Game details: Astros at Athletics, Fri, Sep 25"],
+    ["910001 2026-09-23", "Game details: Astros at Mariners, Wed, Sep 23"],
+    ["910004 2026-09-24", "Game details: Astros at Athletics, Thu, Sep 24"],
+    ["910006 2026-09-25", "Game details: Astros at Athletics, Fri, Sep 25"],
   ]);
   assert.ok(body.text.indexOf('class="game-cards"') < body.text.indexOf("<h3>"));
 });
@@ -484,7 +502,7 @@ test("a club's postseason sets its numbers across from the playoff field's, each
   /** @param {string} away @param {string} home @param {[number, number]} score */
   const final = (away, home, score, date) => ({
     date,
-    id: date,
+    id: `${away}-${home}-${date}`,
     away,
     home,
     state: "final",

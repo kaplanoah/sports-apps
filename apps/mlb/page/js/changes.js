@@ -1,5 +1,6 @@
 import { readEasternDay } from "#shared/days.js";
-import { SEASON_GAMES, hasWonDivision } from "./snapshot.js";
+import { sortInScheduleOrder } from "./schedule-order.js";
+import { countSeasonGames, hasWonDivision } from "./snapshot.js";
 
 export const MAX_LOG = 50;
 
@@ -189,7 +190,7 @@ function findChaser(oldRow, row, after) {
 function describeRace(oldRow, after, id, chaser) {
   if (!chaser) return {};
   const race = oldRow.wce !== "E" ? "wildcard" : after[id].div;
-  const most = SEASON_GAMES - Number(after[id].l);
+  const most = countSeasonGames(after[id]) - Number(after[id].l);
   const target = Number(after[chaser].w);
   return Number.isFinite(most) && Number.isFinite(target) ? { race, most, target } : { race };
 }
@@ -230,13 +231,7 @@ function findStandingsChanges(before, after, games, at) {
   return [...berths.filter(Boolean), ...eliminations];
 }
 
-// MLB can list a doubleheader's second game with the earlier start time.
-const listGames = (reading) =>
-  Object.values(reading.games).sort(
-    (first, second) =>
-      (first.doubleheader || 0) - (second.doubleheader || 0) ||
-      Date.parse(first.start) - Date.parse(second.start),
-  );
+const listGames = (reading) => sortInScheduleOrder(Object.values(reading.games));
 
 // The news between two readings from the Worker's readings.js, stamped with the later one's time.
 export function findChanges(before, after) {

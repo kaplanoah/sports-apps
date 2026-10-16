@@ -1,34 +1,22 @@
-// What MLB's search finds besides games: each club's sheet and its Roster, each player on a club's
-// roster this season, from the list of players the store keeps for it, a final's Highlights and the
-// next game's Matchup, the Bracket, the News tab, the standings' playoff fields and each league's
-// divisions, and settings and each setting the page shows. Runs in the page and in Node, so it uses
-// no DOM.
+// What MLB's search finds besides games, as it hands the shared pages (page-places.js): its clubs,
+// the next game's Matchup, its Bracket, the standings' playoff fields and each league's divisions,
+// and the settings its page shows. Runs in the page and in Node, so it uses no DOM.
 
+import {
+  ATHLETIC_SETTING,
+  DIAGNOSTICS_SETTING,
+  NEWS_TAB,
+  NOTIFICATIONS_SETTING,
+  SEASON_SETTING,
+  SETTINGS_ROW,
+  composeSearchPages,
+  describeAppearanceSetting,
+  describeTeamOutletsSetting,
+} from "#shared/page-places.js";
 import { nameClubFully } from "./clubs.js";
 import { TEAMS } from "./teams.js";
 
-/** @typedef {import("#shared/page-search.js").SearchPages} SearchPages */
 /** @typedef {import("#shared/page-search.js").PagePlace} PagePlace */
-/** @typedef {import("#shared/page-search.js").PagePlayer} PagePlayer */
-/** @typedef {import("#shared/page-search.js").GamePart} GamePart */
-
-const SECTION = { key: "roster", name: "Roster" };
-/** @type {GamePart[]} */
-const GAME_PARTS = [
-  {
-    key: "highlights",
-    name: "Highlights",
-    words: ["highlights", "recap", "clips", "video"],
-    game: "latest-final",
-  },
-  {
-    key: "matchup",
-    name: "Matchup",
-    words: ["matchup", "probables", "probable pitchers", "pitching matchup"],
-    game: "next",
-  },
-];
-const EXAMPLES = ["Yamamoto", "Mets roster"];
 
 /** @type {PagePlace[]} */
 const TABS = [
@@ -38,7 +26,7 @@ const TABS = [
     words: ["bracket", "playoffs", "postseason"],
     icon: "bracket",
   },
-  { key: "tab:news", name: ["News"], words: ["news", "stories", "headlines"], icon: "news" },
+  NEWS_TAB,
 ];
 
 const LEAGUE_NAMES = { AL: "American League", NL: "National League" };
@@ -77,79 +65,53 @@ const STANDINGS = [
   ),
 ];
 
-// Each setting by the key the page names its row with, the words of its row, and the words that
-// find it beside them.
-const SETTINGS = [
-  { key: "settings", name: [], words: ["settings", "preferences"] },
-  { key: "settings:season", name: ["Season"], words: ["season", "year", "past seasons"] },
-  {
-    key: "settings:notifications",
-    name: ["Notifications"],
-    words: ["notifications", "notify", "alerts", "push"],
-  },
-  {
-    key: "settings:appearance",
-    name: ["Appearance"],
-    words: ["appearance", "theme", "dark mode", "light mode", "ball", "night game"],
-  },
-  {
-    key: "settings:team-outlets",
-    name: ["Include dedicated Mets sources"],
-    words: ["dedicated sources", "beat writers", "news sources", "outlets"],
-  },
-  {
-    key: "settings:paywalled",
-    name: ["Include content from The Athletic"],
-    words: ["the athletic", "paywall", "news sources", "outlets"],
-  },
-  {
-    key: "settings:prospectus",
-    name: ["Include content from Baseball Prospectus"],
-    words: ["baseball prospectus", "paywall", "news sources", "outlets"],
-  },
-  {
-    key: "settings:ranking",
-    name: ["Ranking"],
-    words: ["ranking", "rank", "favorite teams", "rooting"],
-  },
-  { key: "settings:diagnostics", name: ["Diagnostics"], words: ["diagnostics", "report"] },
-];
+/** @type {import("#shared/page-places.js").LeaguePages} */
+const LEAGUE_PAGES = {
+  teams: Object.entries(TEAMS).map(([code, { name }]) => ({
+    code,
+    name,
+    fullName: nameClubFully(code),
+  })),
+  places: [...TABS, ...STANDINGS],
+  settings: [
+    SETTINGS_ROW,
+    SEASON_SETTING,
+    NOTIFICATIONS_SETTING,
+    describeAppearanceSetting(["ball", "night game"]),
+    describeTeamOutletsSetting("Mets", ["beat writers"]),
+    ATHLETIC_SETTING,
+    {
+      key: "settings:prospectus",
+      name: ["Include content from Baseball Prospectus"],
+      words: ["baseball prospectus", "paywall", "news sources", "outlets"],
+    },
+    {
+      key: "settings:ranking",
+      name: ["Ranking"],
+      words: ["ranking", "rank", "favorite teams", "rooting"],
+    },
+    DIAGNOSTICS_SETTING,
+  ],
+  gameParts: [
+    {
+      key: "matchup",
+      name: "Matchup",
+      words: ["matchup", "probables", "probable pitchers", "pitching matchup"],
+      game: "next",
+    },
+  ],
+  examples: ["Yamamoto", "Mets roster"],
+};
 
 /**
- * The settings a search can open: those the page shows, as `isShown` says by key.
- * @param {(key: string) => boolean} isShown
- * @returns {PagePlace[]}
+ * The clubs, players, and places a search can open, each club with its record from the
+ * standings, and the stories the News tab shows.
+ * @param {{ index: { players: import("#shared/page-search.js").PagePlayer[] } | null, isSettingShown: (key: string) => boolean, divisions?: Record<string, { id: string, w: number, l: number }[]>, stories?: import("#shared/news-picks.js").NewsStory[] }} shown
  */
-const listSettings = (isShown) =>
-  SETTINGS.filter(({ key }) => isShown(key)).map(({ key, name, words }) => ({
-    key,
-    name: ["Settings", ...name],
-    words: key === "settings" ? words : ["settings", ...words],
-    icon: "settings",
-  }));
-
-/**
- * The clubs, players, and places a search can open.
- * @param {{ index: { players: PagePlayer[] } | null, isSettingShown: (key: string) => boolean }} shown
- * @returns {SearchPages}
- */
-export function listSearchPages({ index, isSettingShown }) {
-  return {
-    teams: Object.entries(TEAMS).map(([code, { name }]) => ({
-      code,
-      name,
-      fullName: nameClubFully(code),
-    })),
-    players: (index?.players ?? []).map(({ id, team, firstName, lastName, number }) => ({
-      id,
-      team,
-      firstName,
-      lastName,
-      number,
-    })),
-    section: SECTION,
-    places: [...TABS, ...STANDINGS, ...listSettings(isSettingShown)],
-    gameParts: GAME_PARTS,
-    examples: EXAMPLES,
-  };
-}
+export const listSearchPages = ({ divisions = {}, ...shown }) =>
+  composeSearchPages(LEAGUE_PAGES, {
+    ...shown,
+    standings: Object.values(divisions)
+      .flat()
+      .map((row) => ({ team: row.id, wins: row.w, losses: row.l })),
+  });

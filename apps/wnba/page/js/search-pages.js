@@ -1,15 +1,21 @@
-// What the WNBA's search finds besides games: each team's sheet, with its record, and its Roster,
-// each player on a team's roster in the season shown, and who is out, from the list of players the
-// store keeps for the season, a final's Highlights, the Bracket, the News tab, with each team's
-// newest stories, the standings' lists, and settings and each setting the page shows. Runs in the
-// page and in Node, so it uses no DOM.
+// What the WNBA's search finds besides games, as it hands the shared pages (page-places.js): its
+// teams, its Bracket and the standings' lists, and the settings its page shows. Runs in the page
+// and in Node, so it uses no DOM.
 
+import {
+  ATHLETIC_SETTING,
+  DIAGNOSTICS_SETTING,
+  NEWS_TAB,
+  NOTIFICATIONS_SETTING,
+  SEASON_SETTING,
+  SETTINGS_ROW,
+  composeSearchPages,
+  describeAppearanceSetting,
+  describeTeamOutletsSetting,
+} from "#shared/page-places.js";
 import { TEAMS } from "./teams.js";
 
-/** @typedef {import("#shared/page-search.js").SearchPages} SearchPages */
 /** @typedef {import("#shared/page-search.js").PagePlace} PagePlace */
-/** @typedef {import("#shared/page-search.js").PagePlayer} PagePlayer */
-/** @typedef {import("#shared/news-picks.js").NewsStory} NewsStory */
 
 /**
  * Where the store keeps which of a season's finals went to overtime, for search.
@@ -17,28 +23,9 @@ import { TEAMS } from "./teams.js";
  */
 export const nameOvertimesKey = (season) => `overtimes/${season}`;
 
-const SECTION = { key: "roster", name: "Roster" };
-/** @type {import("#shared/page-search.js").GamePart[]} */
-const GAME_PARTS = [
-  {
-    key: "highlights",
-    name: "Highlights",
-    words: ["highlights", "recap", "clips", "video"],
-    game: "latest-final",
-  },
-];
-const EXAMPLES = ["Stewart", "Aces roster"];
-
 // The words that ask how the playoffs stand, which both the Bracket and the league's standings
 // answer.
 const PLAYOFF_PICTURE = ["playoff picture", "seeds", "seeding", "clinched", "clinch"];
-
-const NEWS_TAB = {
-  key: "tab:news",
-  name: ["News"],
-  words: ["news", "stories", "headlines"],
-  icon: /** @type {const} */ ("news"),
-};
 
 /** @type {PagePlace[]} */
 const TABS = [
@@ -73,83 +60,30 @@ const STANDINGS = [
   },
 ];
 
-// Each setting by the key the page names its row with, the words of its row, and the words that
-// find it beside them.
-const SETTINGS = [
-  { key: "settings", name: [], words: ["settings", "preferences"] },
-  { key: "settings:season", name: ["Season"], words: ["season", "year", "past seasons"] },
-  {
-    key: "settings:notifications",
-    name: ["Notifications"],
-    words: ["notifications", "notify", "alerts", "push"],
-  },
-  {
-    key: "settings:team-outlets",
-    name: ["Include dedicated Liberty sources"],
-    words: ["dedicated sources", "news sources", "outlets"],
-  },
-  {
-    key: "settings:paywalled",
-    name: ["Include content from The Athletic"],
-    words: ["the athletic", "paywall", "news sources", "outlets"],
-  },
-  {
-    key: "settings:appearance",
-    name: ["Appearance"],
-    words: ["appearance", "theme", "dark mode", "light mode", "walnut", "maple"],
-  },
-  { key: "settings:diagnostics", name: ["Diagnostics"], words: ["diagnostics", "report"] },
-];
-
-/**
- * The settings a search can open: those the page shows, as `isShown` says by key.
- * @param {(key: string) => boolean} isShown
- * @returns {PagePlace[]}
- */
-const listSettings = (isShown) =>
-  SETTINGS.filter(({ key }) => isShown(key)).map(({ key, name, words }) => ({
-    key,
-    name: ["Settings", ...name],
-    words: key === "settings" ? words : ["settings", ...words],
-    icon: "settings",
-  }));
+/** @type {import("#shared/page-places.js").LeaguePages} */
+const LEAGUE_PAGES = {
+  teams: Object.entries(TEAMS).map(([code, { city, name }]) => ({
+    code,
+    name,
+    fullName: `${city} ${name}`,
+  })),
+  places: [...TABS, ...STANDINGS],
+  settings: [
+    SETTINGS_ROW,
+    SEASON_SETTING,
+    NOTIFICATIONS_SETTING,
+    describeTeamOutletsSetting("Liberty"),
+    ATHLETIC_SETTING,
+    describeAppearanceSetting(["walnut", "maple"]),
+    DIAGNOSTICS_SETTING,
+  ],
+  gameParts: [],
+  examples: ["Stewart", "Aces roster"],
+};
 
 /**
  * The teams, players, and places a search of a season can open, each team with its record from the
  * standings, and the stories the News tab shows.
- * @param {{ index: { players: PagePlayer[] } | null, isSettingShown: (key: string) => boolean, standings?: { team: string, wins: number, losses: number }[], stories?: NewsStory[] }} shown
- * @returns {SearchPages}
+ * @param {{ index: { players: import("#shared/page-search.js").PagePlayer[] } | null, isSettingShown: (key: string) => boolean, standings?: { team: string, wins: number, losses: number }[], stories?: import("#shared/news-picks.js").NewsStory[] }} shown
  */
-export function listSearchPages({ index, isSettingShown, standings = [], stories = [] }) {
-  const records = new Map(standings.map((row) => [row.team, `${row.wins}-${row.losses}`]));
-  return {
-    teams: Object.entries(TEAMS).map(([code, { city, name }]) => ({
-      code,
-      name,
-      fullName: `${city} ${name}`,
-      ...(records.has(code) && { record: records.get(code) }),
-    })),
-    players: (index?.players ?? []).map(({ id, team, firstName, lastName, number, out }) => ({
-      id,
-      team,
-      firstName,
-      lastName,
-      number,
-      out: out ?? null,
-    })),
-    section: SECTION,
-    places: [...TABS, ...STANDINGS, ...listSettings(isSettingShown)],
-    gameParts: GAME_PARTS,
-    examples: EXAMPLES,
-    news: { place: NEWS_TAB, stories: listNewestFirst(stories) },
-  };
-}
-
-/**
- * Stories, newest first.
- * @param {NewsStory[]} stories
- */
-const listNewestFirst = (stories) =>
-  [...stories].sort(
-    (first, second) => Date.parse(second.publishedAt) - Date.parse(first.publishedAt),
-  );
+export const listSearchPages = (shown) => composeSearchPages(LEAGUE_PAGES, shown);

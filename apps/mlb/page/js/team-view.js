@@ -27,33 +27,29 @@ import {
   renderStatusChip,
   renderTeamDot,
 } from "./clubs.js";
-import {
-  describeGameLabel,
-  describeInning,
-  describeStart,
-  listSeasonGames,
-  nameGameKey,
-} from "./games-view.js";
+import { describeGameLabel, describeInning, describeStart } from "./games-view.js";
 import { renderLeaders } from "./leaders-view.js";
+import {
+  DIVISION_ELIMINATION_TITLE,
+  MAGIC_NUMBER_TITLE,
+  WILD_CARD_ELIMINATION_TITLE,
+  describeRaceNumber,
+  readMagicNumber,
+} from "./race-numbers.js";
 import { countClubGames } from "./qualifying.js";
 import { findClubRoster } from "./roster-section.js";
+import { sortInScheduleOrder } from "./schedule-order.js";
+import { listSeasonGames, nameGameKey } from "./season-games.js";
 import { nameRound } from "./series-games.js";
 import { isFieldSet, session } from "./session.js";
 import { listSlateGames } from "./slate.js";
-import { SEASON_GAMES } from "./snapshot.js";
+import { countSeasonGames } from "./snapshot.js";
 import { describeDivisionLead } from "./standings.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
 /** @typedef {import("#shared/team-numbers.js").PhaseStats} PhaseStats */
 /** @typedef {import("#shared/team-numbers.js").Measure} Measure */
-
-const MAGIC_NUMBER_TITLE =
-  "Division magic number: combined wins by this team and losses by the club closest behind it that would clinch the division. A dash means clinched.";
-const DIVISION_ELIMINATION_TITLE =
-  "Division elimination number: combined wins by the division leader and losses by this team that would end its division chances. A dash means clinched, E means out.";
-const WILD_CARD_ELIMINATION_TITLE =
-  "Wild card elimination number: combined wins by the team holding the last spot and losses by this team that would end its wild card chances. A dash means clinched, E means out.";
 
 /** @param {string} id */
 function findDivision(id) {
@@ -66,7 +62,7 @@ function findDivision(id) {
   return { name, place, row: rows[place - 1], divisions };
 }
 
-const countGamesLeft = (row) => SEASON_GAMES - row.w - row.l;
+const countGamesLeft = (row) => countSeasonGames(row) - row.w - row.l;
 
 const isInSetField = (id) => isFieldSet() && !!session.state.teams?.[id];
 
@@ -74,17 +70,16 @@ const renderGamesBack = (value) => (value === "-" ? html`&mdash;` : value || nul
 
 /** @param {string | null | undefined} value an elimination or magic number, a dash, or E */
 function renderRaceNumber(value) {
-  if (value === "E") return html`<span class="elim-num">E</span>`;
-  if (value == null || value === "-") return html`<span class="elim-num clinched">&mdash;</span>`;
-  return html`<span class="elim-num live">${value}</span>`;
+  const { text, state } = describeRaceNumber(value);
+  return html`<span class="${["elim-num", state].filter(Boolean).join(" ")}">${text}</span>`;
 }
 
 /** @param {string} label @param {string} title */
 const renderTitledLabel = (label, title) => html`<span title="${title}">${label}</span>`;
 
 function renderMagicNumber(row) {
-  if (row.clinched) return renderRaceNumber("-");
-  return /^\d+$/.test(row.magic || "") ? renderRaceNumber(row.magic) : null;
+  const magic = readMagicNumber(row);
+  return magic ? renderRaceNumber(magic) : null;
 }
 
 // Each race's row starts with the club's place in it: a division leader has only its division's
@@ -107,8 +102,8 @@ function listStats({ name, place, row, divisions }) {
   ];
 }
 
-// A game rained out late in the season and never made up still counts as one left until the field
-// is set, which ends the regular season for every club.
+// A game rained out late in the season counts as one left until MLB cancels it or the field is set,
+// which ends the regular season for every club.
 /** @param {ReturnType<typeof findDivision>} division */
 function renderGamesLeft(division) {
   if (isFieldSet() || !division?.row) return false;
@@ -264,12 +259,6 @@ function renderPlayoffs(id) {
 
 const isPlayedBy = (game, id) => game.away === id || game.home === id;
 
-// A doubleheader's games go in game order, since MLB can list game 2 with the earlier start.
-const compareGames = (first, second) =>
-  first.date.localeCompare(second.date) ||
-  (first.doubleheader || 0) - (second.doubleheader || 0) ||
-  Date.parse(first.start) - Date.parse(second.start);
-
 // A postseason game whose other club isn't known yet may never be played.
 const hasBothClubs = (game) => Boolean(game.away && game.home);
 
@@ -277,7 +266,7 @@ const hasBothClubs = (game) => Boolean(game.away && game.home);
 function findClubNearestGames(id) {
   const slate = session.state?.slate;
   const games = slate ? listSlateGames(slate).filter((game) => isPlayedBy(game, id)) : [];
-  return findNearestGames(games.sort(compareGames), hasBothClubs);
+  return findNearestGames(sortInScheduleOrder(games), hasBothClubs);
 }
 
 function describeScore(game, isHome) {

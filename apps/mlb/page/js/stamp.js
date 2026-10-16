@@ -1,11 +1,28 @@
 import { html } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
+import { describeSeriesLead } from "#shared/series-text.js";
 import { describeFinishedDay, renderStampNow, renderStampTime } from "#shared/stamp.js";
 import { TEAMS } from "./teams.js";
 
 export function formatStampName(id) {
   return TEAMS[id] ? TEAMS[id].name : String(id ?? "");
 }
+/**
+ * Where a playoff series stands, after a final of it on the header's line, or nothing for a game
+ * of no series.
+ * @param {{ teamA: string, teamB: string, winsA: number, winsB: number, winner?: string | null } | null} series
+ */
+export function describeSeriesNote(series) {
+  if (!series) return "";
+  const lead = describeSeriesLead({
+    leader: formatStampName(series.winsA > series.winsB ? series.teamA : series.teamB),
+    wins: Math.max(series.winsA, series.winsB),
+    losses: Math.min(series.winsA, series.winsB),
+    isOver: !!series.winner,
+  });
+  return ` \u2014 ${lead}`;
+}
+
 function describeFinal(game, day) {
   const [awayScore, homeScore] = game.score || [0, 0];
   const [winner, winnerScore, loser, loserScore] =

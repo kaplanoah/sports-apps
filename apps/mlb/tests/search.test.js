@@ -13,7 +13,7 @@ import {
 import { findPages, findPartGame } from "#shared/page-search.js";
 import { listExamples, listOtherReadings, listSuggestions } from "#shared/search-suggestions.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
-import { listSeasonGames } from "../page/js/games-view.js";
+import { listSeasonGames } from "../page/js/season-games.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
@@ -116,7 +116,7 @@ test("a city is offered first as the place, then each club by its whole name, an
     "Padres 168 games",
     "Angels 162 games",
     "Athletics 162 games",
-    "Giants 162 games",
+    "Giants 163 games",
   ]);
   assert.deepEqual(others("Fenway"), []);
   assert.deepEqual(others("Mets in New York"), []);
@@ -399,6 +399,61 @@ test("settings and each setting are found by their words, and only the settings 
     isSettingShown: (key) => key !== "settings:season",
   });
   assert.ok(!hidden.places.some((place) => place.key === "settings:season"));
+});
+
+/** @param {string} id @param {string} title @param {string} publishedAt @param {string[]} teams */
+const describeStory = (id, title, publishedAt, teams) => ({
+  id,
+  url: `https://www.mlb.com/news/${id}`,
+  title,
+  summary: "",
+  author: "",
+  outlet: "MLB.com",
+  source: "mlb",
+  publishedAt,
+  photo: null,
+  teams,
+});
+const STORIES = [
+  describeStory("lindor", "Lindor's homer lifts the Mets", "2026-09-27T02:00:00Z", ["NYM"]),
+  describeStory("soto", "Soto's four hits power the Mets", "2026-09-28T02:00:00Z", ["NYM"]),
+  describeStory("skenes", "Skenes caps his season", "2026-09-28T03:00:00Z", ["PIT"]),
+];
+
+/**
+ * What search lists for a season's pages, with each club's record and the News tab's stories.
+ * @param {string} text
+ */
+const findListedPages = (text) =>
+  findPages(text, {
+    dictionary: CONTEXT.dictionary,
+    pages: listSearchPages({
+      index: INDEX,
+      isSettingShown: () => true,
+      divisions: SNAPSHOT.standings.divisions,
+      stories: STORIES,
+    }),
+    isTyping: false,
+  });
+
+test("every club's row has its record from the standings, and its record's words list it over its games", () => {
+  const mets = Object.values(SNAPSHOT.standings.divisions)
+    .flat()
+    .find((row) => row.id === "NYM");
+  const found = findListedPages("Mets record");
+  assert.deepEqual(
+    found.rows.map((row) => (row.kind === "team" ? row.team.record : row.kind)),
+    [`${mets.w}-${mets.l}`, "section"],
+  );
+});
+
+test("a club's news lists the News tab for the club and its newest stories", () => {
+  assert.deepEqual(
+    findListedPages("Mets news").rows.map((row) =>
+      row.kind === "story" ? row.story.title : row.kind === "place" && row.detail,
+    ),
+    ["Mets", "Soto's four hits power the Mets", "Lindor's homer lifts the Mets"],
+  );
 });
 
 test("the examples are three searches for games, then a player and a club's Roster", () => {

@@ -8,7 +8,8 @@
 
 import { nameTeam, renderClub, renderClubName } from "./clubs.js";
 import { renderArm } from "./games-view.js";
-import { formatShortDate, readCalendarDate, readEasternDay } from "#shared/days.js";
+import { readMlbDay } from "./dates.js";
+import { formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
 import {
@@ -21,8 +22,13 @@ import {
 import { measureSpeedRange, renderPendingPitchMix, renderPitchMix } from "./pitch-mix.js";
 import { fetchPitcher, fetchRotation } from "./pitcher-fetch.js";
 import { renderPlayerButton } from "./player-button.js";
-import { describeInningsToQualify, measureInningsProgress } from "./qualifying.js";
+import {
+  describeInningsToQualify,
+  measureInningsProgress,
+  QUALIFIED_STARTERS_NOTE,
+} from "./qualifying.js";
 import { describeGamePitching, formatInnings } from "./stat-table.js";
+import { formatStarterMeasure, STARTER_MEASURES } from "./starter-measures.js";
 import { TEAMS } from "./teams.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import {
@@ -38,13 +44,6 @@ const USUAL_REST_DAYS = 4;
 // The Worker sends a starter's last three starts, and a club's last five starters.
 const PENDING_STARTS = 3;
 const PENDING_ROTATION = 5;
-// A lower ERA and fewer walks rank first.
-const TAPE = [
-  { key: "era", label: "ERA", format: (line) => line.era, isFewestFirst: true },
-  { key: "k9", label: "K/9", format: (line) => line.k9.toFixed(1) },
-  { key: "bb9", label: "BB/9", format: (line) => line.bb9.toFixed(1), isFewestFirst: true },
-  { key: "speed", label: "Fastball mph", format: (line) => line.speed.toFixed(1) },
-];
 
 const isLoadingPitcher = (side) => Boolean(side.starter?.name) && !side.pitcher && !side.failure;
 
@@ -113,12 +112,14 @@ function renderPitcherId(side, isSectionFailed, isFirstLineShown) {
  * numbers that read the same stand level, since numbers are rounded to be shown and marking either
  * as ahead would look wrong.
  * @param {any[]} sides
- * @param {(typeof TAPE)[number]} measure
+ * @param {import("./starter-measures.js").StarterMeasure} measure
  * @returns {("better" | "worse" | "unranked" | null)[]}
  */
 function findStandings(sides, measure) {
   const shown = sides.map((side) =>
-    side.pitcher?.line?.[measure.key] == null ? null : measure.format(side.pitcher.line),
+    side.pitcher?.line?.[measure.key] == null
+      ? null
+      : formatStarterMeasure(measure, side.pitcher.line),
   );
   const ranks = sides.map((side) => side.pitcher?.ranks?.[measure.key]?.rank ?? null);
   const isCompared = ranks.every(Boolean) && shown[0] !== shown[1];
@@ -153,7 +154,7 @@ const renderPendingNumber = (side) =>
  * A starter's rank in a measure, written under his number: his rank, or where he would rank once
  * he's nearly qualified, or nothing.
  * @param {any} side
- * @param {(typeof TAPE)[number]} measure
+ * @param {import("./starter-measures.js").StarterMeasure} measure
  * @param {number | null} wouldRank
  */
 function renderRank(side, measure, wouldRank) {
@@ -166,7 +167,7 @@ function renderRank(side, measure, wouldRank) {
  * A starter's number in a measure under his side of the face-off, over his rank, bolder when it
  * ranks higher than the other starter's and dimmed when it ranks lower.
  * @param {any} side
- * @param {(typeof TAPE)[number]} measure
+ * @param {import("./starter-measures.js").StarterMeasure} measure
  * @param {"better" | "worse" | "unranked" | null} standing
  * @param {number | null} wouldRank
  */
@@ -176,7 +177,7 @@ function renderNumber(side, measure, standing, wouldRank) {
   if (line?.[measure.key] == null) return html`<span class="tape-number ${side.key}"></span>`;
   const classes = ["tape-number", side.key, standing].filter(Boolean).join(" ");
   return html`<span class="${classes}">
-    <span class="tape-number-line"><span class="tape-dot"></span><span class="tabular">${measure.format(line)}</span></span>
+    <span class="tape-number-line"><span class="tape-dot"></span><span class="tabular">${formatStarterMeasure(measure, line)}</span></span>
     ${renderRank(side, measure, wouldRank)}
   </span>`;
 }
@@ -185,7 +186,7 @@ function renderNumber(side, measure, standing, wouldRank) {
  * Every qualified starter's number in a measure, from the lowest, or null before either side's
  * numbers load.
  * @param {any[]} sides
- * @param {(typeof TAPE)[number]} measure
+ * @param {import("./starter-measures.js").StarterMeasure} measure
  * @returns {number[] | null}
  */
 const findSpread = (sides, measure) =>
@@ -195,7 +196,7 @@ const findSpread = (sides, measure) =>
 /**
  * Where a starter not ranked would rank in a measure, once he's nearly qualified, or null.
  * @param {any} side
- * @param {(typeof TAPE)[number]} measure
+ * @param {import("./starter-measures.js").StarterMeasure} measure
  * @param {number[] | null} values
  * @param {number | null} progress his share of the innings qualifying takes
  */
@@ -212,7 +213,7 @@ function findWouldRank(side, measure, values, progress) {
  * Every qualified starter's number in a measure, smoothed into a curve, with a mark for each
  * ranked starter, and a line where a starter would rank once he's nearly qualified.
  * @param {any[]} sides
- * @param {(typeof TAPE)[number]} measure
+ * @param {import("./starter-measures.js").StarterMeasure} measure
  * @param {number[] | null} values
  * @param {(number | null)[]} wouldRanks
  */
@@ -231,7 +232,7 @@ function renderCurve(sides, measure, values, wouldRanks) {
 
 /**
  * @param {any[]} sides
- * @param {(typeof TAPE)[number]} measure
+ * @param {import("./starter-measures.js").StarterMeasure} measure
  * @param {(number | null)[]} progresses each starter's share of the innings qualifying takes
  */
 function renderMeasure(sides, measure, progresses) {
@@ -257,12 +258,12 @@ const isUnranked = (side) => Boolean(side.pitcher?.line && !side.pitcher.ranks);
  * @param {(club: string) => number | null} countClubGames
  */
 function renderTapeNotes(sides, countClubGames) {
-  const fewestFirst = TAPE.filter((measure) => measure.isFewestFirst).map(
+  const fewestFirst = STARTER_MEASURES.filter((measure) => measure.isFewestFirst).map(
     (measure) => measure.label,
   );
   const rankNote =
     sides.some((side) => side.pitcher?.ranks) &&
-    html`<p class="tape-note">Rank among qualified starters</p>`;
+    html`<p class="tape-note">${QUALIFIED_STARTERS_NOTE}</p>`;
   const fewestNote = html`<p class="tape-note">${describeFewestFirst(fewestFirst)}</p>`;
   const unrankedNotes = sides
     .filter(isUnranked)
@@ -282,14 +283,14 @@ function renderTape(sides, countClubGames) {
   if (!isLoaded && !sides.some(isLoadingPitcher)) return html``;
   const notes = isLoaded
     ? renderTapeNotes(sides, countClubGames)
-    : html`<p class="tape-note">${renderPlaceholder("Rank among qualified starters")}</p>`;
+    : html`<p class="tape-note">${renderPlaceholder(QUALIFIED_STARTERS_NOTE)}</p>`;
   const progresses = sides.map((side) =>
     isUnranked(side)
       ? measureInningsProgress(side.pitcher.line.ip, countClubGames(side.club))
       : null,
   );
   return html`<div class="tape" style="${formatSideColors(sides)}">
-    ${TAPE.map((measure) => renderMeasure(sides, measure, progresses))}
+    ${STARTER_MEASURES.map((measure) => renderMeasure(sides, measure, progresses))}
     ${notes}
   </div>`;
 }
@@ -299,7 +300,7 @@ const formatStartDay = (date) => formatShortDate(readCalendarDate(date));
 const isUnderWay = (start, side, game) =>
   game.state === "live" && start.date === game.date && start.opp === side.opponent;
 
-const isToday = (date) => date === readEasternDay(Date.now()).date;
+const isToday = (date) => date === readMlbDay(Date.now());
 
 // A start still adding up says Now while he pitches, and once he's pulled, Today, like any other
 // start from today.
@@ -543,5 +544,5 @@ export async function loadSide(side, game, season) {
 }
 
 /**
- * @typedef {{ id?: string, date: string, start: string, state: string, tbd?: boolean, doubleheader?: number, away: string, home: string, starters?: object[], networks?: string[], today: boolean, series?: string, number?: number }} MatchupGame
+ * @typedef {{ id: string, date: string, start: string, state: string, tbd?: boolean, doubleheader?: number, away: string, home: string, starters?: object[], networks?: string[], today: boolean, series?: string, number?: number }} MatchupGame
  */

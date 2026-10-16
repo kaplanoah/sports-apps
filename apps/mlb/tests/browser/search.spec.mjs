@@ -262,7 +262,7 @@ test("while words are typed, two whole searches, then the club's pages in place 
   await expect(findRows(page)).toHaveText([
     "Mets next game",
     "Mets at home",
-    "New York Mets",
+    "New York Mets73-86",
     "RosterNew York Mets",
   ]);
   await expect(findGamesLine(page)).toHaveText("Mets\u2022162 games");
@@ -296,7 +296,7 @@ test("a sent club shows its pages over its games from today, soonest first, or, 
 
   await sendSearch(page, "Mets");
 
-  await expect(findRows(page)).toHaveText(["New York Mets", "RosterNew York Mets"]);
+  await expect(findRows(page)).toHaveText(["New York Mets73-86", "RosterNew York Mets"]);
   await expect(findGamesLine(page)).toHaveText("Mets\u2022162 games");
   await expect(findListedDays(page).first()).toHaveAttribute("data-day", "2026-09-24");
 
@@ -367,7 +367,9 @@ test("a club's row opens its sheet, and its Roster row the sheet on its Roster",
   await tapSearch(page);
   await sendSearch(page, "Dodgers");
 
-  await findSearch(page).getByRole("button", { name: "Los Angeles Dodgers", exact: true }).tap();
+  await findSearch(page)
+    .getByRole("button", { name: "Los Angeles Dodgers 97-61", exact: true })
+    .tap();
 
   await expect(page.locator("#teamTitle")).toContainText("Dodgers");
   await expectShown(page.locator("#teamSection"));
@@ -598,7 +600,7 @@ test("while typing, a place's half-typed word lists it first, beside a player it
     await expect(athletic).toHaveText("SettingsInclude content from The Athletic");
     await expect(athletic).toBeInViewport();
   }
-  await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*$/ })).toHaveCount(1);
+  await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*63-95\s*$/ })).toHaveCount(1);
 
   await findInput(page).fill("");
   await findInput(page).pressSequentially("los");

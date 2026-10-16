@@ -15,7 +15,7 @@ const listClubs = (standings) => standings.records.flatMap((division) => divisio
 test("every field the requests ask for has a rule", () => {
   const requests = [
     ...Object.values(MLBSnapshot.listMlbRequests(2026, Date.parse(EVENING.now))),
-    MLBSnapshot.listPitcherRequest(2026, [1]),
+    MLBSnapshot.listPitcherRequest([1]),
   ];
   const requested = requests.flatMap((request) =>
     new URL(request, MLBSnapshot.MLB_API).searchParams.get("fields").split(","),
@@ -91,17 +91,10 @@ test("no games or standings yet is fine; no dates or records at all is not", () 
   );
 });
 
-test("a starter MLB describes without his name or arm is flagged, and a first name or an ERA only once none has one", () => {
-  const withLine = (era) => ({ stats: [{ splits: [{ stat: { era } }] }] });
+test("a starter MLB describes without his name or arm is flagged, and a first name only once none has one", () => {
   const describe = (people) =>
     MLBSnapshot.findMissingFields({ ...EVENING.responses, pitchers: { people } });
-  const complete = {
-    id: 1,
-    useName: "Michael",
-    useLastName: "King",
-    pitchHand: { code: "R" },
-    ...withLine("3.21"),
-  };
+  const complete = { id: 1, useName: "Michael", useLastName: "King", pitchHand: { code: "R" } };
   const rookie = { id: 2, useName: "Payton", useLastName: "Tolle", pitchHand: { code: "L" } };
   assert.deepEqual(describe([complete, rookie]), []);
   assert.deepEqual(describe([{ ...complete, useLastName: undefined }]), ["useLastName"]);
@@ -114,5 +107,10 @@ test("a starter MLB describes without his name or arm is flagged, and a first na
     ["useName"],
   );
   assert.deepEqual(describe([{ ...complete, pitchHand: {} }]), ["pitchHand.code"]);
-  assert.deepEqual(describe([{ ...complete, ...withLine(undefined) }, rookie]), ["era"]);
+});
+
+test("the slate's starters are read without a season line, which no view shows", () => {
+  const request = new URL(MLBSnapshot.listPitcherRequest([1]), MLBSnapshot.MLB_API);
+  assert.equal(request.searchParams.get("hydrate"), null);
+  assert.ok(!request.searchParams.get("fields").split(",").includes("era"));
 });

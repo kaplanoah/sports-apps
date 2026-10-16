@@ -808,12 +808,11 @@ function addStarters(fixture, probables, people) {
   copy.responses.pitchers = { people };
   return copy;
 }
-const describePerson = (id, [useName, useLastName], hand, era) => ({
+const describePerson = (id, [useName, useLastName], hand) => ({
   id,
   ...(useName && { useName }),
   useLastName,
   pitchHand: { code: hand },
-  ...(era && { stats: [{ splits: [{ stat: { era } }] }] }),
 });
 const findSlateGame = (snapshot, away, home) =>
   [
@@ -831,25 +830,25 @@ const EVENING_STARTERS = {
   824703: [6, null], // CHC at BOS, tomorrow
 };
 const EVENING_PEOPLE = [
-  describePerson(1, ["Matthew", "Liberatore"], "L", "4.10"),
-  describePerson(2, ["Mitch", "Keller"], "R", "3.40"),
-  describePerson(3, ["Tanner", "Bibee"], "R", "3.62"),
-  describePerson(4, ["Garrett", "Crochet"], "L", "2.51"),
-  describePerson(5, [null, "King"], "R", null),
+  describePerson(1, ["Matthew", "Liberatore"], "L"),
+  describePerson(2, ["Mitch", "Keller"], "R"),
+  describePerson(3, ["Tanner", "Bibee"], "R"),
+  describePerson(4, ["Garrett", "Crochet"], "L"),
+  describePerson(5, [null, "King"], "R"),
 ];
 
-test("starters: every game listed names each club's starter, with his first name when MLB gives one, his arm, and his ERA", () => {
+test("starters: every game listed names each club's starter, with his first name when MLB gives one, and his arm", () => {
   const snapshot = buildSnapshot(addStarters(EVENING, EVENING_STARTERS, EVENING_PEOPLE));
   assert.deepEqual(findSlateGame(snapshot, "STL", "PIT").starters, [
-    { id: 1, name: "Liberatore", firstName: "Matthew", hand: "L", era: "4.10" },
-    { id: 2, name: "Keller", firstName: "Mitch", hand: "R", era: "3.40" },
+    { id: 1, name: "Liberatore", firstName: "Matthew", hand: "L" },
+    { id: 2, name: "Keller", firstName: "Mitch", hand: "R" },
   ]);
   assert.deepEqual(findSlateGame(snapshot, "CLE", "BOS").starters, [
-    { id: 3, name: "Bibee", firstName: "Tanner", hand: "R", era: "3.62" },
-    { id: 4, name: "Crochet", firstName: "Garrett", hand: "L", era: "2.51" },
+    { id: 3, name: "Bibee", firstName: "Tanner", hand: "R" },
+    { id: 4, name: "Crochet", firstName: "Garrett", hand: "L" },
   ]);
   assert.deepEqual(findSlateGame(snapshot, "SD", "LAD").starters, [
-    { id: 5, name: "King", hand: "R", era: null },
+    { id: 5, name: "King", hand: "R" },
     null,
   ]);
   assert.deepEqual(snapshot.missing, []);
@@ -865,7 +864,7 @@ test("fetchSnapshot looks up the listed games' starters in one sorted request", 
   const fixture = addStarters(EVENING, EVENING_STARTERS, EVENING_PEOPLE);
   const regularSeasonEnd = fixture.responses.season.seasons[0].regularSeasonEndDate;
   const requests = MLBSnapshot.listMlbRequests(2026, Date.parse(fixture.now), regularSeasonEnd);
-  const pitcherRequest = MLBSnapshot.listPitcherRequest(2026, [7, 1, 2, 3, 4, 5, 6]);
+  const pitcherRequest = MLBSnapshot.listPitcherRequest([7, 1, 2, 3, 4, 5, 6]);
   const byPath = {
     ...Object.fromEntries(
       Object.entries(requests).map(([key, path]) => [path, fixture.responses[key]]),
@@ -905,7 +904,7 @@ test("fetchSnapshot looks up the starters of every game the slate lists, the pos
     now,
   );
   const listed = MLBSnapshot.listStarterIds(buildSnapshot(fixture).slate);
-  assert.equal(pitcherRequest, MLBSnapshot.listPitcherRequest(2026, listed));
+  assert.equal(pitcherRequest, MLBSnapshot.listPitcherRequest(listed));
 });
 
 test("fetchSnapshot still builds the games when MLB can't name their starters", async () => {
@@ -1197,6 +1196,68 @@ const listScheduled = (snapshot) => Object.values(snapshot.schedule).flat();
 /** @param {any} schedule MLB's schedule */
 const findListing = (schedule, gamePk) =>
   schedule.dates.flatMap((day) => day.games).find((game) => game.gamePk === gamePk);
+
+test("a read without the standings once the playoffs list a club leaves out what their series decide, and keeps the rest", () => {
+  const whole = buildSnapshot(SEASON_GAMES);
+  const partial = buildSnapshot({
+    ...SEASON_GAMES,
+    responses: { ...SEASON_GAMES.responses, standings: null },
+  });
+  assert.equal(MLBSnapshot.hasClubGames(whole.slate), true);
+  assert.equal(MLBSnapshot.hasClubGames(partial.slate), false);
+  assert.deepEqual(partial.slate.today, whole.slate.today);
+  assert.deepEqual(Object.keys(partial.schedule), [
+    "2026-03",
+    "2026-04",
+    "2026-05",
+    "2026-06",
+    "2026-07",
+    "2026-08",
+  ]);
+  assert.deepEqual(partial.schedule["2026-08"], whole.schedule["2026-08"]);
+});
+
+test("a read without the standings before the playoffs list a club leaves the slate whole", () => {
+  const partial = buildSnapshot({
+    ...EVENING,
+    responses: { ...EVENING.responses, standings: null, postseason: { dates: [] } },
+  });
+  assert.equal(MLBSnapshot.hasClubGames(partial.slate), true);
+});
+
+test("each club's standings row counts its season's games, one fewer for a rainout MLB cancelled", () => {
+  const rows = Object.values(buildSnapshot(SEASON_GAMES).standings.divisions).flat();
+  const shortened = rows.filter((row) => row.scheduled !== 162);
+  assert.deepEqual(
+    shortened.map((row) => [row.id, row.scheduled, row.w + row.l]),
+    [
+      ["NYY", 161, 161],
+      ["BAL", 161, 161],
+    ],
+  );
+  assert.equal(rows.length, 30);
+  assert.equal(MLBSnapshot.countSeasonGames(shortened[0]), 161);
+  assert.equal(MLBSnapshot.countSeasonGames({}), 162);
+});
+
+test("a leader tied with a club a game short for a rainout never made up counts its magic number from that club's games", () => {
+  const fixture = structuredClone(SEASON_GAMES);
+  const east = fixture.responses.standings.records.find((record) => record.division.id === 201);
+  const set = (id, fields) =>
+    Object.assign(
+      east.teamRecords.find((record) => record.team.id === id),
+      fields,
+    );
+  set(139, { wins: 90, losses: 68, divisionChamp: false, clinchIndicator: undefined });
+  set(147, { wins: 90, losses: 68, eliminationNumber: "-" });
+  const rows = buildSnapshot(fixture).standings.divisions["AL East"];
+  const [leader, yankees] = rows;
+  assert.deepEqual(
+    [leader.id, leader.clinched, yankees.id, yankees.scheduled],
+    ["TB", false, "NYY", 161],
+  );
+  assert.equal(leader.magic, "4");
+});
 
 test("the season's whole schedule lists every game by month, from Opening Day to the World Series", () => {
   const snapshot = buildSnapshot(SEASON_GAMES);
