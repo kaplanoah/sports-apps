@@ -14,6 +14,16 @@ const SAVE_AFTER_MS = 1000;
 /** @typedef {{ at: number, text: string }} StepLine */
 
 /**
+ * Two tabs' lines as one log, each line once, oldest first, and only the last few.
+ * @param {StepLine[]} kept
+ * @param {StepLine[]} held
+ */
+function mergeLines(kept, held) {
+  const byStep = new Map([...kept, ...held].map((line) => [`${line.at} ${line.text}`, line]));
+  return [...byStep.values()].toSorted((first, second) => first.at - second.at).slice(-KEPT_LINES);
+}
+
+/**
  * A file by its own name, and the page by "page", never by an address, whose path holds the page's
  * key, so a report shared from Diagnostics can't open the page.
  * @param {string} url
@@ -115,11 +125,23 @@ export function createStepLog({ key, title, isWatched }) {
   /** @returns {StepLine[]} oldest first */
   const readLines = () => [...holdLines()];
 
-  // Lines storage won't take are lost once the page goes. A log turned off, here or in another
-  // tab, has forgotten its lines, so they never go back.
+  // Every tab holds its own lines, so a save keeps the lines other tabs saved too. A log turned
+  // off, here or in another tab, has forgotten its lines, so they never go back. Lines storage
+  // won't take are lost once the page goes.
   function saveLines() {
     clearTimeout(saveTimer);
-    if (held && isOn()) storeJson(key, held);
+    if (!held || !isOn()) return;
+    held = mergeLines(loadLines(), held);
+    storeJson(key, held);
+  }
+
+  // Another tab forgot the log, or storage was cleared.
+  /** @param {StorageEvent} event */
+  function dropForgottenLines(event) {
+    if (event.key === null || (event.key === key && event.newValue === null)) {
+      clearTimeout(saveTimer);
+      held = [];
+    }
   }
 
   function forgetLines() {
@@ -166,6 +188,7 @@ export function createStepLog({ key, title, isWatched }) {
       document.addEventListener(type, noteTouchOrClick, { capture: true, passive: true });
     document.addEventListener("visibilitychange", () => document.hidden && saveLines());
     addEventListener("pagehide", saveLines);
+    addEventListener("storage", dropForgottenLines);
   }
 
   return {

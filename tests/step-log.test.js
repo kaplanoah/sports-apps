@@ -27,12 +27,38 @@ globalThis.document = /** @type {any} */ ({
 });
 /** @type {(() => void)[]} */
 const onPageHide = [];
+/** @type {((event: any) => void)[]} */
+const onStorage = [];
 globalThis.addEventListener = /** @type {any} */ (
   (/** @type {string} */ type, /** @type {() => void} */ listener) => {
     if (type === "pagehide") onPageHide.push(listener);
+    if (type === "storage") onStorage.push(listener);
   }
 );
 const hidePage = () => onPageHide.forEach((listener) => listener());
+/**
+ * Tells every log that another tab changed storage under `key`, as a browser does.
+ * @param {string} key
+ */
+const changeInOtherTab = (key) =>
+  onStorage.forEach((listener) => listener({ key, newValue: stored.get(key) ?? null }));
+
+/**
+ * Two tabs' copies of one log, kept under `key`, each logging while `isOn` says to.
+ * @param {string} key
+ * @param {() => boolean} isOn
+ */
+function openTwoTabs(key, isOn) {
+  return [1, 2].map(() => {
+    const log = createStepLog({ key, title: "Errors", isWatched: () => false });
+    log.watchSteps(isOn, () => {});
+    return log;
+  });
+}
+
+/** @param {string} key */
+const readStoredTexts = (key) =>
+  JSON.parse(stored.get(key) ?? "[]").map((/** @type {{ text: string }} */ line) => line.text);
 
 /** A stand-in for an element, inside the part when `isInPart`. */
 class FakeElement {
@@ -139,6 +165,35 @@ test("a log turned off, which forgets its lines, never keeps them again as the p
   hidePage();
 
   assert.equal(stored.has("offLog"), false);
+});
+
+test("two tabs logging at once keep each other's lines", (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  const [first, second] = openTwoTabs("twoTabsLog", () => true);
+
+  first.noteStep("first tab's step");
+  context.mock.timers.tick(1);
+  second.noteStep("second tab's step");
+  hidePage();
+
+  assert.deepEqual(readStoredTexts("twoTabsLog"), ["first tab's step", "second tab's step"]);
+});
+
+test("a tab never keeps lines again from before another tab turned Diagnostics off and on", (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  let isOn = true;
+  const [first, second] = openTwoTabs("offInOtherTabLog", () => isOn);
+  first.noteStep("before it was off");
+
+  isOn = false;
+  second.forgetLines();
+  changeInOtherTab("offInOtherTabLog");
+  isOn = true;
+  context.mock.timers.tick(1);
+  second.noteStep("after it was on again");
+  hidePage();
+
+  assert.deepEqual(readStoredTexts("offInOtherTabLog"), ["after it was on again"]);
 });
 
 test("a log keeps its lines on the device a moment after the last one, once for a burst, as a page that crashes never hides", (context) => {
