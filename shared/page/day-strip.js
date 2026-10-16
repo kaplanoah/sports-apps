@@ -5,6 +5,7 @@ import {
   describeWhyNoSlide,
   findDayScrollTop,
   isFollowingStartDay,
+  isLedByOne,
   isRowOutOfSight,
   listShownDays,
   listStripDays,
@@ -136,7 +137,7 @@ function renderCell(day, { today, isListed, isChosen }) {
   ]
     .filter(Boolean)
     .join(" ");
-  const content = html`${label}<span class="cell-number tabular">${readDayOfMonth(day)}</span>`;
+  const content = html`${label}<span class="cell-number${isLedByOne(day) ? " leads-with-one" : ""}">${readDayOfMonth(day)}</span>`;
   return html`<button type="button" class="${classes}" data-day="${day}" aria-label="${formatLongDate(date)}"${isToday ? html` aria-current="date"` : ""}>${content}</button>`;
 }
 

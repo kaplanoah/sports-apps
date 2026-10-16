@@ -10,7 +10,7 @@ import {
 } from "./harness.mjs";
 import { createReading } from "../../worker/src/readings.js";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 
@@ -38,7 +38,9 @@ test("a computer shows no Updates box, since each device keeps its own dismissal
 test.describe("on a phone", () => {
   test.use(ON_A_PHONE);
 
-  test("rebuilds updates from the saved readings as the Worker adds to them", async ({ page }) => {
+  test("rebuilds updates from the saved readings as the Worker adds to them, each club in its line's font at 500", async ({
+    page,
+  }) => {
     const currentSnapshot = buildFixtureSnapshot(EVENING_FIXTURE);
     const earlier = createReading({ ...currentSnapshot, asOf: "2026-09-24T20:00:00Z" });
     [earlier.teams.NYY, earlier.teams.BOS] = [
@@ -79,10 +81,19 @@ test.describe("on a phone", () => {
 
     await expect(updates).toContainText(/Mets .*Phillies/);
     expect((await app.readDocument(`readings-2026/${part}`)).changes).toHaveLength(2);
-    expect(await listOffScaleText(page)).toEqual([]);
+    expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
-    await expect(updates.locator(".what").first()).toHaveCSS("font-size", "14.5px");
+    const body = await readRole(page, "body");
+    const what = updates.locator(".what").first();
+    await expect(what).toHaveCSS("font-size", `${body.size}px`);
+    await expect(what).toHaveCSS("font-weight", String(body.weight - 50));
+    const team = what.locator("b").first();
+    await expect(team).toHaveCSS(
+      "font-family",
+      await what.evaluate((element) => getComputedStyle(element).fontFamily),
+    );
+    await expect(team).toHaveCSS("font-weight", String(body.weight + 100));
   });
 
   test("a release note shows in the Updates box, headed New in the app, until it's dismissed", async ({

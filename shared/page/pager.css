@@ -57,10 +57,10 @@
 }
 .pager-tabs button {
   font: inherit;
-  font-size: var(--size-small);
-  font-weight: 500;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   border: 0;
   border-radius: var(--radius-control);
   background-color: transparent;

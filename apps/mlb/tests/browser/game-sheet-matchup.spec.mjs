@@ -17,7 +17,7 @@ import {
 } from "./open-game-sheet.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -195,7 +195,7 @@ test("a starter the Worker can't describe says so under his club, beside the oth
   const retry = sheet.locator(".pitcher-id.home .retry-side");
   await expect(retry.locator(".retry-message")).toHaveText("Couldn't load");
   await expect(sheet.locator(".scout")).toHaveCount(1);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -243,7 +243,7 @@ test("with neither starter's numbers loaded, the Matchup says why once, and read
   await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
   await expect(block.locator(".retry-next")).toHaveText("Try again to load starters' numbers");
   await expect(sheet.locator(".retry-side")).toHaveCount(0);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -338,7 +338,7 @@ test("a club whose last starters didn't load reads them again on a tap on Try ag
   const sheet = await openTbd(page, rotations);
   const mariners = sheet.locator(".scout").nth(1);
   await expect(mariners.locator(".retry-message")).toHaveText("Couldn't load who started lately");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 

@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -39,14 +40,27 @@ test.describe("on a phone", () => {
   test("a release note's lines sit 1.3 apart", async ({ page }) => {
     await serveReleaseNote(page);
     await openApp(page, { isShowingUpdates: true });
-    await expect(page.locator("#updates .updates-notes .what")).toHaveCSS("line-height", "20.8px");
+    const body = await readRole(page, "body");
+    await expect(page.locator("#updates .updates-notes .what")).toHaveCSS(
+      "line-height",
+      `${body.size * 1.3}px`,
+    );
   });
 
-  test("a final's team names are set in Barlow Condensed at medium", async ({ page }) => {
+  test("a final's team names are set in their sentence's font, at 500, two steps over Body", async ({
+    page,
+  }) => {
     await openApp(page, { isShowingUpdates: true });
-    const team = page.locator("#updates .updates-list .what b").first();
-    await expect(team).toHaveCSS("font-family", /^"Barlow Condensed"/);
-    await expect(team).toHaveCSS("font-weight", "500");
+    const what = page.locator("#updates .updates-list .what").first();
+    const team = what.locator("b").first();
+    await expect(team).toHaveCSS(
+      "font-family",
+      await what.evaluate((element) => getComputedStyle(element).fontFamily),
+    );
+    await expect(team).toHaveCSS(
+      "font-weight",
+      String((await readRole(page, "body")).weight + 200),
+    );
   });
 
   test("the Updates box opens on the latest day's playoff finals, newest first, until it's dismissed, and then lists only what's new", async ({
@@ -182,7 +196,7 @@ test.describe("on a phone, in full motion", () => {
 test.describe("on a phone, with a release note out", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test("the note sits under the finals, headed New in the app, its word in bold a step heavier than its text in the same font, unlike the finals' team names, and closes with them", async ({
+  test("the note sits under the finals, headed New in the app, its word in bold at 500, over its text at Body in the same font, as the finals' team names are, and closes with them", async ({
     page,
   }) => {
     await serveReleaseNote(page);
@@ -195,11 +209,16 @@ test.describe("on a phone, with a release note out", () => {
     ]);
     await expect(updates.locator(".updates-notes .what")).toHaveText("Tap a game, then Channels.");
     const bold = updates.locator(".updates-notes .what b");
-    await expect(bold).toHaveCSS("font-weight", "500");
-    await expect(bold).not.toHaveCSS("font-family", /Condensed/);
+    await expect(bold).toHaveCSS(
+      "font-weight",
+      String((await readRole(page, "body")).weight + 200),
+    );
+    const font = await bold.evaluate((element) => getComputedStyle(element).fontFamily);
+    await expect(updates.locator(".updates-notes .what")).toHaveCSS("font-family", font);
+    await expect(updates.locator(".updates-list .what b").first()).toHaveCSS("font-family", font);
     await expect(updates.locator(".updates-list .what b").first()).toHaveCSS(
-      "font-family",
-      /Barlow Condensed/,
+      "font-weight",
+      String((await readRole(page, "body")).weight + 200),
     );
     const finals = await updates.locator(".updates-list").first().boundingBox();
     const notes = await updates.locator(".updates-notes").boundingBox();

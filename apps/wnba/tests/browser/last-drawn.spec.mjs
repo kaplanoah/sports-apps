@@ -45,6 +45,36 @@ test("a saved part the page doesn't draw whole keeps the markup the page has", a
   await expect(page.locator("#view-bracket")).not.toContainText("Old");
 });
 
+test("a reload puts back the colors a part's code gave it, but nothing else in its style, before its code arrives", async ({
+  page,
+}) => {
+  await openApp(page);
+  await expect(findFinalWinner(page)).toContainText("Liberty");
+  await storeBeforeLoad(page, {
+    lastDrawn: JSON.stringify({
+      gameBody: {
+        markup: "",
+        hidden: false,
+        style: "--away-light: #123456; position: relative; top: 56px; --home-light: #654321;",
+      },
+    }),
+  });
+  const release = await holdPageCode(page);
+
+  await page.reload({ waitUntil: "commit" });
+
+  const body = page.locator("#gameBody");
+  await expect(body).toHaveCSS("top", "auto");
+  expect(
+    await body.evaluate((element) =>
+      ["--away-light", "--home-light"].map((name) =>
+        getComputedStyle(element).getPropertyValue(name).trim(),
+      ),
+    ),
+  ).toEqual(["#123456", "#654321"]);
+  release();
+});
+
 test("saved markup that can't be read leaves the page to open as it would", async ({ page }) => {
   await storeBeforeLoad(page, { lastDrawn: "{not json", lastTab: "games" });
 

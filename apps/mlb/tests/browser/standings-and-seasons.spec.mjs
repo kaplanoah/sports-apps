@@ -12,7 +12,7 @@ import {
   buildSeasonRecord,
 } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
-import { measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
+import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 
@@ -156,7 +156,12 @@ test("switching to 2025 shows the finished bracket and its champion from its rec
 
   await chooseSeason(page, "2025");
 
-  await expect(page.locator("#bracketWrap")).toContainText("Dodgers win the World Series");
+  const worldSeries = page.locator('#bracketWrap .box[data-round="WS"]');
+  await expect(worldSeries.locator(".matchup-row.winner")).toContainText("Dodgers");
+  await expect(worldSeries.locator(".card-note")).toHaveCount(0);
+  const championships = page.locator('#bracketWrap .box[data-round="CS"]');
+  await expect(championships).toHaveCount(2);
+  await expect(championships.locator(".card-note")).toHaveCount(0);
   await expect(page.locator("#updates")).toBeHidden();
   expect(app.countSnapshotRequests()).toBe(0);
 });
@@ -277,14 +282,14 @@ const buildEmptySeasonSnapshot = (season, springStart) => ({
   slate: null,
 });
 
-test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-glance", async ({
+test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's numbers", async ({
   page,
 }) => {
   await openApp(page);
   const picker = page.locator("#yearSel");
   await expect(picker).toHaveCSS("font-size", "16px");
-  const widths = await measureFieldFace(picker, "--size-glance");
-  expect(widths.field).toBeCloseTo(widths.step, 0);
+  const widths = await measureFieldFace(picker, "--type-detail-size", "var(--numbers)");
+  expect(widths.field).toBeCloseTo(widths.role, 0);
 });
 
 test("the page shows the season the store says is current", async ({ page }) => {

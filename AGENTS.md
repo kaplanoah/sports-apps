@@ -80,8 +80,10 @@
 - Before a test changes what the page reads next, wait until the page shows its last read, or the change races the read still on its way.
 - A theme changes only colors, so each view lays out the same in each of an app's themes.
   A theme may also change a weight where its font keeps its width at every weight,
-  as MLB's Ball sets each play that scored in a game's Runs a step heavier in Chivo Mono,
-  to stand out from the lighter runners who got on before it as much as it does in Night Game.
+  as MLB's Ball sets a final's losing score a step lighter in Chivo Mono,
+  to stand apart from the winner as much as its dim ink does in Night Game,
+  and may lift a part a pixel or two where its colors look off center otherwise,
+  as MLB's bracket chips and their digits sit as each theme's set them by eye, which the root's `tests/browser/theme-layout.mjs` leaves out.
   The WNBA's `tests/browser/themes.spec.mjs` checks every view in Walnut against Maple,
   on a phone and a wide screen, with the root's `tests/browser/theme-layout.mjs`; a new view joins its list.
 - Sheets look alike.
@@ -271,22 +273,25 @@
 - Build page markup with the `html` template from `shared/page/html.js` and write it with `setHtml`.
   Both escape stored and fetched text, and lint rejects any other `innerHTML` write.
   `setHtml` changes only the nodes that differ from what the element shows, so a redraw keeps the rest as it is.
-- Set text on the type scale in `shared/page/type.css`: sentences read through at `--size-read` (16px),
-  short facts at `--size-glance` (14px), and capital labels and nothing smaller at `--size-small` (13px),
-  but for settings, which set a setting's name at `--size-setting` (17px) and its note at `--size-setting-note` (15px), a step up, as the phone's own Settings do.
-  A size half a pixel over a step, like the WNBA roster's player numbers at 14.5px, is on the scale too.
-  Weights are 400 to 600 under 24px, at least 500 for capitals under 16px, and 300 to 700 from 24px, and Barlow Condensed never goes over 600.
-  Sizes and weights are Barlow's: a font that looks larger or smaller than Barlow at the same size gets a `size-adjust` on its `@font-face`,
-  as the WNBA's Barlow Condensed does at 108% and MLB's Chivo Mono at 94%,
-  and Chivo Mono, which reads heavier, sets each weight 50 under Barlow's.
-  A font that still looks larger or smaller at some step sets its own size for it, matched by eye:
-  MLB sets Chivo Mono's steps in its `:root` (14.5, 13, and 13px,
-  and settings' 15.5 and 14px), and the WNBA's Barlow Condensed takes `--size-read-condensed` (16.5px) where it sits in a sentence,
-  and its player sheet's Out box sets why she is out at `--size-out-reason` (15px), a step over a short fact, so it leads.
-  A field's text is at `--size-field` (16px), since an iPhone zooms in on a smaller field when it's tapped,
-  in a copy of its font whose `size-adjust` draws it at its step,
-  as MLB's search and both apps' Season pickers do, never a viewport that stops a pinch.
-  The root's `tests/browser/type-scale.mjs` lists every shown text off the scale, and each app's browser tests check every view with it.
+- Set every text in a type role from `shared/page/type.css`, whose top comment lists each role and what it sets,
+  like `title` for the app's name, `body` for sentences, `detail` for short facts, and `label` for capitals.
+  Each app's `:root` sets each role's size and weight for its own fonts, as `--type-<role>-size` and `--type-<role>-weight`,
+  matched by eye so a role looks as big and as heavy in every app, and a new league sets its own.
+  A rule that sets a role's size sets its weight from the same role,
+  or a step from it where its text leads or recedes within the role, as `calc(var(--type-label-weight) - 100)`,
+  and a heading's or label's letter spacing from `--type-heading-tracking` or `--type-label-tracking`,
+  and every line height set by its text's size is a share of the app's `--leading`,
+  which MLB's Libre Franklin sets a little apart, while one in pixels keeps its pixels.
+  The root's `tests/type-roles.test.js` checks the stylesheets for each.
+  The WNBA sets its words in Barlow and its teams, numbers, and the app's name in Barlow Condensed,
+  which draws 8% larger to look as big as Barlow,
+  and MLB sets its words in Libre Franklin and its numbers in Chivo Mono,
+  which draws at 97.48% to look as big as Libre Franklin's words.
+  A field's text is at `--type-field-size` (16px), since an iPhone zooms in on a smaller field when it's tapped,
+  in a copy of its font whose `size-adjust` draws it at its role's size,
+  as both apps' searches and Season pickers do, never a viewport that stops a pinch.
+  The root's `tests/browser/type-roles.mjs` lists every shown text off its app's role sizes,
+  or in a weight its font has no face for, and each app's browser tests check every view with it.
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pager's pill, and `--radius-sheet` for a sheet on a wide screen,
@@ -506,7 +511,7 @@
   the News tab, its cards and the outlets each device reads, and its switches,
   from the cards a league's news job keeps,
   in `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through `package.json`'s imports.
-  Its `type.css` holds the type scale's sizes, `chrome.css` styles the tab bar,
+  Its `type.css` lists the type roles, `chrome.css` styles the tab bar,
   settings sheet and its Diagnostics, round dots, Home Screen bar and box,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,
   `pager.css` a pager's pill and lists, `day-strip.css` a season's list of days and its strip,
@@ -661,7 +666,7 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
   with a note out by the box's last dismissal dismissed (`listNotesToShow` in `shared/page/updates.js`).
   Add a note only when the user asks for one, whatever the PR's type, in the words they approve, with an `at` just before the PR merges.
   A word that should stand out, like a button's name, goes in `<b>`,
-  in a note built with the `html` template, which the Updates box sets a step heavier than the note's text.
+  in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.
 - Each app has a beta channel: a second Worker, `<app>-app-beta`,
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
   key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`).
@@ -714,6 +719,8 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
   Nothing a change logs or posts where the public can read it, like a workflow's log or an issue,
   carries a page's address, its key, an access code, or the account's id either,
   masked as `hideAddress` in `worker/check-page.mjs` masks a check's reason.
+  Nor does a Diagnostics report, which a viewer shares wherever they like:
+  each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
   Reviewing a change, check what it commits, logs, and posts for any of these.
 - The Cloudflare token lives only in the cloud environment's API credentials and the repo's `production` GitHub environment.
   Never ask for it in chat or put it in environment variables, code, or commits.
@@ -876,8 +883,8 @@ When a step says to go back to an earlier step, continue in order from there.
 - Simple beats configurable.
   Pick good defaults rather than adding settings.
 - Readable before elegant.
-  Text that's too small, light, or dim is a bug: check it against the type scale,
-  and against WCAG's AA contrast, 4.5 to 1, which the root's `tests/browser/contrast.mjs` checks wherever the browser tests check the type scale,
+  Text that's too small, light, or dim is a bug: check it against its type role,
+  and against WCAG's AA contrast, 4.5 to 1, which the root's `tests/browser/contrast.mjs` checks wherever the browser tests check the type roles,
   once nothing is pressed or mid-transition, so a test of a pressed or hovered row's colors measures that on purpose,
   and the WNBA's `tests/browser/themes.spec.mjs` in both its themes.
 - Things shown side by side for comparison share one scale, like two pitchers' speed lines.
@@ -896,7 +903,7 @@ or a setting's note, ends without a period; text of two or more sentences,
 like a release note or a message that says what to do, ends with one.
 An outlet's own words keep their punctuation, in an element marked `data-quoted`.
 The root's `tests/browser/stray-periods.mjs` lists any shown text that breaks this,
-and each app's browser tests check every view with it, wherever they check the type scale.
+and each app's browser tests check every view with it, wherever they check the type roles.
 
 On the pages, write how fans talk, not a league's official or press words:
 the playoffs in every app, never the postseason or a berth,
@@ -905,4 +912,4 @@ Each app's `page/js/league-words.js` holds what its fans call the things that di
 which shared code reads instead of typing its own (`shared/page/league-words.js`),
 and the words its pages never show, like another sport's.
 The root's `tests/browser/never-shown-words.mjs` lists any shown text that holds one,
-and each app's `page.spec.mjs` checks every view with it, wherever it checks the type scale.
+and each app's `page.spec.mjs` checks every view with it, wherever it checks the type roles.

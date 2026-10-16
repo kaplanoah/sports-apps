@@ -15,6 +15,13 @@
     name="description"
     content="Follow the MLB season: the standings, the games and their starters, the playoff bracket, the news, and your ranking of who you want to win the World Series."
   />
+  <link
+    rel="preload"
+    href="fonts/libre-franklin-latin.woff2"
+    as="font"
+    type="font/woff2"
+    crossorigin
+  />
   <link rel="preload" href="fonts/chivo-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="shared/type.css" />
   <link rel="stylesheet" href="shared/chrome.css" />
@@ -44,7 +51,10 @@
   <div class="home-screen-bar" id="homeScreenBar" hidden></div>
   <header class="top">
     <div class="title-row">
-      <h1>MLB <span class="season-year" id="titleYear" hidden data-last-drawn></span></h1>
+      <h1>
+        <span class="title-letter">M</span><span class="title-letter">L</span>B
+        <span class="season-year" id="titleYear" hidden data-last-drawn></span>
+      </h1>
     </div>
     <div class="head-right">
       <div class="stamp-wrap">

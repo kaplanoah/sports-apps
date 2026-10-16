@@ -5,8 +5,8 @@ import { nameTeam } from "./series.js";
 // the home team's below it, in the order the box score above it lists them, after each basket, on
 // a tile with each team named just outside its own half and each side's biggest lead marked, each
 // side in its team's color, which the game sheet sets. A live game's line stops at its latest
-// basket. The chart's words are laid over the drawing rather than drawn in it, so they keep the
-// type scale's size however wide it shows.
+// basket. The chart's words are laid over the drawing rather than drawn in it, so they keep their
+// type role's size however wide it shows.
 
 /** @typedef {{ periods: number, isOver: boolean, scores: [number, number, number][] }} Lead each score's seconds from tip-off, then the away and home scores */
 

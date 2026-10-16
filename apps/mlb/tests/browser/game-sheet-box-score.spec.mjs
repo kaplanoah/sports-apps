@@ -7,10 +7,11 @@ import {
   BROADCASTS_FIXTURE,
   buildFixtureSnapshot,
   matchPath,
+  readColor,
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole, readType } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
@@ -39,12 +40,18 @@ async function openOctoberGame(page, game, { boxScores = BOX_SCORES, store = {} 
   return { app, sheet: page.locator("#gameSheet") };
 }
 
-test("a final's Game section shows its innings, then each club's batters and pitchers, below its row", async ({
+test("a final's Game section shows its innings, then each club's batters and pitchers under its name as a team's, in dim ink, below its row", async ({
   page,
 }) => {
   const { sheet } = await openOctoberGame(page, "Brewers at Padres, Tue, Oct 6");
   const parts = sheet.locator("#gameBody .sheet-part-head h3");
   await expect(parts).toHaveText(["Innings", "Brewers", "Padres"]);
+  const club = parts.nth(1).locator(".club");
+  const team = await readRole(page, "team");
+  await expect(club).toHaveCSS("font-size", `${team.size}px`);
+  await expect(club).toHaveCSS("font-weight", String(team.weight));
+  await expect(club).toHaveCSS("text-transform", "none");
+  await expect(club).toHaveCSS("color", await readColor(page, "--ink-dim"));
   const innings = sheet.locator(".line-score tbody tr");
   await expect(innings.nth(1).locator("td")).toHaveText([
     "SD",
@@ -90,7 +97,7 @@ test("a final's Game section shows its innings, then each club's batters and pit
     .locator(".box-wrap")
     .evaluateAll((wraps) => wraps.filter((wrap) => wrap.scrollWidth > wrap.clientWidth).length);
   expect(wideTables).toBe(0);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });
@@ -279,7 +286,7 @@ async function openHighlights(page) {
   return { app, sheet, body };
 }
 
-test("a final's Highlights show MLB's recap video, MLB.com's story, and each play with its inning and the score after it", async ({
+test("a final's Highlights show MLB's recap video, its title as heavy as each play's, MLB.com's story, and each play with its inning and the score after it", async ({
   page,
 }) => {
   const { body } = await openHighlights(page);
@@ -297,16 +304,19 @@ test("a final's Highlights show MLB's recap video, MLB.com's story, and each pla
   );
   const rows = body.locator(".clip-row");
   await expect(rows.first().locator(".clip-title")).toHaveText("Jackson Merrill's sliding catch");
+  expect((await readType(body.locator(".clip-feature .clip-title"))).weight).toBe(
+    (await readType(rows.first().locator(".clip-title"))).weight,
+  );
   await expect(rows.first().locator(".clip-meta")).toHaveText("Top 1st");
   await expect(rows.nth(4).locator(".clip-meta")).toHaveText("Bot 3rd\u2022MIL 0, SD 1");
   await expect(rows.nth(4).locator(".clip-meta b")).toHaveText("SD 1");
   await expect(rows.nth(6).locator(".clip-meta b")).toHaveText("MIL 1");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });
 
-test("a final's plays sit 13px apart with no line between them, each still 128px wide with its length at 13px and its play button centered", async ({
+test("a final's plays sit 13px apart with no line between them, each still 128px wide with its length at the caption's size and its play button centered", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -332,10 +342,11 @@ test("a final's plays sit 13px apart with no line between them, each still 128px
       };
     }),
   );
+  const caption = await readRole(page, "caption");
   for (const [index, row] of rows.entries()) {
     expect(row.line).toBe(true);
     expect(row.stillWidth).toBe(128);
-    expect(row.lengthSize).toBe("13px");
+    expect(row.lengthSize).toBe(`${caption.size}px`);
     expect(row.glyphOffset).toBeCloseTo(-0.5, 1);
     if (index > 0) expect(row.top - rows[index - 1].bottom).toBeCloseTo(13, 0);
   }

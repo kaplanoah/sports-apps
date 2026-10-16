@@ -1,4 +1,5 @@
 import { test, expect, openApp, openSettings } from "./harness.mjs";
+import { readType } from "../../../../tests/browser/type-roles.mjs";
 
 const IPHONE_AGENT =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -29,7 +30,7 @@ test.describe("on an iPhone, in the browser", () => {
     userAgent: IPHONE_AGENT,
   });
 
-  test("a bar across the top says how to add the page to the Home Screen, and so do the settings, above the ranking", async ({
+  test("a bar across the top says how to add the page to the Home Screen, and so do the settings, above the ranking, its title set as the bar's", async ({
     page,
   }) => {
     await openApp(page);
@@ -44,6 +45,9 @@ test.describe("on an iPhone, in the browser", () => {
     const { belowSettings, aboveRanking } = await measureTip(page);
     expect(belowSettings).toBeGreaterThan(0);
     expect(aboveRanking).toBeGreaterThan(0);
+    expect(await readType(page.locator("#homeScreenTip .home-screen-title"))).toEqual(
+      await readType(page.locator("#homeScreenBar .home-screen-title")),
+    );
   });
 });
 

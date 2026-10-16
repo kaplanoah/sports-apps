@@ -13,6 +13,7 @@
  *   --strip-action         Today, the way back to the start day
  *   --strip-edge-inset     on a wide screen, the month's and Today's way in from the view's edges
  *   --day-gap              the gap between days, kept above a day brought to the top
+ *   --date-one-shift       how far right of its box's middle a 1's stem sits in the dates' font
  */
 
 /* The page and the view fill the screen, and the list takes what's left under the bar. A phone on
@@ -35,16 +36,19 @@
     height: calc(100% + env(safe-area-inset-top) + 1px);
   }
 }
+/* The view and its list grow from nothing into the room left, rather than shrink from the whole
+   season's height, which rounds to a slightly different height as the list's days draw and would
+   resize the list for no change on the screen. */
 .view.active:has(> .day-view) {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
 }
 .day-view {
   --reach-left: calc(var(--page-gutter) + 1px);
   --reach-right: var(--page-gutter);
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
   width: 100%;
   max-width: 560px;
@@ -76,11 +80,11 @@
 }
 .strip-month {
   margin: 0;
-  font-size: var(--size-small);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--strip-month);
 }
 /* Today looks the same wherever the list is, so it reads as a shortcut, never as where the list
@@ -94,8 +98,8 @@
   border: 0;
   background: none;
   font: inherit;
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
   letter-spacing: 0.01em;
   color: var(--strip-action);
   cursor: pointer;
@@ -144,20 +148,20 @@
 }
 .cell-name,
 .cell-month {
-  font-size: var(--size-small);
-  font-weight: 500;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
+  line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .cell-month {
   color: var(--strip-month);
 }
 .cell-number {
-  font-size: var(--size-read);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-body-size);
+  font-weight: calc(var(--type-body-weight) + 200);
+  line-height: var(--leading);
 }
 /* A day without games is quieter: as dim as a weekday, the dimmest a date can be and still read,
    and a step lighter. */
@@ -165,10 +169,16 @@
   color: var(--ink-dim);
 }
 .day-cell.is-quiet .cell-number {
-  font-weight: 500;
+  font-weight: calc(var(--type-body-weight) + 100);
 }
 .day-cell.is-today .cell-number {
   color: var(--strip-today);
+}
+/* The eye centers a 1 on its stem rather than its box, so a date that starts with one moves left
+   until the stem would sit at the middle, beside its games as in the strip. */
+:is(.day-number, .cell-number).leads-with-one {
+  position: relative;
+  left: calc(-1 * var(--date-one-shift));
 }
 /* The chosen day's box. While the list's scroll slides the dates behind it (strip-slide.js), the box
    is its own, over the strip, the chosen date looks like any other, and the box shows a copy of
@@ -227,7 +237,7 @@
    scroll anchor, so the list's code keeps the day at its top itself, in every browser. */
 .day-list {
   position: relative;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
   padding: var(--day-gap) var(--reach-right) max(48px, var(--end-room, 0px)) var(--reach-left);

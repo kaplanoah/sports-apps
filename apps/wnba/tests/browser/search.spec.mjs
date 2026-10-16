@@ -12,7 +12,7 @@ import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 
 // What Search finds and opens, and how it comes and goes, on a phone.
@@ -63,12 +63,12 @@ async function leaveForTwoMinutes(page) {
 }
 
 /**
- * Checks that what the search shows keeps to the type scale and its periods, and that every tap
+ * Checks that what the search shows keeps to its type roles and its periods, and that every tap
  * lands on a button.
  * @param {import("@playwright/test").Page} page
  */
 async function expectReadableSearch(page) {
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
 }
@@ -592,7 +592,7 @@ test("a search put back from an earlier release names its field as this one does
   await expect(findInput(page)).toHaveAttribute("aria-label", "Teams, players, and games");
 });
 
-test("every search state keeps to the type scale and its periods, and every tap lands on a button", async ({
+test("every search state keeps to its type roles and its periods, and every tap lands on a button", async ({
   page,
 }) => {
   await openSeasonGames(page);

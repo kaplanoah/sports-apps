@@ -153,7 +153,9 @@
   padding-inline: 18px;
 }
 .sheet-content .sheet-head h2 {
-  font-size: 1rem;
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  letter-spacing: var(--type-heading-tracking);
 }
 /* A sheet's sections are named by pills under its title. */
 .sheet-top .pager-tabs {
@@ -162,7 +164,8 @@
 
 .sheet-note {
   margin: 0;
-  font-size: var(--size-small);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   white-space: nowrap;
 }
@@ -178,14 +181,15 @@
   gap: 10px;
 }
 .sheet-part-head h3 {
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--sheet-part-head);
 }
-.sheet-part-head span {
-  font-size: var(--size-glance);
+.sheet-part-head > span {
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   text-align: right;
   color: var(--ink-dim);
 }
@@ -195,11 +199,11 @@
   height: 19px;
   padding: 0 7px;
   border-radius: var(--radius-chip);
-  font-size: var(--size-small);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   white-space: nowrap;
 }
 
@@ -214,14 +218,14 @@
   column-gap: 8px;
 }
 .tape-label {
-  font-size: var(--size-small);
-  line-height: 1.25;
+  font-size: var(--type-label-size);
+  line-height: calc(1.25 * var(--leading));
   text-wrap: balance;
   text-align: center;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
-  font-weight: 500;
+  font-weight: calc(var(--type-label-weight) - 100);
 }
 .tape-side {
   display: grid;
@@ -235,15 +239,15 @@
   display: flex;
   align-items: baseline;
   gap: 5px;
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
 }
 .tape-side.away .tape-value {
   flex-direction: row-reverse;
 }
 .tape-detail {
-  font-size: 0.85em;
-  font-weight: 400;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 .tape-bar {
@@ -271,7 +275,8 @@
 }
 .tape-note {
   margin: 0;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   text-align: center;
   color: var(--ink-dim);
   text-wrap: balance;
@@ -329,7 +334,8 @@
   justify-content: center;
   align-items: center;
   gap: 8px var(--network-gap);
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-mid);
 }
 .networks-pending {
