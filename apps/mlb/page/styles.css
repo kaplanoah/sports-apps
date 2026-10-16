@@ -158,7 +158,10 @@
   --radius-card: 3px;
   --radius-chip: 3px;
   --radius-control: 6px;
+  --radius-tabs: 8px;
   --radius-sheet: 12px;
+  --control-height: 36px;
+  --control-room: 14px;
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23625a52' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-tint: var(--card);
   --tab-bar-edge: var(--card-border);
@@ -168,6 +171,13 @@
   --page-gutter: 18px;
   --header-gap: 13px;
   --pager-chosen-edge: transparent;
+  /* The open tab is raised in its track, as iOS draws a segmented control, so it reads apart from a
+     pill's filled name. */
+  --tabs-track: var(--divider);
+  --tabs-track-edge: var(--card-border);
+  --tabs-chosen: var(--card);
+  --tabs-chosen-edge: var(--card-border);
+  --tabs-chosen-ink: var(--ink);
   --held-bar-fade: 18px;
   --held-bar-line: transparent;
   --pager-label: var(--ink-dim);
@@ -2659,14 +2669,10 @@ body.kbd .player-open:focus {
 }
 .read-button {
   gap: 7px;
-  height: 28px;
-  padding: 0 10px 0 12px;
+  height: var(--control-height);
+  padding: 0 calc(var(--control-room) - 2px) 0 var(--control-room);
   background: var(--card);
   box-shadow: inset 0 0 0 1px var(--card-border);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
   color: var(--ink);
 }
 .read-arrow {
@@ -2680,20 +2686,16 @@ body.kbd .player-open:focus {
   gap: 6px;
 }
 
-/* Try again, outlined in capitals like Diagnostics' buttons, and filled gold where it stands alone
-   in place of what didn't load. */
+/* Try again, outlined like Read, and filled gold where it stands alone in place of what didn't
+   load. */
 .retry-button {
   gap: 7px;
-  height: 28px;
-  padding: 0 12px;
+  height: var(--control-height);
+  padding: 0 var(--control-room);
   border-radius: var(--radius-control);
   background: var(--card);
   box-shadow: inset 0 0 0 1px var(--card-border);
   color: var(--ink);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  text-transform: uppercase;
-  letter-spacing: var(--type-label-tracking);
 }
 .retry-button .retry-icon {
   width: 14px;
@@ -2701,8 +2703,6 @@ body.kbd .player-open:focus {
   color: var(--highlight);
 }
 .retry-button.filled {
-  height: 32px;
-  padding: 0 16px;
   background: var(--accent);
   box-shadow: none;
   color: var(--accent-ink);
@@ -2720,10 +2720,21 @@ body.kbd .player-open:focus {
   line-height: calc(1.5 * var(--leading));
 }
 
-/* Capital labels, the gate, and a club's sheet in the shared styles, each a step from its role of
-   MLB's own. */
+/* Every button's words, from a wide screen's tabs to the gate's Open, in capitals at the body's
+   size. */
+.tab-list button,
+nav.tabs .search-tab,
 .pager-tabs button,
-.open-button,
+.read-button,
+.retry-button,
+.open-button {
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  text-transform: uppercase;
+  letter-spacing: var(--type-label-tracking);
+}
+
+/* Capital labels and a club's sheet in the shared styles, each a step from its role of MLB's own. */
 .updates-count {
   font-weight: var(--type-label-weight);
 }

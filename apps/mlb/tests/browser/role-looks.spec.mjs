@@ -35,6 +35,7 @@ const ROLE_LOOKS = {
 // A second look a role keeps for some of its text, and which text and why.
 const SECOND_LOOKS = {
   "body: Chivo Mono": "a game's start, and Postponed or Time TBD in its place",
+  "body: Libre Franklin, capitals": "a button's words, in capitals as every MLB button's are",
   "detail: Chivo Mono": "numbers, and the letters set among them, like a game card's W or L",
   "label: Chivo Mono, capitals": "numbers",
   "caption: Chivo Mono": "numbers, and the letters set among them, like a starter's arm",

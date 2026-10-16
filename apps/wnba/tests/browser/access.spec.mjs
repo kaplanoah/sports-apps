@@ -3,6 +3,9 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
+import { readTokenColor } from "./theme.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 const findCodeField = (page) => page.getByRole("textbox", { name: "Access code" });
@@ -144,12 +147,12 @@ test("the code field shows it's ready with its cursor, not an outline", async ({
   await expect(findCodeField(page)).toHaveCSS("outline-style", "none");
 });
 
-test("the gate's heading is set as a sheet's title, and Open as the app's other buttons", async ({
+test("the gate's heading is set as a sheet's title, Open as the app's other buttons, and the code field raised inside an outlined button's edge", async ({
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   const heading = await readRole(page, "heading");
-  const detail = await readRole(page, "detail");
+  const setting = await readRole(page, "setting");
   await expect(findGate(page)).toHaveCSS("font-family", /^Barlow,/);
   await expect(findGate(page)).toHaveCSS("font-size", `${heading.size}px`);
   await expect(findGate(page)).toHaveCSS("font-weight", String(heading.weight));
@@ -161,22 +164,28 @@ test("the gate's heading is set as a sheet's title, and Open as the app's other 
 
   const open = page.getByRole("button", { name: "Open" });
   await expect(open).toHaveCSS("font-family", /^Barlow,/);
-  await expect(open).toHaveCSS("font-size", `${detail.size}px`);
-  await expect(open).toHaveCSS("font-weight", String(detail.weight + 100));
+  await expect(open).toHaveCSS("font-size", `${setting.size}px`);
+  await expect(open).toHaveCSS("font-weight", String(setting.weight));
   await expect(open).toHaveCSS("text-transform", "none");
+  await expect(open).toHaveCSS("height", "36px");
+  const box = /** @type {{ y: number, height: number }} */ (await open.boundingBox());
+  expect((await readCapitals(open)).middle - (box.y + box.height / 2)).toBeCloseTo(0, 0);
+
+  const field = findCodeField(page);
+  await expect(field).toHaveCSS("background-color", await readTokenColor(page, "--raised"));
+  await expect(field).toHaveCSS(
+    "box-shadow",
+    `${await readTokenColor(page, "--edge")} 0px 0px 0px 1px inset`,
+  );
 });
 
-test("the gate's code draws in light Barlow Condensed, and its faces are loaded up front", async ({
+test("the gate's code draws in light Barlow Condensed, and every face it draws is loaded up front", async ({
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expect(findCodeField(page)).toHaveCSS("font-family", /^"Barlow Condensed"/);
   await expect(findCodeField(page)).toHaveCSS("font-weight", "300");
-
-  const preloaded = await page
-    .locator('link[rel="preload"][as="font"]')
-    .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
-  expect(preloaded.sort()).toEqual(["fonts/barlow-500.woff2", "fonts/barlow-condensed-300.woff2"]);
+  expect(await listFontsNotPreloaded(page)).toEqual([]);
 });
 
 /**

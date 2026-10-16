@@ -126,6 +126,10 @@
   text-decoration: none;
   white-space: nowrap;
 }
+/* The Read button's words center on their capitals, as every button's do. */
+.read-label {
+  text-box: trim-both cap alphabetic;
+}
 @media (hover: hover) {
   .news-title a,
   .news-more-title a,

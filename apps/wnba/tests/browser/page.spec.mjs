@@ -1,5 +1,6 @@
 import { test, expect, keepHighlights, openApp, openGameSheet, matchPath } from "./harness.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import {
   listTapFlashes,
   listTapsOffButtons,
@@ -275,22 +276,6 @@ const sumChannels = (color) =>
     .map(Number)
     .reduce((sum, channel) => sum + channel);
 
-test("on a wide screen, the tabs that aren't open are darker than the dim text and outlines", async ({
-  page,
-}) => {
-  await openApp(page);
-  const [text, outline] = await page
-    .getByRole("tab", { name: "Games" })
-    .evaluate((button) => [
-      getComputedStyle(button).color,
-      getComputedStyle(button).borderTopColor,
-    ]);
-  expect(sumChannels(text)).toBeLessThan(sumChannels(await readTokenColor(page, "--ink-dim")));
-  expect(sumChannels(outline)).toBeLessThan(
-    sumChannels(await readTokenColor(page, "--card-border")),
-  );
-});
-
 /**
  * The sum of a CSS color's red, green, and blue, whatever space the browser gives it in.
  * @param {import("@playwright/test").Page} page
@@ -548,34 +533,49 @@ test("the page shows the tab it was last on before its modules have loaded", asy
   await expect(page.locator("#view-bracket-standings")).toHaveCSS("display", "none");
 });
 
-test("on a wide screen, Walnut's selected tab reads heavier, Maple's doesn't, and the tabs keep Maple's size and place", async ({
+test("on a wide screen, the tabs are one segmented control, each as tall as a pill's names in a track of the divider's color just around them, the open one filled orange and the rest in ink, and neither a theme nor a tap moves them", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openApp(page);
-  const tabs = page.locator("nav.tabs").getByRole("tab");
+  const track = page.locator("nav.tabs");
+  const tabs = track.getByRole("tab");
   const readBoxes = () =>
     tabs.evaluateAll((each) =>
       each.map((tab) => {
         const box = tab.getBoundingClientRect();
-        const label = /** @type {Element} */ (
-          tab.querySelector(".tab-label")
-        ).getBoundingClientRect();
-        return [box.width, box.height, label.top - box.top];
+        return [box.left, box.top, box.width, box.height];
       }),
     );
-  const games = page.getByRole("tab", { name: "Games" });
-  // A weight's face that arrives between the readings would widen only the later one.
+  // A face that arrives between the readings would widen only the later one.
   await page.evaluate(() => document.fonts.ready);
   const mapleBoxes = await readBoxes();
+  const pillHeight = /** @type {{ height: number }} */ (
+    await page.locator("#bracketStandingsPill .pager-tabs button").first().boundingBox()
+  ).height;
+  expect(mapleBoxes.map(([, , , height]) => height)).toEqual(mapleBoxes.map(() => pillHeight));
+  expect(/** @type {{ height: number }} */ (await track.boundingBox()).height).toBe(pillHeight + 4);
 
-  await page.emulateMedia({ colorScheme: "dark" });
-  expect(await readBoxes()).toEqual(mapleBoxes);
+  const games = page.getByRole("tab", { name: "Games" });
+  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    await expect(track).toHaveCSS("background-color", await readTokenColor(page, "--divider"));
+    const chosen = page.locator("nav.tabs [role=tab][aria-selected=true]");
+    await expect(chosen).toHaveCSS("background-color", await readTokenColor(page, "--orange"));
+    await expect(chosen).toHaveCSS("color", await readTokenColor(page, "--orange-ink"));
+    const others = page.locator("nav.tabs [role=tab][aria-selected=false]");
+    for (const other of await others.all()) {
+      await expect(other).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(other).toHaveCSS("color", await readTokenColor(page, "--ink"));
+    }
+    expect(await readBoxes()).toEqual(mapleBoxes);
+  }
   await games.click();
-  await expect(games).toHaveCSS("font-weight", "500");
-  await expect(findSeasonTab(page)).toHaveCSS("font-weight", "400");
+  await expect(games).toHaveAttribute("aria-selected", "true");
   expect(await readBoxes()).toEqual(mapleBoxes);
-
-  await page.emulateMedia({ colorScheme: "light" });
-  await expect(games).toHaveCSS("font-weight", "400");
+  for (const tab of await tabs.all()) {
+    const box = /** @type {{ y: number, height: number }} */ (await tab.boundingBox());
+    expect((await readCapitals(tab)).middle - (box.y + box.height / 2)).toBeCloseTo(0, 0);
+  }
 });
