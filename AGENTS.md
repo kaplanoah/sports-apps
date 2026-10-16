@@ -594,6 +594,12 @@
 A new league is a new app.
 Copy the WNBA's: it's the newest, and every file below has a working example in `apps/wnba/`.
 
+While a league is being built, a sandbox Worker may try its feeds from Cloudflare,
+since a league can answer Cloudflare differently than it answers a cloud session.
+Name it `<app>-sandbox`, upload it from a scratch folder outside git with Cloudflare's API, as `worker/deploy.mjs` does,
+and give it no page, store, key, or secret.
+Delete it once the app's first PR merges.
+
 1. **Worker config.** `apps/<app>/worker/wrangler.toml` names the Worker and binds the store, as the WNBA's does.
    The tooling finds apps by this file, and `package.json`'s `#page-files/*` import,
    the lint, type, and dead code globs, and Playwright's projects all pick the new folder up from `apps/*`.
@@ -837,7 +843,7 @@ When a step says to go back to an earlier step, continue in order from there.
       Tell the user what failed and recommend a fix.
 11. Run `npm run deploy:api` yourself only when step 10 found no successful deploy and the user agrees.
     Say why the automatic deploy didn't happen and recommend whether to deploy by hand.
-    Never deploy any other way.
+    Never deploy any other way, but for a new league's sandbox Worker ("Adding a league").
 12. Related changes can ship together in one PR.
     Split work into several PRs only when its parts can be reviewed or rolled back on their own.
     A PR that needs another PR's unmerged changes doesn't wait for it: stack it.
