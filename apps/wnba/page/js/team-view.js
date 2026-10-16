@@ -1,4 +1,4 @@
-import { countDaysBetween, describeDay, formatClockTime, formatShortDate } from "#shared/days.js";
+import { describeDay, formatClockTime, formatShortDate } from "#shared/days.js";
 import { renderGameCards } from "#shared/game-cards.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
@@ -12,7 +12,7 @@ import {
 } from "#shared/team-numbers.js";
 import { renderTitles } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
-import { readGameDay } from "./days.js";
+import { isGameToday, readGameDay } from "./days.js";
 import { describeLiveClock, describeStartTime } from "./games-view.js";
 import { findTeamNearestGames } from "./nearest-games.js";
 import { nameTeam, readPlayoffRuns } from "./series.js";
@@ -129,15 +129,6 @@ function listTeamGames(season, team) {
  * @param {Game} game
  * @param {number} now
  */
-const isToday = (game, now) => {
-  const day = readGameDay(game);
-  return !!day && countDaysBetween(new Date(now), day) === 0;
-};
-
-/**
- * @param {Game} game
- * @param {number} now
- */
 function describeWhen(game, now) {
   if (game.state === "live") return "Live";
   const day = readGameDay(game);
@@ -230,8 +221,11 @@ const readLeaguePlayoffs = (games) =>
       .map((game) => ({ home: game.home.score ?? 0, away: game.away.score ?? 0 })),
   );
 
-/** @param {number} margin */
-const formatPointMargin = (margin) => formatMargin(margin, 1);
+/**
+ * A points margin a game, with its sign, as +4.2, or 0.0 when it rounds to nothing.
+ * @param {number} margin
+ */
+export const formatPointMargin = (margin) => formatMargin(margin, 1);
 
 /** @type {Measure[]} */
 const MEASURES = [
@@ -332,7 +326,7 @@ function renderRegularSeason(code, standings) {
 }
 
 /**
- * The seasons a team won it all, newest first, the oldest it won under an earlier name saying so.
+ * The seasons a team won it all, newest first, each it won under an earlier name saying so.
  * @param {string} code
  * @param {{ before: number[], now: number[] }} titles
  */
@@ -340,9 +334,7 @@ function listTitleYears(code, titles) {
   const formerTeam = TEAMS[code].titlesAs;
   const before = [...titles.before]
     .sort((first, second) => second - first)
-    .map((year, index, years) =>
-      formerTeam && index === years.length - 1 ? `${year} (as ${formerTeam})` : String(year),
-    );
+    .map((year) => (formerTeam ? `${year} (as ${formerTeam})` : String(year)));
   return [...titles.now.map(String), ...before];
 }
 
@@ -395,7 +387,7 @@ const NEXT_GAME_ICON = html`<svg class="next-game-icon" viewBox="0 0 256 256" fi
  * @param {number} now
  */
 export function renderNextGame(game, team, now) {
-  const isSoon = game.state === "live" || isToday(game, now);
+  const isSoon = game.state === "live" || isGameToday(game, now);
   return html`<div class="team-game next${isSoon ? " soon" : ""}">
     <span class="team-game-number">G${game.number}</span>
     <span class="team-result" aria-hidden="true">${NEXT_GAME_ICON}</span>

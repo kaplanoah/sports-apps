@@ -8,7 +8,7 @@ import {
   renderStampWhen,
 } from "#shared/stamp.js";
 import { readGameDay } from "./days.js";
-import { describePeriod, isCalledOff } from "./games-view.js";
+import { describeLiveMoment, isCalledOff, listSeasonGames } from "./games-view.js";
 import { nameTeam, orderBySeriesWins } from "./series.js";
 
 // The header's lines on the latest score and the next tip-off, or on why the page isn't current.
@@ -33,18 +33,9 @@ const readStart = (game) => Date.parse(game.start ?? "");
 /** @param {Game} game */
 const formatMatchup = (game) => `${nameTeam(game.away.team)} @ ${nameTeam(game.home.team)}`;
 
-// Between periods the clock stops at zero.
-/** @param {Game} game */
-function describeGameClock(game) {
-  if (!game.period) return game.status;
-  const period = describePeriod(game.period);
-  if (game.clock && game.clock !== "0.0") return `with ${game.clock} in ${period}`;
-  return game.period === 2 ? "at halftime" : `at the end of ${period}`;
-}
-
 /** @param {Game} game */
 const describeLiveGame = (game) =>
-  `${formatMatchup(game)} ${game.away.score}-${game.home.score} ${describeGameClock(game)}`;
+  `${formatMatchup(game)} ${game.away.score}-${game.home.score} ${describeLiveMoment(game) || game.status}`;
 
 /**
  * Where a game's series stands after it: "Liberty won series 2-0", "series tied 1-1", or
@@ -138,12 +129,14 @@ function renderNextTipOff(game, now) {
 }
 
 /**
- * What last happened, or the score of each game under way, and which game is next.
- * @param {{ games?: Game[], series?: Series[] } | null} season
+ * What last happened, or the score of each game under way, and which game is next, from the
+ * season's playoff games and each team's nearest, which hold every team's last, live, and next
+ * game in the regular season too.
+ * @param {{ games?: Game[], nearestGames?: Game[], series?: Series[] } | null} season
  * @param {number} now
  */
 export function renderStampLines(season, now) {
-  const games = season?.games ?? [];
+  const games = listSeasonGames(season, null);
   const seriesById = new Map((season?.series ?? []).map((series) => [series.id, series]));
   const today = new Date(now);
   const latest = describeLatest(games, seriesById, today);

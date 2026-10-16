@@ -1,4 +1,10 @@
-import { formatWeekdayAndDate, nameDay, readEasternDay, readPlayingDay } from "#shared/days.js";
+import {
+  countDaysBetween,
+  formatWeekdayAndDate,
+  nameDay,
+  readEasternDay,
+  readPlayingDay,
+} from "#shared/days.js";
 
 /**
  * Midnight on the viewer's calendar of the day a game is played, or null without a start. A game
@@ -9,6 +15,16 @@ export function readGameDay({ start, isTimeSet }) {
   const startMs = Date.parse(start ?? "");
   const leagueDate = Number.isFinite(startMs) ? readEasternDay(startMs).date : null;
   return readPlayingDay({ start, isTimeSet, leagueDate });
+}
+
+/**
+ * Whether a game is played on the viewer's today.
+ * @param {{ start: string | null, isTimeSet: boolean }} game
+ * @param {number} now
+ */
+export function isGameToday(game, now) {
+  const day = readGameDay(game);
+  return !!day && countDaysBetween(day, new Date(now)) === 0;
 }
 
 /**

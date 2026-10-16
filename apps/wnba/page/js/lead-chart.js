@@ -156,7 +156,7 @@ const placeAcross = (periods) => (/** @type {number} */ at) =>
   LEFT + (at / measureGame(periods)) * (WIDTH - LEFT - RIGHT);
 
 const renderTile = (/** @type {string} */ className) =>
-  html`<rect class="${className}" x="${LEFT - 0.5}" y="0.5" width="${WIDTH - LEFT - RIGHT + 1}" height="${HEIGHT - 1}" rx="4"></rect>`;
+  html`<rect class="${className}" x="${LEFT - 0.5}" y="0.5" width="${WIDTH - LEFT - RIGHT + 1}" height="${HEIGHT - 1}"></rect>`;
 
 /**
  * The chart's shape while its scores load: the teams' names and a regulation game's periods

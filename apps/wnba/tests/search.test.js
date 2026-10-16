@@ -98,6 +98,10 @@ test("nicknames, cities, and filler words read as a fan would mean them", () => 
   assert.equal(search("Liberyt").line, "Liberty | 52 games");
 });
 
+test("each team's words name it once each, its nicknames only what its name, city, and code don't", () => {
+  for (const team of TERMS.teams) assert.deepEqual(team.words, [...new Set(team.words)], team.code);
+});
+
 test("dates relative to now read as the days they cover, a weekend from Friday evening", () => {
   assert.deepEqual(search("Liberty this weekend"), {
     games: ["2026-10-04 NYL at TBD"],

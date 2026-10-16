@@ -256,6 +256,15 @@ test("the All-Star Game's row names it, and shows each team's name beside its st
     assert.doesNotMatch(markup.text, /class="game-open"|class="dot/);
   }));
 
+test("the Commissioner's Cup final's row names it, as the All-Star Game's does, and opens the game", () =>
+  inEastern(() => {
+    const { days } = listDays(WHOLE_SEASON, { schedule: WHOLE_SCHEDULE });
+    const { markup } = days.find(({ day }) => day === "2026-06-30") ?? {};
+    const [, cupFinal] = markup.text.match(/(<li[^>]*data-game="1052600001"[\s\S]*?<\/li>)/) ?? [];
+    assert.match(readText({ text: cupFinal }), /^Aces Cup Final \d+ \d+ Final Liberty$/);
+    assert.match(cupFinal, /class="game-open"/);
+  }));
+
 test("a game the league plays away from its home team's arena names the city in its label, and one at home names nothing", () =>
   inEastern(() => {
     const arena = { name: "Rogers Arena", city: "Vancouver", state: "BC" };
@@ -809,7 +818,7 @@ test("a team's sheet shows its nearest games, its playoffs across from the field
     );
     assert.match(
       readTeam(SEASON, "DAL").body,
-      / Playoffs 1st Rd .* Titles 3 \| 2008, 2006, 2003 \(as Detroit Shock\)$/,
+      / Playoffs 1st Rd .* Titles 3 \| 2008 \(as Detroit Shock\), 2006 \(as Detroit Shock\), 2003 \(as Detroit Shock\)$/,
     );
     assert.match(
       readTeam(SEASON, "MIN").body,
@@ -1038,7 +1047,7 @@ test("a champion counts this season's title, and the team it beat is out in the 
   const dallas = readTeam(season, "DAL");
   assert.match(
     dallas.body,
-    / Playoffs Champions .* Titles 4 \| 2026, 2008, 2006, 2003 \(as Detroit Shock\)$/,
+    / Playoffs Champions .* Titles 4 \| 2026, 2008 \(as Detroit Shock\), 2006 \(as Detroit Shock\), 2003 \(as Detroit Shock\)$/,
   );
   assert.match(readTeam(season, "LVA").body, / Playoffs Out Finals /);
 });
@@ -1152,6 +1161,21 @@ test("the header says how the latest game ended and when the next one tips off, 
     ]);
   }));
 
+test("in the regular season, the header says how the latest game ended and when the next one tips off, from each team's nearest games", () =>
+  inEastern(() => {
+    const tonight = addSeattleAtChicago({ state: "pre" });
+    const regularSeason = {
+      ...tonight,
+      games: [],
+      series: [],
+      nearestGames: tonight.nearestGames.filter((game) => !game.round),
+    };
+    assert.deepEqual(readStampLines(regularSeason, NOW), [
+      "Last game Aces 100 Mercury 82 final Thursday",
+      "Next tip-off 7:00 PM - Storm @ Sky",
+    ]);
+  }));
+
 test("a game the Worker saw end says when, its time and day set apart as the next tip-off's are", () =>
   inEastern(() => {
     const ended = changeGame(SEASON, "1042600102", (game) => {
@@ -1221,7 +1245,7 @@ test("while a game is on, the header gives its score and clock, and still the ne
     const afterThird = changeGame(live, "1042600132", (game) => {
       Object.assign(game, { status: "End of Q3", period: 3, clock: "0.0" });
     });
-    assert.equal(readStampLines(afterThird, NOW)[0], "NOW Dream @ Mystics 30-27 at the end of Q3");
+    assert.equal(readStampLines(afterThird, NOW)[0], "NOW Dream @ Mystics 30-27 after Q3");
     const inOvertime = changeGame(live, "1042600132", (game) => {
       Object.assign(game, { status: "OT 1:12", period: 5, clock: "1:12" });
     });
