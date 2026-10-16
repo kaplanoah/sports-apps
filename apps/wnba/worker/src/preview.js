@@ -43,8 +43,7 @@ function listMeetings(schedule, season, teams) {
   return schedule.leagueSchedule.gameDates
     .flatMap((day) => day.games)
     .filter(isMeeting)
-    .map(describeMeeting)
-    .sort((first, second) => Date.parse(second.start) - Date.parse(first.start));
+    .map(describeMeeting);
 }
 
 /**
