@@ -1,7 +1,10 @@
 // While Diagnostics is on, a step log keeps what one part of the page does, with each touch and
-// click on it. The last few lines stay on this device, for Diagnostics to list.
+// click on it. The last few lines stay on this device, for Diagnostics to list: the page holds
+// them as it logs, since a touch or click can come many times a second, and keeps them on the
+// device as it leaves the screen.
 
 import { formatClockTimeWithSeconds } from "./days.js";
+import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
 
 // Enough for a fling through a few weeks of a season's list, each day it passes a line.
 const KEPT_LINES = 200;
@@ -31,8 +34,11 @@ function readLastPathPart(url) {
   }
 }
 
-/** @param {string} text */
-const hideAddresses = (text) => text.replace(/\bhttps?:\/\/[^\s"'<>]+/g, nameFile);
+/**
+ * Text with each address in it, a socket's too, named as nameFile names it.
+ * @param {string} text
+ */
+export const hideAddresses = (text) => text.replace(/\b(?:https?|wss?):\/\/[^\s"'<>]+/g, nameFile);
 
 /**
  * A log's lines as text under its title, or nothing when it has none.
@@ -89,34 +95,30 @@ function describeTouchOrClick(event) {
 export function createStepLog({ key, title, isWatched }) {
   let isOn = () => false;
   let onLogged = () => {};
+  /** @type {StepLine[] | null} */
+  let held = null;
 
   /** @returns {StepLine[]} */
-  function readLines() {
-    try {
-      const lines = JSON.parse(localStorage.getItem(key) ?? "[]");
-      return Array.isArray(lines)
-        ? lines.map((line) => ({ ...line, text: hideAddresses(String(line.text)) }))
-        : [];
-    } catch {
-      return [];
-    }
+  function loadLines() {
+    const kept = readStoredJson(key);
+    return Array.isArray(kept)
+      ? kept.map((line) => ({ ...line, text: hideAddresses(String(line.text)) }))
+      : [];
   }
 
-  /** @param {StepLine[]} lines */
-  function saveLines(lines) {
-    try {
-      localStorage.setItem(key, JSON.stringify(lines.slice(-KEPT_LINES)));
-    } catch {
-      /* the line is lost, and the next step tries again */
-    }
+  const holdLines = () => (held ??= loadLines());
+
+  /** @returns {StepLine[]} oldest first */
+  const readLines = () => [...holdLines()];
+
+  // Lines storage won't take are lost once the page goes.
+  function saveLines() {
+    if (held) storeJson(key, held);
   }
 
   function forgetLines() {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      /* the lines stay until the next try */
-    }
+    held = [];
+    forgetStored(key);
   }
 
   /**
@@ -125,7 +127,9 @@ export function createStepLog({ key, title, isWatched }) {
    */
   function noteStep(text) {
     if (!isOn()) return;
-    saveLines([...readLines(), { at: Date.now(), text: hideAddresses(text) }]);
+    const lines = holdLines();
+    lines.push({ at: Date.now(), text: hideAddresses(text) });
+    lines.splice(0, lines.length - KEPT_LINES);
     onLogged();
   }
 
@@ -151,6 +155,8 @@ export function createStepLog({ key, title, isWatched }) {
     onLogged = onLineLogged;
     for (const type of ["touchstart", "touchend", "click"])
       document.addEventListener(type, noteTouchOrClick, { capture: true, passive: true });
+    document.addEventListener("visibilitychange", () => document.hidden && saveLines());
+    addEventListener("pagehide", saveLines);
   }
 
   return {

@@ -36,12 +36,14 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(openPage());
 });
 
-const requestPush = (path, method, body) =>
-  fetch(new URL(path, self.registration.scope), {
+async function requestPush(path, method, body) {
+  const response = await fetch(new URL(path, self.registration.scope), {
     method,
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (!response.ok) throw new Error(`The Worker answered ${response.status}`);
+}
 
 function decodeBase64Url(text) {
   const base64 = text.replace(/-/g, "+").replace(/_/g, "/");
@@ -68,7 +70,8 @@ async function replaceSubscription(oldSubscription, newSubscription) {
 }
 
 // A browser can replace a subscription on its own, and the Worker would otherwise keep sending
-// to the old one until the page is next opened.
+// to the old one until the page is next opened. The old one goes only once the Worker has the new
+// one, so a save that fails leaves the device subscribed where the Worker still sends.
 self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil(replaceSubscription(event.oldSubscription, event.newSubscription));
 });

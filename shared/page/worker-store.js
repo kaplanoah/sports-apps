@@ -81,6 +81,8 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
   let syncedAt = null;
   /** @type {Set<(isCaughtUp: boolean) => void>} */
   const catchUpListeners = new Set();
+  /** @type {Set<() => void>} */
+  const syncedAtListeners = new Set();
   // Reads overlap, so one that started before a pushed change, or before a read that already
   // arrived, must not replace it with older data.
   let clock = 0;
@@ -158,13 +160,24 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     }
   }
 
+  // A page whose socket isn't open, as on a network that refuses sockets, had what the store held
+  // as its reads began, once they have all answered.
+  /** @param {number} at */
+  function noteReadWhileBehind(at) {
+    syncedAt = at;
+    for (const listener of syncedAtListeners) listener();
+  }
+
   /** @returns {Promise<boolean>} whether every read answered */
   const refreshWatchedPaths = async () => {
+    const startedAt = Date.now();
     const answers = await Promise.all([
       ...[...listenersByPath.keys()].map(refreshPath),
       ...[...collectionWatches.keys()].map(refreshCollection),
     ]);
-    return answers.every(Boolean);
+    const hasRead = answers.every(Boolean);
+    if (hasRead && !isCaughtUp && !isSocketOpen) noteReadWhileBehind(startedAt);
+    return hasRead;
   };
 
   /** @param {boolean} caughtUp */
@@ -202,6 +215,23 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     if (socket !== reader) return;
     if (!hasRead) abandonSocket();
     else if (isSocketOpen) markCaughtUp();
+    else replaceHungSocket(reader);
+  }
+
+  // A handshake that never ends leaves its socket neither open nor closed, so once the reads made
+  // without it have answered, it's given up for a new one, after a wait that grows each time, unless
+  // it opens first.
+  /** @param {WebSocket | null} hung */
+  function replaceHungSocket(hung) {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (socket !== hung || isSocketOpen) return;
+      socket = null;
+      hung?.close();
+      openSocket();
+    }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
   }
 
   // Before the first listing arrives, the listing takes the push in instead.
@@ -256,6 +286,8 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
       isSocketOpen = true;
       clearTimeout(handshakeTimer);
       handshakeTimer = null;
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
       sendWatching();
       readWatchedPaths(opened);
     });
@@ -308,8 +340,16 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     onChange(isCaughtUp);
   }
 
-  /** When the page last had what the store holds, or null before it first caught up. */
+  /** When the page last had what the store holds, or null before it first read it all. */
   const readSyncedAt = () => syncedAt;
+
+  /**
+   * Calls `onChange` each time readSyncedAt moves while the page is behind.
+   * @param {() => void} onChange
+   */
+  function watchSyncedAt(onChange) {
+    syncedAtListeners.add(onChange);
+  }
 
   /**
    * Resolves with true once the page has caught up, or with false once it has waited
@@ -404,5 +444,14 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     };
   }
 
-  return { doc, collection, catchUp, pause, watchCatchUp, readSyncedAt, waitForCatchUp };
+  return {
+    doc,
+    collection,
+    catchUp,
+    pause,
+    watchCatchUp,
+    readSyncedAt,
+    watchSyncedAt,
+    waitForCatchUp,
+  };
 }

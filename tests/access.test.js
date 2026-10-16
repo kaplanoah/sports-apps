@@ -7,9 +7,9 @@ function watchReloads(events) {
   globalThis.location = /** @type {any} */ ({ reload: () => events.push("reload") });
 }
 
-test("a page turned away for want of the access code forgets its offline copy, then reloads", async (t) => {
+test("a page turned away for want of the access code forgets its offline copy and the pictures it kept, then reloads, keeping the service worker's steps", async (t) => {
   const events = [];
-  const kept = new Set(["page"]);
+  const kept = new Set(["page", "images", "service-worker-steps"]);
   globalThis.caches = /** @type {any} */ ({
     keys: async () => [...kept],
     delete: async (name) => events.push(`forget ${name}`) && kept.delete(name),
@@ -24,7 +24,8 @@ test("a page turned away for want of the access code forgets its offline copy, t
   assert.deepEqual(events, []);
 
   await reloadWhenSignedOut(new Response(null, { status: 401 }));
-  assert.deepEqual(events, ["forget page", "reload"]);
+  assert.deepEqual(events, ["forget page", "forget images", "reload"]);
+  assert.deepEqual([...kept], ["service-worker-steps"]);
 });
 
 test("a browser without the cache API still reloads a page turned away", async (t) => {

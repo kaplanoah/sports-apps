@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from "./device.js";
 import { logPatches } from "./html.js";
 
 // New data that changes what the page shows eases in: a part that grows or shrinks moves to its
@@ -10,8 +11,6 @@ const EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
 /** @type {WeakMap<Element, Animation>} */
 const resizes = new WeakMap();
-
-const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const canEase = () => !document.hidden && !prefersReducedMotion();
 

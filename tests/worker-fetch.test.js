@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fetchFromWorker } from "../shared/page/worker-fetch.js";
+import { countKeptReads, fetchFromWorker } from "../shared/page/worker-fetch.js";
 
 const PAGE = "https://wnba-app.example/k3y/";
 const RULES = { reuseMs: 1000, timeoutMs: 5000, isExpected: (body) => body.id === "1" };
@@ -56,6 +56,21 @@ test("each path keeps its own read, and each caller its own reuse time", async (
   );
 });
 
+test("reads past their reuse time are let go as the next one is asked for", async (context) => {
+  // Later than any read the other tests kept.
+  context.mock.timers.enable({ apis: ["Date"], now: Date.parse("2100-01-01T00:00:00Z") });
+  startWorker(...Array.from({ length: 4 }, () => ({ body: { id: "1" } })));
+  await fetchFromWorker("gone-1", RULES);
+  await fetchFromWorker("gone-2", RULES);
+  await fetchFromWorker("gone-3", RULES);
+  assert.equal(countKeptReads(), 3);
+
+  context.mock.timers.tick(RULES.reuseMs);
+  await fetchFromWorker("kept", RULES);
+
+  assert.equal(countKeptReads(), 1);
+});
+
 test("a failed read is forgotten, so the next one asks again", async () => {
   const failure = { body: { error: "Couldn't read the WNBA" }, status: 502 };
   const reads = startWorker(failure, { body: { id: "1" } });
@@ -66,6 +81,21 @@ test("a failed read is forgotten, so the next one asks again", async () => {
   });
   assert.deepEqual(await fetchFromWorker("failing", RULES), { id: "1" });
   assert.equal(reads.length, 2);
+});
+
+test("an error the store or the access gate answers with is read for its message", async () => {
+  startWorker({
+    body: { error: { code: "access_required", message: "This page needs its access code." } },
+    status: 401,
+  });
+  globalThis.caches = /** @type {any} */ ({ keys: async () => [], delete: async () => true });
+  globalThis.location = /** @type {any} */ ({ href: PAGE, reload: () => {} });
+
+  await assert.rejects(fetchFromWorker("gated", RULES), {
+    message: "This page needs its access code.",
+    status: 401,
+  });
+  delete (/** @type {any} */ (globalThis).caches);
 });
 
 test("an error without a message of its own names the Worker's status", async () => {

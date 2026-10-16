@@ -109,3 +109,17 @@ test("a device whose storage refuses access keeps a choice until the page reload
 
   assert.deepEqual(choice.read(), { "https://example.com/story": 1 });
 });
+
+test("a device whose storage is full keeps a choice it wouldn't take until the page reloads", () => {
+  useStorage({
+    getItem: () => '"old"',
+    setItem: () => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    },
+  });
+  const choice = createViewerChoice("full", readAsIs);
+
+  choice.keep("new");
+
+  assert.equal(choice.read(), "new");
+});

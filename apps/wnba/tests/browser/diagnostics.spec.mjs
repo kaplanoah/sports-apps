@@ -337,6 +337,35 @@ test("with Diagnostics on, a tap that opens a team's sheet from a game's, the ro
   );
 });
 
+test("with Diagnostics on, what's logged while settings is closed draws nothing, and shows once settings opens", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await findRecords(page).evaluate((records) => {
+    const changes = { count: 0 };
+    new MutationObserver((mutations) => (changes.count += mutations.length)).observe(records, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    Object.assign(window, { recordChanges: changes });
+  });
+  const countChanges = () => page.evaluate(() => /** @type {any} */ (window).recordChanges.count);
+
+  await (await findGameButton(page, "Game details: Aces at Fever, First Round Game 2")).click();
+  await expect(page.locator("#gameSheet")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#sheetDialog")).toBeHidden();
+  expect(await countChanges()).toBe(0);
+  await openSettings(page);
+
+  await expect(findRecords(page).locator(".diagnostics-record", { hasText: "Sheets" })).toHaveCount(
+    1,
+  );
+  expect(await countChanges()).toBeGreaterThan(0);
+});
+
 test("with Diagnostics on, each tap on the Games list's strip and Today is logged, with where it takes the list and when it arrives", async ({
   page,
 }) => {

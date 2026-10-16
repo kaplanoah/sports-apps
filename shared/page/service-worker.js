@@ -1,13 +1,17 @@
 // The page's service worker, sw.js, shows its notifications, keeps its offline copy, and keeps its
 // last steps for Diagnostics, which the page reads here.
 
-const STEPS_CACHE = "service-worker-steps";
+export const STEPS_CACHE = "service-worker-steps";
 
 /** @type {Promise<ServiceWorkerRegistration> | null} */
 let registration = null;
 
+// A registration that failed, as on a weak connection, is tried again the next time it's asked for.
 export function registerServiceWorker() {
-  registration ??= navigator.serviceWorker.register("sw.js");
+  registration ??= navigator.serviceWorker.register("sw.js").catch((error) => {
+    registration = null;
+    throw error;
+  });
   return registration;
 }
 

@@ -138,6 +138,60 @@ test("a page let go eases back up", async ({ page }) => {
   expect(transitions).toContain("top 0.3s");
 });
 
+test("a page pulled down and back up to where it started settles in place at once", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await openFromHomeScreen(page);
+  await openApp(page);
+  await openGames(page);
+  const session = await page.context().newCDPSession(page);
+  await session.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+
+  for (const [type, y] of /** @type {const} */ ([
+    ["touchStart", 40],
+    ["touchMove", 70],
+    ["touchMove", 100],
+    ["touchMove", 70],
+    ["touchMove", 40],
+  ]))
+    await session.send("Input.dispatchTouchEvent", { type, touchPoints: [{ x: 200, y }] });
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await session.detach();
+
+  await expect(page.locator("header.top")).toHaveCSS("top", "auto");
+  await expect(page.locator("header.top")).toHaveCSS("position", "static");
+});
+
+test("a page let go stays held to its pull's place until its own move back ends, not a move inside it", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await openFromHomeScreen(page);
+  await openApp(page);
+  await openGames(page);
+  // Right after the page's own handler lets go, a part inside the first moved part ends a move.
+  await page.evaluate(() =>
+    document.addEventListener("touchend", () => {
+      const moved = /** @type {HTMLElement} */ (
+        [...document.body.children].find((part) => /** @type {HTMLElement} */ (part).style.top)
+      );
+      const inside = /** @type {HTMLElement} */ (moved.querySelector("*"));
+      inside.dispatchEvent(
+        new TransitionEvent("transitionend", { bubbles: true, propertyName: "opacity" }),
+      );
+      Object.assign(window, { positionAfterInnerMove: moved.style.position });
+    }),
+  );
+
+  await pullDown(page, 60);
+
+  expect(await page.evaluate(() => /** @type {any} */ (window).positionAfterInnerMove)).toBe(
+    "relative",
+  );
+  await expect(page.locator("header.top")).toHaveCSS("top", "auto");
+});
+
 test("a swipe down in an open sheet is the sheet's, not a pull", async ({ page }) => {
   await openFromHomeScreen(page);
   await openApp(page);

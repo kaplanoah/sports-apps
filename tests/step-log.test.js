@@ -6,9 +6,17 @@ import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
 /** @type {Map<string, string>} */
 const stored = new Map();
+// How often a log asks the device for what it keeps, and keeps it there.
+const storageCalls = { reads: 0, writes: 0 };
 globalThis.localStorage = /** @type {any} */ ({
-  getItem: (/** @type {string} */ key) => stored.get(key) ?? null,
-  setItem: (/** @type {string} */ key, /** @type {string} */ value) => stored.set(key, value),
+  getItem: (/** @type {string} */ key) => {
+    storageCalls.reads += 1;
+    return stored.get(key) ?? null;
+  },
+  setItem: (/** @type {string} */ key, /** @type {string} */ value) => {
+    storageCalls.writes += 1;
+    stored.set(key, value);
+  },
   removeItem: (/** @type {string} */ key) => stored.delete(key),
 });
 /** @type {Map<string, (event: Event) => void>} */
@@ -17,6 +25,14 @@ globalThis.document = /** @type {any} */ ({
   addEventListener: (/** @type {string} */ type, /** @type {any} */ listener) =>
     listeners.set(type, listener),
 });
+/** @type {(() => void)[]} */
+const onPageHide = [];
+globalThis.addEventListener = /** @type {any} */ (
+  (/** @type {string} */ type, /** @type {() => void} */ listener) => {
+    if (type === "pagehide") onPageHide.push(listener);
+  }
+);
+const hidePage = () => onPageHide.forEach((listener) => listener());
 
 /** A stand-in for an element, inside the part when `isInPart`. */
 class FakeElement {
@@ -77,6 +93,8 @@ test("no line holds an address, which holds the page's key, even one kept before
 
   log.noteStep(`Failed to fetch dynamically imported module: ${page}c9c63e6/js/games-view.js`);
   log.noteStep(`a promise failed: Load failed for ${page}`);
+  log.noteStep("The store's socket to wss://example-subdomain.workers.dev/k3y/watch closed");
+  hidePage();
 
   assert.deepEqual(
     log.readLines().map((line) => line.text),
@@ -84,9 +102,26 @@ test("no line holds an address, which holds the page's key, even one kept before
       "an error at page",
       "Failed to fetch dynamically imported module: games-view.js",
       "a promise failed: Load failed for page",
+      "The store's socket to page closed",
     ],
   );
   assert.doesNotMatch(stored.get("addressLog") ?? "", /k3y|example-subdomain/);
+});
+
+test("a log holds its lines as it logs, reading the device once, and keeps them there as the page leaves the screen", () => {
+  const log = createLog();
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+  const before = { ...storageCalls };
+
+  for (let tap = 1; tap <= 50; tap += 1) log.noteStep(`tap ${tap}`);
+  assert.deepEqual(storageCalls, { reads: before.reads + 1, writes: before.writes });
+  hidePage();
+
+  assert.equal(storageCalls.writes, before.writes + onPageHide.length);
+  assert.equal(log.readLines().length, 50);
 });
 
 test("a file is named on a phone without URL.canParse, as on iOS 16", (context) => {

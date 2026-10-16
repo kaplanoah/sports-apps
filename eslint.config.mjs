@@ -127,6 +127,28 @@ export default [
     },
   },
   {
+    // Shared page code keeps what it keeps on the device only through shared/page/local-storage.js,
+    // so storage that refuses access or is full never breaks the page; the plain scripts in the
+    // page's head, which run before any module, keep their own.
+    files: ["shared/page/**/*.js"],
+    ignores: [
+      "shared/page/local-storage.js",
+      "shared/page/open-last-tab.js",
+      "shared/page/pick-theme.js",
+      "shared/page/release-guard.js",
+      "shared/page/show-last-drawn.js",
+    ],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...DEVICE_STORAGES.map((name) => ({
+          name,
+          message: "Keep what the page keeps on the device with shared/page/local-storage.js.",
+        })),
+      ],
+    },
+  },
+  {
     // A change to shared code reaches every app, so an app hands it what it needs instead.
     files: ["shared/**/*.{js,mjs}"],
     rules: {
