@@ -900,26 +900,6 @@ table.st .seed-cell {
   font-weight: calc(var(--type-body-weight) + 100);
 }
 
-.no-field-note {
-  background: var(--card);
-  border: 1px dashed var(--card-border);
-  border-radius: var(--radius-card);
-  padding: 22px;
-  margin-bottom: 18px;
-  text-align: center;
-}
-.no-field-note h2 {
-  font-size: var(--type-headline-size);
-  font-weight: var(--type-headline-weight);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.no-field-note p {
-  color: var(--ink-dim);
-  font-size: var(--type-body-size);
-  font-weight: var(--type-body-weight);
-  margin-top: 10px;
-}
 .rank-slot {
   display: inline-flex;
   justify-content: flex-end;

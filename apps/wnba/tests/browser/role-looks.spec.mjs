@@ -49,6 +49,14 @@ const OTHER_PLACES = [
     shown: (page) => page.getByRole("heading", { name: "Enter your access code" }),
   },
   {
+    name: "the bracket before the playoff field is set",
+    open: async (page) => {
+      const app = await openApp(page);
+      await app.changeSeason((season) => ({ ...season, series: [] }));
+    },
+    shown: (page) => page.getByRole("heading", { name: "No playoff field yet" }),
+  },
+  {
     name: "the Updates box, with finals and a release note",
     device: ON_A_PHONE,
     open: async (page) => {

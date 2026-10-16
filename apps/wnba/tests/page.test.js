@@ -315,9 +315,9 @@ test("a game a finished series no longer needs is left off, and a season without
   }));
 
 test("the bracket and standings say in a short note when they have nothing yet", () => {
-  assert.equal(
-    readText(renderBracket(null, NOW)),
-    "The bracket fills in once the playoff field is set",
+  assert.match(
+    String(renderBracket(null, NOW)),
+    /^<div class="no-field-note">\s*<h2>No playoff field yet<\/h2>\s*<p>The bracket fills in once the playoff field is set<\/p>\s*<\/div>$/,
   );
   assert.equal(readText(renderStandings(null)), "No standings yet");
 });
