@@ -2779,8 +2779,15 @@ nav.tabs .search-tab,
   font-weight: var(--type-team-large-weight);
   letter-spacing: 0.02em;
 }
-.sheet-head .team-note {
+.sheet-head .team-note,
+.player-place {
   font-weight: calc(var(--type-detail-weight) + 50);
+}
+/* A player's hometown sits under his title, which holds his name and one line as every sheet's
+   does, so the title and its back arrow stay where they are on every sheet. */
+.player-place {
+  color: var(--ink-mid);
+  text-align: center;
 }
 .sheet-head .team-note .NL {
   color: var(--nl);
