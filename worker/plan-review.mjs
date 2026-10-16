@@ -18,6 +18,8 @@ const MOST_SHARES = 20;
 // prose of long lines, so a part comes back whole.
 export const PART_LINES = 1000;
 export const PART_BYTES = 48000;
+// Read cuts a longer line short.
+const LONGEST_READ_LINE = 2000;
 
 const RECORDED_DATA = /(^|\/)tests\/fixtures\/.*\.(json|xml)$/;
 
@@ -38,11 +40,20 @@ export function readChangedFiles(numstat) {
     });
 }
 
-/** @param {{ path: string, lines: number | null }} file */
-export function explainUnread({ path, lines }) {
+/** @param {string} fileDiff */
+const hasLineTooLongToRead = (fileDiff) =>
+  fileDiff.split("\n").some((line) => line.length > LONGEST_READ_LINE);
+
+/**
+ * Why a changed file goes unread, or null when it's read.
+ * @param {{ path: string, lines: number | null }} file
+ * @param {string} fileDiff
+ */
+export function explainUnread({ path, lines }, fileDiff) {
   if (lines === null) return "a binary file";
   if (path === "package-lock.json") return "the lockfile, which npm writes";
   if (RECORDED_DATA.test(path)) return "a test's recorded data";
+  if (hasLineTooLongToRead(fileDiff)) return "a line too long to read whole, like an image's data";
   return null;
 }
 
@@ -86,14 +97,17 @@ export function packShares(files) {
 /**
  * A pull request's review: the shares to read, and the files left unread with why.
  * @param {string} numstat
+ * @param {Map<string, string>} diffs each file's diff, by its path
  */
-export function planReview(numstat) {
+export function planReview(numstat, diffs) {
   const changed = readChangedFiles(numstat);
+  const explain = (/** @type {{ path: string, lines: number | null }} */ file) =>
+    explainUnread(file, diffs.get(file.path) ?? "");
   const unread = changed.flatMap((file) => {
-    const why = explainUnread(file);
+    const why = explain(file);
     return why ? [{ path: file.path, why }] : [];
   });
-  const toRead = changed.filter((file) => !explainUnread(file));
+  const toRead = changed.filter((file) => !explain(file));
   return {
     shares: packShares(/** @type {{ path: string, lines: number }[]} */ (toRead)),
     unread,
@@ -225,8 +239,8 @@ export function renderIndex({ shares, unread }, partsByPath) {
  * @param {{ numstat: string, diff: string }} change
  */
 export function writeReview(folder, { numstat, diff }) {
-  const plan = planReview(numstat);
   const diffs = splitDiffByFile(diff);
+  const plan = planReview(numstat, diffs);
   /** @type {Map<string, string[]>} */
   const partsByPath = new Map();
   for (const path of plan.shares.flatMap((share) => share.files)) {
