@@ -292,13 +292,70 @@ test("the league and each conference stack one under another, each named at its 
   expect(lists[0].top - pillBottom).toBeCloseTo(3.5, 1);
 });
 
-test("on a narrow phone, a table wider than the room is cut off at the screen's edge rather than scrolling the page sideways", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 360, height: 780 });
+/**
+ * Where each standings card ends across the screen, where its column ends inside the page's
+ * margin, and how wide the page scrolls.
+ * @param {import("@playwright/test").Page} page
+ */
+const readStandingsEdges = (page) =>
+  page.evaluate(() => ({
+    cards: [...document.querySelectorAll("#standingsWrap table.standings")].map((table) => {
+      const list = /** @type {HTMLElement} */ (table.closest(".standings-list"));
+      return {
+        right: table.getBoundingClientRect().right,
+        columnRight:
+          list.getBoundingClientRect().right - parseFloat(getComputedStyle(list).paddingRight),
+      };
+    }),
+    pageWidth: document.documentElement.scrollWidth,
+  }));
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {number} width
+ */
+async function openStandingsAt(page, width) {
+  await page.setViewportSize({ width, height: 780 });
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-west")).toBeAttached();
+}
 
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+// The layout's rounding where a card fills its column exactly.
+const LAYOUT_ROUNDING_PX = 0.5;
+
+test("on a 375px phone, every standings card fits inside the page's margin, and the page doesn't scroll sideways", async ({
+  page,
+}) => {
+  await openStandingsAt(page, 375);
+
+  const { cards, pageWidth } = await readStandingsEdges(page);
+  expect(cards).toHaveLength(3);
+  for (const { right, columnRight } of cards)
+    expect(right).toBeLessThanOrEqual(columnRight + LAYOUT_ROUNDING_PX);
+  expect(pageWidth).toBe(375);
+});
+
+test("on a 360px phone, every standings card ends inside the screen, its right edge showing, and the page doesn't scroll sideways", async ({
+  page,
+}) => {
+  await openStandingsAt(page, 360);
+
+  const { cards, pageWidth } = await readStandingsEdges(page);
+  expect(cards).toHaveLength(3);
+  for (const { right } of cards) expect(right).toBeLessThanOrEqual(360);
+  expect(pageWidth).toBe(360);
+});
+
+test("on a 390px phone, the standings keep their full gaps between columns", async ({ page }) => {
+  await openStandingsAt(page, 390);
+
+  const row = page.locator("#standings-west tbody tr[data-team]").first();
+  const gaps = await row.evaluate((element) =>
+    ["td.season:not(.pair-end)", "td.season.pair-end", "td.recent-start"].map(
+      (selector) =>
+        getComputedStyle(/** @type {Element} */ (element.querySelector(selector))).paddingLeft,
+    ),
+  );
+  expect(gaps).toEqual(["12px", "16px", "21px"]);
 });
