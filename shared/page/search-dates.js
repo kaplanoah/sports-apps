@@ -199,7 +199,7 @@ const createRange = (from, to, isFromFridayEvening = false) => ({
 });
 
 /**
- * The days of a month of the season's year.
+ * The days of a month of a year.
  * @param {number} month 1 to 12
  * @param {number} year
  * @param {[number, number]} [days] the first and last day of the month to cover

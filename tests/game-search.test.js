@@ -77,6 +77,7 @@ const TERMS = {
     pastRegulation: { name: "Overtime", words: ["overtime", "ot"], games: "overtime games" },
     crossConference: null,
     neverShown: ["postseason", "post season"],
+    seasonSpansYears: false,
   },
   examples: ["Hawks next game", "Foxes at Owls", "Hornets last game", "Hawks in March"],
 };
@@ -156,17 +157,21 @@ TERMS.channels = listSearchChannels(GAMES);
 
 const DICTIONARY = createSearchDictionary(TERMS);
 
-/** @param {number} [now] */
-const createContext = (now = NOW) =>
-  createSearchContext({ terms: TERMS, dictionary: DICTIONARY, games: GAMES, now });
+/**
+ * @param {number} [now]
+ * @param {import("../shared/page/game-search.js").SearchGame[]} [games]
+ */
+const createContext = (now = NOW, games = GAMES) =>
+  createSearchContext({ terms: TERMS, dictionary: DICTIONARY, games, now });
 
 /**
  * The ids of the games a search finds, and the line under the field.
  * @param {string} text
  * @param {number} [now]
+ * @param {import("../shared/page/game-search.js").SearchGame[]} [games]
  */
-function search(text, now) {
-  const context = createContext(now);
+function search(text, now, games) {
+  const context = createContext(now, games);
   const asked = readSearch(text, context);
   const found = findSearchGames(asked, context);
   const { lead, facts } = describeSearch(asked, found, context);
@@ -363,9 +368,12 @@ test("a search that can use none of its words finds no games, rather than every 
   assert.equal(search("the games").line, "All games | 11 games");
 });
 
-/** @param {string} text */
-const suggest = (text) =>
-  listSuggestions(text, createContext()).map(({ text: suggestion, mark, detail }) =>
+/**
+ * @param {string} text
+ * @param {import("../shared/page/game-search.js").SearchContext} [context]
+ */
+const suggest = (text, context = createContext()) =>
+  listSuggestions(text, context).map(({ text: suggestion, mark, detail }) =>
     [suggestion, mark.kind === "team" ? mark.code : mark.kind, detail].filter(Boolean).join(" "),
   );
 
@@ -465,4 +473,42 @@ test("a league's games are read in order of start, leaving out any without a day
     now: Date.parse("2026-09-30T16:00:00Z"),
   });
   assert.deepEqual([context.seasonStart, context.seasonEnd], ["2026-09-01", "2026-09-03"]);
+});
+
+// A season that runs into the next year, as the NBA's does, from October to June. Today is
+// Tuesday, December 15.
+const WINTER_NOW = new Date(2026, 11, 15, 12).getTime();
+const WINTER_GAMES = [
+  makeGame("w1", "2026-10-20", 19 * 60, "HAW", "OWL"),
+  makeGame("w2", "2026-12-28", 19 * 60, "FOX", "HAW"),
+  makeGame("w3", "2027-01-02", 19 * 60, "HAW", "HOR"),
+  makeGame("w4", "2027-01-12", 19 * 60, "OWL", "HAW"),
+  makeGame("w5", "2027-03-05", 19 * 60, "HAW", "FOX"),
+  makeGame("w6", "2027-06-10", 20 * 60, "OWL", "HAW", { kind: "playoffs", round: 3, number: 1 }),
+];
+
+/** @param {string} text */
+const searchWinter = (text) => search(text, WINTER_NOW, WINTER_GAMES);
+
+test("in a season that runs into the next year, each month a search names is the one the season plays", () => {
+  assert.deepEqual(searchWinter("Hawks in January").ids, ["w3", "w4"]);
+  assert.equal(searchWinter("Hawks in January").line, "Hawks | January | 2 games");
+  assert.deepEqual(searchWinter("Hawks Jan 12").ids, ["w4"]);
+  assert.equal(searchWinter("Hawks Jan 12").line, "Hawks | Tue, Jan 12 | 1 game");
+  assert.deepEqual(searchWinter("1/2").ids, ["w3"]);
+  assert.deepEqual(searchWinter("Hawks Dec 28 to Jan 3").ids, ["w2", "w3"]);
+  assert.deepEqual(searchWinter("early March").ids, ["w5"]);
+  assert.deepEqual(searchWinter("Hawks in October").ids, ["w1"]);
+});
+
+test("in a season that runs into the next year, its months are offered from this one on, across the new year", () => {
+  const context = createContext(WINTER_NOW, WINTER_GAMES);
+  assert.deepEqual(
+    suggest("Hawks in J", context).filter((row) => row.includes("date")),
+    ["Hawks in January date 2 games", "Hawks in June date 1 game"],
+  );
+  assert.deepEqual(
+    suggest("in ", context).filter((row) => row.includes(" date ")),
+    ["in December date 1 game", "in January date 2 games"],
+  );
 });

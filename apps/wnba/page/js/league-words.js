@@ -10,6 +10,7 @@ export const LEAGUE_WORDS = {
     games: "overtime games",
   },
   crossConference: null,
+  seasonSpansYears: false,
   neverShown: [
     "postseason",
     "post-season",

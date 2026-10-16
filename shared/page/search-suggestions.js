@@ -8,6 +8,7 @@
 // its other reading when they're other games than the team's. Nothing is offered that would find no
 // games. Runs in the page and in Node, so it uses no DOM.
 
+import { shiftMonth } from "./days.js";
 import { readMonthDays } from "./search-dates.js";
 import {
   describeCount,
@@ -254,23 +255,35 @@ function listFinishingCandidates(text, context, startsOtherName) {
 }
 
 /**
- * The months the season is played in, from the current one on, then the ones gone by.
+ * How many months a season's days reach, counting its first and last.
+ * @param {string} first "YYYY-MM-DD"
+ * @param {string} last "YYYY-MM-DD"
+ */
+const countMonthsReached = (first, last) =>
+  (Number(last.slice(0, 4)) - Number(first.slice(0, 4))) * 12 +
+  Number(last.slice(5, 7)) -
+  Number(first.slice(5, 7)) +
+  1;
+
+/**
+ * The months the season is played in, in order from the current one on, then the ones gone by.
+ * Outside the season, they start at the first month after today's, or at the season's first.
  * @param {SearchContext} context
  * @returns {Meaning[]}
  */
 function listSeasonMonths(context) {
-  const first = Number(context.seasonStart.slice(5, 7));
-  const last = Number(context.seasonEnd.slice(5, 7));
+  const months = Array.from(
+    { length: countMonthsReached(context.seasonStart, context.seasonEnd) },
+    (_, index) => shiftMonth(context.seasonStart, index),
+  );
   const now = Number(context.today.slice(5, 7));
-  const months = Array.from({ length: last - first + 1 }, (_, index) => first + index);
-  const ordered = [
-    ...months.filter((month) => month >= now),
-    ...months.filter((month) => month < now),
-  ];
-  return ordered.map((month) => ({
+  const current = months.findIndex(({ month }) => month === now);
+  const later = months.findIndex(({ month }) => month > now);
+  const start = [current, later].find((index) => index >= 0) ?? months.length;
+  return [...months.slice(start), ...months.slice(0, start)].map(({ month, year }) => ({
     kind: "month",
     value: month,
-    display: readMonthDays(month, context.year).label,
+    display: readMonthDays(month, year).label,
   }));
 }
 
