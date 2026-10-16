@@ -155,6 +155,26 @@ test("a diff splits into each file's, a deleted file's under the path it had", (
   assert.equal(byPath.get("old.js"), deleted);
 });
 
+test("a path with a space is found under its name, though git ends its header with a tab", () => {
+  const spaced = [
+    "diff --git a/a b.js b/a b.js",
+    "--- a/a b.js\t",
+    "+++ b/a b.js\t",
+    "@@ -1,0 +1 @@",
+    "+x",
+    "",
+  ].join("\n");
+  assert.deepEqual([...splitDiffByFile(spaced).keys()], ["a b.js"]);
+});
+
+test("a changed file the diff has no part for stops the review rather than counting as read", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  assert.throws(
+    () => writeReview(folder, { numstat: "1\t0\tmissing.js\n", diff: diffFile("other.js", [1]) }),
+    /The diff has no part for missing\.js/,
+  );
+});
+
 test("a file's diff is one part while it fits, and splits between hunks once it doesn't", () => {
   assert.equal(splitIntoParts(diffFile("a.js", [10, 10])).length, 1);
   const parts = splitIntoParts(diffFile("a.js", [600, 600]));

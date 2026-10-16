@@ -119,8 +119,8 @@ export function splitDiffByFile(diff) {
   const byPath = new Map();
   for (const fileDiff of diff.split(/^(?=diff --git )/m).filter(Boolean)) {
     const path =
-      fileDiff.match(/^\+\+\+ b\/(.+)$/m)?.[1] ??
-      fileDiff.match(/^--- a\/(.+)$/m)?.[1] ??
+      fileDiff.match(/^\+\+\+ b\/(.+?)\t?$/m)?.[1] ??
+      fileDiff.match(/^--- a\/(.+?)\t?$/m)?.[1] ??
       fileDiff.match(/^diff --git a\/(.+) b\//)?.[1];
     if (path) byPath.set(path, fileDiff);
   }
@@ -257,7 +257,10 @@ export function writeReview(folder, { numstat, diff }) {
   /** @type {Map<string, string[]>} */
   const partsByPath = new Map();
   for (const path of plan.shares.flatMap((share) => share.files)) {
-    const parts = splitIntoParts(diffs.get(path) ?? "");
+    const fileDiff = diffs.get(path);
+    if (fileDiff === undefined)
+      throw new Error(`The diff has no part for ${path}, so it can't be read.`);
+    const parts = splitIntoParts(fileDiff);
     const names = nameParts(path, parts.length);
     names.forEach((name, index) => {
       mkdirSync(dirname(join(folder, name)), { recursive: true });
@@ -274,8 +277,13 @@ export function writeReview(folder, { numstat, diff }) {
   return { shares, unread: plan.unread };
 }
 
+// Paths as they are, not quoted and escaped, so the two diffs name each file alike.
 /** @param {string[]} args */
-const runGit = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 1 << 30 });
+const runGit = (args) =>
+  execFileSync("git", ["-c", "core.quotePath=false", ...args], {
+    encoding: "utf8",
+    maxBuffer: 1 << 30,
+  });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const folder = process.argv[2];

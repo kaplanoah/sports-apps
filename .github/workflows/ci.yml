@@ -541,6 +541,12 @@ jobs:
           path: .review/across.json
           retention-days: 14
           overwrite: true
+      # So that re-running the failed jobs checks across the shares again.
+      - name: Fail when the check didn't finish
+        if: steps.review.outcome != 'success'
+        run: |
+          echo "::error::The check across shares didn't finish."
+          exit 1
 
   # Fails a review that left any changed file unread, naming each in the one summary comment it
   # keeps up to date on the pull request. A run a newer push cancelled leaves the summary to the

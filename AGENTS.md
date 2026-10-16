@@ -841,9 +841,9 @@ When a step says to go back to an earlier step, continue in order from there.
    If the summary names something it couldn't judge, tell the user.
    Answer every finding: either fix it and go back to step 2, or reply on the comment saying why not.
    The push with a fix is reviewed again.
-   - If `review` fails, read its summary and the failed share's log, which shows each try's turns and tool calls.
-     If a share stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
-     Otherwise don't reproduce it locally or re-run it: each share already tried twice.
+   - If `review` fails, read its summary and the log of the failed `review-share` or `review-across` job, which shows each try's turns and tool calls.
+     If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
+     Otherwise don't reproduce it locally or re-run it: each share already tried twice, and the check across them once.
      Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
      where a review stalled, or a re-run that failed too.
      `check` can't pass until the job does.

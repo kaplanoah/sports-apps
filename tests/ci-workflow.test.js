@@ -171,7 +171,9 @@ test("the review reads every share in full and fails on any file left unread", (
     /node worker\/judge-review\.mjs share \.review "\$SHARE" >> "\$GITHUB_OUTPUT"/,
   );
   assert.match(share, /if: always\(\) && steps\.first\.outputs\.unread != ''/);
-  assert.match(readJob("review-across"), /node worker\/judge-review\.mjs across \.review/);
+  const across = readJob("review-across");
+  assert.match(across, /node worker\/judge-review\.mjs across \.review/);
+  assert.match(across, /if: steps\.review\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
   assert.match(
     share,
     /if: always\(\) && steps\.last\.outputs\.unread != ''\n\s+run: \|\n.*\n\s+exit 1/,
