@@ -1,3 +1,13 @@
+import { expect } from "@playwright/test";
+
+/**
+ * Waits until no row is pressed, so the tint a test's own tap leaves for a moment after it lets go
+ * is never taken for the page as it rests.
+ * @param {import("@playwright/test").Page} page
+ */
+export const waitForPressesToEnd = (page) =>
+  expect.poll(() => page.evaluate(() => !document.querySelector(".is-pressed"))).toBe(true);
+
 /**
  * The buttons and disclosures on the page that a phone would flash gray when tapped.
  * @param {import("@playwright/test").Page} page

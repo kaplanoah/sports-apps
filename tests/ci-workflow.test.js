@@ -80,7 +80,7 @@ test("burn-in runs every test ten times however many fail, and fails only on a t
   assert.match(burnIn, /name: burn-in-flaky-/);
 });
 
-// Burn-in's four machines start only for a pull request that changes a browser spec, and check
+// Burn-in's machines start only for a pull request that changes a browser spec, and check
 // requires them to pass then.
 test("burn-in runs only when a pull request changes a browser spec, and check requires it then", () => {
   assert.match(readJob("changed-specs"), /git diff --name-only --diff-filter=AM HEAD\^1 HEAD/);
