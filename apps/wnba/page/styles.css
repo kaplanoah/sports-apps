@@ -1963,7 +1963,11 @@ section.bracket-standings.active {
 .standings-list + .standings-list {
   margin-top: 30px;
 }
+/* The gaps before each column, before the second of a pair, and before the playoffs. */
 table.standings {
+  --column-gap: 12px;
+  --pair-gap: 16px;
+  --group-gap: 21px;
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
@@ -1971,7 +1975,7 @@ table.standings {
   font-weight: var(--type-detail-weight);
 }
 table.standings th {
-  padding: 0 0 6px 12px;
+  padding: 0 0 6px var(--column-gap);
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
@@ -1993,7 +1997,7 @@ table.standings th.list-title {
   color: var(--structure);
 }
 table.standings td {
-  padding: 10px 0 10px 12px;
+  padding: 10px 0 10px var(--column-gap);
   border-top: 1px solid var(--divider);
   background: var(--raised);
   text-align: center;
@@ -2046,10 +2050,18 @@ table.standings th:last-child {
   padding-right: 11px;
 }
 table.standings .pair-end {
-  padding-left: 16px;
+  padding-left: var(--pair-gap);
 }
 table.standings .recent-start {
-  padding-left: 21px;
+  padding-left: var(--group-gap);
+}
+/* On a phone narrower than 390px, the gaps close so every table ends inside the screen. */
+@media (max-width: 389px) {
+  table.standings {
+    --column-gap: 8px;
+    --pair-gap: 11px;
+    --group-gap: 14px;
+  }
 }
 table.standings td.season {
   font-size: var(--type-detail-size);

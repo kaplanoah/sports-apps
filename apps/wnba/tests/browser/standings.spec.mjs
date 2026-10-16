@@ -292,13 +292,48 @@ test("the league and each conference stack one under another, each named at its 
   expect(lists[0].top - pillBottom).toBeCloseTo(3.5, 1);
 });
 
-test("on a narrow phone, a table wider than the room is cut off at the screen's edge rather than scrolling the page sideways", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 360, height: 780 });
+/**
+ * Where each standings card ends across the screen, and how wide the page scrolls.
+ * @param {import("@playwright/test").Page} page
+ */
+const readStandingsEdges = (page) =>
+  page.evaluate(() => ({
+    rights: [...document.querySelectorAll("#standingsWrap table.standings")].map(
+      (table) => table.getBoundingClientRect().right,
+    ),
+    pageWidth: document.documentElement.scrollWidth,
+  }));
+
+for (const { width, margin } of [
+  { width: 375, margin: 16 },
+  { width: 360, margin: 10 },
+]) {
+  test(`on a ${width}px phone, every standings card ends at least ${margin}px inside the screen, its right edge showing, and the page doesn't scroll sideways`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 780 });
+    await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await expect(page.locator("#standings-west")).toBeAttached();
+
+    const { rights, pageWidth } = await readStandingsEdges(page);
+    expect(rights).toHaveLength(3);
+    for (const right of rights) expect(right).toBeLessThanOrEqual(width - margin);
+    expect(pageWidth).toBe(width);
+  });
+}
+
+test("on a 390px phone, the standings keep their full gaps between columns", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  await expect(page.locator("#standings-west")).toBeAttached();
 
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+  const row = page.locator("#standings-west tbody tr[data-team]").first();
+  const gaps = await row.evaluate((element) =>
+    ["td.season:not(.pair-end)", "td.season.pair-end", "td.recent-start"].map(
+      (selector) =>
+        getComputedStyle(/** @type {Element} */ (element.querySelector(selector))).paddingLeft,
+    ),
+  );
+  expect(gaps).toEqual(["12px", "16px", "21px"]);
 });
