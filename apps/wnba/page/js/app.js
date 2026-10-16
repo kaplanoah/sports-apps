@@ -43,6 +43,7 @@ import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js
 import { renderBracket } from "./bracket-view.js";
 import { openGameSection, refreshGameSheet, startGameSheet } from "./game-sheet.js";
 import { renderDot } from "./clubs.js";
+import { LEAGUE_WORDS } from "./league-words.js";
 import { listFoundGameDays, listListedGames, listSeasonDays } from "./games-view.js";
 import { NEWS_LEAGUE } from "./news-league.js";
 import { refreshPlayerSheet, startPlayerSheet } from "./player-sheet.js";
@@ -81,7 +82,7 @@ function drawNews() {
 function renderTitleYear() {
   const { year: shownYear, currentYear } = session;
   const isSeasonOver = isPlayoffsOver(session.season?.series ?? []);
-  showTitleYear(chooseTitleYear({ shownYear, currentYear, isSeasonOver }));
+  showTitleYear(chooseTitleYear({ shownYear, currentYear, isSeasonOver }), LEAGUE_WORDS);
 }
 
 function renderAll() {
@@ -163,7 +164,8 @@ async function listSeasonYears() {
 }
 
 /** @param {string[]} years */
-const fillSeasonList = (years) => fillSeasonPicker(findSeasonPicker(), years, session.year);
+const fillSeasonList = (years) =>
+  fillSeasonPicker(findSeasonPicker(), years, session.year, LEAGUE_WORDS);
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 /** @param {number} year */

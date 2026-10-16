@@ -36,6 +36,7 @@ const TERMS = {
     pastRegulation: { name: "Overtime", words: ["overtime"], games: "overtime games" },
     crossConference: null,
     neverShown: [],
+    seasonSpansYears: false,
   },
   examples: [],
   starters: [{ id: "5", name: "Pell", words: ["pell"] }],
