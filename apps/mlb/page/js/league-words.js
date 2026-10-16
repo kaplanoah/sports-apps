@@ -10,6 +10,7 @@ export const LEAGUE_WORDS = {
     games: "extra-inning games",
   },
   crossConference: { name: "Interleague", words: ["interleague", "inter league"] },
+  seasonSpansYears: false,
   neverShown: [
     "postseason",
     "post-season",

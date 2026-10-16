@@ -111,7 +111,6 @@ import { createDictionary, readTokens } from "./search-words.js";
  * @property {import("./search-words.js").Dictionary} dictionary
  * @property {SearchGame[]} games the season's games, in order of start
  * @property {string} today
- * @property {number} year the season's
  * @property {string} seasonStart
  * @property {string} seasonEnd
  * @property {Map<string, SearchTeam>} teamsByCode
@@ -509,12 +508,32 @@ export function createSearchContext({ terms, dictionary, games, now }) {
     dictionary,
     games,
     today,
-    year: Number(seasonStart.slice(0, 4)),
     seasonStart,
     seasonEnd: days.at(-1) ?? today,
     teamsByCode: new Map(terms.teams.map((team) => [team.code, team])),
   };
 }
+
+/**
+ * The year a month of the season falls in: the year the season starts, or, for a season that runs
+ * into the next year, the next one for a month before the one it starts in.
+ * @param {SearchContext} context
+ * @param {number} month 1 to 12
+ */
+function readSeasonMonthYear({ seasonStart, seasonEnd }, month) {
+  const startYear = Number(seasonStart.slice(0, 4));
+  const runsIntoNextYear = Number(seasonEnd.slice(0, 4)) > startYear;
+  return runsIntoNextYear && month < Number(seasonStart.slice(5, 7)) ? startYear + 1 : startYear;
+}
+
+/**
+ * The days of a month of the season.
+ * @param {SearchContext} context
+ * @param {number} month 1 to 12
+ * @param {[number, number]} [days] the first and last day of the month to cover
+ */
+const readSeasonMonthDays = (context, month, days) =>
+  readMonthDays(month, readSeasonMonthYear(context, month), days);
 
 /** @returns {Search} */
 const createEmptySearch = () => ({
@@ -604,15 +623,15 @@ function readMonthAt(state, month) {
   const { tokens, at, context, search } = state;
   const day = readNumber(tokens[at + 1]);
   if (day === null) {
-    search.ranges.push(readMonthDays(month, context.year));
+    search.ranges.push(readSeasonMonthDays(context, month));
     return 1;
   }
-  const from = readMonthDays(month, context.year, [day, day]).from;
+  const from = readSeasonMonthDays(context, month, [day, day]).from;
   const toMonth = findKind(tokens[at + 3], "month")?.value;
   const endOffset = toMonth ? 4 : 3;
   const endDay = hasKind(tokens[at + 2], "to") ? readNumber(tokens[at + endOffset]) : null;
   const to =
-    endDay === null ? from : readMonthDays(toMonth ?? month, context.year, [endDay, endDay]).from;
+    endDay === null ? from : readSeasonMonthDays(context, toMonth ?? month, [endDay, endDay]).from;
   search.ranges.push({ from, to, label: formatDays(from, to) });
   return endDay === null ? 2 : endOffset + 1;
 }
@@ -623,20 +642,23 @@ function readNumberAt(state) {
   const token = tokens[at];
   const slash = /^(\d{1,2})\/(\d{1,2})$/.exec(token.text);
   if (slash) {
-    const day = readMonthDays(Number(slash[1]), context.year, [Number(slash[2]), Number(slash[2])]);
+    const day = readSeasonMonthDays(context, Number(slash[1]), [
+      Number(slash[2]),
+      Number(slash[2]),
+    ]);
     search.ranges.push({ ...day, label: formatDays(day.from, day.to) });
     return 1;
   }
   const number = readNumber(token);
   const month = findKind(tokens[at + 1], "month")?.value;
   if (number !== null && month) {
-    const day = readMonthDays(month, context.year, [number, number]);
+    const day = readSeasonMonthDays(context, month, [number, number]);
     search.ranges.push({ ...day, label: formatDays(day.from, day.to) });
     return 2;
   }
   if (number !== null && /(st|nd|rd|th)$/.test(token.text)) {
     const thisMonth = Number(context.today.slice(5, 7));
-    const day = readMonthDays(thisMonth, context.year, [number, number]);
+    const day = readSeasonMonthDays(context, thisMonth, [number, number]);
     search.ranges.push({ ...day, label: formatDays(day.from, day.to) });
     return 1;
   }
@@ -716,7 +738,7 @@ function readPartAt(state, part) {
   const { tokens, at, context, search } = state;
   const month = findKind(tokens[at + 1], "month")?.value;
   if (month) {
-    search.ranges.push(readPartOfMonth(part, month, context.year));
+    search.ranges.push(readPartOfMonth(part, month, readSeasonMonthYear(context, month)));
     return 2;
   }
   if (part !== "late") return 0;
