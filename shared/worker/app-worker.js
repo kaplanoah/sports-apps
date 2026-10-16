@@ -128,10 +128,24 @@ const serveRobots = (commit) =>
     commit ? { [RELEASE_COMMIT_HEADER]: commit } : {},
   );
 
-// The page and its store answer only under the APP_KEY secret; only robots.txt and health don't.
-function findAppPath(pathname, appKey) {
-  if (!appKey) return null;
-  const prefix = `/${appKey}`;
+// The page and its store answer under the APP_KEY secret, and at the address the PAGE_HOST secret
+// names without it, where the access code alone guards them, so only while the Worker has one.
+// Only robots.txt and health answer anywhere.
+/**
+ * @param {URL} url
+ * @param {any} env
+ * @returns {string | null} what the page's paths start with, or null where nothing answers
+ */
+function findAppPrefix(url, env) {
+  if (env.PAGE_HOST && url.hostname === env.PAGE_HOST) return env.ACCESS_CODE ? "" : null;
+  return env.APP_KEY ? `/${env.APP_KEY}` : null;
+}
+
+/**
+ * @param {string} pathname
+ * @param {string} prefix
+ */
+function findAppPath(pathname, prefix) {
   if (pathname === prefix) return "";
   return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) : null;
 }
@@ -145,7 +159,8 @@ const GATE_PATH = "/gate.html";
 
 /**
  * An app's Worker: its page, its store, its live snapshot, and any reads of its own, all under the
- * APP_KEY secret, and behind the ACCESS_CODE secret when the Worker has one.
+ * APP_KEY secret or at the PAGE_HOST address, and behind the ACCESS_CODE secret when the Worker
+ * has one.
  * @param {object} app
  * @param {Parameters<typeof decodePageFiles>[0]} app.pageFiles
  * @param {(url: URL) => Response | Promise<Response>} app.serveSnapshot
@@ -178,9 +193,10 @@ export function createAppWorker({
   }
 
   // Each visit to a page with a code renews its cookie, so a phone in use never has to type it again.
-  async function servePage(request, env, appPath) {
+  async function servePage(request, env, appPath, prefix) {
     const page = await servePageFile(request, appPath);
-    if (env.ACCESS_CODE) page.headers.append("set-cookie", await createAccessCookie(request, env));
+    if (env.ACCESS_CODE)
+      page.headers.append("set-cookie", await createAccessCookie(request, env, prefix));
     return page;
   }
 
@@ -189,16 +205,17 @@ export function createAppWorker({
       const url = new URL(request.url);
       if (url.pathname === "/robots.txt") return serveRobots(releaseCommit);
       if (url.pathname === "/health") return serveHealth(env);
-      const appPath = findAppPath(url.pathname, env.APP_KEY);
+      const prefix = findAppPrefix(url, env);
+      const appPath = prefix === null ? null : findAppPath(url.pathname, prefix);
       if (appPath === null) return serveNotFound();
       if (appPath === "") return redirectToFolder(url);
-      if (appPath === ACCESS_PATH) return serveAccess(request, env);
+      if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
       if ((await readAccess(request, env)) !== "open") return serveLocked(request, appPath);
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
       if (request.method === "GET" && appPath === "/snapshot") return serveSnapshot(url);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))
         return reads[appPath](url, env);
-      if (isIndexPath(appPath)) return servePage(request, env, appPath);
+      if (isIndexPath(appPath)) return servePage(request, env, appPath, prefix);
       return servePageFile(request, appPath);
     },
   };
