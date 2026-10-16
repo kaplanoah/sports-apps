@@ -40,6 +40,9 @@ export const session = {
 
 export const readSeasonYear = () => session.currentSeason;
 
+/** Whether the shown season's playoff field is set, rather than projected from the standings. */
+export const isFieldSet = () => session.state?.projected === false;
+
 // The day's finals show as fresh for a few minutes after they end.
 export function composeState() {
   const { season } = session;

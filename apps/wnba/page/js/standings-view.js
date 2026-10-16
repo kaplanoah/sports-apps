@@ -1,5 +1,5 @@
-import { html } from "#shared/html.js";
-import { createPager } from "#shared/pager.js";
+import { scrollUnderPill } from "#shared/bracket-standings.js";
+import { html, setHtml } from "#shared/html.js";
 import { renderPlainClub, renderTeamButton } from "./clubs.js";
 import { readPlayoffRuns } from "./series.js";
 import { ROUNDS } from "./snapshot.js";
@@ -17,9 +17,6 @@ const STANDINGS_VIEWS = ["League", "East", "West"];
 
 /** @param {StandingsView} view */
 const nameViewKey = (view) => view.toLowerCase();
-
-/** @type {ReturnType<typeof createPager> | null} */
-let standingsPager = null;
 
 // The top eight across the league make the playoffs, whatever their conference.
 const PLAYOFF_SPOTS = 8;
@@ -165,7 +162,8 @@ function listViewRows(league, view) {
 }
 
 /**
- * One table, of the league or a conference, with the playoff line after the league's eighth.
+ * One table, of the league or a conference, named over its teams, with the playoff line after the
+ * league's eighth.
  * @param {Season | null} season
  * @param {StandingsView} [view]
  */
@@ -183,8 +181,7 @@ export function renderStandings(season, view = "League") {
           <th colspan="2" class="recent-start">${form.group}</th>
         </tr>
         <tr>
-          <th></th>
-          <th class="team">Team</th>
+          <th colspan="2" class="list-title">${view}</th>
           <th>W-L</th>
           <th class="pair-end">GB</th>
           <th class="recent recent-start">${form.heads[0]}</th>
@@ -198,33 +195,31 @@ export function renderStandings(season, view = "League") {
   </div>`;
 }
 
-/** Builds the pill over the league's and each conference's table, which a swipe moves between. */
-export function startStandings() {
-  standingsPager = createPager(
-    /** @type {HTMLElement} */ (document.getElementById("standingsPager")),
-    {
-      label: "Standings",
-      idPrefix: "standings",
-      lists: STANDINGS_VIEWS.map((view) => ({ key: nameViewKey(view), name: view })),
-      openOn: nameViewKey("League"),
-    },
-  );
+/**
+ * The league's table, then each conference's, one under another.
+ * @param {Season | null} season
+ */
+export function renderStandingsLists(season) {
+  if (!season?.standings?.length) return renderStandings(season);
+  return html`${STANDINGS_VIEWS.map(
+    (view) =>
+      html`<div class="standings-list" id="standings-${nameViewKey(view)}">${renderStandings(season, view)}</div>`,
+  )}`;
 }
 
 /** @param {Season | null} season */
 export function drawStandings(season) {
-  standingsPager.fill((key) =>
-    renderStandings(
-      season,
-      STANDINGS_VIEWS.find((view) => nameViewKey(view) === key),
-    ),
+  setHtml(
+    /** @type {HTMLElement} */ (document.getElementById("standingsWrap")),
+    renderStandingsLists(season),
   );
 }
 
 /**
- * Shows one of the tab's lists, as a search's row for it asks.
+ * Brings one of the standings' lists up under the pill, as a search's row for it asks.
  * @param {string} key
  */
 export function showStandingsList(key) {
-  standingsPager?.switchToList(key);
+  const list = document.getElementById(`standings-${key}`);
+  if (list) scrollUnderPill(list);
 }

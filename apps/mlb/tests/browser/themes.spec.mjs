@@ -13,6 +13,7 @@ import {
 } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listLayoutChanges, readLayout } from "../../../../tests/browser/theme-layout.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -69,7 +70,7 @@ async function listThemeLayoutChanges(page) {
  * @param {string} club
  */
 async function openRoster(page, club) {
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator(`.div-grid tr[data-team="${club}"] .team-open`).click();
   await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
 }
@@ -103,7 +104,7 @@ const VIEW_GROUPS = {
   "the page's tabs": [
     {
       name: "Bracket",
-      open: (page) => page.getByRole("tab", { name: "Bracket" }).click(),
+      open: (page) => openSeasonPart(page, "Bracket"),
       shown: (page) => page.locator("#bracketWrap .card-note").first(),
     },
     {
@@ -129,7 +130,7 @@ const VIEW_GROUPS = {
     },
     {
       name: "Standings",
-      open: (page) => page.getByRole("tab", { name: "Standings" }).click(),
+      open: (page) => openSeasonPart(page, "Standings"),
       shown: (page) => page.locator("table.st tbody tr").first(),
     },
     {
@@ -181,7 +182,7 @@ const VIEW_GROUPS = {
     {
       name: "a club's sheet",
       open: async (page) => {
-        await page.getByRole("tab", { name: "Standings" }).click();
+        await openSeasonPart(page, "Standings");
         await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
       },
       shown: (page) => page.locator("#teamSheet .leader-stat").first(),

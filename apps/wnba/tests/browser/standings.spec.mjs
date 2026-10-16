@@ -1,11 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
-import {
-  listFillFades,
-  noteNameFades,
-  readFilledNames,
-} from "../../../../tests/browser/pill-names.mjs";
-import { drag, swipeScrollerTo } from "../../../../tests/browser/touch.mjs";
 import { readTokenColor } from "./theme.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -14,48 +9,9 @@ const STANDINGS_NAME_GAP_PX = 20;
 // The least room between a standings group's name, like Playoffs, and its columns' names under it.
 const STANDINGS_HEADING_GAP_PX = 6;
 
-test.describe("on a phone, the standings", () => {
-  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-
-  test("swipe sideways from the league to a conference, and the pill follows", async ({ page }) => {
-    await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    const pages = page.locator("#standings-pages");
-    await expect(page.locator("#standings-league")).toContainText("Lynx");
-
-    await swipeScrollerTo(pages, 1);
-
-    await expect(page.getByRole("tab", { name: "East" })).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("#standings-east")).toBeInViewport();
-    const box = await pages.boundingBox();
-    expect(box.x).toBe(0);
-    expect(box.width).toBe(390);
-  });
-
-  test("come back from another tab held for where the page is now, not where it was when they left", async ({
-    page,
-  }) => {
-    await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    await expect(page.locator("#standings-league")).toContainText("Lynx");
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    const bar = page.locator("#standings-bar");
-    await expect(bar).toHaveClass(/stuck/);
-    await expect(page.locator("#standings-east")).not.toHaveCSS("transform", "none");
-
-    await page.getByRole("tab", { name: "Bracket" }).click();
-    await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
-    await page.getByRole("tab", { name: "Standings" }).click();
-
-    await expect(bar).not.toHaveClass(/stuck/);
-    await expect(bar).toHaveCSS("background-image", "none");
-    await expect(page.locator("#standings-east")).toHaveCSS("transform", "none");
-  });
-});
-
 test("the standings leave room between each team's name and the next one's", async ({ page }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const names = page.locator("#standings-league tbody td.team");
   await expect(names.first()).toBeVisible();
   const gaps = await names.evaluateAll((cells) =>
@@ -72,7 +28,7 @@ test("the standings leave room between each group's name and its columns' names"
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const heads = page.locator("#standings-league thead");
   await expect(heads.locator("tr.groups th.recent-start")).toHaveText("Playoffs");
   await expect(heads.locator("th.recent-start").last()).toHaveText("Rd 1");
@@ -92,7 +48,7 @@ test("a standings conference tag's letter is trimmed to its capital, with even r
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const tag = page.locator("#standings-league .conference-tag").first();
   await expect(tag).toHaveText(/^[EW]$/);
   const room = await tag.evaluate((element) => {
@@ -113,40 +69,11 @@ test("a standings conference tag's letter is trimmed to its capital, with even r
   expect(room.above).toBe(room.below);
 });
 
-test("the Standings pill switches between the league and each conference, through the season's updates and back from another tab", async ({
-  page,
-}) => {
-  const app = await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  const pill = page.getByRole("tablist", { name: "Standings" });
-  const shownFirstTeam = page.locator(".pager-page:not([inert]) tbody tr").first();
-  await expect(page.getByRole("table", { name: "League standings" })).toBeInViewport();
-  await expect(shownFirstTeam).toContainText("Lynx");
-
-  await pill.getByRole("tab", { name: "East" }).click();
-
-  await expect(page.getByRole("table", { name: "East standings" })).toBeInViewport();
-  await expect(shownFirstTeam).toContainText("Dream");
-  await expect(pill.getByRole("tab", { name: "East" })).toHaveAttribute("aria-selected", "true");
-
-  await app.changeSeason((season) => {
-    season.standings.find((row) => row.team === "ATL").wins += 1;
-    return season;
-  });
-  await expect(shownFirstTeam).toContainText("31-14");
-  await expect(page.getByRole("table", { name: "East standings" })).toBeInViewport();
-
-  await page.getByRole("tab", { name: "Games" }).click();
-  await page.getByRole("tab", { name: "Standings" }).click();
-  await expect(page.getByRole("table", { name: "East standings" })).toBeInViewport();
-  await expect(pill.getByRole("tab", { name: "East" })).toHaveAttribute("aria-selected", "true");
-});
-
 test("the standings' recent form reads a step below the season, in the mid ink", async ({
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const lynx = page.locator('#standings-league tr[data-team="MIN"]');
   await expect(lynx).toBeVisible();
   const readType = (cell) =>
@@ -165,7 +92,7 @@ test("the standings' recent form reads a step below the season, in the mid ink",
 
 test("the playoff line is one dashed strip across the whole table", async ({ page }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const table = await page.locator("#standings-league table.standings").boundingBox();
   const line = await page.locator("#standings-league tr.playoff-line td").boundingBox();
   expect(line.x).toBeCloseTo(table.x, 0);
@@ -176,7 +103,7 @@ test("the standings' teams sit on one raised card inside its edge, with their co
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const table = page.locator("#standings-league table.standings");
   await expect(table.locator("tbody tr").first()).toBeVisible();
   const [raised, edge, divider] = await Promise.all(
@@ -218,7 +145,7 @@ test("the standings' widest value in the last column ends 10px in from the card'
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const table = page.locator("#standings-league table.standings");
   await expect(table.locator("tbody tr").first()).toBeVisible();
   const rooms = await table.locator("tbody td:last-child").evaluateAll((cells) =>
@@ -238,7 +165,7 @@ test("the standings' ranks sit 10px in from the card's edge and 6px before the n
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const table = page.locator("#standings-league table.standings");
   await expect(table.locator("tbody tr").first()).toBeVisible();
   const [one, ten] = await Promise.all(
@@ -276,147 +203,11 @@ test("the standings' ranks sit 10px in from the card's edge and 6px before the n
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  const readStandingsPosition = (page) =>
-    page.locator("#standings-pages").evaluate((pages) => pages.scrollLeft / pages.clientWidth);
-
-  /**
-   * Starts noting where the standings' lists were each time the pill changed its chosen name.
-   * @param {import("@playwright/test").Page} page
-   * @returns {Promise<() => Promise<{ name: string, position: number }[]>>}
-   */
-  async function noteNameChoices(page) {
-    await page.evaluate(() => {
-      const choices = /** @type {object[]} */ ([]);
-      const pages = /** @type {HTMLElement} */ (document.getElementById("standings-pages"));
-      new MutationObserver((records) => {
-        for (const record of records) {
-          const tab = /** @type {HTMLElement} */ (record.target);
-          if (tab.getAttribute("aria-selected") !== "true") continue;
-          choices.push({
-            name: (tab.textContent ?? "").trim(),
-            position: pages.scrollLeft / pages.clientWidth,
-          });
-        }
-      }).observe(/** @type {Node} */ (document.querySelector("#standings-bar [role=tablist]")), {
-        attributes: true,
-        attributeFilter: ["aria-selected"],
-        subtree: true,
-      });
-      Object.assign(window, { nameChoices: choices });
-    });
-    return () => page.evaluate(() => /** @type {any} */ (window).nameChoices);
-  }
-
-  test("a tap on a name two over hands the pill's fill straight there, the old name's fading out as the new one's fades in, eased alike, the new name's letters a beat behind, and the name between never filling", async ({
-    page,
-  }) => {
-    await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    await expect(page.getByRole("tab", { name: "League" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    const tabList = page.locator("#standings-bar [role=tablist]");
-    const readChoices = await noteNameChoices(page);
-    const readFades = await noteNameFades(tabList);
-
-    await page.getByRole("tab", { name: "West" }).click();
-
-    await expect.poll(() => readStandingsPosition(page)).toBe(2);
-    const [choice, ...later] = await readChoices();
-    expect(choice).toEqual({ name: "West", position: 0 });
-    expect(later).toEqual([]);
-    const fades = await readFades();
-    expect(listFillFades(fades)).toEqual([
-      "League 0.18s 0s ease-in-out",
-      "West 0.18s 0s ease-in-out",
-    ]);
-    const [leagueFrame, westFrame] = fades
-      .filter(({ property }) => property === "background-color")
-      .map(({ frame }) => frame);
-    expect(westFrame).toBe(leagueFrame);
-    const letterFades = fades
-      .filter(({ property }) => property === "color")
-      .map(({ name, duration, delay }) => `${name} ${duration} ${delay}`)
-      .sort();
-    expect(letterFades).toEqual(["League 0.18s 0s", "West 0.2s 0.025s"]);
-    expect(await readFilledNames(tabList)).toEqual(["West"]);
-  });
-
-  test("with reduced motion, a tap moves the pill's fill at once, fading nothing", async ({
-    page,
-  }) => {
-    await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    const tabList = page.locator("#standings-bar [role=tablist]");
-    const readFades = await noteNameFades(tabList);
-
-    await page.getByRole("tab", { name: "West" }).click();
-
-    await expect.poll(() => readStandingsPosition(page)).toBe(2);
-    expect(await readFilledNames(tabList)).toEqual(["West"]);
-    expect(await readFades()).toEqual([]);
-  });
-
-  test("a finger swiping the standings past halfway leaves the pill as it is while it moves them, and once it lifts, the pill hands off to the list they snap to as they set off", async ({
-    page,
-  }) => {
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    await expect.poll(() => readStandingsPosition(page)).toBe(0);
-    const tabList = page.locator("#standings-bar [role=tablist]");
-    const readChoices = await noteNameChoices(page);
-    const readFades = await noteNameFades(tabList);
-
-    const release = await drag(page, { x: 330, y: 500 }, { x: -250 }, { durationMs: 1000 });
-    const liftPosition = await readStandingsPosition(page);
-    expect(liftPosition).toBeGreaterThan(0.5);
-    expect(liftPosition).toBeLessThan(0.9);
-    expect(await readChoices()).toEqual([]);
-    expect(await readFilledNames(tabList)).toEqual(["League"]);
-    await release();
-
-    await expect(page.getByRole("tab", { name: "East" })).toHaveAttribute("aria-selected", "true");
-    await expect.poll(() => readStandingsPosition(page)).toBe(1);
-    const [choice, ...later] = await readChoices();
-    expect(choice.name).toBe("East");
-    expect(choice.position).toBeGreaterThan(liftPosition);
-    expect(choice.position).toBeLessThan(0.98);
-    expect(later).toEqual([]);
-    expect(listFillFades(await readFades())).toEqual([
-      "East 0.18s 0s ease-in-out",
-      "League 0.18s 0s ease-in-out",
-    ]);
-  });
-
-  test("a finger swiping the standings short of halfway leaves the pill as it is, and once it lifts, the lists spring back with the pill never changing", async ({
-    page,
-  }) => {
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    await expect.poll(() => readStandingsPosition(page)).toBe(0);
-    const tabList = page.locator("#standings-bar [role=tablist]");
-    const readChoices = await noteNameChoices(page);
-    const readFades = await noteNameFades(tabList);
-
-    const release = await drag(page, { x: 330, y: 500 }, { x: -120 }, { durationMs: 1000 });
-    expect(await readStandingsPosition(page)).toBeGreaterThan(0.2);
-    await release();
-
-    await expect.poll(() => readStandingsPosition(page)).toBe(0);
-    expect(await readChoices()).toEqual([]);
-    expect(await readFades()).toEqual([]);
-    expect(await readFilledNames(tabList)).toEqual(["League"]);
-  });
-
   test("the standings show every column, in the playoffs and before them, with a winning streak below the line paler than one above it", async ({
     page,
   }) => {
     const app = await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const table = page.getByRole("table", { name: "League standings" });
     for (const heading of ["W-L", "GB", "Rd 1", "Now"]) {
       await expect(table.getByRole("columnheader", { name: heading, exact: true })).toBeVisible();
@@ -437,7 +228,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const row = page.locator('#standings-league tr[data-team="ATL"]');
     await expect(row).toBeVisible();
     const cells = await row.locator("td").evaluateAll((all) =>
@@ -457,4 +248,57 @@ test.describe("on a phone", () => {
     await page.touchscreen.tap(cells[2].x, cells[2].y);
     await expect(page.locator("#teamSheet #teamTitle")).toHaveText("Atlanta Dream");
   });
+});
+
+test("the league and each conference stack one under another, each named at its table's edge in the teal of the column groups, the first 3.5px under the pill's bar", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-west")).toBeAttached();
+  const teal = await readTokenColor(page, "--structure");
+
+  const lists = await page.locator(".standings-list").evaluateAll((all) =>
+    all.map((list) => {
+      const table = /** @type {Element} */ (list.querySelector("table"));
+      const title = /** @type {HTMLElement} */ (list.querySelector("th.list-title"));
+      const words = document.createRange();
+      words.selectNodeContents(title);
+      return {
+        id: list.id,
+        title: title.textContent,
+        color: getComputedStyle(title).color,
+        titleOffset: words.getBoundingClientRect().left - table.getBoundingClientRect().left,
+        top: table.getBoundingClientRect().top,
+        bottom: table.getBoundingClientRect().bottom,
+      };
+    }),
+  );
+
+  expect(lists.map(({ id, title }) => [id, title])).toEqual([
+    ["standings-league", "League"],
+    ["standings-east", "East"],
+    ["standings-west", "West"],
+  ]);
+  for (const list of lists) {
+    expect(list.color, list.id).toBe(teal);
+    expect(list.titleOffset, list.id).toBeCloseTo(0, 0);
+  }
+  expect(lists[1].top).toBeGreaterThan(lists[0].bottom);
+  expect(lists[2].top).toBeGreaterThan(lists[1].bottom);
+  const pillBottom = await page
+    .locator("#bracketStandingsPill")
+    .evaluate((bar) => bar.getBoundingClientRect().bottom);
+  expect(lists[0].top - pillBottom).toBeCloseTo(3.5, 1);
+});
+
+test("on a narrow phone, a table wider than the room is cut off at the screen's edge rather than scrolling the page sideways", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-west")).toBeAttached();
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
 });

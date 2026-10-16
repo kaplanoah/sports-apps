@@ -60,16 +60,3 @@ export async function pullDown(page, distance) {
   const release = await drag(page, { x: 200, y: 40 }, { y: distance });
   await release();
 }
-
-/**
- * Scrolls a row of lists sideways between a touch's start and end, as a finger's swipe does, for a
- * test of where the lists come to rest rather than of the swipe itself.
- * @param {import("@playwright/test").Locator} scroller
- * @param {number} widths how far along to scroll it, in its own widths
- */
-export const swipeScrollerTo = (scroller, widths) =>
-  scroller.evaluate((element, to) => {
-    element.dispatchEvent(new Event("touchstart"));
-    element.scrollLeft = element.clientWidth * to;
-    element.dispatchEvent(new Event("touchend"));
-  }, widths);

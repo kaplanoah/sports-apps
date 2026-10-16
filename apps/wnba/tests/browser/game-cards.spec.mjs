@@ -1,4 +1,5 @@
 import { test, expect, openApp } from "./harness.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -234,7 +235,7 @@ test("a card's lines sit at their spacing, from the tops of their capitals to th
 test("a team without a game yet starts its sheet 20px under the band", async ({ page }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('#standings-league tr[data-team="SEA"] .team-open').click();
   const sheet = page.locator("#teamSheet");
   await expect(sheet.locator("#teamTitle")).toHaveText("Seattle Storm");

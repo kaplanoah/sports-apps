@@ -46,6 +46,7 @@ import {
   LOCKED_PAGE_PATH,
 } from "../../../../tests/browser/harness.mjs";
 import { holdStore } from "../../../../tests/browser/hold-store.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 const loadFixture = (name) =>
   JSON.parse(readFileSync(new URL(`../fixtures/${name}.json`, import.meta.url), "utf8"));
@@ -479,6 +480,18 @@ export async function openApp(
       context.sockets.length = 0;
     },
   };
+}
+
+/**
+ * The page as openApp opens it, showing the bracket, which the afternoon's regular season keeps
+ * behind the Standings tab's pill.
+ * @param {import("@playwright/test").Page} page
+ * @param {Parameters<typeof openApp>[1]} [options]
+ */
+export async function openBracket(page, options) {
+  const app = await openApp(page, options);
+  await openSeasonPart(page, "Bracket");
+  return app;
 }
 
 /**

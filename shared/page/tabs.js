@@ -32,3 +32,19 @@ export function wireTabs(buttons, onSelect) {
     button.addEventListener("keydown", (event) => moveBetweenTabs(event, buttons, onSelect));
   }
 }
+
+/**
+ * Wires the tabs in `tabList`, reading them on each tap or key, so tabs it redraws, as when they
+ * reorder, still work.
+ * @param {HTMLElement} tabList
+ * @param {(tab: string) => void} onSelect
+ */
+export function wireTabList(tabList, onSelect) {
+  const readButtons = () =>
+    /** @type {HTMLButtonElement[]} */ ([...tabList.querySelectorAll("[role=tab]")]);
+  tabList.addEventListener("click", (event) => {
+    const button = /** @type {HTMLElement} */ (event.target).closest("[role=tab]");
+    if (button instanceof HTMLElement && button.dataset.tab) onSelect(button.dataset.tab);
+  });
+  tabList.addEventListener("keydown", (event) => moveBetweenTabs(event, readButtons(), onSelect));
+}

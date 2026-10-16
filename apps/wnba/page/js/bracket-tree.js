@@ -157,9 +157,10 @@ export function startBracket() {
   const wrap = findWrap();
   placeOpeningRound = watchOpeningRound(wrap);
   // Laying the bracket out resizes what this observes, so it waits a frame rather than loop the
-  // observer, and only while the bracket shows.
+  // observer, and only while the bracket shows. The standings sliding in beside it change the
+  // page's height but not the bracket, so it holds still until they rest.
   resizes = new ResizeObserver(() => {
-    if (isShown(wrap)) requestAnimationFrame(layOutAndMarkRound);
+    if (isShown(wrap) && !wrap.closest("[data-sliding]")) requestAnimationFrame(layOutAndMarkRound);
   });
   resizes.observe(wrap);
   resizes.observe(document.body);

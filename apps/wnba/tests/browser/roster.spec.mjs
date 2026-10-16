@@ -10,6 +10,7 @@ import { expectShown, readLeft } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -19,7 +20,7 @@ const GAP_PX = 15;
 
 /** @param {import("@playwright/test").Page} page */
 async function openLibertySheet(page) {
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
   const sheet = page.locator("#teamSheet");
   await expect(sheet.locator("#teamTitle")).toHaveText("New York Liberty");
