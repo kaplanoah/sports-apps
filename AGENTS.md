@@ -835,7 +835,7 @@ When a step says to go back to an earlier step, continue in order from there.
    has Claude review every share at once in `review-share`, and then, for more than one share, across them in `review-across`,
    each posting its findings as comments on the lines they concern.
    The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
-   how many findings it posted by weight, which files it left unread as recorded data,
+   how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
    and anything it read but couldn't judge (`worker/judge-review.mjs`).
    It fails when any changed file went unread, naming each.
    If the summary names something it couldn't judge, tell the user.
