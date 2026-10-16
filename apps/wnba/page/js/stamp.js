@@ -1,5 +1,5 @@
 import { nameDay } from "#shared/days.js";
-import { html, joinWithSeparator } from "#shared/html.js";
+import { html, joinNames, joinWithSeparator } from "#shared/html.js";
 import {
   describeFinishedDay,
   renderStampLine,
@@ -156,7 +156,7 @@ function describeFeedProblem(status) {
   const feeds = String(status.detail ?? "")
     .split(", ")
     .map((feed) => FEED_NAMES[feed] ?? feed);
-  const stopped = `The WNBA stopped sending ${feeds.join(" and ")}`;
+  const stopped = `The WNBA stopped sending ${joinNames(feeds, "and")}`;
   return status.standIn === "espn" ? `${stopped}. Scores are from ESPN for now.` : stopped;
 }
 

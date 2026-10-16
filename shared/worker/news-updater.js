@@ -1,6 +1,6 @@
 import { isSameJson } from "../page/compare.js";
 import { readEasternDay } from "../page/days.js";
-import { isWebAddress } from "../page/news-picks.js";
+import { isWebAddress } from "../page/html.js";
 import { hashText } from "./hash-text.js";
 import { countRequests, describeJobRun } from "./job-status.js";
 import { askClaude } from "./news-claude.js";

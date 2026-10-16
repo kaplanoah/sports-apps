@@ -1,6 +1,8 @@
 // Days and times on the viewer's own calendar and clock, and a league's own day, which is Eastern.
 // A league's day, written "YYYY-MM-DD", is a date on a calendar, not an instant, so it's read as one.
 
+import { capitalize } from "./html.js";
+
 const MS_PER_DAY = 86400000;
 
 const EASTERN_PARTS = new Intl.DateTimeFormat("en-US", {
@@ -255,9 +257,6 @@ export const formatWeekdayAndDate = (date) =>
  */
 export const formatWeekdayOrDate = (date, daysAway) =>
   Math.abs(daysAway) < 7 ? formatWeekday(date) : formatShortDate(date);
-
-/** @param {string} text */
-const capitalize = (text) => text.charAt(0).toLocaleUpperCase() + text.slice(1);
 
 /**
  * A day as the viewer would say it from now: "yesterday", "today", or "tomorrow" when it's one of

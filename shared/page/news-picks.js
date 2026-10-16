@@ -3,6 +3,8 @@
 // them off. When it leaves out a card's lead, the first story under it that it reads leads in its
 // place.
 
+import { isWebAddress } from "./html.js";
+
 const MAX_MORE = 3;
 export const TEAM_OUTLETS = "teamOutlets";
 
@@ -43,10 +45,6 @@ export const TEAM_OUTLETS = "teamOutlets";
  * @param {string} name
  */
 export const isChoiceOn = (choices, name) => choices[name] !== false;
-
-// Stored text is never trusted as a link, so only a web address is.
-/** @param {string} url */
-export const isWebAddress = (url) => /^https?:\/\//i.test(url ?? "");
 
 /**
  * @param {NewsStory} story

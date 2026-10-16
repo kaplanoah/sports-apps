@@ -1,4 +1,4 @@
-import { convertToText } from "../page/html.js";
+import { capitalize, convertToText } from "../page/html.js";
 
 const MAX_NOTIFIED = 4;
 
@@ -24,8 +24,6 @@ export function capNotifications(messages, describeMore) {
 
 // A line of the page breaks into its main clause and what explains it at a spaced dash.
 const SENTENCE_BREAK = /\s\u2014\s/;
-
-const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /**
  * A notification that says what a line of the page says: its main clause is the title, and what

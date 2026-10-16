@@ -11,6 +11,7 @@ export const LEAGUE_WORDS = {
   },
   crossConference: null,
   seasonSpansYears: false,
+  searchFiller: [],
   neverShown: [
     "postseason",
     "post-season",

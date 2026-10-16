@@ -11,7 +11,7 @@
 // color each app sets, and a line's solid and dashed stretches, and each app colors a line's dots
 // from its own stylesheet.
 
-import { html } from "./html.js";
+import { html, joinNames } from "./html.js";
 import { formatOrdinal } from "./ordinal.js";
 
 // The curve's drawing is 100 wide and 20 tall, its peak kept CURVE_HEADROOM below the top.
@@ -153,7 +153,7 @@ export const describeWouldRank = (rank) => `would be ${formatOrdinal(rank)}`;
  * The note under ranks that says which stats rank from the fewest, like ERA or turnovers.
  * @param {string[]} labels
  */
-export const describeFewestFirst = (labels) => `${labels.join(" and ")} ranked by fewest`;
+export const describeFewestFirst = (labels) => `${joinNames(labels, "and")} ranked by fewest`;
 
 /** @param {RankedStat} stat */
 function describeRank(stat) {
