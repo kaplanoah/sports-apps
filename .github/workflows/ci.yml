@@ -625,8 +625,11 @@ jobs:
             needs.review.result == 'success' &&
             (github.event_name != 'pull_request' || needs.changed-specs.result == 'success') &&
             (needs.changed-specs.outputs.specs == '' || needs.burn-in.result == 'success')) }}
-          # A draft's run passes without its review, which doesn't stand in for one.
-          REVIEWED: ${{ needs.passed.outputs.run != '' || needs.review-plan.outputs.count != '' }}
+          # A draft's run passes without its review, which comes once it's ready on the same code, so
+          # it doesn't stand in for one. Any other run skips a review that would never run.
+          REVIEWED: >-
+            ${{ needs.passed.outputs.run != '' || needs.review-plan.outputs.count != '' ||
+            !github.event.pull_request.draft }}
         run: |
           echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
           echo "reviewed=$REVIEWED" >> "$GITHUB_OUTPUT"

@@ -145,12 +145,12 @@ test("a label change runs only the gate again once a run passed every test on th
   assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
 });
 
-// A draft's run passes with its review skipped, so only a run whose review ran, or a run that
-// reused one that did, records its code for a later label change to skip the review.
-test("only a run whose review ran records its code as reviewed", () => {
+// A draft's run passes with its review skipped, which comes once it's ready on the same code, so
+// it never records its code for a later label change to skip the review.
+test("a draft's run never records its code as reviewed", () => {
   assert.match(
     readJob("check"),
-    /REVIEWED: \$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.count != '' \}\}/,
+    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.count != '' \|\|\n\s+!github\.event\.pull_request\.draft \}\}/,
   );
 });
 
