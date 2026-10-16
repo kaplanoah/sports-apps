@@ -1360,7 +1360,7 @@ test("each appearance choice shows the home-screen icon it offers, and the page 
     ),
   );
   assert.deepEqual(choices, {
-    System: ["icon-light-180.png", "icon-180.png"],
+    System: ["icon-system-180.png"],
     Maple: ["icon-light-180.png"],
     Walnut: ["icon-180.png"],
   });
