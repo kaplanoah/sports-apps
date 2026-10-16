@@ -44,15 +44,40 @@ const TEXT_ENTITIES = {
   "&ndash;": "\u2013",
   "&mdash;": "\u2014",
   "&nbsp;": "\u00a0",
+  "&bull;": "\u2022",
 };
 
-// For places that show only text, like a notification.
+const SEPARATOR = new Markup('<span class="sep">&bull;</span>');
+
+// For places that show only text, like a notification. The separator stands apart from the facts
+// around it by its margins on the page, and by spaces in text.
 export const convertToText = (markup) =>
   renderValue(markup)
+    .replaceAll(SEPARATOR.text, " &bull; ")
     .replace(/<[^>]*>/g, "")
-    .replace(/&(?:amp|lt|gt|quot|#39|ndash|mdash|nbsp);/g, (entity) => TEXT_ENTITIES[entity]);
+    .replace(/&(?:amp|lt|gt|quot|#39|ndash|mdash|nbsp|bull);/g, (entity) => TEXT_ENTITIES[entity]);
 
-const SEPARATOR = new Markup('<span class="sep">&bull;</span>');
+// Stored and fetched text is never trusted as a link, so only a web address is.
+/** @param {string} url */
+export const isWebAddress = (url) => /^https?:\/\//i.test(url ?? "");
+
+/**
+ * Text with its first letter capitalized, as it starts a line.
+ * @param {string} text
+ */
+export const capitalize = (text) => text.charAt(0).toLocaleUpperCase() + text.slice(1);
+
+const NAME_LISTS = {
+  and: new Intl.ListFormat("en", { type: "conjunction" }),
+  or: new Intl.ListFormat("en", { type: "disjunction" }),
+};
+
+/**
+ * Names joined as a sentence does: "A", "A or B", "A, B, or C", or with "and".
+ * @param {string[]} names
+ * @param {"and" | "or"} joiner
+ */
+export const joinNames = (names, joiner) => NAME_LISTS[joiner].format(names);
 
 /**
  * Joins items with the page's one separator, so every list of facts reads the same way. Each fact

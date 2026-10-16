@@ -16,7 +16,6 @@
  */
 /** @typedef {Map<string, Meaning[]>} Dictionary */
 
-const LONGEST_PHRASE = 4;
 // Names this long or longer forgive one wrong letter: a short one would match too much.
 export const FORGIVING_LENGTH = 5;
 const FORGIVEN_KINDS = new Set(["team", "place", "month", "weekday", "round"]);
@@ -158,6 +157,22 @@ function findWordMeanings(word, dictionary) {
   return single ?? findForgivenMeanings(word, dictionary);
 }
 
+// How many words each dictionary's longest phrase has, worked out once from its phrases.
+/** @type {WeakMap<Dictionary, number>} */
+const longestPhrases = new WeakMap();
+
+/**
+ * How many words a dictionary's longest phrase has.
+ * @param {Dictionary} dictionary
+ */
+function countLongestPhrase(dictionary) {
+  const kept = longestPhrases.get(dictionary);
+  if (kept !== undefined) return kept;
+  const longest = Math.max(1, ...[...dictionary.keys()].map((phrase) => phrase.split(" ").length));
+  longestPhrases.set(dictionary, longest);
+  return longest;
+}
+
 /**
  * The longest phrase the dictionary knows at a word, or the word alone.
  * @param {string[]} words
@@ -166,12 +181,20 @@ function findWordMeanings(word, dictionary) {
  * @returns {{ length: number, meanings: Meaning[] }}
  */
 function matchPhrase(words, start, dictionary) {
-  for (let length = Math.min(LONGEST_PHRASE, words.length - start); length > 1; length -= 1) {
+  const longest = Math.min(countLongestPhrase(dictionary), words.length - start);
+  for (let length = longest; length > 1; length -= 1) {
     const meanings = dictionary.get(words.slice(start, start + length).join(" "));
     if (meanings) return { length, meanings };
   }
   return { length: 1, meanings: findWordMeanings(words[start], dictionary) };
 }
+
+/**
+ * Whether a phrase of a search can mean a kind of thing.
+ * @param {Token | undefined} token
+ * @param {string} kind
+ */
+export const hasKind = (token, kind) => !!token?.meanings.some((meaning) => meaning.kind === kind);
 
 /**
  * A search's phrases, in order, each with what it can mean.

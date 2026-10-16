@@ -1,3 +1,4 @@
+import { errorLog } from "./error-log.js";
 import { watchFailedImages } from "./failed-images.js";
 import { setHtml } from "./html.js";
 import { readNewsChoices, startNewsChoices } from "./news-choices.js";
@@ -46,9 +47,16 @@ export function startNewsRedraws(list, redraw, league) {
 export function watchNews(db, onChange) {
   db.doc(NEWS_PATH).onSnapshot(
     (snapshot) => onChange(snapshot.exists ? snapshot.data() : null),
-    () => {},
+    (error) => errorLog.noteStep(describeNewsFailure(error)),
   );
 }
+
+/**
+ * What the error log says when the store couldn't send the news, which leaves the view as it was.
+ * @param {unknown} error
+ */
+const describeNewsFailure = (error) =>
+  `the news failed to load: ${error instanceof Error ? error.message : String(error)}`;
 
 /**
  * The news from the page's last showing, or undefined when it can't be read, which leaves the view

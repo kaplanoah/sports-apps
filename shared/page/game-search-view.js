@@ -12,17 +12,20 @@
 
 import { describeDay, readCalendarDate } from "./days.js";
 import { createSearchContext, createSearchDictionary, describeNoGames } from "./game-search.js";
-import { html, joinWithSeparator, setHtml } from "./html.js";
+import { html, isWebAddress, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
-import { isWebAddress } from "./news-picks.js";
 import { nameStoryDay } from "./news-view.js";
 import { openPageTab, readShownTab, readTabBefore, setTabEnter, setTabStart } from "./page-tabs.js";
-import { findPages } from "./page-search.js";
 import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
-import { orderListedDays, readSentWords, readTypedSearch } from "./search-reading.js";
-import { EXAMPLE_COUNT, listExamples } from "./search-suggestions.js";
+import {
+  findStartDay,
+  listShownExamples,
+  orderListedDays,
+  readSentWords,
+  readTypedSearch,
+} from "./search-reading.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
 /** @typedef {import("./game-search.js").SearchGame} SearchGame */
@@ -78,8 +81,13 @@ let league = null;
 let isTyping = false;
 // After a tap on the line over the games, the games show whole, until the field is tapped.
 let isGamesOnly = false;
-// The search and its suggestions the list was last placed for, so a redraw keeps where it is.
-/** @type {string | null} */
+/**
+ * What the list shows, for placing it once for each: the search, and whether rows sit over its
+ * games.
+ * @typedef {{ text: string, isOverGames: boolean }} Shown
+ */
+// What the list was last placed for, so a redraw keeps where it is.
+/** @type {Shown | null} */
 let placedFor = null;
 // The days of the games the list draws, and those near the screen, which it draws whole.
 /** @type {ListedDay[]} */
@@ -372,10 +380,10 @@ const findListedDay = (day) =>
  * search places it on, or, while the same search shows, those it had near the screen.
  * @param {ListedDay[]} days
  * @param {string | null} startDay
- * @param {string} shown
+ * @param {Shown} shown
  */
 function keepListedDays(days, startDay, shown) {
-  if (shown !== placedFor) nearDays = startDay ? listDaysAround(days, startDay) : new Set();
+  if (!isPlacedFor(shown)) nearDays = startDay ? listDaysAround(days, startDay) : new Set();
   listedDays = days;
 }
 
@@ -397,18 +405,6 @@ function drawNearDays() {
   const before = nearDays;
   nearDays = measureNearDays(list, listedDays, [list.scrollTop], findListedDay);
   writeListedDays(listedDays.filter(({ day }) => before.has(day) !== nearDays.has(day)));
-}
-
-/**
- * The day a new search places the list on: the first from today, or the last when every one is
- * past, or the first when rows sit over the games.
- * @param {ListedDay[]} days
- * @param {string} today
- * @param {boolean} isOverGames
- */
-function findStartDay(days, today, isOverGames) {
-  if (isOverGames) return days[0]?.day ?? null;
-  return (days.find(({ day }) => day >= today) ?? days.at(-1))?.day ?? null;
 }
 
 /**
@@ -459,19 +455,6 @@ function followScroll() {
   });
 }
 
-/**
- * The examples to offer: the league's searches of games, then its pages that find something.
- * @param {import("./game-search.js").SearchContext} context
- */
-function listShownExamples(context) {
-  const pages = league?.readPages() ?? null;
-  const pageExamples = (pages?.examples ?? []).filter(
-    (example) =>
-      findPages(example, { dictionary: context.dictionary, pages, isTyping: false }).rows.length,
-  );
-  return [...listExamples(context, EXAMPLE_COUNT - pageExamples.length), ...pageExamples];
-}
-
 /** Draws what the search finds, or its examples while nothing is typed. */
 function draw() {
   const season = league?.readSeason();
@@ -481,16 +464,16 @@ function draw() {
   const context = createContext(season);
   const query = readQuery();
   const text = query.trim();
+  const pages = league?.readPages() ?? null;
   findBar()?.classList.toggle("is-empty", !text);
   if (!text) {
     findBar()?.classList.remove("has-rows");
     setHtml(readLine, html``);
     listedDays = [];
-    setHtml(list, renderExamples(listShownExamples(context)));
-    placeOnce(nameShown("", false), context.today);
+    setHtml(list, renderExamples(listShownExamples(context, pages)));
+    placeOnce({ text: "", isOverGames: false }, context.today);
     return;
   }
-  const pages = league?.readPages() ?? null;
   const {
     suggestions,
     readText,
@@ -505,7 +488,7 @@ function draw() {
   } = readTypedSearch(query, { context, pages, isTyping, isGamesOnly });
   findBar()?.classList.toggle("has-rows", isOverGames);
   setHtml(readLine, renderReadLine(answer ?? (isOverGames ? null : read)));
-  const shown = nameShown(text, isOverGames);
+  const shown = { text, isOverGames };
   const days = orderListedDays(
     games.length ? league.listDays(games, Date.now()) : [],
     isNewestFirst,
@@ -533,7 +516,7 @@ function draw() {
 /**
  * Brings each day the list draws up to date, places a new search, and draws whole the days it put
  * near the screen.
- * @param {string} shown
+ * @param {Shown} shown
  * @param {string} today
  */
 function showDays(shown, today) {
@@ -543,22 +526,22 @@ function showDays(shown, today) {
 }
 
 /**
- * What the list shows, for placing it once for each.
- * @param {string} text the search
- * @param {boolean} isOverGames whether rows sit over the games
+ * Whether the list was last placed for what it shows.
+ * @param {Shown} shown
  */
-const nameShown = (text, isOverGames) => `${text}\n${isOverGames}`;
+const isPlacedFor = (shown) =>
+  placedFor?.text === shown.text && placedFor.isOverGames === shown.isOverGames;
 
 /**
  * Places the list once for each search and whether rows sit over its games, so a redraw, as each
  * minute, keeps where it's been scrolled.
- * @param {string} shown
+ * @param {Shown} shown
  * @param {string} today
  */
 function placeOnce(shown, today) {
-  if (shown === placedFor) return;
+  if (isPlacedFor(shown)) return;
   placedFor = shown;
-  placeList(today, shown.endsWith("\ntrue"));
+  placeList(today, shown.isOverGames);
 }
 
 /**
@@ -710,7 +693,10 @@ export function startGameSearch(element, searchLeague) {
   nameField(searchLeague.placeholder);
   placedFor = element.hidden
     ? null
-    : nameShown(readQuery().trim(), !!element.querySelector(".search-games-line"));
+    : {
+        text: readQuery().trim(),
+        isOverGames: !!element.querySelector(".search-games-line"),
+      };
   element.addEventListener("click", followTap);
   element.addEventListener("focusin", followFocus);
   element.addEventListener("input", followTyping);

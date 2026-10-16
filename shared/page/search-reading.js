@@ -1,13 +1,19 @@
-// What a search shows for its words, before the view draws it: the suggestions while they're
-// typed, the pages the words name, the other ways to read them, and the games they find, with the
-// line saying how it read them. A word still being typed is read as the team or place the first
-// suggestion finishes it into, once three letters of its name are typed, or five with one wrong, and
-// otherwise left out until it's whole. Runs in the page and in Node, so it uses no DOM.
+// What a search shows for its words, before the view draws it: the examples before anything is
+// typed, the suggestions while words are, the pages the words name, the other ways to read them,
+// and the games they find, with the line saying how it read them, and the day the list opens on.
+// A word still being typed is read as the team or place the first suggestion finishes it into, once
+// three letters of its name are typed, or five with one wrong, and otherwise left out until it's
+// whole, even typed with an accent or a period. Runs in the page and in Node, so it uses no DOM.
 
 import { describeSearch, findSearchGames, isAskingNothing, readSearch } from "./game-search.js";
 import { SHORTEST_PREFIX, findPages, findPartGame, startsPlayerName } from "./page-search.js";
-import { listOtherReadings, listSuggestions } from "./search-suggestions.js";
-import { splitWords } from "./search-words.js";
+import {
+  EXAMPLE_COUNT,
+  listExamples,
+  listOtherReadings,
+  listSuggestions,
+} from "./search-suggestions.js";
+import { normalizeText, splitWords } from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
 /** @typedef {import("./game-search.js").SearchGame} SearchGame */
@@ -25,9 +31,6 @@ import { splitWords } from "./search-words.js";
  * @typedef {{ context: SearchContext, pages: SearchPages | null, isTyping: boolean, isGamesOnly: boolean }} SearchState
  */
 
-/** @param {string} text */
-const readWords = (text) => splitWords(text).join(" ");
-
 /**
  * Whether the last word is one the search can't read yet, as a word still being typed is, or is too
  * short to ask for anything yet, as "a" on its way to "Astros" passes over.
@@ -38,7 +41,7 @@ function isLastWordHalfTyped(text, context) {
   const last = text.split(/\s+/).at(-1) ?? "";
   const search = readSearch(text, context);
   const isTooShort = last.length < SHORTEST_PREFIX && isAskingNothing(search);
-  return search.skipped.includes(last.toLowerCase()) || isTooShort;
+  return search.skipped.includes(splitWords(last).at(-1) ?? "") || isTooShort;
 }
 
 /**
@@ -51,14 +54,14 @@ function isLastWordHalfTyped(text, context) {
  * @param {Suggestion[]} suggestions
  */
 function finishName(text, [first]) {
-  const typed = readWords(first?.finished ?? "");
-  const words = readWords(text);
+  const typed = normalizeText(first?.finished ?? "");
+  const words = normalizeText(text);
   const head = words.slice(0, words.length - typed.length).trim();
   const isNameFinished =
     typed.replace(/\s+/g, "").length >= SHORTEST_PREFIX &&
     words.endsWith(typed) &&
     (first?.mark.kind === "team" || first?.mark.kind === "place") &&
-    readWords(first.text).startsWith(head);
+    normalizeText(first.text).startsWith(head);
   if (!isNameFinished) return null;
   return {
     words: first.text,
@@ -184,6 +187,32 @@ function listFromToday(games, today) {
  */
 export const orderListedDays = (days, isNewestFirst) =>
   isNewestFirst ? [...days].reverse() : days;
+
+/**
+ * The day a new search places the list on: the first from today, or the last when every one is
+ * past, or the first when rows sit over the games.
+ * @param {{ day: string }[]} days in the order the list shows them
+ * @param {string} today
+ * @param {boolean} isOverGames
+ */
+export function findStartDay(days, today, isOverGames) {
+  if (isOverGames) return days[0]?.day ?? null;
+  return (days.find(({ day }) => day >= today) ?? days.at(-1))?.day ?? null;
+}
+
+/**
+ * The examples to offer before anything is typed: the league's searches of games that find a
+ * game, then its pages' that find a page, as many as there's room for.
+ * @param {SearchContext} context
+ * @param {SearchPages | null} pages
+ */
+export function listShownExamples(context, pages) {
+  const pageExamples = (pages?.examples ?? []).filter(
+    (example) =>
+      findPages(example, { dictionary: context.dictionary, pages, isTyping: false }).rows.length,
+  );
+  return [...listExamples(context, EXAMPLE_COUNT - pageExamples.length), ...pageExamples];
+}
 
 /**
  * What the search shows for words in the field: while they're typed, suggestions over the pages
