@@ -44,10 +44,13 @@ const listJobs = () => {
   return [...jobs.matchAll(/^ {2}([a-z-]+):$/gm)].map(([, job]) => job);
 };
 
+// Prettier writes a long list of needs on a line of its own for each.
 const readCheckNeeds = () =>
   readRepoFile(".github/workflows/ci.yml")
-    .match(/^ {2}check:\n(?: {4}.*\n)*? {4}needs: \[(.*)\]$/m)?.[1]
-    .split(", ");
+    .match(/^ {2}check:\n(?: {4}.*\n)*? {4}needs:\s*\[([^\]]*)\]/m)?.[1]
+    .split(",")
+    .map((job) => job.trim())
+    .filter(Boolean);
 
 // check is the one job a merge waits on, so a job it doesn't need could fail without stopping
 // one. caches only costs pull requests their cache when it fails.
@@ -140,4 +143,28 @@ test("a label change runs only the gate again once a run passed every test on th
     /if: github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true'\n.*\n\s+name: ci-tested-/,
   );
   assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
+});
+
+// A review reads a change of any size in full: each share's reads are checked, and review fails
+// on any file left unread, from a guide the pull request can't change, on a named model.
+test("the review reads every share in full and fails on any file left unread", () => {
+  assert.match(
+    readJob("review-plan"),
+    /node worker\/plan-review\.mjs \.review >> "\$GITHUB_OUTPUT"/,
+  );
+  const share = readJob("review-share");
+  assert.match(share, /include: \$\{\{ fromJSON\(needs\.review-plan\.outputs\.shares/);
+  assert.match(share, /git show FETCH_HEAD:REVIEW\.md > \.review\/REVIEW\.md/);
+  assert.match(share, /--model claude-opus-5-5/);
+  assert.match(share, /disableAllHooks/);
+  assert.match(
+    share,
+    /node worker\/judge-review\.mjs share \.review "\$SHARE" >> "\$GITHUB_OUTPUT"/,
+  );
+  assert.match(share, /if: always\(\) && steps\.first\.outputs\.unread != ''/);
+  assert.match(readJob("review-across"), /node worker\/judge-review\.mjs across \.review/);
+  const review = readJob("review");
+  assert.match(review, /needs: \[review-plan, review-share, review-across\]/);
+  assert.match(review, /run: node worker\/judge-review\.mjs summary \.review/);
+  assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
 });
