@@ -13,11 +13,8 @@ AGENTS.md holds the rules the code keeps; this file says how to check a change a
   Search for the name, the constant, or the words before taking a new one as the only one.
 - A finding can be in a line the change didn't touch, when the change makes that line wrong.
   Put it on the nearest changed line and name the line it's about.
-- On a push after the first review, read what changed since the commit the last summary names,
-  and the whole diff again for anything the push makes wrong.
-- For a stacked pull request, review against its own base, not `main`.
+- Review against the pull request's own base, which for a stacked pull request isn't `main`.
 - Say what you didn't read.
-  The summary lists every changed file you didn't read in full, and why.
   Never say a change has no issues when you read only part of it.
 
 ## What to look for
@@ -48,6 +45,10 @@ In order of what has mattered here.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
+   A change to the review itself, its jobs in `.github/workflows/ci.yml`,
+   `worker/plan-review.mjs`, or `worker/judge-review.mjs`, or to a guard test,
+   that lets less through is Important, naming what it no longer catches,
+   since the pull request's own copy of them runs its review.
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
    like `translate`, `rotate`, `scale`, or `pointer-events`, that `worker/red-change.mjs` doesn't list yet.
@@ -85,6 +86,7 @@ Don't run the tests: CI runs them all.
   If it would matter and you still can't settle it, post it as **Unsure** with what would settle it, rather than leaving it out.
 - Never post a finding already on the pull request, whether it was fixed, answered, or left open.
 - No praise.
-- Last, update the one summary comment: the commit reviewed, the findings by weight,
-  how many of the changed files you read in full out of how many,
-  each one you didn't and why, and anything you couldn't check.
+- The review ends with one summary comment: the commit reviewed, the findings by weight,
+  how many of the changed files were read in full out of how many,
+  each one that wasn't and why, and anything read but not judged.
+  In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge.

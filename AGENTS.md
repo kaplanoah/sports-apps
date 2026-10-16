@@ -830,17 +830,20 @@ When a step says to go back to an earlier step, continue in order from there.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
-7. CI's `review` job has Claude review each push to the PR, post its findings as comments on the lines they concern,
-   and update one summary comment that says which commit it reviewed,
-   how many findings it posted, and anything it couldn't check.
-   If the summary names something it couldn't check, tell the user.
+7. CI's review reads each push to the PR in full, by the root's `REVIEW.md` as `main` has it:
+   it splits the change into shares small enough for one reviewer to read every line of (`worker/plan-review.mjs`),
+   has Claude review every share at once in `review-share`, and then, for more than one share, across them in `review-across`,
+   each posting its findings as comments on the lines they concern.
+   The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
+   how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
+   and anything it read but couldn't judge (`worker/judge-review.mjs`).
+   It fails when any changed file went unread, naming each.
+   If the summary names something it couldn't judge, tell the user.
    Answer every finding: either fix it and go back to step 2, or reply on the comment saying why not.
    The push with a fix is reviewed again.
-   - A PR that changes `.github/workflows/ci.yml` isn't reviewed: the review runs only from the workflow as `main` has it, and passes without a summary otherwise.
-     Keep a change to that file in its own small PR, so nothing else goes unreviewed with it.
-   - If the `review` job fails without posting any comments, read its log, which shows each attempt's turns and tool calls.
-     If both attempts stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
-     Otherwise don't reproduce it locally or re-run it: it already tried twice, eight minutes each at most.
+   - If `review` fails, read its summary and the log of the failed `review-share` or `review-across` job, which shows each try's turns and tool calls.
+     If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
+     Otherwise don't reproduce it locally or re-run it: each share already tried twice, and the check across them once.
      Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
      where a review stalled, or a re-run that failed too.
      `check` can't pass until the job does.
