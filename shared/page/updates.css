@@ -34,10 +34,10 @@
   gap: 14px;
 }
 .updates-count {
-  font-weight: 500;
-  font-size: var(--size-small);
+  font-weight: calc(var(--type-label-weight) - 100);
+  font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--updates-head);
 }
 .updates-x {
@@ -75,7 +75,8 @@
   display: flex;
   align-items: baseline;
   gap: 12px;
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
   padding: 5px 0;
 }
 .updates-list li:first-child {
@@ -87,14 +88,15 @@
 .updates-list .when {
   flex: none;
   width: 80px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
 }
 .updates-list .what {
   color: var(--ink);
   min-width: 0;
-  line-height: 1.45;
+  line-height: calc(1.45 * var(--leading));
 }
 .updates-list .series-score {
   white-space: nowrap;
@@ -109,7 +111,8 @@
 }
 /* The .when column's 80px plus the row's 12px gap. */
 .updates-list .more {
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   padding-left: 92px;
 }

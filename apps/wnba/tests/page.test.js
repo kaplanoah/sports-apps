@@ -574,13 +574,13 @@ test("once the playoff field is set, each team's first round and where its run s
   assert.match(rows[9].text, /^9 Fire W 17-27 16\.0$/, "nothing for a team that missed them");
 });
 
-test("a won first round and a team still in are marked, and a team that's out shows paler", () => {
+test("a won first round and a team still in read as the rest of their column, and a team that's out shows paler", () => {
   const rows = renderStandings(SEASON).text.split("<tr").slice(1);
   const liberty = rows.find((row) => row.includes(">Liberty<"));
   const lynx = rows.find((row) => row.includes(">Lynx<"));
   assert.match(
     liberty,
-    /<span class="series-won">W 2-0<\/span>[\s\S]*<span class="still-in">Semis<\/span>/,
+    /<td class="tabular recent recent-start">W 2-0<\/td>\s*<td class="tabular recent pair-end">Semis<\/td>/,
   );
   assert.match(lynx, /<td class="tabular recent recent-start">L 0-2<\/td>/);
   assert.match(lynx, /<span class="playoff-out">Out<\/span>/);
@@ -623,12 +623,12 @@ test("a team's next game is marked with Phosphor's caret-right icon, which readi
   );
 });
 
-test("a winning streak is marked, so one below the line can show paler than one above it", () => {
+test("a winning streak reads as the rest of its column, below the line as the rest of its row", () => {
   const rows = renderStandings(REGULAR_SEASON).text.split("<tr").slice(1);
   const fire = rows.find((row) => row.includes(">Fire<"));
   const lynx = rows.find((row) => row.includes(">Lynx<"));
-  assert.match(fire, /^ class="below"[\s\S]*<span class="streak-won">W 1<\/span>/);
-  assert.match(lynx, /^ class=""[\s\S]*<span class="streak-won">W 1<\/span>/);
+  assert.match(fire, /^ class="below"[\s\S]*<td class="tabular recent pair-end">W 1<\/td>/);
+  assert.match(lynx, /^ class=""[\s\S]*<td class="tabular recent pair-end">W 1<\/td>/);
 });
 
 /**

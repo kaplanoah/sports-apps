@@ -1,5 +1,5 @@
 import { ROUND_LABEL, buildBracket, listSlotCandidates } from "./bracket.js";
-import { listRankedOrder, renderRankTag, nameTeam, renderClub } from "./clubs.js";
+import { listRankedOrder, renderRankTag, renderClub } from "./clubs.js";
 import { readGameDay } from "./dates.js";
 import { formatClockTime, formatShortDate, formatShortWeekday, nameDay } from "#shared/days.js";
 import { describeInning, renderOutLights } from "./games-view.js";
@@ -50,7 +50,7 @@ export function renderMatchupRow(series, side) {
 // Card metrics must match styles.css.
 const CARD = { width: 209, height: 90, topSlotY: 41, dividerY: 57 };
 // Room beside a card for a seed's label, from styles.css's .seed-labels.
-const SEED_LABEL_ROOM = 50;
+const SEED_LABEL_ROOM = 51;
 
 /* Desktop: AL on the left and NL on the right under their league bars, meeting at the World
    Series in the middle. Each wild card card sits dividerY - topSlotY above its division card, so
@@ -199,8 +199,7 @@ function renderLiveNote(series, game) {
   return html`<div class="card-note live ${game.delay ? "delayed" : ""}"><span class="live-part tabular">${describeLiveScore(series, game)}</span> <span class="live-part">${game.delay || describeInning(game)}</span>${renderOutLights(game)}</div>`;
 }
 
-export function renderCardNote(series, champLine) {
-  if (champLine) return html`<div class="card-note champ">${champLine}</div>`;
+export function renderCardNote(series) {
   const game = findNextSlateGame(series);
   if (game?.state === "live") return renderLiveNote(series, game);
   const firstPitchNote = game?.state === "pre" && renderFirstPitchNote(game, Date.now());
@@ -228,12 +227,7 @@ function renderSeedLabels(series, sides, seedSide) {
   return html`<div class="seed-labels ${seedSide}">${sides.map((side) => renderSeedLabel(series, side))}</div>`;
 }
 
-function renderSeriesCard(
-  series,
-  top,
-  left,
-  { champLine = "", width = CARD.width, seedSide = "left" } = {},
-) {
+function renderSeriesCard(series, top, left, { width = CARD.width, seedSide = "left" } = {}) {
   const [first, second] = orderRows(series);
   return html`<div class="box" data-round="${series.round}" style="left:${left}px; top:${top}px; width:${width}px;">
     ${renderSeedLabels(series, [first, second], seedSide)}
@@ -241,14 +235,9 @@ function renderSeriesCard(
       <div class="bestof"><span>${ROUND_LABEL[series.round]}</span><span>BO${series.bestOf}</span></div>
       ${renderMatchupRow(series, first)}${renderMatchupRow(series, second)}
     </div>
-    ${renderCardNote(series, champLine)}
+    ${renderCardNote(series)}
   </div>`;
 }
-
-const describeAdvance = (champion) => (champion ? `${nameTeam(champion)} advance` : "");
-
-const describeWorldSeriesWin = (ws) =>
-  ws.winner ? `${nameTeam(ws.winner)} win the World Series` : "";
 
 function drawWideConnectors() {
   const left = (index) => findColumnLeft(WIDE, index);
@@ -285,9 +274,9 @@ function renderWideCards(bracket) {
     renderSeriesCard(al.wc[0], WIDE.wildCard2Y, left(0)),
     renderSeriesCard(al.ds[0], WIDE.division1Y, left(1)),
     renderSeriesCard(al.ds[1], WIDE.division2Y, left(1)),
-    renderSeriesCard(al.cs[0], WIDE.middleY, left(2), { champLine: describeAdvance(al.champion) }),
-    renderSeriesCard(ws, WIDE.middleY, left(3), { champLine: describeWorldSeriesWin(ws) }),
-    renderSeriesCard(nl.cs[0], WIDE.middleY, left(4), { champLine: describeAdvance(nl.champion) }),
+    renderSeriesCard(al.cs[0], WIDE.middleY, left(2)),
+    renderSeriesCard(ws, WIDE.middleY, left(3)),
+    renderSeriesCard(nl.cs[0], WIDE.middleY, left(4)),
     renderSeriesCard(nl.ds[0], WIDE.division1Y, left(5), nlSide),
     renderSeriesCard(nl.ds[1], WIDE.division2Y, left(5), nlSide),
     renderSeriesCard(nl.wc[1], WIDE.wildCard1Y, left(6), nlSide),
@@ -412,9 +401,7 @@ function renderLeague(key, league, place) {
     renderSeriesCard(league.wc[0], place.rowY[1], left(0)),
     renderSeriesCard(league.ds[0], place.rowY[0], left(1)),
     renderSeriesCard(league.ds[1], place.rowY[1], left(1)),
-    renderSeriesCard(league.cs[0], place.championshipY, left(2), {
-      champLine: describeAdvance(league.champion),
-    }),
+    renderSeriesCard(league.cs[0], place.championshipY, left(2)),
   ];
 }
 
@@ -435,7 +422,6 @@ function renderStackedStage(bracket, growth, fits) {
     <svg class="bracket-lines" width="${STACKED_LINES_WIDTH}" height="${height}" viewBox="0 0 ${STACKED_LINES_WIDTH} ${height}">${drawStackedConnectors([al, nl], worldSeriesY)}</svg>
     ${renderLeague("al", bracket.al, al)}
     ${renderSeriesCard(bracket.ws, worldSeriesY, worldSeriesLeft, {
-      champLine: describeWorldSeriesWin(bracket.ws),
       width: STACKED.worldSeriesWidth,
     })}
     ${renderLeague("nl", bracket.nl, nl)}

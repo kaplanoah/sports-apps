@@ -94,8 +94,9 @@
   justify-content: center;
   justify-items: start;
   margin: 0;
-  font-size: var(--size-glance);
-  line-height: 1;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: var(--leading);
   color: var(--ink-dim);
 }
 .placed-key {

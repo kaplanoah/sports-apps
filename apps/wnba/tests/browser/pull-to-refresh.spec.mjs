@@ -63,6 +63,25 @@ test("a refreshing page shows the turning spokes, held down until the store answ
   await expect(header).toHaveCSS("top", "auto");
 });
 
+test("a page that reloads while held down, as for a newer release, comes back in place, its Updates box too", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await openGames(page);
+  const header = page.locator("header.top");
+  const release = await app.holdStore();
+  await pullDown(page, 200);
+  await expect(header).toHaveCSS("top", "56px");
+  await expect(page.locator("#updates")).toHaveCSS("top", "56px");
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  await expect(page.locator("#updates")).toHaveCSS("top", "auto");
+  await expect(header).toHaveCSS("top", "auto");
+  release();
+});
+
 test("a short pull settles back without refreshing", async ({ page }) => {
   await openFromHomeScreen(page);
   const app = await openApp(page);

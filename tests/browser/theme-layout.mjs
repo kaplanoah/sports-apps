@@ -1,5 +1,8 @@
 import { waitForPressesToEnd } from "./tap-states.mjs";
 
+// The parts a theme may lift a pixel or two, where its colors look off center otherwise.
+const PLACED_BY_EYE = ".nscore";
+
 /**
  * Where every shown element sits, keyed by its tag, its classes, and its path of child indexes
  * from the body, rounded to the half pixel, once no row is pressed, since a pressed row's class
@@ -10,7 +13,7 @@ import { waitForPressesToEnd } from "./tap-states.mjs";
  */
 export async function readLayout(page) {
   await waitForPressesToEnd(page);
-  return page.evaluate(() => {
+  return page.evaluate((placedByEye) => {
     /** @param {number} value */
     const round = (value) => Math.round(value * 2) / 2;
     /** @param {Element} element */
@@ -27,13 +30,13 @@ export async function readLayout(page) {
     /** @type {Record<string, string>} */
     const layout = {};
     for (const element of document.body.querySelectorAll("*")) {
-      if (!element.checkVisibility()) continue;
+      if (!element.checkVisibility() || element.matches(placedByEye)) continue;
       const box = element.getBoundingClientRect();
       const name = `${element.tagName.toLowerCase()}.${element.getAttribute("class") ?? ""} ${readPath(element)}`;
       layout[name] = [box.x, box.y, box.width, box.height].map(round).join(" ");
     }
     return layout;
-  });
+  }, PLACED_BY_EYE);
 }
 
 /**

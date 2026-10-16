@@ -39,10 +39,9 @@ function checkAt(isoTime, check) {
   }
 }
 
-const RANK_CHIP = /<span class="rank-slot">.*?<\/span><\/span>/g;
-const describeEntry = (entry) => stripTags(String(renderEntryText(entry)).replace(RANK_CHIP, ""));
+const describeEntry = (entry) => stripTags(String(renderEntryText(entry)));
 const describeUpdate = (entries) =>
-  stripTags(String(renderUpdateText(entries)).replace(RANK_CHIP, ""))
+  stripTags(String(renderUpdateText(entries)))
     .replace(/&mdash;/g, "--")
     .replace(/&#39;/g, "'");
 
@@ -285,6 +284,26 @@ test("update log: a series game's result and where the series stands join with a
     describeGame({ won: "TOR", lost: "NYY", runs: [4, 1], game: 3, score: [1, 2] }),
     "Blue Jays beat the Yankees 4-1 in Game&nbsp;3, trail the ALDS 1&ndash;2",
   );
+});
+
+test("update log: each club is its name in bold, without its rank or dot", () => {
+  session.state = { teams: { NYY: {}, TOR: {} } };
+  const rendered = String(
+    renderEntryText({
+      kind: "game",
+      series: "AL_DS1",
+      won: "NYY",
+      lost: "TOR",
+      runs: [5, 3],
+      game: 2,
+      score: [2, 0],
+    }),
+  );
+  assert.deepEqual(
+    [...rendered.matchAll(/<b><button [^>]*>([^<]+)<\/button><\/b>/g)].map(([, name]) => name),
+    ["Yankees", "Blue Jays"],
+  );
+  assert.doesNotMatch(rendered, /rank-tag|class="dot"/);
 });
 
 test("update log: clinches", () => {
@@ -1636,7 +1655,7 @@ const readBracketScores = (seriesIds) =>
 /** What each series' card says under it, in the order of `seriesIds`, without its markup. */
 const readCardNotes = (seriesIds = SERIES_IDS) =>
   seriesIds.map((id) => {
-    const note = String(renderCardNote(findSeries(session.state, id), ""));
+    const note = String(renderCardNote(findSeries(session.state, id)));
     return {
       text: stripTags(normalizeSpaces(note).replace(/&bull;/g, "•")),
       classes:
@@ -1794,14 +1813,13 @@ test("bracket: a delayed start shows its delay instead of a countdown", () =>
     ]);
   }));
 
-test("Chivo Mono draws 6% smaller than its size, so it looks as big as Barlow", () => {
-  const faces = readFontFaces(`${import.meta.dirname}/../page/styles.css`).filter(
-    (face) => face["font-family"] === "Chivo Mono",
-  );
-  assert.deepEqual(
-    faces.map((face) => face["size-adjust"]),
-    ["94%", "94%"],
-  );
+test("Chivo Mono draws a little smaller than its size, so its numbers look as big as Libre Franklin's words", () => {
+  const readAdjusts = (/** @type {string} */ family) =>
+    readFontFaces(`${import.meta.dirname}/../page/styles.css`)
+      .filter((face) => face["font-family"] === family)
+      .map((face) => face["size-adjust"] ?? "100%");
+  assert.deepEqual(readAdjusts("Chivo Mono"), ["97.48%", "97.48%"]);
+  assert.deepEqual(readAdjusts("Libre Franklin"), ["100%", "100%"]);
 });
 
 test("Updates box: each update shows when it happened, not when the page noticed it", (t) => {

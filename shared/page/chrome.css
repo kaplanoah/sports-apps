@@ -24,8 +24,8 @@
  *                                              phone keeps its own
  *   --select-arrow                             a url() of a select field's down arrow, in --ink-dim, if
  *                                              the app has one
- *   --select-face                              a select field's face, drawn at --size-field as big as
- *                                              the page's text at --size-glance
+ *   --select-face                              a select field's face, drawn at --type-field-size as big
+ *                                              as the page's text at --type-detail-size
  *   --tab-bar-tint                             the tab bar's fill
  *   --tab-bar-edge                             the tab bar's edge
  *   --tab-bar-ink                              the tab bar's icons and labels
@@ -103,7 +103,8 @@ nav.tabs {
 .tab-list button,
 nav.tabs .search-tab {
   font: inherit;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   background: none;
@@ -166,7 +167,8 @@ section.view.active {
 .load-note {
   margin: 8px 0 18px;
   color: var(--ink-dim);
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
 }
 
 /* The header's first line while the page catches up, as catch-up-note.js draws it: its icon at the
@@ -357,14 +359,15 @@ section.view.active {
   text-align: center;
 }
 .sheet-head h2 {
-  font-size: 1.05rem;
-  font-weight: 500;
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--type-heading-tracking);
 }
 .settings-version {
   margin: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   letter-spacing: 0.02em;
   color: var(--ink-dim);
   white-space: nowrap;
@@ -382,7 +385,8 @@ section.view.active {
   text-align: center;
 }
 .settings-footer .settings-version {
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   white-space: normal;
 }
 /* A sheet's close button, a caret down, or its back button, an arrow, in place of it on a sheet
@@ -434,7 +438,8 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
   gap: 12px;
   min-height: 56px;
   padding-block: 8px;
-  font-size: var(--size-setting);
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
 }
 .control-row:not([hidden]) ~ .control-row {
   border-top: 1px solid var(--divider);
@@ -461,9 +466,9 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
 }
 .settings-group-label {
   margin: 0;
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -484,7 +489,8 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
   display: grid;
   justify-items: center;
   gap: 6px;
-  font-size: var(--size-setting-note);
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
   color: var(--ink-dim);
   cursor: pointer;
 }
@@ -535,8 +541,9 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   min-width: 0;
 }
 .control-note {
-  font-size: var(--size-setting-note);
-  line-height: 1.45;
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
+  line-height: calc(1.45 * var(--leading));
   color: var(--ink-dim);
 }
 .control-note:empty {
@@ -545,7 +552,7 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .select-field {
   font: inherit;
   font-family: var(--select-face);
-  font-size: var(--size-field);
+  font-size: var(--type-field-size);
   color: var(--ink);
   background: var(--bg) var(--select-arrow) no-repeat right 10px center / 10px 6px;
   border: 1px solid var(--card-border);
@@ -654,17 +661,18 @@ body:has(> .home-screen-bar:not([hidden])) {
   min-width: 0;
 }
 .home-screen-title {
-  font-size: var(--size-glance);
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 200);
+  line-height: calc(1.2 * var(--leading));
 }
 .home-screen-steps {
-  font-size: var(--size-small);
-  line-height: 1.3;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: calc(1.3 * var(--leading));
   color: var(--ink-dim);
 }
 .home-screen-steps b {
-  font-weight: 600;
+  font-weight: calc(var(--type-caption-weight) + 200);
   color: var(--ink);
 }
 .home-screen-steps svg {
@@ -682,10 +690,10 @@ body:has(> .home-screen-bar:not([hidden])) {
   background: var(--accent);
   color: var(--accent-ink);
   font: inherit;
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   cursor: pointer;
 }
 /* The icon sits near the page's edge, and its tap area runs past it. */
@@ -715,17 +723,12 @@ body:has(> .home-screen-bar:not([hidden])) {
 .home-screen-tip .home-screen-copy {
   gap: 3px;
 }
-.home-screen-tip .home-screen-title {
-  font-size: var(--size-glance);
-}
 .home-screen-tip .home-screen-steps {
-  font-size: var(--size-small);
-  line-height: 1.45;
+  line-height: calc(1.45 * var(--leading));
 }
 .home-screen-tip .home-screen-install {
   margin-top: 7px;
   padding: 7px 12px;
-  font-size: var(--size-small);
 }
 
 /* A sheet rises and slides away at the pace and easing of the phone's own sheets, as
@@ -802,7 +805,9 @@ body:has(> .home-screen-bar:not([hidden])) {
     padding: calc(env(safe-area-inset-top) + 8px) 18px 6px;
   }
   .sheet-head h2 {
-    font-size: 0.9rem;
+    font-size: var(--type-heading-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
   }
 
   /*

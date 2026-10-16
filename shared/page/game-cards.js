@@ -99,9 +99,7 @@ function readSpacing(row) {
  * @param {string} selector
  */
 const measureEach = (row, selector) =>
-  [...row.querySelectorAll(selector)].map(
-    (element) => /** @type {HTMLElement} */ (element).offsetWidth,
-  );
+  [...row.querySelectorAll(selector)].map((element) => element.getBoundingClientRect().width);
 
 /**
  * The widest line of the row's cards with each score beside its team, and with each over it. Every

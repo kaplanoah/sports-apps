@@ -17,6 +17,13 @@
   />
   <link
     rel="preload"
+    href="fonts/barlow-condensed-300.woff2"
+    as="font"
+    type="font/woff2"
+    crossorigin
+  />
+  <link
+    rel="preload"
     href="fonts/barlow-condensed-400.woff2"
     as="font"
     type="font/woff2"
@@ -36,6 +43,7 @@
     type="font/woff2"
     crossorigin
   />
+  <link rel="preload" href="fonts/barlow-300.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/barlow-400.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/barlow-500.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/barlow-600.woff2" as="font" type="font/woff2" crossorigin />
@@ -75,7 +83,11 @@
   <div class="home-screen-bar" id="homeScreenBar" hidden></div>
   <header class="top">
     <div class="title-row">
-      <h1>WNBA <span class="season-year" id="titleYear" hidden data-last-drawn></span></h1>
+      <h1>
+        <span class="title-letter">W</span><span class="title-letter">N</span
+        ><span class="title-letter">B</span>A
+        <span class="season-year" id="titleYear" hidden data-last-drawn></span>
+      </h1>
     </div>
     <div class="head-right">
       <span class="stamp" id="stamp" role="status" aria-live="polite" hidden data-last-drawn></span>

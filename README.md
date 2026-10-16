@@ -239,8 +239,9 @@ app's bundle to its `apps/<app>/worker/dist/`, which git ignores, if you want to
 look at it. The bundle records its version, the commit it was built from, and
 when, and the page's settings show them.
 
-Code every app uses lives in `shared/`: the type scale every page's text keeps
-to (`type.css`), the page's tab bar and settings sheet
+Code every app uses lives in `shared/`: the type roles every page's text takes,
+each app sizing and weighing them for its own fonts (`type.css`), the page's tab
+bar and settings sheet
 and the bar that asks a phone to add the page to the Home Screen (their styles
 in `chrome.css`), the sheet a tap on a game opens (`sheet.css`),
 catching up on return, showing what the page last showed while it loads, and

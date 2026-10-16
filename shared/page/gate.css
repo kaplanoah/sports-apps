@@ -2,7 +2,8 @@
  * The page a phone sees until it sends the access code (an app's gate.html): the app's icon, the
  * code, and Open, together in the middle of the screen, however short. Pages theme it with
  * --card, --card-border, --ink, --ink-dim, --accent, --accent-ink, --focus-ring, --radius-control,
- * --gate-problem (what was typed is wrong), --gate-heading-font, and --gate-code-font.
+ * --gate-problem (what was typed is wrong), and --gate-code-font. Its title is set as a sheet's
+ * title, and Open as a pager's buttons, which an app's styles.css sets for both.
  */
 body.gate-page {
   display: flex;
@@ -30,12 +31,11 @@ body.gate-page {
 }
 .gate-title {
   margin: 4px 0 6px;
-  font-family: var(--gate-heading-font);
-  font-size: 1.12rem;
-  font-weight: 500;
-  line-height: 1.1;
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  line-height: calc(1.1 * var(--leading));
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--type-heading-tracking);
   text-wrap: balance;
 }
 .gate-form {
@@ -80,10 +80,10 @@ body.gate-page {
   border-radius: var(--radius-control);
   background: var(--accent);
   color: var(--accent-ink);
-  font-family: var(--gate-heading-font);
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font: inherit;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -98,8 +98,9 @@ body.kbd .open-button:focus {
   inset-inline: 0;
   max-width: 30ch;
   margin: 12px auto 0;
-  font-size: var(--size-glance);
-  line-height: 1.4;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.4 * var(--leading));
   color: var(--gate-problem);
 }
 .gate-message.is-calm {

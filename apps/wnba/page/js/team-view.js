@@ -20,7 +20,6 @@ import { formatMarkColors } from "./sheet-colors.js";
 import { renderPlayerTable } from "./sheet-parts.js";
 import { renderPlayerButton } from "./player-button.js";
 import { ROUNDS } from "./snapshot.js";
-import { renderStreak } from "./standings-view.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("./games-view.js").Game} Game */
@@ -282,6 +281,13 @@ function renderAgainstField(code, team, field, teams) {
     ${renderRanks(code, rows)}${renderFieldLegend(MEASURES, team, field, teams)}
   </div>`;
 }
+
+/**
+ * A streak, like W 3, marked when it's a winning one.
+ * @param {string} streak
+ */
+const renderStreak = (streak) =>
+  streak.startsWith("W") ? html`<span class="streak-won">${streak}</span>` : streak;
 
 /**
  * How the team ended the regular season: its last ten games and its streak, as the standings
