@@ -76,6 +76,7 @@ test("the page's redraw each minute, which keeps its times current, asks for no 
 // The lead chart's tile takes its corner from CSS's rx, which only this spec checks in WebKit, as
 // an iPhone draws it.
 test("the lead chart's tile rounds its corners by the card's shape token", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const app = await openApp(page);
   await app.changeSeason(finishValkyriesAtWings);
   const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);

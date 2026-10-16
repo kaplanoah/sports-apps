@@ -46,8 +46,8 @@
  * An app's styles.css also gives .home-screen-icon the icon the Home Screen gets, as its
  * background-image, so the url() is read from the app's own folder.
  *
- * Phones are up to 779px wide, as settings-sheet.js also matches. Focus rings show
- * only while the body has the kbd class, which keyboard-focus.js sets during keyboard navigation.
+ * Phones are up to 779px wide. Focus rings show only while the body has the kbd class, which
+ * keyboard-focus.js sets during keyboard navigation.
  */
 
 /* Everything a tap reaches draws its own states, so the phone's gray flash over it reads as a
