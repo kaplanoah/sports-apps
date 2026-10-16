@@ -100,7 +100,8 @@ export function readAnswer(structuredOutput) {
 
 /**
  * The weight of each finding the review posted on the commit, from the inline comments that
- * start with one, leaving out replies and anyone else's comments.
+ * start with one, leaving out replies and anyone else's comments. GitHub moves an earlier
+ * review's comment on to each new commit, so only the commit it was posted on tells them apart.
  * @param {any[]} comments the pull request's review comments, as GitHub lists them
  * @param {{ sha: string, author: string }} review
  * @returns {string[]}
@@ -111,7 +112,7 @@ export const listPostedWeights = (comments, { sha, author }) =>
       (comment) =>
         comment.user?.login === author &&
         !comment.in_reply_to_id &&
-        (comment.commit_id === sha || comment.original_commit_id === sha),
+        comment.original_commit_id === sha,
     )
     .flatMap((comment) => {
       const weight = WEIGHTS.find((name) => comment.body?.startsWith(`**${name}`));

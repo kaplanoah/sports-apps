@@ -264,7 +264,7 @@ test("the findings counted are the review's own comments on the commit, each by 
       comment({}),
       comment({ body: "**Unsure:** A part may pass Read's token cap." }),
       comment({ body: "**Nit** The comment overstates it.", commit_id: "def456" }),
-      comment({ commit_id: "old999", original_commit_id: "old999" }),
+      comment({ original_commit_id: "old999" }),
       comment({ user: { login: "kaplanoah" } }),
       comment({ in_reply_to_id: 7 }),
       comment({ body: "A comment with no weight" }),
