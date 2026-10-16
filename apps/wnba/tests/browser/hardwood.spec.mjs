@@ -2,25 +2,11 @@ import { test, expect, openApp } from "./harness.mjs";
 import { readPillNames } from "../../../../tests/browser/pill-names.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
+import { readTokenColor } from "./theme.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const PHONE = { width: 390, height: 844 };
-
-/**
- * What a token computes to in the page's theme, as a color.
- * @param {import("@playwright/test").Page} page
- * @param {string} token
- */
-const readTokenColor = (page, token) =>
-  page.evaluate((name) => {
-    const probe = document.createElement("i");
-    probe.style.color = `var(${name})`;
-    document.body.append(probe);
-    const { color } = getComputedStyle(probe);
-    probe.remove();
-    return color;
-  }, token);
 
 /**
  * The colors a chip of each class draws with, set loose on the page.

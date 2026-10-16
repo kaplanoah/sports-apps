@@ -12,12 +12,12 @@
  *   --sheet                                    a sheet's and the settings dialog's color
  *   --sheet-shadow                             their shadow on wide screens, or none
  *   --ink, --ink-mid, --ink-dim                text, from brightest to dimmest
+ *   --ink-hover                                text under a mouse, the one change a hover makes
  *   --accent, --accent-ink                     the selected tab and a switch that is on, and text on it
  *   --focus-ring                               the keyboard focus ring
  *   --radius-card                              a card's corners, like the Updates box's
  *   --radius-chip                              a chip's corners, like a status beside a title
- *   --radius-control                           a button's or a field's corners, and the hover square
- *                                              behind an icon button
+ *   --radius-control                           a button's or a field's corners
  *   --radius-sheet                             a sheet's corners, and the settings dialog's, on wide
  *                                              screens; on phones they fill the screen
  *   --switch-knob                              a switch's knob, one light color in every theme, as the
@@ -61,21 +61,15 @@
   margin: -8px -10px -8px -14px;
   padding: 4px;
   border: 0;
-  /* The padding trims this to a control's rounding on the hover square. */
-  border-radius: calc(var(--radius-control) + 4px);
+  border-radius: var(--radius-control);
   background: none;
-  /* The hover square stays inside the padding, smaller than the tap area. */
-  background-clip: content-box;
   color: var(--ink-mid);
   cursor: pointer;
-  transition:
-    color 0.15s,
-    background 0.15s;
+  transition: color 0.15s;
 }
 @media (hover: hover) {
   .settings-btn:hover {
-    color: var(--ink);
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink-hover);
   }
 }
 .settings-btn svg {
@@ -570,7 +564,7 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 }
 @media (hover: hover) {
   .select-field:hover {
-    border-color: var(--ink-dim);
+    color: var(--ink-hover);
   }
 }
 .switch {

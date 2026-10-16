@@ -2102,11 +2102,9 @@ table.standings tr.playoff-line + tr td {
    name and its parts under teal titles. A team's name or dot opens it wherever it shows, and in
    the standings and the bracket so does the rest of its row. */
 @media (hover: hover) {
-  table.standings tr[data-team]:hover td {
-    background: color-mix(in srgb, var(--ink) 5%, var(--raised));
-  }
-  .team-line[data-team]:hover {
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  table.standings tr[data-team]:hover :is(.team-open, .team-name),
+  .team-line[data-team]:hover :is(.team-open, .team-name) {
+    color: var(--ink-hover);
   }
 }
 .sheet-head h2.team-title {
