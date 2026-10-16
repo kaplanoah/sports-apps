@@ -4,9 +4,10 @@
 // read one of its games. Runs in the page and in Node, so it uses no DOM.
 
 import { readMinutesIntoDay } from "#shared/days.js";
-import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
+import { listSearchChannels, listSearchGames, listVenuePlaces } from "#shared/game-search.js";
 import { LEAGUE_WORDS } from "./league-words.js";
 import { nameClubFully } from "./clubs.js";
+import { nameGameKey } from "./season-games.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/game-search.js").SearchTerms} SearchTerms */
@@ -310,17 +311,18 @@ const readKind = (game) => {
 };
 
 /**
- * An MLB game as a search reads it, or null for one called off, which is played on another day.
+ * An MLB game as a search reads it, by the key every place opens a game by, since a game called
+ * off and its makeup share MLB's id, or null for one called off, which is played on another day.
  * @param {any} game
  * @returns {SearchGame | null}
  */
-export function readSearchGame(game) {
+function readSearchGame(game) {
   if (!game.date || game.state === "off") return null;
   const { round, conference } = readSeries(game.series);
   const minutes = readStartMinutes(game);
   const timeZone = game.ballpark?.timeZone;
   return {
-    id: game.id,
+    id: nameGameKey(game),
     day: game.date,
     minutes,
     localMinutes: timeZone ? readStartMinutes(game, timeZone) : minutes,
@@ -347,3 +349,24 @@ export function readSearchGame(game) {
     game,
   };
 }
+
+/**
+ * Each game once, as a search counts a club's games: MLB lists a game it suspended again on the
+ * day it's finished, which counts on the day it started, and one called off where it's made up.
+ * @param {any[]} games every listing the Games view shows, in order of day
+ */
+function listCountedGames(games) {
+  const counted = new Set();
+  return games.filter((game) => {
+    if (game.state === "off") return true;
+    if (counted.has(game.id)) return false;
+    counted.add(game.id);
+    return true;
+  });
+}
+
+/**
+ * The season's games as its search reads them, each game once.
+ * @param {any[]} games every listing the Games view shows, in order of day
+ */
+export const readSearchGames = (games) => listSearchGames(listCountedGames(games), readSearchGame);

@@ -54,6 +54,30 @@ test("a doubleheader MLB lists with its second game's start first still goes in 
   ]);
 });
 
+test("two doubleheaders whose first games start together go one after the other, each in game order", () => {
+  const game = (away, home, start, doubleheader = null) => ({
+    date: "2026-09-26",
+    away,
+    home,
+    start,
+    doubleheader,
+  });
+  const listed = [
+    game("BAL", "NYY", "2026-09-26T17:05:00Z", 1),
+    game("TB", "BOS", "2026-09-26T17:05:00Z", 1),
+    game("BAL", "NYY", "2026-09-26T22:05:00Z", 2),
+    game("TB", "BOS", "2026-09-26T22:10:00Z", 2),
+    game("TOR", "DET", "2026-09-26T17:05:00Z"),
+  ];
+  assert.deepEqual(nameGames(sortInScheduleOrder(listed)), [
+    "TOR@DET",
+    "BAL@NYY#1",
+    "BAL@NYY#2",
+    "TB@BOS#1",
+    "TB@BOS#2",
+  ]);
+});
+
 test("each day lists its games in schedule order, the days in order", () => {
   const days = groupGamesByDay(Object.values(SNAPSHOT.schedule).reverse().flat());
   assert.deepEqual(

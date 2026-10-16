@@ -30,3 +30,8 @@ export function formatStarterMeasure(measure, line) {
   const value = Number(line[measure.key]);
   return Number.isFinite(value) ? measure.write(value) : "-";
 }
+
+/** The labels of the measures ranked from the fewest, which a starter's notes name. */
+export const FEWEST_FIRST_LABELS = STARTER_MEASURES.filter((measure) => measure.isFewestFirst).map(
+  (measure) => measure.label,
+);

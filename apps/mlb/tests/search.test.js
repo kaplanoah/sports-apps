@@ -7,15 +7,14 @@ import {
   describeNoGames,
   describeSearch,
   findSearchGames,
-  listSearchGames,
   readSearch,
 } from "#shared/game-search.js";
 import { findPages, findPartGame } from "#shared/page-search.js";
 import { listExamples, listOtherReadings, listSuggestions } from "#shared/search-suggestions.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
-import { listSeasonGames } from "../page/js/season-games.js";
+import { listSeasonGames, nameGameKey } from "../page/js/season-games.js";
 import { listSearchPages } from "../page/js/search-pages.js";
-import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
+import { createSearchTerms, readSearchGames } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 
 useTimeZone(EASTERN);
@@ -39,7 +38,7 @@ function createContext(change = (game) => game) {
   return createSearchContext({
     terms,
     dictionary: createSearchDictionary(terms),
-    games: listSearchGames(games, readSearchGame),
+    games: readSearchGames(games),
     now: NOW,
   });
 }
@@ -116,7 +115,7 @@ test("a city is offered first as the place, then each club by its whole name, an
     "Padres 168 games",
     "Angels 162 games",
     "Athletics 162 games",
-    "Giants 163 games",
+    "Giants 162 games",
   ]);
   assert.deepEqual(others("Fenway"), []);
   assert.deepEqual(others("Mets in New York"), []);
@@ -192,8 +191,8 @@ test("day and night games go by the clock at the ballpark", () => {
   );
   const findDayGames = (/** @type {ReturnType<typeof createSearchContext>} */ context) =>
     findSearchGames(readSearch("day games", context), context).games;
-  assert.ok(findDayGames(atNoon).some((game) => game.id === "823244"));
-  assert.ok(!findDayGames(CONTEXT).some((game) => game.id === "823244"));
+  assert.ok(findDayGames(atNoon).some((game) => game.game.id === "823244"));
+  assert.ok(!findDayGames(CONTEXT).some((game) => game.game.id === "823244"));
   assert.equal(search("Mets day games").line, "Mets | Day games | 64 games | 1 with no time yet");
 });
 
@@ -377,6 +376,31 @@ test("Highlights find the latest final, and the Matchup the next game, of the se
     gameParts.find((part) => part.key === "matchup")
   );
   assert.equal(findPartGame(CONTEXT.games, matchup)?.state, "pre");
+});
+
+test("a game search finds opens by its listing's key, so a makeup opens itself and never the listing called off that shares its id", () => {
+  const listed = listSeasonGames(SNAPSHOT.slate, Object.values(SNAPSHOT.schedule).flat());
+  const listings = listed.filter((game) => game.id === "823471");
+  assert.deepEqual(
+    listings.map((game) => [game.date, game.state]),
+    [
+      ["2026-04-29", "off"],
+      ["2026-04-30", "final"],
+    ],
+  );
+  const found = CONTEXT.games.filter((game) => game.game.id === "823471");
+  assert.equal(found.length, 1);
+  const opened = listed.find((game) => nameGameKey(game) === found[0].id);
+  assert.deepEqual([opened?.date, opened?.state], ["2026-04-30", "final"]);
+});
+
+test("a club's season counts each game once: a game suspended and finished the next day on the day it started, and one postponed where it's made up", () => {
+  const giants = CONTEXT.games.filter((game) => game.away === "SF" || game.home === "SF");
+  const days = (/** @type {string} */ id) =>
+    giants.filter((game) => game.game.id === id).map((game) => game.day);
+  assert.deepEqual(days("824912"), ["2026-06-16"]);
+  assert.deepEqual(days("823471"), ["2026-04-30"]);
+  assert.equal(giants.filter((game) => game.kind === "regular").length, 162);
 });
 
 test("settings and each setting are found by their words, and only the settings shown", () => {

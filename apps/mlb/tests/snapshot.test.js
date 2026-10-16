@@ -1203,8 +1203,9 @@ test("a read without the standings once the playoffs list a club leaves out what
     ...SEASON_GAMES,
     responses: { ...SEASON_GAMES.responses, standings: null },
   });
-  assert.equal(MLBSnapshot.hasClubGames(whole.slate), true);
-  assert.equal(MLBSnapshot.hasClubGames(partial.slate), false);
+  assert.deepEqual([whole.isSeriesKnown, partial.isSeriesKnown], [true, false]);
+  assert.ok("next" in whole.slate && "previous" in whole.slate);
+  assert.ok(!("next" in partial.slate) && !("previous" in partial.slate));
   assert.deepEqual(partial.slate.today, whole.slate.today);
   assert.deepEqual(Object.keys(partial.schedule), [
     "2026-03",
@@ -1213,8 +1214,13 @@ test("a read without the standings once the playoffs list a club leaves out what
     "2026-06",
     "2026-07",
     "2026-08",
+    "2026-09",
   ]);
   assert.deepEqual(partial.schedule["2026-08"], whole.schedule["2026-08"]);
+  assert.deepEqual(
+    partial.schedule["2026-09"],
+    whole.schedule["2026-09"].filter((game) => !game.postseason),
+  );
 });
 
 test("a read without the standings before the playoffs list a club leaves the slate whole", () => {
@@ -1222,7 +1228,49 @@ test("a read without the standings before the playoffs list a club leaves the sl
     ...EVENING,
     responses: { ...EVENING.responses, standings: null, postseason: { dates: [] } },
   });
-  assert.equal(MLBSnapshot.hasClubGames(partial.slate), true);
+  assert.equal(partial.isSeriesKnown, true);
+  assert.ok("next" in partial.slate);
+});
+
+test("each club's last games list two doubleheaders on one day each in game order, among the day's games by start", () => {
+  /** @param {number} gamePk @param {number} away @param {number} home @param {string} start @param {number} [gameNumber] */
+  const listFinal = (gamePk, away, home, start, gameNumber) => ({
+    gamePk,
+    gameType: "R",
+    gameDate: start,
+    officialDate: "2026-09-26",
+    status: {
+      abstractGameState: "Final",
+      codedGameState: "F",
+      detailedState: "Final",
+      startTimeTBD: false,
+    },
+    teams: { away: { team: { id: away }, score: 1 }, home: { team: { id: home }, score: 2 } },
+    doubleHeader: gameNumber ? "S" : "N",
+    gameNumber: gameNumber ?? 1,
+  });
+  const schedule = {
+    dates: [
+      {
+        date: "2026-09-26",
+        games: [
+          listFinal(1, 110, 147, "2026-09-26T17:05:00Z", 1),
+          listFinal(2, 110, 147, "2026-09-26T22:05:00Z", 2),
+          listFinal(3, 139, 111, "2026-09-26T20:05:00Z", 1),
+          listFinal(4, 139, 111, "2026-09-27T01:05:00Z", 2),
+          listFinal(5, 141, 116, "2026-09-26T18:10:00Z"),
+        ],
+      },
+    ],
+  };
+  const snapshot = MLBSnapshot.buildSnapshot(
+    { schedule, postseason: { dates: [] } },
+    { season: 2026, now: Date.parse("2026-09-28T16:00:00Z") },
+  );
+  assert.deepEqual(
+    snapshot.slate.previous.map((game) => `${game.away}@${game.home}${game.doubleheader ?? ""}`),
+    ["BAL@NYY1", "BAL@NYY2", "TOR@DET", "TB@BOS1", "TB@BOS2"],
+  );
 });
 
 test("each club's standings row counts its season's games, one fewer for a rainout MLB cancelled", () => {

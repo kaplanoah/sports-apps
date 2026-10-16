@@ -10,7 +10,7 @@ import {
   watchNews,
 } from "#shared/news.js";
 import { readNewsChoices } from "#shared/news-choices.js";
-import { pickReadCards } from "#shared/news-picks.js";
+import { listShownStories } from "#shared/page-places.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
@@ -188,18 +188,12 @@ function returnGamesToToday() {
   return true;
 }
 
-// Every story the News tab shows, for search to list a team's newest.
-const listReadStories = () =>
-  pickReadCards(session.news?.cards ?? [], readNewsChoices(), NEWS_LEAGUE.outletSwitches).flatMap(
-    (card) => [card.lead, ...card.more],
-  );
-
 const readSearchPages = () =>
   listSearchPages({
     index: session.playerIndex,
     isSettingShown,
     standings: session.season?.standings ?? [],
-    stories: listReadStories(),
+    stories: listShownStories(session.news, readNewsChoices(), NEWS_LEAGUE.outletSwitches),
   });
 
 /**

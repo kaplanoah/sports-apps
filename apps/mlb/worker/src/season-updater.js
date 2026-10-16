@@ -2,6 +2,7 @@ import { isSameJson } from "#shared/compare.js";
 import { readEasternDay } from "#shared/days.js";
 import * as Readings from "./readings.js";
 import { guessSeasonYear, hasSpringStarted } from "../../page/js/session.js";
+import { sortInScheduleOrder } from "../../page/js/schedule-order.js";
 import * as MLBSnapshot from "../../page/js/snapshot.js";
 
 // Keeps the current season's saved data up to date from MLB, whether or not a page is open.
@@ -58,21 +59,27 @@ function collectChangedFields(doc, snapshot, log) {
 
 /**
  * The slate to save: a read without the standings lists no club's last and next games, so the
- * record keeps those it has.
- * @param {any} slate
- * @param {any} saved the record's
+ * record keeps those it has that still come before or after the slate's day, since MLB's day may
+ * have moved on since they were read.
+ * @param {any} snapshot
+ * @param {any} saved the record's slate
  */
-const keepClubGames = (slate, saved) =>
-  !slate || MLBSnapshot.hasClubGames(slate)
-    ? slate
-    : { ...slate, previous: saved?.previous ?? [], next: saved?.next ?? [] };
+function keepClubGames({ slate, isSeriesKnown }, saved) {
+  if (!slate || isSeriesKnown) return slate;
+  const day = slate.today.date;
+  return {
+    ...slate,
+    previous: (saved?.previous ?? []).filter((/** @type {any} */ game) => game.date < day),
+    next: (saved?.next ?? []).filter((/** @type {any} */ game) => game.date > day),
+  };
+}
 
 // The season's one record, which the page reads whole: its field, standings, games, and updates,
 // rebuilt from the readings as each update saves them.
 async function saveSeason(docs, year, snapshot, parts) {
   const doc = (await docs.read(nameSeasonKey(year))) ?? { year };
   const log = Readings.composeLog(doc.log ?? [], parts, snapshot.log);
-  const shown = { ...snapshot, slate: keepClubGames(snapshot.slate, doc.slate) };
+  const shown = { ...snapshot, slate: keepClubGames(snapshot, doc.slate) };
   const fields = collectChangedFields(doc, shown, log);
   if (!Object.keys(fields).length) return;
   await docs.write(nameSeasonKey(year), { ...doc, ...fields, updatedAt: snapshot.asOf });
@@ -107,6 +114,21 @@ const isSavedSchedule = (doc, snapshot, games) =>
   doc.edition === MLBSnapshot.SCHEDULE_EDITION &&
   isSameJson(doc.games, games);
 
+/**
+ * A month's games to save: a read without the standings lists none of its playoff games, so the
+ * month keeps those it has.
+ * @param {any} snapshot
+ * @param {any[]} games the month's games the snapshot lists
+ * @param {any} doc the month as the store keeps it
+ */
+const keepPlayoffGames = (snapshot, games, doc) =>
+  snapshot.isSeriesKnown
+    ? games
+    : sortInScheduleOrder([
+        ...games,
+        ...(doc?.games ?? []).filter((/** @type {any} */ game) => game.postseason),
+      ]);
+
 // Each month of the season's games keeps a document of its own, saved only when its games change,
 // so a game's end sends open pages only its month.
 async function saveSchedule(docs, snapshot) {
@@ -114,8 +136,9 @@ async function saveSchedule(docs, snapshot) {
   const year = snapshot.season;
   const collection = MLBSnapshot.nameScheduleCollection(year);
   const saved = new Map((await docs.list(collection)).map((doc) => [doc.month, doc]));
-  for (const [month, games] of Object.entries(snapshot.schedule)) {
+  for (const [month, listed] of Object.entries(snapshot.schedule)) {
     const doc = saved.get(month);
+    const games = keepPlayoffGames(snapshot, listed, doc);
     if (isSavedSchedule(doc, snapshot, games)) continue;
     await docs.write(MLBSnapshot.nameScheduleKey(year, month), {
       version: snapshot.version,

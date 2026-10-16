@@ -135,24 +135,22 @@ const readRegularSeasonEnd = (seasonDates) =>
   seasonDates?.seasons?.[0]?.regularSeasonEndDate || null;
 
 // Which playoff series a game is in comes from the standings (findSeriesId), so once the playoffs
-// list a club, a read without the standings leaves out what the series decide: each club's last and
-// next games in the slate, and the schedule's months of playoff games, which the store keeps as the
-// last read with the standings had them.
+// list a club, a read without the standings leaves out what the series decide, each club's last
+// and next games in the slate and the schedule's playoff games, and says so with `isSeriesKnown`,
+// so the store keeps them as the last read with the standings had them.
 /** @param {any} slate */
 const leaveOutClubGames = ({ previous, next, ...slate }) => slate;
 
-/** @param {Record<string, any[]>} schedule */
-const leaveOutPlayoffMonths = (schedule) =>
-  Object.fromEntries(
-    Object.entries(schedule).filter(([, games]) => !games.some((game) => game.postseason)),
-  );
-
 /**
- * Whether a slate lists each club's last and next games, which one read without the standings
- * leaves out.
- * @param {any} slate
+ * The schedule's months without their playoff games, leaving out a month of nothing else.
+ * @param {Record<string, any[]>} schedule
  */
-export const hasClubGames = (slate) => !!slate && "next" in slate;
+const leaveOutPlayoffGames = (schedule) =>
+  Object.fromEntries(
+    Object.entries(schedule)
+      .map(([month, games]) => [month, games.filter((game) => !game.postseason)])
+      .filter(([, games]) => games.length > 0),
+  );
 
 export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
   const responses = {
@@ -171,7 +169,7 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
     ...games.filter((game) => game.type === "R"),
     ...listNeededPostseasonGames(gamesBySeries, log),
   ];
-  const knowsSeries = hasStandings || !postseasonGames.some(hasClub);
+  const isSeriesKnown = hasStandings || !postseasonGames.some(hasClub);
   const slate = responses.schedule ? buildSlateWithAllStar(responses, games, clubGames, now) : null;
   const schedule = buildSchedule(
     responses,
@@ -191,8 +189,9 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
     standings: hasStandings
       ? buildStandings(responses.standings, clubGames, countScheduledGames(responses.seasonGames))
       : null,
-    slate: slate && !knowsSeries ? leaveOutClubGames(slate) : slate,
-    schedule: schedule && !knowsSeries ? leaveOutPlayoffMonths(schedule) : schedule,
+    slate: slate && !isSeriesKnown ? leaveOutClubGames(slate) : slate,
+    schedule: schedule && !isSeriesKnown ? leaveOutPlayoffGames(schedule) : schedule,
+    isSeriesKnown,
     missing: findMissingFields(responses),
   };
 }

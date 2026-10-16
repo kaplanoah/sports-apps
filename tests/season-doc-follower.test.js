@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createSeasonDocFollower, readPlayerIndex } from "../shared/page/season-doc-follower.js";
 
-/** A store whose documents a test delivers, with how many listeners each key has had. */
+/** A store whose documents a test delivers, with each key's latest listener and the keys unwatched. */
 function createStore() {
   /** @type {Map<string, (snapshot: any) => void>} */
   const listeners = new Map();

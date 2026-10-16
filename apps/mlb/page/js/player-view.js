@@ -24,7 +24,7 @@ import {
   readInnings,
 } from "./qualifying.js";
 import { describeGamePitching, formatInnings } from "./stat-table.js";
-import { isStarter, STARTER_MEASURES } from "./starter-measures.js";
+import { FEWEST_FIRST_LABELS, isStarter, STARTER_MEASURES } from "./starter-measures.js";
 
 /**
  * A player as the store keeps him.
@@ -64,6 +64,10 @@ const HITTER_RANKS = [
     isFewestFirst: true,
   },
 ];
+/** The labels of a hitter's numbers ranked from the fewest, which his notes name. */
+const HITTER_FEWEST_FIRST = HITTER_RANKS.filter((rank) => rank.isFewestFirst).map(
+  (rank) => rank.label,
+);
 /**
  * A count as a share of a hitter's plate appearances, as "13.3%".
  * @param {number} count
@@ -224,7 +228,7 @@ function renderHitting(player, hitters, clubGames) {
       <div class="player-ranks">
         ${rows}
         <div class="player-rank-notes">
-          ${isRanked && renderFewestNote(["K%"])}
+          ${isRanked && renderFewestNote(HITTER_FEWEST_FIRST)}
           <p class="player-rank-note">${note}</p>
         </div>
       </div>`,
@@ -286,7 +290,7 @@ function renderStarterRanks(player, starters, side, clubGames) {
   return html`<div class="player-ranks">
     ${rows}
     <div class="player-rank-notes">
-      ${isRanked && renderFewestNote(["ERA", "BB/9"])}
+      ${isRanked && renderFewestNote(FEWEST_FIRST_LABELS)}
       <p class="player-rank-note">${note}</p>
     </div>
   </div>`;

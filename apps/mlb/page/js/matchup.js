@@ -28,7 +28,7 @@ import {
   QUALIFIED_STARTERS_NOTE,
 } from "./qualifying.js";
 import { describeGamePitching, formatInnings } from "./stat-table.js";
-import { formatStarterMeasure, STARTER_MEASURES } from "./starter-measures.js";
+import { FEWEST_FIRST_LABELS, formatStarterMeasure, STARTER_MEASURES } from "./starter-measures.js";
 import { TEAMS } from "./teams.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import {
@@ -258,13 +258,10 @@ const isUnranked = (side) => Boolean(side.pitcher?.line && !side.pitcher.ranks);
  * @param {(club: string) => number | null} countClubGames
  */
 function renderTapeNotes(sides, countClubGames) {
-  const fewestFirst = STARTER_MEASURES.filter((measure) => measure.isFewestFirst).map(
-    (measure) => measure.label,
-  );
   const rankNote =
     sides.some((side) => side.pitcher?.ranks) &&
     html`<p class="tape-note">${QUALIFIED_STARTERS_NOTE}</p>`;
-  const fewestNote = html`<p class="tape-note">${describeFewestFirst(fewestFirst)}</p>`;
+  const fewestNote = html`<p class="tape-note">${describeFewestFirst(FEWEST_FIRST_LABELS)}</p>`;
   const unrankedNotes = sides
     .filter(isUnranked)
     .map(

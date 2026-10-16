@@ -9,7 +9,6 @@ import { redrawEased } from "#shared/eased-redraw.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import { startGameSearch } from "#shared/game-search-view.js";
-import { listSearchGames } from "#shared/game-search.js";
 import { keepLastRead } from "#shared/kept-read.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
 import { endLoadNote } from "#shared/load-note.js";
@@ -27,7 +26,7 @@ import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { isSettingShown, openSettings } from "#shared/settings-sheet.js";
 import { openGameSection, startGameSheet } from "./game-sheet.js";
 import { listFoundGameDays } from "./games-view.js";
-import { listSeasonGames, nameGameKey } from "./season-games.js";
+import { listSeasonGames } from "./season-games.js";
 import { REORDER_EVENT } from "./ranking.js";
 import { renderAll } from "./render.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
@@ -50,7 +49,7 @@ import { renderTeamSheet } from "./team-view.js";
 import { TEAMS } from "./teams.js";
 import { renderStamp } from "./stamp-view.js";
 import { listSearchPages } from "./search-pages.js";
-import { createSearchTerms, readSearchGame } from "./search-terms.js";
+import { createSearchTerms, readSearchGames } from "./search-terms.js";
 import { showStandingsPart } from "./standings.js";
 import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
@@ -119,9 +118,6 @@ function returnGamesToToday() {
   return true;
 }
 
-/** Every game the Games view lists, which a search reads. */
-const listListedGames = () => listSeasonGames(session.state?.slate, session.schedule);
-
 const readSearchPages = () =>
   listSearchPages({
     index: session.playerIndex,
@@ -129,16 +125,6 @@ const readSearchPages = () =>
     divisions: session.standings?.divisions ?? {},
     stories: listShownStories(session.news, readNewsChoices(), NEWS_LEAGUE.outletSwitches),
   });
-
-/**
- * Opens a game's sheet on a section, as a search's row for a game's part asks.
- * @param {string} id the game's
- * @param {string} section
- */
-function openGameAt(id, section) {
-  const game = listListedGames().find((each) => each.id === id);
-  if (game) openGameSection(nameGameKey(game), section);
-}
 
 /**
  * Opens a place a search lists: a tab, the bracket or standings in theirs, one of the standings'
@@ -157,7 +143,7 @@ function openSearchPlace(key) {
     openPageTab("bracket-standings");
     showSeasonPart("standings", { isInstant: true });
     showStandingsPart(detail);
-  } else if (place === "highlights" || place === "matchup") openGameAt(detail, place);
+  } else if (place === "highlights" || place === "matchup") openGameSection(detail, place);
   else openSettings(key);
 }
 
@@ -174,7 +160,7 @@ const readSearchSeasonFrom = keepLastRead(
     return {
       listed,
       terms: createSearchTerms({ games: listed, divisions: standings?.divisions }),
-      games: listSearchGames(listed, readSearchGame),
+      games: readSearchGames(listed),
     };
   },
 );

@@ -24,6 +24,16 @@ function findDoubleheaderSlots(games) {
 }
 
 /**
+ * Two doubleheaders that start together go one after the other, each in game order.
+ * @param {ScheduledGame} first
+ * @param {ScheduledGame} second
+ */
+const compareDoubleheaders = (first, second) =>
+  first.doubleheader && second.doubleheader
+    ? nameDoubleheader(first).localeCompare(nameDoubleheader(second))
+    : 0;
+
+/**
  * The games in schedule order. A doubleheader's numbers are compared only between its own games.
  * @template {ScheduledGame} Game
  * @param {Game[]} games
@@ -39,6 +49,7 @@ export function sortInScheduleOrder(games) {
       (first, second) =>
         (first.game.date ?? "").localeCompare(second.game.date ?? "") ||
         first.slot - second.slot ||
+        compareDoubleheaders(first.game, second.game) ||
         (first.game.doubleheader || 0) - (second.game.doubleheader || 0) ||
         Date.parse(first.game.start) - Date.parse(second.game.start),
     )
