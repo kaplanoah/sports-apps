@@ -318,7 +318,7 @@ section.view.active {
    swipe down at the top moves the sheet instead. An app that fills the whole sheet sizes its
    sections from --section-gap and --bottom-padding. */
 .settings-panel {
-  --head-height: 64px;
+  --head-height: 63px;
   --section-gap: 14px;
   --bottom-padding: 22px;
   width: calc(100% - 24px);
@@ -353,13 +353,15 @@ section.view.active {
   min-height: 100%;
   padding: 0 22px var(--bottom-padding);
 }
+/* A sheet's or settings' header has the same room above and below on every screen. On a phone,
+   where it reaches the screen's top, it also clears the status bar by --top-inset. */
 .sheet-top {
+  --top-inset: 0px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   min-height: var(--head-height);
   margin-inline: -22px;
-  padding: 10px 22px;
+  padding: calc(var(--top-inset) + 8px) 22px 6px;
   background: var(--sheet);
 }
 /* A sheet's title is centered, clear of the close or back button at the head's left. */
@@ -411,17 +413,17 @@ section.view.active {
   white-space: normal;
 }
 /* A sheet's close button, a caret down, or its back button, an arrow, in place of it on a sheet
-   opened from another: just the icon, in --accent, its words only for screen readers. */
+   opened from another: just the icon, in --accent, its words only for screen readers. It holds the
+   head's top 44px, whatever the title under it holds. */
 .sheet-close,
 .sheet-back {
   position: absolute;
   left: -12px;
-  top: 50%;
+  top: 0;
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  margin-top: -22px;
   padding: 0;
   border: 0;
   background: none;
@@ -843,7 +845,6 @@ body.kbd .welcome-continue:focus {
   /* On phones, settings rise from the bottom to fill the screen, and a swipe down closes them.
      sheet-swipe.js moves them with the finger. */
   .settings-panel {
-    --head-height: 63px;
     --bottom-padding: max(22px, env(safe-area-inset-bottom));
     width: 100%;
     max-width: none;
@@ -865,9 +866,9 @@ body.kbd .welcome-continue:focus {
   }
   /* A sheet's top clears the status bar, which a Home Screen page draws over it. */
   .sheet-top {
-    justify-content: flex-start;
+    --top-inset: env(safe-area-inset-top);
     margin-inline: -18px;
-    padding: calc(env(safe-area-inset-top) + 8px) 18px 6px;
+    padding-inline: 18px;
   }
 
   /*

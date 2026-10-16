@@ -424,20 +424,6 @@ test("a club's Roster pill slides to its hitters, starters, and bullpen, each na
   expect(await countWideTables()).toBe(0);
 });
 
-test("a reload shows the open roster as it was while the page reads it again", async ({ page }) => {
-  const sheet = await openClub(page, "CLE");
-  await sheet.getByRole("tab", { name: "Roster" }).click();
-  await expect(sheet.locator("#rosterBody .box-name").first()).toHaveText("Jo Adell");
-  const release = await holdRequests(page, matchPath("/store/rosters/CLE"));
-
-  await page.reload();
-
-  await expect(sheet.getByRole("tab", { name: "Roster" })).toHaveAttribute("aria-selected", "true");
-  await expect(sheet.locator("#rosterBody .box-name").first()).toHaveText("Jo Adell");
-  await expect(sheet.locator("#rosterBody .placeholder")).toHaveCount(0);
-  release();
-});
-
 test("a past season's club says rosters show for the current season only", async ({ page }) => {
   await openApp(page, { store: { ...ROSTER_DOCS, "seasons/2025": SEASON_2025 } });
   await chooseSeason(page, "2025");
@@ -502,23 +488,6 @@ test("a starter's sheet ranks him among the qualified starters, each rank all in
   ]);
   await expect(playerSheet.locator(".pitch-mix")).toBeVisible();
   expect(await checkRanksAreDim(playerSheet, ".player-rank")).toEqual(Array(4).fill(true));
-});
-
-test("a reload shows the open player's sheet as it was while the page reads him again", async ({
-  page,
-}) => {
-  const sheet = await openRoster(page, "CLE");
-  await sheet.getByRole("button", { name: "Steven Kwan" }).click();
-  const playerSheet = page.locator("#playerSheet");
-  await expect(playerSheet.locator(".player-curve svg")).toHaveCount(10);
-  const release = await holdRequests(page, matchPath("/store/players/"));
-
-  await page.reload();
-
-  await expect(playerSheet.locator("#playerTitle")).toHaveText("Steven Kwan");
-  await expect(playerSheet.locator(".player-curve svg")).toHaveCount(10);
-  await expect(playerSheet.locator(".placeholder")).toHaveCount(0);
-  release();
 });
 
 /**

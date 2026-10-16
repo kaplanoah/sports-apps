@@ -881,7 +881,7 @@ header.top h1 .title-letter:nth-child(3) {
 .sheet-page .sheet-top {
   position: relative;
   min-height: 0;
-  padding-top: calc(env(safe-area-inset-top) + var(--band-room-above));
+  padding-top: calc(var(--top-inset) + var(--band-room-above));
   padding-bottom: var(--band-room-below);
 }
 .sheet-page .sheet-top:has(> .pager-tabs:not([hidden])) {
@@ -908,9 +908,8 @@ header.top h1 .title-letter:nth-child(3) {
   position: static;
 }
 .sheet-page .sheet-top :is(.sheet-close, .sheet-back) {
-  top: calc(env(safe-area-inset-top) + var(--band-button-top));
+  top: calc(var(--top-inset) + var(--band-button-top));
   left: 6px;
-  margin-top: 0;
 }
 /* The teams and the score hold one row, so they sit the same under every game's title, each team
    --faceoff-teams-drop lower than the score's middle, and what shows under them only adds rows:
@@ -2424,14 +2423,13 @@ table.standings tr.playoff-line + tr td {
 .settings-panel {
   --sheet: var(--bg);
 }
-/* On a phone the title stands alone in the header, close over the first setting. */
+/* The title stands alone in the header, close over the first setting. */
+.settings-panel .sheet-top {
+  min-height: 0;
+}
 @media (max-width: 779px) {
   .settings-panel {
     --bottom-padding: max(17px, env(safe-area-inset-bottom));
-  }
-  .settings-panel .sheet-top {
-    min-height: 0;
-    padding-bottom: 6px;
   }
 }
 

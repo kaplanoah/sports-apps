@@ -90,14 +90,16 @@
   Every sheet's top is a band, from `.sheet-page .sheet-top` in `shared/page/sheet.css`,
   never a list of sheets, as tall as what it holds: the WNBA's is the floor's color over the card's,
   ending in a line, with each title at the same height on every sheet and what goes with it, like a game's teams and score, in the band under it.
+  A title holds its name and one line under it, and anything more, like a player's facts or hometown, goes in the band under the title,
+  so the title and its close or back button, which holds the top of the title's row (`shared/page/chrome.css`), sit in one spot on every sheet and the band grows below them.
   Sheets, and a sheet's sections, slide side by side with the app's `--sheet-gap` of the sheet's color between them,
   each band's sides edged in its line while they move, so two bands never have to meet.
-  `tests/browser/sheet-stack.spec.mjs` opens every sheet on the page and checks each top; a new sheet joins its list, or the test fails.
+  Each app's `tests/browser/sheet-stack.spec.mjs` opens every sheet on the page and checks each top; a new sheet joins its list, or the test fails.
 - A reload draws each open sheet as it was.
   A sheet that reads from the Worker keeps what it read in its `keeper` (`wireSheet` in `shared/page/sheet.js`),
   beside what it shows, and draws again from that while it reads again,
   never its placeholders, as the game sheet does with its box score and a team's sheet with its roster (`sectionsKeeper` in `shared/page/team-sheet.js`).
-  The WNBA's `tests/browser/sheet-reload.spec.mjs` reloads each sheet with its reads held and checks it shows the same; a new sheet joins its list, or the test fails.
+  Each app's `tests/browser/sheet-reload.spec.mjs` reloads each sheet with its reads held and checks it shows the same; a new sheet joins its list, or the test fails.
 - A browser test that isn't about motion asks for reduced motion,
   with `page.emulateMedia({ reducedMotion: "reduce" })` or, for a whole file,
   `test.use({ contextOptions: { reducedMotion: "reduce" } })`, so it doesn't wait out eased scrolls and springs.
