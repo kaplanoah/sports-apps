@@ -511,7 +511,7 @@ jobs:
             You check pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} as a whole, after ${{ needs.review-plan.outputs.count }} reviewers each read one share of it in full.
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it, and `.review/files.md`, which lists every changed file, its share, and its diff files.
-            2. Each share's record is in `.review/share-<share>.json`. Read the findings and notes in each of its tries' answers.
+            2. Each share's record is in `.review/share-<share>.json`. Read the notes and the files left unjudged in each of its tries' answers. Each share's findings are its comments in `.review/comments.jsonl`.
             3. Look for what no one share could see: a change in one share that another share's files rely on, the same fix due in the other app or another view, one fact or rule now in two places, and docs or comments a change makes wrong. Read the diffs and code you need with Read, Grep, Glob, git log, git show, and git diff, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
             4. The comments already on the pull request, the shares' included, are in `.review/comments.jsonl`. Never post a finding already there.
             5. Post each finding as an inline comment on the line it's about, with confirmed=true, as the guide says.

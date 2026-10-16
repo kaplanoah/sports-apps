@@ -89,4 +89,4 @@ Don't run the tests: CI runs them all.
 - The review ends with one summary comment: the commit reviewed, the findings by weight,
   how many of the changed files were read in full out of how many,
   each one that wasn't and why, and anything read but not judged.
-  In CI, a step writes it from each reviewer's answer and from what each one actually read.
+  In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge.
