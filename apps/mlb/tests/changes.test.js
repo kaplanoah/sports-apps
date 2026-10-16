@@ -49,7 +49,13 @@ const TEAMS = {
   BOS: { league: "AL", seed: 5 },
   CWS: { league: "AL", seed: 6 },
 };
-const createFinal = (away, home, score) => ({ away, home, state: "final", score });
+const createFinal = (away, home, score) => ({
+  id: `${away}@${home}`,
+  away,
+  home,
+  state: "final",
+  score,
+});
 
 const createReading = (rows, teams, games = [], projected = true) =>
   Readings.createReading({

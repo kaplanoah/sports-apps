@@ -73,12 +73,31 @@ test("past midnight, a reading keeps the night's finals once the slate has moved
   assert.equal(Readings.readReadingDay(pastMidnight), "2026-09-24");
   const reading = Readings.createReading(pastMidnight);
   assert.equal(Object.keys(reading.games).length, lastNight.games.length);
-  assert.ok("LAA-SEA-1" in reading.games);
-  assert.ok("STL-PIT-1" in reading.games && "STL-PIT-2" in reading.games);
+  assert.ok(`${firstGame.gamePk}-2026-09-24` in reading.games);
+  assert.ok("1-2026-09-24" in reading.games);
 
   const morning = buildAt("2026-09-25T10:00:00Z");
   assert.equal(Readings.readReadingDay(morning), "2026-09-25");
   assert.deepEqual(Readings.createReading(morning).games, {});
+});
+
+test("two of a day's finals between the same clubs, like a resumed game and the day's own, are each kept", () => {
+  const fixture = JSON.parse(JSON.stringify(EVENING));
+  const lastNight = fixture.responses.schedule.dates.find((date) => date.date === "2026-09-24");
+  const [firstGame] = lastNight.games;
+  const resumed = { ...structuredClone(firstGame), gamePk: 2, gameDate: "2026-09-24T17:00:00Z" };
+  lastNight.games.push(resumed);
+  for (const game of [firstGame, resumed])
+    game.status = { abstractGameState: "Final", codedGameState: "F", detailedState: "Final" };
+  const pastMidnight = MLBSnapshot.buildSnapshot(fixture.responses, {
+    season: 2026,
+    now: Date.parse("2026-09-25T05:12:00Z"),
+  });
+
+  const { games } = Readings.createReading(pastMidnight);
+
+  assert.ok(`${firstGame.gamePk}-2026-09-24` in games);
+  assert.ok("2-2026-09-24" in games);
 });
 
 test("a reading leaves out each club's schedule, and keeps only final scores", () => {
