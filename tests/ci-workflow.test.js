@@ -140,9 +140,18 @@ test("a label change runs only the gate again once a run passed every test on th
   const check = readJob("check");
   assert.match(
     check,
-    /if: github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true'\n.*\n\s+name: ci-tested-/,
+    /github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true' &&\n\s+steps\.tested\.outputs\.reviewed == 'true'\n.*\n\s+name: ci-tested-/,
   );
   assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
+});
+
+// A draft's run passes with its review skipped, so only a run whose review ran, or a run that
+// reused one that did, records its code for a later label change to skip the review.
+test("only a run whose review ran records its code as reviewed", () => {
+  assert.match(
+    readJob("check"),
+    /REVIEWED: \$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.count != '' \}\}/,
+  );
 });
 
 // A review reads a change of any size in full: each share's reads are checked, and review fails

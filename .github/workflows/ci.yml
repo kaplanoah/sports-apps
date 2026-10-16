@@ -619,12 +619,16 @@ jobs:
             needs.review.result == 'success' &&
             (github.event_name != 'pull_request' || needs.changed-specs.result == 'success') &&
             (needs.changed-specs.outputs.specs == '' || needs.burn-in.result == 'success')) }}
-        run: echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
+          # A draft's run passes without its review, which doesn't stand in for one.
+          REVIEWED: ${{ needs.passed.outputs.run != '' || needs.review-plan.outputs.count != '' }}
+        run: |
+          echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
+          echo "reviewed=$REVIEWED" >> "$GITHUB_OUTPUT"
       # Checks out even when a job failed, to name the tests its retry passed.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: github.event_name == 'pull_request'
-      # Records the code this pull request's checks passed on: once every test passed, so a label
-      # change runs only the gate again, and once the gate passed too, so that once it merges, main
+      # Records the code this pull request's checks passed on: once every test and the review passed,
+      # so a label change runs only the gate again, and once the gate passed too, so that once it merges, main
       # deploys at once if it has exactly that code (worker/find-passed-ci.mjs).
       - name: Record the code the checks ran on
         id: code
@@ -633,7 +637,9 @@ jobs:
           git rev-parse HEAD > passed-commit.txt
           echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true'
+        if: >-
+          github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true' &&
+          steps.tested.outputs.reviewed == 'true'
         with:
           name: ci-tested-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
