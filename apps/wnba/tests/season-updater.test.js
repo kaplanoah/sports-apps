@@ -398,7 +398,7 @@ test("a game that decides its series is news, worded as the Updates box words it
 
   assert.deepEqual(notifications, [
     {
-      title: "Dream beat the Mystics 84-79 to win the First Round 2\u20130",
+      title: "Dream beat the Mystics 84-79 to win the First Round 2-0",
       body: "",
       tag: "final:1042600132",
     },
@@ -420,7 +420,7 @@ test("a game that leaves its series going is news, its result and where the seri
 
   assert.deepEqual(notifications, [
     {
-      title: "Fever beat the Aces 99-89 in Game\u00a02, tie the First Round 1\u20131",
+      title: "Fever beat the Aces 99-89 in Game\u00a02, tie the First Round 1-1",
       body: "",
       tag: "final:1042600122",
     },
@@ -440,7 +440,7 @@ test("a final's news counts the game itself, even while the bracket hasn't caugh
   const [news] = listNotifications({ before: SNAPSHOT, after, now });
 
   assert.deepEqual(news, {
-    title: "Dream beat the Mystics 93-75 to win the First Round 2\u20130",
+    title: "Dream beat the Mystics 93-75 to win the First Round 2-0",
     body: "",
     tag: "final:1042600132",
   });

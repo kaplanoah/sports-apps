@@ -1,3 +1,5 @@
+import { PHONE_WIDTH_QUERY } from "./device.js";
+
 // A bracket too wide for the screen scrolls sideways, and opens on the earliest round that still
 // has a series to finish, so the games still to come are what the reader sees first.
 
@@ -26,7 +28,7 @@ function isShownFromStart(scroller, target) {
 }
 
 // Only a phone opens partway along: a wider screen shows the bracket from its start.
-const isPhone = () => matchMedia("(max-width: 779px)").matches;
+const isPhone = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
 /**
  * Starts at the bracket's beginning when it isn't on a phone or that already shows the target's

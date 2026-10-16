@@ -11,6 +11,7 @@ export const LEAGUE_WORDS = {
   },
   crossConference: { name: "Interleague", words: ["interleague", "inter league"] },
   seasonSpansYears: false,
+  searchFiller: ["pitch", "pitches", "pitching", "starter", "starters"],
   neverShown: [
     "postseason",
     "post-season",

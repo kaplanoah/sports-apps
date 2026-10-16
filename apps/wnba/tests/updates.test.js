@@ -12,11 +12,7 @@ const AFTERNOON = JSON.parse(
 const SEASON = buildSnapshot(AFTERNOON.responses, { season: 2026, now: Date.parse(AFTERNOON.now) });
 
 /** @param {{ text: { text: string } }} update */
-const readText = (update) =>
-  update.text.text
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&ndash;/g, "-");
+const readText = (update) => update.text.text.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
 
 /** @param {any} season */
 const readWins = (season) => listPlayoffWins(season).map(readText);
