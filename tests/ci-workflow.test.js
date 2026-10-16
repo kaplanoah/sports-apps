@@ -54,6 +54,42 @@ test("the nightly run's report can start the routine that fixes flaky tests", ()
   assert.match(workflow, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
 });
 
+// Each report reads the issue's table and writes it back, so two at once would lose one's runs.
+test("every report to the issue Flaky browser tests takes its turn in one group, alone holding the token that writes issues", () => {
+  for (const workflow of ["flaky.yml", "flaky-report.yml"]) {
+    const report = readJob("report", workflow);
+    assert.match(report, /node worker\/report-flaky-tests\.mjs/, workflow);
+    assert.match(
+      report,
+      /concurrency:\n\s+group: flaky-tests-issue\n\s+cancel-in-progress: false/,
+      workflow,
+    );
+    assert.match(report, /issues: write/, workflow);
+    assert.doesNotMatch(
+      readRepoFile(`.github/workflows/${workflow}`).split(/^jobs:$/m)[0],
+      /issues: write/,
+      workflow,
+    );
+  }
+});
+
+// The report holds the routine's token, so it runs the default branch's code, after CI.
+test("a pull request's flaky tests are reported from the default branch, for this repository's branches only", () => {
+  const workflow = readRepoFile(".github/workflows/flaky-report.yml");
+  assert.match(workflow, /on:\n {2}workflow_run:\n {4}workflows: \[CI\]\n {4}types: \[completed\]/);
+  assert.doesNotMatch(workflow, /\bref:/);
+  const report = readJob("report", "flaky-report.yml");
+  assert.match(report, /github\.event\.workflow_run\.event == 'pull_request'/);
+  assert.match(
+    report,
+    /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/,
+  );
+  assert.match(report, /pattern: burn-in-flaky-\*/);
+  assert.match(report, /run-id: \$\{\{ github\.event\.workflow_run\.id \}\}/);
+  assert.match(report, /--retried "\$\{listed\[@\]\}"/);
+  assert.match(report, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
+});
+
 /** @returns {string[]} the workflow's jobs, by the names they're keyed under */
 const listJobs = () => {
   const jobs = readRepoFile(".github/workflows/ci.yml").split(/^jobs:$/m)[1] ?? "";
@@ -76,11 +112,12 @@ test("the check job needs every other job but caches", () => {
 });
 
 /**
- * One job of ci.yml, from its key to the next job.
+ * One job of a workflow, ci.yml unless it names another, from its key to the next job.
  * @param {string} job
+ * @param {string} [workflow]
  */
-const readJob = (job) =>
-  readRepoFile(".github/workflows/ci.yml").match(
+const readJob = (job, workflow = "ci.yml") =>
+  readRepoFile(`.github/workflows/${workflow}`).match(
     new RegExp(`^ {2}${job}:\\n(?:(?: {4}.*)?\\n)*`, "m"),
   )?.[0] ?? "";
 

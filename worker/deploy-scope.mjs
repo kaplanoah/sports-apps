@@ -14,6 +14,7 @@ const SKIPPED_FILES = new Set([
   ".github/dependabot.yml",
   ".github/workflows/ci.yml",
   ".github/workflows/conflicts.yml",
+  ".github/workflows/flaky-report.yml",
   ".github/workflows/flaky.yml",
   ".github/workflows/watch.yml",
   ".gitignore",
