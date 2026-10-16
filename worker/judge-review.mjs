@@ -162,6 +162,9 @@ const countByWeight = (weights) =>
 /** @param {{ path: string, why: string }} file */
 const listUnread = ({ path, why }) => `- \`${path}\`: ${why}`;
 
+/** @param {string} path */
+const listFile = (path) => `- \`${path}\``;
+
 /** @param {number} count @param {string} noun */
 const pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -182,11 +185,13 @@ export function judgeReview({ sha, plan, records, across, weights }) {
   if (across) answers.push(across);
   const unjudged = answers.flatMap((answer) => answer.unjudged);
   const missedShares = plan.shares.filter(({ share }) => !records.has(share));
-  const unreadFiles = plan.shares.flatMap(({ share, files, partsByFile }) => {
+  const filesOfMissedShares = missedShares.flatMap((share) => share.files);
+  const filesPartlyRead = plan.shares.flatMap(({ share, files, partsByFile }) => {
     const record = records.get(share);
-    if (!record) return files;
+    if (!record) return [];
     return files.filter((path) => partsByFile[path].some((part) => record.unread.includes(part)));
   });
+  const unreadFiles = [...filesOfMissedShares, ...filesPartlyRead];
   const changedCount = plan.shares.flatMap((share) => share.files).length;
   const isComplete = !unreadFiles.length && (!isAcrossDue || Boolean(across));
   const found = weights.length
@@ -202,16 +207,18 @@ export function judgeReview({ sha, plan, records, across, weights }) {
     : [SUMMARY_MARKER, `Claude had nothing to read in ${sha}.`];
   if (plan.unread.length)
     lines.push("", "Left unread, as nothing to review:", ...plan.unread.map(listUnread));
-  if (unreadFiles.length) {
-    const why = missedShares.length
-      ? `${pluralize(missedShares.length, "share")} didn't finish`
-      : "a reviewer didn't read every line of them";
+  if (filesOfMissedShares.length)
     lines.push(
       "",
-      `**Not read, since ${why}, so the review fails until a re-run reads them:**`,
-      ...unreadFiles.map((path) => `- \`${path}\``),
+      `**Not read, since ${pluralize(missedShares.length, "share")} didn't finish, so the review fails until a re-run reads them:**`,
+      ...filesOfMissedShares.map(listFile),
     );
-  }
+  if (filesPartlyRead.length)
+    lines.push(
+      "",
+      "**Not read in full, since a reviewer didn't read every line of them, so the review fails until a re-run reads them:**",
+      ...filesPartlyRead.map(listFile),
+    );
   if (isAcrossDue && !across)
     lines.push("", "**The check across shares didn't finish, so the review fails.**");
   if (unjudged.length)

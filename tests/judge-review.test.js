@@ -224,6 +224,34 @@ test("a share that never finished leaves its files unread and fails the review",
   assert.match(body, /- `b.js`\n- `c.js`/);
 });
 
+test("a share that never finished and one read only in part are each named for their own reason", () => {
+  const plan = {
+    shares: [
+      ...PLAN.shares,
+      { share: 3, files: ["d.js"], partsByFile: { "d.js": ["diffs/d.js.diff"] } },
+    ],
+    unread: [],
+  };
+  const { body } = judgeReview({
+    sha: "abc123",
+    plan,
+    records: new Map([
+      [2, recordOf({}, ["diffs/c.js.diff"])],
+      [3, recordOf({})],
+    ]),
+    across: { notes: [], unjudged: [] },
+    weights: [],
+  });
+  assert.match(
+    body,
+    /1 share didn't finish, so the review fails until a re-run reads them:\*\*\n- `a.js`\n\n/,
+  );
+  assert.match(
+    body,
+    /a reviewer didn't read every line of them, so the review fails until a re-run reads them:\*\*\n- `c.js`$/m,
+  );
+});
+
 test("with more than one share, the review fails until the check across them finishes", () => {
   const records = new Map([
     [1, recordOf({})],
