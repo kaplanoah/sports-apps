@@ -82,7 +82,7 @@
   A theme may also change a weight where its font keeps its width at every weight,
   as MLB's Ball sets a final's losing score a step lighter in Chivo Mono,
   to stand apart from the winner as much as its dim ink does in Night Game,
-  and may lift a part a fraction of a pixel where its colors look off center otherwise,
+  and may lift a part a pixel or two where its colors look off center otherwise,
   as MLB's bracket chips and their digits sit as each theme's set them by eye, which the root's `tests/browser/theme-layout.mjs` leaves out.
   The WNBA's `tests/browser/themes.spec.mjs` checks every view in Walnut against Maple,
   on a phone and a wide screen, with the root's `tests/browser/theme-layout.mjs`; a new view joins its list.

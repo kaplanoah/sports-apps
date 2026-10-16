@@ -297,6 +297,8 @@ h3 {
 .elim-num,
 .arm,
 .nscore,
+.runs-score,
+.speed-labels,
 header.top h1 {
   font-family: var(--numbers);
 }
@@ -1653,6 +1655,7 @@ body.kbd .rank-item .grip:focus {
   font-weight: var(--type-team-weight);
   text-transform: none;
   letter-spacing: 0;
+  color: var(--ink-dim);
 }
 .box-wrap {
   overflow-x: auto;
@@ -1933,7 +1936,7 @@ table.st.line-score td.team .club {
   color: var(--now);
 }
 /* A club's leaders, a table for hitting and one for pitching, each row's stat before its leader's
-   name, a half step over the roster's rows. */
+   name. */
 .leaders {
   display: grid;
   gap: 4px;
@@ -2626,8 +2629,8 @@ body.kbd .player-open:focus {
   }
 }
 
-/* The News view, as shared/news.css lays it out, in the page's cards and Chivo Mono's lighter
-   weights, its Read button outlined in capitals like Try again, its arrow in gold. */
+/* The News view, as shared/news.css lays it out, in the page's cards, its Read button outlined in
+   capitals like Try again, its arrow in gold. */
 .news-card {
   border: 1px solid var(--card-border);
   background: var(--card);
@@ -2701,9 +2704,6 @@ body.kbd .player-open:focus {
   display: grid;
   gap: 6px;
 }
-.settings-news .settings-group-label {
-  font-weight: var(--type-label-weight);
-}
 
 /* Try again, outlined in capitals like Diagnostics' buttons, and filled gold where it stands alone
    in place of what didn't load. */
@@ -2752,9 +2752,6 @@ body.kbd .player-open:focus {
 .updates-count {
   font-weight: var(--type-label-weight);
 }
-.settings-group-label {
-  font-weight: calc(var(--type-label-weight) + 150);
-}
 .game-card-when {
   font-weight: calc(var(--type-label-weight) + 50);
 }
@@ -2770,6 +2767,9 @@ body.kbd .player-open:focus {
 .clip-title {
   font-weight: calc(var(--type-detail-weight) + 50);
 }
+.clip-feature .clip-title {
+  font-weight: calc(var(--type-body-weight) + 50);
+}
 .clip-length {
   font-weight: calc(var(--type-caption-weight) + 50);
 }
@@ -2780,9 +2780,9 @@ body.kbd .player-open:focus {
   font-weight: calc(var(--type-body-weight) + 150);
 }
 
-/* A club's sheet, as shared/team-sheet.css lays it out, set in Chivo Mono's lighter weights, its
-   parts under gold titles like the Updates box's and its labels in the green of the page's. A club's name or dot opens it wherever it shows,
-   and in the standings so does the rest of its row. */
+/* A club's sheet, as shared/team-sheet.css lays it out, its parts under gold titles like the
+   Updates box's and its labels in the green of the page's. A club's name or dot opens it wherever
+   it shows, and in the standings so does the rest of its row. */
 @media (hover: hover) {
   table.st tr[data-team]:hover td {
     background: color-mix(in srgb, var(--ink) 5%, transparent);

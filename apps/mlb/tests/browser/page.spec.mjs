@@ -314,7 +314,7 @@ for (const { screen, viewport } of [
   test.describe(`on ${screen}`, () => {
     test.use({ viewport });
 
-    test("every piece of text keeps to the type scale, in every view", async ({ page }) => {
+    test("every piece of text keeps to its type role, in every view", async ({ page }) => {
       await openApp(page, {
         snapshots: { 2026: buildSnapshotWithStarters() },
         store: { ...ROSTER_DOCS, ...PLAYER_DOCS, ...NEWS_DOCS },

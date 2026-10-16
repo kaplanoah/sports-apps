@@ -7,10 +7,11 @@ import {
   BROADCASTS_FIXTURE,
   buildFixtureSnapshot,
   matchPath,
+  readColor,
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole, readType } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
@@ -39,7 +40,7 @@ async function openOctoberGame(page, game, { boxScores = BOX_SCORES, store = {} 
   return { app, sheet: page.locator("#gameSheet") };
 }
 
-test("a final's Game section shows its innings, then each club's batters and pitchers under its name as a team's, below its row", async ({
+test("a final's Game section shows its innings, then each club's batters and pitchers under its name as a team's, in dim ink, below its row", async ({
   page,
 }) => {
   const { sheet } = await openOctoberGame(page, "Brewers at Padres, Tue, Oct 6");
@@ -50,6 +51,7 @@ test("a final's Game section shows its innings, then each club's batters and pit
   await expect(club).toHaveCSS("font-size", `${team.size}px`);
   await expect(club).toHaveCSS("font-weight", String(team.weight));
   await expect(club).toHaveCSS("text-transform", "none");
+  await expect(club).toHaveCSS("color", await readColor(page, "--ink-dim"));
   const innings = sheet.locator(".line-score tbody tr");
   await expect(innings.nth(1).locator("td")).toHaveText([
     "SD",
@@ -284,7 +286,7 @@ async function openHighlights(page) {
   return { app, sheet, body };
 }
 
-test("a final's Highlights show MLB's recap video, MLB.com's story, and each play with its inning and the score after it", async ({
+test("a final's Highlights show MLB's recap video, its title as heavy as each play's, MLB.com's story, and each play with its inning and the score after it", async ({
   page,
 }) => {
   const { body } = await openHighlights(page);
@@ -302,6 +304,9 @@ test("a final's Highlights show MLB's recap video, MLB.com's story, and each pla
   );
   const rows = body.locator(".clip-row");
   await expect(rows.first().locator(".clip-title")).toHaveText("Jackson Merrill's sliding catch");
+  expect((await readType(body.locator(".clip-feature .clip-title"))).weight).toBe(
+    (await readType(rows.first().locator(".clip-title"))).weight,
+  );
   await expect(rows.first().locator(".clip-meta")).toHaveText("Top 1st");
   await expect(rows.nth(4).locator(".clip-meta")).toHaveText("Bot 3rd\u2022MIL 0, SD 1");
   await expect(rows.nth(4).locator(".clip-meta b")).toHaveText("SD 1");

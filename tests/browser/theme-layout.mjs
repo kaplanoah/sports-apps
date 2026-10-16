@@ -1,6 +1,6 @@
 import { waitForPressesToEnd } from "./tap-states.mjs";
 
-// The parts a theme may lift a fraction of a pixel, where its colors look off center otherwise.
+// The parts a theme may lift a pixel or two, where its colors look off center otherwise.
 const PLACED_BY_EYE = ".nscore";
 
 /**

@@ -27,7 +27,7 @@ async function signIn(page) {
 /** @param {import("@playwright/test").Page} page */
 const findGate = (page) => page.getByRole("heading", { name: "Enter your access code" });
 
-test("the gate's text keeps to the type scale, with its code light only because it's large", async ({
+test("the gate's text keeps to its type roles, with its code light only because it's large", async ({
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });

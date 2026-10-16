@@ -39,12 +39,10 @@ export function buildBracket(state) {
   const describe = (seriesId) => describeSeries(state, bracket[seriesId]);
   const [al, nl] = LEAGUES.map((league) => {
     if (!hasFullLeague(state, league)) return null;
-    const championship = describe(`${league}_CS`);
     return {
       wc: [describe(`${league}_WC1`), describe(`${league}_WC2`)],
       ds: [describe(`${league}_DS1`), describe(`${league}_DS2`)],
-      cs: [championship],
-      champion: championship.winner,
+      cs: [describe(`${league}_CS`)],
     };
   });
   return { al, nl, ws: al && nl ? describe("WS") : null };

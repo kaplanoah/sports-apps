@@ -311,7 +311,7 @@ test("No games today is a sentence, centered beside today's date, its capitals a
   expect(Math.abs(textMiddle - columnMiddle)).toBeLessThanOrEqual(1);
 });
 
-test("a game's series label is on the type scale's small step, and it and If necessary read lighter than Final", async ({
+test("a game's series label is a label, and it and If necessary read a step lighter than Final", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -322,11 +322,14 @@ test("a game's series label is on the type scale's small step, and it and If nec
   });
   const ifNeeded = page.locator('[data-game="1042600132"] .game-status');
   await expect(ifNeeded).toHaveText("If necessary");
-  await expect(ifNeeded.locator(".if-needed")).toHaveCSS("font-weight", "500");
+  const label = await readRole(page, "label");
+  const lighter = String(label.weight - 100);
+  await expect(ifNeeded.locator(".if-needed")).toHaveCSS("font-weight", lighter);
   const final = page.locator("#seasonGames .game-status", { hasText: "Final" }).first();
-  await expect(final).toHaveCSS("font-weight", "600");
-  await expect(page.locator("#seasonGames .series-label").first()).toHaveCSS("font-weight", "500");
-  await expect(page.locator("#seasonGames .series-label").first()).toHaveCSS("font-size", "13px");
+  await expect(final).toHaveCSS("font-weight", String(label.weight));
+  const series = page.locator("#seasonGames .series-label").first();
+  await expect(series).toHaveCSS("font-weight", lighter);
+  await expect(series).toHaveCSS("font-size", `${label.size}px`);
 });
 
 test("a break between periods reads in the status's capitals, in the live game's orange", async ({

@@ -91,7 +91,7 @@
 }
 .clip-feature .clip-title {
   font-size: var(--type-body-size);
-  font-weight: var(--type-body-weight);
+  font-weight: calc(var(--type-body-weight) + 200);
 }
 .clip-rows {
   display: grid;
