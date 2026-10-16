@@ -122,6 +122,33 @@ export const readRole = (page, role) =>
   }, role);
 
 /**
+ * Each text's size and weight, with its letter spacing where its role sets one, as the page draws
+ * it and as its role sets it, by the text's id, so a test checks every text against its role at once.
+ * @param {import("@playwright/test").Page} page
+ * @param {Record<string, string>} roles each text's id and its role, like "heading"
+ */
+export async function readTextsAndRoles(page, roles) {
+  /** @type {Record<string, object>} */
+  const drawn = {};
+  /** @type {Record<string, object>} */
+  const expected = {};
+  for (const [id, role] of Object.entries(roles)) {
+    const { size, weight, spacing } = await readRole(page, role);
+    const type = await page.locator(`#${id}`).evaluate((text) => {
+      const style = getComputedStyle(text);
+      return {
+        size: parseFloat(style.fontSize),
+        weight: Number(style.fontWeight),
+        spacing: parseFloat(style.letterSpacing) || 0,
+      };
+    });
+    drawn[id] = spacing ? type : { size: type.size, weight: type.weight };
+    expected[id] = spacing ? { size, weight, spacing } : { size, weight };
+  }
+  return { drawn, expected };
+}
+
+/**
  * A shown text's size, weight, and letter spacing, as the page draws them, to check two texts that
  * should look alike against each other.
  * @param {import("@playwright/test").Locator} text

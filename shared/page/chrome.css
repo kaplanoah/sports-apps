@@ -810,11 +810,6 @@ body:has(> .home-screen-bar:not([hidden])) {
     margin-inline: -18px;
     padding: calc(env(safe-area-inset-top) + 8px) 18px 6px;
   }
-  .sheet-head h2 {
-    font-size: var(--type-heading-size);
-    font-weight: var(--type-heading-weight);
-    letter-spacing: var(--type-heading-tracking);
-  }
 
   /*
    * A floating tab bar in the app's tint, sized like iOS's: a 62px capsule 21px in from the sides, a
