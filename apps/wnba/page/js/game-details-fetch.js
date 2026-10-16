@@ -3,9 +3,9 @@
 // through it for its lead chart, the meetings that preview one that hasn't, and the highlights of
 // one that's over.
 
+import { SHEET_FETCH_TIMEOUT_MS } from "#shared/sheet-reads.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 
-const FETCH_TIMEOUT_MS = 15 * 1000;
 // A box score read as a finger comes down on its game serves the sheet that opens on the tap.
 const BOX_SCORE_REUSE_MS = 5 * 1000;
 // The meetings change at most a few times a day, so a sheet opened again soon reuses them.
@@ -17,7 +17,7 @@ const HIGHLIGHTS_REUSE_MS = 60 * 1000;
 export const fetchBoxScore = (id) =>
   fetchFromWorker(`box-score?id=${encodeURIComponent(id)}`, {
     reuseMs: BOX_SCORE_REUSE_MS,
-    timeoutMs: FETCH_TIMEOUT_MS,
+    timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => body.id === id,
   });
 
@@ -26,7 +26,7 @@ export function fetchPreview({ season, away, home }) {
   const query = new URLSearchParams({ season: String(season), away, home });
   return fetchFromWorker(`preview?${query}`, {
     reuseMs: PREVIEW_REUSE_MS,
-    timeoutMs: FETCH_TIMEOUT_MS,
+    timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => body.season === season && body.away === away && body.home === home,
   });
 }
@@ -36,7 +36,7 @@ export function fetchLead({ id, away, home, start }) {
   const query = new URLSearchParams({ id, away, home, start });
   return fetchFromWorker(`lead?${query}`, {
     reuseMs: BOX_SCORE_REUSE_MS,
-    timeoutMs: FETCH_TIMEOUT_MS,
+    timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => body.away === away && body.home === home && body.start === start,
   });
 }
@@ -46,7 +46,7 @@ export function fetchHighlights({ id, away, home, start }) {
   const query = new URLSearchParams({ id, away, home, start });
   return fetchFromWorker(`highlights?${query}`, {
     reuseMs: HIGHLIGHTS_REUSE_MS,
-    timeoutMs: FETCH_TIMEOUT_MS,
+    timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => body.id === id && Array.isArray(body.plays),
   });
 }

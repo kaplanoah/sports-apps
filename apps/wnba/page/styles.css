@@ -160,6 +160,11 @@
   --sheet-band: var(--bg);
   --sheet-band-line: var(--edge);
   --sheet-gap: 15px;
+  --meeting-day-width: 4em;
+  --meeting-room: 7px;
+  --meeting-result-gap: 8px;
+  --meeting-score-lift: 0px;
+  --player-fact-room: 12px;
   /* A sheet lifts just off the page on a wide screen, by a close shade and a wide, faint one. */
   --sheet-shadow:
     0 2px 6px color-mix(in srgb, var(--shadow-ink) 10%, transparent),
@@ -175,14 +180,17 @@
   --scoreboard: #24180e;
   --led: #f84434;
   --led-dim: #e8291c;
+  /* The wide, deeper glow around a lit score. */
+  --led-haze: rgba(229, 7, 19, 0.5);
   --shadow-ink: #321c08;
   --engrave-light: rgba(255, 255, 255, 0.4);
   --block-side: #d6bfa0;
   --dot-shadow: color-mix(in srgb, var(--shadow-ink) 30%, transparent);
   --dot-light: rgba(255, 255, 255, 0.49);
+  --dot-hairline: color-mix(in srgb, var(--shadow-ink) 3%, transparent);
   --all-star-shadow: color-mix(in srgb, var(--shadow-ink) 18%, transparent);
   --all-star-light: rgba(255, 255, 255, 0.49);
-  --all-star-hairline: color-mix(in srgb, var(--shadow-ink) 3%, transparent);
+  --all-star-hairline: var(--dot-hairline);
   --all-star-shift: -1px;
   --accent: var(--action);
   --accent-ink: var(--action-ink);
@@ -422,15 +430,6 @@ header.top h1 .title-letter:nth-child(3) {
   color: var(--now);
 }
 
-.section-label {
-  margin: 0 0 6px;
-  font-family: var(--display);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  text-transform: uppercase;
-  letter-spacing: var(--type-label-tracking);
-  color: var(--structure);
-}
 .empty-note {
   margin: 8px 0 18px;
   color: var(--ink-dim);
@@ -492,7 +491,7 @@ header.top h1 .title-letter:nth-child(3) {
   box-shadow:
     inset 0.4px 0.4px 1px var(--dot-shadow),
     0.4px 0.4px 0 var(--dot-light),
-    0 0 0 0.15px color-mix(in srgb, var(--shadow-ink) 3%, transparent);
+    0 0 0 0.15px var(--dot-hairline);
 }
 .dot.unknown {
   background: var(--divider);
@@ -718,7 +717,8 @@ header.top h1 .title-letter:nth-child(3) {
   display: block;
   height: var(--digit-height);
   overflow: visible;
-  filter: drop-shadow(0 0 1.5px rgba(248, 68, 52, 0.85)) drop-shadow(0 0 5px rgba(229, 7, 19, 0.5));
+  filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--led) 85%, transparent))
+    drop-shadow(0 0 5px var(--led-haze));
 }
 /* The narrow hundreds place sits close to the tens, as one figure. */
 .scoreboard svg.hundreds {
@@ -1082,6 +1082,7 @@ header.top h1 .title-letter:nth-child(3) {
   overflow: visible;
 }
 .lead-tile {
+  rx: var(--radius-card);
   fill: var(--tile);
   stroke: color-mix(in srgb, var(--divider) 70%, transparent);
 }
@@ -1557,39 +1558,9 @@ th[aria-sort="ascending"] .roster-caret {
   color: var(--ink);
 }
 
-.meetings {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--divider);
-}
-.meetings li {
-  display: grid;
-  grid-template-columns: 4em minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--divider);
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
-  color: var(--ink-dim);
-}
-.meeting-result {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
 .meeting-result .club {
   font-size: var(--type-team-compact-size);
   font-weight: var(--type-team-compact-weight);
-  color: var(--ink);
-}
-.meeting-score {
-  font-family: var(--numbers);
-  font-size: var(--type-stat-size);
-  font-weight: var(--type-stat-weight);
-  color: var(--ink);
 }
 
 /* Bracket: the rounds left to right, each series beside the two it follows, every round as wide as
@@ -2129,7 +2100,6 @@ table.standings tr.playoff-line + tr td {
    name and its parts under teal titles. A team's name or dot opens it wherever it shows, and in
    the standings and the bracket so does the rest of its row. */
 @media (hover: hover) {
-  table.standings tr[data-team]:hover :is(.team-open, .team-name),
   .team-line[data-team]:hover :is(.team-open, .team-name) {
     color: var(--ink-hover);
   }
@@ -2399,11 +2369,6 @@ table.standings tr.playoff-line + tr td {
 .retry-button.filled .retry-icon {
   color: inherit;
 }
-@media (hover: hover) {
-  .retry-button:not(.filled):hover {
-    color: var(--ink-hover);
-  }
-}
 .retry-block .retry-title {
   font-weight: calc(var(--type-detail-weight) + 100);
 }
@@ -2478,37 +2443,17 @@ body.kbd .player-open:focus {
   outline-offset: 2px;
 }
 @media (hover: hover) {
-  .player-open:hover,
   .player-open:hover :is(.roster-first, .roster-last) {
     color: var(--ink-hover);
   }
 }
 
-/* A player's sheet: under her name and team, her position, age, height, and first season, each
-   under a quiet label, without lines between them. */
-.player-facts {
-  display: flex;
-  justify-content: center;
-  margin: 0;
-}
-.player-fact {
-  display: grid;
-  gap: 1px;
-  padding-inline: 12px;
-  text-align: center;
-}
+/* A player's sheet: under her name and team, her position, age, height, and first season, as
+   shared/sheet.css lays them out. */
 .player-fact dt {
   font-size: var(--type-label-size);
   font-weight: calc(var(--type-label-weight) - 100);
-  text-transform: uppercase;
   letter-spacing: var(--type-label-tracking);
-  color: var(--ink-dim);
-}
-.player-fact dd {
-  margin: 0;
-  font-size: var(--type-detail-size);
-  font-weight: calc(var(--type-detail-weight) + 100);
-  color: var(--ink);
 }
 
 /* A player who is out has a box as her sheet's first part, outlined like the team sheet's game
@@ -2718,20 +2663,4 @@ table.player-game td {
   font-weight: var(--type-detail-weight);
   color: var(--ink);
   white-space: nowrap;
-}
-/* The notes under the rows sit a little further from them than the rows from each other, and
-   nearer each other. Each one's lines run even, so no word sits alone on the last one. */
-.player-rank-notes {
-  display: grid;
-  gap: 7px;
-  margin-top: 5px;
-}
-.player-rank-note {
-  margin: 0;
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
-  line-height: calc(1.35 * var(--leading));
-  color: var(--ink-dim);
-  text-align: center;
-  text-wrap: balance;
 }

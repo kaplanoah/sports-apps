@@ -121,6 +121,13 @@ export function readPlayoffGameId(id) {
 const SEASON_GAME_ID = /^10[2-5](\d{2})\d{5}$/;
 
 const ALL_STAR_GAME_ID = /^103/;
+const CUP_FINAL_ID = /^105/;
+
+/**
+ * Whether a game is the Commissioner's Cup final.
+ * @param {{ id: string }} game
+ */
+export const isCupFinal = (game) => CUP_FINAL_ID.test(game.id);
 
 // The All-Star Game's teams aren't the league's, so the game carries their names: a captain's name
 // or a conference, without the feeds' "Team" before it, as every team shows its name without its
@@ -316,7 +323,7 @@ function listTeamLeaders(players, team, count) {
     }));
 }
 
-// A team's sheet shows its leading five, and a game's preview the first three of them.
+// A team's sheet and a game's preview each show a team's leading five.
 const LEADERS_PER_TEAM = 5;
 
 const listLeaders = (players) =>

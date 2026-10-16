@@ -1,4 +1,4 @@
-import { test, expect, openApp } from "./harness.mjs";
+import { test, expect, openApp, openGameSheet } from "./harness.mjs";
 import {
   countFramesAcross,
   expectAtRest,
@@ -7,6 +7,7 @@ import {
   waitForLoadToSettle,
 } from "../../../../tests/browser/at-rest.mjs";
 import { findSeasonPill } from "../../../../tests/browser/season-tab.mjs";
+import { VALKYRIES_AT_WINGS, finishValkyriesAtWings } from "./game-sheet-games.mjs";
 
 // In full motion, every slide ends, and then nothing moves or asks for a frame. Each test counts
 // ResizeObserver loops from its first gesture, since what the page does as it loads isn't theirs.
@@ -70,6 +71,22 @@ test("the page's redraw each minute, which keeps its times current, asks for no 
   await waitForLoadToSettle(page);
 
   expect(await countFramesAcross(page, 60_000)).toBe(0);
+});
+
+// The lead chart's tile takes its corner from CSS's rx, which only this spec checks in WebKit, as
+// an iPhone draws it.
+test("the lead chart's tile rounds its corners by the card's shape token", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const app = await openApp(page);
+  await app.changeSeason(finishValkyriesAtWings);
+  const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
+  const tile = sheet.locator(".lead-chart .lead-tile");
+  await expect(tile).toBeVisible();
+  const [corner, token] = await tile.evaluate((rect) => [
+    getComputedStyle(rect).rx,
+    getComputedStyle(document.documentElement).getPropertyValue("--radius-card").trim(),
+  ]);
+  expect(corner).toBe(token);
 });
 
 test("a shown list that grows loops no ResizeObserver", async ({ page }) => {

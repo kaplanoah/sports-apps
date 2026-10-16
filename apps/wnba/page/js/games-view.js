@@ -7,7 +7,8 @@ import { readGameDay } from "./days.js";
 import { renderScoreboard } from "./scoreboard.js";
 import { describeSeriesAfterWin } from "#shared/series-text.js";
 import { nameTeam } from "./series.js";
-import { countWinsNeeded, ROUNDS } from "./snapshot.js";
+import { LEAGUE_WORDS } from "./league-words.js";
+import { countWinsNeeded, isCupFinal, ROUNDS } from "./snapshot.js";
 
 /** @typedef {import("./series.js").Series} Series */
 /** @typedef {{ team: string | null, seed: number | null, score: number | null, isInBonus: boolean }} GameSide */
@@ -21,7 +22,11 @@ import { countWinsNeeded, ROUNDS } from "./snapshot.js";
 export const isCalledOff = (game, seriesById) =>
   game.state === "pre" && game.isIfNeeded && !!seriesById.get(game.series ?? "")?.winner;
 
-/** @param {Game} game */
+/**
+ * The side that lost a finished game, as its row or its box score has it, or null before it's
+ * over.
+ * @param {{ state: string, away: { score: number | null }, home: { score: number | null } }} game
+ */
 export function findLoser(game) {
   if (game.state !== "final") return null;
   return game.away.score < game.home.score ? "away" : "home";
@@ -32,14 +37,25 @@ const findWinningTeam = (game) =>
   game.away.score > game.home.score ? game.away.team : game.home.team;
 
 /** @param {number} period */
-export function describePeriod(period) {
+function describePeriod(period) {
   if (period <= 4) return `Q${period}`;
   return period === 5 ? "OT" : `${period - 4}OT`;
 }
 
 // Between periods the clock stops at zero, and the league's own status says which break it is.
-/** @param {Game} game */
+/** @param {Pick<Game, "period" | "clock">} game */
 const isClockRunning = (game) => !!(game.clock && game.clock !== "0.0" && game.period);
+
+/**
+ * Where a live game is, as a broadcaster says it: "with 3:18 in Q2", "at halftime", or "after Q3",
+ * or nothing before the feeds give its period.
+ * @param {Pick<Game, "period" | "clock">} game
+ */
+export function describeLiveMoment(game) {
+  if (!game.period) return "";
+  if (isClockRunning(game)) return `with ${game.clock} in ${describePeriod(game.period)}`;
+  return game.period === 2 ? "at halftime" : `after ${describePeriod(game.period)}`;
+}
 
 /**
  * When a game that hasn't started starts, or TBD while its time isn't set.
@@ -115,6 +131,8 @@ export function describeFinalInSeries(game, games) {
 const renderElsewhereLabel = (game) =>
   !!game.isNeutral && !!game.arena && html`<span class="series-label">In ${game.arena.city}</span>`;
 
+const CUP_FINAL = "Cup Final";
+
 // Short names, since the label shares the row's middle with the time or score. Until both teams
 // are known, the game's number tells the series' games apart instead.
 /**
@@ -122,13 +140,14 @@ const renderElsewhereLabel = (game) =>
  * @param {Game[]} games
  */
 function renderSeriesLabel(game, games) {
-  if (game.allStar) return html`<span class="series-label">All-Star Game</span>`;
+  if (game.allStar) return html`<span class="series-label">${LEAGUE_WORDS.allStar}</span>`;
+  if (isCupFinal(game)) return html`<span class="series-label">${CUP_FINAL}</span>`;
   if (!game.round) return renderElsewhereLabel(game);
   const round = ROUNDS[game.round];
   if (!game.away.team || !game.home.team)
     return html`<span class="series-label">${round.shortName} G${game.number}</span>`;
   const wins = countSeriesWins(game, games);
-  const isDecided = Math.max(...wins) > round.bestOf / 2;
+  const isDecided = Math.max(...wins) >= countWinsNeeded(game.round);
   return html`<span class="series-label${isDecided ? " decided" : ""}"
     >${round.shortName} <span class="series-count tabular">${wins.join("-")}</span></span
   >`;
@@ -169,8 +188,10 @@ function renderSideClub(game, place) {
 }
 
 /** @param {Game} game */
-export const nameGame = (game) =>
-  game.round ? `${ROUNDS[game.round].name} Game ${game.number}` : "Game";
+export function nameGame(game) {
+  if (isCupFinal(game)) return CUP_FINAL;
+  return game.round ? `${ROUNDS[game.round].name} Game ${game.number}` : "Game";
+}
 
 /** @param {Game} game */
 function nameOpenButton(game) {

@@ -4,6 +4,7 @@ import { isPlayingNow } from "#shared/playing-now.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderPendingTapeRow, renderTapeRow } from "#shared/tape.js";
 import { renderClub } from "./clubs.js";
+import { findLoser } from "./games-view.js";
 import { measureBiggestLeads, renderLeadChart, renderPendingLeadChart } from "./lead-chart.js";
 import { renderPlayerButton } from "./player-button.js";
 import {
@@ -50,12 +51,6 @@ function namePeriod(index) {
   if (index < REGULATION_PERIODS) return String(index + 1);
   const overtime = index - REGULATION_PERIODS + 1;
   return overtime === 1 ? "OT" : `${overtime}OT`;
-}
-
-/** @param {BoxScore} box */
-function findLoser(box) {
-  if (box.state !== "final") return null;
-  return box.away.score < box.home.score ? "away" : "home";
 }
 
 // While the game is on, the quarter under way is marked, and the ones still to come are blank.
@@ -179,12 +174,14 @@ function describeGameFlow(box, lead) {
   const leads = SIDES.filter((place) => biggest[place] > 0).map(
     (place) => `${nameTeam(box[place].team)} ${biggest[place]}`,
   );
-  const timeouts = SIDES.map((place) => `${nameTeam(box[place].team)} ${box[place].timeouts}`);
+  const timeouts = SIDES.filter((place) => box[place].timeouts != null).map(
+    (place) => `${nameTeam(box[place].team)} ${box[place].timeouts}`,
+  );
   return [
     leads.length > 0 && `Biggest lead: ${leads.join(", ")}`,
     box.leadChanges != null && `Lead changes: ${box.leadChanges}`,
     box.timesTied != null && `Ties: ${box.timesTied}`,
-    box.state === "live" && `Timeouts left: ${timeouts.join(", ")}`,
+    box.state === "live" && timeouts.length > 0 && `Timeouts left: ${timeouts.join(", ")}`,
   ].filter(Boolean);
 }
 

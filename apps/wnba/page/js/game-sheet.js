@@ -6,7 +6,7 @@
 // from the cards of the team's nearest games. Details that didn't load read again on a tap on Try
 // again, as the phone comes back online, or as the page comes back.
 
-import { countDaysBetween, describeDay } from "#shared/days.js";
+import { describeDay } from "#shared/days.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";
@@ -17,7 +17,7 @@ import { openSheet, wireSheet } from "#shared/sheet.js";
 import { letGoOfGame, noteShownGame } from "#shared/sheet-memory.js";
 import { renderBoxScore, renderPendingBoxScore } from "./box-score-view.js";
 import { renderClub } from "./clubs.js";
-import { readGameDay } from "./days.js";
+import { isGameToday, readGameDay } from "./days.js";
 import { fetchBoxScore, fetchHighlights, fetchLead, fetchPreview } from "./game-details-fetch.js";
 import {
   describeFinalInSeries,
@@ -133,13 +133,19 @@ function renderDetails(opened, game) {
   const teams = { away: game.away.team, home: game.home.team };
   if (opened.kind === "preview") {
     const meetings = opened.details?.meetings ?? null;
-    return renderPreview({ teams, season: session.season, meetings, isLoading: isLoading(opened) });
+    return renderPreview({
+      teams,
+      season: session.season,
+      meetings,
+      isLoading: isLoading(opened),
+      isSeriesOver: game.round != null,
+    });
   }
   if (opened.error?.status === 404)
     return renderSheetMessage("The league hasn't posted a box score for this game yet");
   if (opened.error) return renderRetryBlock("box score", classifyReadFailure(opened.error));
   return opened.details
-    ? renderBoxScore(opened.details, opened, isToday(game))
+    ? renderBoxScore(opened.details, opened, isGameToday(game, Date.now()))
     : renderPendingBoxScore(teams, opened);
 }
 
@@ -172,16 +178,11 @@ function offerHighlights(game) {
 const isOver = (game) => game.state === "final" || /postpon|ppd|cancel/i.test(game.status);
 
 /** @param {Game} game */
-function isToday(game) {
-  const day = readGameDay(game);
-  return !!day && countDaysBetween(day, new Date()) === 0;
-}
-
-/** @param {Game} game */
 function noteGame(game) {
   noteShownGame(findSheet(), {
     key: game.id,
-    isPlayingToday: game.state === "live" || (game.state === "pre" && isToday(game)),
+    isPlayingToday:
+      game.state === "live" || (game.state === "pre" && isGameToday(game, Date.now())),
     isOver: isOver(game),
   });
 }
