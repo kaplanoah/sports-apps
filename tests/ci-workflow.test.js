@@ -168,7 +168,10 @@ test("the review reads every share in full and fails on any file left unread", (
     /if: always\(\) && steps\.last\.outputs\.unread != ''\n\s+run: \|\n.*\n\s+exit 1/,
   );
   const review = readJob("review");
-  assert.match(review, /needs: \[review-plan, review-share, review-across\]/);
+  assert.match(
+    review,
+    /needs: \[review-plan, review-share, review-across\]\n\s+if: \$\{\{ !cancelled\(\) \}\}/,
+  );
   assert.match(review, /run: node worker\/judge-review\.mjs summary \.review/);
   assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
 });

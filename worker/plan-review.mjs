@@ -213,7 +213,7 @@ export const splitIntoParts = (fileDiff) =>
  * @param {number} partCount
  * @returns {string[]}
  */
-export const nameParts = (path, partCount) =>
+const nameParts = (path, partCount) =>
   partCount === 1
     ? [`diffs/${path}.diff`]
     : Array.from({ length: partCount }, (_, index) => `diffs/${path}.part-${index + 1}.diff`);
@@ -224,7 +224,7 @@ export const nameParts = (path, partCount) =>
  * @param {ReturnType<typeof planReview>} plan
  * @param {Map<string, string[]>} partsByPath
  */
-export function renderIndex({ shares, unread }, partsByPath) {
+function renderIndex({ shares, unread }, partsByPath) {
   const shareLines = shares.flatMap(({ share, files }) => [
     `## Share ${share}`,
     "",

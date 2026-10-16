@@ -543,10 +543,11 @@ jobs:
           overwrite: true
 
   # Fails a review that left any changed file unread, naming each in the one summary comment it
-  # keeps up to date on the pull request.
+  # keeps up to date on the pull request. A run a newer push cancelled leaves the summary to the
+  # newer push's run.
   review:
     needs: [review-plan, review-share, review-across]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
