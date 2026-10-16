@@ -8,9 +8,9 @@ import { noteFailure, runWithStatus } from "./job-status.js";
 // of the season's, which are read once each, a few at a time. A read the league couldn't finish
 // in one run, like one with more stills to check than a run may ask about, saves what it has and
 // is read again at the next run, until it's finished, and one that saved what it has with some of
-// it unanswered is tried again later, as a read that failed is. A league that changes how it reads a game's
-// highlights raises its edition, and each final it kept is read once more the same way. Each run
-// saves how it went in `highlights/status`.
+// it unanswered is tried again later, as a read that failed is. A league that changes how it reads
+// a game's highlights raises its edition, and each final it kept is read once more the same way.
+// Each run saves how it went in `highlights/status`.
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;

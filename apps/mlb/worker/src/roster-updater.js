@@ -163,7 +163,7 @@ const listChangedClubs = (transactions, seen) =>
   transactions.filter((transaction) => !seen.has(transaction.id)).flatMap(listTransactionClubs);
 
 /**
- * The clubs whose roster to read this updateStore: those never read first, then those with a transaction
+ * The clubs whose roster to read this run: those never read first, then those with a transaction
  * since, then those read longest ago once a day has passed.
  * @param {RosterReads} reads
  * @param {number} now

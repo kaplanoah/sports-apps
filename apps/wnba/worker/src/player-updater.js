@@ -46,9 +46,10 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 // is whole, every player's averages, for her team's Roster and its leading scorers, from the totals
 // her sheet is worked out from, the finals that went to overtime, for search, and, once every
 // team's roster has answered, the season's list of players. Each run also fills one season the
-// store keeps from before the current one, newest first, and a filled season is never read again, since a past season doesn't change, unless the sheets come to read a column
-// it was filled without. Each run ends by saving how it went in `players/status`, with how often a
-// sheet had to read the league for a player the store hadn't saved.
+// store keeps from before the current one, newest first, and a filled season is never read again,
+// since a past season doesn't change, unless the sheets come to read a column it was filled
+// without. Each run ends by saving how it went in `players/status`, with how often a sheet had to
+// read the league for a player the store hadn't saved.
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;

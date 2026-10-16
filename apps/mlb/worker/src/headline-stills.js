@@ -9,8 +9,9 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 // one run and a game has dozens, so a game with more isn't finished, and the store's job reads it
 // again next run for the next few. A still Claude doesn't answer for shows as MLB's own until it
 // does, and is asked about again a few minutes later, as the job tries again a read that failed,
-// until it has gone unanswered a few times, when it counts as clean. Without the Worker's API key, each still counts as clean. The
-// answers are kept for the current season's games only, since the job reads no other season's.
+// until it has gone unanswered a few times, when it counts as clean. Without the Worker's API key,
+// each still counts as clean. The answers are kept for the current season's games only, since the
+// job reads no other season's.
 
 export const STILL_MODEL = "claude-haiku-5-5";
 const MAX_ANSWER_TOKENS = 1024;
