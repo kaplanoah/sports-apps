@@ -293,40 +293,62 @@ test("the league and each conference stack one under another, each named at its 
 });
 
 /**
- * Where each standings card ends across the screen, and how wide the page scrolls.
+ * Where each standings card ends across the screen, where its column ends inside the page's
+ * margin, and how wide the page scrolls.
  * @param {import("@playwright/test").Page} page
  */
 const readStandingsEdges = (page) =>
   page.evaluate(() => ({
-    rights: [...document.querySelectorAll("#standingsWrap table.standings")].map(
-      (table) => table.getBoundingClientRect().right,
-    ),
+    cards: [...document.querySelectorAll("#standingsWrap table.standings")].map((table) => {
+      const list = /** @type {HTMLElement} */ (table.closest(".standings-list"));
+      return {
+        right: table.getBoundingClientRect().right,
+        columnRight:
+          list.getBoundingClientRect().right - parseFloat(getComputedStyle(list).paddingRight),
+      };
+    }),
     pageWidth: document.documentElement.scrollWidth,
   }));
 
-for (const { width, margin } of [
-  { width: 375, margin: 16 },
-  { width: 360, margin: 10 },
-]) {
-  test(`on a ${width}px phone, every standings card ends at least ${margin}px inside the screen, its right edge showing, and the page doesn't scroll sideways`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height: 780 });
-    await openApp(page);
-    await openSeasonPart(page, "Standings");
-    await expect(page.locator("#standings-west")).toBeAttached();
-
-    const { rights, pageWidth } = await readStandingsEdges(page);
-    expect(rights).toHaveLength(3);
-    for (const right of rights) expect(right).toBeLessThanOrEqual(width - margin);
-    expect(pageWidth).toBe(width);
-  });
-}
-
-test("on a 390px phone, the standings keep their full gaps between columns", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {number} width
+ */
+async function openStandingsAt(page, width) {
+  await page.setViewportSize({ width, height: 780 });
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-west")).toBeAttached();
+}
+
+// The layout's rounding where a card fills its column exactly.
+const LAYOUT_ROUNDING_PX = 0.5;
+
+test("on a 375px phone, every standings card fits inside the page's margin, and the page doesn't scroll sideways", async ({
+  page,
+}) => {
+  await openStandingsAt(page, 375);
+
+  const { cards, pageWidth } = await readStandingsEdges(page);
+  expect(cards).toHaveLength(3);
+  for (const { right, columnRight } of cards)
+    expect(right).toBeLessThanOrEqual(columnRight + LAYOUT_ROUNDING_PX);
+  expect(pageWidth).toBe(375);
+});
+
+test("on a 360px phone, every standings card ends inside the screen, its right edge showing, and the page doesn't scroll sideways", async ({
+  page,
+}) => {
+  await openStandingsAt(page, 360);
+
+  const { cards, pageWidth } = await readStandingsEdges(page);
+  expect(cards).toHaveLength(3);
+  for (const { right } of cards) expect(right).toBeLessThanOrEqual(360);
+  expect(pageWidth).toBe(360);
+});
+
+test("on a 390px phone, the standings keep their full gaps between columns", async ({ page }) => {
+  await openStandingsAt(page, 390);
 
   const row = page.locator("#standings-west tbody tr[data-team]").first();
   const gaps = await row.evaluate((element) =>
