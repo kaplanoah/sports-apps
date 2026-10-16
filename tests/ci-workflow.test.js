@@ -163,8 +163,22 @@ test("the review reads every share in full and fails on any file left unread", (
   );
   assert.match(share, /if: always\(\) && steps\.first\.outputs\.unread != ''/);
   assert.match(readJob("review-across"), /node worker\/judge-review\.mjs across \.review/);
+  assert.match(
+    share,
+    /if: always\(\) && steps\.last\.outputs\.unread != ''\n\s+run: \|\n.*\n\s+exit 1/,
+  );
   const review = readJob("review");
   assert.match(review, /needs: \[review-plan, review-share, review-across\]/);
   assert.match(review, /run: node worker\/judge-review\.mjs summary \.review/);
   assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+});
+
+// A label change skips the review only when a run already passed it on exactly this code, so
+// adding a label never turns a failed review into a passing check.
+test("a label change reviews again unless a run passed the review on the same code", () => {
+  const plan = readJob("review-plan");
+  assert.match(plan, /needs: passed/);
+  assert.match(plan, /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
+  assert.match(plan, /elif \[ -n "\$PASSED_RUN" \]; then/);
+  assert.doesNotMatch(plan, /"\$ACTION" = "labeled"/);
 });

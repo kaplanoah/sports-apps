@@ -310,8 +310,11 @@ jobs:
   # (worker/plan-review.mjs), one reviewer reads each share at once, one more checks across them,
   # and review passes only once every changed file was read (worker/judge-review.mjs). With nothing
   # to review, such as a push to main, it plans no shares and review passes, since check fails on a
-  # skipped job.
+  # skipped job. A label change brings no new code, so it reviews again only when no run passed
+  # every test and the review on exactly this code.
   review-plan:
+    needs: passed
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -325,6 +328,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           ACTION: ${{ github.event.action }}
+          PASSED_RUN: ${{ needs.passed.outputs.run }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -333,8 +337,8 @@ jobs:
           reason=""
           if [ "$EVENT" != "pull_request" ]; then
             reason="only pull requests are reviewed"
-          elif [ "$ACTION" = "labeled" ] || [ "$ACTION" = "unlabeled" ]; then
-            reason="a label change brings no new code"
+          elif [ -n "$PASSED_RUN" ]; then
+            reason="a run on exactly this code already passed its review"
           elif [ "$IS_DRAFT" = "true" ]; then
             reason="a draft is reviewed once it's ready for review"
           elif [ "$AUTHOR" = "dependabot[bot]" ]; then
@@ -462,18 +466,25 @@ jobs:
             5. Post each finding as an inline comment on the line it's about, with confirmed=true, as the guide says.
             6. Don't post a summary: a later step writes it. End with your answer: each file you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares.
       - name: Find what's still unread
+        id: last
         if: always() && steps.first.outputs.unread != ''
         env:
           EXECUTION_FILE: ${{ steps.again.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.again.outputs.structured_output }}
           SHARE: ${{ matrix.share }}
-        run: node worker/judge-review.mjs share .review "$SHARE"
+        run: node worker/judge-review.mjs share .review "$SHARE" >> "$GITHUB_OUTPUT"
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: review-share-${{ matrix.share }}
           path: .review/share-${{ matrix.share }}.json
           retention-days: 14
+      # So that re-running the failed jobs reviews this share again.
+      - name: Fail when parts are still unread
+        if: always() && steps.last.outputs.unread != ''
+        run: |
+          echo "::error::This share's reviewer didn't read every line of its diffs."
+          exit 1
 
   # What no one share can see: a change one share's files rely on in another's, the same fix due in
   # the other app, and one fact or rule now in two places. A change of one share needs none.
