@@ -12,6 +12,7 @@ import {
   readChangedFiles,
   splitDiffByFile,
   splitIntoParts,
+  wrapLongLine,
   writeReview,
 } from "../worker/plan-review.mjs";
 
@@ -43,44 +44,53 @@ test("each changed file's lines are what it added and removed, and a binary file
 
 test("recorded data, the lockfile, and binary files go unread, but a fixture's recording script is read", () => {
   assert.equal(
-    explainUnread({ path: "apps/mlb/tests/fixtures/2026-10-09-season.json", lines: 9 }, ""),
+    explainUnread({ path: "apps/mlb/tests/fixtures/2026-10-09-season.json", lines: 9 }),
     "a test's recorded data",
   );
   assert.equal(
-    explainUnread({ path: "apps/wnba/tests/fixtures/news-2026-10-05/ix.xml", lines: 9 }, ""),
+    explainUnread({ path: "apps/wnba/tests/fixtures/news-2026-10-05/ix.xml", lines: 9 }),
     "a test's recorded data",
   );
   assert.equal(
-    explainUnread({ path: "package-lock.json", lines: 9 }, ""),
+    explainUnread({ path: "package-lock.json", lines: 9 }),
     "the lockfile, which npm writes",
   );
   assert.equal(
-    explainUnread({ path: "shared/page/networks/abc.png", lines: null }, ""),
+    explainUnread({ path: "shared/page/networks/abc.png", lines: null }),
     "a binary file",
   );
-  assert.equal(explainUnread({ path: "apps/mlb/tests/fixtures/record.js", lines: 9 }, ""), null);
-  assert.equal(explainUnread({ path: "shared/page/sheet.js", lines: 9 }, ""), null);
+  assert.equal(explainUnread({ path: "apps/mlb/tests/fixtures/record.js", lines: 9 }), null);
+  assert.equal(explainUnread({ path: "shared/page/sheet.js", lines: 9 }), null);
 });
 
-test("a file with a line too long for Read to return whole goes unread, saying why", () => {
-  const icon = diffFile("apps/mlb/page/icon.svg", [1]).replace(
-    "+line 0",
-    `+<path d="${"M1 1L2 2".repeat(400)}"/>`,
+test("an icon's drawing and a minified library go unread, as a tool wrote them", () => {
+  const plan = planReview("1\t0\tapps/mlb/page/icon.svg\n1\t0\tapps/mlb/page/js/sortable.min.js\n");
+  assert.deepEqual(
+    plan.unread.map((file) => file.why),
+    Array(2).fill("a drawing or a minified library, written by a tool"),
   );
-  const plan = planReview(
-    "1\t0\tapps/mlb/page/icon.svg\n2\t0\tshared/page/tabs.js\n",
-    new Map([
-      ["apps/mlb/page/icon.svg", icon],
-      ["shared/page/tabs.js", diffFile("shared/page/tabs.js", [2])],
-    ]),
+  assert.deepEqual(plan.shares, []);
+});
+
+test("a line longer than Read returns whole goes on in lines that each fit, with nothing lost", () => {
+  const long = '+const key = "' + "x".repeat(4500) + '";';
+  const lines = wrapLongLine(long);
+  assert.equal(lines.length, 3);
+  for (const line of lines) assert.ok(line.length <= 2000);
+  assert.equal(lines[0], long.slice(0, 2000));
+  for (const line of lines.slice(1)) assert.ok(line.startsWith("+(cont.) "));
+  assert.equal(
+    lines[0] +
+      lines
+        .slice(1)
+        .map((line) => line.slice("+(cont.) ".length))
+        .join(""),
+    long,
   );
-  assert.deepEqual(plan.unread, [
-    {
-      path: "apps/mlb/page/icon.svg",
-      why: "a line too long to read whole, like an image's data",
-    },
-  ]);
-  assert.deepEqual(plan.shares[0].files, ["shared/page/tabs.js"]);
+  assert.deepEqual(wrapLongLine("+short"), ["+short"]);
+  const diff = diffFile("worker/a.mjs", [1]).replace("+line 0", long);
+  const [part] = splitIntoParts(diff);
+  assert.ok(part.split("\n").every((line) => line.length <= 2000));
 });
 
 test("shares keep a folder's files together in path order, up to a share's lines", () => {
@@ -123,10 +133,7 @@ test("a change of any size takes at most twenty shares, each bigger to hold it",
 });
 
 test("a plan reads every file but the unread ones, and names why each goes unread", () => {
-  const plan = planReview(
-    "4\t1\tshared/page/sheet.js\n900\t0\tapps/mlb/tests/fixtures/x.json\n",
-    new Map(),
-  );
+  const plan = planReview("4\t1\tshared/page/sheet.js\n900\t0\tapps/mlb/tests/fixtures/x.json\n");
   assert.deepEqual(plan.shares, [{ share: 1, files: ["shared/page/sheet.js"], lines: 5 }]);
   assert.deepEqual(plan.unread, [
     { path: "apps/mlb/tests/fixtures/x.json", why: "a test's recorded data" },
