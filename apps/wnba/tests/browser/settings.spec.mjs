@@ -2,6 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -31,6 +32,21 @@ async function expectTheme(page, theme) {
     isDark ? "#1d1511" : "#ead5b2",
   );
 }
+
+test("settings' header holds its title, its close button, and the room under them alike on a phone and a wide screen", async ({
+  page,
+}) => {
+  const top = page.locator("#settingsDialog .sheet-top");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(top).toBeVisible();
+  const onPhone = await readTopSpacing(top);
+
+  await page.setViewportSize({ width: 1280, height: 844 });
+
+  expect(await readTopSpacing(top)).toEqual(onPhone);
+});
 
 test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's text", async ({
   page,

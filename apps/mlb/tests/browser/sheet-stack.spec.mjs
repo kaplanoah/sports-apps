@@ -9,6 +9,7 @@ import {
   ROSTER_DOCS,
 } from "./harness.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
+import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -126,26 +127,14 @@ test("a title that runs to more lines leaves its close or back button where it w
 test("a sheet's top holds its title, its close or back button, and the room under its last line alike on a phone and a wide screen", async ({
   page,
 }) => {
-  const readBand = () =>
-    page.locator("#teamSheet .sheet-top").evaluate((top) => {
-      const band = top.getBoundingClientRect();
-      const readTop = (/** @type {string} */ selector) =>
-        /** @type {Element} */ (top.querySelector(selector)).getBoundingClientRect().top - band.top;
-      return {
-        titleTop: readTop(".sheet-head h2"),
-        buttonTop: readTop(".sheet-back"),
-        roomBelow:
-          band.bottom -
-          /** @type {Element} */ (top.lastElementChild).getBoundingClientRect().bottom,
-      };
-    });
+  const top = page.locator("#teamSheet .sheet-top");
   await page.setViewportSize(PHONE);
   await openDodgersFromGame(page);
-  const onPhone = await readBand();
+  const onPhone = await readTopSpacing(top);
 
   await page.setViewportSize(WIDE_SCREEN);
 
-  expect(await readBand()).toEqual(onPhone);
+  expect(await readTopSpacing(top)).toEqual(onPhone);
 });
 
 test("on a phone, every sheet fills the screen, whatever it holds", async ({ page }) => {

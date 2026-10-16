@@ -102,11 +102,8 @@
    another, the line runs down the band's sides too, so each band stands apart across the gap. A
    slide a tap starts carries the two as one instead: the gap takes the band's color down to where
    the shorter band ends, --sheet-band-joined, which sheet.js measures as the slide starts, and
-   the line under it. Its room above and below is a phone's on every screen. */
+   the line under it. */
 .sheet-page .sheet-top {
-  justify-content: flex-start;
-  padding-top: calc(env(safe-area-inset-top) + var(--top-room-above));
-  padding-bottom: var(--top-room-below);
   background: var(--sheet-band);
   box-shadow: inset 0 -1px 0 var(--sheet-band-line);
 }
