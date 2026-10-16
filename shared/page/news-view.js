@@ -1,4 +1,5 @@
 import { formatShortDate, formatShortWeekday, nameDay } from "./days.js";
+import { hasImageFailed } from "./failed-images.js";
 import { html, joinWithSeparator } from "./html.js";
 import { framePhoto, WIDEST_FRAME } from "./news-photo.js";
 import { isWebAddress, pickReadCards } from "./news-picks.js";
@@ -72,7 +73,8 @@ function renderCredit(credit) {
 }
 
 /** @param {NewsStory["photo"]} photo */
-const findPhotoUrl = (photo) => (photo && isWebAddress(photo.url) ? photo.url : null);
+const findPhotoUrl = (photo) =>
+  photo && isWebAddress(photo.url) && !hasImageFailed(photo.url) ? photo.url : null;
 
 /**
  * @param {NewsStory} story

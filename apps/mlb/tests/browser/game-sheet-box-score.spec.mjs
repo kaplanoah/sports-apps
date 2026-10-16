@@ -394,7 +394,7 @@ test("a still that doesn't load leaves its box's plain color, with no broken pic
 }) => {
   const { body } = await openHighlights(page);
 
-  await expect(body.locator(".clip-feature img")).toBeHidden();
+  await expect(body.locator(".clip-feature img")).toHaveCount(0);
   await expect(body.locator(".clip-feature .clip-play")).toBeVisible();
 });
 

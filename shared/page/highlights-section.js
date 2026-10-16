@@ -4,6 +4,7 @@
 // (clip-player.js).
 
 import { watchClipTaps } from "./clip-player.js";
+import { watchFailedImages } from "./failed-images.js";
 import { renderHighlights, renderPendingHighlights } from "./highlights-view.js";
 import { setHtml } from "./html.js";
 import { classifyReadFailure, renderRetryBlock } from "./retry.js";
@@ -53,13 +54,7 @@ export function createHighlightsSection(body, describePlay) {
 
   watchClipTaps(body);
   // A still that doesn't load, as when the phone is offline, leaves its box's plain color.
-  body.addEventListener(
-    "error",
-    (event) => {
-      if (event.target instanceof HTMLImageElement) event.target.hidden = true;
-    },
-    true,
-  );
+  watchFailedImages(body, draw);
 
   return {
     /**

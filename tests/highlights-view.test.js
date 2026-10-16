@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { noteFailedImage } from "../shared/page/failed-images.js";
 import { formatClipLength, renderHighlights } from "../shared/page/highlights-view.js";
 import { stripTags } from "./text.js";
 
@@ -111,4 +112,16 @@ test("a game with no clips or story yet says so", () => {
   );
 
   assert.equal(readText(markup), "No highlights for this game yet");
+});
+
+test("a still that didn't load is left out, and its clip still plays", () => {
+  const clip = describeClip("Moved still", { inning: 2, still: "https://img.test/moved.jpg" });
+  const highlights = { recap: null, story: null, plays: [clip] };
+
+  noteFailedImage(clip.still);
+
+  const markup = renderHighlights(highlights, { describePlay, now: NOW }).text;
+  assert.doesNotMatch(markup, /<img/);
+  assert.match(markup, /class="clip-still"[\s\S]*class="clip-play"/);
+  assert.match(markup, /data-video="https:\/\/video\.test\/11\.mp4"/);
 });
