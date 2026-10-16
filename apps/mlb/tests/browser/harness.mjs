@@ -395,19 +395,29 @@ export async function openApp(
   const openSockets = await connectToStore(page, testStore);
   await page.route(matchPath("/pitcher"), (route) => {
     const pitcher = pitchers[Number(new URL(route.request().url()).searchParams.get("id"))];
-    if (!pitcher) return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+    if (!pitcher)
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: pitcher });
   });
   await page.route(matchPath("/rotation"), (route) => {
     const rotation = rotations[new URL(route.request().url()).searchParams.get("club")];
     if (!rotation)
-      return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: rotation });
   });
   await page.route(matchPath("/box-score"), (route) => {
     const boxScore = boxScores[new URL(route.request().url()).searchParams.get("id") ?? ""];
     if (!boxScore)
-      return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: boxScore });
   });
   await page.route(matchPath("/highlights"), (route) => {

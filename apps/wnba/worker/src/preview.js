@@ -1,6 +1,6 @@
 import { REQUESTS } from "../../page/js/snapshot.js";
 import { TEAMS } from "../../page/js/teams.js";
-import { respondJson } from "../../../../shared/worker/responses.js";
+import { respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { fetchWnbaJson, SEASON_PARAM } from "./wnba.js";
 
@@ -109,15 +109,20 @@ export function createPreviewServer({
    */
   async function servePreview(url, readDoc) {
     const season = SEASON_PARAM.readSeason(url.searchParams, now());
-    if (season == null) return respondJson({ error: SEASON_PARAM.rule }, 400);
+    if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     const teams = readTeams(url.searchParams);
-    if (!teams) return respondJson({ error: "away and home must be two WNBA teams" }, 400);
+    if (!teams)
+      return respondError(400, "invalid_argument", "away and home must be two WNBA teams");
     const [away, home] = teams;
     const kept = await readKeptDoc(readDoc, nameMeetingsKey(season, teams));
     if (kept) return respondJson({ season, away, home, meetings: kept.meetings });
     const schedule = await readSchedule().catch(() => null);
     if (!schedule)
-      return respondJson({ error: "Couldn't read the WNBA: its schedule didn't answer" }, 502);
+      return respondError(
+        502,
+        "upstream_error",
+        "Couldn't read the WNBA: its schedule didn't answer",
+      );
     return respondJson(describePreview(schedule, { season, away, home }));
   }
 

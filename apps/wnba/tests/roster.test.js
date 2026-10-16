@@ -148,12 +148,12 @@ test("today's roster still shows when ESPN doesn't answer, with no one out", asy
 test("a roster asked for no team or no real season, or one the league doesn't answer, says why", async () => {
   assert.deepEqual(await askForRoster(listAnswers("NYL", 2026), "team=XYZ"), {
     status: 400,
-    body: { error: "team must name a WNBA team" },
+    body: { error: { code: "invalid_argument", message: "team must name a WNBA team" } },
   });
   assert.equal((await askForRoster(listAnswers("NYL", 2026), "team=NYL&season=1990")).status, 400);
   const failed = await askForRoster({}, "team=NYL&season=2026");
   assert.equal(failed.status, 502);
-  assert.match(failed.body.error, /^Couldn't read the WNBA: The WNBA answered 404/);
+  assert.match(failed.body.error.message, /^Couldn't read the WNBA: The WNBA answered 404/);
 });
 
 test("a roster read again soon reuses the one just read", async () => {

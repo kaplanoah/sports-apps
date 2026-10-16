@@ -1,5 +1,5 @@
 import { TEAMS } from "../../page/js/teams.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { readNameLetters } from "../../../../shared/worker/injury-report.js";
@@ -220,14 +220,14 @@ export function createRosterServer({
    */
   async function serveRoster(url, readDoc) {
     const team = readTeam(url.searchParams);
-    if (!team) return respondJson({ error: "team must name a WNBA team" }, 400);
+    if (!team) return respondError(400, "invalid_argument", "team must name a WNBA team");
     const season = SEASON_PARAM.readSeason(url.searchParams, now());
-    if (season == null) return respondJson({ error: SEASON_PARAM.rule }, 400);
+    if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     try {
       const saved = await readKeptDoc(readDoc, nameRosterKey(season, team));
       return respondJson(saved ?? (await loadRoster(`${team}:${season}`)));
     } catch (error) {
-      return respondJson({ error: `Couldn't read the WNBA: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read the WNBA: ${describeError(error)}`);
     }
   }
 

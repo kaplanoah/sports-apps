@@ -157,16 +157,16 @@ test("nothing but robots.txt and health answers outside the key", async () => {
 test("the pitcher route checks the pitcher before reading MLB, and answers only GET", async () => {
   const response = await requestPage("/k3y/pitcher?id=nope&season=2026");
   assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /id must be an MLB person id/);
+  assert.match((await response.json()).error.message, /id must be an MLB person id/);
   assert.equal((await requestPage("/k3y/pitcher?id=1", { method: "POST" })).status, 405);
 });
 
 test("the rotation route checks the club and day before reading MLB, and answers only GET", async () => {
   const response = await requestPage("/k3y/rotation?club=nope&date=2026-10-01");
   assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /club must be an MLB club/);
+  assert.match((await response.json()).error.message, /club must be an MLB club/);
   const undated = await requestPage("/k3y/rotation?club=PHI");
-  assert.match((await undated.json()).error, /date must be a day written YYYY-MM-DD/);
+  assert.match((await undated.json()).error.message, /date must be a day written YYYY-MM-DD/);
   const post = await requestPage("/k3y/rotation?club=PHI&date=2026-10-01", { method: "POST" });
   assert.equal(post.status, 405);
 });

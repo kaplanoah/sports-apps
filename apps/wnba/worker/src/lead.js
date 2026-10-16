@@ -1,6 +1,6 @@
 import { readEasternDay } from "#shared/days.js";
 import { findTeamCodeByEspnId, TEAMS } from "../../page/js/teams.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { fetchUpstream } from "../../../../shared/worker/upstream.js";
 import { GAME_ID } from "./box-score.js";
 import { nameGameDetailsKey } from "./store-docs.js";
@@ -203,13 +203,17 @@ export function createLeadServer({ fetchImpl = (input, init) => fetch(input, ini
   async function serveLead(url, readDoc) {
     const game = readGame(url.searchParams);
     if (!game)
-      return respondJson({ error: "id, away, home, and start must name a WNBA game" }, 400);
+      return respondError(
+        400,
+        "invalid_argument",
+        "id, away, home, and start must name a WNBA game",
+      );
     try {
       const lead = await loadLead(game, readDoc);
-      if (!lead) return respondJson({ error: "ESPN has no such game that day" }, 404);
+      if (!lead) return respondError(404, "not_found", "ESPN has no such game that day");
       return respondJson(lead);
     } catch (error) {
-      return respondJson({ error: `Couldn't read ESPN: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read ESPN: ${describeError(error)}`);
     }
   }
 

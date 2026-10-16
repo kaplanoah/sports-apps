@@ -369,5 +369,5 @@ test("a request that names no game is refused, and MLB not answering says so", a
   assert.equal((await askForBoxScore("not-a-game")).status, 400);
   const answer = await askForBoxScore(RAYS_AT_YANKEES, { isDown: true });
   assert.equal(answer.status, 502);
-  assert.match(answer.body.error, /MLB/);
+  assert.match(answer.body.error.message, /MLB/);
 });

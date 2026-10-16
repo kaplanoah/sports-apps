@@ -3,7 +3,7 @@ import { readClubId, readGameState, readMlbTeamId } from "../../page/js/snapshot
 import { DATE_RULE, fetchMlbJson, readDateParam } from "./mlb.js";
 import { listGameLogRequest, listStarts } from "./pitchers.js";
 import { noteLeagueRead } from "../../../../shared/worker/store-reads.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 
 // A club that hasn't named a game's starter: who started its last games, how each of those starts
 // went, and the rest each pitcher would have by the game's day. The store keeps each club's
@@ -267,9 +267,10 @@ export function createRotationServer({ fetchImpl = (input, init) => fetch(input,
    */
   async function serveRotation(url, readDoc, countLeagueRead) {
     const club = url.searchParams.get("club") ?? "";
-    if (!readMlbTeamId(club)) return respondJson({ error: "club must be an MLB club" }, 400);
+    if (!readMlbTeamId(club))
+      return respondError(400, "invalid_argument", "club must be an MLB club");
     const date = readDateParam(url.searchParams);
-    if (date == null) return respondJson({ error: DATE_RULE }, 400);
+    if (date == null) return respondError(400, "invalid_argument", DATE_RULE);
     try {
       const saved = readDoc ? await readSavedStarts(club, date, readDoc) : null;
       const hasStoreGap = Boolean(saved?.isCurrentSeason && !saved.clubStarts);
@@ -279,7 +280,7 @@ export function createRotationServer({ fetchImpl = (input, init) => fetch(input,
       ]);
       return respondJson(describeRotation(clubStarts, date));
     } catch (error) {
-      return respondJson({ error: `Couldn't read MLB: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read MLB: ${describeError(error)}`);
     }
   }
 

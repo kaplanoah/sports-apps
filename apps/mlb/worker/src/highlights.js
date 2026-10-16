@@ -1,4 +1,4 @@
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { readStoryLead } from "../../../../shared/worker/story-lead.js";
 import { fetchMlbJson } from "./mlb.js";
@@ -270,12 +270,13 @@ export function createHighlightsServer({ fetchImpl = (input, init) => fetch(inpu
    */
   async function serveHighlights(url, readDoc) {
     const id = url.searchParams.get("id") ?? "";
-    if (!GAME_ID.test(id)) return respondJson({ error: "id must be an MLB game id" }, 400);
+    if (!GAME_ID.test(id))
+      return respondError(400, "invalid_argument", "id must be an MLB game id");
     try {
       const kept = await readKeptDoc(readDoc, nameHighlightsKey(id));
       return respondJson(kept ?? (await fetchHighlights(fetchImpl, id)));
     } catch (error) {
-      return respondJson({ error: `Couldn't read MLB: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read MLB: ${describeError(error)}`);
     }
   }
 

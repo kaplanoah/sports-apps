@@ -1,4 +1,4 @@
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { noteLeagueRead } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { nameRosterKey, readTeam } from "./roster.js";
@@ -658,17 +658,23 @@ export function createPlayerServer({
    */
   async function servePlayer(url, readDoc, countLeagueRead) {
     const id = readId(url.searchParams);
-    if (!id) return respondJson({ error: "id must be a player's number in the WNBA's stats" }, 400);
+    if (!id)
+      return respondError(
+        400,
+        "invalid_argument",
+        "id must be a player's number in the WNBA's stats",
+      );
     const team = readTeam(url.searchParams);
-    if (!team) return respondJson({ error: "team must name a WNBA team" }, 400);
+    if (!team) return respondError(400, "invalid_argument", "team must name a WNBA team");
     const season = SEASON_PARAM.readSeason(url.searchParams, now());
-    if (season == null) return respondJson({ error: SEASON_PARAM.rule }, 400);
+    if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     try {
       const player = await readPlayer({ id, team, season }, readDoc, countLeagueRead);
-      if (!player) return respondJson({ error: `The WNBA has no player ${id} in ${season}` }, 404);
+      if (!player)
+        return respondError(404, "not_found", `The WNBA has no player ${id} in ${season}`);
       return respondJson(player);
     } catch (error) {
-      return respondJson({ error: `Couldn't read the WNBA: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read the WNBA: ${describeError(error)}`);
     }
   }
 

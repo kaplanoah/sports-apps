@@ -1,4 +1,4 @@
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readStoryLead } from "../../../../shared/worker/story-lead.js";
 import { createEspnGameReader, readGame } from "./lead.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
@@ -105,14 +105,18 @@ export function createHighlightsServer({ fetchImpl = (input, init) => fetch(inpu
   async function serveHighlights(url, readDoc) {
     const game = readGame(url.searchParams);
     if (!game)
-      return respondJson({ error: "id, away, home, and start must name a WNBA game" }, 400);
+      return respondError(
+        400,
+        "invalid_argument",
+        "id, away, home, and start must name a WNBA game",
+      );
     try {
       const highlights =
         (await readKeptDoc(readDoc, nameHighlightsKey(game.id))) ?? (await readHighlights(game));
-      if (!highlights) return respondJson({ error: "ESPN has no such game that day" }, 404);
+      if (!highlights) return respondError(404, "not_found", "ESPN has no such game that day");
       return respondJson(highlights);
     } catch (error) {
-      return respondJson({ error: `Couldn't read ESPN: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read ESPN: ${describeError(error)}`);
     }
   }
 

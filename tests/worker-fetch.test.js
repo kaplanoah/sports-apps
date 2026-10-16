@@ -68,6 +68,18 @@ test("a failed read is forgotten, so the next one asks again", async () => {
   assert.equal(reads.length, 2);
 });
 
+test("a route's error says what went wrong in its message, as the store's does", async () => {
+  startWorker({
+    body: { error: { code: "upstream_error", message: "Couldn't read MLB: down" } },
+    status: 502,
+  });
+
+  await assert.rejects(fetchFromWorker("down", RULES), {
+    message: "Couldn't read MLB: down",
+    status: 502,
+  });
+});
+
 test("an error without a message of its own names the Worker's status", async () => {
   startWorker({ body: "Not found", status: 404 });
 

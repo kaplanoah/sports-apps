@@ -1,6 +1,6 @@
 import { readGameState } from "../../page/js/snapshot.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 
 // One game's box score for the Game section of its sheet, read from MLB's live feed in one request
@@ -458,12 +458,13 @@ export function createBoxScoreServer({ fetchImpl = (input, init) => fetch(input,
    */
   async function serveBoxScore(url, readDoc) {
     const id = url.searchParams.get("id") ?? "";
-    if (!GAME_ID.test(id)) return respondJson({ error: "id must be an MLB game id" }, 400);
+    if (!GAME_ID.test(id))
+      return respondError(400, "invalid_argument", "id must be an MLB game id");
     try {
       const kept = await readKeptDoc(readDoc, nameGameDetailsKey(id));
       return respondJson(kept?.state === "final" ? kept : await fetchBoxScore(fetchImpl, id));
     } catch (error) {
-      return respondJson({ error: `Couldn't read MLB: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read MLB: ${describeError(error)}`);
     }
   }
 

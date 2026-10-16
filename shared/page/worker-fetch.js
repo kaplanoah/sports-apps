@@ -9,6 +9,20 @@ import { reloadWhenSignedOut } from "./access.js";
 const recentReads = new Map();
 
 /**
+ * What the Worker said went wrong: a sheet's route says it in words, and the store and the access
+ * gate as `{ code, message }`.
+ * @param {any} body
+ * @param {number} status
+ * @returns {string}
+ */
+function readFailure(body, status) {
+  const error = body?.error;
+  if (typeof error === "string" && error) return error;
+  if (typeof error?.message === "string" && error.message) return error.message;
+  return `The Worker answered ${status}`;
+}
+
+/**
  * @param {string} path
  * @param {ReadRules} rules
  * @returns {Promise<any>}
@@ -21,7 +35,7 @@ async function requestFromWorker(path, { timeoutMs, isExpected }) {
   reloadWhenSignedOut(response);
   const body = await response.json().catch(() => null);
   if (!response.ok)
-    throw Object.assign(new Error(body?.error || `The Worker answered ${response.status}`), {
+    throw Object.assign(new Error(readFailure(body, response.status)), {
       status: response.status,
     });
   if (!body || !isExpected(body))
