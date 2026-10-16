@@ -292,6 +292,11 @@
   as both apps' searches and Season pickers do, never a viewport that stops a pinch.
   The root's `tests/browser/type-roles.mjs` lists every shown text off its app's role sizes,
   or in a weight its font has no face for, and each app's browser tests check every view with it.
+  Each role draws in one font and one case,
+  and in a second only where the app's `tests/browser/role-looks.spec.mjs` names the text and why,
+  like MLB's numbers in Chivo Mono and the WNBA Games list's dates in Barlow, as a wall calendar's;
+  it walks the theme specs' views from the app's `tests/browser/views.mjs`, the gate, and the Updates box,
+  and fails on any look its tables don't name, and on any they name that nothing draws.
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pager's pill, and `--radius-sheet` for a sheet on a wide screen,
