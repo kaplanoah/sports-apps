@@ -41,7 +41,8 @@ const jumpTo = (scroller, top) => scroller.scrollTo({ top, behavior: "instant" }
 function stopScrolling() {
   cancelAnimationFrame(scroll.frame);
   scroll.frame = 0;
-  for (const type of INTERRUPTING_EVENTS) removeEventListener(type, interruptScrolling, true);
+  for (const type of INTERRUPTING_EVENTS)
+    removeEventListener(type, interruptScrolling, { capture: true });
 }
 
 /** @param {Event} event */

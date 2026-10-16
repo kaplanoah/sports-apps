@@ -259,7 +259,7 @@ test("on a phone, the close button and Escape slide the matchup down", async ({ 
   const readMotions = await recordSheetMotions(page);
   await page.setViewportSize({ width: 390, height: 844 });
   const closings = {
-    "the close button": () => page.locator("#gameCloseBtn").dispatchEvent("click"),
+    "the close button": () => page.locator("#gameSheet .sheet-close").dispatchEvent("click"),
     Escape: () => page.keyboard.press("Escape"),
   };
   await showGames(page);
