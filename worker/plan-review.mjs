@@ -607,7 +607,8 @@ function writeIndexedStage(folder, stage, change, words = stage) {
 /**
  * @typedef {object} Plan
  * @property {string} stage
- * @property {string | null} since
+ * @property {string | null} since the head the last full read ended on, which the summary keeps
+ *   until this review finishes
  * @property {any[]} areas the stage's areas
  * @property {any[]} unread the files the stage leaves unread, and why
  * @property {any[]} final the last read's areas, when a push's review is due one
@@ -615,24 +616,26 @@ function writeIndexedStage(folder, stage, change, words = stage) {
  */
 
 /**
- * Writes the review's plan, its stages' diffs and indexes, and the list of stale names.
+ * Writes the review's plan, its stages' diffs and indexes, and, for a stage with reviewers, the
+ * list of stale names.
  * @param {string} folder
  * @param {object} review
  * @param {ReturnType<typeof chooseStage>} review.choice
- * @param {string | null} review.since the head the pushes are read since
+ * @param {string | null} review.since the head the last full read ended on
  * @param {{ range: string[], hasBase: boolean } | null} review.pushed the range that holds what
- *   they changed, and whether it also holds the base's own edits
+ *   the pushes since it changed, and whether it also holds the base's own edits
  * @param {(range: string[], files?: string[]) => { numstat: string, diff: string }} review.readDiff
  * @param {string[]} review.repoFiles
- * @param {{ name: string, hits: string[] }[]} review.stale
+ * @param {() => { name: string, hits: string[] }[]} review.listStale
  */
-export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles, stale }) {
+export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles, listStale }) {
   mkdirSync(folder, { recursive: true });
-  writeFileSync(join(folder, "stale-names.md"), renderStaleNames(stale));
+  if (listStageKinds(choice.stage).length)
+    writeFileSync(join(folder, "stale-names.md"), renderStaleNames(listStale()));
   /** @type {Plan} */
   const plan = {
     stage: choice.stage,
-    since: null,
+    since,
     areas: [],
     unread: [],
     final: [],
@@ -646,7 +649,7 @@ export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles
   if (choice.stage === "push") {
     const change = { ...readDiff(pushed.range, choice.files), repoFiles };
     const words = pushed.hasBase ? "push-with-base" : "push";
-    Object.assign(plan, writeIndexedStage(folder, "push", change, words), { since });
+    Object.assign(plan, writeIndexedStage(folder, "push", change, words));
     const last = writeIndexedStage(folder, "final", { ...readDiff(WHOLE_CHANGE), repoFiles });
     Object.assign(plan, { final: last.areas, finalUnread: last.unread });
   }
@@ -775,14 +778,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       }),
   });
   const pushed = choice.stage === "push" ? readPushedRange() : null;
-  const deleted = listDeletedFiles(runGit);
   const plan = writeReview(folder, {
     choice,
     since: reviewedHead,
     pushed,
     readDiff,
     repoFiles: runGit(["ls-files"]).split("\n").filter(Boolean),
-    stale: listStaleNames(readDiff(WHOLE_CHANGE).diff, grepRepo, deleted),
+    listStale: () =>
+      listStaleNames(readDiff(WHOLE_CHANGE).diff, grepRepo, listDeletedFiles(runGit)),
   });
   const now = listJobs(plan.areas, listStageKinds(plan.stage));
   const last = listJobs(plan.final, listStageKinds("final"));

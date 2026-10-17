@@ -34,7 +34,13 @@ import {
 
 /**
  * @typedef {{ weight: string, path: string, line: number, body: string }} Finding
- * @typedef {{ duplicates: string[][], added: Finding[], unjudged: { file: string, why: string }[] }} Across
+ */
+
+/**
+ * @typedef {object} Across
+ * @property {string[][]} duplicates
+ * @property {Finding[]} added
+ * @property {{ file: string, why: string }[]} unjudged
  */
 
 /**
@@ -151,7 +157,11 @@ async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
  * Posts each finding not already on the pull request, and returns the weight of each this head's
  * review posted, an earlier try's too, and how many an earlier head's review had posted.
  * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
- * @param {{ pullNumber: string, sha: string, findings: Finding[], posted: Map<string, Set<string>> }} review
+ * @param {object} review
+ * @param {string} review.pullNumber
+ * @param {string} review.sha
+ * @param {Finding[]} review.findings
+ * @param {Map<string, Set<string>>} review.posted
  */
 export async function postFindings(callGitHub, { pullNumber, sha, findings, posted }) {
   /** @param {Finding} finding */

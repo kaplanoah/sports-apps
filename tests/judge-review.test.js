@@ -167,7 +167,7 @@ function planFirstReview(paths) {
       diff: diffOf(paths),
     }),
     repoFiles: [],
-    stale: [],
+    listStale: () => [],
   });
   return folder;
 }
@@ -374,7 +374,7 @@ function finishStage(stage, areas, changes = {}) {
 
 test("a stage of more than one area isn't finished until the check across them is", () => {
   const records = finishStage("first", AREAS, { "across-first.json": undefined });
-  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: null, plan: PLAN, records });
+  const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(!isComplete);
   assert.match(body, /- the check across areas\n/);
 });
@@ -387,7 +387,7 @@ test("a review that read and checked everything passes, and moves the reviewed h
     },
     "post-first.json": { weights: ["Important", "Nit", "Important"], unjudged: [] },
   });
-  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: null, plan: PLAN, records });
+  const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(isComplete);
   assert.ok(body.startsWith(SUMMARY_MARKER));
   assert.equal(readReviewedHead(body), HEAD);
@@ -423,8 +423,7 @@ test("a file a reviewer didn't read in full fails the review, keeping the earlie
   });
   const { isComplete, body } = judgeReview({
     sha: HEAD,
-    earlierHead: EARLIER,
-    plan: PLAN,
+    plan: { ...PLAN, since: EARLIER },
     records,
   });
   assert.ok(!isComplete);
@@ -448,7 +447,7 @@ test("a reviewer that gave no answer, or a checker that left a case unchecked, f
     "candidates-first-2.json": [{ id: "bugs-1" }, { id: "rules-1" }],
     "check-first-2.json": { items: [{ ids: ["bugs-1"], verdict: "rejected" }], unjudged: [] },
   });
-  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: null, plan: PLAN, records });
+  const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(!isComplete);
   assert.match(
     body,
@@ -474,7 +473,7 @@ test("what a reviewer, a checker, or the check across areas couldn't judge is na
     }),
     ...finishStage("final", AREAS),
   ]);
-  const { body } = judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records });
+  const { body } = judgeReview({ sha: HEAD, plan, records });
   const [push, final] = body.split("Then it read the whole change once more");
   assert.match(push, /- `push-reviewer\.js`: only an iPhone shows it\n- `across\.js`/);
   assert.doesNotMatch(final, /push-reviewer\.js/);
@@ -486,7 +485,7 @@ test("a reviewer, a checker, or the posting step that never finished fails the r
     "check-first-2.json": undefined,
     "post-first.json": undefined,
   });
-  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: null, plan: PLAN, records });
+  const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(!isComplete);
   assert.match(
     body,
@@ -509,7 +508,7 @@ test("the last read of the whole change names the files it left unread too, each
     finalUnread: [lockfile, fixture],
   };
   const records = new Map([...finishStage("push", [AREAS[0]]), ...finishStage("final", AREAS)]);
-  const { body } = judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records });
+  const { body } = judgeReview({ sha: HEAD, plan, records });
   assert.match(
     body,
     /Left unread, as nothing to review:\n- `package-lock\.json`: the lockfile, which npm writes\n- `apps\/mlb\/tests\/fixtures\/day\.json`: a test's recorded data$/,
@@ -517,7 +516,7 @@ test("the last read of the whole change names the files it left unread too, each
   const posted = finishStage("push", [AREAS[0]], {
     "post-push.json": { weights: ["Nit"], unjudged: [] },
   });
-  const pushOnly = judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records: posted });
+  const pushOnly = judgeReview({ sha: HEAD, plan, records: posted });
   assert.doesNotMatch(pushOnly.body, /fixtures/);
 });
 
@@ -528,14 +527,14 @@ test("a review of a push that finished and posted nothing is due the last read o
     listDueStages(plan, pushed).map((due) => due.stage),
     ["push", "final"],
   );
-  const unfinished = judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records: pushed });
+  const unfinished = judgeReview({ sha: HEAD, plan, records: pushed });
   assert.ok(!unfinished.isComplete);
   assert.match(unfinished.body, /- the last reviewer of mlb page/);
   const records = new Map([
     ...pushed,
     ...finishStage("final", AREAS, { "post-final.json": { weights: ["Nit"], unjudged: [] } }),
   ]);
-  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records });
+  const { isComplete, body } = judgeReview({ sha: HEAD, plan, records });
   assert.ok(isComplete);
   assert.match(
     body,
@@ -557,7 +556,7 @@ test("findings found again that were already on the pull request don't count as 
     ["push", "final"],
   );
   assert.match(
-    judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records }).body,
+    judgeReview({ sha: HEAD, plan, records }).body,
     /posted no findings, and found 2 findings already on it\./,
   );
 });
@@ -581,14 +580,13 @@ test("a review of a push that posted findings isn't due the last read", () => {
     listDueStages(plan, records).map((due) => due.stage),
     ["push"],
   );
-  assert.ok(judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records }).isComplete);
+  assert.ok(judgeReview({ sha: HEAD, plan, records }).isComplete);
 });
 
 test("a push that changes only what a merge brings in passes and moves the reviewed head on", () => {
   const { isComplete, body } = judgeReview({
     sha: HEAD,
-    earlierHead: EARLIER,
-    plan: { stage: "none", since: null, areas: [], unread: [], final: [], finalUnread: [] },
+    plan: { stage: "none", since: EARLIER, areas: [], unread: [], final: [], finalUnread: [] },
     records: new Map(),
   });
   assert.ok(isComplete);
@@ -603,7 +601,6 @@ test("a run on a head already read in full passes and leaves that read's summary
   assert.deepEqual(
     judgeReview({
       sha: HEAD,
-      earlierHead: HEAD,
       plan: { stage: "reviewed", since: null, areas: [], unread: [], final: [], finalUnread: [] },
       records: new Map(),
     }),
@@ -614,7 +611,6 @@ test("a run on a head already read in full passes and leaves that read's summary
 test("a change of only recorded data passes, naming what it left unread", () => {
   const { isComplete, body } = judgeReview({
     sha: HEAD,
-    earlierHead: null,
     plan: { ...PLAN, areas: [], unread: [{ path: "a.json", why: "a test's recorded data" }] },
     records: new Map(),
   });

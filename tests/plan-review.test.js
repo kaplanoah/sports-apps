@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -531,7 +531,7 @@ test("a review of a push reads what it changed, and keeps the whole change for t
     pushed: { range: ["merged-tree", "HEAD"], hasBase: false },
     readDiff,
     repoFiles: [],
-    stale: [],
+    listStale: () => [],
   });
   assert.deepEqual(ranges, [
     ["merged-tree", "HEAD", "shared/page/sheet.js"],
@@ -568,7 +568,7 @@ test("a push whose merge of the base git can't set apart says its diffs may hold
       diff: diffFile("shared/page/sheet.js", [3]),
     }),
     repoFiles: [],
-    stale: [],
+    listStale: () => [],
   });
   assert.match(
     readFileSync(join(folder, "push.md"), "utf8"),
@@ -592,7 +592,7 @@ test("the first review reads the whole change and keeps nothing for a last read"
       };
     },
     repoFiles: [],
-    stale: [],
+    listStale: () => [],
   });
   assert.deepEqual(ranges, [["HEAD^1", "HEAD"]]);
   assert.deepEqual(
@@ -608,24 +608,27 @@ test("the first review reads the whole change and keeps nothing for a last read"
   );
 });
 
-test("a push that changes only what a merge brings in reads nothing", () => {
-  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
-  const plan = writeReview(folder, {
-    choice: { stage: "none" },
-    since: "b".repeat(40),
-    pushed: null,
-    readDiff: () => assert.fail("nothing is read"),
-    repoFiles: [],
-    stale: [],
-  });
-  assert.deepEqual(plan, {
-    stage: "none",
-    since: null,
-    areas: [],
-    unread: [],
-    final: [],
-    finalUnread: [],
-  });
+test("a review with no reviewers reads nothing, and keeps the head the last full read ended on", () => {
+  for (const stage of /** @type {const} */ (["none", "reviewed"])) {
+    const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+    const plan = writeReview(folder, {
+      choice: { stage },
+      since: "b".repeat(40),
+      pushed: null,
+      readDiff: () => assert.fail("nothing is read"),
+      repoFiles: [],
+      listStale: () => assert.fail("no reviewer reads the stale names"),
+    });
+    assert.deepEqual(plan, {
+      stage,
+      since: "b".repeat(40),
+      areas: [],
+      unread: [],
+      final: [],
+      finalUnread: [],
+    });
+    assert.ok(!existsSync(join(folder, "stale-names.md")));
+  }
 });
 
 test("a big area splits into as few parts as it needs, each near an even share, with no part left over", () => {
@@ -779,12 +782,15 @@ test("each kind of reviewer names REVIEW.md's items by the number and title REVI
 test("the stale names are written for the rules reviewer, each with where the repo still names it", () => {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
   writeReview(folder, {
-    choice: { stage: "none" },
+    choice: { stage: "first" },
     since: null,
     pushed: null,
-    readDiff: () => assert.fail("nothing is read"),
+    readDiff: () => ({
+      numstat: "2\t0\tshared/page/sheet.js\n",
+      diff: diffFile("shared/page/sheet.js", [2]),
+    }),
     repoFiles: [],
-    stale: [{ name: "serveSnapshot", hits: ["AGENTS.md:351: the live snapshot"] }],
+    listStale: () => [{ name: "serveSnapshot", hits: ["AGENTS.md:351: the live snapshot"] }],
   });
   assert.match(
     readFileSync(join(folder, "stale-names.md"), "utf8"),
@@ -803,7 +809,7 @@ test("a stage's index names each file left unread and why", () => {
       diff: diffFile("shared/page/sheet.js", [2]),
     }),
     repoFiles: [],
-    stale: [],
+    listStale: () => [],
   });
   assert.match(
     readFileSync(join(folder, "first.md"), "utf8"),

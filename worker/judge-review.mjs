@@ -18,13 +18,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { listStageKinds } from "./plan-review.mjs";
-import {
-  SUMMARY_MARKER,
-  WEIGHTS,
-  findSummary,
-  readReviewedHead,
-  writeReviewedHead,
-} from "./review-state.mjs";
+import { SUMMARY_MARKER, WEIGHTS, findSummary, writeReviewedHead } from "./review-state.mjs";
 
 // What Claude Code's Read returns when it's given no limit.
 const READ_LINES = 2000;
@@ -128,10 +122,18 @@ export const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const readExecution = (path) => (path && existsSync(path) ? readJson(path) : []);
 
 /**
+ * @typedef {object} PlannedArea
+ * @property {number} area
+ * @property {string} name
+ * @property {string[]} files
+ * @property {Record<string, string[]>} partsByFile
+ */
+
+/**
  * The areas of a stage, from the plan.
  * @param {import('./plan-review.mjs').Plan} plan
  * @param {string} stage
- * @returns {{ area: number, name: string, files: string[], partsByFile: Record<string, string[]> }[]}
+ * @returns {PlannedArea[]}
  */
 const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.areas);
 
@@ -302,7 +304,7 @@ export function keepCheck(folder, { stage, area }, structuredOutput) {
 /**
  * The files an area's reviewers left unread, and the reviewers and checker that didn't finish.
  * @param {string} stage
- * @param {{ area: number, name: string, files: string[], partsByFile: Record<string, string[]> }} area
+ * @param {PlannedArea} area
  * @param {Map<string, any>} records
  */
 function judgeArea(stage, { area, name, files, partsByFile }, records) {
@@ -442,11 +444,10 @@ function describeStage(judged, { stage, areas, sha, since }) {
  * The summary's opening when no stage was due.
  * @param {import('./plan-review.mjs').Plan} plan
  * @param {string} sha
- * @param {string | null} earlierHead
  */
-const describeNothingDue = (plan, sha, earlierHead) =>
+const describeNothingDue = (plan, sha) =>
   plan.stage === "none"
-    ? `Claude read nothing new in ${sha}: the pushes since ${(earlierHead ?? "").slice(0, 7)} change only what a merge of the base brings in.`
+    ? `Claude read nothing new in ${sha}: the pushes since ${(plan.since ?? "").slice(0, 7)} change only what a merge of the base brings in.`
     : `Claude had nothing to read in ${sha}.`;
 
 /**
@@ -455,16 +456,15 @@ const describeNothingDue = (plan, sha, earlierHead) =>
  * full read ended on has no summary of its own, so that read's stands.
  * @param {object} review
  * @param {string} review.sha the pull request's head
- * @param {string | null} review.earlierHead the head the last full read ended on
  * @param {import('./plan-review.mjs').Plan} review.plan
  * @param {Map<string, any>} review.records the reviewers', checkers', and posting steps' records
  */
-export function judgeReview({ sha, earlierHead, plan, records }) {
+export function judgeReview({ sha, plan, records }) {
   if (plan.stage === "reviewed") return { isComplete: true, body: null };
   const stages = listDueStages(plan, records);
   const judged = stages.map(({ stage, areas }) => judgeStage(stage, areas, records));
   const isComplete = judged.every(isStageFinished);
-  const reviewedHead = isComplete ? sha : earlierHead;
+  const reviewedHead = isComplete ? sha : plan.since;
   const lines = [
     SUMMARY_MARKER,
     ...(reviewedHead ? [writeReviewedHead(reviewedHead)] : []),
@@ -472,7 +472,7 @@ export function judgeReview({ sha, earlierHead, plan, records }) {
       ? stages.flatMap(({ stage, areas }, index) =>
           describeStage(judged[index], { stage, areas, sha, since: plan.since }),
         )
-      : [describeNothingDue(plan, sha, earlierHead), ""]),
+      : [describeNothingDue(plan, sha), ""]),
     ...listLeftUnread(plan, stages),
   ];
   return { isComplete, body: lines.join("\n").trimEnd() };
@@ -535,7 +535,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const earlier = findSummary(await readAllPages(callGitHub, `/issues/${env.PR}/comments`));
     const { isComplete, body } = judgeReview({
       sha: env.SHA ?? "",
-      earlierHead: readReviewedHead(earlier?.body),
       plan: readJson(join(folder, "plan.json")),
       records: readRecords(folder),
     });
