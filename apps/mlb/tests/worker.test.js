@@ -241,11 +241,11 @@ test("a loader that starts over on the same storage keeps what the last one read
   const mlb = createFakeMlb();
   const storage = createMemoryStorage();
   let now = NOW;
-  const createServerOnStorage = () =>
+  const createLoaderOnStorage = () =>
     createSnapshotLoader({ fetchImpl: mlb.fetchImpl, now: () => now, storage });
-  await createServerOnStorage().loadSnapshot(2026);
+  await createLoaderOnStorage().loadSnapshot(2026);
 
   now += 30 * 1000;
-  await createServerOnStorage().loadSnapshot(2026);
+  await createLoaderOnStorage().loadSnapshot(2026);
   assert.deepEqual(["schedule", ...SLOW_REQUESTS].map(mlb.countCalls), [2, 1, 1, 1, 1]);
 });

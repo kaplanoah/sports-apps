@@ -292,6 +292,7 @@ function createJobRun(mlb, env) {
   const job = createHighlightsUpdater();
   return {
     stored: docs.stored,
+    storage: storage.stored,
     runJob: () => job.updateStore(context),
     forgetReads: () => {
       for (const key of storage.stored.keys()) {
@@ -303,6 +304,21 @@ function createJobRun(mlb, env) {
     },
   };
 }
+
+test("the store's job keeps the current season's stills whichever finals it lists, and forgets the season before's", async () => {
+  const { storage, runJob } = createJobRun(createMlbFetch(), {});
+  const answers = { "https://img.mlbstatic.com/still.jpg": true };
+  storage.set("headline-stills:999999", answers);
+  storage.set("headline-stills:2026:999998", answers);
+  storage.set("headline-stills:2025:776001", answers);
+
+  await runJob();
+
+  assert.deepEqual(storage.get("headline-stills:2026:999999"), answers);
+  assert.deepEqual(storage.get("headline-stills:2026:999998"), answers);
+  assert.equal(storage.has("headline-stills:999999"), false);
+  assert.equal(storage.has("headline-stills:2025:776001"), false);
+});
 
 test("the store's job reads each of the slate's finals in two requests, and saves its highlights", async () => {
   const mlb = createMlbFetch();

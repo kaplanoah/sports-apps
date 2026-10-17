@@ -41,10 +41,15 @@ const MISSES_PREFIX = "headline-still-misses:";
 // The season whose games' answers are kept.
 const SEASON_KEY = "headline-stills-season";
 
-/** @param {string} id */
-const nameChecksKey = (id) => `${CHECKS_PREFIX}${id}`;
-/** @param {string} id */
-const nameMissesKey = (id) => `${MISSES_PREFIX}${id}`;
+/**
+ * A game of a season, as its stills' answers are kept.
+ * @typedef {{ season: number, id: string }} StillsGame
+ */
+
+/** @param {StillsGame} game */
+const nameChecksKey = ({ season, id }) => `${CHECKS_PREFIX}${season}:${id}`;
+/** @param {StillsGame} game */
+const nameMissesKey = ({ season, id }) => `${MISSES_PREFIX}${season}:${id}`;
 
 /**
  * Whether Claude finds a headline on the still.
@@ -155,17 +160,17 @@ async function saveWhenChanged(storage, key, { before, after }) {
  * still that has gone unanswered too often is kept as clean. A read Claude turned the key away for
  * is tried again later, as one that went unanswered is, without counting against its stills.
  * @param {RunContext} context
- * @param {string} id the game's
+ * @param {StillsGame} game
  * @param {string[]} stills
  * @returns {Promise<{ withHeadlines: Set<string>, isFinished: boolean, hasMisses: boolean }>}
  */
-export async function findHeadlineStills(context, id, stills) {
+export async function findHeadlineStills(context, game, stills) {
   const apiKey = context.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { withHeadlines: new Set(), isFinished: true, hasMisses: false };
   /** @type {Record<string, boolean>} */
-  const kept = (await context.storage.get(nameChecksKey(id))) ?? {};
+  const kept = (await context.storage.get(nameChecksKey(game))) ?? {};
   /** @type {Record<string, number>} */
-  const missed = (await context.storage.get(nameMissesKey(id))) ?? {};
+  const missed = (await context.storage.get(nameMissesKey(game))) ?? {};
   const round = listRoundStills(stills, kept, missed);
   const asked = round.slice(0, STILLS_PER_READ);
   const checked = await checkStills({ apiKey, fetchImpl: context.fetchImpl }, asked);
@@ -173,7 +178,7 @@ export async function findHeadlineStills(context, id, stills) {
   if (unanswered)
     noteFailure(
       context.failures,
-      `Asking Claude about ${unanswered} of game ${id}'s stills`,
+      `Asking Claude about ${unanswered} of game ${game.id}'s stills`,
       checked.firstError,
     );
   const answered = { ...kept, ...checked.answers };
@@ -185,8 +190,8 @@ export async function findHeadlineStills(context, id, stills) {
       .map((still) => [still, answered[still] ?? false]),
   );
   const misses = Object.fromEntries(Object.entries(counted).filter(([still]) => !isGivenUp(still)));
-  await saveWhenChanged(context.storage, nameChecksKey(id), { before: kept, after: checks });
-  await saveWhenChanged(context.storage, nameMissesKey(id), { before: missed, after: misses });
+  await saveWhenChanged(context.storage, nameChecksKey(game), { before: kept, after: checks });
+  await saveWhenChanged(context.storage, nameMissesKey(game), { before: missed, after: misses });
   const isKeyRefused = checked.refused.length > 0;
   return {
     withHeadlines: new Set(stills.filter((still) => checks[still])),
@@ -196,15 +201,31 @@ export async function findHeadlineStills(context, id, stills) {
 }
 
 /**
- * Forgets the answers kept for any game but the current season's finals, once the season changes.
- * @param {JobContext} context
- * @param {{ season: number, games: { id: string }[] }} finals the current season's
+ * Where the answers kept under `key` belong, by the season its name holds, or, for answers kept
+ * under a game alone, which every season before had, under the current season.
+ * @param {string} prefix
+ * @param {string} key
+ * @param {number} current
  */
-export async function forgetOtherSeasonsStills({ storage }, { season, games }) {
-  if ((await storage.get(SEASON_KEY)) === season) return;
-  const ids = new Set(games.map((game) => String(game.id)));
+function placeKeptStills(prefix, key, current) {
+  const [season, id] = key.slice(prefix.length).split(":");
+  if (id === undefined) return { isCurrent: true, key: `${prefix}${current}:${season}` };
+  return { isCurrent: season === String(current), key };
+}
+
+/**
+ * Forgets the answers kept for any season but the current one, by the season each key names,
+ * once the season changes.
+ * @param {JobContext} context
+ * @param {number} current the current season
+ */
+export async function forgetOtherSeasonsStills({ storage }, current) {
+  if ((await storage.get(SEASON_KEY)) === current) return;
   for (const prefix of [CHECKS_PREFIX, MISSES_PREFIX])
-    for (const key of (await storage.list(prefix)).keys())
-      if (!ids.has(key.slice(prefix.length))) await storage.delete(key);
-  await storage.put(SEASON_KEY, season);
+    for (const [key, answers] of await storage.list(prefix)) {
+      const placed = placeKeptStills(prefix, key, current);
+      if (placed.isCurrent && placed.key !== key) await storage.put(placed.key, answers);
+      if (!placed.isCurrent || placed.key !== key) await storage.delete(key);
+    }
+  await storage.put(SEASON_KEY, current);
 }

@@ -48,7 +48,10 @@ const STATUS_KEY = "highlights/status";
  * @property {(context: JobContext) => Promise<{ season: number, games: any[] } | null>} listFinals
  *   the current season's finals, newest first
  * @property {number} gameLengthMs about how long a game lasts, for one the store didn't see end
- * @property {(context: RunContext, game: any) => Promise<GameHighlights>} readHighlights
+ * @property {(context: RunContext, game: any, season: number) => Promise<GameHighlights>} readHighlights
+ *   a final of the current season
+ * @property {(context: JobContext, season: number) => Promise<void>} [forgetOtherSeasons] forgets
+ *   what the league keeps for its reads of any season but the current one, each run
  * @property {(id: string) => string} nameKey where the store keeps a game's highlights
  * @property {number} [edition] how the league reads a game's highlights, raised when that changes
  */
@@ -107,17 +110,17 @@ const stampEdition = (read, edition) => (edition ? { ...read, edition } : read);
  * brought what it could so far is finished next run.
  * @param {RunContext} context
  * @param {HighlightsLeague} league
- * @param {any} game
+ * @param {{ game: any, season: number }} final the game, and the current season it belongs to
  * @param {HighlightsRead | undefined} read
  * @returns {Promise<HighlightsRead>}
  */
-async function keepGame(context, league, game, read) {
+async function keepGame(context, league, { game, season }, read) {
   const now = context.now();
   const tried = stampEdition(
     { readAt: read?.readAt ?? null, triedAt: now, tries: (read?.tries ?? 0) + 1 },
     read?.edition,
   );
-  const brought = await league.readHighlights(context, game).catch((error) => {
+  const brought = await league.readHighlights(context, game, season).catch((error) => {
     noteFailure(context.failures, `Reading game ${game.id}'s highlights`, error);
     return undefined;
   });
@@ -140,6 +143,7 @@ export function createHighlightsJob(league) {
   async function keepHighlights(context) {
     const finals = await league.listFinals(context);
     if (!finals) return;
+    await league.forgetOtherSeasons?.(context, finals.season);
     const readsKey = nameReadsKey(finals.season);
     /** @type {Record<string, HighlightsRead>} */
     const stored = (await context.storage.get(readsKey)) ?? {};
@@ -150,7 +154,13 @@ export function createHighlightsJob(league) {
     const due = finals.games
       .filter((game) => isDue(findEnd(game, league.gameLengthMs), reads[game.id], when))
       .slice(0, GAMES_PER_RUN);
-    for (const game of due) reads[game.id] = await keepGame(context, league, game, reads[game.id]);
+    for (const game of due)
+      reads[game.id] = await keepGame(
+        context,
+        league,
+        { game, season: finals.season },
+        reads[game.id],
+      );
     if (!isSameJson(stored, reads)) await context.storage.put(readsKey, reads);
   }
 

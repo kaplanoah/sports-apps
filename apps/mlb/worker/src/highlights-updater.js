@@ -21,12 +21,13 @@ const GAME_LENGTH_MS = 3 * 60 * 60 * 1000;
 /**
  * @param {import("../../../../shared/worker/job-status.js").RunContext} context
  * @param {any} game
+ * @param {number} season
  */
-async function readHighlights(context, game) {
+async function readHighlights(context, game, season) {
   const { content, feed } = await fetchGameMedia(context.fetchImpl, game.id);
   const { withHeadlines, isFinished, hasMisses } = await findHeadlineStills(
     context,
-    game.id,
+    { season, id: String(game.id) },
     listStillsToCheck(content, feed),
   );
   return {
@@ -36,16 +37,10 @@ async function readHighlights(context, game) {
   };
 }
 
-/** @param {import("../../../../shared/worker/season-store.js").JobContext} context */
-async function listFinals(context) {
-  const finals = await listCurrentFinals(context);
-  if (finals) await forgetOtherSeasonsStills(context, finals);
-  return finals;
-}
-
 export const createHighlightsUpdater = () =>
   createHighlightsJob({
-    listFinals,
+    listFinals: listCurrentFinals,
+    forgetOtherSeasons: forgetOtherSeasonsStills,
     gameLengthMs: GAME_LENGTH_MS,
     readHighlights,
     nameKey: nameHighlightsKey,
