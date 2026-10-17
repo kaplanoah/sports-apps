@@ -5,7 +5,8 @@
  * an outlined button's), --accent, --accent-ink, --pager-chosen-edge, --focus-ring,
  * --radius-control, --control-height, --control-room, --gate-problem (what was typed is wrong), and
  * --gate-code-font. Its title is set as a sheet's title, and Open as the app's other buttons, which
- * an app's styles.css sets for both.
+ * an app's styles.css sets for both. The Home Screen welcome (chrome.css) takes its title and its
+ * Open button for Install.
  */
 body.gate-page {
   display: flex;

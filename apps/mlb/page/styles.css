@@ -121,6 +121,7 @@
   --ink: #1e1b18;
   --ink-dim: #625a52;
   --catch-up-fade: 0.75;
+  --step-number-lift: 0px;
   --ink-mid: color-mix(in srgb, var(--ink-dim) 55%, var(--ink));
   --ink-hover: color-mix(in srgb, var(--ink) 75%, var(--accent));
   --divider: #ebe4d6;
@@ -1408,10 +1409,7 @@ body.kbd .rank-item .grip:focus {
   background: var(--accent);
   color: var(--accent-ink);
 }
-.home-screen-icon {
-  background-image: url(icon-180.png);
-}
-/* The Home Screen bar and box and Diagnostics, each a step from its role of MLB's own. */
+/* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
 .home-screen-title {
   font-weight: calc(var(--type-detail-weight) + 100);
 }

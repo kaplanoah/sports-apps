@@ -1,7 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { listApps } from "../worker/apps.mjs";
-import { listModules, pinPageFiles } from "../worker/page-files.mjs";
+import {
+  HOME_SCREEN_ICONS,
+  listModules,
+  pinPageFiles,
+  readPageFiles,
+} from "../worker/page-files.mjs";
 
 const IMPORTS = { "#shared/": "./shared/" };
 
@@ -49,7 +57,47 @@ for (const app of listApps()) {
     assert.ok(page.indexOf('<script type="importmap">') < preloads[0].index);
     assert.ok(preloads.at(-1).index < page.indexOf('<script type="module" src="js/app.js">'));
   });
+
+  test(`${app}: the page loads each icon its theme choices show before its welcome, from the app's own PNGs`, async () => {
+    const { default: files } = await import(`#page-files/${app}`);
+    const page = files["index.html"].text;
+    const icons = files["home-screen-icons.css"].text;
+    const readIcon = (look) =>
+      icons.match(
+        new RegExp(`--home-screen-icon-${look}: url\\("data:image/png;base64,([^"]+)"\\)`),
+      )?.[1];
+    const CHOICE_LOOKS = {
+      light: ["light"],
+      dark: ["dark"],
+      system: ["system"],
+      halves: ["light", "dark"],
+    };
+    const shownLooks = [
+      ...page.matchAll(/class="appearance-icon appearance-icon-([a-z]+)"/g),
+    ].flatMap(([, choice]) => CHOICE_LOOKS[choice]);
+    assert.ok(shownLooks.length > 0);
+    for (const look of shownLooks)
+      assert.ok(
+        readIcon(look) === files[HOME_SCREEN_ICONS[look]].base64,
+        `${look} is ${HOME_SCREEN_ICONS[look]}`,
+      );
+    const iconsLink = page.indexOf('<link rel="stylesheet" href="home-screen-icons.css" />');
+    assert.ok(iconsLink >= 0 && iconsLink < page.indexOf('<dialog id="homeScreenWelcome"'));
+  });
+
+  test(`${app}: the icons the page draws for each look are the ones it gives the Home Screen`, async () => {
+    const { LOOKS } = await import(`../apps/${app}/page/js/looks.js`);
+    assert.equal(LOOKS.light.homeScreenIcon, HOME_SCREEN_ICONS.light);
+    assert.equal(LOOKS.dark.homeScreenIcon, HOME_SCREEN_ICONS.dark);
+  });
 }
+
+test("a page without its light or dark Home Screen icon isn't built", () => {
+  const pageRoot = mkdtempSync(join(tmpdir(), "page-"));
+  writeFileSync(join(pageRoot, "index.html"), "<!doctype html>\n");
+  writeFileSync(join(pageRoot, HOME_SCREEN_ICONS.light), "png");
+  assert.throws(() => readPageFiles(pageRoot), /no icon-180\.png/);
+});
 
 const PAGE = `<!doctype html>
   <script src="shared/release-guard.js"></script>

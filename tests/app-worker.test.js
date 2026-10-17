@@ -2,6 +2,7 @@ import test from "node:test";
 import { createHmac } from "node:crypto";
 import assert from "node:assert/strict";
 import { createAppWorker } from "../shared/worker/app-worker.js";
+import { ANDROID_AGENT, IPHONE_AGENT } from "./browser/devices.mjs";
 
 const answerNothing = () => new Response(null, { status: 500 });
 const storeAnswers = async () => true;
@@ -364,4 +365,40 @@ test("with an address of its own, the page still answers under its key, and only
   );
   assert.equal(keyless.status, 404);
   assert.equal((await requestAtPageHost("/key/", { cookie })).status, 404);
+});
+
+const AGENTS = {
+  iPhone: IPHONE_AGENT,
+  iPad: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+  android: ANDROID_AGENT,
+  macChrome:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+};
+
+test("Safari's manifest leaves out start_url, so a Home Screen app opens at the address it was added from, and Chrome's keeps it", async () => {
+  const manifest = { name: "WNBA", start_url: "./", scope: "./" };
+  const worker = createPageWorker({
+    "manifest.webmanifest": {
+      contentType: "application/manifest+json",
+      text: JSON.stringify(manifest),
+    },
+  });
+  /** @param {string} agent */
+  const requestManifest = (agent) =>
+    worker.fetch(
+      new Request("https://worker.example/key/manifest.webmanifest", {
+        headers: { "user-agent": agent },
+      }),
+      { APP_KEY: "key" },
+    );
+
+  const { start_url: _startUrl, ...withoutStartUrl } = manifest;
+  for (const agent of [AGENTS.iPhone, AGENTS.iPad])
+    assert.deepEqual(await (await requestManifest(agent)).json(), withoutStartUrl);
+  for (const agent of [AGENTS.android, AGENTS.macChrome])
+    assert.deepEqual(await (await requestManifest(agent)).json(), manifest);
+  const safari = await requestManifest(AGENTS.iPhone);
+  const chrome = await requestManifest(AGENTS.android);
+  assert.notEqual(safari.headers.get("etag"), chrome.headers.get("etag"));
+  assert.equal(safari.headers.get("vary"), "user-agent");
 });

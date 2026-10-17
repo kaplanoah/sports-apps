@@ -131,6 +131,9 @@
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
+  /* Barlow's digits sit low in their line, which would leave each step's number under its
+     circle's middle. */
+  --step-number-lift: 0.5px;
   --orange: #a23a0a;
   --orange-ink: #ffffff;
   --teal: #0b6860;
@@ -2407,14 +2410,6 @@ table.standings tr.playoff-line + tr td {
 }
 .retry-block .retry-title {
   font-weight: calc(var(--type-detail-weight) + 100);
-}
-
-/* The Home Screen bar and box show the icon the theme showing would give the Home Screen. */
-.home-screen-icon {
-  background-image: url(icon-light-180.png);
-}
-:root[data-theme="dark"] .home-screen-icon {
-  background-image: url(icon-180.png);
 }
 
 .settings-footer .sep {

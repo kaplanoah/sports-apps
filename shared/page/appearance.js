@@ -3,25 +3,23 @@
 // sets the theme before the first paint; this keeps it, and the icons and bar color that go with
 // it, current. Each app hands it its looks' icons and bar colors.
 
+// Every page that loads this runs pick-theme.js first.
+/* global buildSafariAddress, isAppearanceChoice, openThemeAddress -- from pick-theme.js */
+
+import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
+import { html, setHtml } from "./html.js";
 
 /**
  * @typedef {{ barColor: string, tabIcon: string, homeScreenIcon: string }} Look
  * @typedef {{ light: Look, dark: Look }} Looks
  */
 
-const CHOICES = ["auto", "light", "dark"];
-
-// A home-screen page keeps its settings apart from the browser's, so matching the icon takes
-// choosing again in the browser.
-const HOME_SCREEN_NOTE =
-  "Apple sets a home-screen icon only when the page is added. To match this look, choose it in your browser and add the page again.";
-
 const darkScheme = matchMedia("(prefers-color-scheme: dark)");
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 const appearance = createViewerChoice("appearance", (stored) =>
-  typeof stored === "string" && CHOICES.includes(stored) ? stored : "auto",
+  typeof stored === "string" && isAppearanceChoice(stored) ? stored : "auto",
 );
 
 /**
@@ -74,25 +72,39 @@ function checkSavedChoice(choices) {
   for (const choice of choices) choice.checked = choice.value === saved;
 }
 
+// An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
+// changes its icon only once the site is added again, from Safari, which opens on the same theme.
+/** @param {string} choice */
+function drawReAddNote(choice) {
+  setHtml(
+    findElement("appearanceNote"),
+    html`Apple only sets icons when you add a site to your home screen. To update your icon,
+      <a href="${buildSafariAddress(choice)}">re-add the site</a>`,
+  );
+}
+
 /**
- * Wires the settings' Appearance choices to the look they pick.
+ * Wires the settings' Appearance choices, and the welcome's copy of them
+ * (draw-home-screen-asks.js), to the look they pick.
  * @param {Looks} looks
  */
 export function startAppearance(looks) {
   const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
-    document.querySelectorAll('input[name="appearance"]')
+    document.querySelectorAll('input[name="appearance"], input[name="welcomeAppearance"]')
   );
-  const readPicked = () => [...choices].find((choice) => choice.checked)?.value ?? "auto";
   checkSavedChoice(choices);
-  const showChosenTheme = followTheme(looks, readPicked);
+  const showChosenTheme = followTheme(looks, appearance.read);
   for (const choice of choices) {
     choice.addEventListener("change", () => {
-      appearance.keep(readPicked());
+      appearance.keep(choice.value);
+      openThemeAddress(choice.value);
+      checkSavedChoice(choices);
       showChosenTheme();
-      findElement("appearanceNote").textContent = HOME_SCREEN_NOTE;
+      if (choice.name === "appearance" && isOnHomeScreen() && isIos()) drawReAddNote(choice.value);
     });
   }
   appearance.watch(() => {
+    openThemeAddress(appearance.read());
     checkSavedChoice(choices);
     showChosenTheme();
   });

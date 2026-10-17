@@ -24,11 +24,10 @@
 :root {
   height: 100%;
 }
-/* The Home Screen bar takes its own height off the page's top (chrome.css). */
 :root:has(.view.active > .day-view) body {
   display: flex;
   flex-direction: column;
-  height: calc(100% - var(--home-screen-bar-height, 0px));
+  height: 100%;
   padding-bottom: 0;
 }
 @media (max-width: 779px) {

@@ -62,7 +62,7 @@
   --bar-top: calc(env(safe-area-inset-top) + 10px);
   position: sticky;
   z-index: 5;
-  top: var(--home-screen-bar-height, 0px);
+  top: 0;
   margin: calc(-1 * var(--bar-top)) calc(-1 * var(--reach-right)) 0 calc(-1 * var(--reach-left));
   padding: var(--bar-top) var(--reach-right) 18px var(--reach-left);
   pointer-events: none;
