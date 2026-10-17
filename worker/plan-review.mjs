@@ -3,8 +3,9 @@
 // each for one kind of problem. The first review reads the whole change. A review after it reads
 // only what the pushes since the last full read changed, and when that review finishes and posts
 // nothing, the whole change is read once more, one reviewer an area. A push that changes only what
-// a merge of the base brings in is read by no one. A test's recorded data, the lockfile, a binary
-// file, and a drawing or minified library a tool wrote go unread, named in the summary instead.
+// a merge of the base brings in is read by no one, and neither is a run on the head the last full
+// read ended on, as a label's is. A test's recorded data, the lockfile, a binary file, and a
+// drawing or minified library a tool wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
 // commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,
@@ -307,29 +308,37 @@ export function listChangedSince(earlier, now) {
 }
 
 /**
- * The files the pushes since a reviewed head changed: those whose change from that head's base
- * differs from the whole change now.
+ * The files the pushes since a reviewed head changed: those the pushed range changes, the range
+ * the push's reviewers read, or, where that range holds the base's edits too, those whose change
+ * from that head's base differs from the whole change now.
  * @param {object} review
  * @param {string} review.reviewedHead
+ * @param {{ range: string[], hasBase: boolean }} review.pushed
  * @param {(one: string, other: string) => string} review.findMergeBase
- * @param {(range: string[]) => { diff: string }} review.readDiff
+ * @param {(range: string[]) => { numstat: string, diff: string }} review.readDiff
  */
-export function listPushedFiles({ reviewedHead, findMergeBase, readDiff }) {
+export function listPushedFiles({ reviewedHead, pushed, findMergeBase, readDiff }) {
+  if (!pushed.hasBase)
+    return readChangedFiles(readDiff(pushed.range).numstat).map(({ path }) => path);
   const earlierBase = findMergeBase(WHOLE_CHANGE[0], reviewedHead);
   return listChangedSince(readDiff([earlierBase, reviewedHead]).diff, readDiff(WHOLE_CHANGE).diff);
 }
 
 /**
- * Which review this run makes: the first, of the whole change; one of what the pushes since the
- * last full read changed; or none, when they changed only what a merge of the base brings in.
+ * Which review this run makes: the first, of the whole change; none, on the head the last full
+ * read ended on, as a label's run is, which leaves that read's summary as it is; one of what the
+ * pushes since the last full read changed; or none, when they changed only what a merge of the
+ * base brings in.
  * @param {object} review
  * @param {string | null} review.reviewedHead the head the last full read ended on
+ * @param {string} review.head the pull request's head
  * @param {boolean} review.isOnBranch whether that head is still in the pull request's history
  * @param {() => string[]} review.listChanged the files the pushes since changed
- * @returns {{ stage: "first" } | { stage: "push", files: string[] } | { stage: "none" }}
+ * @returns {{ stage: "first" | "reviewed" | "none" } | { stage: "push", files: string[] }}
  */
-export function chooseStage({ reviewedHead, isOnBranch, listChanged }) {
+export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
   if (!reviewedHead || !isOnBranch) return { stage: "first" };
+  if (reviewedHead === head) return { stage: "reviewed" };
   const files = listChanged();
   return files.length ? { stage: "push", files } : { stage: "none" };
 }
@@ -670,18 +679,24 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       });
     return /** @type {{ numstat: string, diff: string }} */ (diffs.get(key));
   };
+  const head = runGit(["rev-parse", "HEAD^2"]).trim();
+  /** @type {{ range: string[], hasBase: boolean } | undefined} */
+  let pushedRange;
+  const readPushedRange = () =>
+    (pushedRange ??= findPushedRange(/** @type {string} */ (reviewedHead), tryGit));
   const choice = chooseStage({
     reviewedHead,
+    head,
     isOnBranch,
     listChanged: () =>
       listPushedFiles({
         reviewedHead: /** @type {string} */ (reviewedHead),
+        pushed: readPushedRange(),
         findMergeBase: (one, other) => runGit(["merge-base", one, other]).trim(),
         readDiff,
       }),
   });
-  const pushed =
-    choice.stage === "push" ? findPushedRange(/** @type {string} */ (reviewedHead), tryGit) : null;
+  const pushed = choice.stage === "push" ? readPushedRange() : null;
   const deleted = runGit(["diff", "--name-only", "--diff-filter=D", ...WHOLE_CHANGE])
     .split("\n")
     .filter(Boolean);

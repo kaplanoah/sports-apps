@@ -431,7 +431,8 @@ const describeNothingDue = (plan, sha, earlierHead) =>
 
 /**
  * What the review read, found, and checked, whether it did everything it was due, and the head
- * the next push's review reads since, which moves on only once it did.
+ * the next push's review reads since, which moves on only once it did. A run on the head the last
+ * full read ended on has no summary of its own, so that read's stands.
  * @param {object} review
  * @param {string} review.sha the pull request's head
  * @param {string | null} review.earlierHead the head the last full read ended on
@@ -439,6 +440,7 @@ const describeNothingDue = (plan, sha, earlierHead) =>
  * @param {Map<string, any>} review.records the reviewers', checkers', and posting steps' records
  */
 export function judgeReview({ sha, earlierHead, plan, records }) {
+  if (plan.stage === "reviewed") return { isComplete: true, body: null };
   const stages = listDueStages(plan, records);
   const judged = stages.map(({ stage, areas }) => judgeStage(stage, areas, records));
   const isComplete = judged.every(isStageFinished);
@@ -500,8 +502,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       plan: readJson(join(folder, "plan.json")),
       records: readRecords(folder),
     });
-    await postSummary(callGitHub, env.PR ?? "", earlier, body);
-    console.log(body);
+    if (body) await postSummary(callGitHub, env.PR ?? "", earlier, body);
+    console.log(body ?? "This head was already reviewed in full, so its summary stands.");
     if (!isComplete) {
       console.log("::error::The review didn't read and check everything it was due.");
       process.exit(1);

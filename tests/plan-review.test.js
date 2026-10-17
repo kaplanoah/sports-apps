@@ -334,19 +334,28 @@ test("the files a push changed are those whose change differs, never those a mer
 
 test("the first review reads the whole change, a later one what changed, and a merge alone nothing", () => {
   const listChanged = () => ["a.js"];
-  assert.deepEqual(chooseStage({ reviewedHead: null, isOnBranch: false, listChanged }), {
+  const [reviewed, head] = ["a".repeat(40), "b".repeat(40)];
+  assert.deepEqual(chooseStage({ reviewedHead: null, head, isOnBranch: false, listChanged }), {
     stage: "first",
   });
-  const head = "a".repeat(40);
-  assert.deepEqual(chooseStage({ reviewedHead: head, isOnBranch: false, listChanged }), {
+  assert.deepEqual(chooseStage({ reviewedHead: reviewed, head, isOnBranch: false, listChanged }), {
     stage: "first",
   });
-  assert.deepEqual(chooseStage({ reviewedHead: head, isOnBranch: true, listChanged }), {
+  assert.deepEqual(chooseStage({ reviewedHead: reviewed, head, isOnBranch: true, listChanged }), {
     stage: "push",
     files: ["a.js"],
   });
-  assert.deepEqual(chooseStage({ reviewedHead: head, isOnBranch: true, listChanged: () => [] }), {
-    stage: "none",
+  assert.deepEqual(
+    chooseStage({ reviewedHead: reviewed, head, isOnBranch: true, listChanged: () => [] }),
+    { stage: "none" },
+  );
+});
+
+test("a run on the head the last full read ended on reads nothing and lists no pushed files", () => {
+  const head = "a".repeat(40);
+  const listChanged = () => assert.fail("a head already read in full has no pushes to list");
+  assert.deepEqual(chooseStage({ reviewedHead: head, head, isOnBranch: true, listChanged }), {
+    stage: "reviewed",
   });
 });
 
@@ -608,19 +617,45 @@ test("a line whose own text starts like a file header still counts as part of th
   );
 });
 
-test("the files a push changed compare the reviewed head's change from its own base with the whole change now", () => {
+test("where the base's edits can't be set apart, the files a push changed compare the reviewed head's change with the whole change now", () => {
   /** @type {string[][]} */
   const ranges = [];
   const files = listPushedFiles({
     reviewedHead: "r".repeat(40),
+    pushed: { range: ["r".repeat(40), "HEAD^2"], hasBase: true },
     findMergeBase: (one, other) => `base-of-${one}-and-${other.slice(0, 1)}`,
     readDiff: (range) => {
       ranges.push(range);
-      return { diff: range[1] === "HEAD" ? diffFile("a.js", [3]) : diffFile("a.js", [2]) };
+      const diff = range[1] === "HEAD" ? diffFile("a.js", [3]) : diffFile("a.js", [2]);
+      return { numstat: "", diff };
     },
   });
   assert.deepEqual(files, ["a.js"]);
   assert.deepEqual(ranges, [["base-of-HEAD^1-and-r", "r".repeat(40)], WHOLE_CHANGE]);
+});
+
+test("the files a push changed are the ones its reviewers read, so a merge that only moved a file's context reads none", () => {
+  /** @type {string[][]} */
+  const ranges = [];
+  const read = (/** @type {string} */ numstat) =>
+    listPushedFiles({
+      reviewedHead: "r".repeat(40),
+      pushed: { range: ["t".repeat(40), "HEAD"], hasBase: false },
+      findMergeBase: () => assert.fail("the pushed range alone says what changed"),
+      readDiff: (range) => {
+        ranges.push(range);
+        return { numstat, diff: "" };
+      },
+    });
+  assert.deepEqual(read("2\t1\tshared/page/a.js\n-\t-\tlogo.png\n"), [
+    "shared/page/a.js",
+    "logo.png",
+  ]);
+  assert.deepEqual(read(""), []);
+  assert.deepEqual(ranges, [
+    ["t".repeat(40), "HEAD"],
+    ["t".repeat(40), "HEAD"],
+  ]);
 });
 
 test("the first review and a push's have every kind of reviewer, and a review that reads nothing none", () => {

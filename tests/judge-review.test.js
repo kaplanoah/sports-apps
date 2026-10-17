@@ -553,6 +553,18 @@ test("a push that changes only what a merge brings in passes and moves the revie
   );
 });
 
+test("a run on a head already read in full passes and leaves that read's summary as it is", () => {
+  assert.deepEqual(
+    judgeReview({
+      sha: HEAD,
+      earlierHead: HEAD,
+      plan: { stage: "reviewed", since: null, areas: [], unread: [], final: [] },
+      records: new Map(),
+    }),
+    { isComplete: true, body: null },
+  );
+});
+
 test("a change of only recorded data passes, naming what it left unread", () => {
   const { isComplete, body } = judgeReview({
     sha: HEAD,
