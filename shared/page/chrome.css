@@ -497,7 +497,8 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
 }
 
 /* Settings: the appearance choices show the home-screen icon each one offers. System shows
-   both, the light look's on the left half and the dark look's on the right. */
+   both, the light look's on the left half and the dark look's on the right, from the two icons
+   or, where their halves would meet with a seam, from one icon drawn to blend them. */
 .appearance-row {
   flex-direction: column;
   align-items: stretch;

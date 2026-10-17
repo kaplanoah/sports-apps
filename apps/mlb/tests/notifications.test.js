@@ -23,12 +23,12 @@ const CLINCH = findLogEntry("clinch", undefined);
 
 test("a notification's title is the update's main clause, and its body the rest", () => {
   assert.deepEqual(describeNotification([GAME_5], CONTEXT), {
-    title: "Blue Jays beat the Dodgers 6-1 in Game\u00a05, lead the World Series 3\u20132",
+    title: "Blue Jays beat the Dodgers 6-1 in Game\u00a05, lead the World Series 3-2",
     body: "",
     tag: "game:WS:5",
   });
   assert.deepEqual(describeNotification([CLINCH], CONTEXT), {
-    title: "Dodgers beat the Blue Jays 5-4 to win the World Series 4\u20133",
+    title: "Dodgers beat the Blue Jays 5-4 to win the World Series 4-3",
     body: "",
     tag: "clinch:WS",
   });
@@ -40,7 +40,7 @@ test("a game that ties its series says tie, with the game's score", () => {
     (entry) => entry.kind === "game" && entry.score[0] === entry.score[1],
   );
   assert.deepEqual(describeNotification([tie], CONTEXT), {
-    title: "Guardians beat the Tigers 6-1 in Game\u00a02, tie the AL Wild Card Series 1\u20131",
+    title: "Guardians beat the Tigers 6-1 in Game\u00a02, tie the AL Wild Card Series 1-1",
     body: "",
     tag: "game:AL_WC1:2",
   });
@@ -50,12 +50,12 @@ test("an update saved before games kept their score still says who won", () => {
   const { lost, runs, ...savedGame } = GAME_5;
   assert.equal(
     describeNotification([savedGame], CONTEXT).title,
-    "Blue Jays took Game\u00a05, lead the World Series 3\u20132",
+    "Blue Jays took Game\u00a05, lead the World Series 3-2",
   );
   const { runs: clinchRuns, ...savedClinch } = CLINCH;
   assert.equal(
     describeNotification([savedClinch], CONTEXT).title,
-    "Dodgers win the World Series, 4\u20133 over the Blue Jays",
+    "Dodgers win the World Series, 4-3 over the Blue Jays",
   );
 });
 
@@ -95,7 +95,7 @@ test("past a few updates at once, the rest are summed up in one", () => {
   assert.equal(messages.length, 4);
   assert.equal(
     messages[0].title,
-    "Blue Jays beat the Dodgers 11-4 in Game\u00a01, lead the World Series 1\u20130",
+    "Blue Jays beat the Dodgers 11-4 in Game\u00a01, lead the World Series 1-0",
   );
   assert.deepEqual(messages[3], {
     title: `${entries.length - 3} more updates`,

@@ -27,6 +27,8 @@ const SKIPPED_FILES = new Set([
   "worker/flag-conflicts.mjs",
   "worker/github-api.mjs",
   "worker/judge-burn-in.mjs",
+  "worker/judge-review.mjs",
+  "worker/plan-review.mjs",
   "worker/red-change.mjs",
   "worker/report-flaky-tests.mjs",
   "worker/rollback.mjs",

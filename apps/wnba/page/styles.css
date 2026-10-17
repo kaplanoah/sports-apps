@@ -111,7 +111,8 @@
  * color, with a line under it only once something scrolls under it, never a fade.
  *
  * Buttons say what they do in sentence case, as capitals are only for labels and chips, and for the
- * tabs a wide screen shows, which sit in one track of the divider's color, as a segmented control.
+ * tabs a wide screen shows, which sit in one track of the divider's color faded into the floor, as a
+ * segmented control.
  * The one that's on, like the list a pill shows or the open tab, is filled orange, inside a darker
  * edge, and the rest are raised and outlined, in ink, with any icon in orange, but for a pill's
  * other names and the other tabs, which are plain words, and a sheet's close and back buttons,
@@ -242,7 +243,7 @@
   --header-gap: 14px;
   --pager-label: var(--ink);
   --pager-chosen-edge: color-mix(in srgb, var(--action) 70%, var(--shadow-ink));
-  --tabs-track: var(--divider);
+  --tabs-track: color-mix(in oklab, var(--divider) 45%, var(--bg));
   --tabs-track-edge: var(--edge);
   --tabs-chosen: var(--action);
   --tabs-chosen-edge: var(--pager-chosen-edge);
