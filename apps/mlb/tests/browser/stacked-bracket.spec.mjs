@@ -8,7 +8,7 @@ import {
   SEASON_2025,
 } from "./harness.mjs";
 import { LAPTOP, PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
-import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -133,6 +133,26 @@ test("on a phone, the bracket opens on the earliest round still playing, and swi
 
   await page.getByRole("tab", { name: "Games" }).click();
   await openSeasonPart(page, "Bracket");
+  await expect(worldSeries).toBeInViewport({ ratio: 1 });
+});
+
+test("on a phone, a tap on the bracket's tab brings it back to the round still playing", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openBracket(page, {
+    store: { "seasons/2025": SEASON_2025 },
+  });
+  await chooseSeason(page, "2025");
+  const worldSeries = page.locator('.box[data-round="WS"]');
+  await expect(worldSeries).toBeInViewport({ ratio: 1 });
+  await expect(findSeasonTab(page)).toHaveAccessibleName("Bracket");
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+  await page.locator(".tree-scroll").evaluate((element) => (element.scrollLeft = 0));
+  await expect(worldSeries).not.toBeInViewport();
+
+  await findSeasonTab(page).click();
+
   await expect(worldSeries).toBeInViewport({ ratio: 1 });
 });
 
