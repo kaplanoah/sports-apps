@@ -269,7 +269,7 @@ export function listUnchecked(candidates, findings) {
  * Keeps an area's candidates, every reviewer's over every try, for its check, and returns how
  * many there are.
  * @param {string} folder
- * @param {{ stage: string, area: number }} place the stage and the area
+ * @param {{ stage: string, area: number }} place
  */
 export function keepCandidates(folder, { stage, area }) {
   const candidates = gatherCandidates(listAreaRecords(readRecords(folder), stage, area));
@@ -285,7 +285,7 @@ export function keepCandidates(folder, { stage, area }) {
  * which has no checker, and returns the candidates it left unchecked, which the judge counts the
  * same way, so the job fails where the judge would.
  * @param {string} folder
- * @param {{ stage: string, area: number }} place the stage and the area
+ * @param {{ stage: string, area: number }} place
  * @param {string | undefined} structuredOutput
  */
 export function keepCheck(folder, { stage, area }, structuredOutput) {
