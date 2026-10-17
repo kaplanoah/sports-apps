@@ -6,6 +6,7 @@ import { TEAMS } from "../page/js/teams.js";
 import {
   PLAYOFFS,
   REGULAR_SEASON,
+  TOTALS_COLUMNS,
   createPlayerServer,
   nameGameLogRequest,
   nameRanksKey,
@@ -21,6 +22,7 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../worker/src/roster.js";
+import { nameKeptFeedKey } from "../../../tests/feed-storage.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { saveSnapshot } from "../worker/src/season-updater.js";
@@ -326,6 +328,31 @@ test("a past season filled before the sheets read a column is filled once more, 
 
   assert.equal(pastReads.length, STATS_FEEDS + TEAM_COUNT + 1);
   assert.equal(league.requests.filter((url) => /Season=2025/.test(url)).length, pastReads.length);
+});
+
+test("each season's totals kept without each player's team are forgotten, once", async () => {
+  const { storage, runJob, wait } = createRun();
+  const oldKeys = await Promise.all(
+    [2025, 2026].map((season) =>
+      nameKeptFeedKey("totals", `${nameTotalsRequest(season)} ${TOTALS_COLUMNS.join(" ")}`),
+    ),
+  );
+  for (const key of oldKeys) await storage.put(key, { answer: { at: 0, data: [] } });
+  const deletes = [];
+  const deleteKey = storage.delete;
+  storage.delete = (key) => {
+    deletes.push(key);
+    return deleteKey(key);
+  };
+
+  await runJob();
+  wait(5);
+  await runJob();
+
+  for (const key of oldKeys) {
+    assert.equal(await storage.get(key), undefined);
+    assert.equal(deletes.filter((deleted) => deleted === key).length, 1);
+  }
 });
 
 test("a past season filled before the store kept every player's averages is filled once more, and saves them", async () => {

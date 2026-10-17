@@ -6,6 +6,7 @@ import { TEAMS } from "../page/js/teams.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
 import { createSnapshotServer } from "../worker/src/snapshot.js";
+import { nameKeptFeedKey } from "../../../tests/feed-storage.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -499,12 +500,6 @@ test("each season's slow feeds are kept apart", async () => {
 const AVERAGES_REQUEST =
   "https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=2026&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight=";
 
-/** @param {string} key */
-async function digestFeedKey(key) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
-  return Buffer.from(digest).subarray(0, 16).toString("hex");
-}
-
 test("the players' averages the snapshot once read are forgotten from the slow feeds' storage, once a season", async () => {
   const league = createLeague();
   let clock = NOW;
@@ -520,7 +515,7 @@ test("the players' averages the snapshot once read are forgotten from the slow f
       return values.delete(key);
     },
   };
-  const averagesKey = await digestFeedKey(`players ${AVERAGES_REQUEST}`);
+  const averagesKey = await nameKeptFeedKey("players", AVERAGES_REQUEST);
   values.set(averagesKey, { answer: { at: NOW - 1000, data: RESPONSES.standings } });
   const server = createSnapshotServer({ fetchImpl: league.fetchImpl, now: () => clock, storage });
 

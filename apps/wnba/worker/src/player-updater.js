@@ -13,6 +13,7 @@ import {
   PLAYOFFS,
   REGULAR_SEASON,
   TEAM_GAME_COLUMNS,
+  TOTALS_COLUMNS,
   TOTALS_FEED_COLUMNS,
   describeSeasonPlayers,
   nameGameLogRequest,
@@ -145,6 +146,8 @@ function createStoreUpdate() {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
   let keeper = null;
   const savedDocs = createSavedDocs();
+  /** @type {Set<number>} */
+  const oldTotalsForgotten = new Set();
 
   /**
    * @param {RunContext} context
@@ -188,12 +191,25 @@ function createStoreUpdate() {
       })
       .catch(() => NO_TEAM_OUT);
 
+  // Each season's totals without each player's team sit under a key no run reads, so each is
+  // deleted once.
+  /** @param {number} season */
+  async function forgetOldTotals(season) {
+    if (oldTotalsForgotten.has(season)) return;
+    oldTotalsForgotten.add(season);
+    await /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).forgetFeed(
+      "totals",
+      `${nameTotalsRequest(season)} ${TOTALS_COLUMNS.join(" ")}`,
+    );
+  }
+
   /**
    * @param {RunContext} context
    * @param {number} season
    */
-  const readSeasonFeeds = (context, season) =>
-    Promise.all([
+  async function readSeasonFeeds(context, season) {
+    await forgetOldTotals(season);
+    return Promise.all([
       readStats(
         context,
         "totals",
@@ -220,6 +236,7 @@ function createStoreUpdate() {
         ),
       ),
     ]);
+  }
 
   /**
    * Each team's roster answer, or null for one the league hasn't answered.

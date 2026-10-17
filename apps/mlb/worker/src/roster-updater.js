@@ -239,10 +239,11 @@ function createStoreUpdate() {
         ),
       ]);
     if (hitting.status === "rejected" || pitching.status === "rejected") {
-      answerNull(
+      noteFailure(
         context.failures,
-        "every player's numbers",
-      )(hitting.status === "rejected" ? hitting.reason : /** @type {any} */ (pitching).reason);
+        "Reading every player's numbers",
+        hitting.status === "rejected" ? hitting.reason : /** @type {any} */ (pitching).reason,
+      );
       return null;
     }
     /** @param {PromiseSettledResult<any>} result */

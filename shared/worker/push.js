@@ -2,7 +2,7 @@ import * as WebPush from "./web-push.js";
 import { respondError, respondJson } from "./responses.js";
 
 // Push subscriptions and the key that signs messages for them. Both are kept under keys the
-// store's own paths can't name, so the page's store never hands them out. The store keeps a few
+// store's own paths can't name, so the page's store never hands them out. The store keeps a hundred
 // devices at most, since anyone with the page's address can subscribe one, and forgets a device
 // its push service says is gone, or that has failed every message for a week, long enough for a
 // fault of the store's own to be fixed first.
