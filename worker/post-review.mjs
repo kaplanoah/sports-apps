@@ -1,11 +1,11 @@
 // Posts what a stage of CI's checkers confirmed or left unsure, each finding on the line it's
 // about, so no reviewer or checker holds a token that writes to the pull request. The check across
-// areas names only the repeats to merge and what it adds, so no finding a checker confirmed can
-// drop out of its answer. A finding on a line the diff doesn't show goes on its file, and one on a
-// file the diff doesn't show goes in one comment on the pull request. Each finding's comment carries a
-// mark, so a finding already posted in any form, as by an earlier try of this step, isn't posted
-// again. A finding counts as posted when this head's review posted it, in this try or an earlier
-// one, and as already on the pull request when an earlier head's review did.
+// areas names only the repeats to merge and what it adds, so no finding a checker kept can drop
+// out of its answer. A finding on a line the diff doesn't show goes on its file, and one on a
+// file the diff doesn't show goes in one comment on the pull request. Each finding's comment
+// carries a mark, so a finding already posted in any form, as by an earlier try of this step, isn't
+// posted again. A finding counts as posted when this head's review posted it, in this try or an
+// earlier one, and as already on the pull request when an earlier head's review did.
 // Usage: node worker/post-review.mjs list <folder> <stage>, with AREAS set, after the stage's
 // checkers, writes what they confirmed or left unsure for the check across areas. node
 // worker/post-review.mjs across <folder> <stage>, with STRUCTURED_OUTPUT from that check, keeps its
@@ -42,7 +42,7 @@ import {
  * @param {{ area: number, items: any[] }[]} checks
  * @returns {(Finding & { ref: string })[]}
  */
-export const listConfirmed = (checks) =>
+export const listCheckedFindings = (checks) =>
   checks
     .toSorted((one, other) => one.area - other.area)
     .flatMap(({ area, items }) =>
@@ -58,20 +58,20 @@ export const listConfirmed = (checks) =>
     );
 
 /**
- * The confirmed refs the check across areas named as repeats of another. Each group keeps its
- * first confirmed ref that no earlier group dropped, and drops its other confirmed refs but any
- * an earlier group kept, so a ref it got wrong, repeated, or crossed with another group never
- * drops a finding that nothing else stands in for.
+ * The checkers' refs the check across areas named as repeats of another. Each group keeps its
+ * first known ref that no earlier group dropped, and drops its other known refs but any an earlier
+ * group kept, so a ref it got wrong, repeated, or crossed with another group never drops a finding
+ * that nothing else stands in for.
  * @param {string[][]} groups
- * @param {Set<string>} confirmedRefs
+ * @param {Set<string>} knownRefs the refs of the checkers' findings
  */
-function listRepeats(groups, confirmedRefs) {
+function listRepeats(groups, knownRefs) {
   /** @type {Set<string>} */
   const kept = new Set();
   /** @type {Set<string>} */
   const dropped = new Set();
   for (const group of groups) {
-    const [lead, ...rest] = group.filter((ref) => confirmedRefs.has(ref) && !dropped.has(ref));
+    const [lead, ...rest] = group.filter((ref) => knownRefs.has(ref) && !dropped.has(ref));
     if (!lead) continue;
     kept.add(lead);
     for (const ref of rest) if (!kept.has(ref)) dropped.add(ref);
@@ -80,19 +80,16 @@ function listRepeats(groups, confirmedRefs) {
 }
 
 /**
- * What a stage posts: every confirmed finding but the repeats the check across areas named, with
- * what it added, weightiest first.
- * @param {(Finding & { ref?: string })[]} confirmed
+ * What a stage posts: every finding its checkers kept but the repeats the check across areas
+ * named, with what it added, weightiest first.
+ * @param {(Finding & { ref?: string })[]} checked
  * @param {Across | null} across
  * @returns {Finding[]}
  */
-export function listToPost(confirmed, across) {
-  const confirmedRefs = new Set(confirmed.flatMap((finding) => finding.ref ?? []));
-  const repeats = listRepeats(across?.duplicates ?? [], confirmedRefs);
-  return [
-    ...confirmed.filter((finding) => !repeats.has(finding.ref ?? "")),
-    ...(across?.added ?? []),
-  ]
+export function listToPost(checked, across) {
+  const knownRefs = new Set(checked.flatMap((finding) => finding.ref ?? []));
+  const repeats = listRepeats(across?.duplicates ?? [], knownRefs);
+  return [...checked.filter((finding) => !repeats.has(finding.ref ?? "")), ...(across?.added ?? [])]
     .filter((finding) => WEIGHTS.includes(finding.weight) && finding.path && finding.body)
     .toSorted((one, other) => WEIGHTS.indexOf(one.weight) - WEIGHTS.indexOf(other.weight))
     .map(({ weight, path, line, body }) => ({ weight, path, line, body }));
@@ -248,10 +245,10 @@ export const readChecks = (folder, stage, areaCount) =>
   });
 
 /**
- * What a stage's posting step reads: what its checkers confirmed, less the repeats the check
- * across areas named, and every finding already on the pull request, in a review comment or in
- * the one comment for files it doesn't change. A stage of more than one area posts nothing until
- * the check across areas has left its answer.
+ * What a stage's posting step reads: what its checkers confirmed or left unsure, less the repeats
+ * the check across areas named, and every finding already on the pull request, in a review
+ * comment or in the one comment for files it doesn't change. A stage of more than one area posts
+ * nothing until the check across areas has left its answer.
  * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
  * @param {{ folder: string, stage: string, areaCount: number, pullNumber: string }} options
  */
@@ -266,7 +263,7 @@ export async function readPostInputs(callGitHub, { folder, stage, areaCount, pul
     ...(await readAllPages(callGitHub, `/issues/${pullNumber}/comments`)),
   ];
   return {
-    findings: listToPost(listConfirmed(readChecks(folder, stage, areaCount)), across),
+    findings: listToPost(listCheckedFindings(readChecks(folder, stage, areaCount)), across),
     posted: listPosted(comments),
     across,
   };
@@ -279,7 +276,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (command === "list") {
     writeFileSync(
       join(folder, nameConfirmedRecord(stage)),
-      JSON.stringify(listConfirmed(readChecks(folder, stage, areaCount)), null, 1),
+      JSON.stringify(listCheckedFindings(readChecks(folder, stage, areaCount)), null, 1),
     );
   } else if (command === "across") {
     const across = readAcross(env.STRUCTURED_OUTPUT);

@@ -242,6 +242,12 @@ test("the review reads every area in full, checks before it posts, and fails on 
     find,
     /if: \$\{\{ !cancelled\(\) && \(steps\.last\.outputs\.unread != '' \|\| steps\.last\.outputs\.answered == 'false'\) \}\}\n\s+run: \|\n.*\n\s+exit 1/,
   );
+  assert.ok(
+    find.includes(
+      "${{ steps.first.outputs.answered == 'true' && 'Its answer is kept, so judge only what those files change.' || 'It gave no answer, so judge your whole area again.' }}",
+    ),
+    "a retry judges its whole area again only when the first try gave no answer",
+  );
   const check = readJob("review-check");
   assert.match(check, /node worker\/judge-review\.mjs candidates \.review "\$STAGE" "\$AREA"/);
   assert.match(check, /run: node worker\/judge-review\.mjs check .* >> "\$GITHUB_OUTPUT"/);

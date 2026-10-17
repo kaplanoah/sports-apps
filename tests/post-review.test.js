@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitHubError } from "../worker/github-api.mjs";
 import {
-  listConfirmed,
+  listCheckedFindings,
   listPosted,
   listToPost,
   nameFinding,
@@ -47,7 +47,7 @@ const CHECKS = [
 
 test("what the checkers confirmed or left unsure is listed in area order, each with its ref", () => {
   assert.deepEqual(
-    listConfirmed(CHECKS).map(({ ref, weight, body }) => [ref, weight, body]),
+    listCheckedFindings(CHECKS).map(({ ref, weight, body }) => [ref, weight, body]),
     [
       ["1.1", "Nit", "a nit"],
       ["2.1", "Unsure", "can't settle"],
@@ -58,7 +58,7 @@ test("what the checkers confirmed or left unsure is listed in area order, each w
 
 test("every confirmed finding is posted, weightiest first, without a check across areas", () => {
   assert.deepEqual(
-    listToPost(listConfirmed(CHECKS), null).map(({ weight, body }) => [weight, body]),
+    listToPost(listCheckedFindings(CHECKS), null).map(({ weight, body }) => [weight, body]),
     [
       ["Important", "a bug"],
       ["Unsure", "can't settle"],
@@ -78,13 +78,13 @@ test("the check across areas drops only the later repeats it names, and adds wha
     unjudged: [],
   };
   assert.deepEqual(
-    listToPost(listConfirmed(CHECKS), across).map((item) => item.body),
+    listToPost(listCheckedFindings(CHECKS), across).map((item) => item.body),
     ["a bug", "can't settle", "spans two areas"],
   );
 });
 
 test("a repeat group the check across areas got wrong never drops a finding nothing else stands in for", () => {
-  const confirmed = listConfirmed(CHECKS);
+  const confirmed = listCheckedFindings(CHECKS);
   const posted = (/** @type {string[][]} */ duplicates) =>
     listToPost(confirmed, { duplicates, added: [], unjudged: [] }).map((item) => item.body);
   assert.deepEqual(posted([["9.9", "1.1"]]), ["a bug", "can't settle", "a nit"]);
@@ -244,7 +244,7 @@ test("a stage's checks are read as the checkers leave them, each with its area, 
   writeFileSync(join(folder, "check-final-1.json"), record("final"));
   writeFileSync(join(folder, "candidates-push-1.json"), "[]");
   assert.deepEqual(
-    listConfirmed(readChecks(folder, "push", 10)).map(({ ref, body }) => [ref, body]),
+    listCheckedFindings(readChecks(folder, "push", 10)).map(({ ref, body }) => [ref, body]),
     [
       ["1.1", "one"],
       ["10.1", "ten"],
