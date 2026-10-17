@@ -136,6 +136,29 @@ export function readAccount(env) {
   return env.CLOUDFLARE_ACCOUNT_ID;
 }
 
+const WORKERS_SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+
+// A token limited to its channel's Workers can't read the account's workers.dev subdomain, so a
+// secret names it. Deploy logs are public, so a wrong one is never repeated back.
+export function readWorkersSubdomain(env) {
+  const subdomain = env.CLOUDFLARE_WORKERS_SUBDOMAIN;
+  if (!subdomain)
+    throw new Error(
+      "Set CLOUDFLARE_WORKERS_SUBDOMAIN to the account's workers.dev subdomain (Cloudflare dashboard > Workers & Pages, beside the Account ID).",
+    );
+  if (!WORKERS_SUBDOMAIN_PATTERN.test(subdomain))
+    throw new Error(
+      "CLOUDFLARE_WORKERS_SUBDOMAIN holds more than a subdomain: set it to just the part before .workers.dev.",
+    );
+  return subdomain;
+}
+
+/**
+ * @param {string} name The Worker's name.
+ * @param {string} subdomain The account's workers.dev subdomain.
+ */
+export const formatWorkerUrl = (name, subdomain) => `https://${name}.${subdomain}.workers.dev/`;
+
 export const findWorkersApi = (account) => `${API}/accounts/${account}/workers`;
 
 // A call Cloudflare never answers would otherwise hold the deploy, and every deploy after it.
@@ -271,6 +294,7 @@ export async function deploy({
   isEarlier = (earlier, of) => isAncestor(runGit, earlier, of),
 }) {
   const account = readAccount(env);
+  const subdomain = readWorkersSubdomain(env);
   const { name, compatibilityDate } = readAppWorkerConfig(app, channel);
   const { isForcePushed } = findChannel(channel);
   const base = findWorkersApi(account);
@@ -336,21 +360,6 @@ export async function deploy({
     await callCloudflare("upload", `${base}/scripts/${name}`, { method: "PUT", body: form });
   }
 
-  async function enableWorkersDevRoute() {
-    await callCloudflare("workers.dev route", `${base}/scripts/${name}/subdomain`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ enabled: true, previews_enabled: false }),
-    });
-  }
-
-  async function readWorkerUrl() {
-    const { subdomain } = await callCloudflare("subdomain", `${base}/subdomain`, {
-      method: "GET",
-    });
-    return `https://${name}.${subdomain}.workers.dev/`;
-  }
-
   // The upload makes the new version live, so anything that goes wrong after it puts the
   // earlier one back.
   /** @returns {Promise<never>} */
@@ -386,12 +395,15 @@ export async function deploy({
       );
   }
 
-  async function findNewVersionUrl(previousVersions) {
+  async function enableWorkersDevRoute(previousVersions) {
     try {
-      await enableWorkersDevRoute();
-      return await readWorkerUrl();
+      await callCloudflare("workers.dev route", `${base}/scripts/${name}/subdomain`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: true, previews_enabled: false }),
+      });
     } catch (error) {
-      return restoreAfter(error instanceof Error ? error.message : String(error), previousVersions);
+      await restoreAfter(error instanceof Error ? error.message : String(error), previousVersions);
     }
   }
 
@@ -399,7 +411,8 @@ export async function deploy({
   if (!(await isDeployNeeded(previousVersions))) return null;
   const migrations = listPendingMigrations(await readMigrationTag());
   await uploadWorker(migrations);
-  const url = await findNewVersionUrl(previousVersions);
+  await enableWorkersDevRoute(previousVersions);
+  const url = formatWorkerUrl(name, subdomain);
   await confirmWorkerAnswers(url, previousVersions);
   await confirmPageDraws(previousVersions);
   log("worker check: ok");
