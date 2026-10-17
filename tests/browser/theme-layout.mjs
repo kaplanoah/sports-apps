@@ -1,3 +1,4 @@
+import { expect } from "@playwright/test";
 import { waitForPressesToEnd } from "./tap-states.mjs";
 
 // The parts a theme may lift a pixel or two, where its colors look off center otherwise.
@@ -48,3 +49,30 @@ export const listLayoutChanges = (first, second) =>
   [...new Set([...Object.keys(first), ...Object.keys(second)])]
     .filter((name) => first[name] !== second[name])
     .map((name) => `${name}: ${first[name] ?? "hidden"} -> ${second[name] ?? "hidden"}`);
+
+/**
+ * Shows the app's light or dark theme, as the phone's setting picks it, once any color it eases
+ * into has arrived.
+ * @param {import("@playwright/test").Page} page
+ * @param {"light" | "dark"} theme
+ */
+export async function showTheme(page, theme) {
+  await page.emulateMedia({ colorScheme: theme });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+  // A link that eases its color on hover eases it into the new theme's too.
+  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+}
+
+/**
+ * The elements whose place or size differs between the app's light and dark themes, which change
+ * only colors, read with the page in each and left in the light one.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function listThemeLayoutChanges(page) {
+  await showTheme(page, "light");
+  const light = await readLayout(page);
+  await showTheme(page, "dark");
+  const dark = await readLayout(page);
+  await showTheme(page, "light");
+  return listLayoutChanges(light, dark);
+}

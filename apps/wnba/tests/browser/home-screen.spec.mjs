@@ -1,8 +1,11 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
+import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 const IPHONE_AGENT =
@@ -58,6 +61,16 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listTapsOffButtons(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
+  });
+
+  test("the welcome lays out the same in Walnut as in Maple, which change only colors", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page, { isShowingWelcome: true });
+    await expect(page.locator(WELCOME)).toBeVisible();
+    expect(await listThemeLayoutChanges(page)).toEqual([]);
   });
 
   test("the welcome is there before the page's code runs, so it never arrives over the page", async ({

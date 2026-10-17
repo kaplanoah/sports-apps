@@ -20,3 +20,13 @@ test("every app's manifest offers the icons Android needs to install it", () => 
       assert.ok(existsSync(new URL(`../apps/${app}/page/${src}`, import.meta.url)), src);
   }
 });
+
+// A manifest without an id takes its start_url as one, and the start_url names the theme picked
+// before the page was added, so an installed app would stop knowing its own page.
+test("every app's manifest names the app's id apart from the address it opens at", () => {
+  for (const app of listApps()) {
+    const { id, start_url: startUrl } = readManifest(app);
+    assert.equal(id, "./", app);
+    assert.equal(startUrl, "./", app);
+  }
+});

@@ -1,6 +1,7 @@
 {
   "name": "WNBA",
   "short_name": "WNBA",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,8 +1,11 @@
 import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
+import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
 const IPHONE_AGENT =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -49,10 +52,20 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listTapsOffButtons(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
 
     await welcome.getByRole("radio", { name: "Ball" }).check();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     expect(await listLowContrastText(page)).toEqual([]);
+  });
+
+  test("the welcome lays out the same in Night Game as in Ball, which change only colors", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page, { isShowingWelcome: true });
+    await expect(page.locator("#homeScreenWelcome")).toBeVisible();
+    expect(await listThemeLayoutChanges(page)).toEqual([]);
   });
 
   test("the settings say how to add the page to the Home Screen, above the ranking", async ({

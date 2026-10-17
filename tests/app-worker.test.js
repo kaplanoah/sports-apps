@@ -345,7 +345,7 @@ test("with an address of its own, the page still answers under its key, and only
 });
 
 test("the manifest names the theme its address asks for in the address the Home Screen app opens at", async () => {
-  const manifest = { name: "WNBA", start_url: "./", scope: "./" };
+  const manifest = { name: "WNBA", id: "./", start_url: "./", scope: "./" };
   const worker = createPageWorker({
     "manifest.webmanifest": {
       contentType: "application/manifest+json",
