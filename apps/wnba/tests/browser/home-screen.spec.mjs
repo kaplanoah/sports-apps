@@ -422,7 +422,7 @@ test.describe("on an iPhone, in the browser", () => {
     });
     await page.emulateMedia({ colorScheme: "light" });
     await openApp(page, { isShowingWelcome: true });
-    await page.locator(WELCOME).getByRole("button", { name: "Continue in browser" }).click();
+    await page.locator(WELCOME).getByRole("button", CONTINUE).click();
     await expect(page.locator(WELCOME)).toBeHidden();
     await page.goto("/?app-theme=dark");
     await expect(page.locator(WELCOME)).toBeVisible();
