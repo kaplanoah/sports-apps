@@ -379,7 +379,7 @@ const MOST_STALE_HITS = 15;
  * removed.
  * @param {string} diff
  * @param {(pattern: string, isWord: boolean) => string[]} grep every matching line in the repo, as
- * path:line:text
+ * path:line:text cut as grepRepo cuts it
  * @param {string[]} deletedFiles
  */
 export function listStaleNames(diff, grep, deletedFiles) {
