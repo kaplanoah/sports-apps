@@ -295,6 +295,33 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   });
 
+  test("the Home Screen app, where the phone refuses it storage, shows the phone's theme from its first paint", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => true });
+      Object.defineProperty(window, "localStorage", {
+        get: () => {
+          throw new DOMException("The operation is insecure.", "SecurityError");
+        },
+      });
+      const themesShown = [];
+      Object.assign(window, { themesShown });
+      new MutationObserver(() => themesShown.push(document.documentElement.dataset.theme)).observe(
+        document,
+        { subtree: true, attributeFilter: ["data-theme"] },
+      );
+    });
+    await page.emulateMedia({ colorScheme: "dark" });
+    // The harness would keep the welcome and the Updates box closed in the storage this test takes away.
+    await openApp(page, { isShowingWelcome: true, isShowingUpdates: true });
+    await page.goto("/?theme=dark");
+    await expect(page.locator("#stamp")).toBeVisible();
+    expect(new URL(page.url()).search).toBe("");
+    const themesShown = await page.evaluate(() => /** @type {any} */ (window).themesShown);
+    expect(new Set(themesShown)).toEqual(new Set(["dark"]));
+  });
+
   test("a theme picked on an earlier visit is in the page's address as it opens in the browser", async ({
     page,
   }) => {

@@ -65,8 +65,12 @@ function keepThemeFromAddress() {
   if (fromAddress === null) return;
   address.searchParams.delete("theme");
   history.replaceState(history.state, "", address);
-  if (localStorage.getItem("appearance") === null)
-    localStorage.setItem("appearance", JSON.stringify(fromAddress));
+  try {
+    if (localStorage.getItem("appearance") === null)
+      localStorage.setItem("appearance", JSON.stringify(fromAddress));
+  } catch {
+    /* without storage, the app follows the phone, as appearance.js will */
+  }
 }
 
 /** @param {string} choice */
