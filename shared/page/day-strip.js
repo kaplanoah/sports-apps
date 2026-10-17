@@ -3,6 +3,7 @@ import {
   choosePlacement,
   chooseTrip,
   describeWhyNoSlide,
+  findCellScrollLeft,
   findDayScrollTop,
   isFollowingStartDay,
   isLedByOne,
@@ -32,7 +33,8 @@ import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
 // follows it as it scrolls, passing to the next day once none of a day's text shows; a tap on a day, or on Today, brings that day to the top, a day's gap
 // under the bar, so nothing of the day before shows. A tap on a date without games brings in its
 // No games row, which leaves once it's out of sight, and a tap on Today while the list is already
-// there pulses the date. While a finger moves the strip, the month names the day in its middle.
+// there brings the date back to the strip's middle, or, with the strip there too, pulses it. While
+// a finger moves the strip, the month names the day in its middle.
 // The list opens on its start day, today or the day the app names, and goes back there once
 // someone has been away two minutes, following it for a few seconds as the store catches up. A league hands it each game day's markup, as it draws a day
 // elsewhere, and a date without games' markup. A league with many games a day can also hand over
@@ -212,14 +214,44 @@ const findListedDay = (day) =>
 const findCell = (day) =>
   /** @type {HTMLElement | null} */ (findStrip()?.querySelector(`[data-day="${day}"]`) ?? null);
 
+/**
+ * @param {HTMLElement} strip
+ * @param {HTMLElement} cell
+ */
+const findCellLeft = (strip, cell) =>
+  findCellScrollLeft({
+    cellLeft: cell.offsetLeft,
+    cellWidth: cell.offsetWidth,
+    scrollWidth: strip.scrollWidth,
+    clientWidth: strip.clientWidth,
+  });
+
 /** @param {ScrollBehavior} behavior */
 function centerChosenCell(behavior) {
   const strip = findStrip();
   const cell = chosenDay && findCell(chosenDay);
   if (!strip || !cell) return;
-  const left = cell.offsetLeft - (strip.clientWidth - cell.offsetWidth) / 2;
+  const left = findCellLeft(strip, cell);
   strip.scrollTo({ left, behavior });
   if (behavior === "instant") noteStripMissed(strip, left);
+}
+
+function isStripOnChosenDay() {
+  const strip = findStrip();
+  const cell = chosenDay && findCell(chosenDay);
+  return !!strip && !!cell && Math.abs(strip.scrollLeft - findCellLeft(strip, cell)) < 2;
+}
+
+// A day sent to the list's top while it's already chosen brings its date back to the strip's
+// middle, and its month back over it, from wherever a finger left the strip.
+/** @param {ScrollBehavior} behavior */
+function bringBackChosenCell(behavior) {
+  endStripSlide();
+  if (!chosenDay || isStripOnChosenDay()) return;
+  dayStripLog.noteStep(`the strip comes back to ${chosenDay}`);
+  isStripSwiped = false;
+  showMonth(chosenDay);
+  centerChosenCell(behavior);
 }
 
 /** @param {string} day */
@@ -398,7 +430,9 @@ function showDay(day, motion) {
   );
   if (isJump) list.scrollTo({ top, behavior: "instant" });
   else scrollWithSpring(list, top);
-  chooseDay(day, motion === "instant" ? "instant" : chooseMotion());
+  const behavior = motion === "instant" ? "instant" : chooseMotion();
+  if (day === chosenDay) bringBackChosenCell(behavior);
+  else chooseDay(day, behavior);
 }
 
 // The day's place is read again each time, since the list's end can move as its days draw.
@@ -839,11 +873,13 @@ function isOnStartDay() {
     !!shown &&
     chosenDay === shown.startDay &&
     typeof top === "number" &&
-    Math.abs(list.scrollTop - top) < 2
+    Math.abs(list.scrollTop - top) < 2 &&
+    isStripOnChosenDay()
   );
 }
 
-// A tap on Today where the list already is has nowhere to go, so the date says it's there.
+// A tap on Today where the list and the strip already are has nowhere to go, so the date says
+// it's there.
 function pulseStartDay() {
   const cell = shown && findCell(shown.startDay);
   dayStripLog.noteStep(

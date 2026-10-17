@@ -183,12 +183,6 @@ async function showNewCurrentYear() {
   fillSeasonList(await listSeasonYears());
 }
 
-// As on iPhone, choosing the Games tab while it shows goes back to where it starts: today.
-function returnGamesToToday() {
-  showStartDay();
-  return true;
-}
-
 const readSearchPages = () =>
   listSearchPages({
     index: session.playerIndex,
@@ -272,7 +266,7 @@ async function boot() {
   trackKeyboardFocus();
   watchPresses([".team-line .team-open"]);
   startPageTabs();
-  setTabStart("games", returnGamesToToday);
+  setTabStart("games", showStartDay);
   startDayStrip(findElement("seasonGames"));
   startGameSearch(findElement("gameSearch"), {
     readSeason: readSearchSeason,

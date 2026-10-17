@@ -98,17 +98,27 @@ test("on a phone, even a page shorter than the screen can scroll", async ({ page
   expect(scrollHeight).toBeGreaterThan(clientHeight);
 });
 
-test("on a phone, tapping the tab that's showing scrolls back to the top", async ({ page }) => {
+test("on a phone, tapping the tab that's showing scrolls back to the top, and then takes it back to the part it's named for", async ({
+  page,
+}) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await openSeasonPart(page, "Standings");
+  await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
+  await openSeasonPart(page, "Bracket");
+  await expect(page.locator("#bracketWrap")).toBeVisible();
   await page.mouse.wheel(0, 800);
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
 
-  await openSeasonPart(page, "Standings");
+  await findSeasonTab(page).click();
 
   await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect(page.locator("#bracketWrap")).toBeVisible();
+
+  await findSeasonTab(page).click();
+
   await expect(page.locator("#standingsWrap")).toBeVisible();
+  await expect(page.locator("#bracketWrap")).toBeHidden();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
 });
 
 test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing animates", async ({

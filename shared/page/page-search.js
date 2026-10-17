@@ -6,14 +6,17 @@
 // words find, or the season's: the latest final for a final's part, or the next game for one before
 // it. A player's name lists her sheet, even with one letter wrong in a name of five letters or
 // more, and finds no games, since nobody knows yet which games she'll play, unless a search of games
-// knows the name, as MLB's knows a starter's, finding his starts. Words like "out" or "injured" list
-// who is out, alone, on a team beside its name, or the player they name, saying whether she is. A
-// team's name beside the News tab's words lists the tab and the newest stories about the team. A
-// place's words list it, and leave the games to any of them that a search of games reads, as "East"
-// finds the East's standings and its games. Words that ask for anything else, like a second team, a
-// day, or "at", ask for games, and list no page. A league hands it its teams, players, and places,
-// and the search's dictionary, so a team is named here by the same words it is in a search of
-// games. Runs in the page and in Node, so it uses no DOM.
+// knows the name, as MLB's knows a starter's, finding his starts. A team's name beside a number
+// some player of its wears, as "Valkyries 2" or "Valkyries #2", lists the sheet of each who wears
+// it, over the team's games, since a fan asking for an hour writes it as one, as "2pm", "2 pm", or
+// "at 2" are. Words like "out" or "injured" list who is out, alone, on a team beside its name, or
+// the player they name, saying whether she is. A team's name beside the News tab's words lists the
+// tab and the newest stories about the team. A place's words list it, and leave the games to any of
+// them that a search of games reads, as "East" finds the East's standings and its games. Words that
+// ask for anything else, like a second team, a day, or "at", ask for games, and list no page. A
+// league hands it its teams, players, and places, and the search's dictionary, so a team is named
+// here by the same words it is in a search of games. Runs in the page and in Node, so it uses no
+// DOM.
 
 import { describeCount } from "./game-search.js";
 import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.js";
@@ -298,8 +301,36 @@ function leaveGameText(tokens, taken) {
     : null;
 }
 
+// The words a fan may put before a player's number, as in "No. 2" or "number 2".
+const NUMBER_WORDS = ["number", "no"];
+
 /**
- * The rows for a team named alone, or with its section's name.
+ * The player's number the words name, as "2", "#2", "No. 2", or "number 2", or null.
+ * @param {string[]} typed
+ */
+function readPlayerNumber(typed) {
+  const number = typed.at(-1) ?? "";
+  const before = typed.slice(0, -1);
+  const isNumberWord = (/** @type {string} */ word) =>
+    NUMBER_WORDS.some((numberWord) => isWordOf(word, numberWord, true));
+  const isLedRight = before.length === 0 || (before.length === 1 && isNumberWord(before[0]));
+  return /^\d{1,2}$/.test(number) && isLedRight ? number : null;
+}
+
+/**
+ * The rows of a team's players who wear a number.
+ * @param {PageTeam} team
+ * @param {string} number
+ * @param {SearchPages} pages
+ * @returns {PageRow[]}
+ */
+const listNumberRows = (team, number, pages) =>
+  pages.players
+    .filter((player) => player.team === team.code && player.number === number)
+    .map((player) => ({ kind: "player", team, player }));
+
+/**
+ * The rows for a team named alone, with its section's name, or with a player's number.
  * @param {PageTeam} team
  * @param {string[]} typed the words beside the team's name
  * @param {SearchPages} pages
@@ -310,6 +341,8 @@ function listTeamRows(team, typed, pages) {
   /** @type {PageRow[]} */
   const sectionRow = section ? [{ kind: "section", team }] : [];
   if (!typed.length) return [{ kind: "team", team }, ...sectionRow];
+  const number = readPlayerNumber(typed);
+  if (number !== null) return listNumberRows(team, number, pages);
   const sectionWords = section ? splitWords(section.name) : [];
   const isSection = typed.every((word) => sectionWords.some((part) => isWordOf(word, part, true)));
   return isSection ? sectionRow : [];
@@ -550,7 +583,8 @@ function findPassedOverPlaces(tokens, text, pages) {
 }
 
 /**
- * The pages of the one team the words name, alone or with its section's name.
+ * The pages of the one team the words name, alone, with its section's name, or with a player's
+ * number.
  * @param {import("./search-words.js").Token[]} teamTokens
  * @param {import("./search-words.js").Token[]} otherTokens
  * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages }} search

@@ -360,6 +360,12 @@
   built from the shared `gate.js` and `gate.css`, and the season's data answers 401 until the phone sends that code,
   which the Worker keeps in a cookie signed over the code with the `ACCESS_SIGNING_KEY` secret,
   never the page's key, which every link shows (`shared/worker/access-gate.js`); a 401 reloads the page (`shared/page/access.js`).
+  The Home Screen app's link to add the site again, whose browser keeps its cookies apart from the app's,
+  signs the browser in with a handoff the Worker makes for a phone signed in,
+  good for ten minutes under the code it was made under,
+  which the app asks for again halfway through while settings stays open,
+  or as it comes back once that's past, since a phone freezes its timers while it's away (`shared/page/appearance.js`),
+  and opens the page at its own address without it (`serveHandoff` in `shared/worker/access-gate.js`).
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,
   `shared/worker/push.js` and `web-push.js`, and `page/sw.js`);
   the Durable Object makes and keeps the signing key itself, under a key the store's paths can't name.
@@ -465,7 +471,7 @@
   which each app's `tests/search-typing.test.js` types a key at a time, as fans do, and with a letter wrong each way a thumb gets one wrong,
   with the root's `tests/search-sweep.js`,
   and reading the same words into the pages they name, a team's,
-  its section's, a player's, even with a letter wrong, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
+  its section's, a player's, even with a letter wrong, or by a team's name and the number a player wears, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
   from the list of a season's players the store keeps for it, in `page-search.js`,
   each game day under a label, the WNBA's date beside its games as a wall calendar shows it and MLB's heading over them,
   with a No games row for today between game days, in `season-days.js`,
