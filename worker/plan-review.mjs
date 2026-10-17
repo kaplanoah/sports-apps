@@ -180,6 +180,10 @@ export function splitEvenly(items, measure, count) {
   return groups;
 }
 
+// By code point, since a locale's collation ignores some characters, like the NUL in a test's order.
+/** @param {string} one @param {string} other */
+const compareText = (one, other) => Number(one > other) - Number(one < other);
+
 /**
  * Files in order grouped into units, each code file with the tests beside it, so a split between
  * parts never falls between them.
@@ -221,7 +225,9 @@ function groupInAreas(files, repoFiles, areaLines) {
     name,
     files: placed
       .filter((file) => file.name === name)
-      .toSorted((one, other) => one.order.localeCompare(other.order)),
+      .toSorted(
+        (one, other) => compareText(one.unit, other.unit) || compareText(one.order, other.order),
+      ),
   }));
   const isSmall = (/** @type {{ files: { lines: number }[] }} */ area) =>
     sum(area.files) < SMALL_AREA_LINES;
@@ -637,7 +643,7 @@ export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles
       plan,
       writeIndexedStage(folder, "first", { ...readDiff(WHOLE_CHANGE), repoFiles }),
     );
-  if (choice.stage === "push" && pushed) {
+  if (choice.stage === "push") {
     const change = { ...readDiff(pushed.range, choice.files), repoFiles };
     const words = pushed.hasBase ? "push-with-base" : "push";
     Object.assign(plan, writeIndexedStage(folder, "push", change, words), { since });
@@ -706,6 +712,16 @@ export function listDeletedFiles(git) {
 }
 
 /**
+ * Whether the head the last review read in full is still on the pull request's branch, which a
+ * force-push that drops it leaves it off.
+ * @param {string | null} reviewedHead
+ * @param {string} head
+ * @param {(args: string[]) => string | null} git null where git fails, as merge-base does when it isn't
+ */
+export const isReviewedOnBranch = (reviewedHead, head, git) =>
+  reviewedHead !== null && git(["merge-base", "--is-ancestor", reviewedHead, head]) !== null;
+
+/**
  * The pull request's own head, as a commit.
  * @param {(args: string[]) => string} git
  */
@@ -726,8 +742,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const folder = process.argv[2];
   const reviewedHead = await readLastReviewedHead(process.env);
   const head = readPullHead(runGit);
-  const isOnBranch =
-    reviewedHead !== null && tryGit(["merge-base", "--is-ancestor", reviewedHead, head]) !== null;
+  const isOnBranch = isReviewedOnBranch(reviewedHead, head, tryGit);
   /** @type {Map<string, { numstat: string, diff: string }>} */
   const diffs = new Map();
   /** @param {string[]} range @param {string[]} [files] */

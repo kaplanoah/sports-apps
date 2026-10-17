@@ -1,7 +1,8 @@
 // What CI's review keeps on a pull request: one summary comment, which carries the last head the
 // review read in full so the next push's review reads only what changed since, and the findings
 // it posts, each by its weight and marked with what it says and the head it was posted on, so no
-// try posts one twice and a finding an earlier head's review posted tells apart from a new one.
+// try posts one twice and the review can tell a finding an earlier head's review posted from a
+// new one.
 
 export const SUMMARY_MARKER = "<!-- claude-review-summary -->";
 // The posting and summary steps post with the run's own token.

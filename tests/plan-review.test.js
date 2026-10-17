@@ -13,6 +13,7 @@ import {
   explainUnread,
   findPushedRange,
   findTestedFile,
+  isReviewedOnBranch,
   listAreas,
   listChangedSince,
   listDeletedFiles,
@@ -269,7 +270,26 @@ test("a big area splits between units, never between a file and its test", () =>
   );
 });
 
-test("a change of any size takes at most twelve areas, each bigger to hold it", () => {
+test("a file whose path goes on from a code file's never falls between it and its test", () => {
+  const areas = listAreas(
+    [
+      { path: "worker/a.mjs", lines: 1500 },
+      { path: "worker/a.mjs.orig", lines: 300 },
+      { path: "tests/a.test.js", lines: 600 },
+      { path: "worker/b.mjs", lines: 1300 },
+    ],
+    [],
+  );
+  assert.deepEqual(
+    areas.map(({ name, files }) => ({ name, files })),
+    [
+      { name: "tooling, part 1", files: ["worker/a.mjs", "tests/a.test.js"] },
+      { name: "tooling, part 2", files: ["worker/a.mjs.orig", "worker/b.mjs"] },
+    ],
+  );
+});
+
+test("a change of any size in one area takes at most twelve parts, each bigger to hold it", () => {
   const files = Array.from({ length: 300 }, (_, index) => ({
     path: `shared/page/file-${String(index).padStart(3, "0")}.js`,
     lines: ((index * 7919) % 400) + 20,
@@ -398,6 +418,27 @@ test("the pull request's head is the merge commit's second parent", () => {
   });
   assert.equal(head, "a".repeat(40));
   assert.deepEqual(asked, [["rev-parse", "HEAD^2"]]);
+});
+
+test("the reviewed head is on the branch only where git finds it an ancestor of the head", () => {
+  const reviewed = "a".repeat(40);
+  const head = "b".repeat(40);
+  /** @type {string[][]} */
+  const asked = [];
+  const isOn = isReviewedOnBranch(reviewed, head, (args) => {
+    asked.push(args);
+    return "";
+  });
+  assert.equal(isOn, true);
+  assert.deepEqual(asked, [["merge-base", "--is-ancestor", reviewed, head]]);
+  assert.equal(
+    isReviewedOnBranch(reviewed, head, () => null),
+    false,
+  );
+  assert.equal(
+    isReviewedOnBranch(null, head, () => ""),
+    false,
+  );
 });
 
 test("a run on the head the last full read ended on reads nothing and lists no pushed files", () => {
