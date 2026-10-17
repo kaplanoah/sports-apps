@@ -3,6 +3,7 @@
 import {
   createCloudflareCaller,
   findWorkersApi,
+  formatWorkerUrl,
   readAccount,
   readAppWorkerConfig,
 } from "./deploy.mjs";
@@ -42,7 +43,7 @@ export function createSecretsClient({ app, channel, fetchImpl, env, log }) {
       const { subdomain } = await callCloudflare("subdomain", `${base}/subdomain`, {
         method: "GET",
       });
-      return `https://${name}.${subdomain}.workers.dev/`;
+      return formatWorkerUrl(name, subdomain);
     },
   };
 }
