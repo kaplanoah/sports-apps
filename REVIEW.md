@@ -80,7 +80,9 @@ Don't run the tests: CI runs them all.
 In CI, each area's reviewers each look for one kind of problem
 (in the last read of the whole change, one reviewer an area looks for every kind)
 and list every case they find,
-a checker confirms each against the code before anything is posted, and a step posts what the checkers confirmed or left unsure.
+a checker confirms each against the code before anything is posted,
+a check across areas, when there's more than one, merges repeats and adds what spans them,
+and a step posts what they confirmed or left unsure.
 
 - List every case you find, not a sample, and each place it shows.
   Include one you're unsure of, with your confidence, rather than leaving it out.

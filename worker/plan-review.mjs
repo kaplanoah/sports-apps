@@ -371,10 +371,13 @@ export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
   return files.length ? { stage: "push", files } : { stage: "none" };
 }
 
+// A stale name lists its first places only, enough for the rules reviewer to find the rest.
+const MOST_STALE_HITS = 15;
+
 /**
  * Each place in the repo that still names a function, constant, or file the change removed.
  * @param {string} diff
- * @param {(pattern: string, isWord: boolean) => string[]} grep the repo's matching lines, as
+ * @param {(pattern: string, isWord: boolean) => string[]} grep every matching line in the repo, as
  * path:line:text
  * @param {string[]} deletedFiles
  */
@@ -396,7 +399,7 @@ export function listStaleNames(diff, grep, deletedFiles) {
   const names = [...removed].filter((name) => !added.has(name) && isGone(name));
   const files = deletedFiles.map((path) => basename(path));
   return [...names, ...files].flatMap((name) => {
-    const hits = grep(name, true);
+    const hits = grep(name, true).slice(0, MOST_STALE_HITS);
     return hits.length ? [{ name, hits }] : [];
   });
 }
@@ -681,8 +684,7 @@ const grepRepo = (pattern, isWord) =>
   (tryGit(["grep", "-n", isWord ? "-wF" : "-E", pattern, "HEAD"]) ?? "")
     .split("\n")
     .filter(Boolean)
-    .map((hit) => hit.replace(/^HEAD:/, "").slice(0, 220))
-    .slice(0, 15);
+    .map((hit) => hit.replace(/^HEAD:/, "").slice(0, 220));
 
 /**
  * The range that holds what the pushes since a head changed: from that head merged onto the base

@@ -480,6 +480,23 @@ test("the stale names are what the change removed that the repo still names, and
   ]);
 });
 
+test("a name defined past many matches isn't stale, and a stale one lists its first places", () => {
+  const diff = ["-export const STILL_DEFINED = 1;", "-export const GONE = 1;"].join("\n");
+  const docs = Array.from({ length: 20 }, (_, index) => `AGENTS.md:${index + 1}:const NAME`);
+  /** @type {Record<string, string[]>} */
+  const repo = {
+    "STILL_DEFINED:false": [...docs, "shared/page/other.js:3:export const STILL_DEFINED = 1;"],
+    "STILL_DEFINED:true": docs,
+    "GONE:false": docs,
+    "GONE:true": docs,
+  };
+  const grep = (/** @type {string} */ pattern, /** @type {boolean} */ isWord) => {
+    const name = isWord ? pattern : (pattern.match(/\)(\w+)\\b$/)?.[1] ?? "");
+    return repo[`${name}:${isWord}`] ?? [];
+  };
+  assert.deepEqual(listStaleNames(diff, grep, []), [{ name: "GONE", hits: docs.slice(0, 15) }]);
+});
+
 test("a changed file the diff has no part for stops the review rather than counting as read", () => {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
   assert.throws(

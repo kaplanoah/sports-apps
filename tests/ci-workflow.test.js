@@ -232,6 +232,7 @@ test("a draft's run never records its code as reviewed", () => {
 test("the review reads every area in full, checks before it posts, and fails on anything left undone", () => {
   const plan = readJob("review-plan");
   assert.match(plan, /node worker\/plan-review\.mjs \.review >> "\$GITHUB_OUTPUT"/);
+  assert.match(plan, /node worker\/review-context\.mjs \.review/);
   assert.match(plan, /git show "origin\/\$DEFAULT_BRANCH:REVIEW\.md" > \.review\/REVIEW\.md/);
   assert.match(plan, /fetch-depth: 0/);
   const find = readJob("review-find");

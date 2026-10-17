@@ -728,8 +728,8 @@ jobs:
           overwrite: true
 
   # When a review of the pushes since the last full read finishes and posts nothing, the whole
-  # change is read once more, one reviewer an area for every kind of problem, to find what the
-  # earlier reads missed, and the summary says what it found.
+  # change is read once more, by FINAL_KIND's reviewer in each area, to find what the earlier
+  # reads missed, and the summary says what it found.
   review-final-find:
     name: review-final-find (${{ matrix.name }}, ${{ matrix.kind }})
     needs: [review-plan, review-find, review-check, review-post]
