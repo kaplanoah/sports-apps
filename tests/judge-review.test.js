@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -302,12 +302,27 @@ test("an area's candidates are kept for its check and counted, so one with none 
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   const reviewer = (/** @type {string} */ kind, /** @type {object[]} */ items) =>
     JSON.stringify({ kind, tries: [{ reads: [], answer: { items, unjudged: [] } }] });
-  writeFileSync(join(folder, "find-first-1-bugs.json"), reviewer("bugs", []));
-  writeFileSync(join(folder, "find-first-1-tests.json"), reviewer("tests", []));
-  writeFileSync(join(folder, "find-first-2-bugs.json"), reviewer("bugs", [{ claim: "one" }]));
+  for (const { kind } of listStageKinds("first")) {
+    writeFileSync(join(folder, `find-first-1-${kind}.json`), reviewer(kind, []));
+    const items = kind === "bugs" ? [{ claim: "one" }] : [];
+    writeFileSync(join(folder, `find-first-2-${kind}.json`), reviewer(kind, items));
+  }
   assert.equal(keepCandidates(folder, { stage: "first", area: 1 }), 0);
   assert.equal(readFileSync(join(folder, "candidates-first-1.json"), "utf8"), "[]");
   assert.equal(keepCandidates(folder, { stage: "first", area: 2 }), 1);
+});
+
+test("an area a reviewer left no record for stops rather than counting its cases as none", () => {
+  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
+  writeFileSync(
+    join(folder, "find-first-1-bugs.json"),
+    JSON.stringify({ kind: "bugs", tries: [{ reads: [], answer: { items: [], unjudged: [] } }] }),
+  );
+  assert.throws(
+    () => keepCandidates(folder, { stage: "first", area: 1 }),
+    /No reviewer's record named find-first-1-bugs-from-end\.json, find-first-1-rules\.json/,
+  );
+  assert.ok(!existsSync(join(folder, "candidates-first-1.json")));
 });
 
 test("an area with no candidates keeps an empty check with no checker, which the judge counts as done", () => {

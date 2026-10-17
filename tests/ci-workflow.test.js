@@ -287,6 +287,22 @@ test("the review reads every area in full, checks before it posts, and fails on 
   ];
   for (const [job, record] of records)
     assert.ok(readJob(job).includes(`.review/${record}`), `${job} names ${record}`);
+  /** @param {string} record */
+  const nameArtifact = (record) => `review-${record.replace(/\.json$/, "")}`;
+  const findArtifact = nameArtifact(nameFindRecord(stage, area, kind));
+  assert.ok(find.includes(`name: ${findArtifact}\n`), "each reviewer uploads its record");
+  assert.ok(
+    check.includes(`pattern: ${findArtifact.slice(0, -kind.length)}*\n`),
+    "each checker downloads its area's reviewers' records",
+  );
+  const acrossArtifact = nameArtifact(nameAcrossRecord(stage)).replace(/[$.{}]/g, "\\$&");
+  assert.match(
+    post,
+    new RegExp(
+      `- if: env\\.AREAS > 1\\n\\s+uses: actions/download-artifact@\\S+ # \\S+\\n\\s+with:\\n\\s+name: ${acrossArtifact}\\n`,
+    ),
+    "the posting step downloads the check across areas only when there is one",
+  );
   const review = readJob("review");
   const reviewJobs = listJobs().filter((job) => job.startsWith("review-"));
   for (const job of reviewJobs) assert.match(review, new RegExp(`^\\s+${job},$`, "m"), job);

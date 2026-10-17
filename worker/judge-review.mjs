@@ -263,12 +263,18 @@ export function listUnchecked(candidates, findings) {
 
 /**
  * Keeps an area's candidates, every reviewer's over every try, for its check, and returns how
- * many there are.
+ * many there are, or stops when a reviewer the stage has left no record, rather than counting
+ * what it found as none.
  * @param {string} folder
  * @param {{ stage: string, area: number }} place
  */
 export function keepCandidates(folder, { stage, area }) {
-  const candidates = gatherCandidates(listAreaRecords(readRecords(folder), stage, area));
+  const records = readRecords(folder);
+  const absent = listStageKinds(stage)
+    .map(({ kind }) => nameFindRecord(stage, area, kind))
+    .filter((name) => !records.has(name));
+  if (absent.length) throw new Error(`No reviewer's record named ${absent.join(", ")}.`);
+  const candidates = gatherCandidates(listAreaRecords(records, stage, area));
   writeFileSync(
     join(folder, nameCandidatesRecord(stage, area)),
     JSON.stringify(candidates, null, 1),
