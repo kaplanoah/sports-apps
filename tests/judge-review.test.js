@@ -314,7 +314,7 @@ test("a checker's answer keeps only its findings that are objects, and what it c
   const unjudged = { file: "a.js", why: "too big" };
   const answer = {
     findings: [null, "a string", finding],
-    unjudged: [null, "a string", { why: "names no file" }, unjudged],
+    unjudged: [null, "a string", { why: "names no file" }, { file: "b.js" }, unjudged],
   };
   assert.deepEqual(keepCheck(folder, { stage: "first", area: 1 }, JSON.stringify(answer)), []);
   assert.deepEqual(readRecords(folder).get("check-first-1.json"), {

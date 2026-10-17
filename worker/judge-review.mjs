@@ -91,7 +91,7 @@ const isObject = (item) => typeof item === "object" && item !== null;
  * A Claude step's structured answer, its lists by the keys it must hold and what it couldn't
  * judge, or null when it gave none, as when it ran out of turns, or gave one of another shape.
  * Each list keeps only its entries that are objects, and what it couldn't judge only those that
- * name a file, so every later step reads the same lists however Claude shaped them.
+ * name a file and why, so every later step reads the same lists however Claude shaped them.
  * @param {string | undefined} structuredOutput
  * @param {string[]} keys
  * @returns {({ unjudged: { file: string, why: string }[] } & Record<string, any[]>) | null}
@@ -103,7 +103,9 @@ export function readAnswer(structuredOutput, keys) {
     const unjudged = Array.isArray(answer.unjudged) ? answer.unjudged : [];
     return {
       ...Object.fromEntries(keys.map((key) => [key, answer[key].filter(isObject)])),
-      unjudged: unjudged.filter((item) => isObject(item) && typeof item.file === "string"),
+      unjudged: unjudged.filter(
+        (item) => isObject(item) && typeof item.file === "string" && typeof item.why === "string",
+      ),
     };
   } catch {
     return null;

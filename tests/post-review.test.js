@@ -180,7 +180,13 @@ test("a finding of another shape the check across areas added is left out rather
         { weight: "Nit", path: 3, body: "a number for a path" },
         { weight: "Nit", path: "a.js", body: 5 },
       ],
-      unjudged: [null, "a string", { why: "names no file" }, { file: "a.js", why: "too big" }],
+      unjudged: [
+        null,
+        "a string",
+        { why: "names no file" },
+        { file: "b.js" },
+        { file: "a.js", why: "too big" },
+      ],
     }),
   );
   assert.deepEqual(across?.unjudged, [{ file: "a.js", why: "too big" }]);
