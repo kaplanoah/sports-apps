@@ -307,13 +307,20 @@ test("a checker's job counts the cases it left unchecked as the judge does, from
   assert.throws(() => keepCheck(folder, { stage: "first", area: 2 }, ""), /gave no answer/);
 });
 
-test("a checker's answer keeps only its findings that are objects, so no later step trips on one", () => {
+test("a checker's answer keeps only its findings that are objects, and what it couldn't judge that names a file", () => {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   writeFileSync(join(folder, "candidates-first-1.json"), JSON.stringify([{ id: "bugs-1" }]));
   const finding = { ids: ["bugs-1"], verdict: "rejected" };
-  const answer = { findings: [null, "a string", finding], unjudged: [] };
+  const unjudged = { file: "a.js", why: "too big" };
+  const answer = {
+    findings: [null, "a string", finding],
+    unjudged: [null, "a string", { why: "names no file" }, unjudged],
+  };
   assert.deepEqual(keepCheck(folder, { stage: "first", area: 1 }, JSON.stringify(answer)), []);
-  assert.deepEqual(readRecords(folder).get("check-first-1.json").items, [finding]);
+  assert.deepEqual(readRecords(folder).get("check-first-1.json"), {
+    items: [finding],
+    unjudged: [unjudged],
+  });
 });
 
 test("an area's candidates are kept for its check and counted, so one with none skips its checker", () => {

@@ -74,7 +74,7 @@ const compareWeights = (one, other) => WEIGHTS.indexOf(one) - WEIGHTS.indexOf(ot
  * @param {Finding} finding
  */
 const isPostable = (finding) =>
-  WEIGHTS.includes(finding?.weight) &&
+  WEIGHTS.includes(finding.weight) &&
   typeof finding.path === "string" &&
   typeof finding.body === "string" &&
   Boolean(finding.path) &&

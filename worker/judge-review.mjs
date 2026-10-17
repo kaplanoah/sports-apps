@@ -84,9 +84,14 @@ export function findUnreadParts(parts, triesReads, readPart, folder) {
   });
 }
 
+/** @param {unknown} item */
+const isObject = (item) => typeof item === "object" && item !== null;
+
 /**
  * A Claude step's structured answer, its lists by the keys it must hold and what it couldn't
  * judge, or null when it gave none, as when it ran out of turns, or gave one of another shape.
+ * Each list keeps only its entries that are objects, and what it couldn't judge only those that
+ * name a file, so every later step reads the same lists however Claude shaped them.
  * @param {string | undefined} structuredOutput
  * @param {string[]} keys
  * @returns {({ unjudged: { file: string, why: string }[] } & Record<string, any[]>) | null}
@@ -95,9 +100,10 @@ export function readAnswer(structuredOutput, keys) {
   try {
     const answer = JSON.parse(structuredOutput || "null");
     if (!keys.every((key) => Array.isArray(answer?.[key]))) return null;
+    const unjudged = Array.isArray(answer.unjudged) ? answer.unjudged : [];
     return {
-      ...Object.fromEntries(keys.map((key) => [key, answer[key]])),
-      unjudged: Array.isArray(answer.unjudged) ? answer.unjudged : [],
+      ...Object.fromEntries(keys.map((key) => [key, answer[key].filter(isObject)])),
+      unjudged: unjudged.filter((item) => isObject(item) && typeof item.file === "string"),
     };
   } catch {
     return null;
@@ -105,20 +111,14 @@ export function readAnswer(structuredOutput, keys) {
 }
 
 /**
- * A reviewer's or checker's answer as its record keeps it: the cases or findings it listed, each
- * an object, so every later step reads the same list however Claude shaped it, and what it
- * couldn't judge, or null when it gave none.
+ * A reviewer's or checker's answer as its record keeps it: the cases or findings it listed, and
+ * what it couldn't judge, or null when it gave none.
  * @param {string | undefined} structuredOutput
  * @param {"candidates" | "findings"} key
  */
 const readListAnswer = (structuredOutput, key) => {
   const answer = readAnswer(structuredOutput, [key]);
-  return (
-    answer && {
-      items: answer[key].filter((item) => typeof item === "object" && item !== null),
-      unjudged: answer.unjudged,
-    }
-  );
+  return answer && { items: answer[key], unjudged: answer.unjudged };
 };
 
 /** @param {string} path */
