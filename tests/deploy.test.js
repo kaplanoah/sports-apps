@@ -552,6 +552,153 @@ test("a new version's page that doesn't draw puts the live version back", async 
   );
 });
 
+test("a page check that fails puts the live version back", async () => {
+  const { deploy } = await loadDeployModule();
+  const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+  await assert.rejects(
+    deploy({
+      app: "mlb",
+      fetchImpl: cloudflare.fetchImpl,
+      env: ENV,
+      script: "",
+      commit: NEW_COMMIT,
+      findChanges: () => ["apps/mlb/page/js/app.js"],
+      log: () => {},
+      pause: skipPause,
+      checkPage: async () => {
+        throw new Error("browserType.newContext: Target closed");
+      },
+    }),
+    /The page didn't draw as the new version: the page check failed: browserType\.newContext: Target closed, so the earlier version is live again/,
+  );
+  assert.equal(
+    describeCalls(cloudflare.calls).at(-1),
+    "POST /accounts/acct123/workers/scripts/mlb-app/deployments",
+  );
+});
+
+test("a merge whose live version already has it isn't deployed, but a push to beta is", async () => {
+  const { deploy } = await loadDeployModule();
+  /** @type {string[][]} */
+  const asked = [];
+  /** @param {string} channel */
+  const deployOlder = (channel) => {
+    const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+    const lines = [];
+    const url = deploy({
+      app: "mlb",
+      channel,
+      fetchImpl: cloudflare.fetchImpl,
+      env: ENV,
+      script: "",
+      commit: NEW_COMMIT,
+      findChanges: () => ["apps/mlb/page/js/app.js"],
+      log: (line) => lines.push(line),
+      pause: skipPause,
+      checkPage: async () => ({ status: "drawn" }),
+      isEarlier: (commit, of) => {
+        asked.push([commit, of]);
+        return true;
+      },
+    });
+    return { url, lines, cloudflare };
+  };
+
+  const merge = deployOlder("production");
+  assert.equal(await merge.url, null);
+  assert.deepEqual(asked, [[NEW_COMMIT, LIVE_COMMIT]]);
+  assert.match(
+    merge.lines.at(-1),
+    /^::notice::The live version is at 1111111, which already has 2222222, so nothing was deployed\.$/,
+  );
+  assert.ok(!describeCalls(merge.cloudflare.calls).some((call) => call.startsWith("PUT ")));
+
+  const beta = deployOlder("beta");
+  assert.equal(await beta.url, "https://mlb-app-beta.example-subdomain.workers.dev/");
+  assert.equal(asked.length, 1);
+});
+
+test("a merge main has moved past deploys unless CI passed on the newer one, and beta's newer push always covers it", async () => {
+  const { decideMovedOn } = await loadDeployModule();
+  const release = { commit: LIVE_COMMIT, newer: NEW_COMMIT };
+  /** @type {string[]} */
+  const asked = [];
+  /** @param {"passed" | "not passed" | "unknown"} state */
+  const answerCi = (state) => async (/** @type {string} */ commit) => {
+    asked.push(commit);
+    return state;
+  };
+
+  assert.deepEqual(await decideMovedOn({ ...release, channel: "production" }, answerCi("passed")), {
+    isCovered: true,
+    message:
+      "::notice::main has moved on to 2222222, whose deploy covers 1111111, so nothing was deployed.",
+  });
+  assert.deepEqual(asked, [NEW_COMMIT]);
+  assert.deepEqual(
+    await decideMovedOn({ ...release, channel: "production" }, answerCi("not passed")),
+    {
+      isCovered: false,
+      message:
+        "::notice::main has moved on to 2222222, but CI on main hasn't passed on it, so 1111111 deploys.",
+    },
+  );
+  assert.deepEqual(
+    await decideMovedOn({ ...release, channel: "production" }, answerCi("unknown")),
+    {
+      isCovered: false,
+      message:
+        "::notice::main has moved on to 2222222, but GitHub couldn't be asked whether CI on main passed on it, so 1111111 deploys.",
+    },
+  );
+  const beta = await decideMovedOn({ ...release, channel: "beta" }, answerCi("not passed"));
+  assert.equal(beta.isCovered, true);
+  assert.equal(asked.length, 3, "beta asks nothing");
+});
+
+test("whether CI on main passed on a commit comes from its newest push run, and is unknown when GitHub can't be asked", async () => {
+  const { readMainCiState } = await loadDeployModule();
+  const env = { GH_TOKEN: "token", GITHUB_REPOSITORY: "owner/repo" };
+  /** @type {string[]} */
+  const urls = [];
+  /** @param {Response} answer */
+  const createFetch = (answer) => async (/** @type {string} */ url) => {
+    urls.push(url);
+    return answer;
+  };
+  /** @param {(string | null)[]} conclusions */
+  const answerRuns = (conclusions) =>
+    Response.json({ workflow_runs: conclusions.map((conclusion) => ({ conclusion })) });
+
+  assert.equal(
+    await readMainCiState(NEW_COMMIT, { fetchImpl: createFetch(answerRuns(["success"])), env }),
+    "passed",
+  );
+  assert.deepEqual(urls, [
+    `https://api.github.com/repos/owner/repo/actions/workflows/ci.yml/runs?head_sha=${NEW_COMMIT}&event=push&per_page=1`,
+  ]);
+  for (const answer of [answerRuns(["failure"]), answerRuns([null]), answerRuns([])])
+    assert.equal(
+      await readMainCiState(NEW_COMMIT, { fetchImpl: createFetch(answer), env }),
+      "not passed",
+    );
+  assert.equal(
+    await readMainCiState(NEW_COMMIT, {
+      fetchImpl: createFetch(new Response("", { status: 500 })),
+      env,
+    }),
+    "unknown",
+  );
+  for (const unnamed of [{}, { GH_TOKEN: "token" }, { GITHUB_REPOSITORY: "owner/repo" }])
+    assert.equal(
+      await readMainCiState(NEW_COMMIT, {
+        fetchImpl: createFetch(answerRuns(["success"])),
+        env: unnamed,
+      }),
+      "unknown",
+    );
+});
+
 test("a new version passes once its Worker answers and its page draws, or has no page to open", async () => {
   const { deploy } = await loadDeployModule();
   for (const [check, line] of [
@@ -739,16 +886,31 @@ test("anything else is refused, with the reason", async () => {
   );
 });
 
-test("a beta release is exactly what GitHub has as beta", async () => {
+test("a beta release is what GitHub has as beta, and a push beta has since replaced, built on or not, is older", async () => {
   const { checkRelease } = await loadDeployModule();
   const fake = createFakeGit({ branch: "claude/some-branch" });
-  assert.deepEqual(checkRelease(fake.git, "beta"), { commit: "a".repeat(40), newer: null });
+  assert.deepEqual(checkRelease(fake.git, "beta", ""), { commit: "a".repeat(40), newer: null });
   assert.ok(fake.asked.includes("fetch --quiet origin beta"));
   assert.ok(fake.asked.includes("rev-parse origin/beta"));
-  assert.throws(
-    () => checkRelease(createFakeGit({ head: "b".repeat(40) }).git, "beta"),
-    /isn't beta as GitHub has it \(aaaaaaa\)\. Push it with git push -f origin <branch>:beta/,
-  );
+  const forcePushedOver = createFakeGit({ branch: "HEAD", head: "b".repeat(40) });
+  assert.deepEqual(checkRelease(forcePushedOver.git, "beta", "b".repeat(40)), {
+    commit: "b".repeat(40),
+    newer: "a".repeat(40),
+  });
+});
+
+test("a checkout at a commit beta never held isn't a beta release, and says how to push one", async () => {
+  const { checkRelease } = await loadDeployModule();
+  for (const pushedCommit of ["", "c".repeat(40)])
+    assert.throws(
+      () =>
+        checkRelease(
+          createFakeGit({ branch: "claude/some-branch", head: "b".repeat(40) }).git,
+          "beta",
+          pushedCommit,
+        ),
+      /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Push it with git push -f origin <branch>:beta/,
+    );
 });
 
 test("a push to beta deploys the beta channel, and main still waits for its CI", () => {

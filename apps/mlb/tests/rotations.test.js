@@ -81,6 +81,7 @@ const describePhilliesStarts = (from) =>
   describeClubStarts({
     club: "PHI",
     from,
+    through: "2026-10-11",
     schedule: SCHEDULE,
     pitchers: new Map(
       GAME_LOGS.people.map((person) => [person.id, describeRotationPitcher(person)]),
@@ -194,5 +195,5 @@ test("MLB failing is reported", async () => {
   const { requestRotation } = createTestServer({ status: 503 });
   const response = await requestRotation("?club=PHI&date=2026-10-01");
   assert.equal(response.status, 502);
-  assert.match((await response.json()).error, /MLB Stats API answered 503/);
+  assert.match((await response.json()).error.message, /MLB Stats API answered 503/);
 });

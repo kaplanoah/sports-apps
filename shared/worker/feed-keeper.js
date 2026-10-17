@@ -16,7 +16,7 @@ const FINALS_KEY = "finals";
 
 /**
  * What a keeper keeps its answers in.
- * @typedef {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void> }} FeedStorage
+ * @typedef {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<unknown> }} FeedStorage
  */
 
 /**
@@ -50,17 +50,25 @@ export function createMemoryStorage() {
     put: async (key, value) => {
       values.set(key, value);
     },
+    delete: async (key) => values.delete(key),
   };
 }
 
 // A request can be longer than a storage key may be, so each is kept under its digest.
-/** @param {string} key */
-async function digestKey(key) {
+/** @param {string} text */
+async function digestKey(text) {
   const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key)),
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
   );
   return [...digest.subarray(0, 16)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+/**
+ * Where a keeper keeps a feed's answer to a request.
+ * @param {string} name the feed's
+ * @param {string} key the request
+ */
+export const nameFeedKey = (name, key) => digestKey(`${name} ${key}`);
 
 /**
  * @param {object} options
@@ -73,24 +81,27 @@ async function digestKey(key) {
 export function createFeedKeeper({ feeds, leagueName, now, storage = createMemoryStorage() }) {
   /** @type {Map<string, any>} */
   const records = new Map();
+  /** @type {Set<string>} */
+  const forgotten = new Set();
 
-  /** @param {string} key */
-  async function readRecord(key) {
-    if (!records.has(key)) records.set(key, (await storage.get(await digestKey(key))) ?? null);
-    return records.get(key);
+  /** @param {string} storageKey */
+  async function readRecord(storageKey) {
+    if (!records.has(storageKey)) records.set(storageKey, (await storage.get(storageKey)) ?? null);
+    return records.get(storageKey);
   }
 
   // An answer too big to store is still kept until the Durable Object leaves memory.
   /**
-   * @param {string} key
+   * @param {string} storageKey
    * @param {any} record
+   * @param {string} what the record, as an error names it
    */
-  async function saveRecord(key, record) {
-    records.set(key, record);
+  async function saveRecord(storageKey, record, what) {
+    records.set(storageKey, record);
     try {
-      await storage.put(await digestKey(key), record);
+      await storage.put(storageKey, record);
     } catch (error) {
-      console.error(`Keeping ${key} failed: ${describeError(error)}`);
+      console.error(`Keeping ${what} failed: ${describeError(error)}`);
     }
   }
 
@@ -120,7 +131,7 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
     if (!record?.answer || now() - record.answer.at >= maxAgeMs) return true;
     if (isBehindLong(record.answer, isBehind)) return true;
     if (!changesWithGames) return false;
-    const finals = await readRecord(FINALS_KEY);
+    const finals = await readRecord(await digestKey(FINALS_KEY));
     return isReadBeforeFinalSettled(record.answer.at, finals?.at ?? -Infinity);
   }
 
@@ -132,10 +143,25 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
      */
     async noteFinalCount(count) {
       if (count === null) return;
-      const finals = await readRecord(FINALS_KEY);
+      const finalsKey = await digestKey(FINALS_KEY);
+      const finals = await readRecord(finalsKey);
       if (finals?.count === count) return;
       const hasNewFinal = finals !== null && count > finals.count;
-      await saveRecord(FINALS_KEY, { count, at: hasNewFinal ? now() : (finals?.at ?? null) });
+      const at = hasNewFinal ? now() : (finals?.at ?? null);
+      await saveRecord(finalsKey, { count, at }, FINALS_KEY);
+    },
+
+    /**
+     * Forgets the answer kept for a request no longer read, once while the keeper is in memory.
+     * @param {string} name the feed's
+     * @param {string} key the request
+     */
+    async forgetFeed(name, key) {
+      const storageKey = await nameFeedKey(name, key);
+      if (forgotten.has(storageKey)) return;
+      forgotten.add(storageKey);
+      records.delete(storageKey);
+      await storage.delete(storageKey);
     },
 
     /**
@@ -148,7 +174,9 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
      *   another feed already says
      */
     async readFeed(name, key, load, { isBehind = () => false } = {}) {
-      const record = await readRecord(`${name} ${key}`);
+      const storageKey = await nameFeedKey(name, key);
+      const what = `${name} ${key}`;
+      const record = await readRecord(storageKey);
       const answer = record?.answer;
       if (!(await isDue(name, record, isBehind))) {
         if (answer) return answer.data;
@@ -156,10 +184,10 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
       }
       try {
         const data = await load();
-        await saveRecord(`${name} ${key}`, { answer: { at: now(), data } });
+        await saveRecord(storageKey, { answer: { at: now(), data } }, what);
         return data;
       } catch (error) {
-        await saveRecord(`${name} ${key}`, { answer, failedAt: now() });
+        await saveRecord(storageKey, { answer, failedAt: now() }, what);
         if (answer) return answer.data;
         throw error;
       }

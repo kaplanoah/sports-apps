@@ -292,6 +292,7 @@ function createJobRun(mlb, env) {
   const job = createHighlightsUpdater();
   return {
     stored: docs.stored,
+    storage: storage.stored,
     runJob: () => job.updateStore(context),
     forgetReads: () => {
       for (const key of storage.stored.keys()) {
@@ -303,6 +304,21 @@ function createJobRun(mlb, env) {
     },
   };
 }
+
+test("the store's job keeps the current season's stills whichever finals it lists, and forgets the season before's", async () => {
+  const { storage, runJob } = createJobRun(createMlbFetch(), {});
+  const answers = { "https://img.mlbstatic.com/still.jpg": true };
+  storage.set("headline-stills:999999", answers);
+  storage.set("headline-stills:2026:999998", answers);
+  storage.set("headline-stills:2025:776001", answers);
+
+  await runJob();
+
+  assert.deepEqual(storage.get("headline-stills:2026:999999"), answers);
+  assert.deepEqual(storage.get("headline-stills:2026:999998"), answers);
+  assert.equal(storage.has("headline-stills:999999"), false);
+  assert.equal(storage.has("headline-stills:2025:776001"), false);
+});
 
 test("the store's job reads each of the slate's finals in two requests, and saves its highlights", async () => {
   const mlb = createMlbFetch();
@@ -370,22 +386,30 @@ test("the store's job asks Claude about a few stills a run, saving the game's hi
   assert.equal(mlb.stillsAsked.length, stills.length);
 });
 
-test("a game whose stills Claude didn't answer for saves nothing, and is read again ten minutes later", async () => {
-  const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
+test("a game whose stills Claude didn't answer for saves its highlights with MLB's own stills, and has the moment once Claude answers ten minutes later", async () => {
+  const title = "William Contreras' solo home run";
+  const contreras = findRecordedClip(BREWERS_AT_PADRES, title);
   const mlb = createMlbFetch(new Set([contreras.still]));
   const run = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
   const { stored, wait } = run;
   mlb.claude.isDown = true;
 
   await run.runJob();
-  assert.equal(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), undefined);
+  assert.match(
+    stored.get("highlights/status").lastFailure.message,
+    /Asking Claude about \d+ of game 849826's stills failed: Claude answered 529/,
+  );
+  await runUntilChecked(run, mlb);
+  assert.deepEqual(
+    stored.get(nameHighlightsKey(BREWERS_AT_PADRES)),
+    describeRecorded(BREWERS_AT_PADRES),
+  );
 
   mlb.claude.isDown = false;
   wait(10);
   await runUntilChecked(run, mlb);
   assert.equal(
-    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), "William Contreras' solo home run")
-      .still,
+    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), title).still,
     contreras.frames?.replace("%", "0000003"),
   );
 });

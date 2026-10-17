@@ -24,8 +24,8 @@ import {
   nameRound,
   nameSeriesGame,
 } from "./series-games.js";
+import { groupGamesByDay, listSeasonGames, nameGameKey } from "./season-games.js";
 import { session } from "./session.js";
-import { listSlateGames } from "./slate.js";
 
 const HALF_INNING_LABELS = { top: "Top", middle: "Mid", bottom: "Bot", end: "End" };
 const OUT_LIGHTS = 2;
@@ -200,11 +200,6 @@ const nameSide = (id) => (id ? nameTeam(id) : "TBD");
 /** @param {{ away?: string, home?: string }} game */
 export const nameGame = (game) => `${nameSide(game.away)} @ ${nameSide(game.home)}`;
 
-// A doubleheader's two games share their day and clubs, so its game number tells them apart.
-/** @param {{ date: string, away?: string, home?: string, doubleheader?: number }} game */
-export const nameGameKey = (game) =>
-  `${game.date} ${game.away ?? ""} ${game.home ?? ""} ${game.doubleheader || 1}`;
-
 /** @param {{ date: string, away?: string, home?: string, series?: string, number?: number }} game */
 export function describeGameLabel(game) {
   const clubs = `${nameSide(game.away)} at ${nameSide(game.home)}`;
@@ -359,49 +354,6 @@ export function renderGameFaceOff(game) {
   return html`<ul class="game-list game-faceoff">${renderGameRow(row)}</ul>`;
 }
 
-// A doubleheader's games sit together in game order, since MLB can list game 2 with the earlier start.
-function orderDay(games) {
-  const isSameMatchup = (game, other) => game.away === other.away && game.home === other.home;
-  const findSlot = (game) =>
-    Math.min(
-      ...games
-        .filter((other) => isSameMatchup(game, other))
-        .map((other) => Date.parse(other.start)),
-    );
-  return games
-    .map((game) => ({ game, slot: findSlot(game) }))
-    .sort(
-      (first, second) =>
-        first.slot - second.slot ||
-        (first.game.doubleheader || 0) - (second.game.doubleheader || 0),
-    )
-    .map(({ game }) => game);
-}
-
-/**
- * Every game of the season, from the store's schedule, with the slate's copies, which carry a game
- * while it's played, over it, keeping each club's record with the game, which only the schedule
- * has.
- * @param {any} slate
- * @param {any[] | null} schedule
- */
-export function listSeasonGames(slate, schedule) {
-  const games = new Map((schedule ?? []).map((game) => [nameGameKey(game), game]));
-  const slateGames = slate ? [...listSlateGames(slate), slate.allStar].filter(Boolean) : [];
-  for (const game of slateGames)
-    games.set(nameGameKey(game), { ...games.get(nameGameKey(game)), ...game });
-  return [...games.values()];
-}
-
-/** @param {any[]} games */
-function groupByDay(games) {
-  const dates = [...new Set(games.map((game) => game.date))].sort();
-  return dates.map((date) => ({
-    date,
-    games: orderDay(games.filter((game) => game.date === date)),
-  }));
-}
-
 /**
  * The day a game still under way began, which the list opens on when it began before today, as
  * one does past midnight.
@@ -423,7 +375,7 @@ function describeEmptySeason(slate) {
  * @param {string} today
  */
 const listGameDays = (games, seriesFinals, today) =>
-  groupByDay(games).map((day) => ({
+  groupGamesByDay(games).map((day) => ({
     day: day.date,
     count: day.games.length,
     games: html`<ul class="game-list">

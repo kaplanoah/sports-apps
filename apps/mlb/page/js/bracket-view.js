@@ -1,4 +1,10 @@
-import { ROUND_LABEL, buildBracket, listSlotCandidates } from "./bracket.js";
+import {
+  ROUND_LABEL,
+  buildBracket,
+  describeFirstPitchWait,
+  findPreferredSide,
+  orderRows,
+} from "./bracket.js";
 import { listRankedOrder, renderRankTag, renderClub } from "./clubs.js";
 import { readGameDay } from "./dates.js";
 import { formatClockTime, formatShortDate, formatShortWeekday, nameDay } from "#shared/days.js";
@@ -7,26 +13,6 @@ import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { findOpeningRound, watchOpeningRound } from "#shared/opening-round.js";
 import { markScrolledRound, renderRoundDots } from "#shared/round-dots.js";
 import { session } from "./session.js";
-
-const findRank = (id) => {
-  const index = listRankedOrder().indexOf(id);
-  return index === -1 ? Infinity : index;
-};
-
-function listSideCandidates(series, side) {
-  const team = side === "A" ? series.teamA : series.teamB;
-  return team ? [team] : listSlotCandidates(session.state, series.id, side);
-}
-
-// A side is preferred only when every club that could fill it is ranked above every club on the other.
-function findPreferredSide(series) {
-  const ranksA = listSideCandidates(series, "A").map(findRank);
-  const ranksB = listSideCandidates(series, "B").map(findRank);
-  if (!ranksA.length || !ranksB.length) return null;
-  if (Math.max(...ranksA) < Math.min(...ranksB)) return "A";
-  if (Math.max(...ranksB) < Math.min(...ranksA)) return "B";
-  return null;
-}
 
 const renderSeriesWins = (wins, isWinner = false) =>
   html`<span class="nscore tabular ${isWinner ? "lead" : ""}">${wins ?? ""}</span>`;
@@ -38,7 +24,7 @@ export function renderMatchupRow(series, side) {
     return html`<div class="matchup-row"><span class="tbd">TBD</span>${renderSeriesWins(null)}</div>`;
   const isWinner = series.winner === id;
   const isLoser = series.winner && series.winner !== id;
-  const isPreferred = findPreferredSide(series) === side;
+  const isPreferred = findPreferredSide(session.state, series, listRankedOrder()) === side;
   // A score stays empty until the series' first game starts, and counts from 0 after.
   const shownWins = series.started ? wins : null;
   return html`<div class="matchup-row ${isWinner ? "winner" : ""} ${isLoser ? "eliminated" : ""}">
@@ -130,32 +116,6 @@ function describeNextGame(series) {
   return joinWithSeparator([describeGameDay(day, new Date()), describeStartTime(next)]);
 }
 
-const readWinningPercentage = (team) =>
-  team.w != null && team.l != null && team.w + team.l > 0 ? team.w / (team.w + team.l) : null;
-
-// The higher seed hosts within a league; the World Series goes to the better record.
-function findHomeSide(series) {
-  if (!series.teamA || !series.teamB) return null;
-  const teamA = session.state.teams[series.teamA];
-  const teamB = session.state.teams[series.teamB];
-  if (!teamA || !teamB) return null;
-
-  if (series.round === "WS") {
-    const percentageA = readWinningPercentage(teamA);
-    const percentageB = readWinningPercentage(teamB);
-    if (percentageA == null || percentageB == null) return null;
-    return percentageA >= percentageB ? "A" : "B";
-  }
-  return teamA.seed <= teamB.seed ? "A" : "B";
-}
-
-// The host goes on the bottom, as in a line score. In the WC and DS, teamA is the higher seed.
-function orderRows(series) {
-  const home = findHomeSide(series);
-  if (home) return home === "A" ? ["B", "A"] : ["A", "B"];
-  return series.round === "WC" || series.round === "DS" ? ["B", "A"] : ["A", "B"];
-}
-
 const isPlayedBetween = (game, series) =>
   !!series.teamA &&
   !!series.teamB &&
@@ -170,25 +130,17 @@ function findNextSlateGame(series) {
   return games.find((game) => isPlayedBetween(game, series) && game.start === next.at) || null;
 }
 
-const FIRST_PITCH_COUNTDOWN_MS = 30 * 60 * 1000;
-const MS_PER_MINUTE = 60 * 1000;
-
-const renderFirstPitchPart = (text, isDelayed = false) =>
-  html`<div class="card-note live ${isDelayed ? "delayed" : ""}"><span class="live-part">${text}</span></div>`;
-
-// First pitch often comes a few minutes after the scheduled start.
 function renderFirstPitchNote(game, now) {
-  if (game.tbd) return null;
-  const msToStart = Date.parse(game.start) - now;
-  if (msToStart > FIRST_PITCH_COUNTDOWN_MS) return null;
-  if (game.delay) return renderFirstPitchPart(game.delay, true);
-  if (msToStart <= 0) return renderFirstPitchPart("Warmup");
-  return renderFirstPitchPart(`First pitch in ${Math.ceil(msToStart / MS_PER_MINUTE)} min`);
+  const wait = describeFirstPitchWait(game, now);
+  return (
+    wait &&
+    html`<div class="card-note live ${wait.isDelayed ? "delayed" : ""}"><span class="live-part">${wait.text}</span></div>`
+  );
 }
 
 // The runs read in the card's row order, top row first.
 function describeLiveScore(series, game) {
-  const [firstSide, secondSide] = orderRows(series);
+  const [firstSide, secondSide] = orderRows(series, session.state.teams);
   const readRuns = (side) => {
     const id = side === "A" ? series.teamA : series.teamB;
     return game.away === id ? game.score[0] : game.score[1];
@@ -229,7 +181,7 @@ function renderSeedLabels(series, sides, seedSide) {
 }
 
 function renderSeriesCard(series, top, left, { width = CARD.width, seedSide = "left" } = {}) {
-  const [first, second] = orderRows(series);
+  const [first, second] = orderRows(series, session.state.teams);
   return html`<div class="box" data-round="${series.round}" style="left:${left}px; top:${top}px; width:${width}px;">
     ${renderSeedLabels(series, [first, second], seedSide)}
     <div class="series ${series.round === "WS" ? "world" : ""}">

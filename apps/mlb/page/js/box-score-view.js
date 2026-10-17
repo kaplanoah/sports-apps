@@ -8,7 +8,7 @@ import { isPlayingNow } from "#shared/playing-now.js";
 import { renderPlainClub, renderTeamDot } from "./clubs.js";
 import { renderRuns } from "./runs-view.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
-import { renderPlayerCell, renderStatCells, renderStatTable } from "./stat-table.js";
+import { formatInnings, renderPlayerCell, renderStatCells, renderStatTable } from "./stat-table.js";
 
 const SIDES = /** @type {const} */ (["away", "home"]);
 const INNINGS = 9;
@@ -21,7 +21,11 @@ const BATTING_COLUMNS = /** @type {const} */ ([
   ["K", "strikeOuts"],
 ]);
 const PITCHING_COLUMNS = /** @type {const} */ ([
-  ["IP", "inningsPitched"],
+  [
+    "IP",
+    (/** @type {any} */ pitcher) =>
+      pitcher.inningsPitched == null ? null : formatInnings(pitcher.inningsPitched),
+  ],
   ["P", "pitches"],
   ["H", "hits"],
   ["R", "runs"],
@@ -40,12 +44,17 @@ const LINEUP_COLUMNS = /** @type {const} */ ([
 /** @param {any} batter */
 const renderPosition = (batter) => html`<span class="box-pos">${batter.position}</span>`;
 
-/** @param {any[]} batters */
+/**
+ * The club's total in each column, or none where a batter has none of it, as his own row shows.
+ * @param {any[]} batters
+ */
 const sumBatting = (batters) =>
   Object.fromEntries(
     BATTING_COLUMNS.map(([, field]) => [
       field,
-      batters.reduce((total, batter) => total + batter[field], 0),
+      batters.every((batter) => Number.isFinite(batter[field]))
+        ? batters.reduce((total, batter) => total + batter[field], 0)
+        : null,
     ]),
   );
 

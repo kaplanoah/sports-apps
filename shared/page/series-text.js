@@ -12,12 +12,13 @@ export const describeSeriesStanding = (own, theirs) =>
   own > theirs ? "lead" : own === theirs ? "tie" : "trail";
 
 /**
- * A series' wins, which the Updates box keeps on one line.
+ * A series' wins, as "2-1", the way every score and series lead reads, which the Updates box keeps
+ * on one line.
  * @param {number} own
  * @param {number} theirs
  */
 export const renderSeriesWins = (own, theirs) =>
-  html`<span class="series-score">${own}&ndash;${theirs}</span>`;
+  html`<span class="series-score">${own}-${theirs}</span>`;
 
 /**
  * A game that leaves its series going. `result` is the game as the league words it, and `own`

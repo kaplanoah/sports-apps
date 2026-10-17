@@ -2,6 +2,7 @@ import test from "node:test";
 import { createHmac } from "node:crypto";
 import assert from "node:assert/strict";
 import { createAppWorker } from "../shared/worker/app-worker.js";
+import { ANDROID_AGENT, IPHONE_AGENT } from "./browser/devices.mjs";
 
 const answerNothing = () => new Response(null, { status: 500 });
 const storeAnswers = async () => true;
@@ -10,7 +11,6 @@ const storeAnswers = async () => true;
 const createPageWorker = (pageFiles) =>
   createAppWorker({
     pageFiles,
-    serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
     isStoreAnswering: storeAnswers,
   });
@@ -48,7 +48,6 @@ test("health answers without the key, saying whether the store answers and which
 
   const unhealthy = await createAppWorker({
     pageFiles,
-    serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
     isStoreAnswering: async () => false,
   }).fetch(new Request("https://worker.example/health"), env);
@@ -118,7 +117,6 @@ const answerOk = () => new Response("data");
 function createLockedWorker() {
   return createAppWorker({
     pageFiles: PAGE_FILES,
-    serveSnapshot: answerOk,
     forwardToStore: answerOk,
     isStoreAnswering: storeAnswers,
     reads: { "/box-score": answerOk },
@@ -156,7 +154,6 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
   const handed = [];
   const worker = createAppWorker({
     pageFiles: PAGE_FILES,
-    serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
     isStoreAnswering: storeAnswers,
     reads: {
@@ -177,7 +174,7 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
   assert.deepEqual(handed, [["NYL", "the store"]]);
 });
 
-const DATA_PATHS = ["/snapshot", "/box-score", "/store/seasons/2026", "/watch", "/push/key"];
+const DATA_PATHS = ["/box-score", "/store/seasons/2026", "/watch", "/push/key"];
 
 test("without an access code, the page and its data open as they always have", async () => {
   const env = { APP_KEY: "key" };
@@ -202,6 +199,32 @@ test("until the code is sent, the page's address shows the gate and its data sta
     assert.equal((await locked.json()).error.code, "access_required");
   }
   assert.deepEqual(await (await requestLocked("/access")).json(), { isChanged: false });
+});
+
+test("the page's address in its release's folder shows the gate too, until the code is sent", async () => {
+  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
+  const worker = createAppWorker({
+    pageFiles: {
+      ...PAGE_FILES,
+      "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    },
+    forwardToStore: answerOk,
+    isStoreAnswering: storeAnswers,
+  });
+  const request = () =>
+    new Request("https://worker.example/key/release/abc1234/index.html", {
+      headers: { "cf-connecting-ip": "203.0.113.7" },
+    });
+
+  const gate = await worker.fetch(request(), LOCKED_ENV);
+  assert.equal(await gate.text(), "the gate");
+  assert.equal(gate.headers.get("cache-control"), "no-store");
+  const open = await worker.fetch(request(), { APP_KEY: "key" });
+  assert.equal(await open.text(), "the app");
+});
+
+test("the Worker has no route of its own that reads the league for the page", async () => {
+  assert.equal((await requestLocked("/snapshot", { env: { APP_KEY: "key" } })).status, 404);
 });
 
 test("the right code, however it's typed, signs the phone in with a cookie for the page", async () => {
@@ -234,14 +257,14 @@ test("a wrong code, or none, signs nothing in", async () => {
   const empty = await requestLocked("/access", { method: "POST", body: {} });
   assert.equal(empty.status, 400);
   assert.equal((await requestLocked("/", { cookie: "access=made-up" })).status, 200);
-  assert.equal((await requestLocked("/snapshot", { cookie: "access=made-up" })).status, 401);
+  assert.equal((await requestLocked("/box-score", { cookie: "access=made-up" })).status, 401);
 });
 
 test("a new code signs every phone out, and the gate can say so", async () => {
   const cookie = await signIn();
   const env = { ...LOCKED_ENV, ACCESS_CODE: "LAYUP" };
   assert.equal(await (await requestLocked("/", { cookie, env })).text(), "the gate");
-  assert.equal((await requestLocked("/snapshot", { cookie, env })).status, 401);
+  assert.equal((await requestLocked("/box-score", { cookie, env })).status, 401);
   assert.deepEqual(await (await requestLocked("/access", { cookie, env })).json(), {
     isChanged: true,
   });
@@ -251,7 +274,7 @@ test("a cookie anyone with the link could make from its key and a guessed code o
   const guessed = createHmac("sha256", "key").update("FASTBREAK").digest("base64url");
   const cookie = `access=${guessed}`;
   assert.equal(await (await requestLocked("/", { cookie })).text(), "the gate");
-  assert.equal((await requestLocked("/snapshot", { cookie })).status, 401);
+  assert.equal((await requestLocked("/box-score", { cookie })).status, 401);
 });
 
 test("a code without a key to sign with keeps the page locked and signs no one in", async () => {
@@ -342,4 +365,40 @@ test("with an address of its own, the page still answers under its key, and only
   );
   assert.equal(keyless.status, 404);
   assert.equal((await requestAtPageHost("/key/", { cookie })).status, 404);
+});
+
+const AGENTS = {
+  iPhone: IPHONE_AGENT,
+  iPad: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+  android: ANDROID_AGENT,
+  macChrome:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+};
+
+test("Safari's manifest leaves out start_url, so a Home Screen app opens at the address it was added from, and Chrome's keeps it", async () => {
+  const manifest = { name: "WNBA", start_url: "./", scope: "./" };
+  const worker = createPageWorker({
+    "manifest.webmanifest": {
+      contentType: "application/manifest+json",
+      text: JSON.stringify(manifest),
+    },
+  });
+  /** @param {string} agent */
+  const requestManifest = (agent) =>
+    worker.fetch(
+      new Request("https://worker.example/key/manifest.webmanifest", {
+        headers: { "user-agent": agent },
+      }),
+      { APP_KEY: "key" },
+    );
+
+  const { start_url: _startUrl, ...withoutStartUrl } = manifest;
+  for (const agent of [AGENTS.iPhone, AGENTS.iPad])
+    assert.deepEqual(await (await requestManifest(agent)).json(), withoutStartUrl);
+  for (const agent of [AGENTS.android, AGENTS.macChrome])
+    assert.deepEqual(await (await requestManifest(agent)).json(), manifest);
+  const safari = await requestManifest(AGENTS.iPhone);
+  const chrome = await requestManifest(AGENTS.android);
+  assert.notEqual(safari.headers.get("etag"), chrome.headers.get("etag"));
+  assert.equal(safari.headers.get("vary"), "user-agent");
 });

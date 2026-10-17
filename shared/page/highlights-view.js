@@ -5,8 +5,7 @@
 // leaves the list.
 
 import { hasImageFailed } from "./failed-images.js";
-import { html, joinWithSeparator } from "./html.js";
-import { isWebAddress } from "./news-picks.js";
+import { html, isWebAddress, joinWithSeparator } from "./html.js";
 import { renderReadButton } from "./news-view.js";
 import { renderPlaceholder } from "./placeholder.js";
 import { renderSheetPart } from "./sheet-part.js";

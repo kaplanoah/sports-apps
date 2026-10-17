@@ -11,7 +11,7 @@ import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
-import { chooseAppearance, readTokenColor } from "./theme.mjs";
+import { chooseAppearance, readColor, readTokenColor } from "./theme.mjs";
 import {
   findSeasonPill,
   findSeasonTab,
@@ -19,6 +19,16 @@ import {
 } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
+
+/**
+ * Waits for the page to draw the season the store sent, which names the season's tab Bracket and
+ * adds the header's lines over the tabs, moving them.
+ * @param {import("@playwright/test").Page} page
+ */
+async function expectFirstDrawing(page) {
+  await expect(page.locator("#bracketFace")).toBeVisible();
+  await expect(page.locator("#stamp")).toBeVisible();
+}
 
 test("the page opens on the bracket the Worker saved, and each tab shows its view", async ({
   page,
@@ -414,6 +424,7 @@ test.describe("on a phone", () => {
   }) => {
     // The tab bar's pill would ease to each tab, which this test doesn't need to wait out.
     await openApp(page);
+    await expectFirstDrawing(page);
     const bar = await page.locator("#tabBar").boundingBox();
     expect(bar.y + bar.height).toBeGreaterThan(844 - 40);
     const headerBottom = await page
@@ -533,11 +544,12 @@ test("the page shows the tab it was last on before its modules have loaded", asy
   await expect(page.locator("#view-bracket-standings")).toHaveCSS("display", "none");
 });
 
-test("on a wide screen, the tabs are one segmented control, each as tall as a pill's names in a track of the divider's color just around them, the open one filled orange and the rest in ink, and neither a theme nor a tap moves them", async ({
+test("on a wide screen, the tabs are one segmented control, each as tall as a pill's names in a track of the divider's color faded into the floor just around them, the open one filled orange and the rest in ink, and neither a theme nor a tap moves them", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openApp(page);
+  await expectFirstDrawing(page);
   const track = page.locator("nav.tabs");
   const tabs = track.getByRole("tab");
   const readBoxes = () =>
@@ -560,7 +572,10 @@ test("on a wide screen, the tabs are one segmented control, each as tall as a pi
   for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
-    await expect(track).toHaveCSS("background-color", await readTokenColor(page, "--divider"));
+    await expect(track).toHaveCSS(
+      "background-color",
+      await readColor(page, "color-mix(in oklab, var(--divider) 45%, var(--bg))"),
+    );
     const chosen = page.locator("nav.tabs [role=tab][aria-selected=true]");
     await expect(chosen).toHaveCSS("background-color", await readTokenColor(page, "--orange"));
     await expect(chosen).toHaveCSS("color", await readTokenColor(page, "--orange-ink"));

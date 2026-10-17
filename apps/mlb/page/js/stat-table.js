@@ -45,6 +45,9 @@ export const describeGamePitching = ({ innings, pitches, runs, strikeOuts }) =>
     .filter(Boolean)
     .join(", ");
 
+// What a stat shows where there's no number for it.
+export const NO_NUMBER = "-";
+
 /**
  * @param {any} row
  * @param {StatColumn[1]} reader
@@ -57,7 +60,9 @@ const readValue = (row, reader) => (typeof reader === "function" ? reader(row) :
  * @param {readonly StatColumn[]} columns
  */
 export const renderStatCells = (row, columns) =>
-  columns.map(([, reader]) => html`<td class="tabular">${readValue(row, reader) ?? "-"}</td>`);
+  columns.map(
+    ([, reader]) => html`<td class="tabular">${readValue(row, reader) ?? NO_NUMBER}</td>`,
+  );
 
 /**
  * A player's name cell, with what goes before his name, like his number, and after it, like his

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { renderBracket } from "../page/js/bracket-view.js";
 import { renderDot } from "../page/js/clubs.js";
 import { readGameDay } from "../page/js/days.js";
@@ -13,6 +13,7 @@ import {
 import { renderScoreboard } from "../page/js/scoreboard.js";
 import { describeSeriesStanding, isFieldSet, isPlayoffsOver } from "../page/js/series.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
+import { readSeasonAverages } from "./player-fixtures.js";
 import { describeStampProblem, renderStampLines } from "../page/js/stamp.js";
 import { renderStandings, renderStandingsLists } from "../page/js/standings-view.js";
 import { renderTeamSheet } from "../page/js/team-view.js";
@@ -29,10 +30,11 @@ const NOW = Date.parse(AFTERNOON.now);
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
-const SEASON = buildSnapshot(
-  { ...AFTERNOON.responses, players: GAMES.preview.players },
-  { season: 2026, now: NOW },
-);
+// The afternoon, with the leading scorers the store works out from the season's totals.
+const SEASON = {
+  ...buildSnapshot(AFTERNOON.responses, { season: 2026, now: NOW }),
+  leaders: readSeasonAverages().leaders,
+};
 
 // Each tag reads as a space, and the page's separator as a bar.
 const readText = (markup) =>
@@ -239,7 +241,7 @@ test("a date without games a tap brings into the list says so beside its date, n
 test("the All-Star Game's row names it, and shows each team's name beside its star, the visitors' orange and the home team's white, and opens nothing", () =>
   inEastern(() => {
     const whole = buildSnapshot(
-      { ...AFTERNOON.responses, schedule: GAMES.preview.schedule, players: GAMES.preview.players },
+      { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
       { season: 2026, now: NOW },
     );
     const { days } = listDays(whole, { schedule: { games: whole.schedule } });
@@ -661,10 +663,13 @@ function readTeam(season, code) {
 }
 
 // The afternoon, with the whole season's schedule from the next day, its regular season and all.
-const WHOLE_SEASON = buildSnapshot(
-  { ...AFTERNOON.responses, schedule: GAMES.preview.schedule, players: GAMES.preview.players },
-  { season: 2026, now: NOW },
-);
+const WHOLE_SEASON = {
+  ...buildSnapshot(
+    { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
+    { season: 2026, now: NOW },
+  ),
+  leaders: readSeasonAverages().leaders,
+};
 const SEATTLES_LAST = WHOLE_SEASON.nearestGames.find((game) => game.id === "1022600325");
 
 /**
@@ -1349,21 +1354,19 @@ test("each game's score shows in scoreboard digits, the loser's dimmed", () =>
     assert.match(markup, /class="scoreboard"\s*><span class="scoreboard-text">87<\/span>/);
   }));
 
-test("each appearance choice shows the home-screen icon it offers, and the page has each one", () => {
+test("each appearance choice shows the home-screen icon it offers", () => {
   const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
   const choices = Object.fromEntries(
     [...page.matchAll(/<label class="appearance-choice">([\s\S]*?)<\/label>/g)].map(
       ([, choice]) => [
         choice.match(/<span>([^<]+)<\/span>\s*$/)[1],
-        [...choice.matchAll(/<img src="([^"]+)"/g)].map(([, source]) => source),
+        choice.match(/class="appearance-icon (appearance-icon-[a-z]+)"/)[1],
       ],
     ),
   );
   assert.deepEqual(choices, {
-    System: ["icon-system-180.png"],
-    Maple: ["icon-light-180.png"],
-    Walnut: ["icon-180.png"],
+    System: "appearance-icon-system",
+    Maple: "appearance-icon-light",
+    Walnut: "appearance-icon-dark",
   });
-  for (const source of Object.values(choices).flat())
-    assert.ok(existsSync(`${import.meta.dirname}/../page/${source}`), source);
 });

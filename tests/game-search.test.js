@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   createSearchContext,
   createSearchDictionary,
@@ -15,7 +16,13 @@ import {
   listOtherReadings,
   listSuggestions,
 } from "../shared/page/search-suggestions.js";
-import { isOneEditApart, normalizeText } from "../shared/page/search-words.js";
+import {
+  findListPlace,
+  listShownExamples,
+  readTypedSearch,
+} from "../shared/page/search-reading.js";
+import { isOneEditApart, normalizeText, readTokens } from "../shared/page/search-words.js";
+import { addDays } from "../shared/page/days.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "./time-zone.js";
 
 useTimeZone(EASTERN);
@@ -78,6 +85,7 @@ const TERMS = {
     crossConference: null,
     neverShown: ["postseason", "post season"],
     seasonSpansYears: false,
+    searchFiller: [],
   },
   examples: ["Hawks next game", "Foxes at Owls", "Hornets last game", "Hawks in March"],
 };
@@ -208,6 +216,7 @@ test("two teams find their games either way, and at or @ only the second's home 
   assert.deepEqual(search("Owls vs Hawks").ids, search("Hawks and Owls").ids);
   assert.deepEqual(search("at Owls").ids, ["g1", "g8", "g10"]);
   assert.equal(search("at Owls").line, "Owls at home | 3 games");
+  assert.equal(search("at Owls in March").empty, "No Owls home games in March");
 });
 
 test("either of two teams, and a team against a conference", () => {
@@ -306,6 +315,98 @@ test("playoff words, a game number, if needed, wins, and a season's landmarks", 
   assert.deepEqual(search("opener").ids, ["g1"]);
 });
 
+test("every phrase a search knows reads whole, however many words it has", () => {
+  for (const phrase of DICTIONARY.keys())
+    assert.deepEqual(
+      readTokens(phrase, DICTIONARY).map((token) => token.text),
+      [phrase],
+      phrase,
+    );
+  assert.deepEqual(search("last game of the season").ids, ["g9"]);
+  assert.equal(search("final game of the season").line, "Season finale | 1 game");
+  assert.deepEqual(search("first game of the season").ids, ["g1"]);
+});
+
+test("a date the calendar doesn't have is named as a search's words it couldn't use, never as another day", () => {
+  for (const text of ["Feb 30", "6/31", "13/5", "31 June", "31st"])
+    assert.deepEqual(
+      search(text),
+      {
+        ids: [],
+        line: `No results | '${normalizeText(text)}' unrecognized, skipped`,
+        empty: "Check the spelling or try a new search",
+      },
+      text,
+    );
+  assert.equal(
+    search("Hawks June 12 to 31").line,
+    "Hawks | 8 games | 'june 12 to 31' unrecognized, skipped",
+  );
+  assert.equal(search("Hawks June 30").line, "Hawks | Tue, Jun 30 | No games");
+  assert.deepEqual(search("6/30").ids, []);
+  assert.equal(search("30th").line, "Wed, Sep 30 | No games");
+});
+
+test("the next days a count names are those days, and the last or past days their finals, never a count of games or a time", () => {
+  assert.deepEqual(search("next 3 days"), {
+    ids: ["g8", "g6", "g7"],
+    line: "Sep 30\u2013Oct 2 | 3 games",
+    empty: "No games Sep 30\u2013Oct 2",
+  });
+  for (const text of ["last 6 days", "past 6 days", "Hawks last 6 days", "results past 6 days"]) {
+    const asked = readSearch(text, createContext());
+    assert.deepEqual(
+      [
+        asked.ranges.map(({ from, to }) => [from, to]),
+        asked.states,
+        asked.pick,
+        asked.times,
+        asked.skipped,
+      ],
+      [[["2026-09-25", "2026-09-30"]], ["final"], null, [], []],
+      text,
+    );
+  }
+  const tonight = makeGame("g12", "2026-09-30", 21 * 60, "HOR", "OWL");
+  const withTonight = [...GAMES, tonight];
+  for (const text of ["last 6 days", "past 6 days", "last 7 days"])
+    assert.deepEqual(search(text, NOW, withTonight).ids, ["g5"], text);
+  assert.equal(search("past 6 days").line, "Sep 25\u201330 | Results | 1 game");
+});
+
+test("the All-Star break is its days, from the last games before the All-Star Game to the first after it", () => {
+  assert.deepEqual(search("all star break"), {
+    ids: ["g2", "g3", "g11", "g4"],
+    line: "All-Star break | 4 games",
+    empty: "No games",
+  });
+  assert.deepEqual(search("Hawks all star break").ids, ["g2", "g3", "g4"]);
+  const withoutAllStar = GAMES.filter((game) => game.kind !== "all-star");
+  assert.equal(search("break", NOW, withoutAllStar).line, "All-Star break | No games");
+});
+
+test("home or away after either of two teams is each one's, and the line says so", () => {
+  assert.deepEqual(search("Foxes or Hornets at home"), {
+    ids: ["g6", "g9"],
+    line: "Foxes or Hornets at home | 2 games | 1 in Vancouver left out",
+    empty: "No Foxes or Hornets home games",
+  });
+  assert.deepEqual(search("Foxes or Hornets away"), {
+    ids: ["g4", "g8", "g6"],
+    line: "Foxes or Hornets away | 3 games",
+    empty: "No Foxes or Hornets away games",
+  });
+  assert.deepEqual(search("Hawks vs Owls at home"), {
+    ids: ["g2", "g5", "g7"],
+    line: "Hawks vs Owls at home | 3 games",
+    empty: "No Hawks vs Owls home games",
+  });
+});
+
+test("a word for games no league's search reads, like a sport's own, is named as one it couldn't use", () => {
+  assert.equal(search("Hawks pitching").line, "Hawks | 8 games | 'pitching' unrecognized, skipped");
+});
+
 test("filler is skipped, a name one letter off or a plural is forgiven, and a word it can't use is named", () => {
   assert.deepEqual(search("When do the Hawks play the Owls?").ids, search("Hawks Owls").ids);
   assert.deepEqual(search("Hawsk").ids, search("Hawks").ids);
@@ -335,6 +436,27 @@ test("a channel finds the games on it, by any name the league lists it by or fan
     assert.deepEqual(search(text).ids, ["g9"], text);
   assert.equal(search("USA Network").line, "On USA Network | 1 game");
   assert.equal(search("Foxes on ABC").empty, "No Foxes games on ABC");
+});
+
+test("a word that names two channels finds the games on either", () => {
+  const games = [
+    makeGame("c1", "2026-10-02", 19 * 60, "HAW", "OWL", { networks: ["FS1"] }),
+    makeGame("c2", "2026-10-03", 19 * 60, "FOX", "HOR", { networks: ["FOX Sports 1"] }),
+  ];
+  const terms = { ...TERMS, channels: listSearchChannels(games) };
+  const context = createSearchContext({
+    terms,
+    dictionary: createSearchDictionary(terms),
+    games,
+    now: NOW,
+  });
+  const asked = readSearch("fox sports 1", context);
+  const found = findSearchGames(asked, context);
+  assert.deepEqual(
+    found.games.map((game) => game.id),
+    ["c1", "c2"],
+  );
+  assert.equal(describeSearch(asked, found, context).lead, "On FS1 or FOX Sports 1");
 });
 
 test("the league's word for a final past regulation finds those finals", () => {
@@ -424,6 +546,31 @@ test("after in, the places with the most of a team's games, then the season's mo
   ]);
 });
 
+// Node takes its default locale from the environment when it starts, so a Spanish one needs a
+// process of its own.
+test("after in, a month is offered by the name a search reads, whatever the phone's language", () => {
+  const resolve = (/** @type {string} */ path) => JSON.stringify(import.meta.resolve(path));
+  const script = `
+    import { createSearchContext, createSearchDictionary } from ${resolve("../shared/page/game-search.js")};
+    import { listSuggestions } from ${resolve("../shared/page/search-suggestions.js")};
+    const terms = ${JSON.stringify(TERMS)};
+    const dictionary = createSearchDictionary(terms);
+    const games = ${JSON.stringify(GAMES)};
+    const context = createSearchContext({ terms, dictionary, games, now: ${NOW} });
+    console.log(JSON.stringify(listSuggestions("Hawks in ", context).map((row) => row.text)));
+  `;
+  const output = execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+    env: { ...process.env, LANG: "es_ES.UTF-8", LC_ALL: "es_ES.UTF-8", TZ: EASTERN },
+    encoding: "utf8",
+  });
+  assert.deepEqual(JSON.parse(output), [
+    "Hawks in Lakeside",
+    "Hawks in Bayview",
+    "Hawks in September",
+    "Hawks in October",
+  ]);
+});
+
 test("a date typed whole isn't finished again from its last word", () => {
   assert.deepEqual(suggest("this weekend"), []);
   assert.deepEqual(suggest("Hawks this week"), ["Hawks this weekend date Oct 2\u20134"]);
@@ -449,6 +596,51 @@ test("a city has each of its teams' games as another reading, unless it's after 
 
 test("the examples fit the room they're given, the first that find a game first", () => {
   assert.deepEqual(listExamples(createContext(), 1), ["Hawks next game"]);
+});
+
+test("before typing, the league's searches that find a game come first, then its pages' that find a page", () => {
+  /** @type {import("../shared/page/page-search.js").SearchPages} */
+  const pages = {
+    teams: [],
+    players: [],
+    section: null,
+    places: [{ key: "settings", name: ["Settings"], words: ["settings"], icon: "settings" }],
+    gameParts: [],
+    examples: ["Settings", "Fireworks"],
+    isOutKnown: true,
+  };
+  const context = createContext();
+  assert.deepEqual(listShownExamples(context, pages), [
+    "Hawks next game",
+    "Foxes at Owls",
+    "Settings",
+  ]);
+  assert.deepEqual(listShownExamples(context, null), listExamples(context));
+});
+
+test("a new search's list rests on its first day from today, at its end on its last when all are past, or at its top on its first under rows", () => {
+  const days = [{ day: "2026-09-28" }, { day: "2026-10-02" }, { day: "2026-10-05" }];
+  assert.deepEqual(findListPlace(days, "2026-09-30", false), { at: "day", day: "2026-10-02" });
+  assert.deepEqual(findListPlace(days, "2026-10-06", false), { at: "end", day: "2026-10-05" });
+  assert.deepEqual(findListPlace(days, "2026-09-30", true), { at: "top", day: "2026-09-28" });
+  assert.deepEqual(findListPlace([], "2026-09-30", false), { at: "end", day: null });
+});
+
+test("a last word still being typed is left out of the line, however it's typed, as a search reads it", () => {
+  /** @param {string} query */
+  const readWhileTyping = (query) =>
+    readTypedSearch(query, {
+      context: createContext(),
+      pages: null,
+      isTyping: true,
+      isGamesOnly: false,
+    });
+  for (const query of ["Hawks acu\u00f1", "Hawks st.", "Hawks Ren\u00e9"])
+    assert.deepEqual(
+      [readWhileTyping(query).readText, readWhileTyping(query).read],
+      ["Hawks", readWhileTyping("Hawks").read],
+      query,
+    );
 });
 
 test("a league's games are read in order of start, leaving out any without a day, so the season runs from its first to its last", () => {
@@ -511,4 +703,49 @@ test("in a season that runs into the next year, its months are offered from this
     suggest("in ", context).filter((row) => row.includes(" date ")),
     ["in December date 1 game", "in January date 2 games"],
   );
+});
+
+// A season of 2,500 games, ten a day from April on, with the All-Star Game in July, as a league
+// of many games a day has.
+const LONG_SEASON = Array.from({ length: 2500 }, (_, index) => {
+  const codes = TERMS.teams.map((team) => team.code);
+  const day = addDays("2026-04-01", Math.floor(index / 10));
+  const kind = index === 1000 ? "all-star" : "regular";
+  const minutes = 13 * 60 + (index % 10) * 30;
+  return makeGame(`l${index}`, day, minutes, codes[index % 4], codes[(index + 1) % 4], { kind });
+});
+
+/**
+ * How many times finding a search's games reads the search, and the season's games.
+ * @param {string} text
+ * @param {import("../shared/page/game-search.js").SearchGame[]} games
+ */
+function countReads(text, games) {
+  let searchReads = 0;
+  let gameReads = 0;
+  const context = createContext(NOW, games);
+  const search = new Proxy(readSearch(text, context), {
+    get: (target, key) => ((searchReads += 1), Reflect.get(target, key)),
+  });
+  const countedGames = games.map(
+    (game) =>
+      new Proxy(game, { get: (target, key) => ((gameReads += 1), Reflect.get(target, key)) }),
+  );
+  findSearchGames(search, { ...context, games: countedGames });
+  return { searchReads, gameReads };
+}
+
+test("a search works out what it asks once, and reads each game of a whole season only a few times", () => {
+  const searches = [
+    "season finale",
+    "Hawks vs Owls after the all star break",
+    "Hawks or Owls at home in June",
+    "next 3 days after 7 pm",
+  ];
+  for (const text of searches) {
+    const short = countReads(text, LONG_SEASON.slice(0, 20));
+    const whole = countReads(text, LONG_SEASON);
+    assert.equal(whole.searchReads, short.searchReads, text);
+    assert.ok(whole.gameReads < LONG_SEASON.length * 30, `${text}: ${whole.gameReads}`);
+  }
 });

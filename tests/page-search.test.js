@@ -37,6 +37,7 @@ const TERMS = {
     crossConference: null,
     neverShown: [],
     seasonSpansYears: false,
+    searchFiller: [],
   },
   examples: [],
   starters: [{ id: "5", name: "Pell", words: ["pell"] }],
@@ -97,6 +98,7 @@ const PAGES = {
     { key: "matchup", name: "Matchup", words: ["matchup", "probables"], game: "next" },
   ],
   examples: [],
+  isOutKnown: true,
 };
 
 const DICTIONARY = createSearchDictionary(TERMS);

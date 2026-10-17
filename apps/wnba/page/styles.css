@@ -111,7 +111,8 @@
  * color, with a line under it only once something scrolls under it, never a fade.
  *
  * Buttons say what they do in sentence case, as capitals are only for labels and chips, and for the
- * tabs a wide screen shows, which sit in one track of the divider's color, as a segmented control.
+ * tabs a wide screen shows, which sit in one track of the divider's color faded into the floor, as a
+ * segmented control.
  * The one that's on, like the list a pill shows or the open tab, is filled orange, inside a darker
  * edge, and the rest are raised and outlined, in ink, with any icon in orange, but for a pill's
  * other names and the other tabs, which are plain words, and a sheet's close and back buttons,
@@ -130,6 +131,9 @@
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
+  /* Barlow's digits sit low in their line, which would leave each step's number under its
+     circle's middle. */
+  --step-number-lift: 0.5px;
   --orange: #a23a0a;
   --orange-ink: #ffffff;
   --teal: #0b6860;
@@ -242,7 +246,7 @@
   --header-gap: 14px;
   --pager-label: var(--ink);
   --pager-chosen-edge: color-mix(in srgb, var(--action) 70%, var(--shadow-ink));
-  --tabs-track: var(--divider);
+  --tabs-track: color-mix(in oklab, var(--divider) 45%, var(--bg));
   --tabs-track-edge: var(--edge);
   --tabs-chosen: var(--action);
   --tabs-chosen-edge: var(--pager-chosen-edge);
@@ -2406,14 +2410,6 @@ table.standings tr.playoff-line + tr td {
 }
 .retry-block .retry-title {
   font-weight: calc(var(--type-detail-weight) + 100);
-}
-
-/* The Home Screen bar and box show the icon the theme showing would give the Home Screen. */
-.home-screen-icon {
-  background-image: url(icon-light-180.png);
-}
-:root[data-theme="dark"] .home-screen-icon {
-  background-image: url(icon-180.png);
 }
 
 .settings-footer .sep {

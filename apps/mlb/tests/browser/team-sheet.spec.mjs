@@ -365,7 +365,7 @@ test.describe("on a phone", () => {
       ({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.dataset.game,
       spot,
     );
-    expect(landsOn).toBe("2026-09-24 HOU ATH 1");
+    expect(landsOn).toBe("824950 2026-09-24");
     await page.touchscreen.tap(spot.x, spot.y);
 
     const gameSheet = page.locator("#gameSheet");
@@ -484,7 +484,7 @@ test("a starter's sheet ranks him among the qualified starters, each rank all in
     "ERA",
     "K/9",
     "BB/9",
-    "Velo",
+    "Fastball mph",
   ]);
   await expect(playerSheet.locator(".pitch-mix")).toBeVisible();
   expect(await checkRanksAreDim(playerSheet, ".player-rank")).toEqual(Array(4).fill(true));
@@ -499,7 +499,8 @@ test("a starter's sheet ranks him among the qualified starters, each rank all in
 async function failStoreReads(page, path) {
   const pattern = matchPath(path);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 500, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 500, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(pattern, refuse);
   return () => page.unroute(pattern, refuse);
 }

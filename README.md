@@ -192,8 +192,9 @@ says why the Worker couldn't read the league, and `write` names the save that fa
 **5. Save it to the home screen.** On an iPhone, have them open the address
 in Safari and choose **Share > Add to Home Screen**. It then opens full
 screen with its own icon. On a phone, the page shows these steps itself, in a
-bar across the top until it's closed and at the bottom of settings, and on
-Android its **Install** button opens Chrome's own install dialog.
+welcome over the whole screen until the page is added or the viewer goes on in
+the browser, and at the bottom of settings, and on Android its **Install**
+button opens Chrome's own install dialog.
 
 **6. Turn on notifications.** From the home screen icon, have them tap the
 sliders at the top right to open settings, turn on **Notifications**, and allow
@@ -232,12 +233,27 @@ something doesn't match, point them to Cloudflare's
 runs the tests, in Node and in a browser, on every pull request, so merge once
 those pass and the pull request has no conflicts with `main`. If the repo has a
 `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret, Claude also reviews
-every push to a pull request in full, as [REVIEW.md](REVIEW.md) says: it splits
-the change into shares one reviewer can read every line of, reviews them all at
-once and then across them, comments on each finding's line, and keeps one
-summary comment up to date. The review is one of the checks that must pass, so
-a review that can't run, or that left a changed file unread, blocks the merge.
-Its findings don't fail the check; answer each one by fixing it or replying. To run the
+each pull request, as [REVIEW.md](REVIEW.md) says: it splits the change into
+areas by what the files are about, has four reviewers read each area in full,
+each for one kind of problem (in the last read of the whole change, one reviewer
+an area looks for every kind), checks every case they list against the code,
+comments on each finding's line, and keeps one summary comment up to date. The
+first review reads the whole change, and each review after it reads what changed
+since the last review that finished. The review is one of the checks that must
+pass, so a review that can't run, that left a changed file unread, or whose
+reviewers, checkers, check across areas, or posting step didn't finish, blocks
+the merge. Its findings don't fail the check; answer all of a review's findings
+in one push, by fixing each or replying.
+
+A pull request from a fork runs without the repo's secrets, so Claude can't review
+it, and it runs the fork's own copy of the workflows, which its author can change
+to pass. The repo's **Settings > Actions > General**, under **Approval for
+running fork pull request workflows from contributors**, is set to **Require
+approval for first-time contributors**. GitHub counts anyone without a commit
+merged into the repo as a first-time contributor, and only the owner merges, so
+nothing a fork sends runs until the owner has read it and approved its run.
+
+To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,
 then `npm run check`. `npm run format` fixes formatting.
 
@@ -314,8 +330,10 @@ opened, and the deploy log and the workflow say so.
 Each deploy records its commit on the Worker's version. A merge skips an app's
 deploy when nothing but docs, tests, tooling, and other apps' folders changed
 since its live version's commit, since its Worker would be the same;
-`worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too, since
-the newer merge's deploy covers it. Without the token, merges deploy nothing.
+`worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too
+once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
+CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
+always deploys. Without the token, merges deploy nothing.
 Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <app>` for
 one app. `npm run rollback -- <app>` puts the app's previous version back at all
 of its traffic and prints which commit was live and which is now; it refuses

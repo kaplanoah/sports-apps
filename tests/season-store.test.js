@@ -363,19 +363,40 @@ test("a store saves which season is current, and saves it again only when it cha
   );
 });
 
-test("a league keeps what it reads in the store's storage, under keys its paths can't name", async () => {
+test("a league reads through the fetch it's handed, and keeps what it reads in the store's storage, under keys its paths can't name", async () => {
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore({
     ...QUIET_LEAGUE,
-    createLoadSnapshot: (storage) => async () => {
-      await storage.put("standings", { read: 1 });
+    createLoadSnapshot: (storage, fetchImpl) => async () => {
+      const answer = await (await fetchImpl("https://league.example/standings")).json();
+      await storage.put("standings", answer);
+      await storage.put("old-standings", answer);
+      await storage.delete("old-standings");
       return storage.get("standings");
     },
   });
-  const store = new SeasonStore(context.ctx, {});
+  /** @param {string} who */
+  const createFetch = (who) => {
+    const reads = [];
+    /** @type {typeof fetch} */
+    const fetchImpl = async (url) => {
+      reads.push(String(url));
+      return Response.json({ readBy: who });
+    };
+    return { reads, fetchImpl };
+  };
+  const storeFetch = createFetch("store");
+  const store = new SeasonStore(context.ctx, {}, { fetchImpl: storeFetch.fetchImpl });
 
-  assert.deepEqual(await store.loadSnapshot(2026), { read: 1 });
-  assert.deepEqual(await context.ctx.storage.get("feed:standings"), { read: 1 });
+  assert.deepEqual(await store.loadSnapshot(2026), { readBy: "store" });
+  assert.deepEqual(storeFetch.reads, ["https://league.example/standings"]);
+  assert.deepEqual(await context.ctx.storage.get("feed:standings"), { readBy: "store" });
+  assert.equal(context.stored.has("feed:old-standings"), false);
+
+  const runFetch = createFetch("run");
+  assert.deepEqual(await store.createLoadSnapshot(runFetch.fetchImpl)(2026), { readBy: "run" });
+  assert.deepEqual(runFetch.reads, ["https://league.example/standings"]);
+  assert.equal(storeFetch.reads.length, 1);
 });
 
 /**
@@ -417,7 +438,7 @@ test("a background job runs beside the season's update, and the alarm wakes for 
   await store.alarm();
   assert.equal(contexts.length, 1);
   assert.equal(contexts[0].env, env);
-  assert.equal(contexts[0].loadSnapshot, store.loadSnapshot);
+  assert.equal(contexts[0].createLoadSnapshot, store.createLoadSnapshot);
   assert.equal(seasonUpdates, 1);
   assert.equal(await context.ctx.storage.getAlarm(), NOW + 15 * MINUTE_MS);
 
@@ -450,6 +471,62 @@ test("a job still running when it's due again isn't started twice, and doesn't h
 
   assert.equal(contexts.length, 1);
   assert.equal(seasonUpdates, 2);
+});
+
+test("a job's run lost with the store, as when a deploy restarts it, runs again at the store's next alarm rather than at its next turn", async () => {
+  const context = createDurableObjectContext();
+  const contexts = [];
+  const { league, finish } = createJobLeague(contexts);
+  const SeasonStore = createSeasonStore({ ...league, choosePollDelay: () => MINUTE_MS });
+  const clock = { now: NOW };
+  await new SeasonStore(context.ctx, {}, { now: () => clock.now }).alarm();
+
+  const restarted = new SeasonStore(context.ctx, {}, { now: () => clock.now });
+  await fireNextAlarm(restarted, context, clock);
+  assert.equal(contexts.length, 2);
+
+  finish();
+  await restarted.jobRuns.get("news");
+  await fireNextAlarm(restarted, context, clock);
+  assert.equal(contexts.length, 2);
+});
+
+test("a run lost again as it ran for one lost before waits for the job's next turn", async () => {
+  const context = createDurableObjectContext();
+  const contexts = [];
+  const { league } = createJobLeague(contexts);
+  const SeasonStore = createSeasonStore({ ...league, choosePollDelay: () => MINUTE_MS });
+  const clock = { now: NOW };
+  const restart = () => new SeasonStore(context.ctx, {}, { now: () => clock.now });
+  await restart().alarm();
+  await fireNextAlarm(restart(), context, clock);
+  assert.equal(contexts.length, 2);
+
+  const third = restart();
+  await fireNextAlarm(third, context, clock);
+  await fireNextAlarm(third, context, clock);
+  assert.equal(contexts.length, 2);
+
+  clock.now = NOW + 16 * MINUTE_MS;
+  await third.alarm();
+  assert.equal(contexts.length, 3);
+});
+
+test("an alarm whose storage fails is set again for a retry", async (t) => {
+  const context = createDurableObjectContext();
+  const logged = t.mock.method(console, "error", () => {});
+  const SeasonStore = createSeasonStore(QUIET_LEAGUE);
+  const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
+  const { get } = context.ctx.storage;
+  context.ctx.storage.get = async () => {
+    throw new Error("Storage is down");
+  };
+
+  await store.alarm();
+
+  context.ctx.storage.get = get;
+  assert.equal(await context.ctx.storage.getAlarm(), NOW + 30_000);
+  assert.match(String(logged.mock.calls[0].arguments[0]), /alarm failed: .*Storage is down/);
 });
 
 test("a job that fails is logged, and runs again when it's next due", async (t) => {
@@ -510,6 +587,30 @@ test("a job keeps what it saves under keys the store's paths can't name, and wri
   assert.deepEqual(await context.ctx.storage.get("news/feed"), {
     count: 2,
     keys: ["story:a", "story:b"],
+  });
+});
+
+test("changes to one document, as from the season's update and a job, run one at a time, each from what the one before left", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore(QUIET_LEAGUE);
+  const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
+  await store.docs.write("seasons/2026", { year: 2026 });
+
+  await Promise.all([
+    store.docs.update("seasons/2026", (doc) => ({ ...doc, games: [] })),
+    assert.rejects(
+      store.docs.update("seasons/2026", () => {
+        throw new Error("A change that fails");
+      }),
+    ),
+    store.docs.update("seasons/2026", () => null),
+    store.docs.update("seasons/2026", (doc) => ({ ...doc, leaders: [] })),
+  ]);
+
+  assert.deepEqual(await context.ctx.storage.get("seasons/2026"), {
+    games: [],
+    leaders: [],
+    year: 2026,
   });
 });
 

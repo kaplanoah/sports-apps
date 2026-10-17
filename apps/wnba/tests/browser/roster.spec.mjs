@@ -557,7 +557,8 @@ test("a roster that didn't load says so over Try again, which holds its shape as
 }) => {
   await openApp(page);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 502, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 502, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(matchPath("/roster"), refuse);
   const teamSheet = await openLibertySheet(page);
   await teamSheet.getByRole("tab", { name: "Roster" }).click();
@@ -583,7 +584,7 @@ test("a roster that didn't load sets its icon, why, what comes next, and Try aga
 }) => {
   await openApp(page);
   await page.route(matchPath("/roster"), (route) =>
-    route.fulfill({ status: 502, json: { error: "test" } }),
+    route.fulfill({ status: 502, json: { error: { code: "upstream_error", message: "test" } } }),
   );
   const teamSheet = await openLibertySheet(page);
   await teamSheet.getByRole("tab", { name: "Roster" }).click();

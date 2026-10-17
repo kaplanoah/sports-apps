@@ -1,30 +1,9 @@
 import { test, expect } from "./harness.mjs";
 import { checkEachView, openWithNews } from "./views.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listLayoutChanges, readLayout } from "../../../../tests/browser/theme-layout.mjs";
+import { listThemeLayoutChanges, showTheme } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {"light" | "dark"} theme
- */
-async function showTheme(page, theme) {
-  await page.emulateMedia({ colorScheme: theme });
-  await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-  // A link that eases its color on hover eases it into the new theme's too.
-  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
-}
-
-/** @param {import("@playwright/test").Page} page */
-async function listThemeLayoutChanges(page) {
-  await showTheme(page, "light");
-  const maple = await readLayout(page);
-  await showTheme(page, "dark");
-  const walnut = await readLayout(page);
-  await showTheme(page, "light");
-  return listLayoutChanges(maple, walnut);
-}
 
 const SCREENS = {
   "a phone": { width: 390, height: 844 },
