@@ -667,20 +667,20 @@ export function findPushedRange(since, git) {
 }
 
 /**
- * The files the change deletes, a renamed one under the path it had, so the name it had is looked
- * for too, but not one only moved to another folder under the same name, which is still named so.
+ * The files the change deletes, and the old path of each file git finds it renamed, so the name it
+ * had is looked for too, but not of one git finds it only moved under the same name, which is
+ * still named so.
  * @param {(args: string[]) => string} git
  */
 export function listDeletedFiles(git) {
-  const changes = git(["diff", "--name-status", "--no-renames", ...WHOLE_CHANGE])
+  return git(["diff", "--name-status", "--find-renames", ...WHOLE_CHANGE])
     .split("\n")
     .filter(Boolean)
-    .map((line) => line.split("\t"));
-  const added = new Set(
-    changes.filter(([status]) => status === "A").map(([, path]) => basename(path)),
-  );
-  return changes
-    .filter(([status, path]) => status === "D" && !added.has(basename(path)))
+    .map((line) => line.split("\t"))
+    .filter(
+      ([status, path, movedTo]) =>
+        status === "D" || (status.startsWith("R") && basename(path) !== basename(movedTo)),
+    )
     .map(([, path]) => path);
 }
 

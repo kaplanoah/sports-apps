@@ -128,7 +128,7 @@ const readExecution = (path) => (path && existsSync(path) ? readJson(path) : [])
 
 /**
  * The areas of a stage, from the plan.
- * @param {any} plan
+ * @param {import('./plan-review.mjs').Plan} plan
  * @param {string} stage
  * @returns {{ area: number, name: string, files: string[], partsByFile: Record<string, string[]> }[]}
  */
@@ -364,7 +364,7 @@ const isStageFinished = (judged) => !judged.unreadFiles.length && !judged.missin
 /**
  * The stages the review was due to finish: the one the plan chose, and the last read of the
  * whole change when a review of the pushes since finished and posted nothing.
- * @param {any} plan
+ * @param {import('./plan-review.mjs').Plan} plan
  * @param {Map<string, any>} records
  * @returns {{ stage: string, areas: any[] }[]}
  */
@@ -420,7 +420,7 @@ function describeStage(judged, { stage, areas, sha, since }) {
 
 /**
  * The summary's opening when no stage was due.
- * @param {any} plan
+ * @param {import('./plan-review.mjs').Plan} plan
  * @param {string} sha
  * @param {string | null} earlierHead
  */
@@ -436,7 +436,7 @@ const describeNothingDue = (plan, sha, earlierHead) =>
  * @param {object} review
  * @param {string} review.sha the pull request's head
  * @param {string | null} review.earlierHead the head the last full read ended on
- * @param {any} review.plan
+ * @param {import('./plan-review.mjs').Plan} review.plan
  * @param {Map<string, any>} review.records the reviewers', checkers', and posting steps' records
  */
 export function judgeReview({ sha, earlierHead, plan, records }) {
@@ -461,7 +461,7 @@ export function judgeReview({ sha, earlierHead, plan, records }) {
 /**
  * The summary's lines on the files the due stages left unread, as nothing to review, each once,
  * so the last read of the whole change names the ones the push it follows didn't touch too.
- * @param {any} plan
+ * @param {import('./plan-review.mjs').Plan} plan
  * @param {{ stage: string }[]} stages
  */
 function listLeftUnread(plan, stages) {
