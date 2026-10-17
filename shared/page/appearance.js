@@ -103,14 +103,14 @@ let renewTimer;
 
 // A handoff lasts minutes and a Home Screen app stays open for hours, so the note asks for a new
 // one halfway through each, and again whenever the app comes back, since a phone freezes timers
-// while it's away.
+// while it's away. A wake can come with the timer, so the last answer alone sets the next.
 async function renewHandoff() {
-  clearTimeout(renewTimer);
   const choice = reAddChoice;
   if (choice === null) return;
   const handoff = await requestHandoff();
   if (handoff === null || choice !== reAddChoice) return;
   drawReAddNote(choice, handoff.address);
+  clearTimeout(renewTimer);
   renewTimer = setTimeout(renewHandoff, handoff.expiresInMs / 2);
 }
 

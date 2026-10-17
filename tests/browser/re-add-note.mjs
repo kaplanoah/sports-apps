@@ -63,9 +63,10 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
 
 /**
  * Signs in to an iPhone's Home Screen app behind its access code, picks the dark look, checks the
- * note asks for a new handoff when the app wakes and halfway through each, and opens the note's
- * link in a browser that has never been signed in, as Safari is, which opens the welcome on that
- * look without asking for the code, with no token left in its address.
+ * note asks for a new handoff when the app wakes and halfway through each, keeping one renewal
+ * when a wake comes with it, and opens the note's link in a browser that has never been signed
+ * in, as Safari is, which opens the welcome on that look without asking for the code, with no
+ * token left in its address.
  * @param {{
  *   page: import("@playwright/test").Page,
  *   browser: import("@playwright/test").Browser,
@@ -94,11 +95,18 @@ export async function checkReAddHandoff({ page, browser, serveLockedApp, openSet
     ),
   );
   expect(handoffCount).toBe(1);
-  await page.clock.runFor(5 * 60 * 1000);
-  await expect.poll(() => handoffCount).toBe(2);
-  // A jump past the page's timers is how a phone wakes it.
-  await page.clock.fastForward(2 * 60 * 1000);
+  // A jump past the page's timers is how a phone wakes it, here as the renewal comes due, so the
+  // wake and the timer each ask.
+  await page.clock.fastForward(6 * 60 * 1000);
   await expect.poll(() => handoffCount).toBe(3);
+  // The clock moves a minute at a time, since a renewal sets its timer only once its answer arrives.
+  const readCountAfterMinute = async () => {
+    await page.clock.runFor(60 * 1000);
+    return handoffCount;
+  };
+  await expect.poll(readCountAfterMinute, { timeout: 15 * 1000 }).toBe(4);
+  await page.clock.runFor(2 * 60 * 1000);
+  expect(handoffCount).toBe(4);
   const safariAddress = (await link.getAttribute("href")).replace("x-safari-", "");
 
   const safari = await browser.newContext({
