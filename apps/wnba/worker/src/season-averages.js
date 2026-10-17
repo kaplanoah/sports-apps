@@ -3,15 +3,12 @@ import { readTable } from "./wnba.js";
 
 // Every player's averages a game, for her team's Roster, and each team's leading scorers, worked
 // out from the season's totals, the one read each player's sheet is worked out from too, with the
-// same math, so a Roster, the leading scorers, and a sheet show the same numbers. The store keeps
-// the averages in `averages/<year>`, which the player job saves (player-updater.js), and the
-// season's record its leading scorers, which each update works out from them (season-updater.js).
+// same math, so a Roster, the leading scorers, and a sheet show the same numbers. The player job
+// saves both from each read of the totals (player-updater.js): the averages in `averages/<year>`,
+// and the leading scorers in the season's record.
 
 // A team's sheet and a game's preview each show a team's leading five.
 const LEADERS_PER_TEAM = 5;
-// How the kept averages are worked out, raised when that changes, so the leading scorers wait for
-// the player job to save them again rather than follow averages kept the way before.
-const AVERAGES_VERSION = 2;
 
 /**
  * Where the store keeps every player's averages for a season.
@@ -96,7 +93,6 @@ export function describeAverages(totals) {
  * @param {any} totals the stats site's season totals
  */
 export const describeAveragesDoc = (year, totals) => ({
-  version: AVERAGES_VERSION,
   year,
   players: describeAverages(totals),
 });
@@ -122,11 +118,3 @@ function listTeamLeaders(averages, team) {
  */
 export const listLeaders = (averages) =>
   Object.keys(TEAMS).flatMap((team) => listTeamLeaders(averages, team));
-
-/**
- * Each team's leading scorers from the averages the store keeps, or null until it keeps them as
- * they're worked out now.
- * @param {{ version?: number, players: PlayerAverages[] } | null} doc
- */
-export const listKeptLeaders = (doc) =>
-  doc?.version === AVERAGES_VERSION ? listLeaders(doc.players) : null;

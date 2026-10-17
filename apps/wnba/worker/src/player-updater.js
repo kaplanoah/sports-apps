@@ -1,3 +1,4 @@
+import { isSameJson } from "#shared/compare.js";
 import {
   createPerStoreJob,
   createSavedDocs,
@@ -26,7 +27,8 @@ import { namePlayerIndexKey } from "#shared/page-search.js";
 import { nameOvertimesKey } from "../../page/js/search-pages.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { describeOvertimes } from "./overtimes.js";
-import { describeAveragesDoc, nameAveragesKey } from "./season-averages.js";
+import { describeAveragesDoc, listLeaders, nameAveragesKey } from "./season-averages.js";
+import { nameSeasonKey } from "./season-updater.js";
 import { indexRosters } from "./player-index.js";
 import {
   describeRoster,
@@ -43,9 +45,10 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 // once for the whole league, every hour while a team still plays. It keeps each feed trimmed to the
 // columns the sheets read, and saves only the documents that changed: each team's roster, each
 // player's numbers, and the season's ranked numbers, which go after them, so a season that has them
-// is whole, every player's averages, for her team's Roster and its leading scorers, from the totals
-// her sheet is worked out from, the finals that went to overtime, for search, and, once every
-// team's roster has answered, the season's list of players. Each run also fills one season the
+// is whole, every player's averages, for her team's Roster, and with them each team's leading
+// scorers in the season's record, from the totals her sheet is worked out from, the finals that
+// went to overtime, for search, and, once every team's roster has answered, the season's list of
+// players. Each run also fills one season the
 // store keeps from before the current one, newest first, and a filled season is never read again,
 // since a past season doesn't change, unless the sheets come to read a column it was filled
 // without. Each run ends by saving how it went in `players/status`, with how often a sheet had to
@@ -294,6 +297,24 @@ function createStoreUpdate() {
   }
 
   /**
+   * Each team's leading scorers, into the season's record, from the averages its Roster shows, so
+   * the two change together. A season the store keeps no record of yet gets them in the first run
+   * after it does.
+   * @param {RunContext} context
+   * @param {number} season
+   * @param {import("./season-averages.js").PlayerAverages[]} averages
+   */
+  async function saveLeaders({ docs, log }, season, averages) {
+    const leaders = listLeaders(averages);
+    let isChanged = false;
+    await docs.update(nameSeasonKey(season), (/** @type {any} */ record) => {
+      isChanged = !!record && !isSameJson(record.leaders, leaders);
+      return isChanged ? { ...record, leaders } : null;
+    });
+    if (isChanged) addOne(log.saved, "seasons");
+  }
+
+  /**
    * @param {RunContext} context
    * @param {number} season
    * @param {any[]} answers
@@ -310,7 +331,9 @@ function createStoreUpdate() {
     for (const [id, numbers] of players)
       await saveDoc(context, nameNumbersKey(season, id), numbers);
     await saveDoc(context, nameRanksKey(season), ranks);
-    await saveDoc(context, nameAveragesKey(season), describeAveragesDoc(season, totals));
+    const averages = describeAveragesDoc(season, totals);
+    await saveDoc(context, nameAveragesKey(season), averages);
+    await saveLeaders(context, season, averages.players);
     await saveDoc(
       context,
       nameOvertimesKey(season),
@@ -395,7 +418,7 @@ function createStoreUpdate() {
     });
     const current = (await context.docs.read("live/current"))?.season;
     if (!Number.isInteger(current)) return;
-    const savedSeason = await context.docs.read(`seasons/${current}`);
+    const savedSeason = await context.docs.read(nameSeasonKey(current));
     await keeper.noteFinalCount(countFinals(await context.docs.read(nameScheduleKey(current))));
     await catchFailure(context.failures, `Keeping ${current}'s players`, () =>
       updateSeason(context, current, savedSeason?.series ?? []),

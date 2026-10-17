@@ -4,6 +4,7 @@ import { reloadWhenSignedOut } from "./access.js";
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
+import { chooseFailedSyncStatus, isTurnedAway, TOO_MANY_DEVICES } from "./notification-status.js";
 import { registerServiceWorker } from "./service-worker.js";
 import { readWorkerError } from "./worker-error.js";
 
@@ -16,7 +17,7 @@ const NOTES = {
     "To get notifications on an iPhone, add this page to your Home Screen and open it from there",
   unsupported: "This browser can't show notifications",
   failed: "Couldn't change notifications. Try again in a moment.",
-  tooManyDevices: "Too many devices get notifications already",
+  tooManyDevices: TOO_MANY_DEVICES,
 };
 
 const SWITCHABLE = new Set(["off", "on", "failed"]);
@@ -111,10 +112,6 @@ async function saveSubscription(current) {
   });
 }
 
-/** @param {unknown} error */
-const isTurnedAway = (error) =>
-  /** @type {{ code?: string } | undefined} */ (error)?.code === "too_many_devices";
-
 // A device the Worker turns away never gets a message, so the browser doesn't keep it either, and
 // the switch shows it off, now and on the next visit. A save that fails any other way keeps the
 // subscription, which the next visit saves again.
@@ -152,12 +149,10 @@ async function syncSubscription() {
   await saveOrForget(subscription);
 }
 
-// A sync that leaves the browser unsubscribed shows the switch off. Any other is tried again on
-// the next visit.
 /** @param {unknown} error */
 function showFailedSync(error) {
-  if (isTurnedAway(error)) setStatus("off", NOTES.tooManyDevices);
-  else if (!subscription) setStatus("off");
+  const shown = chooseFailedSyncStatus(error, !!subscription);
+  if (shown) setStatus(shown.status, shown.note);
 }
 
 async function showBusyDuring(task) {

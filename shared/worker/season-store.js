@@ -188,12 +188,15 @@ export function createSeasonStore(league) {
       this.hasAlarm = false;
       this.failures = 0;
       this.push = createPushService({ storage: ctx.storage, now, fetchImpl });
+      /** @type {Map<string, Promise<void>>} */
+      this.docUpdates = new Map();
       this.docs = {
         read: async (key) => (await ctx.storage.get(key)) ?? null,
         list: async (collection) => [
           ...(await ctx.storage.list({ prefix: `${collection}/` })).values(),
         ],
         write: (key, doc) => this.putDoc(key, doc),
+        update: (key, change) => this.updateDoc(key, change),
         remove: (key) => this.deleteDoc(key),
       };
     }
@@ -264,6 +267,26 @@ export function createSeasonStore(league) {
       const data = sortKeys(doc);
       await this.ctx.storage.put(key, data);
       this.announceChange(key, data);
+    }
+
+    // Changes to a document more than one of the store's runs write, like a season's record, which
+    // its updates and a job both write, go one at a time, each on what the one before left, so a
+    // run never writes back a copy it read before another's change. `change` answers the document
+    // to save, or null to leave it as it is.
+    /**
+     * @param {string} key
+     * @param {(doc: any) => any} change
+     */
+    updateDoc(key, change) {
+      const updating = (this.docUpdates.get(key) ?? Promise.resolve()).then(async () => {
+        const doc = change((await this.ctx.storage.get(key)) ?? null);
+        if (doc) await this.putDoc(key, doc);
+      });
+      this.docUpdates.set(
+        key,
+        updating.catch(() => {}),
+      );
+      return updating;
     }
 
     async deleteDoc(key) {

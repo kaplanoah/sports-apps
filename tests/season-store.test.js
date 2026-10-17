@@ -590,6 +590,30 @@ test("a job keeps what it saves under keys the store's paths can't name, and wri
   });
 });
 
+test("changes to one document, as from the season's update and a job, run one at a time, each from what the one before left", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore(QUIET_LEAGUE);
+  const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
+  await store.docs.write("seasons/2026", { year: 2026 });
+
+  await Promise.all([
+    store.docs.update("seasons/2026", (doc) => ({ ...doc, games: [] })),
+    assert.rejects(
+      store.docs.update("seasons/2026", () => {
+        throw new Error("A change that fails");
+      }),
+    ),
+    store.docs.update("seasons/2026", () => null),
+    store.docs.update("seasons/2026", (doc) => ({ ...doc, leaders: [] })),
+  ]);
+
+  assert.deepEqual(await context.ctx.storage.get("seasons/2026"), {
+    games: [],
+    leaders: [],
+    year: 2026,
+  });
+});
+
 test("a page that opens starts a job a deploy added, rather than waiting for the alarm already set", async () => {
   const context = createDurableObjectContext();
   const contexts = [];

@@ -143,7 +143,7 @@ test("a device the Worker no longer has room for on a later visit is turned off"
     .toBeNull();
 });
 
-test("a new signing key whose save fails for a moment leaves the switch on, and the next visit saves it", async ({
+test("a new signing key whose save fails for a moment keeps the subscription, which the next visit saves", async ({
   page,
 }) => {
   await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
@@ -170,7 +170,6 @@ test("a new signing key whose save fails for a moment leaves the switch on, and 
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await failedSave;
-  await expect(toggle).toHaveAttribute("aria-checked", "true");
 
   await page.unroute(matchPath("/push/subscription"), answerUnavailable);
   const save = page.waitForResponse(

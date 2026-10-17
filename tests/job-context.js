@@ -32,6 +32,15 @@ export function createDocs(initial = {}) {
   const removals = [];
   /** @type {string[]} */
   const lists = [];
+  /**
+   * @param {string} key
+   * @param {any} doc
+   */
+  const save = (key, doc) => {
+    writes.push(key);
+    stored.set(key, structuredClone(doc));
+  };
+  let updating = Promise.resolve();
   return {
     stored,
     writes,
@@ -44,9 +53,14 @@ export function createDocs(initial = {}) {
         .filter(([key]) => key.startsWith(`${collection}/`))
         .map(([, doc]) => structuredClone(doc));
     },
-    write: async (/** @type {string} */ key, /** @type {any} */ doc) => {
-      writes.push(key);
-      stored.set(key, structuredClone(doc));
+    write: async (/** @type {string} */ key, /** @type {any} */ doc) => save(key, doc),
+    update: (/** @type {string} */ key, /** @type {(doc: any) => any} */ change) => {
+      const run = updating.then(() => {
+        const doc = change(structuredClone(stored.get(key)) ?? null);
+        if (doc) save(key, doc);
+      });
+      updating = run.catch(() => {});
+      return run;
     },
     remove: async (/** @type {string} */ key) => {
       removals.push(key);

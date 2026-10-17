@@ -23,8 +23,7 @@ import {
 } from "../worker/src/roster.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
-import { saveSnapshot } from "../worker/src/season-updater.js";
+import { findTeamLeaders } from "../page/js/team-view.js";
 
 // Every player's totals and every team's games as the league answered the morning after the
 // Liberty's last game, with the game logs of a few players standing in for every player's, beside
@@ -37,9 +36,6 @@ const ROSTERS = JSON.parse(
 );
 const INJURIES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-11-espn-injuries.json`, "utf8"),
-);
-const AFTERNOON = JSON.parse(
-  readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
 );
 const NOW = Date.parse(ROSTERS.recordedAt);
 const MINUTE_MS = 60 * 1000;
@@ -208,31 +204,76 @@ test("a player's sheet from the store is the one the league's feeds make, and re
   }
 });
 
+/** @param {any} numbers */
+const readAverages = (numbers) => [numbers.points, numbers.rebounds, numbers.assists];
+
 test("a player's Roster averages, her team's leading scorers, and her sheet show the same numbers, from one read of the season's totals", async () => {
   const { docs, runJob } = createRun();
   await runJob();
-  await saveSnapshot(docs, {
-    ...buildSnapshot(AFTERNOON.responses, { season: 2026, now: NOW }),
-    missing: [],
-  });
 
   const averages = docs.stored.get("averages/2026").players;
-  const leaders = docs.stored.get("seasons/2026").leaders;
-  const liberty = leaders.filter((/** @type {any} */ leader) => leader.team === "NYL");
+  const liberty = findTeamLeaders(docs.stored.get("seasons/2026"), "NYL");
   assert.equal(liberty.length, 5);
-  assert.ok(liberty.some((/** @type {any} */ leader) => String(leader.id) === STEWART));
+  assert.ok(liberty.some((leader) => String(leader.id) === STEWART));
   for (const leader of liberty) {
     const sheet = (await askForPlayer(`id=${leader.id}&team=NYL&season=2026`, { docs })).body;
     const onRoster = averages.find((/** @type {any} */ player) => player.id === leader.id);
     const { games, averages: onSheet } = sheet.regularSeason;
-    const read = (/** @type {any} */ numbers) => [
-      numbers.points,
-      numbers.rebounds,
-      numbers.assists,
-    ];
-    assert.deepEqual(read(onRoster), read(onSheet), leader.lastName);
-    assert.deepEqual(read(leader), read(onSheet), leader.lastName);
+    assert.deepEqual(readAverages(onRoster), readAverages(onSheet), leader.lastName);
+    assert.deepEqual(readAverages(leader), readAverages(onSheet), leader.lastName);
     assert.deepEqual([onRoster.games, leader.games], [games, games], leader.lastName);
+  }
+});
+
+/**
+ * The season's totals with one more game for a player, in which she scored `points`.
+ * @param {any} answer
+ * @param {string} id
+ * @param {number} points
+ */
+const addGame = (answer, id, points) => ({
+  ...answer,
+  resultSets: answer.resultSets.map((/** @type {any} */ table) => {
+    const at = (/** @type {string} */ column) => table.headers.indexOf(column);
+    return {
+      ...table,
+      rowSet: table.rowSet.map((/** @type {any[]} */ row) => {
+        if (String(row[at("PLAYER_ID")]) !== id) return row;
+        const played = [...row];
+        played[at("GP")] += 1;
+        played[at("PTS")] += points;
+        return played;
+      }),
+    };
+  }),
+});
+
+test("once the job saves new averages, a team's leading scorers show the numbers its Roster does, without waiting for the season's next update", async () => {
+  const answers = listAnswers();
+  const { docs, runJob, wait, endGames } = createRun({ answers });
+  await runJob();
+  const findStewart = () =>
+    findTeamLeaders(docs.stored.get("seasons/2026"), "NYL").find(
+      (leader) => String(leader.id) === STEWART,
+    );
+  const before = findStewart();
+
+  answers[nameTotalsRequest(2026)] = addGame(answers[nameTotalsRequest(2026)], STEWART, 40);
+  await endGames(2);
+  wait(5);
+  await runJob();
+
+  const roster = docs.stored.get("averages/2026").players;
+  const shown = findTeamLeaders(docs.stored.get("seasons/2026"), "NYL");
+  assert.equal(shown.length, 5);
+  assert.ok(Number(findStewart()?.points) > Number(before?.points));
+  for (const leader of shown) {
+    const onRoster = roster.find((/** @type {any} */ player) => player.id === leader.id);
+    assert.deepEqual(
+      [leader.games, ...readAverages(leader)],
+      [onRoster.games, ...readAverages(onRoster)],
+      leader.lastName,
+    );
   }
 });
 
@@ -566,8 +607,10 @@ test("each run saves its status: the requests it made by feed, what it saved, an
     "players",
     "ranks",
     "rosters",
+    "seasons",
   ]);
   assert.equal(first.saved.ranks, 2);
+  assert.equal(first.saved.seasons, 2);
   assert.equal(first.saved["player-index"], 2);
   assert.deepEqual(first.pastSeason, { season: 2025, isWhole: true });
   assert.equal(first.lastFailure, null);
