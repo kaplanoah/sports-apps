@@ -104,7 +104,7 @@ async function requestHandoff() {
 let reAddChoice = null;
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let renewTimer;
-let renewDueAt = 0;
+let renewDueAt = Infinity;
 
 /** @param {number} delayMs */
 function scheduleRenewal(delayMs) {
@@ -113,11 +113,17 @@ function scheduleRenewal(delayMs) {
   renewTimer = setTimeout(renewHandoff, delayMs);
 }
 
+function stopRenewals() {
+  clearTimeout(renewTimer);
+  renewDueAt = Infinity;
+}
+
 // A handoff lasts minutes and settings can stay open longer, so the note asks for a new one
 // halfway through each. Two picks in a row ask at once, so the last answer alone sets the next.
 async function renewHandoff() {
   const choice = reAddChoice;
   if (choice === null) return;
+  stopRenewals();
   const answer = await requestHandoff();
   if (choice !== reAddChoice || answer === "none") return;
   if (answer === "failed") {
@@ -137,7 +143,7 @@ function renewIfDue() {
 // The note answers a pick, so it leaves as settings closes, and its handoff stops renewing.
 function forgetReAdd() {
   reAddChoice = null;
-  clearTimeout(renewTimer);
+  stopRenewals();
   setHtml(findElement("appearanceNote"), html``);
 }
 

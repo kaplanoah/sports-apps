@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
 import { LOCKED_PAGE_PATH } from "./harness.mjs";
-import { setHidden } from "./visibility.mjs";
+import { passTime, setHidden } from "./visibility.mjs";
 
 const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
@@ -136,7 +136,7 @@ async function openLockedSettings({ page, serveLockedApp, openSettings }) {
  */
 async function leaveFor(page, ms) {
   await setHidden(page, true);
-  await page.clock.setSystemTime((await page.evaluate(() => Date.now())) + ms);
+  await passTime(page, ms);
   await setHidden(page, false);
 }
 
@@ -203,6 +203,7 @@ export async function checkHandoffRenewal(app) {
   expect(await readAsked()).toBe(7);
   await expect.poll(readAnswered).toBe(7);
   await page.clock.runFor(10 * 60 * 1000);
+  await leaveFor(page, 110 * 1000);
   expect(await readAsked()).toBe(7);
 }
 

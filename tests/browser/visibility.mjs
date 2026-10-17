@@ -10,6 +10,14 @@ export const setHidden = (page, hidden) =>
   }, hidden);
 
 /**
+ * Moves the page's clock on by `ms` without running its timers, as a phone that suspends it does.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} ms
+ */
+export const passTime = async (page, ms) =>
+  page.clock.setSystemTime((await page.evaluate(() => Date.now())) + ms);
+
+/**
  * Has the page come back to the screen and says whether `selector`'s dialog is open in the same
  * moment, before the browser can draw.
  * @param {import("@playwright/test").Page} page
