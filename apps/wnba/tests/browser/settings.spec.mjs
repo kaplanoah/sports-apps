@@ -179,7 +179,7 @@ test.describe("in an iPhone's Home Screen app", () => {
     await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
   });
 
-  test("the link's handoff follows the last pick, renews halfway through, tries again after a failure, and stops once settings closes", async ({
+  test("the link's handoff follows the last pick, renews halfway through and on coming back once that's due, tries again after a failure, and stops once settings closes", async ({
     page,
   }) => {
     await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });

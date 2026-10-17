@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
 import { LOCKED_PAGE_PATH } from "./harness.mjs";
+import { setHidden } from "./visibility.mjs";
 
 const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
@@ -70,17 +71,45 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
  * }} LockedApp
  */
 
-const HANDOFF_ROUTE = "**/access/handoff";
+const HANDOFF_PATH = "access/handoff";
+const HANDOFF_ROUTE = `**/${HANDOFF_PATH}`;
+
+/** @param {import("@playwright/test").Request} request */
+const isHandoffRequest = (request) =>
+  request.method() === "POST" && request.url().endsWith(`/${HANDOFF_PATH}`);
 
 /** @param {string} look */
 const buildHandoffLink = (look) =>
   new RegExp(
-    `^x-safari-http://[^/]+${LOCKED_PAGE_PATH}access/handoff\\?token=[^&]+&app-theme=${look}$`,
+    `^x-safari-http://[^/]+${LOCKED_PAGE_PATH}${HANDOFF_PATH}\\?token=[^&]+&app-theme=${look}$`,
   );
 
 /** @param {import("@playwright/test").Page} page */
 const findReAddLink = (page) =>
   page.locator("#appearanceNote").getByRole("link", { name: "re-add the site" });
+
+// A handoff's answer is read in the page's own steps after the network has finished it, so the
+// page counts each one it has read, and a test can wait for that.
+/** @param {string} handoffPath */
+function countHandoffsRead(handoffPath) {
+  const page = /** @type {any} */ (window);
+  const fetchFromWorker = window.fetch;
+  page.handoffsRead = 0;
+  window.fetch = async (...request) => {
+    const response = await fetchFromWorker(...request);
+    if (!String(request[0]).endsWith(handoffPath)) return response;
+    const readJson = response.json.bind(response);
+    response.json = async () => {
+      const body = await readJson();
+      page.handoffsRead += 1;
+      return body;
+    };
+    return response;
+  };
+}
+
+/** @param {import("@playwright/test").Page} page */
+const readHandoffsRead = (page) => page.evaluate(() => /** @type {any} */ (window).handoffsRead);
 
 /**
  * Signs in to an iPhone's Home Screen app behind its access code and opens settings, counting
@@ -89,11 +118,11 @@ const findReAddLink = (page) =>
  */
 async function openLockedSettings({ page, serveLockedApp, openSettings }) {
   await page.addInitScript(markOnHomeScreen);
+  await page.addInitScript(countHandoffsRead, HANDOFF_PATH);
   await serveLockedApp(page, { accessCode: "FASTBREAK" });
   const handoffs = { count: 0 };
   page.on("request", (request) => {
-    if (request.method() === "POST" && request.url().endsWith("/access/handoff"))
-      handoffs.count += 1;
+    if (isHandoffRequest(request)) handoffs.count += 1;
   });
   await page.goto(LOCKED_PAGE_PATH);
   await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
@@ -103,9 +132,22 @@ async function openLockedSettings({ page, serveLockedApp, openSettings }) {
 }
 
 /**
+ * Has the page leave the screen for `ms`, as a phone's switch to another app does, which freezes
+ * the page's timers, so only its clock moves on.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} ms
+ */
+async function leaveFor(page, ms) {
+  await setHidden(page, true);
+  await page.clock.setSystemTime((await page.evaluate(() => Date.now())) + ms);
+  await setHidden(page, false);
+}
+
+/**
  * Picks the light look and then the dark one before the light one's handoff answers, and checks
  * the link stays on the dark one, then that the note renews its handoff halfway through, tries
- * again soon after a renewal fails, and leaves with settings, renewing no more.
+ * again soon after a renewal fails, renews as it comes back from short trips away once that's
+ * due, and leaves with settings, renewing no more.
  * @param {LockedApp} app
  */
 export async function checkHandoffRenewal(app) {
@@ -125,13 +167,8 @@ export async function checkHandoffRenewal(app) {
   await page.getByRole("radio", { name: looks.light }).check();
   await page.getByRole("radio", { name: looks.dark }).check();
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
-  const lateAnswer = page.waitForEvent("requestfinished", (request) =>
-    request.url().endsWith("/access/handoff"),
-  );
   releaseFirst();
-  await lateAnswer;
-  // A trip to the page lets it read the late answer before the link is checked again.
-  await page.evaluate(() => document.readyState);
+  await expect.poll(() => readHandoffsRead(page)).toBe(2);
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
   expect(handoffs.count).toBe(2);
 
@@ -144,12 +181,21 @@ export async function checkHandoffRenewal(app) {
     return handoffs.count;
   };
   await expect.poll(readCountAfterTenSeconds).toBe(4);
+  await expect.poll(() => readHandoffsRead(page)).toBe(3);
+
+  // Each trip is short of the two minutes that close settings, and the third passes the renewal.
+  await leaveFor(page, 110 * 1000);
+  await leaveFor(page, 110 * 1000);
+  expect(handoffs.count).toBe(4);
+  await leaveFor(page, 110 * 1000);
+  await expect.poll(() => handoffs.count).toBe(5);
+  await expect.poll(() => readHandoffsRead(page)).toBe(4);
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
 
   await page.locator("#settingsCloseBtn").click();
   await expect(page.locator("#appearanceNote")).toBeEmpty();
   await page.clock.runFor(15 * 60 * 1000);
-  expect(handoffs.count).toBe(4);
+  expect(handoffs.count).toBe(5);
 }
 
 /**

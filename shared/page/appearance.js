@@ -9,6 +9,7 @@
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
 import { html, setHtml } from "./html.js";
+import { watchTimeAway } from "./resume.js";
 
 /**
  * @typedef {{ barColor: string, tabIcon: string, homeScreenIcon: string }} Look
@@ -103,23 +104,34 @@ async function requestHandoff() {
 let reAddChoice = null;
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let renewTimer;
+let renewDueAt = 0;
+
+/** @param {number} delayMs */
+function scheduleRenewal(delayMs) {
+  clearTimeout(renewTimer);
+  renewDueAt = Date.now() + delayMs;
+  renewTimer = setTimeout(renewHandoff, delayMs);
+}
 
 // A handoff lasts minutes and settings can stay open longer, so the note asks for a new one
-// halfway through each. Settings closes after two minutes away, well before a handoff a phone's
-// frozen timer held could run out. Two picks in a row ask at once, so the last answer alone sets
-// the next.
+// halfway through each. Two picks in a row ask at once, so the last answer alone sets the next.
 async function renewHandoff() {
   const choice = reAddChoice;
   if (choice === null) return;
   const answer = await requestHandoff();
   if (choice !== reAddChoice || answer === "none") return;
-  clearTimeout(renewTimer);
   if (answer === "failed") {
-    renewTimer = setTimeout(renewHandoff, HANDOFF_RETRY_MS);
+    scheduleRenewal(HANDOFF_RETRY_MS);
     return;
   }
   drawReAddNote(choice, answer.address);
-  renewTimer = setTimeout(renewHandoff, answer.expiresInMs / 2);
+  scheduleRenewal(answer.expiresInMs / 2);
+}
+
+// A phone freezes the page's timers while it's away, and short trips away leave settings open, so
+// a renewal they held back goes out as the page comes back.
+function renewIfDue() {
+  if (reAddChoice !== null && Date.now() >= renewDueAt) renewHandoff();
 }
 
 // The note answers a pick, so it leaves as settings closes, and its handoff stops renewing.
@@ -166,4 +178,5 @@ export function startAppearance(looks) {
     showChosenTheme();
   });
   findElement("settingsDialog").addEventListener("close", forgetReAdd);
+  watchTimeAway(renewIfDue);
 }
