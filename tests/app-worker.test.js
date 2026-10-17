@@ -321,7 +321,7 @@ test("a page served over plain http, as on a laptop, gets a cookie it can keep",
  */
 async function requestHandoff(cookie, env = LOCKED_ENV) {
   const response = await requestLocked("/access/handoff", { method: "POST", cookie, env });
-  return (await response.json()).address;
+  return response.json();
 }
 
 /**
@@ -333,7 +333,7 @@ const openHandoff = (address, env = LOCKED_ENV) =>
 
 test("a phone signed in gets a handoff that signs a browser in and opens the page at its own address", async () => {
   const cookie = await signIn();
-  const address = new URL(await requestHandoff(cookie));
+  const address = new URL((await requestHandoff(cookie)).address);
   assert.equal(`${address.origin}${address.pathname}`, "https://worker.example/key/access/handoff");
   address.searchParams.set("app-theme", "dark");
 
@@ -359,10 +359,11 @@ test("a handoff is made only for a phone signed in, and only while the page asks
   assert.equal(deleted.status, 405);
 });
 
-test("a handoff past its ten minutes, under an old code, or made up opens the page without signing in", async (t) => {
+test("a handoff past the ten minutes it says it lasts, under an old code, or made up opens the page without signing in", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-17T20:00:00Z") });
   const cookie = await signIn();
-  const address = await requestHandoff(cookie);
+  const { address, expiresInMs } = await requestHandoff(cookie);
+  assert.equal(expiresInMs, 10 * 60 * 1000);
   const signature = cookie.split("=")[1];
   const farOff = Date.parse("2027-01-01T00:00:00Z") / 1000;
   const refused = [
@@ -371,7 +372,7 @@ test("a handoff past its ten minutes, under an old code, or made up opens the pa
     ["https://worker.example/key/access/handoff", LOCKED_ENV],
     [`https://worker.example/key/access/handoff?token=${farOff}.${signature}`, LOCKED_ENV],
   ];
-  t.mock.timers.tick(10 * 60 * 1000);
+  t.mock.timers.tick(expiresInMs);
   assert.ok(readCookie(await openHandoff(address)));
   t.mock.timers.tick(1000);
   refused.push([address, LOCKED_ENV]);

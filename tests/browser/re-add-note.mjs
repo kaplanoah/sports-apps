@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
+import { LOCKED_PAGE_PATH } from "./harness.mjs";
 
 const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
@@ -61,29 +62,26 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
 }
 
 /**
- * Signs in to an iPhone's Home Screen app behind its access code, picks the dark look, and opens
- * the note's link in a browser that has never been signed in, as Safari is, which opens the
- * welcome on that look without asking for the code, with no token left in its address.
+ * Signs in to an iPhone's Home Screen app behind its access code, picks the dark look, checks the
+ * note asks for a new handoff when the app wakes and halfway through each, and opens the note's
+ * link in a browser that has never been signed in, as Safari is, which opens the welcome on that
+ * look without asking for the code, with no token left in its address.
  * @param {{
  *   page: import("@playwright/test").Page,
  *   browser: import("@playwright/test").Browser,
  *   serveLockedApp: (page: import("@playwright/test").Page, options: { accessCode: string }) => Promise<unknown>,
  *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
  *   looks: { light: string, dark: string },
- *   lockedPagePath: string,
  * }} app
  */
-export async function checkReAddHandoff({
-  page,
-  browser,
-  serveLockedApp,
-  openSettings,
-  looks,
-  lockedPagePath,
-}) {
+export async function checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks }) {
   await page.addInitScript(markOnHomeScreen);
   await serveLockedApp(page, { accessCode: "FASTBREAK" });
-  await page.goto(lockedPagePath);
+  let handoffCount = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/access/handoff")) handoffCount += 1;
+  });
+  await page.goto(LOCKED_PAGE_PATH);
   await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
   await page.getByRole("button", { name: "Open" }).click();
   await openSettings(page);
@@ -92,9 +90,15 @@ export async function checkReAddHandoff({
   await expect(link).toHaveAttribute(
     "href",
     new RegExp(
-      `^x-safari-http://[^/]+${lockedPagePath}access/handoff\\?token=[^&]+&app-theme=dark$`,
+      `^x-safari-http://[^/]+${LOCKED_PAGE_PATH}access/handoff\\?token=[^&]+&app-theme=dark$`,
     ),
   );
+  expect(handoffCount).toBe(1);
+  await page.clock.runFor(5 * 60 * 1000);
+  await expect.poll(() => handoffCount).toBe(2);
+  // A jump past the page's timers is how a phone wakes it.
+  await page.clock.fastForward(2 * 60 * 1000);
+  await expect.poll(() => handoffCount).toBe(3);
   const safariAddress = (await link.getAttribute("href")).replace("x-safari-", "");
 
   const safari = await browser.newContext({
@@ -108,7 +112,7 @@ export async function checkReAddHandoff({
   await serveLockedApp(safariPage, { accessCode: "FASTBREAK" });
   await safariPage.goto(safariAddress);
   const redirected = new URL(safariPage.url());
-  expect(`${redirected.pathname}${redirected.search}`).toBe(`${lockedPagePath}?app-theme=dark`);
+  expect(`${redirected.pathname}${redirected.search}`).toBe(`${LOCKED_PAGE_PATH}?app-theme=dark`);
   // Playwright routes only the first request of a redirect, so the page it leads to is opened
   // again through the Worker, with the cookie the redirect set.
   await safariPage.goto(redirected.href);

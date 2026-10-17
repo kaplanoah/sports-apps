@@ -1,4 +1,4 @@
-import { test, expect, openApp, serveLockedApp, LOCKED_PAGE_PATH } from "./harness.mjs";
+import { test, expect, openApp, serveLockedApp } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
@@ -176,8 +176,7 @@ test.describe("in an iPhone's Home Screen app", () => {
     const openSettings = (tab) =>
       tab.getByRole("button", { name: "Settings", exact: true }).click();
     const looks = { light: "Maple", dark: "Walnut" };
-    const lockedPagePath = LOCKED_PAGE_PATH;
-    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks, lockedPagePath });
+    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
   });
 });
 

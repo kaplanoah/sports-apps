@@ -167,7 +167,7 @@ async function createHandoff(request, env, prefix) {
   const expiresAt = String(Math.floor(Date.now() / 1000) + HANDOFF_SECONDS);
   const address = new URL(`${prefix}${HANDOFF_PATH}`, request.url);
   address.searchParams.set(HANDOFF_TOKEN_KEY, `${expiresAt}.${await signHandoff(expiresAt, env)}`);
-  return respondJson({ address: address.href });
+  return respondJson({ address: address.href, expiresInMs: HANDOFF_SECONDS * 1000 });
 }
 
 /**

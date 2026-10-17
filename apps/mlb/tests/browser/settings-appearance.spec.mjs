@@ -1,11 +1,4 @@
-import {
-  test,
-  expect,
-  openApp,
-  openSettings,
-  serveLockedApp,
-  LOCKED_PAGE_PATH,
-} from "./harness.mjs";
+import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { checkReAddHandoff, checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
@@ -109,8 +102,7 @@ test.describe("in an iPhone's Home Screen app", () => {
     browser,
   }) => {
     const looks = { light: "Ball", dark: "Night Game" };
-    const lockedPagePath = LOCKED_PAGE_PATH;
-    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks, lockedPagePath });
+    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
   });
 });
 

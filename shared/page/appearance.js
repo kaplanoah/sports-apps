@@ -9,6 +9,7 @@
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
 import { html, setHtml } from "./html.js";
+import { watchTimeAway } from "./resume.js";
 
 /**
  * @typedef {{ barColor: string, tabIcon: string, homeScreenIcon: string }} Look
@@ -85,13 +86,32 @@ function drawReAddNote(choice, address) {
 }
 
 // The Worker answers only a phone signed in, and only while it asks for a code.
-async function requestHandoffAddress() {
+/** @returns {Promise<{ address: string, expiresInMs: number } | null>} */
+async function requestHandoff() {
   try {
     const response = await fetch("access/handoff", { method: "POST" });
-    return response.ok ? /** @type {{ address: string }} */ (await response.json()).address : null;
+    return response.ok ? await response.json() : null;
   } catch {
     return null;
   }
+}
+
+/** @type {string | null} */
+let reAddChoice = null;
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let renewTimer;
+
+// A handoff lasts minutes and a Home Screen app stays open for hours, so the note asks for a new
+// one halfway through each, and again whenever the app comes back, since a phone freezes timers
+// while it's away.
+async function renewHandoff() {
+  clearTimeout(renewTimer);
+  const choice = reAddChoice;
+  if (choice === null) return;
+  const handoff = await requestHandoff();
+  if (handoff === null || choice !== reAddChoice) return;
+  drawReAddNote(choice, handoff.address);
+  renewTimer = setTimeout(renewHandoff, handoff.expiresInMs / 2);
 }
 
 // An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
@@ -99,10 +119,10 @@ async function requestHandoffAddress() {
 // Safari keeps its cookies apart from the app's, so the link signs it in with a handoff from the
 // Worker (access-gate.js), and until one arrives, or where none does, Safari asks for the code.
 /** @param {string} choice */
-async function offerReAdd(choice) {
+function offerReAdd(choice) {
+  reAddChoice = choice;
   drawReAddNote(choice, location.href);
-  const handoff = await requestHandoffAddress();
-  if (handoff !== null && appearance.read() === choice) drawReAddNote(choice, handoff);
+  renewHandoff();
 }
 
 /**
@@ -130,4 +150,5 @@ export function startAppearance(looks) {
     checkSavedChoice(choices);
     showChosenTheme();
   });
+  watchTimeAway(renewHandoff);
 }

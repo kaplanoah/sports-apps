@@ -363,6 +363,7 @@
   The Home Screen app's link to add the site again, whose browser keeps its cookies apart from the app's,
   signs the browser in with a handoff the Worker makes for a phone signed in,
   good for ten minutes under the code it was made under,
+  which the app asks for again halfway through and whenever it comes back (`shared/page/appearance.js`),
   and opens the page at its own address without it (`serveHandoff` in the same file).
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,
   `shared/worker/push.js` and `web-push.js`, and `page/sw.js`);
