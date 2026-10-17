@@ -55,7 +55,7 @@ export const listCheckedFindings = (checks) =>
     .toSorted((one, other) => one.area - other.area)
     .flatMap(({ area, items }) =>
       items
-        .filter((item) => item?.verdict === "confirmed" || item?.verdict === "unsure")
+        .filter((item) => item.verdict === "confirmed" || item.verdict === "unsure")
         .map((item, index) => ({
           ref: `${area}.${index + 1}`,
           weight: item.verdict === "unsure" ? UNSURE : item.weight,

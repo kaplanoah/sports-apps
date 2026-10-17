@@ -169,9 +169,13 @@ test("a finding that can't be posted neither leads nor joins a group", () => {
   }
 });
 
-test("a finding of another shape in an answer is left out rather than stopping the post", () => {
-  const checks = [{ area: 1, items: [null, "a string", finding({ verdict: "confirmed" })] }];
-  const added = /** @type {any[]} */ ([null, { weight: "Nit", path: 3, body: "a number" }]);
+test("a finding of another shape the check across areas added is left out rather than stopping the post", () => {
+  const checks = [{ area: 1, items: [finding({ verdict: "confirmed" })] }];
+  const added = /** @type {any[]} */ ([
+    null,
+    { weight: "Nit", path: 3, body: "a number for a path" },
+    { weight: "Nit", path: "a.js", body: 5 },
+  ]);
   assert.deepEqual(
     listToPost(listCheckedFindings(checks), { duplicates: [], added, unjudged: [] }).map(
       ({ body }) => body,
