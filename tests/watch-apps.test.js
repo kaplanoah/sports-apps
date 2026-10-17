@@ -101,3 +101,20 @@ test("an app that can't be checked warns in the run and touches no issue", async
   assert.deepEqual(writes, []);
   assert.deepEqual(lines, ["::warning::mlb: not checked, the Worker refused the access code"]);
 });
+
+test("a check that can't open a browser fails the watch's run, rather than passing it unchecked", async () => {
+  const github = createFakeGitHub([]);
+  await assert.rejects(
+    watchApps({
+      repository: REPOSITORY,
+      runUrl: RUN_URL,
+      apps: ["mlb"],
+      checkApp: async () => {
+        throw new Error("browserType.launch: Executable doesn't exist");
+      },
+      fetchImpl: github.fetchImpl,
+      env: { GH_TOKEN: "token" },
+    }),
+    /Executable doesn't exist/,
+  );
+});

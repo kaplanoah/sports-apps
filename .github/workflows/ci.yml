@@ -32,6 +32,8 @@ jobs:
       run: ${{ steps.find.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - &setup-node
         id: node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -45,8 +47,9 @@ jobs:
         run: node worker/find-passed-ci.mjs $SEARCH
 
   # A red change merges only once the owner has used it on the beta app and labeled it phone-ok
-  # (worker/red-change.mjs), which reads the pull request's events for who added the label. The
-  # merge commit's first parent is the base branch.
+  # (worker/red-change.mjs), which reads the pull request's timeline for who added the label, and
+  # the head commit's check suites for whether the label came after the head was pushed, so a push
+  # after phone-ok holds the pull request again. The merge commit's first parent is the base branch.
   gate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -54,10 +57,14 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # A pull request's timeline is an issue's, which the issues scope reads.
+      issues: read
+      checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 2
+          persist-credentials: false
       - *setup-node
       - name: Hold a red change for the owner's phone
         shell: bash
@@ -65,6 +72,7 @@ jobs:
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: git diff --no-renames HEAD^1 HEAD | node worker/red-change.mjs "$LABELS"
 
   # The quick checks share one machine, which leaves more of the account's runners for the browser
@@ -79,6 +87,9 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
       - *setup-node
       - &restore-modules
         id: modules
@@ -110,15 +121,17 @@ jobs:
         if: ${{ !cancelled() }}
         run: TZ=Pacific/Honolulu npm test
       # A pull request's title sets the next version once it's squash merged (worker/release.mjs).
-      # The title comes from GitHub rather than the event, so a re-run checks an edited title.
-      # Naming the shell adds pipefail, so a failed diff can't pass as no changes.
+      # The title comes from GitHub rather than the event, so a re-run checks an edited title. The
+      # files come from git, which lists a change of any size, where GitHub's diff stops at 20,000
+      # lines; the merge commit's first parent is the base branch. Naming the shell adds pipefail,
+      # so a failed diff can't pass as no changes.
       - name: Check the title
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh pr diff "$PR" --name-only | node worker/check-pr-title.mjs "$(gh pr view "$PR" --json title --jq .title)"
+        run: git diff --name-only --no-renames HEAD^1 HEAD | node worker/check-pr-title.mjs "$(gh pr view "$PR" --json title --jq .title)"
 
   # The browser tests take most of CI's time, so they run split across machines.
   browser:
@@ -132,6 +145,8 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - *setup-node
       - *restore-modules
       - *install-modules
@@ -155,8 +170,8 @@ jobs:
         id: flaky
         if: ${{ !cancelled() && hashFiles('test-results/report.json') != '' }}
         run: echo "found=$(node -p 'require("./test-results/report.json").stats.flaky > 0')" >> "$GITHUB_OUTPUT"
-      # A test that passed only on its retry keeps its failed try's trace, and the check job names
-      # it in the issue Flaky browser tests.
+      # A test that passed only on its retry keeps its failed try's trace, and the next nightly run
+      # names it in the issue Flaky browser tests (worker/report-flaky-tests.mjs).
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure() || steps.flaky.outputs.found == 'true'
         with:
@@ -178,22 +193,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 2
+          persist-credentials: false
       # Naming the shell adds pipefail, so a failed diff fails the job rather than reading as no
-      # spec changed.
+      # spec changed. A spec moved or split from another reads as added, so it's burned in too.
       - id: find
         shell: bash
         run: |
-          specs=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | tr '\n' ' ')
+          specs=$(git diff --name-only --no-renames --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | tr '\n' ' ')
           echo "specs=$specs" >> "$GITHUB_OUTPUT"
 
   # A browser spec a pull request adds or changes runs ten times over, with no retry, so a test
   # that passes only some of the time fails on the pull request that brings it, rather than on
   # later ones. Only a test the pull request wrote or edited fails it: any other that failed goes
-  # to the issue Flaky browser tests from the check job (worker/judge-burn-in.mjs). Ten runs of
-  # every spec a large pull request changes take longer than one machine's limit, so they're split
-  # across machines too, and a machine whose share holds no test passes. It runs in Playwright's
-  # own image, as the webkit job does, so the at-rest specs repeat in WebKit too, where they've
-  # failed most.
+  # to the issue Flaky browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten
+  # runs of every spec a large pull request changes take longer than one machine's limit, so
+  # they're split across machines too, and a machine whose share holds no test passes. It runs in
+  # Playwright's own image, as the webkit job does, so the at-rest specs repeat in WebKit too,
+  # where they've failed most.
   burn-in:
     needs: changed-specs
     if: ${{ !cancelled() && needs.changed-specs.result == 'success' && needs.changed-specs.outputs.specs != '' }}
@@ -209,6 +225,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 2
+          persist-credentials: false
       - *setup-node
       - *restore-modules
       - *install-modules
@@ -254,6 +271,8 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - *setup-node
       - *restore-modules
       - *install-modules
@@ -277,6 +296,8 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - *setup-node
       - id: modules
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -839,7 +860,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      issues: write
     steps:
       # Every test passed when passed found a run that passed them on exactly this code, or when
       # every job but the gate passed.
@@ -860,9 +880,10 @@ jobs:
         run: |
           echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
           echo "reviewed=$REVIEWED" >> "$GITHUB_OUTPUT"
-      # Checks out even when a job failed, to name the tests its retry passed.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: github.event_name == 'pull_request'
+        with:
+          persist-credentials: false
       # Records the code this pull request's checks passed on: once every test and the review passed,
       # so a label change runs only the gate again, and once the gate passed too, so that once it merges, main
       # deploys at once if it has exactly that code (worker/find-passed-ci.mjs).
@@ -892,38 +913,3 @@ jobs:
           name: ci-passed-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
-      # The browser jobs' reports go to the issue from this one job, so two of them can't both
-      # rewrite its table at once. Naming a flaky test never fails the pull request, whose own
-      # token may not write issues, as Dependabot's can't.
-      - id: node
-        if: ${{ always() && github.event_name == 'pull_request' }}
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version-file: .nvmrc
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: ${{ always() && github.event_name == 'pull_request' }}
-        continue-on-error: true
-        with:
-          pattern: browser-report-*
-          path: browser-reports/
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: ${{ always() && github.event_name == 'pull_request' }}
-        continue-on-error: true
-        with:
-          pattern: burn-in-flaky-*
-          path: burn-in-flaky/
-      # A test new to the issue starts the routine that fixes flaky tests, through its API trigger.
-      - name: Name each test its retry passed, or burn-in found failing, in the issue Flaky browser tests
-        if: ${{ always() && github.event_name == 'pull_request' && (hashFiles('browser-reports/**/report.json') != '' || hashFiles('burn-in-flaky/**/burn-in-flaky.json') != '') }}
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          FLAKY_ROUTINE_URL: ${{ secrets.FLAKY_ROUTINE_URL }}
-          FLAKY_ROUTINE_TOKEN: ${{ secrets.FLAKY_ROUTINE_TOKEN }}
-        run: |
-          shopt -s globstar nullglob
-          listed=()
-          for file in burn-in-flaky/**/burn-in-flaky.json; do listed+=(--listed "$file"); done
-          node worker/report-flaky-tests.mjs --retried "${listed[@]}" browser-reports/**/report.json

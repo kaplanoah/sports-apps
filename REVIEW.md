@@ -52,7 +52,7 @@ In order of what has mattered here.
    since the pull request's own copy of them runs its review.
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
-   like `translate`, `rotate`, `scale`, or `pointer-events`, that `worker/red-change.mjs` doesn't list yet.
+   like `offset-path` or `-webkit-touch-callout`, that `worker/red-change.mjs` doesn't list yet.
 7. **Tests.**
    AGENTS.md: "Every change to behavior comes with tests that fail without it, in the same PR."
    Flag a change to behavior whose tests would still pass with it reverted.

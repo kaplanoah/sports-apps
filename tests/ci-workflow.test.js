@@ -1,9 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 /** @param {string} path from the repo's root */
 const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+const WORKFLOWS = readdirSync(new URL("../.github/workflows/", import.meta.url)).filter((name) =>
+  name.endsWith(".yml"),
+);
+
+// A tag can be moved to other code, so each action is named by its commit, which can't.
+test("every workflow's actions are pinned to a commit", () => {
+  assert.ok(WORKFLOWS.length > 0);
+  for (const workflow of WORKFLOWS) {
+    const actions = [
+      ...readRepoFile(`.github/workflows/${workflow}`).matchAll(/^\s*-?\s*uses:\s*(\S+)/gm),
+    ].map(([, action]) => action);
+    for (const action of actions)
+      assert.match(action, /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/, `${workflow}: ${action}`);
+  }
+});
 
 const readInstalledPlaywright = () =>
   JSON.parse(readRepoFile("package-lock.json")).packages["node_modules/playwright"].version;
@@ -38,6 +54,25 @@ test("the nightly run's report can start the routine that fixes flaky tests", ()
   assert.match(workflow, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
 });
 
+// Each report reads the issue's table and writes it back, so two at once would lose one's runs.
+test("only the nightly run writes the issue Flaky browser tests, from main's code, reading CI's runs it can list", () => {
+  const writers = WORKFLOWS.filter((workflow) =>
+    /node worker\/report-flaky-tests\.mjs|FLAKY_ROUTINE_TOKEN/.test(
+      readRepoFile(`.github/workflows/${workflow}`),
+    ),
+  );
+  assert.deepEqual(writers, ["flaky.yml"]);
+  assert.doesNotMatch(readRepoFile(".github/workflows/ci.yml"), /issues: write/);
+  const workflow = readRepoFile(".github/workflows/flaky.yml");
+  assert.doesNotMatch(workflow.split(/^jobs:$/m)[0], /issues: write/);
+  const report = readJob("report", "flaky.yml");
+  assert.match(report, /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' \}\}/);
+  assert.match(report, /permissions:\n\s+contents: read\n\s+actions: read\n\s+issues: write/);
+  assert.match(report, /run: node worker\/report-flaky-tests\.mjs nightly-report\/report\.json/);
+  assert.match(report, /GH_REPO: \$\{\{ github\.repository \}\}/);
+  assert.doesNotMatch(report, /\bref:/);
+});
+
 /** @returns {string[]} the workflow's jobs, by the names they're keyed under */
 const listJobs = () => {
   const jobs = readRepoFile(".github/workflows/ci.yml").split(/^jobs:$/m)[1] ?? "";
@@ -60,11 +95,12 @@ test("the check job needs every other job but caches", () => {
 });
 
 /**
- * One job of ci.yml, from its key to the next job.
+ * One job of a workflow, ci.yml unless it names another, from its key to the next job.
  * @param {string} job
+ * @param {string} [workflow]
  */
-const readJob = (job) =>
-  readRepoFile(".github/workflows/ci.yml").match(
+const readJob = (job, workflow = "ci.yml") =>
+  readRepoFile(`.github/workflows/${workflow}`).match(
     new RegExp(`^ {2}${job}:\\n(?:(?: {4}.*)?\\n)*`, "m"),
   )?.[0] ?? "";
 
@@ -86,7 +122,11 @@ test("burn-in runs every test ten times however many fail, and fails only on a t
 // Burn-in's machines start only for a pull request that changes a browser spec, and check
 // requires them to pass then.
 test("burn-in runs only when a pull request changes a browser spec, and check requires it then", () => {
-  assert.match(readJob("changed-specs"), /git diff --name-only --diff-filter=AM HEAD\^1 HEAD/);
+  // Without --no-renames, a spec moved or split from another reads as renamed, not added.
+  assert.match(
+    readJob("changed-specs"),
+    /git diff --name-only --no-renames --diff-filter=AM HEAD\^1 HEAD/,
+  );
   const burnIn = readJob("burn-in");
   assert.match(burnIn, /needs: changed-specs/);
   assert.match(
@@ -121,12 +161,25 @@ test("each job that needs another runs even when one before it was skipped", () 
   assert.deepEqual(skippedWithTheirChain, []);
 });
 
-test("the check job names each test burn-in found failing in the issue, and can start the fix routine", () => {
-  const check = readJob("check");
-  assert.match(check, /pattern: burn-in-flaky-\*/);
-  assert.match(check, /--retried "\$\{listed\[@\]\}"/);
-  assert.match(check, /FLAKY_ROUTINE_URL: \$\{\{ secrets\.FLAKY_ROUTINE_URL \}\}/);
-  assert.match(check, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
+// GitHub refuses a pull request's diff past 20,000 lines, and git lists a change of any size.
+test("the title is checked against the files git lists against the base branch", () => {
+  const checks = readJob("checks");
+  assert.match(checks, /uses: actions\/checkout@\S+ # v7\n\s+with:\n\s+fetch-depth: 2/);
+  assert.match(
+    checks,
+    /run: git diff --name-only --no-renames HEAD\^1 HEAD \| node worker\/check-pr-title\.mjs/,
+  );
+  assert.doesNotMatch(checks, /gh pr diff/);
+});
+
+// None of the workflows push, so none leaves git a token on disk for the code it runs to read.
+test("every checkout leaves no credentials behind", () => {
+  for (const workflow of WORKFLOWS) {
+    const text = readRepoFile(`.github/workflows/${workflow}`);
+    const checkouts = [...text.matchAll(/uses: actions\/checkout@.*\n((?: {8,}.*\n)*)/g)];
+    for (const [, settings] of checkouts)
+      assert.match(settings, /persist-credentials: false/, `${workflow}: ${settings}`);
+  }
 });
 
 // A label change, like adding phone-ok, brings no new code: once a run passed every test on
