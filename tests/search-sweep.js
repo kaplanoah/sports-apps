@@ -18,7 +18,8 @@ import { FORGIVING_LENGTH, isOneEditApart, normalizeText } from "#shared/search-
 // each way a thumb gets one wrong, and lists where it finds another name's games: a wrong letter
 // finds the name's, or, when it's as near another name, nothing.
 // And it types each team's name beside each number its players wear, each way fans write it, and
-// lists where it doesn't list just the team's players who wear it.
+// lists where it doesn't list just the team's players who wear it, or, while the number is last,
+// each number it starts, over suggestions that each keep the number.
 
 const SHORTEST_GUESS = 3;
 // A phone's keyboard, a row at a time, for the key a thumb lands on beside the one it meant.
@@ -231,9 +232,46 @@ function listOwnNames(team, { dictionary }) {
 }
 
 /**
- * Each search of a team's name beside each number its players wear, as it's typed, as "search:
- * what's wrong", where it lists anything but the team's players who wear it, or finds other games
- * than the name alone does.
+ * The ids of the players who wear a number or, while it's being typed, a number it starts, the
+ * number itself first, then by number.
+ * @param {import("#shared/page-search.js").PagePlayer[]} players
+ * @param {string} number
+ * @param {boolean} isStart
+ */
+const listWearing = (players, number, isStart) =>
+  players
+    .filter((player) => player.number === number || (isStart && player.number.startsWith(number)))
+    .toSorted(
+      (first, second) =>
+        first.number.length - second.number.length || Number(first.number) - Number(second.number),
+    )
+    .map((player) => player.id);
+
+/**
+ * What breaks a rule in what a search of a team's name beside a number shows: it lists just the
+ * team's players who wear the number, or, as it's typed with the number last, every number it
+ * starts, over its suggestions, which each keep the number, and finds the games the name alone does.
+ * @param {Shown} shown
+ * @param {{ text: string, expected: string[], nameGames: string | undefined }} search
+ */
+function listBrokenNumberRules(shown, { text, expected, nameGames }) {
+  const listed = shown.rows.map((row) => (row.kind === "player" ? row.player.id : row.kind));
+  const found = describeFound(shown);
+  const number = text.match(/\d+/)?.[0] ?? "";
+  const ignoring = shown.suggestions.filter((suggestion) => !suggestion.text.includes(number));
+  return [
+    ...(listed.join() === expected.join()
+      ? []
+      : [`${text}: lists ${listed.join(", ")}, not ${expected.join(", ")}`]),
+    ...(shown.isRowsFirst ? [] : [`${text}: lists its players under its suggestions`]),
+    ...ignoring.map((suggestion) => `${text}: suggests ${suggestion.text}, without its number`),
+    ...(found === nameGames ? [] : [`${text}: finds ${found}, not ${nameGames}`]),
+  ];
+}
+
+/**
+ * Each search of a team's name beside each number its players wear, as it's typed, and the plain
+ * one as it's sent, as "search: what's wrong", where it breaks a rule `listBrokenNumberRules` names.
  * @param {{ context: SearchContext, pages: SearchPages }} search
  */
 export function sweepPlayerNumbers({ context, pages }) {
@@ -248,20 +286,20 @@ export function sweepPlayerNumbers({ context, pages }) {
     const names = listOwnNames(team, context);
     const nameGames = new Map(names.map((name) => [name, describeFound(show(name, false))]));
     return [...new Set(players.map((player) => player.number))].flatMap((number) => {
-      const wearing = players.filter((player) => player.number === number).map((each) => each.id);
-      return listNumberPhrasings(names, number).flatMap(({ name, text }) => {
-        const shown = show(text, true);
-        const listed = shown.rows.map((row) => (row.kind === "player" ? row.player.id : row.kind));
-        const found = describeFound(shown);
-        return [
-          ...(listed.join() === wearing.join()
-            ? []
-            : [`${text}: lists ${listed.join(", ")}, not ${wearing.join(", ")}`]),
-          ...(found === nameGames.get(name)
-            ? []
-            : [`${text}: finds ${found}, not ${nameGames.get(name)}`]),
-        ];
+      const typed = listNumberPhrasings(names, number).flatMap(({ name, text }) =>
+        listBrokenNumberRules(show(text, true), {
+          text,
+          expected: listWearing(players, number, text.endsWith(number)),
+          nameGames: nameGames.get(name),
+        }),
+      );
+      const sentText = `${names[0]} ${number}`;
+      const sent = listBrokenNumberRules(show(sentText, false), {
+        text: `${sentText} sent`,
+        expected: listWearing(players, number, false),
+        nameGames: nameGames.get(names[0]),
       });
+      return [...typed, ...sent];
     });
   });
 }

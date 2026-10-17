@@ -391,6 +391,28 @@ test("a half-typed name finds the player, with her number and team and no games,
   await expectShown(page.locator("#rosterSection"));
 });
 
+test("while typing, a team's name and a number list the players whose numbers it starts, over the suggestions", async ({
+  page,
+}) => {
+  const app = await openSeasonGames(page);
+  await app.writeDocument("player-index/2026", {
+    season: 2026,
+    players: [
+      { id: "1641656", team: "GSV", number: "1", firstName: "Gabby", lastName: "Williams" },
+      { id: "1641695", team: "GSV", number: "11", firstName: "Ashten", lastName: "Prechtel" },
+    ],
+  });
+  await tapSearch(page);
+
+  await findInput(page).pressSequentially("valkyries 1");
+
+  await expect(findRows(page)).toHaveText([
+    "Gabby Williams1•Valkyries",
+    "Ashten Prechtel11•Valkyries",
+    "valkyries 1st Round",
+  ]);
+});
+
 test("a standings list's words find it, and its row opens the standings at that list", async ({
   page,
 }) => {
