@@ -159,8 +159,7 @@ export const namePostRecord = (stage) => `${joinRecordName(RECORD_JOBS.post, sta
 export const nameCheckedRecord = (stage) => `${joinRecordName("checked", stage)}.json`;
 
 /**
- * A reviewer's try as the lines its job hands $GITHUB_OUTPUT, which ci.yml's retry and fail steps
- * read.
+ * A reviewer's try as the lines for $GITHUB_OUTPUT: its unread parts and whether it answered.
  * @param {{ unread: string[], isAnswered: boolean }} kept
  */
 export const formatFindOutputs = ({ unread, isAnswered }) =>

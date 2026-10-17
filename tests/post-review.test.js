@@ -112,7 +112,7 @@ test("a repeat group the check across areas got wrong never drops a finding noth
   );
 });
 
-test("a finding that stands in for its repeats takes the heaviest weight among them", () => {
+test("a finding that stands in for its repeats takes the heaviest weight a checker settled", () => {
   const checked = listCheckedFindings(CHECKS);
   const posted = (/** @type {string[][]} */ duplicates) =>
     listToPost(checked, { duplicates, added: [], unjudged: [] }).map(({ weight, body }) => [
@@ -123,14 +123,28 @@ test("a finding that stands in for its repeats takes the heaviest weight among t
     ["Important", "a nit"],
     ["Unsure", "can't settle"],
   ]);
-  assert.deepEqual(posted([["1.1", "2.1"]]), [
-    ["Important", "a bug"],
-    ["Unsure", "a nit"],
-  ]);
   assert.deepEqual(posted([["2.2", "1.1"]]), [
     ["Important", "a bug"],
     ["Unsure", "can't settle"],
   ]);
+  assert.deepEqual(posted([["1.1", "2.1"]]), [
+    ["Important", "a bug"],
+    ["Nit", "a nit"],
+  ]);
+  assert.deepEqual(posted([["2.1", "1.1"]]), [
+    ["Important", "a bug"],
+    ["Nit", "can't settle"],
+  ]);
+  assert.deepEqual(
+    posted([
+      ["2.2", "1.1"],
+      ["2.1", "2.2"],
+    ]),
+    [
+      ["Important", "a bug"],
+      ["Unsure", "can't settle"],
+    ],
+  );
 });
 
 test("a check across areas that gave no answer, or one of another shape, reads as none", () => {

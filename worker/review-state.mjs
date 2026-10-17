@@ -7,8 +7,10 @@
 export const SUMMARY_MARKER = "<!-- claude-review-summary -->";
 // The posting and summary steps post with the run's own token.
 export const REVIEWER = "github-actions[bot]";
+// What a finding a checker couldn't settle is posted as, in place of its weight.
+export const UNSURE = "Unsure";
 // Each finding's weight, in the order the review posts and counts them.
-export const WEIGHTS = ["Important", "Unsure", "Nit", "Pre-existing"];
+export const WEIGHTS = ["Important", UNSURE, "Nit", "Pre-existing"];
 // The comment that holds the findings on files a pull request doesn't change, which GitHub takes
 // on no line.
 export const OFF_DIFF_HEADING = "Findings on files this pull request doesn't change:";

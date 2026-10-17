@@ -27,6 +27,7 @@ import {
 import {
   OFF_DIFF_HEADING,
   REVIEWER,
+  UNSURE,
   WEIGHTS,
   listFindingMarks,
   writeFindingMark,
@@ -57,7 +58,7 @@ export const listCheckedFindings = (checks) =>
         .filter((item) => item.verdict === "confirmed" || item.verdict === "unsure")
         .map((item, index) => ({
           ref: `${area}.${index + 1}`,
-          weight: item.verdict === "unsure" ? "Unsure" : item.weight,
+          weight: item.verdict === "unsure" ? UNSURE : item.weight,
           path: item.path,
           line: item.line,
           body: item.body,
@@ -68,13 +69,25 @@ export const listCheckedFindings = (checks) =>
 const rankWeight = (weight) =>
   WEIGHTS.includes(weight) ? WEIGHTS.indexOf(weight) : WEIGHTS.length;
 
+/** @param {string} one @param {string} other */
+const compareWeights = (one, other) => rankWeight(one) - rankWeight(other);
+
+/**
+ * The weight a finding takes for itself and the repeats it stands in for: the heaviest a checker
+ * settled, or unsure when none did, since unsure is a checker's verdict rather than a weight.
+ * @param {string[]} weights
+ */
+function pickGroupWeight(weights) {
+  const settled = weights.filter((weight) => weight !== UNSURE);
+  return settled.length ? settled.toSorted(compareWeights)[0] : UNSURE;
+}
+
 /**
  * The checkers' refs the check across areas named as repeats of another, and the weight each kept
  * ref takes. Each group keeps its first known ref that no earlier group dropped, and drops its
  * other known refs but any an earlier group kept, so a ref it got wrong, repeated, or crossed with
  * another group never drops a finding that nothing else stands in for. A kept ref takes the
- * heaviest weight of the refs it stands in for, so a repeat weighed heavier than it keeps that
- * weight.
+ * heaviest settled weight of the refs it stands in for.
  * @param {string[][]} groups
  * @param {Map<string, string>} weightByRef the weight of each of the checkers' findings, by ref
  */
@@ -94,15 +107,15 @@ function listRepeats(groups, weightByRef) {
     const weights = [leadWeights.get(lead) ?? weightByRef.get(lead) ?? ""].concat(
       absorbed.map((ref) => weightByRef.get(ref) ?? ""),
     );
-    leadWeights.set(lead, weights.toSorted((one, other) => rankWeight(one) - rankWeight(other))[0]);
+    leadWeights.set(lead, pickGroupWeight(weights));
   }
   return { dropped, leadWeights };
 }
 
 /**
  * What a stage posts: every finding its checkers kept but the repeats the check across areas
- * named, each at the heaviest weight of those it stands in for, with what it added, weightiest
- * first.
+ * named, each at the heaviest settled weight of those it stands in for, with what it added,
+ * weightiest first.
  * @param {(Finding & { ref?: string })[]} checked
  * @param {Across | null} across
  * @returns {Finding[]}
@@ -120,7 +133,7 @@ export function listToPost(checked, across) {
     }));
   return [...kept, ...(across?.added ?? [])]
     .filter((finding) => WEIGHTS.includes(finding.weight) && finding.path && finding.body)
-    .toSorted((one, other) => WEIGHTS.indexOf(one.weight) - WEIGHTS.indexOf(other.weight))
+    .toSorted((one, other) => compareWeights(one.weight, other.weight))
     .map(({ weight, path, line, body }) => ({ weight, path, line, body }));
 }
 

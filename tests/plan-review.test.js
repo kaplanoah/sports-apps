@@ -733,6 +733,14 @@ test("a test goes with code outside every app when it's a root test, never an ap
   assert.equal(findTestedFile("tests/updates.test.js", [], repo), "shared/page/updates.js");
 });
 
+test("a root test's imports are read from the test itself", () => {
+  const repo = ["shared/page/notifications.js", "shared/worker/notifications.js"];
+  assert.equal(
+    findTestedFile("tests/notifications.test.js", [], repo),
+    "shared/worker/notifications.js",
+  );
+});
+
 test("more names than areas allow gives each its own area, rather than splitting forever", () => {
   const apps = ["mlb", "wnba", "nba", "nhl", "nfl"];
   const files = apps.flatMap((app) => [

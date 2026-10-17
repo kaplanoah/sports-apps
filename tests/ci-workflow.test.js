@@ -87,21 +87,6 @@ const listJobs = () => {
   return [...jobs.matchAll(/^ {2}([a-z-]+):$/gm)].map(([, job]) => job);
 };
 
-// Prettier writes a long list of needs on a line of its own for each.
-const readCheckNeeds = () =>
-  readRepoFile(".github/workflows/ci.yml")
-    .match(/^ {2}check:\n(?: {4}.*\n)*? {4}needs:\s*\[([^\]]*)\]/m)?.[1]
-    .split(",")
-    .map((job) => job.trim())
-    .filter(Boolean);
-
-// check is the one job a merge waits on, so a job it doesn't need could fail without stopping
-// one. caches only costs pull requests their cache when it fails.
-test("the check job needs every other job but caches", () => {
-  const others = listJobs().filter((job) => !["check", "caches"].includes(job));
-  assert.deepEqual(readCheckNeeds()?.toSorted(), others.toSorted());
-});
-
 /**
  * One job of a workflow, ci.yml unless it names another, from its key to the next job.
  * @param {string} job
@@ -113,7 +98,7 @@ const readJob = (job, workflow = "ci.yml") =>
   )?.[0] ?? "";
 
 /**
- * The jobs a ci.yml job needs, however its needs are written.
+ * The jobs a ci.yml job needs, however its needs are written, a long list a line each too.
  * @param {string} job
  */
 const readNeeds = (job) =>
@@ -121,6 +106,13 @@ const readNeeds = (job) =>
     .replace(/[[\]\s]/g, "")
     .split(",")
     .filter(Boolean);
+
+// check is the one job a merge waits on, so a job it doesn't need could fail without stopping
+// one. caches only costs pull requests their cache when it fails.
+test("the check job needs every other job but caches", () => {
+  const others = listJobs().filter((job) => !["check", "caches"].includes(job));
+  assert.deepEqual(readNeeds("check").toSorted(), others.toSorted());
+});
 
 test("the browser job's traces leave out the page at each step, which burn-in's keep", () => {
   assert.match(readJob("browser"), /TRACE_SNAPSHOTS: "off"/);
@@ -346,9 +338,9 @@ test("the last read of the whole change runs only once a review of a push finish
   assert.match(readJob("review-final-check"), /if: \*final-due/);
   assert.match(readJob("review-final-post"), /if: \*final-due/);
   for (const job of ["review-final-find", "review-final-check", "review-final-post"])
-    assert.match(
-      readJob(job),
-      /needs:\s*\[review-plan, review-find, review-check, review-post/,
+    assert.deepEqual(
+      readNeeds(job).slice(0, 4),
+      ["review-plan", "review-find", "review-check", "review-post"],
       job,
     );
   assert.match(readJob("review-final-find"), /steps: \*find-steps/);
