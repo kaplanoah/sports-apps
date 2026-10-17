@@ -360,6 +360,10 @@
   built from the shared `gate.js` and `gate.css`, and the season's data answers 401 until the phone sends that code,
   which the Worker keeps in a cookie signed over the code with the `ACCESS_SIGNING_KEY` secret,
   never the page's key, which every link shows (`shared/worker/access-gate.js`); a 401 reloads the page (`shared/page/access.js`).
+  The Home Screen app's link to add the site again, whose browser keeps its cookies apart from the app's,
+  signs the browser in with a handoff the Worker makes for a phone signed in,
+  good for ten minutes under the code it was made under,
+  and opens the page at its own address without it (`serveHandoff` in the same file).
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,
   `shared/worker/push.js` and `web-push.js`, and `page/sw.js`);
   the Durable Object makes and keeps the signing key itself, under a key the store's paths can't name.

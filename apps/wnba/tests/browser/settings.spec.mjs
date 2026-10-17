@@ -1,9 +1,9 @@
-import { test, expect, openApp } from "./harness.mjs";
+import { test, expect, openApp, serveLockedApp, LOCKED_PAGE_PATH } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
-import { checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
+import { checkReAddHandoff, checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
@@ -167,6 +167,17 @@ test.describe("in an iPhone's Home Screen app", () => {
       tab.getByRole("button", { name: "Settings", exact: true }).click();
     const looks = { light: "Maple", dark: "Walnut" };
     await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+  });
+
+  test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
+    page,
+    browser,
+  }) => {
+    const openSettings = (tab) =>
+      tab.getByRole("button", { name: "Settings", exact: true }).click();
+    const looks = { light: "Maple", dark: "Walnut" };
+    const lockedPagePath = LOCKED_PAGE_PATH;
+    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks, lockedPagePath });
   });
 });
 

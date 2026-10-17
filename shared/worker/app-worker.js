@@ -1,9 +1,11 @@
 import {
   ACCESS_PATH,
   createAccessCookie,
+  HANDOFF_PATH,
   readAccess,
   respondAccessRequired,
   serveAccess,
+  serveHandoff,
 } from "./access-gate.js";
 import { createHealthServer } from "./health.js";
 
@@ -234,6 +236,7 @@ export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, r
       if (appPath === null) return serveNotFound();
       if (appPath === "") return redirectToFolder(url);
       if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
+      if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
       if ((await readAccess(request, env)) !== "open") return serveLocked(request, appPath);
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))

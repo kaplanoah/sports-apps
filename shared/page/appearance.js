@@ -72,15 +72,37 @@ function checkSavedChoice(choices) {
   for (const choice of choices) choice.checked = choice.value === saved;
 }
 
-// An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
-// changes its icon only once the site is added again, from Safari, which opens on the same theme.
-/** @param {string} choice */
-function drawReAddNote(choice) {
+/**
+ * @param {string} choice
+ * @param {string} address
+ */
+function drawReAddNote(choice, address) {
   setHtml(
     findElement("appearanceNote"),
     html`Apple only sets icons when you add a site to your home screen. To update your icon,
-      <a href="${buildSafariAddress(choice)}">re-add the site</a>`,
+      <a href="${buildSafariAddress(choice, address)}">re-add the site</a>`,
   );
+}
+
+// The Worker answers only a phone signed in, and only while it asks for a code.
+async function requestHandoffAddress() {
+  try {
+    const response = await fetch("access/handoff", { method: "POST" });
+    return response.ok ? /** @type {{ address: string }} */ (await response.json()).address : null;
+  } catch {
+    return null;
+  }
+}
+
+// An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
+// changes its icon only once the site is added again, from Safari, which opens on the same theme.
+// Safari keeps its cookies apart from the app's, so the link signs it in with a handoff from the
+// Worker (access-gate.js), and until one arrives, or where none does, Safari asks for the code.
+/** @param {string} choice */
+async function offerReAdd(choice) {
+  drawReAddNote(choice, location.href);
+  const handoff = await requestHandoffAddress();
+  if (handoff !== null && appearance.read() === choice) drawReAddNote(choice, handoff);
 }
 
 /**
@@ -100,7 +122,7 @@ export function startAppearance(looks) {
       openThemeAddress(choice.value);
       checkSavedChoice(choices);
       showChosenTheme();
-      if (choice.name === "appearance" && isOnHomeScreen() && isIos()) drawReAddNote(choice.value);
+      if (choice.name === "appearance" && isOnHomeScreen() && isIos()) offerReAdd(choice.value);
     });
   }
   appearance.watch(() => {

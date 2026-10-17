@@ -1,7 +1,14 @@
-import { test, expect, openApp, openSettings } from "./harness.mjs";
+import {
+  test,
+  expect,
+  openApp,
+  openSettings,
+  serveLockedApp,
+  LOCKED_PAGE_PATH,
+} from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
-import { checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
+import { checkReAddHandoff, checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -95,6 +102,15 @@ test.describe("in an iPhone's Home Screen app", () => {
   }) => {
     const looks = { light: "Ball", dark: "Night Game" };
     await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+  });
+
+  test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
+    page,
+    browser,
+  }) => {
+    const looks = { light: "Ball", dark: "Night Game" };
+    const lockedPagePath = LOCKED_PAGE_PATH;
+    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks, lockedPagePath });
   });
 });
 

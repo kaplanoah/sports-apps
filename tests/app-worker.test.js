@@ -315,6 +315,73 @@ test("a page served over plain http, as on a laptop, gets a cookie it can keep",
   assert.ok(!response.headers.get("set-cookie").includes("Secure"));
 });
 
+/**
+ * @param {string} cookie
+ * @param {object} [env]
+ */
+async function requestHandoff(cookie, env = LOCKED_ENV) {
+  const response = await requestLocked("/access/handoff", { method: "POST", cookie, env });
+  return (await response.json()).address;
+}
+
+/**
+ * @param {string} address
+ * @param {object} [env]
+ */
+const openHandoff = (address, env = LOCKED_ENV) =>
+  createLockedWorker().fetch(new Request(address), env);
+
+test("a phone signed in gets a handoff that signs a browser in and opens the page at its own address", async () => {
+  const cookie = await signIn();
+  const address = new URL(await requestHandoff(cookie));
+  assert.equal(`${address.origin}${address.pathname}`, "https://worker.example/key/access/handoff");
+  address.searchParams.set("app-theme", "dark");
+
+  const opened = await openHandoff(address.href);
+  assert.equal(opened.status, 302);
+  assert.equal(opened.headers.get("location"), "https://worker.example/key/?app-theme=dark");
+  assert.equal(opened.headers.get("cache-control"), "no-store");
+  assert.equal(readCookie(opened), cookie);
+  assert.ok(opened.headers.get("set-cookie").includes("Path=/key/"));
+  const page = await requestLocked("/", { cookie: readCookie(opened) });
+  assert.equal(await page.text(), "the app");
+});
+
+test("a handoff is made only for a phone signed in, and only while the page asks for a code", async () => {
+  const signedOut = await requestLocked("/access/handoff", { method: "POST" });
+  assert.equal(signedOut.status, 401);
+  const noCode = await requestLocked("/access/handoff", {
+    method: "POST",
+    env: { APP_KEY: "key" },
+  });
+  assert.equal(noCode.status, 404);
+  const deleted = await requestLocked("/access/handoff", { method: "DELETE" });
+  assert.equal(deleted.status, 405);
+});
+
+test("a handoff past its ten minutes, under an old code, or made up opens the page without signing in", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-17T20:00:00Z") });
+  const cookie = await signIn();
+  const address = await requestHandoff(cookie);
+  const signature = cookie.split("=")[1];
+  const farOff = Date.parse("2027-01-01T00:00:00Z") / 1000;
+  const refused = [
+    [address, { ...LOCKED_ENV, ACCESS_CODE: "LAYUP" }],
+    ["https://worker.example/key/access/handoff?token=made-up", LOCKED_ENV],
+    ["https://worker.example/key/access/handoff", LOCKED_ENV],
+    [`https://worker.example/key/access/handoff?token=${farOff}.${signature}`, LOCKED_ENV],
+  ];
+  t.mock.timers.tick(10 * 60 * 1000);
+  assert.ok(readCookie(await openHandoff(address)));
+  t.mock.timers.tick(1000);
+  refused.push([address, LOCKED_ENV]);
+  for (const [refusedAddress, env] of refused) {
+    const opened = await openHandoff(refusedAddress, env);
+    assert.equal(opened.headers.get("location"), "https://worker.example/key/", refusedAddress);
+    assert.equal(opened.headers.get("set-cookie"), null, refusedAddress);
+  }
+});
+
 const PAGE_HOST = "mlb.sports.example";
 const PAGE_HOST_ENV = { ...LOCKED_ENV, PAGE_HOST };
 
@@ -344,6 +411,20 @@ test("at the page's own address, the page and its data answer without the key, b
   assert.equal(page.headers.get("set-cookie").split("; ")[1], "Path=/");
   for (const path of DATA_PATHS)
     assert.equal((await requestAtPageHost(path, { cookie })).status, 200, path);
+});
+
+test("at the page's own address, a handoff opens the page there", async () => {
+  const signedIn = await requestAtPageHost("/access", {
+    method: "POST",
+    body: { code: "FASTBREAK" },
+  });
+  const cookie = readCookie(signedIn);
+  const handoff = await requestAtPageHost("/access/handoff", { method: "POST", cookie });
+  const address = (await handoff.json()).address;
+  assert.ok(address.startsWith(`https://${PAGE_HOST}/access/handoff?token=`));
+  const opened = await openHandoff(address, PAGE_HOST_ENV);
+  assert.equal(opened.headers.get("location"), `https://${PAGE_HOST}/`);
+  assert.equal(opened.headers.get("set-cookie").split("; ")[1], "Path=/");
 });
 
 test("the page's own address answers nothing while the Worker has no code", async () => {

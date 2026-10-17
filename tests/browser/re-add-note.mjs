@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { ANDROID_AGENT } from "./devices.mjs";
+import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
 
 const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
@@ -58,4 +58,62 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
   await expect(androidApp.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(androidApp.locator("#appearanceNote")).toBeHidden();
   await android.close();
+}
+
+/**
+ * Signs in to an iPhone's Home Screen app behind its access code, picks the dark look, and opens
+ * the note's link in a browser that has never been signed in, as Safari is, which opens the
+ * welcome on that look without asking for the code, with no token left in its address.
+ * @param {{
+ *   page: import("@playwright/test").Page,
+ *   browser: import("@playwright/test").Browser,
+ *   serveLockedApp: (page: import("@playwright/test").Page, options: { accessCode: string }) => Promise<unknown>,
+ *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
+ *   looks: { light: string, dark: string },
+ *   lockedPagePath: string,
+ * }} app
+ */
+export async function checkReAddHandoff({
+  page,
+  browser,
+  serveLockedApp,
+  openSettings,
+  looks,
+  lockedPagePath,
+}) {
+  await page.addInitScript(markOnHomeScreen);
+  await serveLockedApp(page, { accessCode: "FASTBREAK" });
+  await page.goto(lockedPagePath);
+  await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
+  await page.getByRole("button", { name: "Open" }).click();
+  await openSettings(page);
+  await page.getByRole("radio", { name: looks.dark }).check();
+  const link = page.locator("#appearanceNote").getByRole("link", { name: "re-add the site" });
+  await expect(link).toHaveAttribute(
+    "href",
+    new RegExp(
+      `^x-safari-http://[^/]+${lockedPagePath}access/handoff\\?token=[^&]+&app-theme=dark$`,
+    ),
+  );
+  const safariAddress = (await link.getAttribute("href")).replace("x-safari-", "");
+
+  const safari = await browser.newContext({
+    userAgent: IPHONE_AGENT,
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+    reducedMotion: "reduce",
+  });
+  const safariPage = await safari.newPage();
+  await serveLockedApp(safariPage, { accessCode: "FASTBREAK" });
+  await safariPage.goto(safariAddress);
+  const redirected = new URL(safariPage.url());
+  expect(`${redirected.pathname}${redirected.search}`).toBe(`${lockedPagePath}?app-theme=dark`);
+  // Playwright routes only the first request of a redirect, so the page it leads to is opened
+  // again through the Worker, with the cookie the redirect set.
+  await safariPage.goto(redirected.href);
+  await expect(safariPage.locator("#homeScreenWelcome")).toBeVisible();
+  await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(safariPage.getByRole("textbox", { name: "Access code" })).toHaveCount(0);
+  await safari.close();
 }
