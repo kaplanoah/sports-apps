@@ -180,7 +180,7 @@ test("every background job saves how its run went where the Diagnostics report r
     {},
     {
       fetchImpl: async () => new Response("", { status: 503 }),
-      loadSnapshot: async () => {
+      createLoadSnapshot: () => async () => {
         throw new Error("MLB didn't answer");
       },
       now: () => now,

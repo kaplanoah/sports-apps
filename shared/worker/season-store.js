@@ -19,7 +19,9 @@ import { describeError, respondError, respondJson } from "./responses.js";
  * store's paths can't name, the store's reading of the league, the Worker's secrets, and the clock.
  * @typedef {object} JobContext
  * @property {any} docs
- * @property {(season: number) => Promise<any>} loadSnapshot
+ * @property {(fetchImpl: typeof fetch) => (season: number) => Promise<any>} createLoadSnapshot
+ *   the store's reading of the league, made on the fetch it's handed, so a run that counts its
+ *   requests counts these too
  * @property {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<boolean>, list: (prefix: string) => Promise<Map<string, any>> }} storage
  * @property {Record<string, any>} env
  * @property {typeof fetch} fetchImpl
@@ -38,8 +40,8 @@ import { describeError, respondError, respondJson } from "./responses.js";
 /**
  * What a league hands the store.
  * @typedef {object} League
- * @property {(storage: import("./feed-keeper.js").FeedStorage) => (season: number) => Promise<any>} createLoadSnapshot
- *   reads the league, keeping what it may read again in `storage`
+ * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => (season: number) => Promise<any>} createLoadSnapshot
+ *   reads the league through `fetchImpl`, keeping what it may read again in `storage`
  * @property {(loadSnapshot: (season: number) => Promise<any>, now: number) => Promise<any>} loadCurrentSnapshot
  * @property {(docs: any, season: number) => Promise<any>} readUpdates
  * @property {(docs: any, snapshot: any) => Promise<void>} saveSnapshot
@@ -166,9 +168,10 @@ export function createSeasonStore(league) {
       env,
       {
         openSocket = openWatchSocket,
-        loadSnapshot = league.createLoadSnapshot(createFeedStorage(ctx.storage)),
         now = () => Date.now(),
         fetchImpl = (input, init) => fetch(input, init),
+        createLoadSnapshot = (/** @type {typeof fetch} */ fetchWith) =>
+          league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith),
         loadDetails = league.createLoadDetails?.() ?? null,
       } = {},
     ) {
@@ -178,7 +181,8 @@ export function createSeasonStore(league) {
       /** @type {Map<string, Promise<void>>} */
       this.jobRuns = new Map();
       this.openSocket = openSocket;
-      this.loadSnapshot = loadSnapshot;
+      this.createLoadSnapshot = createLoadSnapshot;
+      this.loadSnapshot = createLoadSnapshot(fetchImpl);
       this.loadDetails = loadDetails;
       this.now = now;
       this.hasAlarm = false;
@@ -360,7 +364,7 @@ export function createSeasonStore(league) {
         await job.updateStore({
           docs: this.docs,
           storage: this.createJobStorage(name),
-          loadSnapshot: this.loadSnapshot,
+          createLoadSnapshot: this.createLoadSnapshot,
           env: this.env,
           fetchImpl: this.fetchImpl,
           now: this.now,

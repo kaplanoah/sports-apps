@@ -1,5 +1,5 @@
 import { hasCurrentSchedule, savePastSeason } from "./season-updater.js";
-import { runWithStatus } from "../../../../shared/worker/job-status.js";
+import { noteFailure, runWithStatus } from "../../../../shared/worker/job-status.js";
 
 // Fills in each season before the current one that the store keeps without its standings, as one
 // followed only until it ended was, or without its games as the page reads them now, as one saved
@@ -27,7 +27,7 @@ async function fillPastSeason({ docs, loadSnapshot, failures }) {
     if (hasStandings(season) && (await hasCurrentSchedule(docs, season.year))) continue;
     const snapshot = await loadSnapshot(season.year);
     if (!isWholeSnapshot(snapshot)) {
-      failures.push(`Reading ${season.year} failed: MLB didn't answer it whole`);
+      noteFailure(failures, `Reading ${season.year}`, "MLB didn't answer it whole");
       continue;
     }
     await savePastSeason(docs, snapshot);

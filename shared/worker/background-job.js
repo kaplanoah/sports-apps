@@ -59,7 +59,8 @@ export function createSavedDocs() {
 }
 
 /**
- * Where a job keeps a version of what it keeps under `key`, the first version under `key` itself.
+ * Where a job keeps a version of what it keeps under `key`, the first version under `key` itself,
+ * since each record's first version was saved under the bare key, before records had versions.
  * @param {string} key
  * @param {number} version
  */

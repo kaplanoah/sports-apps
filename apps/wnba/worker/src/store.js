@@ -20,7 +20,8 @@ export {
 
 export const SeasonStore = createSeasonStore({
   release: readReleaseCommit(PAGE_FILES),
-  createLoadSnapshot: (storage) => createSnapshotLoader({ storage }).loadSnapshot,
+  createLoadSnapshot: (storage, fetchImpl) =>
+    createSnapshotLoader({ storage, fetchImpl }).loadSnapshot,
   loadCurrentSnapshot: SeasonUpdater.loadCurrentSnapshot,
   readUpdates: SeasonUpdater.readUpdates,
   saveSnapshot: SeasonUpdater.saveSnapshot,

@@ -39,7 +39,11 @@ function createUpdatingStore({ stored = {}, snapshot = SNAPSHOT, now = NOW } = {
   const clock = { now };
   // MLB, whose pitchers the store also keeps, isn't what these tests follow.
   const fetchImpl = async () => new Response(null, { status: 404 });
-  const store = new SeasonStore(context.ctx, {}, { loadSnapshot, now: () => clock.now, fetchImpl });
+  const store = new SeasonStore(
+    context.ctx,
+    {},
+    { createLoadSnapshot: () => loadSnapshot, now: () => clock.now, fetchImpl },
+  );
   return { store, context, clock, harness, sent, read: (key) => context.stored.get(key) ?? null };
 }
 

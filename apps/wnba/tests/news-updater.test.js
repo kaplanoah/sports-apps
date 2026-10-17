@@ -107,9 +107,9 @@ function createRun({ env = ENV, now = NOW } = {}) {
   const storage = createJobStorage();
   const docs = createDocs();
   const job = createWnbaNewsJob();
-  const loadSnapshot = async () => ({});
+  const createLoadSnapshot = () => async () => ({});
   const runJob = (fetchImpl) =>
-    job.updateStore({ docs, storage, loadSnapshot, env, fetchImpl, now: () => now });
+    job.updateStore({ docs, storage, createLoadSnapshot, env, fetchImpl, now: () => now });
   return { storage, docs, runJob };
 }
 
@@ -520,7 +520,7 @@ test("without an API key, no photo is asked about, and one no card shows is forg
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => ({}),
+      createLoadSnapshot: () => async () => ({}),
       env,
       fetchImpl: createFetch({ photoSize: TALL_PHOTO, spotRequests }),
       now: () => NOW,

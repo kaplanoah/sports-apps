@@ -93,7 +93,7 @@ function createRun({ slate = SLATE, minutesAfter = 0, stored = {}, kept = {} } =
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => null,
+      createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: mlb.fetchImpl,
       now: () => clock.now,

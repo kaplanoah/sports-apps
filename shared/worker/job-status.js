@@ -81,8 +81,9 @@ function describeJobRun({ startedAt, endedAt, requests, failure }, stored) {
 }
 
 /**
- * What a job's run gets: the store's context, its fetch counted, and what failed so far.
- * @typedef {import("./season-store.js").JobContext & { failures: string[] }} RunContext
+ * What a job's run gets: the store's context, its fetch counted, the store's reading of the league
+ * on that fetch, and what failed so far.
+ * @typedef {import("./season-store.js").JobContext & { failures: string[], loadSnapshot: (season: number) => Promise<any> }} RunContext
  */
 
 /**
@@ -98,8 +99,16 @@ function describeJobRun({ startedAt, endedAt, requests, failure }, stored) {
 export async function runWithStatus(context, { statusKey, updateStore, describeRun }) {
   const startedAt = context.now();
   const counter = countRequests(context.fetchImpl);
+  /** @type {((season: number) => Promise<any>) | undefined} */
+  let loadSnapshot;
   /** @type {RunContext} */
-  const runContext = { ...context, fetchImpl: counter.fetchImpl, failures: [] };
+  const runContext = {
+    ...context,
+    fetchImpl: counter.fetchImpl,
+    loadSnapshot: (season) =>
+      (loadSnapshot ??= context.createLoadSnapshot(counter.fetchImpl))(season),
+    failures: [],
+  };
   await catchFailure(runContext.failures, "The run", () => updateStore(runContext));
   const stored = await context.docs.read(statusKey);
   const failure = runContext.failures.join("; ");

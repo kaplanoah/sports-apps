@@ -136,7 +136,7 @@ function createRun({ series = [], answers = listAnswers(), job = createPlayerJob
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => null,
+      createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: league.fetchImpl,
       now: () => clock.now,
@@ -492,7 +492,7 @@ test("a past season filled before the store kept its list of players gets one fr
   await createPlayerJob().updateStore({
     docs,
     storage,
-    loadSnapshot: async () => null,
+    createLoadSnapshot: () => async () => null,
     env: {},
     fetchImpl: league.fetchImpl,
     now: () => NOW + 5 * MINUTE_MS,

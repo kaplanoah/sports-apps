@@ -97,7 +97,7 @@ function createRun({
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => null,
+      createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: league.fetchImpl,
       now: () => clock.now,

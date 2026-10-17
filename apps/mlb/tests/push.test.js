@@ -45,7 +45,7 @@ function createPushStore({ pushStatus = 201 } = {}) {
     context.ctx,
     {},
     {
-      loadSnapshot: async () => structuredClone(harness.snapshot),
+      createLoadSnapshot: () => async () => structuredClone(harness.snapshot),
       now: () => clock.now,
       fetchImpl,
     },

@@ -417,7 +417,7 @@ test("a background job runs beside the season's update, and the alarm wakes for 
   await store.alarm();
   assert.equal(contexts.length, 1);
   assert.equal(contexts[0].env, env);
-  assert.equal(contexts[0].loadSnapshot, store.loadSnapshot);
+  assert.equal(contexts[0].createLoadSnapshot, store.createLoadSnapshot);
   assert.equal(seasonUpdates, 1);
   assert.equal(await context.ctx.storage.getAlarm(), NOW + 15 * MINUTE_MS);
 
