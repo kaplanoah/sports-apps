@@ -39,7 +39,10 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
     "eslint.config.mjs",
+    "worker/post-review.mjs",
     "worker/report-flaky-tests.mjs",
+    "worker/review-context.mjs",
+    "worker/review-state.mjs",
     "worker/set-app-key.mjs",
   ]);
   assert.equal(decision.isNeeded, false);
