@@ -152,6 +152,10 @@
      winner less than in Night Game. Chivo Mono draws every weight at the same width, so both
      themes still lay out the same. */
   --lost-score-weight: calc(var(--type-stat-large-weight) - 100);
+  /* A series score is sunk a little into the card, and the winner's deeper into its red. */
+  --won-chip-shade: rgba(0, 0, 0, 0.44);
+  --score-chip: color-mix(in srgb, var(--divider) 12%, var(--card));
+  --score-chip-shade: rgba(0, 0, 0, 0.18);
   --focus-ring: var(--now);
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
@@ -256,6 +260,8 @@
   --out: #998b7d;
   --credit-ink: var(--ink-dim);
   --lost-score-weight: var(--type-stat-large-weight);
+  --score-chip: var(--divider);
+  --score-chip-shade: var(--won-chip-shade);
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-ink: #fff;
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
@@ -1163,7 +1169,7 @@ table.st td.team .team-name {
 }
 /* Each chip sits a little above its row's middle, and its digit a little below the chip's, by as
    much as its colors need to look centered, set by eye in each theme: the inset shadow darkens the
-   top of a gray or green chip more than a red or gold one. A margin of twice the lift moves the
+   top of a cream or green chip more than a red or gold one. A margin of twice the lift moves the
    chip, and the split of its padding moves the digit. */
 .nscore {
   min-width: 1.5em;
@@ -1172,10 +1178,10 @@ table.st td.team .team-name {
   font-size: var(--type-score-size);
   padding: 3px 6px 1px;
   border-radius: var(--radius-chip);
-  background: var(--divider);
+  background: var(--score-chip);
   margin-bottom: 0.5px;
   box-shadow:
-    inset 0 2px 3px rgba(0, 0, 0, 0.44),
+    inset 0 2px 3px var(--score-chip-shade),
     0 1px 0 rgba(241, 234, 212, 0.13);
 }
 /* An empty score keeps the height it has with a digit in it. */
@@ -1188,6 +1194,9 @@ table.st td.team .team-name {
   margin-bottom: 0;
   background: var(--accent);
   color: var(--accent-ink);
+  box-shadow:
+    inset 0 2px 3px var(--won-chip-shade),
+    0 1px 0 rgba(241, 234, 212, 0.13);
 }
 :root[data-theme="dark"] .nscore:not(.lead) {
   padding-top: 3.5px;
