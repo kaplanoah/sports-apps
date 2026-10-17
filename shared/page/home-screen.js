@@ -1,9 +1,8 @@
 // The page's asks to be added to the Home Screen, which draw-home-screen-asks.js draws before the
-// first paint: the welcome a phone's or tablet's browser opens on, and the box at the bottom of
-// settings. Neither shows on a computer, or once the page is opened from the Home Screen. Going on
-// in the browser closes the welcome on this device for good, and the box stays, so the steps are
-// still there. With Chrome's own install to hand, Install takes the place of the steps in both.
-// The welcome's first step picks the theme, which appearance.js keeps.
+// first paint, and whose welcome keeps its own theme pick and closing: the welcome a phone's or
+// tablet's browser opens on, and the box at the bottom of settings. Neither shows on a computer, or
+// once the page is opened from the Home Screen. With Chrome's own install to hand, Install takes
+// the place of the steps in both.
 
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
 
@@ -15,23 +14,12 @@ import { isOnHomeScreen, isTouchDevice } from "./device.js";
  * }} InstallPrompt
  */
 
-// draw-home-screen-asks.js reads it under the same key before the first paint.
-const WELCOME_CLOSED_KEY = "homeScreenWelcomeClosed";
-
 /** @type {InstallPrompt | null} */
 let installPrompt = null;
 let isInstalled = false;
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const findWelcome = () => /** @type {HTMLDialogElement} */ (findElement("homeScreenWelcome"));
-
-function saveWelcomeClosed() {
-  try {
-    localStorage.setItem(WELCOME_CLOSED_KEY, "closed");
-  } catch {
-    /* the welcome opens again on the next visit */
-  }
-}
 
 const isAsking = () => isTouchDevice() && !isOnHomeScreen() && !isInstalled;
 
@@ -64,7 +52,6 @@ async function install() {
 function followClick(event) {
   const target = /** @type {Element} */ (event.target);
   if (target.closest("[data-install]") && installPrompt) install();
-  else if (target.closest(".welcome-continue")) findWelcome().close();
 }
 
 /** @param {Event} event */
@@ -83,8 +70,6 @@ function forgetAsks() {
 export function startHomeScreen() {
   findElement("homeScreenTip").addEventListener("click", followClick);
   findWelcome().addEventListener("click", followClick);
-  // Escape and Continue in the browser both close it, and either way it stays closed.
-  findWelcome().addEventListener("close", saveWelcomeClosed);
   // Chrome would otherwise show its own banner along the bottom of the screen.
   window.addEventListener("beforeinstallprompt", keepInstallPrompt);
   window.addEventListener("appinstalled", forgetAsks);

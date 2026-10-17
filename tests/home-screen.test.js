@@ -6,21 +6,22 @@ import { readFileSync } from "node:fs";
 const readNamed = (path, pattern) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8").match(pattern)?.[1];
 
-// The plain script that draws the welcome before the first paint can't import the module that
-// closes it, so each names the key it's kept under, and the tests' harness closes it under the
-// same one.
-test("the welcome is kept closed under one key wherever it's read or written", () => {
-  const declared = /const WELCOME_CLOSED_KEY = "([^"]+)";/;
-  const drawn = readNamed("shared/page/draw-home-screen-asks.js", declared);
+// The tests' harness closes the welcome as the viewer would, under the key the plain script that
+// draws it keeps it closed by.
+test("the tests close the welcome under the key the page keeps it closed by", () => {
+  const drawn = readNamed(
+    "shared/page/draw-home-screen-asks.js",
+    /const WELCOME_CLOSED_KEY = "([^"]+)";/,
+  );
   assert.ok(drawn);
-  assert.equal(readNamed("shared/page/home-screen.js", declared), drawn);
   assert.equal(
     readNamed("tests/browser/harness.mjs", /localStorage\.setItem\("([^"]+)", "closed"\)/),
     drawn,
   );
 });
 
-// For the same reason, the plain scripts make device.js's tests of the device themselves.
+// The plain scripts that draw the welcome before the first paint can't import a module, so they
+// make device.js's tests of the device themselves.
 test("the welcome tells a phone, its Home Screen, and an iPhone or iPad as device.js does", () => {
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
   const drawing = read("shared/page/draw-home-screen-asks.js") + read("shared/page/pick-theme.js");

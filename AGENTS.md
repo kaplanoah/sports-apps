@@ -428,7 +428,7 @@
   whose numbered steps pick the theme the Home Screen icon takes and say how to add the page there,
   until the page is added or the viewer goes on in the browser, which keeps it closed on that device,
   and the box at the bottom of settings that keeps the steps, both drawn before the first paint in `draw-home-screen-asks.js`,
-  so the welcome never arrives over the page, and run from then on in `home-screen.js`,
+  so the welcome never arrives over the page and its pick and close work at once, with Chrome's Install in `home-screen.js`,
   telling a phone or tablet from a computer, and the Home Screen from the browser,
   in `device.js`, one tab for a season's standings and its bracket,
   named Standings and opening on them until the playoff field is set, and Bracket from then on,

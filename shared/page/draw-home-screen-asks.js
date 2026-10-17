@@ -3,11 +3,11 @@
 // the browser, and the box at the bottom of settings, which keeps the steps. Modules run only once
 // all of them have loaded, so a welcome they drew would arrive over a page already painted. This
 // plain script loads in the head, and the page calls drawHomeScreenAsks() right after its
-// settings, before anything is painted. home-screen.js takes both from there.
+// settings, before anything is painted, and it answers the welcome's own taps from then on, so they
+// work while the modules still load. home-screen.js runs Chrome's Install in both.
 
-/* global isOnHomeScreen, readPickedAppearance -- from pick-theme.js, which loads before it */
+/* global isOnHomeScreen, keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
 
-// home-screen.js keeps it under the same key once the viewer goes on in the browser.
 const WELCOME_CLOSED_KEY = "homeScreenWelcomeClosed";
 
 const TIP_TITLE = "Use this site like an app";
@@ -48,6 +48,14 @@ function readStoredText(key) {
     return localStorage.getItem(key);
   } catch {
     return null;
+  }
+}
+
+function keepWelcomeClosed() {
+  try {
+    localStorage.setItem(WELCOME_CLOSED_KEY, "closed");
+  } catch {
+    /* the welcome opens again on the next visit */
   }
 }
 
@@ -116,6 +124,17 @@ function drawWelcome(isOnIos) {
   return welcome;
 }
 
+// appearance.js also shows the icons and bar that go with the theme picked, once it has loaded.
+/** @param {HTMLDialogElement} welcome */
+function wireWelcome(welcome) {
+  welcome.addEventListener("change", (event) =>
+    keepPickedAppearance(/** @type {HTMLInputElement} */ (event.target).value),
+  );
+  welcome.querySelector(".welcome-continue").addEventListener("click", () => welcome.close());
+  // Continue in the browser, Escape, and Android's back all close it, and it stays closed.
+  welcome.addEventListener("close", keepWelcomeClosed);
+}
+
 /** @param {boolean} isOnIos */
 function drawTip(isOnIos) {
   const tip = /** @type {HTMLElement} */ (document.getElementById("homeScreenTip"));
@@ -139,5 +158,6 @@ function drawHomeScreenAsks() {
   const isOnIos = isIosDevice();
   drawTip(isOnIos);
   const welcome = drawWelcome(isOnIos);
+  wireWelcome(welcome);
   if (readStoredText(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
 }

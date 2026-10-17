@@ -88,6 +88,25 @@ test.describe("on an iPhone, in the browser", () => {
     ]);
   });
 
+  test("before the page's code arrives, the welcome already picks the theme and closes for good", async ({
+    page,
+  }) => {
+    await page.route(/\/js\/app\.js(?:[?#]|$)/, (route) =>
+      route.fulfill({ contentType: "text/javascript", body: "" }),
+    );
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page, { isShowingWelcome: true });
+    const welcome = page.locator(WELCOME);
+    await welcome.getByRole("radio", { name: "Walnut" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+    await welcome.getByRole("button", CONTINUE).click();
+    await expect(welcome).toBeHidden();
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(welcome).toBeHidden();
+  });
+
   test("a theme picked on the welcome is the page's theme, its Home Screen icon, and Appearance's pick in Settings", async ({
     page,
   }) => {

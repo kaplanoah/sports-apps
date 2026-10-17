@@ -5,6 +5,7 @@ declare const Sortable: {
 // The page's plain scripts in its head share these, from shared/page/pick-theme.js.
 declare function isOnHomeScreen(): boolean;
 declare function readPickedAppearance(): string;
+declare function keepPickedAppearance(choice: string): void;
 
 // Cloudflare Workers runtime: a Durable Object answers a WebSocket upgrade with one end of a pair.
 declare class WebSocketPair {
