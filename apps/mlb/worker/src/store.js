@@ -12,7 +12,7 @@ import { createPastSeasonsJob } from "./past-seasons.js";
 import { PITCHER_JOB, createPitcherJob } from "./pitcher-updater.js";
 import { createRosterJob } from "./roster-updater.js";
 import * as SeasonUpdater from "./season-updater.js";
-import { createSnapshotServer } from "./snapshot.js";
+import { createSnapshotLoader } from "./snapshot.js";
 import { createWatchedGameLoader } from "./watched-games.js";
 
 export {
@@ -24,7 +24,7 @@ export {
 
 export const SeasonStore = createSeasonStore({
   release: readReleaseCommit(PAGE_FILES),
-  createLoadSnapshot: (storage) => createSnapshotServer({ storage }).loadSnapshot,
+  createLoadSnapshot: (storage) => createSnapshotLoader({ storage }).loadSnapshot,
   loadCurrentSnapshot: SeasonUpdater.loadCurrentSnapshot,
   readUpdates: SeasonUpdater.readUpdates,
   saveSnapshot: SeasonUpdater.saveSnapshot,

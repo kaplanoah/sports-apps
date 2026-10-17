@@ -7,7 +7,7 @@ import { createWnbaGameDetailsJob } from "./game-details-updater.js";
 import { createHighlightsUpdater } from "./highlights-updater.js";
 import { createWnbaNewsJob } from "./news-updater.js";
 import { PLAYER_JOB, createPlayerJob } from "./player-updater.js";
-import { createSnapshotServer } from "./snapshot.js";
+import { createSnapshotLoader } from "./snapshot.js";
 import { GAME_DETAILS_COLLECTION } from "./store-docs.js";
 import { createWatchedGameLoader } from "./watched-games.js";
 
@@ -20,7 +20,7 @@ export {
 
 export const SeasonStore = createSeasonStore({
   release: readReleaseCommit(PAGE_FILES),
-  createLoadSnapshot: (storage) => createSnapshotServer({ storage }).loadSnapshot,
+  createLoadSnapshot: (storage) => createSnapshotLoader({ storage }).loadSnapshot,
   loadCurrentSnapshot: SeasonUpdater.loadCurrentSnapshot,
   readUpdates: SeasonUpdater.readUpdates,
   saveSnapshot: SeasonUpdater.saveSnapshot,

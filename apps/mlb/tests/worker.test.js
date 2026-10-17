@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import * as MLBSnapshot from "../page/js/snapshot.js";
 import { createMemoryStorage } from "../../../shared/worker/feed-keeper.js";
-import { createSnapshotServer } from "../worker/src/snapshot.js";
+import { createSnapshotLoader } from "../worker/src/snapshot.js";
 
 const EVENING = JSON.parse(
   readFileSync(path.join(import.meta.dirname, "fixtures/2026-09-24-evening.json"), "utf8"),
@@ -58,14 +58,14 @@ function createFakeMlb({ status = 200, answers = {} } = {}) {
 }
 
 /** @param {Parameters<typeof createFakeMlb>[0]} [options] */
-function createTestServer(options = {}) {
+function createTestLoader(options = {}) {
   const mlb = createFakeMlb(options);
   let now = NOW;
-  const server = createSnapshotServer({ fetchImpl: mlb.fetchImpl, now: () => now });
+  const loader = createSnapshotLoader({ fetchImpl: mlb.fetchImpl, now: () => now });
   return {
     mlb,
-    server,
-    loadSnapshot: () => server.loadSnapshot(2026),
+    loader,
+    loadSnapshot: () => loader.loadSnapshot(2026),
     advanceClock: (milliseconds) => {
       now += milliseconds;
     },
@@ -73,7 +73,7 @@ function createTestServer(options = {}) {
 }
 
 test("the snapshot is built from MLB, with a timeout and a short edge cache", async () => {
-  const { mlb, loadSnapshot } = createTestServer();
+  const { mlb, loadSnapshot } = createTestLoader();
   const snapshot = await loadSnapshot();
   const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
   assert.deepEqual(snapshot, expected);
@@ -83,7 +83,7 @@ test("the snapshot is built from MLB, with a timeout and a short edge cache", as
 });
 
 test("each game being played is read from MLB's live feed, reused only moments, and one that doesn't answer keeps the schedule's copy", async () => {
-  const { mlb, loadSnapshot } = createTestServer();
+  const { mlb, loadSnapshot } = createTestLoader();
   await loadSnapshot();
   const liveCalls = mlb.calls.filter((call) => nameRequest(call.url) === "liveGame");
 
@@ -96,14 +96,14 @@ test("each game being played is read from MLB's live feed, reused only moments, 
     nameRequest(url) === "liveGame"
       ? Promise.resolve(new Response("", { status: 503 }))
       : down.fetchImpl(url, init);
-  const server = createSnapshotServer({ fetchImpl, now: () => NOW });
-  const snapshot = await server.loadSnapshot(2026);
+  const loader = createSnapshotLoader({ fetchImpl, now: () => NOW });
+  const snapshot = await loader.loadSnapshot(2026);
   const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
   assert.deepEqual(snapshot, expected);
 });
 
 test("reads moments apart share one trip to MLB", async () => {
-  const { mlb, loadSnapshot, advanceClock } = createTestServer();
+  const { mlb, loadSnapshot, advanceClock } = createTestLoader();
   await Promise.all([1, 2, 3].map(() => loadSnapshot()));
   const firstTrip = 5 + LIVE_GAME_IDS.length;
   assert.equal(mlb.calls.length, firstTrip);
@@ -116,7 +116,7 @@ const HOUR_MS = 60 * 60 * 1000;
 const SLOW_REQUESTS = ["season", "standings", "postseason", "seasonGames"];
 
 test("only the schedule is read every time, the postseason hourly, and the rest daily", async () => {
-  const { mlb, loadSnapshot, advanceClock } = createTestServer();
+  const { mlb, loadSnapshot, advanceClock } = createTestLoader();
   await loadSnapshot();
 
   advanceClock(HOUR_MS);
@@ -140,7 +140,7 @@ function finishLiveGame(schedule) {
 
 test("a game that ends has the slow requests read again at once, and once more ten minutes on", async () => {
   const answers = {};
-  const { mlb, loadSnapshot, advanceClock } = createTestServer({ answers });
+  const { mlb, loadSnapshot, advanceClock } = createTestLoader({ answers });
   await loadSnapshot();
 
   answers.schedule = finishLiveGame(EVENING.responses.schedule);
@@ -157,34 +157,34 @@ test("a game that ends has the slow requests read again at once, and once more t
 });
 
 test("a past season read whole is kept", async () => {
-  const { mlb, server, advanceClock } = createTestServer();
-  await server.loadSnapshot(2025);
+  const { mlb, loader, advanceClock } = createTestLoader();
+  await loader.loadSnapshot(2025);
   const reads = mlb.calls.length;
 
   advanceClock(24 * HOUR_MS);
-  await server.loadSnapshot(2025);
+  await loader.loadSnapshot(2025);
   assert.equal(mlb.calls.length, reads);
 });
 
 test("a past season read while a request failed is read again, and kept once it's whole", async () => {
   const answers = { standings: { records: "not standings" } };
-  const { mlb, server, advanceClock } = createTestServer({ answers });
-  const partial = await server.loadSnapshot(2025);
+  const { mlb, loader, advanceClock } = createTestLoader({ answers });
+  const partial = await loader.loadSnapshot(2025);
   assert.ok(partial.missing.length > 0);
 
   delete answers.standings;
   advanceClock(25 * HOUR_MS);
-  const whole = await server.loadSnapshot(2025);
+  const whole = await loader.loadSnapshot(2025);
   assert.deepEqual(whole.missing, []);
   const reads = mlb.calls.length;
 
   advanceClock(24 * HOUR_MS);
-  await server.loadSnapshot(2025);
+  await loader.loadSnapshot(2025);
   assert.equal(mlb.calls.length, reads);
 });
 
 test("MLB failing is reported", async () => {
-  const { loadSnapshot } = createTestServer({ status: 503 });
+  const { loadSnapshot } = createTestLoader({ status: 503 });
   await assert.rejects(loadSnapshot(), /MLB Stats API answered 503/);
 });
 
@@ -237,12 +237,12 @@ test("without git, the build has no release", async () => {
   assert.equal(release, null);
 });
 
-test("a server that starts over on the same storage keeps what the last one read", async () => {
+test("a loader that starts over on the same storage keeps what the last one read", async () => {
   const mlb = createFakeMlb();
   const storage = createMemoryStorage();
   let now = NOW;
   const createServerOnStorage = () =>
-    createSnapshotServer({ fetchImpl: mlb.fetchImpl, now: () => now, storage });
+    createSnapshotLoader({ fetchImpl: mlb.fetchImpl, now: () => now, storage });
   await createServerOnStorage().loadSnapshot(2026);
 
   now += 30 * 1000;

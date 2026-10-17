@@ -57,7 +57,7 @@ const countFinals = (scoreboard) =>
  * @param {() => number} [options.now]
  * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} [options.storage]
  */
-export function createSnapshotServer({
+export function createSnapshotLoader({
   fetchImpl = (input, init) => fetch(input, init),
   now = () => Date.now(),
   storage = undefined,
