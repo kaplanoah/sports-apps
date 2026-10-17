@@ -291,7 +291,13 @@ test("a game still to come shows its start time centered in its row", async ({ p
 const openPostseasonDay = async (page, games, earlierGames) => {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   /** @param {string} start */
-  const describeGame = (start) => (game) => ({ state: "pre", start, postseason: true, ...game });
+  const describeGame = (start) => (game) => ({
+    id: `${game.away}-${game.home}-${game.date ?? start}`,
+    state: "pre",
+    start,
+    postseason: true,
+    ...game,
+  });
   snapshot.slate.today.games = games.map(describeGame("2026-09-24T18:08:00Z"));
   snapshot.slate.previous = earlierGames.map((game) => ({
     date: "2026-09-23",

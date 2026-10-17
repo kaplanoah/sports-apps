@@ -36,7 +36,7 @@ jobs:
           persist-credentials: false
       - &setup-node
         id: node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
       - name: Find the CI run that passed on this code
@@ -172,7 +172,7 @@ jobs:
         run: echo "found=$(node -p 'require("./test-results/report.json").stats.flaky > 0')" >> "$GITHUB_OUTPUT"
       # A test that passed only on its retry keeps its failed try's trace, and the next nightly run
       # names it in the issue Flaky browser tests (worker/report-flaky-tests.mjs).
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure() || steps.flaky.outputs.found == 'true'
         with:
           name: browser-report-${{ matrix.shard }}
@@ -245,12 +245,12 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
         with:
           name: burn-in-flaky-${{ matrix.shard }}
           path: test-results/burn-in-flaky.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
           name: playwright-report-burn-in-${{ matrix.shard }}
@@ -278,7 +278,7 @@ jobs:
       - *install-modules
       - run: npm run test:browser -- --project '*-webkit'
       - *find-flaky
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure() || steps.flaky.outputs.found == 'true'
         with:
           name: browser-report-webkit
@@ -379,7 +379,7 @@ jobs:
           # Claude reads the checkout, and the review needs no git credentials on disk.
           persist-credentials: false
       - if: steps.decision.outputs.review == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
       - name: Split the change into shares
@@ -432,7 +432,7 @@ jobs:
         id: review
         continue-on-error: true
         timeout-minutes: 15
-        uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           claude_code_oauth_token: &oauth-token ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: &api-key ${{ secrets.ANTHROPIC_API_KEY }}
@@ -468,7 +468,7 @@ jobs:
         if: ${{ !cancelled() && steps.first.outputs.unread != '' }}
         continue-on-error: true
         timeout-minutes: 15
-        uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           claude_code_oauth_token: *oauth-token
           anthropic_api_key: *api-key
@@ -494,7 +494,7 @@ jobs:
           SHARE: ${{ matrix.share }}
         run: node worker/judge-review.mjs share .review "$SHARE" >> "$GITHUB_OUTPUT"
       - if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: review-share-${{ matrix.share }}
           path: .review/share-${{ matrix.share }}.json
@@ -523,7 +523,7 @@ jobs:
       - *setup-node
       - *prepare-review
       - *read-comments
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: review-share-*
           path: .review/
@@ -532,7 +532,7 @@ jobs:
         id: review
         continue-on-error: true
         timeout-minutes: 15
-        uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           claude_code_oauth_token: *oauth-token
           anthropic_api_key: *api-key
@@ -555,7 +555,7 @@ jobs:
           STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
         run: node worker/judge-review.mjs across .review
       - if: steps.review.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: review-across
           path: .review/across.json
@@ -591,13 +591,13 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - if: needs.review-plan.outputs.count != ''
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
       - if: needs.review-plan.outputs.count != ''
         run: node worker/plan-review.mjs .review > /dev/null
       - if: needs.review-plan.outputs.count > 0
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: review-*
           path: .review/
@@ -665,7 +665,7 @@ jobs:
         run: |
           git rev-parse HEAD > passed-commit.txt
           echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: >-
           github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true' &&
           steps.tested.outputs.reviewed == 'true'
@@ -679,7 +679,7 @@ jobs:
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
           (github.event_name == 'pull_request' && needs.gate.result != 'success')
         run: exit 1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: github.event_name == 'pull_request'
         with:
           name: ci-passed-${{ steps.code.outputs.tree }}
