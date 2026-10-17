@@ -65,12 +65,15 @@ export const listCheckedFindings = (checks) =>
         })),
     );
 
-/** @param {string} weight */
-const rankWeight = (weight) =>
-  WEIGHTS.includes(weight) ? WEIGHTS.indexOf(weight) : WEIGHTS.length;
-
 /** @param {string} one @param {string} other */
-const compareWeights = (one, other) => rankWeight(one) - rankWeight(other);
+const compareWeights = (one, other) => WEIGHTS.indexOf(one) - WEIGHTS.indexOf(other);
+
+/**
+ * Whether a finding can be posted: it has a weight the review knows, a file, and a body.
+ * @param {Finding} finding
+ */
+const isPostable = (finding) =>
+  WEIGHTS.includes(finding.weight) && Boolean(finding.path) && Boolean(finding.body);
 
 /**
  * The weight a finding takes for itself and the repeats it stands in for: the heaviest a checker
@@ -78,7 +81,7 @@ const compareWeights = (one, other) => rankWeight(one) - rankWeight(other);
  * @param {string[]} weights
  */
 function pickGroupWeight(weights) {
-  const settled = weights.filter((weight) => weight !== UNSURE && WEIGHTS.includes(weight));
+  const settled = weights.filter((weight) => weight !== UNSURE);
   return settled.length ? settled.toSorted(compareWeights)[0] : UNSURE;
 }
 
@@ -113,26 +116,26 @@ function listRepeats(groups, weightByRef) {
 }
 
 /**
- * What a stage posts: every finding its checkers kept but the repeats the check across areas
- * named, each at the heaviest settled weight of those it stands in for, with what it added,
- * weightiest first.
+ * What a stage posts: every postable finding its checkers kept but the repeats the check across
+ * areas named, each at the heaviest settled weight of those it stands in for, with what it added,
+ * weightiest first. A finding that can't be posted neither leads nor joins a group of repeats.
  * @param {(Finding & { ref?: string })[]} checked
  * @param {Across | null} across
  * @returns {Finding[]}
  */
 export function listToPost(checked, across) {
+  const postable = checked.filter(isPostable);
   const weightByRef = new Map(
-    checked.flatMap((finding) => (finding.ref ? [[finding.ref, finding.weight]] : [])),
+    postable.flatMap((finding) => (finding.ref ? [[finding.ref, finding.weight]] : [])),
   );
   const { dropped, leadWeights } = listRepeats(across?.duplicates ?? [], weightByRef);
-  const kept = checked
+  const kept = postable
     .filter((finding) => !dropped.has(finding.ref ?? ""))
     .map((finding) => ({
       ...finding,
       weight: leadWeights.get(finding.ref ?? "") ?? finding.weight,
     }));
-  return [...kept, ...(across?.added ?? [])]
-    .filter((finding) => WEIGHTS.includes(finding.weight) && finding.path && finding.body)
+  return [...kept, ...(across?.added ?? []).filter(isPostable)]
     .toSorted((one, other) => compareWeights(one.weight, other.weight))
     .map(({ weight, path, line, body }) => ({ weight, path, line, body }));
 }
