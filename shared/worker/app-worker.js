@@ -84,6 +84,24 @@ function findPageFile(pagePath, releaseFolder) {
   return { path, headers: PAGE_HEADERS };
 }
 
+const MANIFEST_PATH = "manifest.webmanifest";
+
+// A Home Screen app opens at its manifest's start_url, with storage apart from the browser's, so
+// the theme picked before the page was added rides in that address, which pick-theme.js keeps on
+// the app's first open.
+/**
+ * @param {string} manifest
+ * @param {URL} url
+ */
+function addThemeToStartUrl(manifest, url) {
+  const theme = url.searchParams.get("theme");
+  if (!theme) return manifest;
+  return JSON.stringify({
+    ...JSON.parse(manifest),
+    start_url: `./?${new URLSearchParams({ theme })}`,
+  });
+}
+
 /**
  * @param {Parameters<typeof decodePageFiles>[0]} pageFiles
  * @param {string | null} releaseCommit
@@ -101,12 +119,13 @@ function createPageServer(pageFiles, releaseCommit) {
     if (replaced) return serveReplacedRelease(replaced[1]);
     const file = files.get(path);
     if (!file) return serveNotFound();
+    const body =
+      path === MANIFEST_PATH ? addThemeToStartUrl(file.body, new URL(request.url)) : file.body;
     file.etag ??= hashBody(file.body);
-    const etag = await file.etag;
+    const etag = body === file.body ? await file.etag : await hashBody(body);
     const headers = { "content-type": file.contentType, etag, ...cacheHeaders };
     if (hasMatchingTag(request, etag)) return new Response(null, { status: 304, headers });
-    const body = request.method === "HEAD" ? null : file.body;
-    return new Response(body, { headers });
+    return new Response(request.method === "HEAD" ? null : body, { headers });
   };
 }
 

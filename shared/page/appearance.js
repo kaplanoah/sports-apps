@@ -47,6 +47,13 @@ function showTheme(looks, theme) {
   findElement("homeScreenIcon").setAttribute("href", homeScreenIcon);
 }
 
+// A Home Screen app keeps its storage apart from the browser's, so the page's manifest names the
+// pick in the address the app opens at, which pick-theme.js keeps on its first open.
+/** @param {string} choice */
+function offerPickToHomeScreen(choice) {
+  findElement("manifestLink").setAttribute("href", `manifest.webmanifest?theme=${choice}`);
+}
+
 /**
  * Shows the theme the viewer picked, or the phone's for System, now and whenever the phone's
  * changes.
@@ -54,7 +61,11 @@ function showTheme(looks, theme) {
  * @param {() => string} readPicked
  */
 function followTheme(looks, readPicked) {
-  const showChosenTheme = () => showTheme(looks, resolveTheme(readPicked()));
+  const showChosenTheme = () => {
+    const choice = readPicked();
+    showTheme(looks, resolveTheme(choice));
+    offerPickToHomeScreen(choice);
+  };
   showChosenTheme();
   darkScheme.addEventListener("change", showChosenTheme);
   return showChosenTheme;

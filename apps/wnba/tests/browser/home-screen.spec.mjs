@@ -86,6 +86,10 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(page.locator("#homeScreenIcon")).toHaveAttribute("href", "icon-180.png");
     await expect(welcome.getByRole("radio", { name: "Walnut" })).toBeChecked();
+    await expect(page.locator("#manifestLink")).toHaveAttribute(
+      "href",
+      "manifest.webmanifest?theme=dark",
+    );
     expect(await listLowContrastText(page)).toEqual([]);
     await welcome.getByRole("button", CONTINUE).click();
     await openSettings(page);
@@ -107,6 +111,23 @@ test.describe("on an iPhone, in the browser", () => {
       "Use this site like an app Tap Share, then Add to Home Screen. It opens full screen, without the browser's bars.",
       { useInnerText: true },
     );
+  });
+
+  test("the Home Screen app's first open takes the theme its address names, but never over one picked since", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page);
+    await page.goto("/?theme=dark");
+    await expect(page.locator("#stamp")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await openSettings(page);
+    await expect(page.locator('input[name="appearance"][value="dark"]')).toBeChecked();
+
+    await page.locator("#settingsDialog").getByRole("radio", { name: "Maple" }).check();
+    await page.goto("/?theme=dark");
+    await expect(page.locator("#stamp")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   });
 
   test("opened from the Home Screen, the page asks for nothing", async ({ page }) => {

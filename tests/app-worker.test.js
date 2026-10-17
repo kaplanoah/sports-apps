@@ -343,3 +343,19 @@ test("with an address of its own, the page still answers under its key, and only
   assert.equal(keyless.status, 404);
   assert.equal((await requestAtPageHost("/key/", { cookie })).status, 404);
 });
+
+test("the manifest names the theme its address asks for in the address the Home Screen app opens at", async () => {
+  const manifest = { name: "WNBA", start_url: "./", scope: "./" };
+  const worker = createPageWorker({
+    "manifest.webmanifest": {
+      contentType: "application/manifest+json",
+      text: JSON.stringify(manifest),
+    },
+  });
+
+  const picked = await requestPageFile(worker, "manifest.webmanifest?theme=dark");
+  assert.deepEqual(await picked.json(), { ...manifest, start_url: "./?theme=dark" });
+  const plain = await requestPageFile(worker, "manifest.webmanifest");
+  assert.deepEqual(await plain.json(), manifest);
+  assert.notEqual(picked.headers.get("etag"), plain.headers.get("etag"));
+});
