@@ -518,6 +518,10 @@ const COVERAGE = {
   "tab:search": { leftOut: "It's the search itself" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },
   "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
+  "dialog:homeScreenWelcome": {
+    leftOut:
+      "It shows once, before the page is added, and the box at the bottom of Settings keeps its steps",
+  },
   "sheet:gameSheet": { games: "Mets at Phillies" },
   "section:game": { games: "Mets at Phillies" },
   "section:matchup": { search: "Mets matchup", opens: "matchup" },
@@ -533,7 +537,8 @@ const COVERAGE = {
   "settings:paywalled": { search: "the athletic", opens: "settings:paywalled" },
   "settings:prospectus": { search: "prospectus", opens: "settings:prospectus" },
   "settings:home-screen": {
-    leftOut: "Shows only in a phone's browser, whose bar at the top also asks to add the page",
+    leftOut:
+      "Shows only in a phone's or tablet's browser, at the bottom of Settings, which search finds",
   },
   "settings:ranking": { search: "ranking", opens: "settings:ranking" },
   "settings:diagnostics": { search: "diagnostics", opens: "settings:diagnostics" },

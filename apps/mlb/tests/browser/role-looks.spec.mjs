@@ -74,6 +74,12 @@ const OTHER_PLACES = [
     shown: (page) => page.getByRole("heading", { name: "Enter your access code" }),
   },
   {
+    name: "the Home Screen welcome",
+    device: ON_A_PHONE,
+    open: (page) => openApp(page, { isShowingWelcome: true }),
+    shown: (page) => page.getByRole("heading", { name: "Add MLB to your Home Screen" }),
+  },
+  {
     name: "a bracket with a series under way",
     open: async (page) => {
       const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);

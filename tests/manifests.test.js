@@ -20,3 +20,13 @@ test("every app's manifest offers the icons Android needs to install it", () => 
       assert.ok(existsSync(new URL(`../apps/${app}/page/${src}`, import.meta.url)), src);
   }
 });
+
+// An installed app's id is its manifest's start_url, the page's own address, where it has no id of
+// its own, so naming one, or moving the start_url, would make Chrome take it for another app.
+test("every app's manifest keeps the id installed apps already have, its page's own address", () => {
+  for (const app of listApps()) {
+    const { id, start_url: startUrl } = readManifest(app);
+    assert.equal(id, undefined, app);
+    assert.equal(startUrl, "./", app);
+  }
+});

@@ -1,9 +1,10 @@
 import { TEAMS } from "../../page/js/teams.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { readNameLetters } from "../../../../shared/worker/injury-report.js";
-import { readKeptDoc } from "./store-docs.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
+import { splitName } from "./season-averages.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
 
 // Reads a team's roster for a season, for its sheet's Roster page: each player's number, position,
@@ -12,7 +13,7 @@ import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } fro
 // each. ESPN's injury report says who is out and why, and only for today's roster, so a past
 // season's has no one out. The store keeps each season's rosters (player-updater.js), so a sheet
 // reads the league itself only for a season the store doesn't keep. The page takes each player's
-// averages from the store, which the season updater keeps.
+// averages from the store, which the player job keeps (player-updater.js).
 
 const WNBA_STATS = "https://stats.wnba.com/stats";
 // A roster changes with a signing or an injury, a past season's never, and the list of every
@@ -115,8 +116,7 @@ function chooseAgeDay(season, now) {
  */
 function readNames(row, listed) {
   if (listed) return { firstName: listed.PLAYER_FIRST_NAME, lastName: listed.PLAYER_LAST_NAME };
-  const [firstName, ...rest] = String(row.PLAYER).split(" ");
-  return { firstName, lastName: rest.join(" ") };
+  return splitName(row.PLAYER);
 }
 
 /**
@@ -215,19 +215,19 @@ export function createRosterServer({
 
   /**
    * @param {URL} url
-   * @param {import("./store-docs.js").ReadDoc} [readDoc] the store's documents, when the Worker
+   * @param {import("../../../../shared/worker/store-reads.js").ReadDoc} [readDoc] the store's documents, when the Worker
    *   has a store
    */
   async function serveRoster(url, readDoc) {
     const team = readTeam(url.searchParams);
-    if (!team) return respondJson({ error: "team must name a WNBA team" }, 400);
+    if (!team) return respondError(400, "invalid_argument", "team must name a WNBA team");
     const season = SEASON_PARAM.readSeason(url.searchParams, now());
-    if (season == null) return respondJson({ error: SEASON_PARAM.rule }, 400);
+    if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     try {
       const saved = await readKeptDoc(readDoc, nameRosterKey(season, team));
       return respondJson(saved ?? (await loadRoster(`${team}:${season}`)));
     } catch (error) {
-      return respondJson({ error: `Couldn't read the WNBA: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read the WNBA: ${describeError(error)}`);
     }
   }
 

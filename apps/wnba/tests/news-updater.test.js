@@ -107,9 +107,9 @@ function createRun({ env = ENV, now = NOW } = {}) {
   const storage = createJobStorage();
   const docs = createDocs();
   const job = createWnbaNewsJob();
-  const loadSnapshot = async () => ({});
+  const createLoadSnapshot = () => async () => ({});
   const runJob = (fetchImpl) =>
-    job.updateStore({ docs, storage, loadSnapshot, env, fetchImpl, now: () => now });
+    job.updateStore({ docs, storage, createLoadSnapshot, env, fetchImpl, now: () => now });
   return { storage, docs, runJob };
 }
 
@@ -396,7 +396,7 @@ test("Claude answers in the schema, and a run whose answer Claude didn't finish 
 // with this hash.
 test("the WNBA's prompt is the one its stories were last judged by", () => {
   const hash = createHash("sha256").update(LABEL_PROMPT).digest("hex").slice(0, 16);
-  assert.equal(hash, "5a56822c8c0fb6d6");
+  assert.equal(hash, "2bb0ad1e7203fb81");
 });
 
 /** @param {{ stored: Map<string, any> }} docs */
@@ -520,7 +520,7 @@ test("without an API key, no photo is asked about, and one no card shows is forg
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => ({}),
+      createLoadSnapshot: () => async () => ({}),
       env,
       fetchImpl: createFetch({ photoSize: TALL_PHOTO, spotRequests }),
       now: () => NOW,

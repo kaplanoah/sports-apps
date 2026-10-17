@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   decideGate,
-  findLabeler,
+  findLabeling,
   findRedReasons,
+  findStyleObjectLines,
   readDiff,
-  readIssueEvents,
+  readPushTime,
+  readTimeline,
 } from "../worker/red-change.mjs";
 
 /**
@@ -29,14 +31,24 @@ const createDiff = (path, added, { kept = ["kept"], removed = ["removed"] } = {}
     "",
   ].join("\n");
 
+// A script with no style's object in it, so only the diff's lines decide.
+const readPlainScript = () => "";
+
 /** @param {string} path @param {string[]} [addedLines] */
 const findReasons = (path, addedLines = []) =>
-  findRedReasons([
-    { path, addedLines: addedLines.map((text, index) => ({ number: index + 1, text })), hunks: [] },
-  ]);
+  findRedReasons(
+    [
+      {
+        path,
+        addedLines: addedLines.map((text, index) => ({ number: index + 1, text })),
+        hunks: [],
+      },
+    ],
+    readPlainScript,
+  );
 
 /** @param {string} diff */
-const findDiffReasons = (diff) => findRedReasons(readDiff(diff));
+const findDiffReasons = (diff) => findRedReasons(readDiff(diff), readPlainScript);
 
 test("a diff lists each file with its added lines, numbered as the new file has them, and its hunks", () => {
   const diff = createDiff("apps/wnba/page/styles.css", [".a {", "  color: red;"]);
@@ -166,6 +178,8 @@ test("a shared stylesheet's change to how parts layer, stack, scroll, or show is
     "  -webkit-overflow-scrolling: touch;",
     "  scroll-snap-type: x mandatory;",
     "  touch-action: pan-y;",
+    "  pointer-events: none;",
+    "  translate: 0 -1px;",
     "  z-index: 20;",
     "  opacity: 0;",
     "  visibility: hidden;",
@@ -214,6 +228,13 @@ test("an added line that makes a layer is red in any page's CSS or JavaScript", 
     "  transition-duration: 200ms;",
     "  contain: paint;",
     "  content-visibility: auto;",
+    "  translate: 0 var(--game-side-offset);",
+    "  rotate: 45deg;",
+    "  scale: 1.2;",
+    "  perspective: 800px;",
+    "  perspective-origin: center;",
+    "  backface-visibility: hidden;",
+    "  -webkit-backface-visibility: hidden;",
     "  position: fixed;",
     "  position:sticky;",
     ".bar { top: 0; position: sticky }",
@@ -225,6 +246,14 @@ test("an added line that makes a layer is red in any page's CSS or JavaScript", 
     '  element.style.position = "sticky";',
     "  element.animate([{ opacity: 0 }, { opacity: 1 }], 200);",
     '  const style = html`<div style="transform: scale(2)"></div>`;',
+    '  const style = html`<div style="scale: 2"></div>`;',
+    "  part.style.translate = offset > 0 ? `0 ${offset}px` : '';",
+    "  element.style.rotate = '45deg';",
+    "  element.style.scale = '1.1';",
+    "  element.style.perspective = '800px';",
+    "  element.style.backfaceVisibility = 'hidden';",
+    "  element.style.webkitBackfaceVisibility = 'hidden';",
+    '  element.style.setProperty("translate", value);',
   ];
   for (const path of [
     "shared/page/stamp.js",
@@ -236,11 +265,102 @@ test("an added line that makes a layer is red in any page's CSS or JavaScript", 
       assert.equal(findReasons(path, [line]).length, 1, `${path}: ${line}`);
 });
 
+// As shared/page/strip-slide.js places its lens, with the call above what a hunk shows of it.
+const STYLE_SCRIPT = [
+  "function placeLens({ lens, left, width }) {",
+  "  Object.assign(lens.style, {",
+  "    left: `${left}px`,",
+  "    top: `${top}px`,",
+  "    width: `${width}px`,",
+  "    height: `${height}px`,",
+  "    scale: 0.98,",
+  '    "will-change": "transform",',
+  "    willChange: 'transform',",
+  "    // scale: 0.98,",
+  "  });",
+  "  const steps = { scale: 0.98, rotate: 2 };",
+  "}",
+].join("\n");
+
+test("a key of the object Object.assign hands a part's style sets that style, a number too, wherever the call sits", () => {
+  const path = "shared/page/strip-slide-lens.js";
+  /** @param {number} number */
+  const findLineReasons = (number) =>
+    findRedReasons(
+      [
+        {
+          path,
+          addedLines: [{ number, text: STYLE_SCRIPT.split("\n")[number - 1] }],
+          hunks: [],
+        },
+      ],
+      (read) => (read === path ? STYLE_SCRIPT : ""),
+    );
+  assert.deepEqual(findLineReasons(7), [
+    `${path}:7 adds a style property that sets scale: scale: 0.98,`,
+  ]);
+  assert.equal(findLineReasons(8).length, 1, "a style's quoted name");
+  assert.equal(findLineReasons(9).length, 1, "a style's camelCase name");
+  for (const quiet of [3, 6, 10, 12])
+    assert.deepEqual(findLineReasons(quiet), [], STYLE_SCRIPT.split("\n")[quiet - 1]);
+});
+
+test("the lines of each object Object.assign hands a part's style are found, and no others", () => {
+  assert.deepEqual([...findStyleObjectLines(STYLE_SCRIPT)], [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.deepEqual([...findStyleObjectLines("Object.assign(session, { scale: 1 });")], []);
+});
+
+// As a page pulses a part, with the call above what a hunk shows of its keyframes.
+const KEYFRAMES_SCRIPT = [
+  "function pulse(date) {",
+  "  date.animate(",
+  "    [",
+  "      { scale: 1 },",
+  "      { scale: 1.1, offset: 0.4 },",
+  "      { scale: 1 },",
+  "    ],",
+  "    { duration: 300, easing: 'ease-out' },",
+  "  );",
+  "}",
+  "const SHRINK = [",
+  "  { scale: 0.9 },",
+  "];",
+  "const shrink = (part) => part.animate(SHRINK, { duration: 200 });",
+  "const sizes = [{ scale: 2 }];",
+].join("\n");
+
+test("a key of the keyframes a part's animate takes sets that style, a number too, inline or by name", () => {
+  const path = "apps/wnba/page/js/games-view.js";
+  /** @param {number} number */
+  const findLineReasons = (number) =>
+    findRedReasons(
+      [
+        {
+          path,
+          addedLines: [{ number, text: KEYFRAMES_SCRIPT.split("\n")[number - 1] }],
+          hunks: [],
+        },
+      ],
+      (read) => (read === path ? KEYFRAMES_SCRIPT : ""),
+    );
+  assert.deepEqual(findLineReasons(5), [
+    `${path}:5 adds a style property that sets scale: { scale: 1.1, offset: 0.4 },`,
+  ]);
+  assert.equal(findLineReasons(12).length, 1, "a keyframe of a named list");
+  for (const quiet of [8, 15])
+    assert.deepEqual(findLineReasons(quiet), [], KEYFRAMES_SCRIPT.split("\n")[quiet - 1]);
+  assert.deepEqual([...findStyleObjectLines(KEYFRAMES_SCRIPT)], [3, 4, 5, 6, 7, 11, 12, 13]);
+});
+
 test("lines that only read or name those properties aren't red", () => {
   const quietLines = [
     "  const live = games.filter((game) => game.isLive);",
     "  if (list.contains(target)) return;",
     "  item.transformed = true;",
+    '  { name: "ABC", file: "abc.png", names: [], scale: 1.22, nudge: 0.02 },',
+    "    scale: 0.99,",
+    "  const scale = size / (Math.max(...xs) - Math.min(...xs));",
+    "  const translated = translate(text);",
     "  position: relative;",
     "  position: absolute;",
     '  const isFixed = element.style.position === "fixed";',
@@ -295,21 +415,46 @@ test("a red change is held until it has the phone-ok label, and says why", () =>
   assert.match(held.message, /git push -f origin <branch>:beta/);
   assert.match(held.message, /owner adds the phone-ok label after using it on the beta app/);
 
-  const labeled = decideGate(diff, { labels: ["phone-ok"], labeler: "owner", owner: "owner" });
+  const labeled = decideGate(diff, {
+    labels: ["phone-ok"],
+    labeling: { labeler: "owner", isAfterLastPush: true },
+    owner: "owner",
+  });
   assert.equal(labeled.isHeld, false);
   assert.match(labeled.message, /labeled phone-ok/);
 });
 
 test("a red change labeled phone-ok by anyone but the owner is held, and says the label has to come from the owner", () => {
-  const held = decideGate(RED_DIFF, { labels: ["phone-ok"], labeler: "helper", owner: "owner" });
+  /** @param {string | null} labeler @param {string} owner */
+  const decideLabeledBy = (labeler, owner) =>
+    decideGate(RED_DIFF, {
+      labels: ["phone-ok"],
+      labeling: { labeler, isAfterLastPush: true },
+      owner,
+    });
+  const held = decideLabeledBy("helper", "owner");
   assert.equal(held.isHeld, true);
   assert.match(held.message, /labeled phone-ok by helper/);
   assert.match(held.message, /has to come from the repository's owner, owner/);
 
-  const unnamed = decideGate(RED_DIFF, { labels: ["phone-ok"], labeler: null, owner: "owner" });
-  assert.equal(unnamed.isHeld, true);
-  assert.equal(decideGate(RED_DIFF, { labels: ["phone-ok"], labeler: "", owner: "" }).isHeld, true);
+  assert.equal(decideLabeledBy(null, "owner").isHeld, true);
+  assert.equal(decideLabeledBy("", "").isHeld, true);
+  assert.equal(decideGate(RED_DIFF, { labels: ["phone-ok"], owner: "owner" }).isHeld, true);
 });
+
+test("a red change the owner labeled phone-ok before its last push is held until they label it again", () => {
+  const held = decideGate(RED_DIFF, {
+    labels: ["phone-ok"],
+    labeling: { labeler: "owner", isAfterLastPush: false },
+    owner: "owner",
+  });
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, /labeled phone-ok before its last push/);
+  assert.match(held.message, /git push -f origin <branch>:beta/);
+  assert.match(held.message, /takes the label off and adds it again/);
+});
+
+const HEAD_PUSHED_AT = Date.parse("2026-10-07T09:00:00Z");
 
 test("the phone-ok label's adder is whoever added it last, whatever else was labeled", () => {
   const events = [
@@ -317,18 +462,78 @@ test("the phone-ok label's adder is whoever added it last, whatever else was lab
     createEvent("unlabeled", "phone-ok", "owner", "2026-10-07T11:00:00Z"),
     createEvent("labeled", "phone-ok", "helper", "2026-10-07T12:00:00Z"),
     createEvent("labeled", "bug", "owner", "2026-10-07T13:00:00Z"),
-    {
-      event: "head_ref_force_pushed",
-      created_at: "2026-10-07T14:00:00Z",
-      actor: { login: "owner" },
-    },
   ];
-  assert.equal(findLabeler(events, "phone-ok"), "helper");
-  assert.equal(findLabeler(events.toReversed(), "phone-ok"), "helper");
-  assert.equal(findLabeler(events.slice(3), "phone-ok"), null);
+  assert.deepEqual(findLabeling(events, "phone-ok", HEAD_PUSHED_AT), {
+    labeler: "helper",
+    isAfterLastPush: true,
+  });
+  assert.deepEqual(findLabeling(events.toReversed(), "phone-ok", HEAD_PUSHED_AT), {
+    labeler: "helper",
+    isAfterLastPush: true,
+  });
+  assert.deepEqual(findLabeling(events.slice(3), "phone-ok", HEAD_PUSHED_AT), {
+    labeler: null,
+    isAfterLastPush: false,
+  });
 });
 
-test("a pull request's events are read page by page, with the token, until a short page", async () => {
+test("a head pushed after the phone-ok label leaves it before the last push, whatever its commit's date says", () => {
+  const labeled = createEvent("labeled", "phone-ok", "owner", "2026-10-07T10:00:00Z");
+  // Committed before the label, so the timeline dates it then, but pushed after it.
+  const committedEarlier = { event: "committed", committer: { date: "2026-10-07T09:30:00Z" } };
+  assert.deepEqual(
+    findLabeling([committedEarlier, labeled], "phone-ok", Date.parse("2026-10-07T11:00:00Z")),
+    { labeler: "owner", isAfterLastPush: false },
+  );
+  const forcePush = {
+    event: "head_ref_force_pushed",
+    created_at: "2026-10-07T11:00:00Z",
+    actor: { login: "owner" },
+  };
+  assert.equal(
+    findLabeling([labeled, forcePush], "phone-ok", HEAD_PUSHED_AT).isAfterLastPush,
+    false,
+    "a force push back to a commit GitHub saw before the label",
+  );
+  const labeledAgain = createEvent("labeled", "phone-ok", "owner", "2026-10-07T12:00:00Z");
+  assert.equal(
+    findLabeling([labeled, forcePush, labeledAgain], "phone-ok", HEAD_PUSHED_AT).isAfterLastPush,
+    true,
+  );
+  assert.equal(
+    findLabeling([labeled], "phone-ok", Number.NaN).isAfterLastPush,
+    false,
+    "a head GitHub can't date may be the last push",
+  );
+});
+
+test("a head's push time is its earliest check suite's", async () => {
+  /** @type {string[]} */
+  const urls = [];
+  /** @param {{ created_at: string }[]} suites */
+  const createFetch = (suites) => async (/** @type {string} */ url) => {
+    urls.push(url);
+    return Response.json({ total_count: suites.length, check_suites: suites });
+  };
+  const sha = "a".repeat(40);
+  const options = { repository: "owner/repo", sha, env: { GH_TOKEN: "token" } };
+  assert.equal(
+    await readPushTime({
+      ...options,
+      fetchImpl: createFetch([
+        { created_at: "2026-10-07T11:00:00Z" },
+        { created_at: "2026-10-07T09:00:00Z" },
+      ]),
+    }),
+    HEAD_PUSHED_AT,
+  );
+  assert.deepEqual(urls, [
+    `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100`,
+  ]);
+  assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: createFetch([]) })));
+});
+
+test("a pull request's timeline is read page by page, with the token, until a short page", async () => {
   const pages = [
     Array.from({ length: 100 }, (_, index) =>
       createEvent(
@@ -349,30 +554,35 @@ test("a pull request's events are read page by page, with the token, until a sho
     return Response.json(pages[requests.length - 1]);
   };
 
-  const events = await readIssueEvents({
+  const events = await readTimeline({
     repository: "owner/repo",
     pullNumber: "408",
-    token: "token",
     fetchImpl,
+    env: { GH_TOKEN: "token" },
   });
 
   assert.equal(events.length, 101);
   assert.deepEqual(
     requests.map(({ url }) => url),
     [
-      "https://api.github.com/repos/owner/repo/issues/408/events?per_page=100&page=1",
-      "https://api.github.com/repos/owner/repo/issues/408/events?per_page=100&page=2",
+      "https://api.github.com/repos/owner/repo/issues/408/timeline?per_page=100&page=1",
+      "https://api.github.com/repos/owner/repo/issues/408/timeline?per_page=100&page=2",
     ],
   );
   assert.ok(requests.every(({ authorization }) => authorization === "Bearer token"));
 });
 
-test("events GitHub won't give fail the gate's read", async () => {
+test("a timeline GitHub won't give fails the gate's read", async () => {
   /** @type {typeof fetch} */
   const fetchImpl = async () => new Response("", { status: 403 });
   await assert.rejects(
-    readIssueEvents({ repository: "owner/repo", pullNumber: "408", token: "token", fetchImpl }),
-    /GitHub answered 403 for the events of #408/,
+    readTimeline({
+      repository: "owner/repo",
+      pullNumber: "408",
+      fetchImpl,
+      env: { GH_TOKEN: "token" },
+    }),
+    /GitHub answered 403 for GET \/issues\/408\/timeline/,
   );
 });
 
@@ -400,6 +610,6 @@ test("CI's check needs the gate, which a label change runs again without a push"
   );
   assert.match(
     workflow,
-    /gate:[\s\S]*?pull-requests: read[\s\S]*?PR: \$\{\{ github\.event\.pull_request\.number \}\}/,
+    /gate:[\s\S]*?pull-requests: read\n.*\n\s+issues: read\n\s+checks: read[\s\S]*?PR: \$\{\{ github\.event\.pull_request\.number \}\}\n\s+HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/,
   );
 });
