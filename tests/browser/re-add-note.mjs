@@ -1,5 +1,7 @@
 import { expect } from "@playwright/test";
-import { ANDROID_AGENT } from "./devices.mjs";
+import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
+import { LOCKED_PAGE_PATH } from "./harness.mjs";
+import { passTime, setHidden } from "./visibility.mjs";
 
 const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
@@ -58,4 +60,184 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
   await expect(androidApp.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(androidApp.locator("#appearanceNote")).toBeHidden();
   await android.close();
+}
+
+/**
+ * @typedef {{
+ *   page: import("@playwright/test").Page,
+ *   serveLockedApp: (page: import("@playwright/test").Page, options: { accessCode: string }) => Promise<unknown>,
+ *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
+ *   looks: { light: string, dark: string },
+ * }} LockedApp
+ */
+
+const HANDOFF_PATH = "access/handoff";
+const HANDOFF_ROUTE = `**/${HANDOFF_PATH}`;
+
+/** @param {string} look */
+const buildHandoffLink = (look) =>
+  new RegExp(
+    `^x-safari-http://[^/]+${LOCKED_PAGE_PATH}${HANDOFF_PATH}\\?token=[^&]+&app-theme=${look}$`,
+  );
+
+/** @param {import("@playwright/test").Page} page */
+const findReAddLink = (page) =>
+  page.locator("#appearanceNote").getByRole("link", { name: "re-add the site" });
+
+// The page counts, in its own steps, each handoff it asks for as it asks, each answer as it
+// arrives, and each answer's body as it's read, so a test reads where the page is rather than
+// where the network is, which reports to the test in its own time.
+/** @param {string} handoffPath */
+function countHandoffs(handoffPath) {
+  const handoffs = { asked: 0, answered: 0, read: 0 };
+  Object.assign(window, { handoffs });
+  const fetchFromWorker = window.fetch;
+  window.fetch = async (...request) => {
+    if (!String(request[0]).endsWith(handoffPath)) return fetchFromWorker(...request);
+    handoffs.asked += 1;
+    const response = await fetchFromWorker(...request);
+    handoffs.answered += 1;
+    const readJson = response.json.bind(response);
+    response.json = async () => {
+      const body = await readJson();
+      handoffs.read += 1;
+      return body;
+    };
+    return response;
+  };
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<{ asked: number, answered: number, read: number }>}
+ */
+const readHandoffs = (page) => page.evaluate(() => /** @type {any} */ (window).handoffs);
+
+/**
+ * Signs in to an iPhone's Home Screen app behind its access code and opens settings, with the
+ * page counting its handoffs.
+ * @param {LockedApp} app
+ */
+async function openLockedSettings({ page, serveLockedApp, openSettings }) {
+  await page.addInitScript(markOnHomeScreen);
+  await page.addInitScript(countHandoffs, HANDOFF_PATH);
+  await serveLockedApp(page, { accessCode: "FASTBREAK" });
+  await page.goto(LOCKED_PAGE_PATH);
+  await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
+  await page.getByRole("button", { name: "Open" }).click();
+  await openSettings(page);
+}
+
+/**
+ * Has the page leave the screen for `ms`, as a phone's switch to another app does, which freezes
+ * the page's timers, so only its clock moves on.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} ms
+ */
+async function leaveFor(page, ms) {
+  await setHidden(page, true);
+  await passTime(page, ms);
+  await setHidden(page, false);
+}
+
+/**
+ * Picks the light look and then the dark one before the light one's handoff answers, and checks
+ * the link stays on the dark one, then that the note renews its handoff halfway through, tries
+ * again soon after a renewal fails, renews as it comes back from short trips away once that's
+ * due, leaves with settings, renewing no more, and renews no more once the Worker makes none.
+ * @param {LockedApp} app
+ */
+export async function checkHandoffRenewal(app) {
+  const { page, openSettings, looks } = app;
+  await openLockedSettings(app);
+  const link = findReAddLink(page);
+  const readAsked = async () => (await readHandoffs(page)).asked;
+  const readAnswered = async () => (await readHandoffs(page)).answered;
+  const readRead = async () => (await readHandoffs(page)).read;
+
+  /** @type {(value?: unknown) => void} */
+  let releaseFirst = () => {};
+  const firstHeld = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const holdFirstAnswer = async (route) => {
+    await firstHeld;
+    await route.fallback();
+  };
+  await page.route(HANDOFF_ROUTE, holdFirstAnswer, { times: 1 });
+  await page.getByRole("radio", { name: looks.light }).check();
+  await page.getByRole("radio", { name: looks.dark }).check();
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  releaseFirst();
+  await expect.poll(readRead).toBe(2);
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  expect(await readAsked()).toBe(2);
+
+  await page.route(HANDOFF_ROUTE, (route) => route.fulfill({ status: 503 }), { times: 1 });
+  await page.clock.runFor(5 * 60 * 1000);
+  expect(await readAsked()).toBe(3);
+  await expect.poll(readAnswered).toBe(3);
+  await page.clock.runFor(30 * 1000);
+  expect(await readAsked()).toBe(4);
+  await expect.poll(readRead).toBe(3);
+
+  // Each trip is short of the two minutes that close settings, and the third passes the renewal.
+  await leaveFor(page, 110 * 1000);
+  await leaveFor(page, 110 * 1000);
+  expect(await readAsked()).toBe(4);
+  await leaveFor(page, 110 * 1000);
+  expect(await readAsked()).toBe(5);
+  await expect.poll(readRead).toBe(4);
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+
+  await page.locator("#settingsCloseBtn").click();
+  await expect(page.locator("#appearanceNote")).toBeEmpty();
+  await page.clock.runFor(15 * 60 * 1000);
+  expect(await readAsked()).toBe(5);
+
+  await openSettings(page);
+  await page.getByRole("radio", { name: looks.light }).check();
+  await expect.poll(readRead).toBe(5);
+  await page.route(HANDOFF_ROUTE, (route) => route.fulfill({ status: 404 }), { times: 1 });
+  await page.clock.runFor(5 * 60 * 1000);
+  expect(await readAsked()).toBe(7);
+  await expect.poll(readAnswered).toBe(7);
+  await page.clock.runFor(10 * 60 * 1000);
+  await leaveFor(page, 110 * 1000);
+  expect(await readAsked()).toBe(7);
+}
+
+/**
+ * Signs in to an iPhone's Home Screen app behind its access code, picks the dark look, and opens
+ * the note's link in a browser that has never been signed in, as Safari is, which opens the
+ * welcome on that look without asking for the code, with no token left in its address.
+ * @param {LockedApp & { browser: import("@playwright/test").Browser }} app
+ */
+export async function checkReAddHandoff(app) {
+  const { page, browser, serveLockedApp, looks } = app;
+  await openLockedSettings(app);
+  await page.getByRole("radio", { name: looks.dark }).check();
+  const link = findReAddLink(page);
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  const safariAddress = (await link.getAttribute("href")).replace("x-safari-", "");
+
+  const safari = await browser.newContext({
+    userAgent: IPHONE_AGENT,
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+    reducedMotion: "reduce",
+  });
+  const safariPage = await safari.newPage();
+  await serveLockedApp(safariPage, { accessCode: "FASTBREAK" });
+  await safariPage.goto(safariAddress);
+  const redirected = new URL(safariPage.url());
+  expect(`${redirected.pathname}${redirected.search}`).toBe(`${LOCKED_PAGE_PATH}?app-theme=dark`);
+  // Playwright routes only the first request of a redirect, so the page it leads to is opened
+  // again through the Worker, with the cookie the redirect set.
+  await safariPage.goto(redirected.href);
+  await expect(safariPage.locator("#homeScreenWelcome")).toBeVisible();
+  await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(safariPage.getByRole("textbox", { name: "Access code" })).toHaveCount(0);
+  await safari.close();
 }

@@ -1,7 +1,11 @@
-import { test, expect, openApp, openSettings } from "./harness.mjs";
+import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
-import { checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
+import {
+  checkHandoffRenewal,
+  checkReAddHandoff,
+  checkReAddNote,
+} from "../../../../tests/browser/re-add-note.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -87,14 +91,27 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
 
 test.describe("in an iPhone's Home Screen app", () => {
   test.use({ userAgent: IPHONE_AGENT });
+  const looks = { light: "Ball", dark: "Night Game" };
 
   test("changing the appearance says how to update the icon, under the icons, linking to Safari on the theme picked, which the browser and Android leave out", async ({
     page,
     context,
     browser,
   }) => {
-    const looks = { light: "Ball", dark: "Night Game" };
     await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+  });
+
+  test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
+    page,
+    browser,
+  }) => {
+    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
+  });
+
+  test("the link's handoff follows the last pick, renews halfway through and on coming back once that's due, tries again after a failure, and stops once settings closes", async ({
+    page,
+  }) => {
+    await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });
   });
 });
 
