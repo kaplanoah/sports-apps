@@ -10,6 +10,7 @@ import {
   findSeasonTab,
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
+import { findRows, sendSearch, tapSearch } from "./search-page.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -129,6 +130,28 @@ test("a part chosen while the page is scrolled down opens at its top, just under
     pillBottom: document.getElementById("bracketStandingsPill").getBoundingClientRect().bottom,
   }));
   expect(partsTop).toBeGreaterThanOrEqual(pillBottom - 1);
+});
+
+test("search's Bracket row, with the bracket left scrolled down, opens it at its top, just under the pill", async ({
+  page,
+}) => {
+  // A screen short enough for the bracket to scroll.
+  await page.setViewportSize({ width: 390, height: 480 });
+  await openApp(page);
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+  await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+  await tapSearch(page);
+
+  await sendSearch(page, "bracket");
+  await findRows(page).filter({ hasText: "Bracket" }).first().tap();
+
+  await expect(page.locator("#bracketWrap .round-name").first()).toBeInViewport();
+  const { partsTop, pillBottom } = await page.evaluate(() => ({
+    partsTop: document.getElementById("bracketStandingsParts").getBoundingClientRect().top,
+    pillBottom: document.getElementById("bracketStandingsPill").getBoundingClientRect().bottom,
+  }));
+  expect(Math.abs(partsTop - pillBottom)).toBeLessThanOrEqual(1);
 });
 
 test("the bracket's round names sit 10px under the pill's bar", async ({ page }) => {

@@ -1,6 +1,6 @@
 import { test, expect, expectDayAtTop } from "./harness.mjs";
-import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
-import { findCell, findDay, findList, openSeasonGames, openWholeSeason } from "./season-games.mjs";
+import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
+import { findCell, findDay, findList, openSeasonGames } from "./season-games.mjs";
 
 // A tap on Today, or on Games while it shows, brings the Games list back to today.
 
@@ -32,18 +32,14 @@ test.describe("with reduced motion", () => {
     await expectDayAtTop(page, "2026-09-30");
   });
 
-  test("a tap on Games brings today back at once, even with the page left a pixel from its top by the standings", async ({
+  test("a tap on Games brings today back at once, even with the page left a pixel from its top", async ({
     page,
   }) => {
-    await openWholeSeason(page);
-    await openSeasonPart(page, "Standings");
-    await page.mouse.wheel(0, 2000);
-    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
-    await page.getByRole("tab", { name: "Games" }).click();
+    await openSeasonGames(page);
     await expectDayAtTop(page, "2026-09-30");
-    expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
     await findCell(page, "2026-09-20").click();
     await expectDayAtTop(page, "2026-09-20");
+    expect(await leavePagePixelDown(page)).toBe(1);
 
     await page.getByRole("tab", { name: "Games" }).click();
 
@@ -93,16 +89,12 @@ test.describe("with reduced motion", () => {
 test("a tap on Games with the page left a pixel down glides the page to its top while the list flies to today", async ({
   page,
 }) => {
-  await openWholeSeason(page);
-  await openSeasonPart(page, "Standings");
-  await page.mouse.wheel(0, 2000);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
-  await page.getByRole("tab", { name: "Games" }).click();
+  await openSeasonGames(page);
   await page.clock.runFor(1000);
   await findCell(page, "2026-09-29").click();
   await page.clock.runFor(2000);
   await expectDayAtTop(page, "2026-09-29");
-  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  expect(await leavePagePixelDown(page)).toBe(1);
 
   await page.getByRole("tab", { name: "Games" }).click();
   await page.clock.runFor(2000);

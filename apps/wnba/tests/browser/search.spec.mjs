@@ -1,14 +1,17 @@
-import { test, expect, matchPath } from "./harness.mjs";
+import { test, expect } from "./harness.mjs";
 import {
   ON_A_PHONE,
   PLAYER_INDEX,
+  findGamesLine,
   findInput,
+  findLine,
   findRows,
+  findSearch,
   openSeasonGames,
+  readTopDay,
   sendSearch,
   tapSearch,
 } from "./search-page.mjs";
-import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
@@ -20,52 +23,13 @@ import {
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
 
-// What Search finds and opens, and how it comes and goes, on a phone.
+// What Search finds and opens, on a phone.
 
 test.use({ ...ON_A_PHONE, contextOptions: { reducedMotion: "reduce" } });
 
 // Phosphor's film-strip at its Regular weight.
 const FILM_STRIP =
   "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,88h80v80H40Zm96-16V56h32V72Zm-16,0H88V56h32Zm0,112v16H88V184Zm16,0h32v16H136Zm0-16V88h80v80Zm80-96H184V56h32ZM72,56V72H40V56ZM40,184H72v16H40Zm176,16H184V184h32v16Z";
-
-/** @param {import("@playwright/test").Page} page */
-const findSearch = (page) => page.locator("#gameSearch");
-/** @param {import("@playwright/test").Page} page */
-const findLine = (page) => page.locator("#gameSearch .search-read");
-/** @param {import("@playwright/test").Page} page */
-const findGamesLine = (page) => page.locator("#gameSearch .search-games-line");
-
-/**
- * The day at the top of the search's list, where a finger just under its top lands.
- * @param {import("@playwright/test").Page} page
- */
-const readTopDay = (page) =>
-  page.evaluate(() => {
-    const list = /** @type {Element} */ (document.querySelector("#gameSearch .search-list"));
-    const { top, left, width } = list.getBoundingClientRect();
-    return (
-      document
-        .elementFromPoint(left + width / 2, top + 20)
-        ?.closest(".listed-day")
-        ?.getAttribute("data-day") ?? null
-    );
-  });
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} hidden
- */
-const setHidden = (page, hidden) =>
-  page.evaluate((isHidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, hidden);
-
-/** @param {import("@playwright/test").Page} page */
-async function leaveForTwoMinutes(page) {
-  await setHidden(page, true);
-  await page.clock.runFor(2 * 60_000);
-}
 
 /**
  * Checks that what the search shows keeps to its type roles and its periods, and that every tap
@@ -509,125 +473,6 @@ test("a found game's row opens its sheet wherever a finger lands on it", async (
   await page.touchscreen.tap(landing.x, landing.y);
 
   await expect(page.locator("#gameSheet")).toBeVisible();
-});
-
-test("Cancel empties the search and goes back to the tab before it; another tab leaves the search as it was", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await openSeasonPart(page, "Standings");
-  await tapSearch(page);
-  await sendSearch(page, "Liberty");
-
-  await page.getByRole("tab", { name: "Games" }).click();
-  await tapSearch(page);
-
-  await expect(findInput(page)).toHaveValue("Liberty");
-
-  await page.locator("#gameSearch .search-cancel").first().tap();
-
-  await expect(page.locator("#view-games")).toBeVisible();
-  await tapSearch(page);
-  await expect(findInput(page)).toHaveValue("");
-});
-
-test("Search tapped again while it shows starts over: an empty field with its examples, ready to type", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await sendSearch(page, "Liberty");
-  await expect(findInput(page)).not.toBeFocused();
-
-  await tapSearch(page);
-
-  await expect(findInput(page)).toHaveValue("");
-  await expect(findInput(page)).toBeFocused();
-  await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
-});
-
-test("the field's clear button empties it and brings the examples back, ready to type", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await sendSearch(page, "Liberty");
-
-  await page.locator("#gameSearch .search-clear").tap();
-
-  await expect(findInput(page)).toHaveValue("");
-  await expect(findInput(page)).toBeFocused();
-  await expect(page.locator("#gameSearch .search-clear")).toBeHidden();
-  await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
-});
-
-test("two minutes away closes the search and goes back to the tab before it, and less leaves it as it was", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await sendSearch(page, "Liberty");
-
-  await setHidden(page, true);
-  await page.clock.runFor(60_000);
-  await setHidden(page, false);
-  await page.clock.runFor(100);
-  await expect(findInput(page)).toHaveValue("Liberty");
-
-  await leaveForTwoMinutes(page);
-  await setHidden(page, false);
-  await page.clock.runFor(100);
-  await expect(page.locator("#view-games")).toBeVisible();
-  await expect(findSearch(page)).toBeHidden();
-});
-
-test("a reload shows the search as it was before the page's code arrives, and the tab before it after two minutes away", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await sendSearch(page, "Liberty");
-  await findGamesLine(page).tap();
-  await expect.poll(() => readTopDay(page)).toBe("2026-10-04");
-  let release = await holdRequests(page, matchPath("/js/app.js"));
-
-  await page.reload({ waitUntil: "commit" });
-
-  await expect(page.locator("#view-search")).toBeVisible();
-  await expect(findInput(page)).toHaveValue("Liberty");
-  await expect(findLine(page)).toHaveText("Liberty•52 games");
-  await expect.poll(() => readTopDay(page)).toBe("2026-10-04");
-  release();
-  await page.waitForLoadState("domcontentloaded");
-  await expect(page.locator('#gameSearch .listed-day[data-day="2026-10-04"]')).toBeInViewport();
-  await leaveForTwoMinutes(page);
-  release = await holdRequests(page, matchPath("/js/app.js"));
-
-  await page.reload({ waitUntil: "commit" });
-
-  await expect(page.locator("#view-games")).toBeVisible();
-  await expect(page.locator("#view-search")).toBeHidden();
-  await expect(page.locator("#tabBar")).not.toHaveClass(/is-unselected/);
-  release();
-});
-
-test("a search put back from an earlier release names its field as this one does", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
-  await findInput(page).evaluate((input) => {
-    input.setAttribute("placeholder", "Search games");
-    input.setAttribute("aria-label", "Search games");
-  });
-  await setHidden(page, true);
-
-  await page.reload();
-  await page.waitForLoadState("domcontentloaded");
-
-  await expect(findInput(page)).toHaveAttribute("placeholder", "Teams, players, and games");
-  await expect(findInput(page)).toHaveAttribute("aria-label", "Teams, players, and games");
 });
 
 test("every search state keeps to its type roles and its periods, and every tap lands on a button", async ({
