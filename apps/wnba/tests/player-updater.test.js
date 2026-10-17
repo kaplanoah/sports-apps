@@ -22,7 +22,7 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../worker/src/roster.js";
-import { nameKeptFeedKey } from "../../../tests/feed-storage.js";
+import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { saveSnapshot } from "../worker/src/season-updater.js";
@@ -334,7 +334,7 @@ test("each season's totals kept without each player's team are forgotten, once",
   const { storage, runJob, wait } = createRun();
   const oldKeys = await Promise.all(
     [2025, 2026].map((season) =>
-      nameKeptFeedKey("totals", `${nameTotalsRequest(season)} ${TOTALS_COLUMNS.join(" ")}`),
+      nameFeedKey("totals", `${nameTotalsRequest(season)} ${TOTALS_COLUMNS.join(" ")}`),
     ),
   );
   for (const key of oldKeys) await storage.put(key, { answer: { at: 0, data: [] } });

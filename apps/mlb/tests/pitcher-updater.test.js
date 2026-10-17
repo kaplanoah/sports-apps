@@ -176,7 +176,7 @@ async function askForPitcher(query, { docs, answers = listAnswers() } = {}) {
 async function askForRotation(query, { docs } = {}) {
   const { requests, fetchImpl } = createMlbFetch(listAnswers());
   const counter = createLeagueReadCounter();
-  const response = await createRotationServer({ fetchImpl }).serveRotation(
+  const response = await createRotationServer({ fetchImpl, now: () => NOW }).serveRotation(
     new URL(`https://mlb-app.example/k3y/rotation?${query}`),
     docs ? readFromStore(docs) : undefined,
     counter.countLeagueRead,
@@ -229,14 +229,34 @@ test("a club's starters from the store are the ones MLB's feeds make, and read n
     }
 });
 
-test("a day whose last two weeks the store's starts don't reach up to has the sheet read MLB, counted", async () => {
+test("a day after tomorrow reads only the store's starts, which reach today, the last day played", async () => {
   const { docs, runJob } = createRun();
   await runJob();
 
   const later = await askForRotation("club=CLE&date=2026-10-09", { docs });
+  assert.deepEqual(later.requests, []);
+  assert.equal(later.leagueReads, 0);
+  // Tomorrow's starters two days more rested, but for those whose starts fall out of the two weeks.
+  const tomorrow = await askForRotation(`club=CLE&date=${TOMORROW}`, { docs });
+  const stillCounted = tomorrow.body.starters.filter(
+    (/** @type {any} */ starter) => starter.start.date >= "2026-09-25",
+  );
+  assert.ok(stillCounted.length > 0);
+  assert.deepEqual(
+    later.body.starters,
+    stillCounted.map((/** @type {any} */ starter) => ({ ...starter, rest: starter.rest + 2 })),
+  );
+});
+
+test("starts the store saved before today have the sheet read MLB for a later day, counted", async () => {
+  const { docs, runJob } = createRun();
+  await runJob();
+  const key = nameRotationKey(2026, "CLE");
+  docs.stored.set(key, { ...docs.stored.get(key), through: "2026-10-05" });
+
+  const later = await askForRotation("club=CLE&date=2026-10-09", { docs });
   assert.ok(later.requests.length > 0);
   assert.equal(later.leagueReads, 1);
-  assert.deepEqual(later.body, (await askForRotation("club=CLE&date=2026-10-09")).body);
 });
 
 test("a club whose starters the store doesn't keep, or a day its starts don't reach back to, has the sheet read MLB, counted", async () => {

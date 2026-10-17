@@ -7,14 +7,15 @@ const DEVICE_ENDPOINT = "https://fcm.googleapis.com/fcm/send/test-device";
 
 // Headless Chromium has no push service, and its headless shell denies notifications outright,
 // so the permission prompt and the subscription are stand-ins. The subscription has real keys,
-// which is all the Worker needs, and lasts through a reload, as the browser's does.
+// which is all the Worker needs. Both last through a reload, as the browser's do.
 function stubPushManager(endpoint) {
-  /** @type {NotificationPermission} */
-  let permission = "default";
-  Object.defineProperty(Notification, "permission", { get: () => permission });
+  const PERMISSION_KEY = "test-notification-permission";
+  Object.defineProperty(Notification, "permission", {
+    get: () => sessionStorage.getItem(PERMISSION_KEY) ?? "default",
+  });
   Notification.requestPermission = async () => {
-    permission = "granted";
-    return permission;
+    sessionStorage.setItem(PERMISSION_KEY, "granted");
+    return "granted";
   };
   const KEPT_KEY = "test-push-subscription";
   /** @returns {any} a stand-in for the browser's PushSubscription */
@@ -106,6 +107,40 @@ test("a device the Worker has no room for is left off, and is still off after a 
     )
     .toBeNull();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
+});
+
+test("a device the Worker no longer has room for on a later visit is turned off", async ({
+  page,
+}) => {
+  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await openApp(page);
+  await openSettings(page);
+  const toggle = page.getByRole("switch", { name: "Notifications" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await page.route(matchPath("/push/subscription"), (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 429,
+          json: { error: { code: "too_many_devices", message: "Too many devices." } },
+        })
+      : route.fallback(),
+  );
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  await expect(page.locator("#notifyNote")).toHaveText(
+    "Too many devices get notifications already",
+  );
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        return registration.pushManager.getSubscription();
+      }),
+    )
+    .toBeNull();
 });
 
 test("blocked notifications point to the browser's site settings", async ({ page }) => {

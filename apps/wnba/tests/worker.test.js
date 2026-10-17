@@ -6,7 +6,7 @@ import { TEAMS } from "../page/js/teams.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
 import { createSnapshotServer } from "../worker/src/snapshot.js";
-import { nameKeptFeedKey } from "../../../tests/feed-storage.js";
+import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -515,7 +515,7 @@ test("the players' averages the snapshot once read are forgotten from the slow f
       return values.delete(key);
     },
   };
-  const averagesKey = await nameKeptFeedKey("players", AVERAGES_REQUEST);
+  const averagesKey = await nameFeedKey("players", AVERAGES_REQUEST);
   values.set(averagesKey, { answer: { at: NOW - 1000, data: RESPONSES.standings } });
   const server = createSnapshotServer({ fetchImpl: league.fetchImpl, now: () => clock, storage });
 

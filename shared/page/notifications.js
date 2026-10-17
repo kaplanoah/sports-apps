@@ -110,8 +110,12 @@ async function saveSubscription(current) {
   });
 }
 
+/** @param {unknown} error */
+const isTurnedAway = (error) =>
+  /** @type {{ code?: string } | undefined} */ (error)?.code === "too_many_devices";
+
 // A device the Worker doesn't keep never gets a message, so the browser doesn't keep it either,
-// and the switch shows it off on the next visit.
+// and the switch shows it off, now and on the next visit.
 async function subscribe(publicKey) {
   const created = await registration.pushManager.subscribe({
     userVisibleOnly: true,
@@ -133,10 +137,27 @@ async function syncSubscription() {
   const subscribedKey = subscription.options.applicationServerKey;
   if (subscribedKey && encodeBase64Url(subscribedKey) !== publicKey) {
     await subscription.unsubscribe();
+    subscription = null;
     await subscribe(publicKey);
     return;
   }
-  await saveSubscription(subscription);
+  try {
+    await saveSubscription(subscription);
+  } catch (error) {
+    if (isTurnedAway(error)) {
+      await subscription.unsubscribe().catch(() => {});
+      subscription = null;
+    }
+    throw error;
+  }
+}
+
+// A sync that leaves the browser unsubscribed shows the switch off. Any other is tried again on
+// the next visit.
+/** @param {unknown} error */
+function showFailedSync(error) {
+  if (isTurnedAway(error)) setStatus("off", NOTES.tooManyDevices);
+  else if (!subscription) setStatus("off");
 }
 
 async function showBusyDuring(task) {
@@ -161,8 +182,7 @@ async function turnOn() {
     await subscribe(await fetchPublicKey());
     setStatus("on");
   } catch (error) {
-    const { code } = /** @type {{ code?: string }} */ (error);
-    if (code === "too_many_devices") setStatus("off", NOTES.tooManyDevices);
+    if (isTurnedAway(error)) setStatus("off", NOTES.tooManyDevices);
     else setStatus("failed");
   }
 }
@@ -208,6 +228,5 @@ export async function startNotifications(options = {}) {
     return;
   }
   setStatus(describeStartStatus());
-  // A sync that fails is tried again on the next visit.
-  if (status === "on") syncSubscription().catch(() => {});
+  if (status === "on") syncSubscription().catch(showFailedSync);
 }

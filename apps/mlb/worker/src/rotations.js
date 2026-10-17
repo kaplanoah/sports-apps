@@ -1,4 +1,4 @@
-import { addDays } from "#shared/days.js";
+import { addDays, readEasternDay } from "#shared/days.js";
 import { readClubId, readGameState, readMlbTeamId } from "../../page/js/snapshot.js";
 import { DATE_RULE, fetchMlbJson, readDateParam } from "./mlb.js";
 import { listGameLogRequest, listStarts } from "./pitchers.js";
@@ -132,12 +132,17 @@ export function describeClubStarts({ club, from, through, schedule, pitchers }) 
 }
 
 /**
- * Whether a club's starts reach the two weeks before `date`, both back and up to its day before.
+ * Whether a club's starts reach the two weeks before `date`, both back and up to its day before,
+ * or up to today for a later day, since no game after today has been played.
  * @param {{ from: string, through?: string }} clubStarts
  * @param {string} date
+ * @param {string} today MLB's day now
  */
-const coversDay = ({ from, through }, date) =>
-  from <= addDays(date, -LOOKBACK_DAYS) && !!through && through >= addDays(date, -1);
+function coversDay({ from, through }, date, today) {
+  const dayBefore = addDays(date, -1);
+  const lastPlayed = dayBefore < today ? dayBefore : today;
+  return from <= addDays(date, -LOOKBACK_DAYS) && !!through && through >= lastPlayed;
+}
 
 /**
  * A pitcher as the rotation shows him, from his game log.
@@ -209,8 +214,12 @@ export function describeRotation({ club, games, pitchers }, date) {
 /**
  * @param {object} [options]
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]
+ * @param {() => number} [options.now]
  */
-export function createRotationServer({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
+export function createRotationServer({
+  fetchImpl = (input, init) => fetch(input, init),
+  now = () => Date.now(),
+} = {}) {
   /** @param {string} path */
   const fetchJson = (path) => fetchMlbJson(fetchImpl, path, ROTATION_CACHE_SECONDS);
 
@@ -249,7 +258,7 @@ export function createRotationServer({ fetchImpl = (input, init) => fetch(input,
         readDoc("live/current"),
       ]);
       return {
-        clubStarts: saved && coversDay(saved, date) ? saved : null,
+        clubStarts: saved && coversDay(saved, date, readEasternDay(now()).date) ? saved : null,
         isCurrentSeason: Number(date.slice(0, 4)) === current?.season,
       };
     } catch (error) {
