@@ -414,6 +414,25 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await page.evaluate(() => localStorage.getItem("appearance"))).toBe('"dark"');
   });
 
+  test("the welcome the Home Screen app's link opens stays through the reload a pick on it brings in Safari", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => false });
+    });
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page, { isShowingWelcome: true });
+    await page.locator(WELCOME).getByRole("button", { name: "Continue in browser" }).click();
+    await expect(page.locator(WELCOME)).toBeHidden();
+    await page.goto("/?app-theme=dark");
+    await expect(page.locator(WELCOME)).toBeVisible();
+    await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
+    await pickReloadingTheme(page.locator(WELCOME), "Maple");
+    await expect.poll(() => page.evaluate(() => "isBeforePick" in window)).toBe(false);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.locator(WELCOME)).toBeVisible();
+  });
+
   test("opened from the Home Screen, the page asks for nothing", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "standalone", { get: () => true });

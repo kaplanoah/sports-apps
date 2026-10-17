@@ -51,6 +51,16 @@ function keepWelcomeClosed() {
   }
 }
 
+// The Home Screen app's link to add the site again opens the welcome until it's closed once more,
+// through the reload a theme picked on it brings.
+function reopenWelcome() {
+  try {
+    localStorage.removeItem(WELCOME_CLOSED_KEY);
+  } catch {
+    /* without storage, the welcome opens on every visit */
+  }
+}
+
 /**
  * The page's own markup, which this script writes before html.js can load.
  * @param {string} markup
@@ -151,5 +161,6 @@ function drawHomeScreenAsks() {
   drawTip(isOnIos);
   const welcome = drawWelcome(isOnIos);
   wireWelcome(welcome);
-  if (isOpenedFromHomeScreenApp || readStored(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
+  if (isOpenedFromHomeScreenApp) reopenWelcome();
+  if (readStored(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
 }
