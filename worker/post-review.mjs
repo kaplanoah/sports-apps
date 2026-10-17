@@ -78,7 +78,7 @@ const compareWeights = (one, other) => rankWeight(one) - rankWeight(other);
  * @param {string[]} weights
  */
 function pickGroupWeight(weights) {
-  const settled = weights.filter((weight) => weight !== UNSURE);
+  const settled = weights.filter((weight) => weight !== UNSURE && WEIGHTS.includes(weight));
   return settled.length ? settled.toSorted(compareWeights)[0] : UNSURE;
 }
 

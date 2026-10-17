@@ -147,6 +147,19 @@ test("a finding that stands in for its repeats takes the heaviest weight a check
   );
 });
 
+test("a repeat with a weight the review doesn't know never sets its group's weight", () => {
+  const checked = [
+    { ...finding({ weight: "Unsure", body: "can't settle" }), ref: "1.1" },
+    { ...finding({ weight: "Minor", body: "odd weight" }), ref: "2.1" },
+  ];
+  assert.deepEqual(
+    listToPost(checked, { duplicates: [["1.1", "2.1"]], added: [], unjudged: [] }).map(
+      ({ weight, body }) => [weight, body],
+    ),
+    [["Unsure", "can't settle"]],
+  );
+});
+
 test("a check across areas that gave no answer, or one of another shape, reads as none", () => {
   assert.equal(readAcross(undefined), null);
   assert.equal(readAcross("not json"), null);
