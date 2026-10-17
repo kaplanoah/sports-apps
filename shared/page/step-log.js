@@ -1,8 +1,8 @@
 // While Diagnostics is on, a step log keeps what one part of the page does, with each touch and
 // click on it. The last few lines stay on this device, for Diagnostics to list: the page holds
 // them as it logs, since a touch or click can come many times a second, and keeps them on the
-// device a moment after the last one, so a burst writes once and a page that crashes still has
-// them, and as it leaves the screen.
+// device a moment after a line comes, with every line that comes meanwhile, so a burst writes
+// once and a page that crashes, even mid-fling, still has them, and as it leaves the screen.
 
 import { formatClockTimeWithSeconds } from "./days.js";
 import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
@@ -122,6 +122,11 @@ export function createStepLog({ key, title, isWatched }) {
 
   const holdLines = () => (held ??= loadLines());
 
+  function stopSaveTimer() {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+  }
+
   /** @returns {StepLine[]} oldest first */
   const readLines = () => [...holdLines()];
 
@@ -129,7 +134,7 @@ export function createStepLog({ key, title, isWatched }) {
   // off, here or in another tab, has forgotten its lines, so they never go back. Lines storage
   // won't take are lost once the page goes.
   function saveLines() {
-    clearTimeout(saveTimer);
+    stopSaveTimer();
     if (!held || !isOn()) return;
     held = mergeLines(loadLines(), held);
     storeJson(key, held);
@@ -139,13 +144,13 @@ export function createStepLog({ key, title, isWatched }) {
   /** @param {StorageEvent} event */
   function dropForgottenLines(event) {
     if (event.key === null || (event.key === key && event.newValue === null)) {
-      clearTimeout(saveTimer);
+      stopSaveTimer();
       held = [];
     }
   }
 
   function forgetLines() {
-    clearTimeout(saveTimer);
+    stopSaveTimer();
     held = [];
     forgetStored(key);
   }
@@ -159,8 +164,7 @@ export function createStepLog({ key, title, isWatched }) {
     const lines = holdLines();
     lines.push({ at: Date.now(), text: hideAddresses(text) });
     lines.splice(0, lines.length - KEPT_LINES);
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveLines, SAVE_AFTER_MS);
+    saveTimer ??= setTimeout(saveLines, SAVE_AFTER_MS);
     onLogged();
   }
 

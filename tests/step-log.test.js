@@ -151,6 +151,22 @@ test("a log holds its lines as it logs, reading the device once, and keeps them 
   assert.equal(log.readLines().length, 50);
 });
 
+test("a log keeps a steady stream of lines on the device while they still come, as a fling's", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const log = createStepLog({ key: "streamLog", title: "Games list", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+
+  for (let line = 1; line <= 6; line += 1) {
+    log.noteStep(`top day ${line}`);
+    context.mock.timers.tick(500);
+  }
+
+  assert.ok(JSON.parse(stored.get("streamLog") ?? "[]").length >= 2);
+});
+
 test("a log turned off, which forgets its lines, never keeps them again as the page leaves the screen", () => {
   const log = createStepLog({ key: "offLog", title: "Errors", isWatched: () => false });
   let isOn = true;
@@ -196,7 +212,7 @@ test("a tab never keeps lines again from before another tab turned Diagnostics o
   assert.deepEqual(readStoredTexts("offInOtherTabLog"), ["after it was on again"]);
 });
 
-test("a log keeps its lines on the device a moment after the last one, once for a burst, as a page that crashes never hides", (context) => {
+test("a log keeps its lines on the device a moment after a line comes, once for a burst, as a page that crashes never hides", (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const log = createStepLog({ key: "burstLog", title: "Errors", isWatched: () => false });
   log.watchSteps(
