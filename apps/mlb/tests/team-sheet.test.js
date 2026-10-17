@@ -508,6 +508,32 @@ test("a club whose standings row has no runs, as a season saved before the store
   assert.doesNotMatch(renderTeamSheet("LAD").body.text, /team-ranks/);
 });
 
+test("a playoff game MLB suspended counts once in a club's playoff numbers, though MLB lists it again on the day it's finished", () => {
+  session.state = { ...session.state, projected: false, slate: null };
+  session.standings = NL_WEST_FINAL;
+  const suspended = {
+    id: "900001",
+    away: "ATL",
+    home: "LAD",
+    state: "final",
+    score: [3, 5],
+    postseason: true,
+    series: "NL_DS1",
+    number: 1,
+  };
+  session.schedule = [
+    { ...suspended, date: "2026-10-03", start: "2026-10-03T20:00:00Z" },
+    { ...suspended, date: "2026-10-04", start: "2026-10-04T17:00:00Z" },
+  ];
+  const { body } = renderTeamSheet("LAD");
+  session.schedule = null;
+
+  assert.equal(
+    readText(body.text.match(/<div class="field-heads">[\s\S]*?<\/div>/)?.[0] ?? ""),
+    "Dodgers 1-0 Playoff field",
+  );
+});
+
 test("a club's postseason sets its numbers across from the playoff field's, each a dot on a line solid over the regular season's range and dashed past it, with the legend under them", () => {
   session.state = { ...session.state, projected: false, slate: null };
   session.standings = NL_WEST_FINAL;

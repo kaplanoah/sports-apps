@@ -85,3 +85,24 @@ test("a doubleheader's meetings list in game order, even when MLB lists its seco
     "May 20 Padres 4-1 vs Brewers",
   ]);
 });
+
+test("a suspended game is one meeting, on the day it started, though MLB lists it again on the day it's finished", () => {
+  const suspended = GAMES.filter((game) => game.id === "824912");
+  assert.deepEqual(
+    suspended.map((game) => [game.date, game.state]),
+    [
+      ["2026-06-16", "final"],
+      ["2026-06-17", "final"],
+    ],
+  );
+  const markup = renderSeasonSeries({ away: "SF", home: "ATL", state: "pre" }, GAMES);
+  assert.deepEqual(listMeetings(markup), [
+    "Jun 16 Giants 7-2 at Braves",
+    "Jun 17 Giants 7-5 at Braves",
+    "Jun 26 Braves 3-1 at Giants",
+    "Jun 27 Giants 5-0 vs Braves",
+    "Jun 28 Giants 3-2 vs Braves",
+    "Aug 31 Giants 7-3 at Braves",
+  ]);
+  assert.match(String(markup), /<span>Giants lead 5-1<\/span>/);
+});

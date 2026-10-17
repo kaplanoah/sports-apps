@@ -40,7 +40,7 @@ import {
 import { countClubGames } from "./qualifying.js";
 import { findClubRoster } from "./roster-section.js";
 import { sortInScheduleOrder } from "./schedule-order.js";
-import { listSeasonGames, nameGameKey } from "./season-games.js";
+import { listCountedGames, listSeasonGames, nameGameKey } from "./season-games.js";
 import { nameRound } from "./series-games.js";
 import { isFieldSet, session } from "./session.js";
 import { listSlateGames } from "./slate.js";
@@ -211,7 +211,7 @@ function listTeamSeries(id) {
 const hasBye = (id) => (session.state.teams[id]?.seed ?? 99) <= 2;
 
 const listPostseasonFinals = () =>
-  listSeasonGames(session.state?.slate, session.schedule).filter(
+  listCountedGames(listSeasonGames(session.state?.slate, session.schedule)).filter(
     (game) => game.postseason && game.state === "final" && game.score,
   );
 

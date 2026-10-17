@@ -27,6 +27,24 @@ export function listSeasonGames(slate, schedule) {
 }
 
 /**
+ * Each game once, as a club's games count: MLB lists a game it suspended again on the day it's
+ * finished, and the game counts on the day it started. A called-off listing stays, for what reads
+ * its games to tell from the makeup that shares its id.
+ * @template {{ id: string, date: string, state: string }} Game
+ * @param {Game[]} games
+ * @returns {Game[]}
+ */
+export function listCountedGames(games) {
+  /** @type {Map<string, string>} */
+  const firstDays = new Map();
+  for (const game of games.filter((each) => each.state !== "off")) {
+    const firstDay = firstDays.get(game.id);
+    if (!firstDay || game.date < firstDay) firstDays.set(game.id, game.date);
+  }
+  return games.filter((game) => game.state === "off" || firstDays.get(game.id) === game.date);
+}
+
+/**
  * Each day that has games, in order, with its games in schedule order.
  * @template {{ date: string, start: string }} Game
  * @param {Game[]} games

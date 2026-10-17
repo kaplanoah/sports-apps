@@ -7,6 +7,7 @@ import { html } from "#shared/html.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { nameTeam, renderClub } from "./clubs.js";
 import { sortInScheduleOrder } from "./schedule-order.js";
+import { listCountedGames } from "./season-games.js";
 
 const TITLE = "Season series";
 
@@ -19,14 +20,14 @@ const isMeetingOf = (game, first, second) =>
   (game.away === first && game.home === second) || (game.away === second && game.home === first);
 
 /**
- * The two clubs' finished regular season games, first to last.
+ * The two clubs' finished regular season games, first to last, each once.
  * @param {any[]} games every game of the season
  * @param {string} away
  * @param {string} home
  */
 const listMeetings = (games, away, home) =>
   sortInScheduleOrder(
-    games.filter(
+    listCountedGames(games).filter(
       (game) =>
         !game.postseason &&
         !game.allStar &&

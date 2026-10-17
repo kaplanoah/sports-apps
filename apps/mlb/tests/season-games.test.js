@@ -2,7 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { sortInScheduleOrder } from "../page/js/schedule-order.js";
-import { groupGamesByDay, listSeasonGames, nameGameKey } from "../page/js/season-games.js";
+import {
+  groupGamesByDay,
+  listCountedGames,
+  listSeasonGames,
+  nameGameKey,
+} from "../page/js/season-games.js";
+import { countSeriesWins, groupSeriesFinals } from "../page/js/series-games.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 
 // MLB's 2026 season as the store kept it on Friday, October 9.
@@ -99,4 +105,37 @@ test("a game resumed on another day is listed on each, and every game of either 
     resumedDay.map((game) => game.id),
     ["824912", "824913"],
   );
+});
+
+test("a suspended game counts once, on the day it started, and a called-off listing stays beside its makeup", () => {
+  const suspended = { id: "824912", away: "SF", home: "ATL", state: "final", score: [7, 2] };
+  const games = [
+    { ...suspended, date: "2026-06-17" },
+    { id: "823471", date: "2026-04-29", state: "off" },
+    { ...suspended, date: "2026-06-16" },
+    { id: "823471", date: "2026-04-30", state: "final" },
+  ];
+  assert.deepEqual(listCountedGames(games).map(nameGameKey), [
+    "823471 2026-04-29",
+    "824912 2026-06-16",
+    "823471 2026-04-30",
+  ]);
+});
+
+test("a playoff game MLB suspended counts once toward its series", () => {
+  const suspended = {
+    id: "900001",
+    away: "ATL",
+    home: "LAD",
+    state: "final",
+    score: [3, 5],
+    series: "NL_DS1",
+    number: 1,
+  };
+  const games = [
+    { ...suspended, date: "2026-10-03" },
+    { ...suspended, date: "2026-10-04" },
+  ];
+  const second = { ...suspended, id: "900002", date: "2026-10-05", state: "pre", number: 2 };
+  assert.deepEqual(countSeriesWins(second, groupSeriesFinals(games)), [0, 1]);
 });

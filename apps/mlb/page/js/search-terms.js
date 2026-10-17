@@ -7,7 +7,7 @@ import { readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listSearchGames, listVenuePlaces } from "#shared/game-search.js";
 import { LEAGUE_WORDS } from "./league-words.js";
 import { nameClubFully } from "./clubs.js";
-import { nameGameKey } from "./season-games.js";
+import { listCountedGames, nameGameKey } from "./season-games.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/game-search.js").SearchTerms} SearchTerms */
@@ -351,22 +351,7 @@ function readSearchGame(game) {
 }
 
 /**
- * Each game once, as a search counts a club's games: MLB lists a game it suspended again on the
- * day it's finished, which counts on the day it started, and one called off where it's made up.
- * @param {any[]} games every listing the Games view shows, in order of day
- */
-function listCountedGames(games) {
-  const counted = new Set();
-  return games.filter((game) => {
-    if (game.state === "off") return true;
-    if (counted.has(game.id)) return false;
-    counted.add(game.id);
-    return true;
-  });
-}
-
-/**
  * The season's games as its search reads them, each game once.
- * @param {any[]} games every listing the Games view shows, in order of day
+ * @param {any[]} games every listing the Games view shows
  */
 export const readSearchGames = (games) => listSearchGames(listCountedGames(games), readSearchGame);
