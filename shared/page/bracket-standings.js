@@ -116,15 +116,21 @@ export function scrollUnderPill(element) {
 
 /**
  * Slides to one of the tab's parts, as a tap on its name does, or shows it at once, as a search's
- * row does. A part newly shown starts at its top, just under the pill.
+ * row does. A part newly shown starts at its top, just under the pill, and so does one a search's
+ * row shows, even when it was showing further down.
  * @param {SeasonPart} part
  * @param {{ isInstant?: boolean }} [options]
  */
 export function showSeasonPart(part, { isInstant = false } = {}) {
   const index = readOrder().indexOf(part);
   if (!panels) return;
-  if (isInstant) panels.jumpTo(index);
-  else if (index !== panels.readShown()) panels.slideTo(index);
+  if (!isInstant) {
+    if (index !== panels.readShown()) panels.slideTo(index);
+    return;
+  }
+  panels.jumpTo(index);
+  const partsTopScroll = measurePartsTopScroll();
+  if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
 }
 
 /**

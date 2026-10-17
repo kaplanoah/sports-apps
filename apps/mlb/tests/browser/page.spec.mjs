@@ -127,9 +127,12 @@ test("on a phone, each tab comes back where it was left, and a tab not shown yet
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
-  const left = await page.evaluate(() => scrollY);
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  const left = await page.evaluate(() => {
+    scrollTo({ top: 400, behavior: "instant" });
+    return scrollY;
+  });
+  expect(left).toBe(400);
 
   await page.getByRole("tab", { name: "News" }).click();
   expect(await page.evaluate(() => scrollY)).toBe(0);
