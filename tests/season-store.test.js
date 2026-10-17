@@ -363,19 +363,40 @@ test("a store saves which season is current, and saves it again only when it cha
   );
 });
 
-test("a league keeps what it reads in the store's storage, under keys its paths can't name", async () => {
+test("a league reads through the fetch it's handed, and keeps what it reads in the store's storage, under keys its paths can't name", async () => {
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore({
     ...QUIET_LEAGUE,
-    createLoadSnapshot: (storage) => async () => {
-      await storage.put("standings", { read: 1 });
+    createLoadSnapshot: (storage, fetchImpl) => async () => {
+      const answer = await (await fetchImpl("https://league.example/standings")).json();
+      await storage.put("standings", answer);
+      await storage.put("old-standings", answer);
+      await storage.delete("old-standings");
       return storage.get("standings");
     },
   });
-  const store = new SeasonStore(context.ctx, {});
+  /** @param {string} who */
+  const createFetch = (who) => {
+    const reads = [];
+    /** @type {typeof fetch} */
+    const fetchImpl = async (url) => {
+      reads.push(String(url));
+      return Response.json({ readBy: who });
+    };
+    return { reads, fetchImpl };
+  };
+  const storeFetch = createFetch("store");
+  const store = new SeasonStore(context.ctx, {}, { fetchImpl: storeFetch.fetchImpl });
 
-  assert.deepEqual(await store.loadSnapshot(2026), { read: 1 });
-  assert.deepEqual(await context.ctx.storage.get("feed:standings"), { read: 1 });
+  assert.deepEqual(await store.loadSnapshot(2026), { readBy: "store" });
+  assert.deepEqual(storeFetch.reads, ["https://league.example/standings"]);
+  assert.deepEqual(await context.ctx.storage.get("feed:standings"), { readBy: "store" });
+  assert.equal(context.stored.has("feed:old-standings"), false);
+
+  const runFetch = createFetch("run");
+  assert.deepEqual(await store.createLoadSnapshot(runFetch.fetchImpl)(2026), { readBy: "run" });
+  assert.deepEqual(runFetch.reads, ["https://league.example/standings"]);
+  assert.equal(storeFetch.reads.length, 1);
 });
 
 /**
