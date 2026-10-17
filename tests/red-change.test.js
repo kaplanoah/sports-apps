@@ -310,6 +310,48 @@ test("the lines of each object Object.assign hands a part's style are found, and
   assert.deepEqual([...findStyleObjectLines("Object.assign(session, { scale: 1 });")], []);
 });
 
+// As a page pulses a part, with the call above what a hunk shows of its keyframes.
+const KEYFRAMES_SCRIPT = [
+  "function pulse(date) {",
+  "  date.animate(",
+  "    [",
+  "      { scale: 1 },",
+  "      { scale: 1.1, offset: 0.4 },",
+  "      { scale: 1 },",
+  "    ],",
+  "    { duration: 300, easing: 'ease-out' },",
+  "  );",
+  "}",
+  "const SHRINK = [",
+  "  { scale: 0.9 },",
+  "];",
+  "const shrink = (part) => part.animate(SHRINK, { duration: 200 });",
+  "const sizes = [{ scale: 2 }];",
+].join("\n");
+
+test("a key of the keyframes a part's animate takes sets that style, a number too, inline or by name", () => {
+  const path = "apps/wnba/page/js/games-view.js";
+  /** @param {number} number */
+  const findLineReasons = (number) =>
+    findRedReasons(
+      [
+        {
+          path,
+          addedLines: [{ number, text: KEYFRAMES_SCRIPT.split("\n")[number - 1] }],
+          hunks: [],
+        },
+      ],
+      (read) => (read === path ? KEYFRAMES_SCRIPT : ""),
+    );
+  assert.deepEqual(findLineReasons(5), [
+    `${path}:5 adds a style property that sets scale: { scale: 1.1, offset: 0.4 },`,
+  ]);
+  assert.equal(findLineReasons(12).length, 1, "a keyframe of a named list");
+  for (const quiet of [8, 15])
+    assert.deepEqual(findLineReasons(quiet), [], KEYFRAMES_SCRIPT.split("\n")[quiet - 1]);
+  assert.deepEqual([...findStyleObjectLines(KEYFRAMES_SCRIPT)], [3, 4, 5, 6, 7, 11, 12, 13]);
+});
+
 test("lines that only read or name those properties aren't red", () => {
   const quietLines = [
     "  const live = games.filter((game) => game.isLive);",

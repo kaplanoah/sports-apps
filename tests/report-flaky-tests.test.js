@@ -12,6 +12,7 @@ import {
   mergeFailedTests,
   postReport,
   readCounted,
+  readLedger,
   readRunFailures,
   readTable,
   renderTable,
@@ -449,8 +450,8 @@ const nameRunUrl = (id) => `https://github.com/${REPOSITORY}/actions/runs/${1000
 /** @typedef {{ id: number, name: string, created_at: string, run: number }} FakeArtifact */
 
 /**
- * GitHub's API as the nightly report reads it: the repository's artifacts, newest first, a page at
- * a time, and the CI runs that made them, with each of their tries.
+ * GitHub's API as the nightly report reads it: the repository's artifacts, in the order given, a
+ * page at a time, and the CI runs that made them, with each of their tries.
  * @param {{ ciRuns: FakeCiRun[], artifacts: FakeArtifact[] }} state
  */
 function createFakeRunsApi(state) {
@@ -478,10 +479,8 @@ function createFakeRunsApi(state) {
     const page = path.match(/^\/actions\/artifacts\?per_page=(\d+)&page=(\d+)$/);
     if (page) {
       const [size, number] = [Number(page[1]), Number(page[2])];
-      const newestFirst = state.artifacts.toSorted(
-        (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
-      );
-      return { artifacts: newestFirst.slice((number - 1) * size, number * size).map(showArtifact) };
+      const shown = state.artifacts.slice((number - 1) * size, number * size);
+      return { artifacts: shown.map(showArtifact) };
     }
     const attempt = path.match(/^\/actions\/runs\/(\d+)\/attempts\/(\d+)$/);
     if (attempt) return { run_started_at: findRun(attempt[1]).tries[Number(attempt[2]) - 1] };
@@ -540,13 +539,15 @@ test("a night takes each report and burn-in list this repository's CI runs made 
   assert.deepEqual(ids, [11, 12]);
 });
 
-test("a night reads the repository's artifacts a page at a time until it has passed the table's week", async () => {
+test("a night reads every page of the repository's artifacts, whatever their order, and takes each once", async () => {
   const artifacts = Array.from({ length: 400 }, (_, index) => ({
     id: index,
     name: "browser-report-1",
-    created_at: new Date(TONIGHT.getTime() - index * 3600000).toISOString(),
+    created_at: new Date(TONIGHT.getTime() - (399 - index) * 3600000).toISOString(),
     run: 1,
   }));
+  // As one made while the pages are read pushes the one before it onto the next page too.
+  artifacts.splice(300, 0, artifacts[299]);
   const { github, asked } = createFakeRunsApi({
     ciRuns: [{ id: 1, updated_at: "2026-10-09T12:00:00Z", tries: ["2026-10-09T11:00:00Z"] }],
     artifacts,
@@ -555,11 +556,11 @@ test("a night reads the repository's artifacts a page at a time until it has pas
   const found = await listUncountedArtifacts(github, { counted: [], now: TONIGHT });
 
   assert.equal(found.length, 152);
-  assert.deepEqual(asked, [
-    "/actions/artifacts?per_page=100&page=1",
-    "/actions/artifacts?per_page=100&page=2",
-    "/actions/artifacts?per_page=100&page=3",
-  ]);
+  assert.equal(new Set(found.map(({ id }) => id)).size, 152);
+  assert.deepEqual(
+    asked,
+    [1, 2, 3, 4, 5].map((page) => `/actions/artifacts?per_page=100&page=${page}`),
+  );
 });
 
 /**
@@ -649,6 +650,8 @@ function createFakeDownloads(filesById) {
   return { download, downloaded };
 }
 
+const UNCOUNTED = { counted: [], countedBefore: 0 };
+
 /** @param {FlakyRun[]} runs */
 const listTries = (runs) =>
   runs.map(({ id, artifacts }) => [id, artifacts.map((artifact) => artifact.id)]);
@@ -657,12 +660,12 @@ const listTries = (runs) =>
  * @param {object} night
  * @param {ReturnType<typeof createFakeRunsApi>["github"]} night.github
  * @param {ReturnType<typeof createFakeDownloads>["download"]} night.download
- * @param {CountedArtifact[]} [night.counted]
+ * @param {import("../worker/report-flaky-tests.mjs").Ledger} [night.ledger]
  * @param {Date} [night.now]
  * @param {any[]} [night.nightReports]
  */
-const collect = ({ github, download, counted = [], now = TONIGHT, nightReports = [] }) =>
-  collectFailedTests({ nightReports, github, night: { url: RUN_URL, now }, counted, download });
+const collect = ({ github, download, ledger = UNCOUNTED, now = TONIGHT, nightReports = [] }) =>
+  collectFailedTests({ nightReports, github, night: { url: RUN_URL, now }, ledger, download });
 
 /**
  * The body a night's report writes to the open issue with this body.
@@ -720,8 +723,8 @@ test("a run tried again before a night judges each try on its own, and counts it
   const { failed, counted } = await collect({ github, download });
 
   assert.deepEqual(listTries(downloaded), [
-    [8, [83, 82]],
     [8, [81]],
+    [8, [82, 83]],
   ]);
   assert.deepEqual(
     failed.map(({ name, runs, failures }) => [name, runs, failures]),
@@ -752,7 +755,7 @@ test("a run tried again days after it began is found, and only its new try is co
   const { failed, counted } = await collect({
     github,
     download,
-    counted: [{ id: 91, at: "2026-10-04T10:30:00Z" }],
+    ledger: { counted: [{ id: 91, at: "2026-10-04T10:30:00Z" }], countedBefore: 0 },
   });
 
   assert.deepEqual(listTries(downloaded), [[9, [92]]]);
@@ -772,7 +775,7 @@ test("an artifact the table has counted is never counted again", async () => {
   const second = await collect({
     github: createFakeRunsApi(ONE_REPORT).github,
     download,
-    counted: readCounted(body),
+    ledger: readLedger({ body, updated_at: TONIGHT.toISOString() }),
     now: NEXT_NIGHT,
   });
   const nextBody = await postNight({ body, ...second, now: NEXT_NIGHT });
@@ -805,7 +808,7 @@ test("a night whose report doesn't land leaves its artifacts to the next night",
   const second = await collect({
     github: createFakeRunsApi(ONE_REPORT).github,
     download,
-    counted: readCounted(issues[0].body),
+    ledger: readLedger({ ...issues[0], updated_at: "2026-10-09T07:40:00Z" }),
     now: NEXT_NIGHT,
   });
 
@@ -839,7 +842,7 @@ test("a run still going waits, and once it ends its try's reports are judged tog
   });
   const next = await collect({ github: ended.github, download, now: NEXT_NIGHT });
 
-  assert.deepEqual(listTries(downloaded), [[10, [102, 101]]]);
+  assert.deepEqual(listTries(downloaded), [[10, [101, 102]]]);
   assert.deepEqual(next.failed, []);
   assert.deepEqual(next.counted.map(({ id }) => id).toSorted(), [101, 102]);
 });
@@ -888,4 +891,46 @@ test("a night's report holds its own tests, found in it, and each CI run's it co
     [RETRY_PASSED]: nameRunUrl(1),
     [BURN_IN_FLAKY.name]: nameRunUrl(7),
   });
+});
+
+test("the first night after the issue's body lists what it counted takes each artifact made before the issue's last edit as counted", async () => {
+  const issue = {
+    body: OPEN_BODY.replace(/\n<!-- flaky-counted .*? -->/, ""),
+    updated_at: "2026-10-09T08:00:00Z",
+  };
+  const state = {
+    ciRuns: [
+      { id: 1, updated_at: "2026-10-09T07:40:00Z", tries: ["2026-10-09T07:00:00Z"] },
+      { id: 2, updated_at: "2026-10-09T09:40:00Z", tries: ["2026-10-09T09:00:00Z"] },
+    ],
+    artifacts: [
+      { id: 11, name: "browser-report-1", created_at: "2026-10-09T07:30:00Z", run: 1 },
+      { id: 21, name: "browser-report-1", created_at: "2026-10-09T09:30:00Z", run: 2 },
+    ],
+  };
+  const { download, downloaded } = createFakeDownloads({
+    11: RETRY_PASSED_REPORT,
+    21: RETRY_PASSED_REPORT,
+  });
+  const ledger = readLedger(issue);
+  assert.deepEqual(ledger, { counted: [], countedBefore: Date.parse(issue.updated_at) });
+
+  const first = await collect({ github: createFakeRunsApi(state).github, download, ledger });
+  const body = await postNight({ body: issue.body, ...first, now: TONIGHT });
+  const second = await collect({
+    github: createFakeRunsApi(state).github,
+    download,
+    ledger: readLedger({ body, updated_at: TONIGHT.toISOString() }),
+    now: NEXT_NIGHT,
+  });
+
+  assert.deepEqual(listTries(downloaded), [[2, [21]]]);
+  assert.equal(first.failed.find(({ name }) => name === RETRY_PASSED)?.failures, 1);
+  assert.deepEqual(
+    readCounted(body).map(({ id }) => id),
+    [11, 21],
+  );
+  assert.deepEqual(second, { failed: [], counted: [] });
+  assert.deepEqual(readLedger({ body, updated_at: TONIGHT.toISOString() }).countedBefore, 0);
+  assert.deepEqual(readLedger(undefined), UNCOUNTED);
 });

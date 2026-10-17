@@ -69,7 +69,8 @@ const CAMEL_PROPERTY_NAMES = LAYER_PROPERTIES.map(toCamelCase)
 
 // A property's longhands set it too, as transition-duration and -webkit-mask-image do. A number an
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since Prettier ends each
-// of a stylesheet's declarations with a semicolon.
+// of a stylesheet's declarations with a semicolon, unless the object is a style's or an
+// animation's keyframes, which findStyleObjectLines finds.
 const LAYER_SETTINGS = [
   {
     name: "a CSS declaration",
@@ -97,8 +98,11 @@ const LAYER_SETTINGS = [
   },
 ];
 
-// Object.assign(<part>.style, { ... }) sets each key of its object as a style, a number too.
-const STYLE_ASSIGN = /Object\.assign\(\s*[\w$.]+\.style\s*,\s*\{/g;
+// Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) hands a
+// part's style, and in the keyframes <part>.animate([ ... ]) or <part>.animate({ ... }) takes.
+const STYLE_OBJECTS = [/Object\.assign\(\s*[\w$.]+\.style\s*,\s*\{/g, /\.animate\(\s*[[{]/g];
+// The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
+const KEYFRAMES_NAME = /\.animate\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 const STYLE_KEY = new RegExp(
   `(?:^|[\\s{,])["']?(?:-webkit-|webkit|Webkit)?(${PROPERTY_NAMES}|${CAMEL_PROPERTY_NAMES})(?:-[a-z]+|[A-Z][a-z]+)*["']?\\s*:`,
 );
@@ -252,16 +256,21 @@ function findSharedReasons(file) {
   );
 }
 
+const CLOSING_BRACKETS = { "{": "}", "[": "]" };
+
 /**
- * The index of the brace that closes the one at `open`, or the text's end when none does.
+ * The index of the brace or bracket that closes the one at `open`, or the text's end when none
+ * does.
  * @param {string} text
  * @param {number} open
  */
-function findClosingBrace(text, open) {
+function findClosingBracket(text, open) {
+  const opening = text[open];
+  const closing = CLOSING_BRACKETS[/** @type {"{" | "["} */ (opening)];
   let depth = 0;
   for (let at = open; at < text.length; at += 1) {
-    if (text[at] === "{") depth += 1;
-    if (text[at] === "}") depth -= 1;
+    if (text[at] === opening) depth += 1;
+    if (text[at] === closing) depth -= 1;
     if (depth === 0) return at;
   }
   return text.length;
@@ -274,15 +283,35 @@ function findClosingBrace(text, open) {
 const findLineNumber = (text, index) => text.slice(0, index).split("\n").length;
 
 /**
- * The line numbers, from 1, that lie in an object Object.assign hands a part's style, whose keys
+ * Where each object or array of keyframes opens that a script hands `.animate` by its name.
+ * @param {string} text
+ */
+function findNamedKeyframes(text) {
+  const names = new Set([...text.matchAll(KEYFRAMES_NAME)].map((match) => match[1]));
+  return [...names].flatMap((name) => {
+    const named = new RegExp(
+      `\\b(?:const|let|var)\\s+${name.replaceAll("$", "\\$")}\\s*=\\s*[[{]`,
+      "g",
+    );
+    return [...text.matchAll(named)].map((match) => (match.index ?? 0) + match[0].length - 1);
+  });
+}
+
+/**
+ * The line numbers, from 1, that lie in a style's object or an animation's keyframes, whose keys
  * a hunk's lines can't show as styles when the call sits above them.
  * @param {string} text a script as the change leaves it
  */
 export function findStyleObjectLines(text) {
+  const opens = [
+    ...STYLE_OBJECTS.flatMap((pattern) =>
+      [...text.matchAll(pattern)].map((match) => (match.index ?? 0) + match[0].length - 1),
+    ),
+    ...findNamedKeyframes(text),
+  ];
   const lines = new Set();
-  for (const match of text.matchAll(STYLE_ASSIGN)) {
-    const open = (match.index ?? 0) + match[0].length - 1;
-    const last = findLineNumber(text, findClosingBrace(text, open));
+  for (const open of opens) {
+    const last = findLineNumber(text, findClosingBracket(text, open));
     for (let line = findLineNumber(text, open); line <= last; line += 1) lines.add(line);
   }
   return lines;

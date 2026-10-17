@@ -168,6 +168,21 @@ export function readCounted(body) {
 }
 
 /**
+ * What the open issue has counted: the artifacts its body lists, and the time before which every
+ * artifact counts as counted, for a table written before its body listed them.
+ * @param {{ body?: string | null, updated_at: string } | undefined} issue
+ * @returns {Ledger}
+ */
+export function readLedger(issue) {
+  const body = issue?.body ?? "";
+  const isUnlisted = STATE_PATTERN.test(body) && !COUNTED_PATTERN.test(body);
+  return {
+    counted: readCounted(body),
+    countedBefore: issue && isUnlisted ? Date.parse(issue.updated_at) : 0,
+  };
+}
+
+/**
  * The counted artifacts made in the week the table keeps: an older one isn't looked at again.
  * @param {CountedArtifact[]} counted
  * @param {Date} now
@@ -351,6 +366,7 @@ export async function postReport({
 
 /** @typedef {ReturnType<typeof createGitHub>} GitHub */
 /** @typedef {{ id: number, at: string }} CountedArtifact a CI artifact and when it was made */
+/** @typedef {{ counted: CountedArtifact[], countedBefore: number }} Ledger */
 /** @typedef {CountedArtifact & { name: string }} RunArtifact */
 /** @typedef {{ id: number, foundIn: FoundIn, artifacts: RunArtifact[] }} FlakyRun one try of a CI run, and the artifacts it made */
 
@@ -370,23 +386,20 @@ const isArtifactToCount = (artifact, { since, counted }) =>
 
 /**
  * Every report and burn-in list CI made in the week the table keeps that it hasn't counted, from
- * the repository's artifacts, newest first, so a run tried again days after it began is found.
+ * every page of the repository's artifacts, so a run tried again days after it began is found. An
+ * artifact made while the pages are read can show on two, so each is taken once.
  * @param {GitHub} github
  * @param {{ counted: CountedArtifact[], now: Date }} night
+ * @returns {Promise<any[]>}
  */
 export async function listUncountedArtifacts(github, { counted, now }) {
-  const since = findWeekStart(now);
-  const night = { since, counted: new Set(counted.map(({ id }) => id)) };
-  const found = [];
+  const night = { since: findWeekStart(now), counted: new Set(counted.map(({ id }) => id)) };
+  const found = new Map();
   for (let page = 1; ; page += 1) {
     const { artifacts } = await github(`/actions/artifacts?per_page=${PAGE_SIZE}&page=${page}`);
-    found.push(
-      ...artifacts.filter((/** @type {any} */ artifact) => isArtifactToCount(artifact, night)),
-    );
-    const isPast = artifacts.every(
-      (/** @type {any} */ artifact) => Date.parse(artifact.created_at) < since,
-    );
-    if (artifacts.length < PAGE_SIZE || isPast) return found;
+    for (const artifact of artifacts)
+      if (isArtifactToCount(artifact, night)) found.set(artifact.id, artifact);
+    if (artifacts.length < PAGE_SIZE) return [...found.values()];
   }
 }
 
@@ -500,12 +513,13 @@ function downloadRun({ id, artifacts }) {
 
 /**
  * The tests that failed in the nightly run and in each try of a CI run that made artifacts the
- * table hasn't counted, each with the latest run it failed in, and the artifacts the night counted.
+ * table hasn't counted, each with the latest run it failed in, and the artifacts the night counted:
+ * those it read, and those the ledger counts as counted by when they were made.
  * @param {object} options
  * @param {any[]} options.nightReports the nightly run's own Playwright JSON reports
  * @param {GitHub} options.github
  * @param {{ url: string, now: Date }} options.night
- * @param {CountedArtifact[]} options.counted what the table counted before
+ * @param {Ledger} options.ledger what the table counted before
  * @param {(run: FlakyRun) => string} [options.download]
  * @returns {Promise<{ failed: TestRuns[], counted: CountedArtifact[] }>}
  */
@@ -513,18 +527,29 @@ export async function collectFailedTests({
   nightReports,
   github,
   night,
-  counted,
+  ledger,
   download = downloadRun,
 }) {
-  const artifacts = await listUncountedArtifacts(github, { counted, now: night.now });
-  const runs = await listFlakyRuns(github, artifacts);
+  const uncounted = await listUncountedArtifacts(github, {
+    counted: ledger.counted,
+    now: night.now,
+  });
+  /** @param {any} artifact */
+  const isCountedBefore = (artifact) => Date.parse(artifact.created_at) < ledger.countedBefore;
+  const runs = await listFlakyRuns(
+    github,
+    uncounted.filter((artifact) => !isCountedBefore(artifact)),
+  );
   const tonight = { url: night.url, at: night.now.toISOString() };
   return {
     failed: mergeFailedTests([
       listFailedTests(nightReports).map((test) => ({ ...test, foundIn: tonight })),
       ...runs.map((run) => readRunFailures(download(run), run.foundIn)),
     ]),
-    counted: runs.flatMap((run) => run.artifacts.map(({ id, at }) => ({ id, at }))),
+    counted: [
+      ...uncounted.filter(isCountedBefore).map(({ id, created_at: at }) => ({ id, at })),
+      ...runs.flatMap((run) => run.artifacts.map(({ id, at }) => ({ id, at }))),
+    ],
   };
 }
 
@@ -537,7 +562,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     nightReports: process.argv.slice(2).map((path) => JSON.parse(readFileSync(path, "utf8"))),
     github,
     night: { url: runUrl, now },
-    counted: readCounted((await findOpenIssue(github))?.body),
+    ledger: readLedger(await findOpenIssue(github)),
   });
   console.log(await postReport({ repository, failed, counted, runUrl, now }));
 }
