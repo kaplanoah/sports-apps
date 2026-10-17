@@ -284,6 +284,34 @@ test.describe("with reduced motion", () => {
     await expect(month).toHaveText("September");
   });
 
+  test("after a swipe of the strip, a tap on Games while it shows, or on Today, brings today's date back to the strip's middle and its month over it, leaving the list where it is", async ({
+    page,
+  }) => {
+    await openSeasonGames(page);
+    await expectDayAtTop(page, "2026-09-30");
+    const month = page.locator("#seasonGames .strip-month");
+    const strip = page.locator("#seasonGames .day-strip");
+    const readStripLeft = () => strip.evaluate((element) => element.scrollLeft);
+    const centered = await readStripLeft();
+    const top = await findList(page).evaluate((list) => list.scrollTop);
+    const box = await strip.boundingBox();
+
+    for (const tap of [
+      () => page.getByRole("tab", { name: "Games" }).click(),
+      () => page.locator("#seasonGames .go-today").click(),
+    ]) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.wheel(-2400, 0);
+      await expect(month).toHaveText("August");
+
+      await tap();
+
+      await expect.poll(readStripLeft).toBe(centered);
+      await expect(month).toHaveText("September");
+      expect(await findList(page).evaluate((list) => list.scrollTop)).toBe(top);
+    }
+  });
+
   test("a tap on Today where the list already is moves nothing", async ({ page }) => {
     await openSeasonGames(page);
     await expectDayAtTop(page, "2026-09-30");

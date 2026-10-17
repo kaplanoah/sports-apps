@@ -1,3 +1,4 @@
+import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
 import { createSlidePanels } from "./slide-panels.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
@@ -140,6 +141,14 @@ export function showSeasonPhase(isFieldSet) {
   panels?.jumpTo(0);
 }
 
+// A tap on the tab while it shows takes it back to the part it's named for, and from there, as any
+// tab's does, to the page's top.
+function returnToFirstPart() {
+  if (!panels || panels.readShown() === 0) return false;
+  panels.slideTo(0);
+  return true;
+}
+
 // The pill and the tab's two faces, its name and icon for each part, are drawn whole, as they last
 // showed (show-last-drawn.js), until the season says where it is.
 export function startBracketStandings() {
@@ -153,6 +162,7 @@ export function startBracketStandings() {
   panels = slidePanels;
   slidePanels.jumpTo(readOrder().indexOf(readShownPart()));
   wireTabList(findPill(), (part) => showSeasonPart(/** @type {SeasonPart} */ (part)));
+  setTabStart("bracket-standings", returnToFirstPart);
   addEventListener("scroll", followPageScroll, { passive: true });
   addEventListener("resize", () => {
     fitPartsToRoomUnderPill();
