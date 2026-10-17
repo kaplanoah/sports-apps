@@ -6,8 +6,14 @@ import {
   createSearchDictionary,
   listSearchGames,
 } from "#shared/game-search.js";
+import { readTypedSearch } from "#shared/search-reading.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
-import { listPhrasings, sweepMisspellings, sweepPhrasings } from "../../../tests/search-sweep.js";
+import {
+  listPhrasings,
+  sweepMisspellings,
+  sweepPhrasings,
+  sweepPlayerNumbers,
+} from "../../../tests/search-sweep.js";
 import { listSeasonGames } from "../page/js/games-view.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
@@ -61,4 +67,20 @@ test("typing each team's and place's name a key at a time, alone or in a search,
 
 test("typing each team's and place's name of five letters or more with a letter wrong, each way a thumb gets one wrong, finds only games the name's own letters find, or nothing, never another name's", () => {
   assert.deepEqual(sweepMisspellings({ context: CONTEXT, pages: PAGES }), []);
+});
+
+test("a team's name beside a number, each way fans write it, lists each of its players who wears it", () => {
+  assert.deepEqual(sweepPlayerNumbers({ context: CONTEXT, pages: PAGES }), []);
+  const { rows } = readTypedSearch("valkyries 2", {
+    context: CONTEXT,
+    pages: PAGES,
+    isTyping: true,
+    isGamesOnly: false,
+  });
+  assert.deepEqual(
+    rows.map((row) =>
+      row.kind === "player" ? `${row.player.firstName} ${row.player.lastName}` : row.kind,
+    ),
+    ["Kaitlyn Chen"],
+  );
 });

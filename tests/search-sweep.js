@@ -17,6 +17,8 @@ import { FORGIVING_LENGTH, isOneEditApart, normalizeText } from "#shared/search-
 // It also types each name of one word long enough to forgive a wrong letter with one letter wrong,
 // each way a thumb gets one wrong, and lists where it finds another name's games: a wrong letter
 // finds the name's, or, when it's as near another name, nothing.
+// And it types each team's name beside each number its players wear, each way fans write it, and
+// lists where it doesn't list just the team's players who wear it.
 
 const SHORTEST_GUESS = 3;
 // A phone's keyboard, a row at a time, for the key a thumb lands on beside the one it meant.
@@ -189,6 +191,66 @@ export function sweepMisspellings({ context, pages }) {
           }),
       ),
     );
+  });
+}
+
+/**
+ * The ways fans write a team's name beside a player's number: each way with its own name, and its
+ * other names, like its full name or its code, just beside the number.
+ * @param {string[]} names the team's own name first
+ * @param {string} number
+ */
+const listNumberPhrasings = ([name, ...others], number) => [
+  `${name} ${number}`,
+  `${name} #${number}`,
+  `${number} ${name}`,
+  `${name} No. ${number}`,
+  `${name} number ${number}`,
+  ...others.map((other) => `${other} ${number}`),
+];
+
+/**
+ * A team's names that name it alone, its own first, as "Dodgers" does, but not "Los Angeles".
+ * @param {import("#shared/game-search.js").SearchTeam} team
+ * @param {SearchContext} context
+ */
+function listOwnNames(team, { dictionary }) {
+  const isOwn = (/** @type {string} */ name) => {
+    const meanings = (dictionary.get(normalizeText(name)) ?? []).filter(
+      (meaning) => meaning.kind === "team",
+    );
+    return meanings.length > 0 && meanings.every((meaning) => meaning.value === team.code);
+  };
+  const names = [team.name, ...team.words, ...(team.shownNames ?? [])].map((name) =>
+    name.toLowerCase(),
+  );
+  return [...new Set(names)].filter(isOwn);
+}
+
+/**
+ * Each search of a team's name beside each number its players wear, as it's typed, as "search: lists
+ * rows, not players", where it lists anything but the team's players who wear it.
+ * @param {{ context: SearchContext, pages: SearchPages }} search
+ */
+export function sweepPlayerNumbers({ context, pages }) {
+  return context.terms.teams.flatMap((team) => {
+    const players = pages.players.filter((player) => player.team === team.code && player.number);
+    const names = listOwnNames(team, context);
+    return [...new Set(players.map((player) => player.number))].flatMap((number) => {
+      const wearing = players.filter((player) => player.number === number).map((each) => each.id);
+      return listNumberPhrasings(names, number).flatMap((text) => {
+        const { rows } = readTypedSearch(text, {
+          context,
+          pages,
+          isTyping: true,
+          isGamesOnly: false,
+        });
+        const listed = rows.map((row) => (row.kind === "player" ? row.player.id : row.kind));
+        return listed.join() === wearing.join()
+          ? []
+          : [`${text}: lists ${listed.join(", ")}, not ${wearing.join(", ")}`];
+      });
+    });
   });
 }
 

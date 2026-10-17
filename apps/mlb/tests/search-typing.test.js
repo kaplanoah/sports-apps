@@ -4,7 +4,12 @@ import { readFileSync } from "node:fs";
 import { createSearchContext, createSearchDictionary } from "#shared/game-search.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import { orderListedDays, readSentWords, readTypedSearch } from "#shared/search-reading.js";
-import { listPhrasings, sweepMisspellings, sweepPhrasings } from "../../../tests/search-sweep.js";
+import {
+  listPhrasings,
+  sweepMisspellings,
+  sweepPhrasings,
+  sweepPlayerNumbers,
+} from "../../../tests/search-sweep.js";
 import { listSeasonGames } from "../page/js/season-games.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGames } from "../page/js/search-terms.js";
@@ -124,4 +129,9 @@ test("under the rows, a search lists its games from today on, soonest first, or,
   assert.deepEqual(show("Los Angeles"), [3, "2026-10-14", "2026-10-16"]);
   assert.deepEqual(show("New York"), [164, "2026-10-07", "2026-03-26"]);
   assert.deepEqual(show("Mets"), [162, "2026-09-27", "2026-03-26"]);
+});
+
+test("a club's name beside a number, each way fans write it, lists each of its players who wears it", () => {
+  assert.deepEqual(sweepPlayerNumbers({ context: CONTEXT, pages: PAGES }), []);
+  assert.deepEqual(showTyped("mets 22").rows, ["Juan Soto"]);
 });
