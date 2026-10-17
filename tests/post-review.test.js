@@ -179,6 +179,9 @@ test("a finding of another shape the check across areas added is left out rather
         "a string",
         { weight: "Nit", path: 3, body: "a number for a path" },
         { weight: "Nit", path: "a.js", body: 5 },
+        { weight: "Nit", path: "a.js", body: "no line" },
+        { weight: "Nit", path: "a.js", line: "3", body: "a string for a line" },
+        { weight: "Nit", path: "a.js", line: 0, body: "line zero" },
       ],
       unjudged: [
         null,

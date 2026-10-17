@@ -248,7 +248,7 @@ test("the review reads every area in full, checks before it posts, and fails on 
   );
   assert.match(
     find,
-    /id: again\n\s+if: &retry-due \$\{\{ !cancelled\(\) && \(steps\.first\.outputs\.unread != '' \|\| steps\.first\.outputs\.answered != 'true'\) \}\}/,
+    /id: again\n\s+if: &retry-due \$\{\{ !cancelled\(\) && steps\.first\.outcome == 'success' && \(steps\.first\.outputs\.unread != '' \|\| steps\.first\.outputs\.answered != 'true'\) \}\}/,
   );
   assert.match(find, /id: last\n\s+if: \*retry-due\n/);
   assert.match(
@@ -347,6 +347,23 @@ test("the last read of the whole change runs only once a review of a push finish
       ["review-plan", "review-find", "review-check", "review-post"],
       job,
     );
+  assert.match(readJob("review-post"), /posted: \$\{\{ steps\.post\.outputs\.posted \}\}/);
+  assert.match(readJob("review-post"), /\n\s+id: post\n/);
+  assert.match(
+    readJob("review-final-find"),
+    /include: \$\{\{ fromJSON\(needs\.review-plan\.outputs\.final-reviewers \|\| '\[\]'\) \}\}/,
+  );
+  assert.match(
+    readJob("review-final-check"),
+    /include: \$\{\{ fromJSON\(needs\.review-plan\.outputs\.final-checkers \|\| '\[\]'\) \}\}/,
+  );
+  for (const job of [
+    "review-final-find",
+    "review-final-check",
+    "review-final-across",
+    "review-final-post",
+  ])
+    assert.match(readJob(job), /\n\s+STAGE: final\n/, job);
   assert.match(readJob("review-final-find"), /steps: \*find-steps/);
   assert.match(readJob("review-final-check"), /steps: \*check-steps/);
   assert.match(readJob("review-final-across"), /steps: \*across-steps/);

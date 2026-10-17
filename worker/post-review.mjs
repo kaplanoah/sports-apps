@@ -69,8 +69,8 @@ export const listCheckedFindings = (checks) =>
 const compareWeights = (one, other) => WEIGHTS.indexOf(one) - WEIGHTS.indexOf(other);
 
 /**
- * Whether a finding can be posted: it has a weight the review knows, and a file and a body as
- * text, however Claude's answer shaped it.
+ * Whether a finding can be posted: it has a weight the review knows, a file and a body as text,
+ * and a line, however Claude's answer shaped it.
  * @param {Finding} finding
  */
 const isPostable = (finding) =>
@@ -78,7 +78,9 @@ const isPostable = (finding) =>
   typeof finding.path === "string" &&
   typeof finding.body === "string" &&
   Boolean(finding.path) &&
-  Boolean(finding.body);
+  Boolean(finding.body) &&
+  Number.isInteger(finding.line) &&
+  finding.line > 0;
 
 /**
  * The weight a finding takes for itself and the repeats it stands in for: the heaviest a checker
