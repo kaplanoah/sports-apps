@@ -17,6 +17,7 @@ import {
   nameRotationKey,
 } from "../worker/src/rotations.js";
 import { addDays } from "#shared/days.js";
+import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // MLB's tables, the last two weeks of games, and the pitchers the matchup sheet reads, as MLB
@@ -285,6 +286,24 @@ test("past midnight, the store's starts are read again to reach the new day, tho
     .filter((path) => path.startsWith("/api/v1/schedule?"));
   assert.equal(scheduleReads.length, 1);
   assert.equal(docs.stored.get(nameRotationKey(2026, "CLE")).through, TOMORROW);
+});
+
+test("a kept schedule that doesn't say the day it reaches is read again", async () => {
+  const earlier = createRun();
+  await earlier.runJob();
+  const { docs, storage, mlb, runJob, wait } = createRun();
+  const scheduleKey = await nameFeedKey("schedule", "2026");
+  for (const [key, value] of earlier.storage.stored)
+    storage.stored.set(key, structuredClone(value));
+  for (const [key, value] of earlier.docs.stored) docs.stored.set(key, structuredClone(value));
+  delete storage.stored.get(scheduleKey).answer.data.through;
+
+  wait(10);
+  await runJob();
+
+  const scheduleReads = mlb.requests.filter((path) => path.startsWith("/api/v1/schedule?"));
+  assert.equal(scheduleReads.length, 1);
+  assert.equal(docs.stored.get(nameRotationKey(2026, "CLE")).through, TODAY);
 });
 
 test("a club whose starters the store doesn't keep, or a day its starts don't reach back to, has the sheet read MLB, counted", async () => {

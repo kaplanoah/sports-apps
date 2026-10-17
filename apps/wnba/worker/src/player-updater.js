@@ -13,7 +13,6 @@ import {
   PLAYOFFS,
   REGULAR_SEASON,
   TEAM_GAME_COLUMNS,
-  TOTALS_COLUMNS,
   TOTALS_FEED_COLUMNS,
   describeSeasonPlayers,
   nameGameLogRequest,
@@ -27,7 +26,7 @@ import { namePlayerIndexKey } from "#shared/page-search.js";
 import { nameOvertimesKey } from "../../page/js/search-pages.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { describeOvertimes } from "./overtimes.js";
-import { describeAverages, nameAveragesKey } from "./season-averages.js";
+import { describeAveragesDoc, nameAveragesKey } from "./season-averages.js";
 import { indexRosters } from "./player-index.js";
 import {
   describeRoster,
@@ -141,6 +140,12 @@ const countFinals = (schedule) =>
     ? schedule.games.filter((/** @type {any} */ game) => game.state === "final").length
     : null;
 
+// Each season's totals as they were kept without each player's team, under a key no run reads,
+// written out as they were kept, since a change to how the totals are read now can't change it.
+/** @param {number} season */
+const nameOldTotalsRequest = (season) =>
+  `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Totals&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight= PLAYER_ID PLAYER_NAME GP MIN PTS REB AST STL BLK TOV FGM FGA FG3M FG3A FTM FTA`;
+
 /** One store's update, with what it keeps between runs while it stays in memory. */
 function createStoreUpdate() {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
@@ -189,12 +194,11 @@ function createStoreUpdate() {
       })
       .catch(() => NO_TEAM_OUT);
 
-  // Each season's totals without each player's team sit under a key no run reads.
   /** @param {number} season */
   const forgetOldTotals = (season) =>
     /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).forgetFeed(
       "totals",
-      `${nameTotalsRequest(season)} ${TOTALS_COLUMNS.join(" ")}`,
+      nameOldTotalsRequest(season),
     );
 
   /**
@@ -306,10 +310,7 @@ function createStoreUpdate() {
     for (const [id, numbers] of players)
       await saveDoc(context, nameNumbersKey(season, id), numbers);
     await saveDoc(context, nameRanksKey(season), ranks);
-    await saveDoc(context, nameAveragesKey(season), {
-      year: season,
-      players: describeAverages(totals),
-    });
+    await saveDoc(context, nameAveragesKey(season), describeAveragesDoc(season, totals));
     await saveDoc(
       context,
       nameOvertimesKey(season),

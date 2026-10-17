@@ -9,6 +9,9 @@ import { readTable } from "./wnba.js";
 
 // A team's sheet and a game's preview each show a team's leading five.
 const LEADERS_PER_TEAM = 5;
+// How the kept averages are worked out, raised when that changes, so the leading scorers wait for
+// the player job to save them again rather than follow averages kept the way before.
+const AVERAGES_VERSION = 2;
 
 /**
  * Where the store keeps every player's averages for a season.
@@ -88,6 +91,17 @@ export function describeAverages(totals) {
 }
 
 /**
+ * Every player's averages a season as the store keeps them.
+ * @param {number} year
+ * @param {any} totals the stats site's season totals
+ */
+export const describeAveragesDoc = (year, totals) => ({
+  version: AVERAGES_VERSION,
+  year,
+  players: describeAverages(totals),
+});
+
+/**
  * A team's best scorers by points a game. A player who has missed most of the team's games
  * doesn't lead it, however well she scores.
  * @param {PlayerAverages[]} averages
@@ -108,3 +122,11 @@ function listTeamLeaders(averages, team) {
  */
 export const listLeaders = (averages) =>
   Object.keys(TEAMS).flatMap((team) => listTeamLeaders(averages, team));
+
+/**
+ * Each team's leading scorers from the averages the store keeps, or null until it keeps them as
+ * they're worked out now.
+ * @param {{ version?: number, players: PlayerAverages[] } | null} doc
+ */
+export const listKeptLeaders = (doc) =>
+  doc?.version === AVERAGES_VERSION ? listLeaders(doc.players) : null;

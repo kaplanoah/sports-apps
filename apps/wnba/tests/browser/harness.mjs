@@ -219,7 +219,7 @@ async function createAfternoonStore(league = {}) {
   const testStore = createTestStore(SeasonStore, {
     loadSnapshot,
     now: NOW,
-    stored: { "averages/2026": { year: 2026, players: readSeasonAverages().averages } },
+    stored: { "averages/2026": readSeasonAverages().doc },
     fetchImpl: createStoreFetch(league),
   });
   await testStore.store.alarm();

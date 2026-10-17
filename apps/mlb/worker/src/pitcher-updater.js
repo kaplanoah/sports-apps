@@ -153,7 +153,7 @@ function createStoreUpdate() {
         const schedule = await fetchJson(context, listScheduleRequest(null, from, today));
         return { from, through: today, schedule };
       },
-      (recent) => recent.through < readEasternDay(context.now()).date,
+      (recent) => !(recent.through >= readEasternDay(context.now()).date),
     );
   }
 

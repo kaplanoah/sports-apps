@@ -8,7 +8,7 @@ import {
 } from "../../../../shared/worker/notifications.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { nameMeetingsKey } from "./preview.js";
-import { listLeaders, nameAveragesKey } from "./season-averages.js";
+import { listKeptLeaders, nameAveragesKey } from "./season-averages.js";
 
 // Keeps the current season's saved data up to date from the league, whether or not a page is
 // open, and says which finished games and series are news. `docs` reads and writes the store's
@@ -129,14 +129,14 @@ function readGameFeeds(snapshot) {
 async function saveSeason(docs, snapshot) {
   const key = nameSeasonKey(snapshot.season);
   const doc = (await docs.read(key)) ?? { year: snapshot.season };
-  const averages = await docs.read(nameAveragesKey(snapshot.season));
+  const leaders = listKeptLeaders(await docs.read(nameAveragesKey(snapshot.season)));
   const { missing, isStandIn, hasGames } = readGameFeeds(snapshot);
   const update = { isStandIn, asOf: snapshot.asOf };
   const saving = {
     ...snapshot,
     games: prepareGames(doc.games, snapshot.games, update),
     nearestGames: prepareGames(doc.nearestGames, snapshot.nearestGames, update),
-    leaders: averages && listLeaders(averages.players),
+    leaders,
   };
   const answered = {
     version: true,
@@ -144,7 +144,7 @@ async function saveSeason(docs, snapshot) {
     nearestGames: hasGames,
     series: !missing.has("bracket") || (hasGames && !isStandIn),
     standings: !missing.has("standings"),
-    leaders: !!averages,
+    leaders: leaders !== null,
   };
   const changed = SAVED_FIELDS.filter(
     (field) => answered[field] && !isSameJson(doc[field], saving[field]),
@@ -155,8 +155,6 @@ async function saveSeason(docs, snapshot) {
 }
 
 export const readUpdates = (docs, year) => docs.read(nameSeasonKey(year));
-
-export const readAverages = (docs, year) => docs.read(nameAveragesKey(year));
 
 export const readSchedule = (docs, year) => docs.read(nameScheduleKey(year));
 

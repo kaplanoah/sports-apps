@@ -4,7 +4,6 @@ import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { createReusedLoader, fetchUpstream } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
-import { nameTotalsRequest } from "./player.js";
 import { listUpcomingMeetings } from "./preview.js";
 import { ESPN_HEADERS, fetchWnbaJson } from "./wnba.js";
 
@@ -31,9 +30,11 @@ const FEED_DATA = {
 const hasFeedData = (name, answer) => Array.isArray(FEED_DATA[name](answer));
 
 // The players' averages a game, a request the snapshot doesn't read, since the player job reads
-// their totals, but whose last answer the slow feeds' storage can still hold until it's forgotten.
+// their totals, but whose last answer the slow feeds' storage can still hold until it's forgotten,
+// written out as it was read.
+/** @param {number} season */
 const nameAveragesRequest = (season) =>
-  nameTotalsRequest(season).replace("PerMode=Totals", "PerMode=PerGame");
+  `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight=`;
 
 // Where a game is on rarely changes, so ESPN's scoreboard is read at most this often.
 const NETWORKS_MS = 6 * 60 * 60 * 1000;

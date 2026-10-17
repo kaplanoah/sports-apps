@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
-import { describeAverages, listLeaders } from "../worker/src/season-averages.js";
+import {
+  describeAverages,
+  describeAveragesDoc,
+  listLeaders,
+} from "../worker/src/season-averages.js";
 
 // Every player's totals as the league answered the morning after the Liberty's last game.
 const PLAYERS = JSON.parse(
@@ -7,12 +11,13 @@ const PLAYERS = JSON.parse(
 );
 
 /**
- * Every player's averages in 2026, and each team's leading scorers, as the store keeps them from
- * the season's totals.
+ * Every player's averages in 2026, the document the store keeps them in, and each team's leading
+ * scorers, from the season's totals.
  */
 export function readSeasonAverages() {
   const averages = describeAverages(PLAYERS.totals[2026]);
-  return { averages, leaders: listLeaders(averages) };
+  const doc = describeAveragesDoc(2026, PLAYERS.totals[2026]);
+  return { averages, doc, leaders: listLeaders(averages) };
 }
 
 /**

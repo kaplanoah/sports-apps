@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { NEWS_FEEDS } from "../worker/src/news-feeds.js";
 import { LABEL_PROMPT } from "../worker/src/news-prompts.js";
@@ -91,4 +92,11 @@ test("MLB's prompt keeps the Mets' news, and another club's only when it matters
   assert.match(LABEL_PROMPT, /- other-club: news about one club other than the Mets/);
   assert.match(LABEL_PROMPT, /NYM \(Mets\), NYY \(Yankees\)/);
   assert.doesNotMatch(LABEL_PROMPT, /Examples of how the app's editor decided/);
+});
+
+// Claude judges every story again when its prompt changes, so the prompt changes only on purpose,
+// with this hash.
+test("MLB's prompt is the one its stories were last judged by", () => {
+  const hash = createHash("sha256").update(LABEL_PROMPT).digest("hex").slice(0, 16);
+  assert.equal(hash, "4bb0f3c5091574ca");
 });

@@ -1,6 +1,7 @@
 // The gate an app's gate.html shows, at the page's own address, until the phone sends the access
 // code. The Worker takes the code and keeps it in a cookie, so reloading opens the app.
 import { trackKeyboardFocus } from "./keyboard-focus.js";
+import { readWorkerError } from "./worker-error.js";
 
 const PROBLEMS = {
   empty: "Type the code first",
@@ -58,8 +59,11 @@ async function sendCode(code) {
       body: JSON.stringify({ code }),
     });
     if (response.ok) return null;
-    const problem = (await response.json().catch(() => null))?.error?.code;
-    return Object.hasOwn(PROBLEMS, problem) ? problem : "unavailable";
+    const body = await response.json().catch(() => null);
+    const problem = readWorkerError(body, response.status).code;
+    return Object.hasOwn(PROBLEMS, problem)
+      ? /** @type {keyof typeof PROBLEMS} */ (problem)
+      : "unavailable";
   } catch {
     return "unavailable";
   }

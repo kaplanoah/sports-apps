@@ -6,7 +6,6 @@ import { TEAMS } from "../page/js/teams.js";
 import {
   PLAYOFFS,
   REGULAR_SEASON,
-  TOTALS_COLUMNS,
   createPlayerServer,
   nameGameLogRequest,
   nameRanksKey,
@@ -330,12 +329,15 @@ test("a past season filled before the sheets read a column is filled once more, 
   assert.equal(league.requests.filter((url) => /Season=2025/.test(url)).length, pastReads.length);
 });
 
+// Each season's totals as the player job kept them before it kept each player's team.
+/** @param {number} season */
+const nameOldTotalsRequest = (season) =>
+  `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Totals&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight= PLAYER_ID PLAYER_NAME GP MIN PTS REB AST STL BLK TOV FGM FGA FG3M FG3A FTM FTA`;
+
 test("each season's totals kept without each player's team are forgotten, once", async () => {
   const { storage, runJob, wait } = createRun();
   const oldKeys = await Promise.all(
-    [2025, 2026].map((season) =>
-      nameFeedKey("totals", `${nameTotalsRequest(season)} ${TOTALS_COLUMNS.join(" ")}`),
-    ),
+    [2025, 2026].map((season) => nameFeedKey("totals", nameOldTotalsRequest(season))),
   );
   for (const key of oldKeys) await storage.put(key, { answer: { at: 0, data: [] } });
   const deletes = [];
