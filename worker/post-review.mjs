@@ -71,9 +71,7 @@ function listRepeats(groups, confirmedRefs) {
   /** @type {Set<string>} */
   const dropped = new Set();
   for (const group of groups) {
-    const [lead, ...rest] = [...new Set(group)].filter(
-      (ref) => confirmedRefs.has(ref) && !dropped.has(ref),
-    );
+    const [lead, ...rest] = group.filter((ref) => confirmedRefs.has(ref) && !dropped.has(ref));
     if (!lead) continue;
     kept.add(lead);
     for (const ref of rest) if (!kept.has(ref)) dropped.add(ref);
@@ -255,7 +253,7 @@ export const readChecks = (folder, stage, areaCount) =>
  * the one comment for files it doesn't change. A stage of more than one area posts nothing until
  * the check across areas has left its answer.
  * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
- * @param {{ folder: string, stage: string, areaCount: number, pullNumber: string }} stage
+ * @param {{ folder: string, stage: string, areaCount: number, pullNumber: string }} options
  */
 export async function readPostInputs(callGitHub, { folder, stage, areaCount, pullNumber }) {
   const acrossPath = join(folder, nameAcrossRecord(stage));

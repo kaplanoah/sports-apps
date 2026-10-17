@@ -103,6 +103,13 @@ test("a repeat group the check across areas got wrong never drops a finding noth
     ]),
     ["a bug", "can't settle"],
   );
+  assert.deepEqual(
+    posted([
+      ["1.1", "2.2"],
+      ["2.1", "1.1"],
+    ]),
+    ["can't settle", "a nit"],
+  );
 });
 
 test("a check across areas that gave no answer, or one of another shape, reads as none", () => {
@@ -251,35 +258,48 @@ test("a stage's count of areas must be named, so a job that lost it stops rather
     assert.throws(() => readAreaCount(areas), /AREAS must name how many areas/, String(areas));
 });
 
-test("the posting step reads the marks of findings off the pull request's files, and waits for the check across areas", async () => {
+test("the posting step reads every finding already on the pull request, and the check across areas' answer", async () => {
   const folder = mkdtempSync(join(tmpdir(), "post-review-"));
+  const onLine = finding({ body: "on its line" });
   const offFile = finding({ path: "apps/wnba/page/js/app.js", body: "elsewhere" });
-  writeFileSync(
-    join(folder, "check-push-1.json"),
+  const repeat = finding({ path: "apps/mlb/page/js/app.js", body: "the same, in mlb" });
+  const record = (/** @type {object[]} */ items) =>
     JSON.stringify({
-      items: [{ ...offFile, ids: ["bugs-1"], verdict: "confirmed" }],
+      items: items.map((item) => ({ ...item, ids: ["bugs-1"], verdict: "confirmed" })),
       unjudged: [],
-    }),
-  );
+    });
+  writeFileSync(join(folder, "check-push-1.json"), record([onLine, offFile]));
+  writeFileSync(join(folder, "check-push-2.json"), record([repeat]));
+  const bot = { login: "github-actions[bot]" };
+  const lineComment = {
+    user: bot,
+    body: `**Nit** on its line\n\n${writeFindingMark(nameFinding(onLine), EARLIER)}`,
+  };
   const offDiffComment = {
-    user: { login: "github-actions[bot]" },
+    user: bot,
     body: `${OFF_DIFF_HEADING}\n\n- \`apps/wnba/page/js/app.js:12\`: **Nit** elsewhere\n\n${writeFindingMark(nameFinding(offFile), EARLIER)}`,
   };
-  const callGitHub = async (/** @type {string} */ path) =>
-    path.startsWith("/issues/7/comments") ? [offDiffComment] : [];
-  const read = await readPostInputs(callGitHub, {
-    folder,
-    stage: "push",
-    areaCount: 1,
-    pullNumber: "7",
-  });
-  assert.deepEqual(
-    read.findings.map((item) => item.body),
-    ["elsewhere"],
-  );
-  assert.deepEqual([...(read.posted.get(nameFinding(offFile)) ?? [])], [EARLIER]);
+  const callGitHub = async (/** @type {string} */ path) => {
+    if (path.startsWith("/pulls/7/comments")) return [lineComment];
+    return path.startsWith("/issues/7/comments") ? [offDiffComment] : [];
+  };
+  const inputs = { folder, stage: "push", areaCount: 2, pullNumber: "7" };
   await assert.rejects(
-    readPostInputs(callGitHub, { folder, stage: "push", areaCount: 2, pullNumber: "7" }),
+    readPostInputs(callGitHub, inputs),
     /check across areas didn't leave its answer/,
   );
+  const across = {
+    duplicates: [["1.1", "2.1"]],
+    added: [finding({ body: "spans two areas" })],
+    unjudged: [],
+  };
+  writeFileSync(join(folder, "across-push.json"), JSON.stringify(across));
+  const read = await readPostInputs(callGitHub, inputs);
+  assert.deepEqual(
+    read.findings.map((item) => item.body),
+    ["on its line", "elsewhere", "spans two areas"],
+  );
+  assert.deepEqual(read.across, across);
+  assert.deepEqual([...(read.posted.get(nameFinding(onLine)) ?? [])], [EARLIER]);
+  assert.deepEqual([...(read.posted.get(nameFinding(offFile)) ?? [])], [EARLIER]);
 });
