@@ -667,9 +667,9 @@ export function findPushedRange(since, git) {
 }
 
 /**
- * The files the change deletes, and the old path of each file git finds it renamed, so the name it
- * had is looked for too, but not of one git finds it only moved under the same name, which is
- * still named so.
+ * The files the change deletes, and the old path of each file git finds renamed, so the name it
+ * had is looked for too, but not a file git finds only moved under the same name, which is still
+ * named so.
  * @param {(args: string[]) => string} git
  */
 export function listDeletedFiles(git) {
