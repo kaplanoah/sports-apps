@@ -170,7 +170,7 @@ export function listSeasonDays({
   renderLabel = renderCalendarLabel,
   standsIn = false,
 }) {
-  const days = gameDays.map((gameDay) => listGameDay(gameDay, today, renderLabel, standsIn));
+  const days = listFoundDays({ gameDays, today, renderLabel, standsIn });
   const isTodayInSeason = !!days.length && days[0].day < today && today < days.at(-1).day;
   if (isTodayInSeason && !days.some(({ day }) => day === today)) {
     const after = days.findIndex(({ day }) => day > today);

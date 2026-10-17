@@ -1,4 +1,4 @@
-import { isOnHomeScreen } from "./device.js";
+import { isOnHomeScreen, prefersReducedMotion } from "./device.js";
 import { html, setHtml } from "./html.js";
 import { reloadIfReplaced } from "./resume.js";
 
@@ -66,8 +66,6 @@ function isPullable(target) {
   return !isScrolledInside(target);
 }
 
-const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 function createSpinner() {
   const spinner = document.createElement("div");
   spinner.className = "pull-refresh";
@@ -117,19 +115,23 @@ export function startPullToRefresh({ store, catchUp }) {
   }
 
   // Once the page is back in place, its parts drop the relative position the pull gave them,
-  // which would otherwise anchor what's absolutely placed inside them.
+  // which would otherwise anchor what's absolutely placed inside them. A page already in place
+  // has nowhere to ease to, and only its own move back, not one inside it, says it's there.
   function settle() {
-    movePage(0, true);
+    const settled = movedParts;
+    const [first] = settled;
+    movePage(0, !!first && first.style.top !== "0px");
     spinner.hidden = true;
     spinner.classList.remove("turning");
     state = "idle";
-    const settled = movedParts;
-    const [first] = settled;
-    if (!first || !first.style.transition) releaseParts(settled);
-    else
-      first.addEventListener("transitionend", () => state === "idle" && releaseParts(settled), {
-        once: true,
-      });
+    if (!first || !first.style.transition) return releaseParts(settled);
+    /** @param {TransitionEvent} event */
+    const releaseOnceBack = (event) => {
+      if (event.target !== first || event.propertyName !== "top") return;
+      first.removeEventListener("transitionend", releaseOnceBack);
+      if (state === "idle") releaseParts(settled);
+    };
+    first.addEventListener("transitionend", releaseOnceBack);
   }
 
   async function refresh() {

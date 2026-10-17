@@ -46,6 +46,7 @@ afterEach(() => mock.timers.reset());
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const HANDSHAKE_WAIT_MS = 3 * 1000;
+const RECONNECT_MAX_MS = 30 * 1000;
 const SEASON_URL = "https://mlb-app.example/k3y/store/seasons/2026";
 const READINGS_URL = "https://mlb-app.example/k3y/store/readings-2026?limit=10";
 
@@ -439,6 +440,109 @@ test("waiting for the store to catch up ends as it does", async () => {
   await catchUpStore(started);
 
   assert.equal(await waiting, true);
+});
+
+test("a socket whose handshake hangs is given up for a new one once the reads made without it answer, waiting longer each time", async () => {
+  const { store, reads, sockets } = startStore();
+  store.doc("seasons/2026").onSnapshot(() => {});
+  mock.timers.tick(HANDSHAKE_WAIT_MS);
+  reads[0].answer({ data: {} });
+  await settle();
+  assert.equal(sockets.length, 1);
+
+  mock.timers.tick(RECONNECT_FIRST_MS);
+  assert.equal(sockets.length, 2);
+  assert.equal(sockets[0].isClosed, true);
+  mock.timers.tick(HANDSHAKE_WAIT_MS);
+  reads[1].answer({ data: {} });
+  await settle();
+  mock.timers.tick(RECONNECT_FIRST_MS);
+  assert.equal(sockets.length, 2);
+  mock.timers.tick(RECONNECT_FIRST_MS);
+  assert.equal(sockets.length, 3);
+});
+
+/**
+ * Starts a store whose socket's handshake outlasted the wait, and whose reads made without it
+ * have answered.
+ */
+async function startHungStore() {
+  const started = startStore();
+  started.store.doc("seasons/2026").onSnapshot(() => {});
+  mock.timers.tick(HANDSHAKE_WAIT_MS);
+  started.reads[0].answer({ data: {} });
+  await settle();
+  return started;
+}
+
+test("a hung socket that opens before it's given up is kept", async () => {
+  const { sockets, openSocket } = await startHungStore();
+
+  openSocket();
+  mock.timers.tick(RECONNECT_MAX_MS);
+
+  assert.equal(sockets.length, 1);
+  assert.equal(sockets[0].isClosed, false);
+});
+
+test("a hung socket that closes without ever opening reconnects", async () => {
+  const { sockets } = await startHungStore();
+
+  sockets[0].close();
+  mock.timers.tick(RECONNECT_MAX_MS);
+
+  assert.equal(sockets.length, 2);
+});
+
+test("a hung socket that opens and then closes reconnects", async () => {
+  const { sockets, openSocket } = await startHungStore();
+
+  openSocket();
+  sockets[0].close();
+  mock.timers.tick(RECONNECT_MAX_MS);
+
+  assert.equal(sockets.length, 2);
+});
+
+test("on a network that refuses sockets, the page was current as each read of everything it watches began", async () => {
+  const started = startStore();
+  const { store, reads, sockets } = started;
+  /** @type {(number | null)[]} */
+  const moves = [];
+  store.watchSyncedAt(() => moves.push(store.readSyncedAt()));
+  store.doc("seasons/2026").onSnapshot(() => {});
+  sockets[0].close();
+
+  mock.timers.tick(RECONNECT_FIRST_MS);
+  sockets[1].close();
+  mock.timers.tick(500);
+  reads[0].answer({ data: {} });
+  await settle();
+
+  assert.equal(store.readSyncedAt(), START + RECONNECT_FIRST_MS);
+  assert.deepEqual(moves, [START + RECONNECT_FIRST_MS]);
+});
+
+test("a read that answers after the page caught up and fell behind again never moves when it was current back", async () => {
+  const { store, reads, sockets, openSocket } = startStore();
+  /** @type {(number | null)[]} */
+  const moves = [];
+  store.watchSyncedAt(() => moves.push(store.readSyncedAt()));
+  store.doc("seasons/2026").onSnapshot(() => {});
+  sockets[0].close();
+  mock.timers.tick(RECONNECT_FIRST_MS);
+  const slowRead = reads[0];
+
+  openSocket();
+  reads[1].answer({ data: {} });
+  await settle();
+  mock.timers.tick(5000);
+  sockets[1].close();
+  slowRead.answer({ data: {} });
+  await settle();
+
+  assert.equal(store.readSyncedAt(), START + RECONNECT_FIRST_MS + 5000);
+  assert.deepEqual(moves, []);
 });
 
 test("waiting for a store that doesn't catch up gives up after ten seconds", async () => {

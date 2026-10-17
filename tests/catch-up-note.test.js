@@ -58,17 +58,26 @@ function setOnline(isOnline) {
 function startNote(syncedAt = SYNCED_AT) {
   /** @type {(isCaughtUp: boolean) => void} */
   let announce = () => {};
+  let noteSyncedAt = () => {};
   const store = {
     watchCatchUp: (/** @type {(isCaughtUp: boolean) => void} */ onChange) => {
       announce = onChange;
       onChange(false);
     },
     readSyncedAt: () => syncedAt,
+    watchSyncedAt: (/** @type {() => void} */ onChange) => {
+      noteSyncedAt = onChange;
+    },
   };
   let redraws = 0;
   startCatchUpNote(store, () => (redraws += 1));
   return {
     announce: (/** @type {boolean} */ isCaughtUp) => announce(isCaughtUp),
+    // The store read everything without its socket, at `at`.
+    readAt: (/** @type {number} */ at) => {
+      syncedAt = at;
+      noteSyncedAt();
+    },
     countRedraws: () => redraws,
   };
 }
@@ -126,6 +135,18 @@ test("a wait that goes on says the server isn't answering, as a problem", () => 
   assert.deepEqual(readLines(), ["Can't reach the server. Scores as of 5:31 PM."]);
   assert.match(readMarkup()[0], /catch-up-line stamp-err/);
   assert.match(readMarkup()[0], /catch-up-ring/);
+});
+
+test("a page that can't reach the server's socket but reads the store says its scores are from the latest read, and keeps it", () => {
+  const { readAt, countRedraws } = startNote();
+  mock.timers.tick(STALLED_WAIT_MS);
+  const redraws = countRedraws();
+
+  readAt(Date.parse("2026-10-04T21:33:00Z"));
+
+  assert.deepEqual(readLines(), ["Can't reach the server. Scores as of 5:33 PM."]);
+  assert.equal(countRedraws(), redraws + 1);
+  assert.equal(saved.get("syncedAt"), String(Date.parse("2026-10-04T21:33:00Z")));
 });
 
 test("an offline page still catching up says so at once, as a problem", () => {

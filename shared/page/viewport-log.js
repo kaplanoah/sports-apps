@@ -8,6 +8,7 @@
 // with the latest line where the viewport went off even once newer lines have pushed it out.
 
 import { formatClockTimeWithSeconds } from "./days.js";
+import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
 
 const LINES_KEY = "diagnosticsViewport";
 const KEPT_LINES = 40;
@@ -32,12 +33,8 @@ let isReadingQueued = false;
 
 /** @returns {ViewportLine[]} */
 export function readViewportLines() {
-  try {
-    const lines = JSON.parse(localStorage.getItem(LINES_KEY) ?? "[]");
-    return Array.isArray(lines) ? lines : [];
-  } catch {
-    return [];
-  }
+  const lines = readStoredJson(LINES_KEY);
+  return Array.isArray(lines) ? lines : [];
 }
 
 /**
@@ -52,22 +49,13 @@ export function trimViewportLines(lines) {
   return latestWentOff && !newest.includes(latestWentOff) ? [latestWentOff, ...newest] : newest;
 }
 
+// A line storage won't take is lost, and the next change tries again.
 /** @param {ViewportLine[]} lines */
-function saveViewportLines(lines) {
-  try {
-    localStorage.setItem(LINES_KEY, JSON.stringify(trimViewportLines(lines)));
-  } catch {
-    /* the line is lost, and the next change tries again */
-  }
-}
+const saveViewportLines = (lines) => storeJson(LINES_KEY, trimViewportLines(lines));
 
 export function forgetViewportLines() {
   lastShape = "";
-  try {
-    localStorage.removeItem(LINES_KEY);
-  } catch {
-    /* the lines stay until the next try */
-  }
+  forgetStored(LINES_KEY);
 }
 
 /** @param {Element | null} element */

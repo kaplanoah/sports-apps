@@ -9,13 +9,12 @@
 // and once it ends, or is cancelled, the panels settle: all but the shown one hidden and inert,
 // with nothing left animating.
 
+import { prefersReducedMotion } from "./device.js";
 import { followSideSwipes } from "./side-swipe.js";
 
 // The phone's own sheets' pace and easing, as chrome.css's --sheet-motion has them.
 export const SHEET_MOTION_MS = 500;
 export const SHEET_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
-
-export const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Runs `settle` once the animation ends, whether it finished or was cancelled.

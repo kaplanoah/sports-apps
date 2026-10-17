@@ -1,7 +1,9 @@
+import { readStoredText, storeText } from "./local-storage.js";
+
 const LAST_TAB_KEY = "lastTab";
 const TAB_BEFORE_KEY = "tabBeforeLast";
 
-// Storage can be empty or refuse access, as in a private window, so the page never depends on it.
+// Storage that refuses the tab has the page open on its first tab instead.
 
 /**
  * Keeps the tab the page shows, and the one it showed before, for a tab that a reload leaves for
@@ -10,19 +12,9 @@ const TAB_BEFORE_KEY = "tabBeforeLast";
  * @param {string | undefined} before
  */
 export function saveLastTab(tab, before) {
-  try {
-    localStorage.setItem(LAST_TAB_KEY, tab);
-    if (before && before !== tab) localStorage.setItem(TAB_BEFORE_KEY, before);
-  } catch {
-    /* the page opens on its first tab instead */
-  }
+  storeText(LAST_TAB_KEY, tab);
+  if (before && before !== tab) storeText(TAB_BEFORE_KEY, before);
 }
 
 /** The tab shown before the last one, or null. */
-export function readTabBeforeLast() {
-  try {
-    return localStorage.getItem(TAB_BEFORE_KEY);
-  } catch {
-    return null;
-  }
-}
+export const readTabBeforeLast = () => readStoredText(TAB_BEFORE_KEY);

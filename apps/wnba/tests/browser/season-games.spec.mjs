@@ -587,6 +587,28 @@ test("a tap on Today flies the list there on a spring, never stepping back, and 
   await expectDayAtTop(page, "2026-09-30");
 });
 
+test("a key pressed while the list flies to a day stops it where it is, and the strip chooses the day at the top", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await findCell(page, "2026-09-29").click();
+  await page.clock.runFor(1000);
+  await expectDayAtTop(page, "2026-09-29");
+  // Each frame comes only as the test moves the clock, however slow the machine draws.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+
+  await page.locator("#seasonGames .go-today").click();
+  await page.clock.runFor(50);
+  await page.keyboard.press("Shift");
+  await page.clock.runFor(2000);
+
+  await expect(page.locator("#seasonGames")).not.toHaveAttribute("data-held-day");
+  await expect(findCell(page, "2026-09-29")).toHaveClass(/is-chosen/);
+  expect(await findList(page).evaluate((list) => list.scrollTop)).toBeLessThan(
+    await findDay(page, "2026-09-30").evaluate((day) => /** @type {HTMLElement} */ (day).offsetTop),
+  );
+});
+
 for (const { screen, viewport } of [
   { screen: "a phone", viewport: { width: 390, height: 844 } },
   { screen: "a wide screen", viewport: { width: 1280, height: 900 } },
@@ -686,36 +708,45 @@ for (const { screen, viewport } of [
   });
 }
 
-test("a scroll the page makes itself, without a finger or wheel on the list, swaps the strip's chosen day at once, without sliding its dates", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await page.clock.runFor(1000);
-  await expectDayAtTop(page, "2026-09-30");
-  const dayBefore = await findDay(page, "2026-09-30").evaluate(
-    (today) => /** @type {HTMLElement} */ (today.previousElementSibling).dataset.day,
-  );
+for (const { before, isClicked } of [
+  { before: "without a finger or wheel on the list", isClicked: false },
+  { before: "after a click and a key on the list", isClicked: true },
+]) {
+  test(`a scroll the page makes itself, ${before}, swaps the strip's chosen day at once, without sliding its dates`, async ({
+    page,
+  }) => {
+    await openSeasonGames(page);
+    await page.clock.runFor(1000);
+    await expectDayAtTop(page, "2026-09-30");
+    const dayBefore = await findDay(page, "2026-09-30").evaluate(
+      (today) => /** @type {HTMLElement} */ (today.previousElementSibling).dataset.day,
+    );
 
-  // Each frame comes only as the test moves the clock, so a slide would still be under way.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
-  // The list chooses its top day from its scroll event, which comes when the browser draws, so the
-  // clock moves on only once it has.
-  await findDay(page, dayBefore).evaluate((listed) => {
-    const list = /** @type {HTMLElement} */ (listed.parentElement);
-    const scrolled = new Promise((resolve) => {
-      list.addEventListener("scroll", resolve, { once: true });
-    });
-    listed.scrollIntoView();
-    return scrolled;
+    // Each frame comes only as the test moves the clock, so a slide would still be under way.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+    // The list chooses its top day from its scroll event, which comes when the browser draws, so
+    // the clock moves on only once it has. A click or key moves nothing of its own.
+    await findDay(page, dayBefore).evaluate((listed, clicked) => {
+      const list = /** @type {HTMLElement} */ (listed.parentElement);
+      if (clicked) {
+        list.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        list.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      }
+      const scrolled = new Promise((resolve) => {
+        list.addEventListener("scroll", resolve, { once: true });
+      });
+      listed.scrollIntoView();
+      return scrolled;
+    }, isClicked);
+    await page.clock.runFor(100);
+
+    const strip = await page.evaluate(() => ({
+      chosen: document.querySelector("#seasonGames .day-cell.is-chosen")?.getAttribute("data-day"),
+      isSliding: !!document.querySelector("#seasonGames .day-strip.is-sliding, .strip-lens"),
+    }));
+    expect(strip).toEqual({ chosen: dayBefore, isSliding: false });
   });
-  await page.clock.runFor(100);
-
-  const strip = await page.evaluate(() => ({
-    chosen: document.querySelector("#seasonGames .day-cell.is-chosen")?.getAttribute("data-day"),
-    isSliding: !!document.querySelector("#seasonGames .day-strip.is-sliding, .strip-lens"),
-  }));
-  expect(strip).toEqual({ chosen: dayBefore, isSliding: false });
-});
+}
 
 test("a tap on Today where the list already is pulses today's date, 4% bigger and back over 290ms", async ({
   page,

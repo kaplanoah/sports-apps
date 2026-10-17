@@ -421,8 +421,6 @@ export function startGameSheet() {
     if (shown?.game.id) highlights?.retry(loadHighlights(shown.game.id));
   });
   wireSheet(sheet, {
-    closeButton: findElement("gameCloseBtn"),
-    backButton: findElement("gameBackBtn"),
     findScroller: sections.findShownSection,
     keeper: { read: readShownGame, reopen: reopenGameSheet },
     name: "Game",

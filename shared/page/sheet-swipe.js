@@ -2,22 +2,16 @@
 // down whichever way it closes. Each slide writes where it ends into the sheet's style and leaves
 // no animation behind once it ends.
 
-import {
-  SHEET_EASING,
-  SHEET_MOTION_MS,
-  prefersReducedMotion,
-  settleAfter,
-} from "./slide-panels.js";
+import { PHONE_WIDTH_QUERY, prefersReducedMotion } from "./device.js";
+import { SHEET_EASING, SHEET_MOTION_MS, settleAfter } from "./slide-panels.js";
 
-// Matches chrome.css's phone layout, where dialogs are sheets.
-const SHEET_MEDIA = "(max-width: 779px)";
 // A swipe down closes the sheet once it goes this far or this fast; anything less springs back.
 const CLOSE_DISTANCE_PX = 110;
 const CLOSE_SPEED_PX_PER_MS = 0.5;
 // A touch has to move this far before it counts as a swipe, so a tap stays a tap.
 const SWIPE_START_PX = 6;
 
-const isSheetLayout = () => matchMedia(SHEET_MEDIA).matches;
+const isSheetLayout = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
 /**
  * Moves a sheet from where a finger left it to `to`, which its style holds from the start.

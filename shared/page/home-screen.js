@@ -5,6 +5,7 @@
 
 import { isIos, isOnHomeScreen, isTouchDevice } from "./device.js";
 import { html, setHtml } from "./html.js";
+import { readStoredText, storeText } from "./local-storage.js";
 
 /**
  * Chrome's own install dialog, which it offers only to a page it can install.
@@ -52,22 +53,11 @@ let isBarClosed = false;
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
-// Storage can be off, as in a private window, and then the bar comes back on the next visit.
-function readBarClosed() {
-  try {
-    return localStorage.getItem(CLOSED_KEY) === "closed";
-  } catch {
-    return false;
-  }
-}
+const readBarClosed = () => readStoredText(CLOSED_KEY) === "closed";
 
-function saveBarClosed() {
-  try {
-    localStorage.setItem(CLOSED_KEY, "closed");
-  } catch {
-    /* the bar stays closed until the page reloads */
-  }
-}
+// Storage can be off, as in a private window, and then the bar stays closed until the page
+// reloads.
+const saveBarClosed = () => storeText(CLOSED_KEY, "closed");
 
 const isAsking = () => isTouchDevice() && !isOnHomeScreen() && !isInstalled;
 

@@ -20,24 +20,26 @@ import {
   readDayOfMonth,
 } from "./days.js";
 import { dayStripLog } from "./day-strip-log.js";
+import { prefersReducedMotion } from "./device.js";
 import { html, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { watchTimeAway } from "./resume.js";
-import { scrollWithSpring } from "./spring-scroll.js";
+import { INTERRUPTING_EVENTS, scrollWithSpring } from "./spring-scroll.js";
 import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
 
 // A season's games as one list of its game days, from its first to its last, under a bar holding
 // a strip of every day between them. The strip's chosen day is the one at the top of the list, and
-// follows it as it scrolls, passing to the next day once none of a day's text shows; a tap on a day, or on Today, brings that day to the top, a day's gap
-// under the bar, so nothing of the day before shows. A tap on a date without games brings in its
-// No games row, which leaves once it's out of sight, and a tap on Today while the list is already
-// there pulses the date. While a finger moves the strip, the month names the day in its middle.
-// The list opens on its start day, today or the day the app names, and goes back there once
-// someone has been away two minutes, following it for a few seconds as the store catches up. A league hands it each game day's markup, as it draws a day
-// elsewhere, and a date without games' markup. A league with many games a day can also hand over
-// a stand-in for each day, as tall as its games, which the list draws in place of a day far from
-// its top, so it holds only the games near the screen.
+// follows it as it scrolls, passing to the next day once none of a day's text shows; a tap on a
+// day, or on Today, brings that day to the top, a day's gap under the bar, so nothing of the day
+// before shows. A tap on a date without games brings in its No games row, which leaves once it's
+// out of sight, and a tap on Today while the list is already there pulses the date. While a finger
+// moves the strip, the month names the day in its middle. The list opens on its start day, today
+// or the day the app names, and goes back there once someone has been away two minutes, following
+// it for a few seconds as the store catches up. A league hands it each game day's markup, as it
+// draws a day elsewhere, and a date without games' markup. A league with many games a day can also
+// hand over a stand-in for each day, as tall as its games, which the list draws in place of a day
+// far from its top, so it holds only the games near the screen.
 
 /** @typedef {import("./html.js").Markup} Markup */
 /**
@@ -54,8 +56,11 @@ import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
  * @property {(day: string) => Markup} renderQuietDay a date without games, as the list shows it
  */
 
-// Phosphor's calendar-dot, at its Regular weight, as beside the words of a Read button.
+// Phosphor's calendar-dot, at its Regular weight, beside the word on the Today button.
 const CALENDAR_DOT = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Zm-64-56a16,16,0,1,1-16-16A16,16,0,0,1,144,152Z"/></svg>`;
+
+// The touches that move the list or the strip, a finger's or a wheel's.
+const MOVING_EVENTS = ["touchstart", "wheel"];
 
 // A tap on Today while the list is already there grows the date this much and back, this fast.
 const PULSE_SCALE = 1.04;
@@ -68,8 +73,8 @@ let shown = null;
 /** @type {string | null} */
 let chosenDay = null;
 // A day a tap or Today sent the list to stays chosen while the list travels there, and until it
-// moves away again, since the season's last days can't all reach the top.
-// Where its top was last seen, for Diagnostics to say when it moves while the list travels.
+// moves away again, since the season's last days can't all reach the top, with where its top was
+// last seen, for Diagnostics to say when it moves while the list travels.
 /** @type {{ day: string, hasArrived: boolean, top: number | null } | null} */
 let held = null;
 let isPlaced = false;
@@ -82,7 +87,8 @@ let anchor = null;
 let quietDay = null;
 // Until when the list held on its start day follows it to a new one.
 let followStartUntil = 0;
-// A finger or wheel moving the strip has the month name the day in its middle, until the list moves.
+// A finger or wheel moving the strip has the month name the day in its middle, until the list
+// moves.
 let isStripSwiped = false;
 // The strip's dates slide only while a finger or wheel has moved the list, since the list's own
 // moves, as it's placed, redrawn, or sent to a day, already choose their day.
@@ -261,7 +267,7 @@ function followTopDay(day) {
   const cannotSlide = describeWhyNoSlide({
     hasCells: !!strip && !!from && !!to,
     isListInHand,
-    isReducedMotion: isReducedMotion(),
+    isReducedMotion: prefersReducedMotion(),
   });
   dayStripLog.noteStep(
     `top day ${day}, ${cannotSlide ? `chosen at once: ${cannotSlide}` : "slide"}`,
@@ -346,9 +352,8 @@ function findTopDay() {
   return listed[isPassed ? low + 1 : low].dataset.day ?? null;
 }
 
-const isReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 /** @returns {ScrollBehavior} */
-const chooseMotion = () => (isReducedMotion() ? "instant" : "smooth");
+const chooseMotion = () => (prefersReducedMotion() ? "instant" : "smooth");
 
 // The list keeps the gap between its days above its first, which is the gap a day brought to the
 // top keeps under the bar.
@@ -390,14 +395,14 @@ function showDay(day, motion) {
     motion,
     distance: top - list.scrollTop,
     screenHeight: list.clientHeight,
-    isReducedMotion: isReducedMotion(),
+    isReducedMotion: prefersReducedMotion(),
   });
   const isJump = trip === "jump";
   dayStripLog.noteStep(
     `${isJump ? "jump" : "fly"} to ${day}, list ${Math.round(list.scrollTop)} to ${Math.round(top)}`,
   );
   if (isJump) list.scrollTo({ top, behavior: "instant" });
-  else scrollWithSpring(list, top);
+  else scrollWithSpring(list, top, (event) => letGoOfHeldDay(`the ${event.type}`));
   chooseDay(day, motion === "instant" ? "instant" : chooseMotion());
 }
 
@@ -814,18 +819,26 @@ function noteFill(drawing, before, after) {
   dayStripLog.noteStep(`${drawing || "redraw nothing"}; ${describeTopDay(after)}${was}`);
 }
 
-// A finger or wheel on the list takes it over, even on its way to a day, and one on the strip has
-// the month follow it.
+/** @param {string} taker what took the list over */
+function letGoOfHeldDay(taker) {
+  if (!held) return;
+  dayStripLog.noteStep(`${taker} takes the list over on its way to ${held.day}`);
+  setHeld(null);
+}
+
+// A finger, wheel, click, or key on the list takes it over, even on its way to a day, as anything
+// that stops its spring does. Only a finger or wheel moves the list or the strip itself, which
+// then has the strip's dates slide or its month follow.
 /** @param {Event} event */
 function noteTouch(event) {
   const target = /** @type {Node} */ (event.target);
+  const isMoving = MOVING_EVENTS.includes(event.type);
   followStartUntil = 0;
-  if (findList()?.contains(target)) isListInHand = true;
-  if (held && findList()?.contains(target)) {
-    dayStripLog.noteStep(`the list's touch takes it over on its way to ${held.day}`);
-    setHeld(null);
+  if (findList()?.contains(target)) {
+    if (isMoving) isListInHand = true;
+    letGoOfHeldDay(`the list's ${event.type}`);
   }
-  if (findStrip()?.contains(target)) {
+  if (isMoving && findStrip()?.contains(target)) {
     endStripSlide();
     isStripSwiped = true;
   }
@@ -847,9 +860,9 @@ function isOnStartDay() {
 function pulseStartDay() {
   const cell = shown && findCell(shown.startDay);
   dayStripLog.noteStep(
-    `already on ${shown?.startDay}, ${isReducedMotion() ? "less motion, no pulse" : "pulse"}`,
+    `already on ${shown?.startDay}, ${prefersReducedMotion() ? "less motion, no pulse" : "pulse"}`,
   );
-  if (!cell || isReducedMotion()) return;
+  if (!cell || prefersReducedMotion()) return;
   cell.animate(
     [
       { transform: "scale(1)" },
@@ -901,7 +914,7 @@ export function startDayStrip(element) {
     },
     { capture: true, passive: true },
   );
-  for (const type of ["touchstart", "wheel"])
+  for (const type of INTERRUPTING_EVENTS)
     element.addEventListener(type, noteTouch, { capture: true, passive: true });
   // The page saves what it shows as it leaves (last-seen.js), so the strip comes to rest first.
   for (const type of ["visibilitychange", "pagehide"])

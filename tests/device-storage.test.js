@@ -109,3 +109,39 @@ test("a device whose storage refuses access keeps a choice until the page reload
 
   assert.deepEqual(choice.read(), { "https://example.com/story": 1 });
 });
+
+test("a device whose storage is full keeps a choice it wouldn't take until the page reloads", () => {
+  useStorage({
+    getItem: () => '"old"',
+    setItem: () => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    },
+  });
+  const choice = createViewerChoice("full", readAsIs);
+
+  choice.keep("new");
+
+  assert.equal(choice.read(), "new");
+});
+
+test("a choice another tab makes takes the place of one this tab's full storage wouldn't take", () => {
+  const saved = new Map([["fullHere", '"old"']]);
+  useStorage({
+    getItem: (key) => saved.get(key) ?? null,
+    setItem: () => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    },
+  });
+  const choice = createViewerChoice("fullHere", readAsIs);
+  /** @type {unknown[]} */
+  const shown = [];
+  choice.watch(() => shown.push(choice.read()));
+  choice.keep("mine");
+
+  saved.set("fullHere", '"theirs"');
+  changeInOtherTab("fullHere");
+  choice.keep("mine again");
+  changeInOtherTab(null);
+
+  assert.deepEqual(shown, ["theirs", "theirs"]);
+});

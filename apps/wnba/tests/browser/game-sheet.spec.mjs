@@ -340,7 +340,7 @@ test.describe("on a phone", () => {
     const readMotions = await recordSheetMotions(page);
     await openApp(page);
     const closings = {
-      "the close button": () => page.locator("#gameCloseBtn").dispatchEvent("click"),
+      "the close button": () => page.locator("#gameSheet .sheet-close").dispatchEvent("click"),
       Escape: () => page.keyboard.press("Escape"),
     };
     for (const [way, close] of Object.entries(closings)) {

@@ -2,8 +2,10 @@
 // device as JSON under its key. Nobody signs in, and people share a page's address, so the page
 // saves nothing of a viewer's to the store. Every choice is listed, so carrying a viewer's choices
 // between their devices can find them all, and each tells the page when something other than the
-// page itself, like another tab, changes it. Storage can refuse access, as in a private window, and
-// then a choice lasts until the page reloads.
+// page itself, like another tab, changes it. Storage can refuse access, as in a private window, or
+// be full, and then a choice lasts until the page reloads.
+
+import { readStoredText, storeJson } from "./local-storage.js";
 
 /**
  * @template T
@@ -32,14 +34,11 @@ function parseKept(text) {
   }
 }
 
+// A choice storage wouldn't take is the one the viewer made, whatever storage still holds.
 /** @param {string} key */
-function readStored(key) {
-  let text;
-  try {
-    text = localStorage.getItem(key);
-  } catch {
-    return keptInMemory.get(key) ?? null;
-  }
+function readKept(key) {
+  if (keptInMemory.has(key)) return keptInMemory.get(key);
+  const text = readStoredText(key);
   return text === null ? null : parseKept(text);
 }
 
@@ -47,13 +46,9 @@ function readStored(key) {
  * @param {string} key
  * @param {unknown} value
  */
-function store(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    keptInMemory.delete(key);
-  } catch {
-    keptInMemory.set(key, value);
-  }
+function keep(key, value) {
+  if (storeJson(key, value)) keptInMemory.delete(key);
+  else keptInMemory.set(key, value);
 }
 
 /** @param {string | null} key */
@@ -62,11 +57,19 @@ function tellWatchers(key) {
   for (const each of keys) for (const onChange of watchersByKey.get(each) ?? []) onChange();
 }
 
-// Another tab's change to storage comes as an event, with no key when it cleared it all.
+// Another tab's change to storage comes as an event, with no key when it cleared it all. It's the
+// viewer's newer choice, so it takes the place of one this tab's storage wouldn't take.
+/** @param {string | null} key */
+function takeOtherTabsChange(key) {
+  if (key === null) keptInMemory.clear();
+  else keptInMemory.delete(key);
+  tellWatchers(key);
+}
+
 function watchOtherTabs() {
   if (isWatchingOtherTabs || typeof addEventListener !== "function") return;
   isWatchingOtherTabs = true;
-  addEventListener("storage", (event) => tellWatchers(event.key));
+  addEventListener("storage", (event) => takeOtherTabsChange(event.key));
 }
 
 /**
@@ -94,8 +97,8 @@ function watchKey(key, onChange) {
 export function createViewerChoice(key, readValue) {
   viewerChoiceKeys.add(key);
   return {
-    read: () => readValue(readStored(key)),
-    keep: (value) => store(key, value),
+    read: () => readValue(readKept(key)),
+    keep: (value) => keep(key, value),
     watch: (onChange) => watchKey(key, onChange),
   };
 }

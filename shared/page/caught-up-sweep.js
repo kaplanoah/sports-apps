@@ -1,3 +1,5 @@
+import { prefersReducedMotion } from "./device.js";
+
 // The page shows what it last drew while it catches up, so a header whose lines read the same
 // before and after the store answers gives no sign the page checked. Once the page has caught up,
 // the lines show it: lines that changed arrive faded and an edge sweeps them up to full strength,
@@ -6,7 +8,7 @@
 const WIPE_CLASS = "caught-up-wipe";
 const BAND_CLASS = "caught-up-band";
 
-const canSweep = () => !document.hidden && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+const canSweep = () => !document.hidden && !prefersReducedMotion();
 
 /**
  * @param {HTMLElement} lines
