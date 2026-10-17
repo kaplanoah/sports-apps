@@ -110,4 +110,15 @@ test.describe("on a tablet, in the browser", () => {
     expect(belowSettings).toBeGreaterThan(0);
     expect(besideRanking).toBeGreaterThan(0);
   });
+
+  test("the welcome keeps to a column as wide as a phone's, in the middle of the screen", async ({
+    page,
+  }) => {
+    await openApp(page, { isShowingWelcome: true });
+    const column = await page.locator("#homeScreenWelcome .welcome-steps").evaluate((steps) => {
+      const box = steps.getBoundingClientRect();
+      return { width: box.width, leftOfRight: box.left - (innerWidth - box.right) };
+    });
+    expect(column).toEqual({ width: 360, leftOfRight: 0 });
+  });
 });

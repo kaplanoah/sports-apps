@@ -83,23 +83,6 @@ test.describe("on an iPhone, in the browser", () => {
     expect(headingGap).toBe(0);
   });
 
-  test("the 1 sits half a pixel right of its circle's middle, and every other number on it", async ({
-    page,
-  }) => {
-    await openApp(page, { isShowingWelcome: true });
-    const offMiddle = await page.locator(WELCOME).evaluate((welcome) =>
-      [...welcome.querySelectorAll(".welcome-steps > li:not([hidden])")].map((step) => {
-        const circle = getComputedStyle(step, "::before");
-        const contentWidth =
-          parseFloat(circle.width) -
-          parseFloat(circle.paddingLeft) -
-          parseFloat(circle.paddingRight);
-        return parseFloat(circle.paddingLeft) + contentWidth / 2 - parseFloat(circle.width) / 2;
-      }),
-    );
-    expect(offMiddle).toEqual([0.5, 0, 0]);
-  });
-
   // An iPhone's bottom inset, which keeps its home bar clear, is 34px, and Android's Chrome has none.
   test("Continue's text sits 24px over the welcome's bottom, on an iPhone and where there's no inset", async ({
     page,
@@ -264,6 +247,16 @@ test.describe("on an iPhone, in the browser", () => {
     await page.goto("/?theme=dark");
     await expect(page.locator("#stamp")).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  });
+
+  test("a theme picked on an earlier visit is in the page's address as it opens in the browser", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.evaluate(() => localStorage.setItem("appearance", JSON.stringify("dark")));
+    await page.goto("/");
+    await expect(page.locator("#stamp")).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("theme")).toBe("dark");
   });
 
   test("a shared link that names a theme opens in the browser on the phone's own, and drops it from the address", async ({

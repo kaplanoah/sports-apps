@@ -706,7 +706,9 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   max-height: none;
   margin: 0;
   padding-top: max(24px, env(safe-area-inset-top));
-  padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right));
+  /* On a wide screen, it keeps to a column as wide as a phone's, in the middle, as the gate does. */
+  padding-inline: max(24px, env(safe-area-inset-left), (100% - 360px) / 2)
+    max(24px, env(safe-area-inset-right), (100% - 360px) / 2);
   /* Continue sits in the room the bottom inset keeps clear above the iPhone's home bar, where
      Safari's own bar floats, its text half its height over the bottom. */
   padding-bottom: max(2px, env(safe-area-inset-bottom) - 32px);
@@ -753,11 +755,6 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   color: var(--accent-ink);
   font-size: var(--type-detail-size);
   font-weight: calc(var(--type-detail-weight) + 200);
-}
-/* A 1 reads left of its circle's middle, so it sits half a pixel right. */
-.welcome-steps > li:first-child::before {
-  box-sizing: border-box;
-  padding-left: 1px;
 }
 .welcome-step {
   display: flex;

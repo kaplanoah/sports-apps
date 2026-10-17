@@ -26,27 +26,26 @@ function readPickedAppearance() {
 }
 
 // A Home Screen app keeps its storage apart from the browser's, and Safari opens it at the page's
-// address as it stood when it was added, so a theme picked in the browser rides there until then,
-// and the app's first open keeps it.
+// address as it stood when it was added, so the browser's address always names the theme picked
+// in it, and the app's first open keeps that. A theme in a shared link is the sender's, which the
+// browser swaps for its own.
 /** @param {string} choice */
 function nameThemeInAddress(choice) {
   if (isOnHomeScreen()) return;
   const address = new URL(location.href);
   if (choice === "light" || choice === "dark") address.searchParams.set("theme", choice);
   else address.searchParams.delete("theme");
-  history.replaceState(history.state, "", address);
+  if (address.href !== location.href) history.replaceState(history.state, "", address);
 }
 
-// Only the app takes a theme from its address, and drops it at once. The browser keeps one only
-// where it's the browser's own pick, so a link shared from either never hands on a theme.
+// Only the app takes a theme from its address, on its first open, and drops it at once.
 function keepThemeFromAddress() {
   const address = new URL(location.href);
   const fromAddress = address.searchParams.get("theme");
   if (fromAddress === null) return;
-  if (!isOnHomeScreen() && fromAddress === readPickedAppearance()) return;
   address.searchParams.delete("theme");
   history.replaceState(history.state, "", address);
-  if (isOnHomeScreen() && localStorage.getItem("appearance") === null)
+  if (localStorage.getItem("appearance") === null)
     localStorage.setItem("appearance", JSON.stringify(fromAddress));
 }
 
@@ -69,7 +68,8 @@ function keepPickedAppearance(choice) {
 }
 
 try {
-  keepThemeFromAddress();
+  if (isOnHomeScreen()) keepThemeFromAddress();
+  else nameThemeInAddress(readPickedAppearance());
   showTheme(readPickedAppearance());
 } catch {
   document.documentElement.dataset.theme = "light";
