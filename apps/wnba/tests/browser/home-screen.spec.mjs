@@ -1,3 +1,4 @@
+import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp } from "./harness.mjs";
@@ -12,8 +13,6 @@ import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 const PAGE_FOLDER = new URL("../../page/", import.meta.url);
 
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
-const IPHONE_AGENT =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 
 const openSettings = (page) => page.getByRole("button", { name: "Settings", exact: true }).click();
 

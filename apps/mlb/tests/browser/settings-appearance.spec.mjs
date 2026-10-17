@@ -1,6 +1,7 @@
 import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { IPHONE_AGENT, checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
+import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 

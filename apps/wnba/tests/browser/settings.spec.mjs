@@ -2,7 +2,8 @@ import { test, expect, openApp } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { IPHONE_AGENT, checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
+import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
