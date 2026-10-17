@@ -1,7 +1,7 @@
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
-import { createSlidePanels } from "./slide-panels.js";
+import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
@@ -142,8 +142,6 @@ export function showSeasonPhase(isFieldSet) {
   panels?.jumpTo(0);
 }
 
-const isReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 // A tap on the tab while it shows, with the page at its top, takes it back to where it opens: the
 // part it's named for, and a bracket on its round in progress, as Games goes back to today. A
 // bracket out of sight moves at once, before it slides in.
@@ -151,7 +149,7 @@ function returnToStart() {
   if (!panels) return;
   const isBracketShown = readOrder()[panels.readShown()] === "bracket";
   if (readOrder()[0] === "bracket")
-    showOpeningRound(isBracketShown && !isReducedMotion() ? "smooth" : "instant");
+    showOpeningRound(isBracketShown && !prefersReducedMotion() ? "smooth" : "instant");
   if (panels.readShown() !== 0) panels.slideTo(0);
 }
 

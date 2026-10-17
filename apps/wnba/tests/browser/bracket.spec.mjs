@@ -1,6 +1,10 @@
 import { TEAMS } from "../../page/js/teams.js";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
-import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import {
+  findSeasonPill,
+  findSeasonTab,
+  openSeasonPart,
+} from "../../../../tests/browser/season-tab.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -118,7 +122,7 @@ test.describe("on a phone, the bracket", () => {
     }
 
     await page.locator(".bracket").evaluate((tree) => (tree.scrollLeft = 0));
-    await openSeasonPart(page, "Standings");
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
     await expect(page.locator("#standings-league")).toBeVisible();
 
     await findSeasonTab(page).click();

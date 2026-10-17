@@ -9,6 +9,7 @@ import {
   tapSearch,
 } from "./search-page.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
@@ -522,6 +523,19 @@ test("Search tapped again while it shows starts over: an empty field with its ex
   await expect(findInput(page)).toHaveValue("");
   await expect(findInput(page)).toBeFocused();
   await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
+});
+
+test("Search tapped again starts over at once, even with the page left a pixel from its top", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await sendSearch(page, "Liberty");
+  expect(await leavePagePixelDown(page)).toBe(1);
+
+  await tapSearch(page);
+
+  await expect(findInput(page)).toHaveValue("");
 });
 
 test("the field's clear button empties it and brings the examples back, ready to type", async ({
