@@ -236,8 +236,8 @@ each pull request, as [REVIEW.md](REVIEW.md) says: it splits the change into
 areas by what the files are about, has four reviewers read each area in full,
 each for one kind of problem, checks every case they list against the code,
 comments on each finding's line, and keeps one summary comment up to date. The
-first review reads the whole change, and each push after it is reviewed for what
-it changed. The review is one of the checks that must pass, so a review that
+first review reads the whole change, and each review after it reads what changed
+since the last review that finished. The review is one of the checks that must pass, so a review that
 can't run, or that left a changed file unread, blocks the merge. Its findings
 don't fail the check; answer all of a review's findings in one push, by fixing
 each or replying. To run the

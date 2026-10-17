@@ -836,9 +836,10 @@ When a step says to go back to an earlier step, continue in order from there.
    It splits the change into areas by what the files are about, each test with its code (`worker/plan-review.mjs`),
    and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests, and list every case they find.
    A checker for each area confirms each case against the code, merges repeats, and weighs it,
-   and a check across areas posts only what the checkers confirmed, each on the line it concerns.
-   The first review reads the whole change, and each push after it is reviewed for what that push changed.
-   A review that finds nothing reads the whole change once more, one reviewer an area, and the summary names what that pass found.
+   a check across areas, when there's more than one, names repeats across them and adds what spans them,
+   and a step posts what the checkers confirmed or left unsure, each on the line it concerns.
+   The first review reads the whole change, and each review after it reads what changed since the last review that finished.
+   A review of a push that finds nothing reads the whole change once more, one reviewer an area, and the summary names what that pass found.
    A push that changes only what a merge of its base brings in isn't reviewed again.
    The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
    how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
@@ -848,7 +849,7 @@ When a step says to go back to an earlier step, continue in order from there.
    Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its comment saying why not.
    A Nit never gets a push of its own.
    After three reviews in a row with an Important finding, or when a finding you declined comes back, stop and ask the user.
-   - If `review` fails, read its summary and the log of the failed `review-find`, `review-check`, or `review-post` job, which shows each try's turns and tool calls.
+   - If `review` fails, read its summary and the log of the failed `review-find`, `review-check`, `review-across`, or `review-post` job, or its `review-final-` twin, which shows each try's turns and tool calls.
      If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
      Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and each checker and the check across areas once.
      Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
