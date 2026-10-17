@@ -71,11 +71,14 @@ const APP_THEME_KEY = "app-theme";
 
 // Safari opens an address the app hands it under this scheme, which the app would otherwise open
 // itself.
-/** @param {string} choice */
-function buildSafariAddress(choice) {
-  const address = new URL(location.href);
-  address.searchParams.set(APP_THEME_KEY, choice);
-  return `x-safari-${address.href}`;
+/**
+ * @param {string} choice
+ * @param {string} address
+ */
+function buildSafariAddress(choice, address) {
+  const url = new URL(address);
+  url.searchParams.set(APP_THEME_KEY, choice);
+  return `x-safari-${url.href}`;
 }
 
 // A device keeps the Home Screen welcome closed under this key once the viewer closes it.

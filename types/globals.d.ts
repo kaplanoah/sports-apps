@@ -9,7 +9,7 @@ declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;
 declare function keepPickedAppearance(choice: string): void;
 declare function openThemeAddress(choice: string): void;
-declare function buildSafariAddress(choice: string): string;
+declare function buildSafariAddress(choice: string, address: string): string;
 declare const WELCOME_CLOSED_KEY: string;
 declare function readStored(key: string): string | null;
 
