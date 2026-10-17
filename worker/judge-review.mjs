@@ -159,7 +159,7 @@ export const nameAcrossRecord = (stage) => `${joinRecordName(RECORD_JOBS.across,
 /** @param {string} stage */
 export const namePostRecord = (stage) => `${joinRecordName(RECORD_JOBS.post, stage)}.json`;
 /** @param {string} stage */
-export const nameConfirmedRecord = (stage) => `${joinRecordName("confirmed", stage)}.json`;
+export const nameCheckedRecord = (stage) => `${joinRecordName("checked", stage)}.json`;
 
 /**
  * Adds a try to a reviewer's record, and returns the parts it still hasn't read and whether its

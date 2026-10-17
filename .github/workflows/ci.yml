@@ -615,7 +615,7 @@ jobs:
 
   # What no one area can see: a change one area's files rely on in another's, the same fix due in
   # the other app, and one fact or rule now in two places. It names only the repeats to merge and
-  # what it adds, so no finding a checker confirmed drops out of its answer, and leaves its answer
+  # what it adds, so no finding a checker kept drops out of its answer, and leaves its answer
   # for the posting step. A change of one area needs none.
   review-across:
     needs: [review-plan, review-check]
@@ -657,10 +657,10 @@ jobs:
             --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
             --json-schema '{"type":"object","properties":{"duplicates":{"type":"array","items":{"type":"array","items":{"type":"string"}}},"added":{"type":"array","items":{"type":"object","properties":{"weight":{"type":"string","enum":["Important","Nit","Pre-existing","Unsure"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["weight","path","line","body"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["duplicates","added","unjudged"]}'
           prompt: |
-            You make the last check of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}'s review before its findings are posted. Its change is split into ${{ env.AREAS }} areas, and each area's checker confirmed what its reviewers found. Every finding they confirmed or left unsure is in `.review/confirmed-${{ env.STAGE }}.json`, each with a ref, and all of them are posted unless you name them as repeats.
+            You make the last check of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}'s review before its findings are posted. Its change is split into ${{ env.AREAS }} areas, and each area's checker checked what its reviewers found. Every finding they confirmed or left unsure is in `.review/checked-${{ env.STAGE }}.json`, each with a ref, and all of them are posted unless you name them as repeats.
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
-            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files, and `.review/confirmed-${{ env.STAGE }}.json`.
+            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files, and `.review/checked-${{ env.STAGE }}.json`.
             3. Name each group of findings from different areas that are the same problem, by their refs, the one that best shows it first: only the first of each group is posted.
             4. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each against the code as a checker does, with Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects. Add each you confirm that no listed finding already says, on a line the diff changes, weighed as the guide says, its body saying what is wrong, when it goes wrong, and how to fix it, without its weight.
             5. Post nothing. End with your answer: the groups of repeats, the findings you add, and anything you couldn't judge from the code, and why.

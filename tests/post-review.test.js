@@ -56,7 +56,7 @@ test("what the checkers confirmed or left unsure is listed in area order, each w
   );
 });
 
-test("every confirmed finding is posted, weightiest first, without a check across areas", () => {
+test("every finding the checkers kept is posted, weightiest first, without a check across areas", () => {
   assert.deepEqual(
     listToPost(listCheckedFindings(CHECKS), null).map(({ weight, body }) => [weight, body]),
     [
@@ -84,9 +84,9 @@ test("the check across areas drops only the later repeats it names, and adds wha
 });
 
 test("a repeat group the check across areas got wrong never drops a finding nothing else stands in for", () => {
-  const confirmed = listCheckedFindings(CHECKS);
+  const checked = listCheckedFindings(CHECKS);
   const posted = (/** @type {string[][]} */ duplicates) =>
-    listToPost(confirmed, { duplicates, added: [], unjudged: [] }).map((item) => item.body);
+    listToPost(checked, { duplicates, added: [], unjudged: [] }).map((item) => item.body);
   assert.deepEqual(posted([["9.9", "1.1"]]), ["a bug", "can't settle", "a nit"]);
   assert.deepEqual(posted([["1.1", "1.1"]]), ["a bug", "can't settle", "a nit"]);
   assert.deepEqual(

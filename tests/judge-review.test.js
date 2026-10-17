@@ -126,7 +126,7 @@ test("the records read back are every job's the review needs, and nothing else i
     "across-first.json",
     "post-first.json",
     "plan.json",
-    "confirmed-first.json",
+    "checked-first.json",
   ])
     writeFileSync(join(folder, name), "{}");
   assert.deepEqual([...readRecords(folder).keys()].sort(), [

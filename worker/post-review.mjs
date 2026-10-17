@@ -19,7 +19,7 @@ import { createGitHub, readAllPages } from "./github-api.mjs";
 import {
   nameAcrossRecord,
   nameCheckRecord,
-  nameConfirmedRecord,
+  nameCheckedRecord,
   namePostRecord,
   readAnswer,
 } from "./judge-review.mjs";
@@ -275,7 +275,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const areaCount = readAreaCount(env.AREAS);
   if (command === "list") {
     writeFileSync(
-      join(folder, nameConfirmedRecord(stage)),
+      join(folder, nameCheckedRecord(stage)),
       JSON.stringify(listCheckedFindings(readChecks(folder, stage, areaCount)), null, 1),
     );
   } else if (command === "across") {
