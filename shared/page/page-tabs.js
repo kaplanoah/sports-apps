@@ -42,27 +42,32 @@ export const readTabBefore = () => tabBefore ?? readTabBeforeLast();
  */
 export const openPageTab = (tab) => switchTab(tab);
 
-// What choosing a tab that's already showing does once the page is at its top, for a tab whose start
-// is more than its top, like a Games view's today or the part a bracket and standings tab is named
-// for.
-/** @type {Map<string, () => void>} */
+// What choosing a tab that's already showing does besides scrolling the page to its top, for a tab
+// whose start is more than its top, like a Games view's today or the part a bracket and standings
+// tab is named for.
+/** @type {Map<string, { returnToStart: () => void, isAfterTop: boolean }>} */
 const startReturns = new Map();
 
 /**
- * Has choosing `tab` while it's showing, with the page at its top, call `returnToStart`.
+ * Has choosing `tab` while it's showing call `returnToStart`: in the same tap for a view that
+ * scrolls in itself, which the page can still leave a pixel or two from its top, and only once the
+ * page is at its top for a view the page scrolls.
  * @param {string} tab
  * @param {() => void} returnToStart
+ * @param {{ isAfterTop?: boolean }} [options]
  */
-export function setTabStart(tab, returnToStart) {
-  startReturns.set(tab, returnToStart);
+export function setTabStart(tab, returnToStart, { isAfterTop = false } = {}) {
+  startReturns.set(tab, { returnToStart, isAfterTop });
 }
 
-// Choosing the tab that's already showing scrolls the page to its top, and once it's there, takes
-// the tab back to where it starts.
+// Choosing the tab that's already showing scrolls the page to its top and takes the tab back to
+// where it starts, the start waiting for a second tap where the page scrolls the view.
 /** @param {string} tab */
 function returnToStart(tab) {
-  if (scrollY > 0) scrollToTop();
-  else startReturns.get(tab)?.();
+  const start = startReturns.get(tab);
+  const isScrolled = scrollY > 0;
+  if (isScrolled) scrollToTop();
+  if (start && !(isScrolled && start.isAfterTop)) start.returnToStart();
 }
 
 // What choosing a tab does as it opens, from the tap, like bringing up the keyboard in a search.

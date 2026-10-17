@@ -168,7 +168,7 @@ export function startBracketStandings() {
   panels = slidePanels;
   slidePanels.jumpTo(readOrder().indexOf(readShownPart()));
   wireTabList(findPill(), (part) => showSeasonPart(/** @type {SeasonPart} */ (part)));
-  setTabStart("bracket-standings", returnToStart);
+  setTabStart("bracket-standings", returnToStart, { isAfterTop: true });
   addEventListener("scroll", followPageScroll, { passive: true });
   addEventListener("resize", () => {
     fitPartsToRoomUnderPill();
