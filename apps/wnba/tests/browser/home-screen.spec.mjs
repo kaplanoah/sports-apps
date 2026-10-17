@@ -415,6 +415,23 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await page.evaluate(() => localStorage.getItem("appearance"))).toBe('"dark"');
   });
 
+  test("a theme the page doesn't have reads as System, kept or named by a link, which then opens no welcome", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page, { isShowingWelcome: true });
+    await page.evaluate(() => localStorage.setItem("appearance", '"sepia"'));
+    await page.reload();
+    await expect(page.locator(WELCOME).getByRole("radio", { name: "System" })).toBeChecked();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.locator(WELCOME).getByRole("button", CONTINUE).click();
+    await page.goto("/?app-theme=sepia");
+    expect(new URL(page.url()).search).toBe("");
+    await expect(page.locator("#stamp")).toBeVisible();
+    await expect(page.locator(WELCOME)).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem("appearance"))).toBe('"sepia"');
+  });
+
   test("the welcome the Home Screen app's link opens stays through the reload a pick on it brings in Safari", async ({
     page,
   }) => {

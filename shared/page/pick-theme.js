@@ -8,6 +8,12 @@ const isOnHomeScreen = () =>
   matchMedia("(display-mode: standalone)").matches ||
   /** @type {{ standalone?: boolean }} */ (navigator).standalone === true;
 
+// System, the app's light look, or its dark one. Anything else reads as System.
+/** @param {unknown} value */
+function isAppearanceChoice(value) {
+  return value === "auto" || value === "light" || value === "dark";
+}
+
 // A device keeps the choice as JSON, or, if it kept one earlier, as its name. Storage can refuse
 // access, as in a private window, so the page never depends on it.
 function readPickedAppearance() {
@@ -17,12 +23,13 @@ function readPickedAppearance() {
   } catch {
     return "auto";
   }
+  let choice;
   try {
-    const choice = JSON.parse(stored);
-    return typeof choice === "string" ? choice : "auto";
+    choice = JSON.parse(stored);
   } catch {
-    return stored || "auto";
+    choice = stored;
   }
+  return isAppearanceChoice(choice) ? choice : "auto";
 }
 
 // Only Apple's browsers tell a page whether it runs from the Home Screen this way.
@@ -78,6 +85,7 @@ function takeThemeFromApp() {
   if (fromApp === null) return false;
   address.searchParams.delete(APP_THEME_KEY);
   history.replaceState(history.state, "", address);
+  if (!isAppearanceChoice(fromApp)) return false;
   try {
     localStorage.setItem("appearance", JSON.stringify(fromApp));
   } catch {
@@ -93,6 +101,7 @@ function keepThemeFromAddress() {
   if (fromAddress === null) return;
   address.searchParams.delete("theme");
   history.replaceState(history.state, "", address);
+  if (!isAppearanceChoice(fromAddress)) return;
   try {
     if (localStorage.getItem("appearance") === null)
       localStorage.setItem("appearance", JSON.stringify(fromAddress));

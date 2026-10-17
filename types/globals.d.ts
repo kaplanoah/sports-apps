@@ -5,6 +5,7 @@ declare const Sortable: {
 // The page's plain scripts in its head share these, from shared/page/pick-theme.js and
 // open-last-tab.js.
 declare function isOnHomeScreen(): boolean;
+declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;
 declare function keepPickedAppearance(choice: string): void;
 declare function openThemeAddress(choice: string): void;

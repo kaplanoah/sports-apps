@@ -4,7 +4,7 @@
 // it, current. Each app hands it its looks' icons and bar colors.
 
 // Every page that loads this runs pick-theme.js first.
-/* global buildSafariAddress, openThemeAddress -- from pick-theme.js */
+/* global buildSafariAddress, isAppearanceChoice, openThemeAddress -- from pick-theme.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
@@ -15,13 +15,11 @@ import { html, setHtml } from "./html.js";
  * @typedef {{ light: Look, dark: Look }} Looks
  */
 
-const CHOICES = ["auto", "light", "dark"];
-
 const darkScheme = matchMedia("(prefers-color-scheme: dark)");
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 const appearance = createViewerChoice("appearance", (stored) =>
-  typeof stored === "string" && CHOICES.includes(stored) ? stored : "auto",
+  typeof stored === "string" && isAppearanceChoice(stored) ? stored : "auto",
 );
 
 /**
