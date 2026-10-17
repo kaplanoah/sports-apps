@@ -147,19 +147,26 @@ test("a finding that stands in for its repeats takes the heaviest weight a check
   );
 });
 
-test("a finding with a weight the review doesn't know neither leads nor joins a group", () => {
-  const checked = [
-    { ...finding({ weight: "Unsure", body: "can't settle" }), ref: "1.1" },
-    { ...finding({ weight: "Minor", body: "odd weight" }), ref: "2.1" },
+test("a finding that can't be posted neither leads nor joins a group", () => {
+  const unpostable = [
+    finding({ weight: "Minor", body: "odd weight" }),
+    finding({ weight: "Important", body: "" }),
+    finding({ weight: "Important", path: "", body: "nowhere" }),
   ];
-  const posted = (/** @type {string[][]} */ duplicates) =>
-    listToPost(checked, { duplicates, added: [], unjudged: [] }).map(({ weight, body }) => [
-      weight,
-      body,
-    ]);
-  assert.deepEqual(posted([["1.1", "2.1"]]), [["Unsure", "can't settle"]]);
-  assert.deepEqual(posted([["2.1", "1.1"]]), [["Unsure", "can't settle"]]);
-  assert.deepEqual(posted([["2.1"]]), [["Unsure", "can't settle"]]);
+  for (const bad of unpostable) {
+    const checked = [
+      { ...finding({ weight: "Unsure", body: "can't settle" }), ref: "1.1" },
+      { ...bad, ref: "2.1" },
+    ];
+    const posted = (/** @type {string[][]} */ duplicates) =>
+      listToPost(checked, { duplicates, added: [], unjudged: [] }).map(({ weight, body }) => [
+        weight,
+        body,
+      ]);
+    assert.deepEqual(posted([["1.1", "2.1"]]), [["Unsure", "can't settle"]], bad.body);
+    assert.deepEqual(posted([["2.1", "1.1"]]), [["Unsure", "can't settle"]], bad.body);
+    assert.deepEqual(posted([["2.1"]]), [["Unsure", "can't settle"]], bad.body);
+  }
 });
 
 test("a check across areas that gave no answer, or one of another shape, reads as none", () => {
