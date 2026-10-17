@@ -305,23 +305,35 @@ jobs:
           path: ~/.cache/ms-playwright
           key: *browsers-key
 
-  # Each push to a pull request is reviewed in full, so fixes for its comments are reviewed too: its
-  # change is split into shares small enough for one reviewer to read every line of
-  # (worker/plan-review.mjs), one reviewer reads each share at once, one more checks across them,
-  # and review passes only once every changed file was read (worker/judge-review.mjs). With nothing
-  # to review, such as a push to main, it plans no shares and review passes, since check fails on a
+  # Each pull request is reviewed in areas, by what its files are about, each test with its code
+  # (worker/plan-review.mjs). In each area four reviewers read every line, each listing every case
+  # of one kind of problem; a checker confirms each case against the code; and one step posts what
+  # the checkers confirmed, after a check across areas merges repeats and looks for what spans them
+  # (worker/post-review.mjs), so no reviewer or checker can write to the pull request. The first
+  # review reads the whole change. A review after it reads what the pushes since the last full read
+  # changed, and when that posts nothing, the whole change is read once more, one reviewer an area.
+  # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
+  # nothing to review, such as a push to main, it plans nothing and passes, since check fails on a
   # skipped job. A label change brings no new code, so it reviews again only when no run passed
   # every test and the review on exactly this code.
   review-plan:
     needs: passed
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: read
     outputs:
-      shares: ${{ steps.plan.outputs.shares }}
+      stage: ${{ steps.plan.outputs.stage }}
+      reviewers: ${{ steps.plan.outputs.reviewers }}
+      checkers: ${{ steps.plan.outputs.checkers }}
+      areas: ${{ steps.plan.outputs.areas }}
       count: ${{ steps.plan.outputs.count }}
+      final-reviewers: ${{ steps.plan.outputs.final-reviewers }}
+      final-checkers: ${{ steps.plan.outputs.final-checkers }}
+      final-areas: ${{ steps.plan.outputs.final-areas }}
+      final-count: ${{ steps.plan.outputs.final-count }}
     steps:
       - name: Decide whether to review
         id: decision
@@ -354,59 +366,70 @@ jobs:
       - if: steps.decision.outputs.review == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 2
+          # The whole history, to read since the last review's head and to look back as reviewers do.
+          fetch-depth: 0
           # Claude reads the checkout, and the review needs no git credentials on disk.
           persist-credentials: false
       - if: steps.decision.outputs.review == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
-      - name: Split the change into shares
+      # The review guide comes from the default branch, so a pull request can't change what its
+      # reviewers look for.
+      - name: Split the change into areas, and write what the reviewers read
         id: plan
         if: steps.decision.outputs.review == 'true'
-        run: node worker/plan-review.mjs .review >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          DESCRIPTION: ${{ github.event.pull_request.body }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          node worker/plan-review.mjs .review >> "$GITHUB_OUTPUT"
+          node worker/review-context.mjs .review
+          git show "origin/$DEFAULT_BRANCH:REVIEW.md" > .review/REVIEW.md
+      - if: steps.decision.outputs.review == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: review-plan
+          path: .review/
+          include-hidden-files: true
+          retention-days: 14
+          overwrite: true
 
-  # A share's reviewer is told to read every line of its share's diffs, which a step then checks
-  # from the reads it actually made, and a second try reads what the first left. The review guide
-  # comes from the default branch, so a pull request can't change what its reviewers look for. The
-  # token is the run's own rather than Claude's app's, which works only while this file is as the
-  # default branch has it, so a change to the review is reviewed by its own jobs, and the guide
-  # has them flag one that lets less through.
-  review-share:
+  # A reviewer is told to read every line of its area's diffs, which a step then checks from the
+  # reads it actually made, and a second try reads what the first left. The token is the run's
+  # own rather than Claude's app's, which works only while this file is as the default branch has
+  # it, so a change to the review is reviewed by its own jobs, and the guide has them flag one that
+  # lets less through.
+  review-find:
+    name: review-find (${{ matrix.name }}, ${{ matrix.kind }})
     needs: review-plan
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.review-plan.outputs.shares || '[]') }}
-    steps:
+        include: ${{ fromJSON(needs.review-plan.outputs.reviewers || '[]') }}
+    env:
+      STAGE: ${{ needs.review-plan.outputs.stage }}
+    steps: &find-steps
       - &review-checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
       - *setup-node
-      - &prepare-review
-        name: Write the change's diffs and the review guide
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          node worker/plan-review.mjs .review > /dev/null
-          git fetch --depth 1 origin "$DEFAULT_BRANCH"
-          git show FETCH_HEAD:REVIEW.md > .review/REVIEW.md
-      - &read-comments
-        name: Write the comments already posted
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/comments" --paginate \
-            --jq '.[] | {path, line, author: .user.login, body}' > .review/comments.jsonl
+      - &download-plan
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-plan
+          path: .review/
       - name: Review
         id: review
         continue-on-error: true
@@ -418,30 +441,29 @@ jobs:
           github_token: &run-token ${{ github.token }}
           show_full_output: true
           settings: &review-settings '{"disableAllHooks": true}'
-          claude_args: &review-args |
+          claude_args: &find-args |
             --model claude-opus-5-5
             --max-turns 150
-            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(git log:*),Bash(git show:*),Bash(git diff:*)"
-            --json-schema '{"type":"object","properties":{"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}},"notes":{"type":"array","items":{"type":"string"}}},"required":["unjudged","notes"]}'
+            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
+            --json-schema '{"type":"object","properties":{"candidates":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"confidence":{"type":"string","enum":["high","medium","low"]},"claim":{"type":"string"},"when":{"type":"string"},"fix":{"type":"string"}},"required":["path","line","weight","confidence","claim","when","fix"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["candidates","unjudged"]}'
           prompt: |
-            You are one of ${{ needs.review-plan.outputs.count }} reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}, each reading one share of its change in full. You review share ${{ matrix.share }}.
+            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. Its change is split into areas by what the files are about, and each area's reviewers each look for one kind of problem. You review area ${{ matrix.area }}, "${{ matrix.name }}", and look only for this: ${{ matrix.focus }}
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps.
-            2. Read `.review/files.md`, which lists every changed file, the share that reviews it, and the diff files that hold its change.
-            3. Read every diff file listed under Share ${{ matrix.share }}, each whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of your share's diffs you didn't read.
-            4. Read what else you need to judge your share: the files as the pull request leaves them, other shares' diffs, callers, and copies, with Read, Grep, and Glob, and history with git log, git show, and git diff, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
-            5. The comments already on the pull request are in `.review/comments.jsonl`. Never post a finding already there, whether it was fixed, answered, or left open.
-            6. Post each finding as an inline comment on the line it's about, with confirmed=true, as the guide says.
-            7. Don't post a summary: a later step writes it. End with your answer: each file of your share you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares, like anything your share relies on or changes in another share's files or the other app.
+            2. Read `.review/pull-request.md`: the pull request's title and description, and every review thread on it so far, with its replies and whether it's resolved.
+            3. Read `.review/${{ env.STAGE }}.md`, which lists each area's files and the diff files that hold their change. Read every diff file listed under Area ${{ matrix.area }}, each whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of your area's diffs you didn't read.
+            4. Read what else you need to judge them: the files as the pull request leaves them, other areas' diffs, callers, and copies, with Read, Grep, and Glob, and history with git log, git show, git diff, and git blame, whose base is HEAD^1 and whose whole history is here. Run each command on its own, with no pipes or redirects.
+            5. List every case of your kind of problem you find, not a sample, and each place it shows. Include a case you're unsure of, with your confidence: a checker confirms each against the code before anything is posted. Leave out a case a thread already raised, unless its reply is wrong or a fix it claims didn't hold, and then say so.
+            6. Post nothing. End with your answer: each case, on a line the diff changes, nearest the one it's about, naming that one if it's another; and each file of your area you read but couldn't judge from the code, and why.
       - name: Find what the review left unread
         id: first
         if: ${{ !cancelled() }}
         env:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
-          SHARE: ${{ matrix.share }}
-        run: node worker/judge-review.mjs share .review "$SHARE" >> "$GITHUB_OUTPUT"
-      - *read-comments
+          AREA: ${{ matrix.area }}
+          KIND: ${{ matrix.kind }}
+        run: node worker/judge-review.mjs find .review "$STAGE" "$AREA" "$KIND" >> "$GITHUB_OUTPUT"
       - name: Review what's left
         id: again
         if: ${{ !cancelled() && steps.first.outputs.unread != '' }}
@@ -454,63 +476,73 @@ jobs:
           github_token: *run-token
           show_full_output: true
           settings: *review-settings
-          claude_args: *review-args
+          claude_args: *find-args
           prompt: |
-            You are one of ${{ needs.review-plan.outputs.count }} reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}, each reading one share of its change in full. You review share ${{ matrix.share }}, and an earlier try left these of its diff files unread: ${{ steps.first.outputs.unread }}
+            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ matrix.area }}, "${{ matrix.name }}", and look only for this: ${{ matrix.focus }} An earlier try left these of its diff files unread: ${{ steps.first.outputs.unread }}
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps.
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps. `.review/pull-request.md` holds the pull request's description and every review thread on it.
             2. Read each of those diff files, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read.
-            3. Read what else you need to judge them, with Read, Grep, Glob, git log, git show, and git diff, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
-            4. The comments already on the pull request, the earlier try's included, are in `.review/comments.jsonl`. Never post a finding already there.
-            5. Post each finding as an inline comment on the line it's about, with confirmed=true, as the guide says.
-            6. Don't post a summary: a later step writes it. End with your answer: each file you read but couldn't judge from the code and why, and notes for the reviewer who checks across shares.
+            3. Read what else you need to judge them, with Read, Grep, Glob, git log, git show, git diff, and git blame, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
+            4. List every case of your kind of problem you find in them, unsure ones too, with your confidence. Leave out a case a thread already raised, unless its reply is wrong or a fix it claims didn't hold.
+            5. Post nothing. End with your answer: each case, on a line the diff changes, and each file you read but couldn't judge from the code, and why.
       - name: Find what's still unread
         id: last
         if: ${{ !cancelled() && steps.first.outputs.unread != '' }}
         env:
           EXECUTION_FILE: ${{ steps.again.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.again.outputs.structured_output }}
-          SHARE: ${{ matrix.share }}
-        run: node worker/judge-review.mjs share .review "$SHARE" >> "$GITHUB_OUTPUT"
+          AREA: ${{ matrix.area }}
+          KIND: ${{ matrix.kind }}
+        run: node worker/judge-review.mjs find .review "$STAGE" "$AREA" "$KIND" >> "$GITHUB_OUTPUT"
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: review-share-${{ matrix.share }}
-          path: .review/share-${{ matrix.share }}.json
+          name: review-find-${{ env.STAGE }}-${{ matrix.area }}-${{ matrix.kind }}
+          path: .review/find-${{ env.STAGE }}-${{ matrix.area }}-${{ matrix.kind }}.json
           retention-days: 14
           # A re-run of the job uploads its record again.
           overwrite: true
-      # So that re-running the failed jobs reviews this share again.
+      # So that re-running the failed jobs reviews this area again.
       - name: Fail when parts are still unread
         if: ${{ !cancelled() && steps.last.outputs.unread != '' }}
         run: |
-          echo "::error::This share's reviewer didn't read every line of its diffs."
+          echo "::error::This reviewer didn't read every line of its area's diffs."
           exit 1
 
-  # What no one share can see: a change one share's files rely on in another's, the same fix due in
-  # the other app, and one fact or rule now in two places. A change of one share needs none.
-  review-across:
-    needs: [review-plan, review-share]
-    if: ${{ !cancelled() && needs.review-plan.outputs.count > 1 }}
+  # Each area's checker confirms its reviewers' cases against the code, merges repeats, and weighs
+  # each, before anything is posted.
+  review-check:
+    name: review-check (${{ matrix.name }})
+    needs: [review-plan, review-find]
+    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: write
-    steps:
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.review-plan.outputs.checkers || '[]') }}
+    env:
+      STAGE: ${{ needs.review-plan.outputs.stage }}
+    steps: &check-steps
       - *review-checkout
       - *setup-node
-      - *prepare-review
-      - *read-comments
+      - *download-plan
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: review-share-*
+          pattern: review-find-${{ env.STAGE }}-${{ matrix.area }}-*
           path: .review/
           merge-multiple: true
-      - name: Review across the shares
-        id: review
+      - name: Gather the area's candidates
+        env:
+          AREA: ${{ matrix.area }}
+        run: node worker/judge-review.mjs candidates .review "$STAGE" "$AREA"
+      - name: Check the candidates
+        id: check
         continue-on-error: true
-        timeout-minutes: 15
+        timeout-minutes: 20
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           claude_code_oauth_token: *oauth-token
@@ -518,40 +550,177 @@ jobs:
           github_token: *run-token
           show_full_output: true
           settings: *review-settings
-          claude_args: *review-args
+          claude_args: |
+            --model claude-opus-5-5
+            --max-turns 150
+            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
+            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}},"verdict":{"type":"string","enum":["confirmed","rejected","unsure"]},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"why":{"type":"string"}},"required":["ids","verdict","weight","path","line","body","why"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["findings","unjudged"]}'
           prompt: |
-            You check pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} as a whole, after ${{ needs.review-plan.outputs.count }} reviewers each read one share of it in full.
+            You check what the reviewers of one area of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, before anything is posted. Your area is ${{ matrix.area }}, "${{ matrix.name }}". Its reviewers each looked for one kind of problem and listed every case, unsure ones included. Their candidates are in `.review/candidates-${{ env.STAGE }}-${{ matrix.area }}.json`.
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it, and `.review/files.md`, which lists every changed file, its share, and its diff files.
-            2. Each share's record is in `.review/share-<share>.json`. Read the notes and the files left unjudged in each of its tries' answers. Each share's findings are its comments in `.review/comments.jsonl`.
-            3. Look for what no one share could see: a change in one share that another share's files rely on, the same fix due in the other app or another view, one fact or rule now in two places, and docs or comments a change makes wrong. Read the diffs and code you need with Read, Grep, Glob, git log, git show, and git diff, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
-            4. The comments already on the pull request, the shares' included, are in `.review/comments.jsonl`. Never post a finding already there.
-            5. Post each finding as an inline comment on the line it's about, with confirmed=true, as the guide says.
-            6. Don't post a summary: a later step writes it. End with your answer: anything you couldn't judge from the code and why. Leave notes empty.
-      - name: Keep the check's answer
-        if: steps.review.outcome == 'success'
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
+            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, and `.review/${{ env.STAGE }}.md`, which lists your area's diff files, and read those as you need.
+            3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with git show HEAD^1:<path>. Use Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects.
+            4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
+            5. Merge candidates that are the same problem into one finding, naming every id it merges.
+            6. Weigh each as the guide says: Important for a bug, meaning a wrong result someone can see, wrong data kept, or a failure, and for a security hole or a broken AGENTS.md rule; Nit for something worth fixing that doesn't block; Pre-existing for a problem in code the change didn't make worse.
+            7. Write each finding's body as the guide's "How to report" says: what is wrong, when it goes wrong, and how to fix it, in a few sentences, without its weight, which a later step adds. Put it on a line the diff changes, nearest the one it's about, naming that one if it's another.
+            8. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
+      - name: Keep the checker's answer
+        if: steps.check.outcome == 'success'
         env:
-          STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
-        run: node worker/judge-review.mjs across .review
-      - if: steps.review.outcome == 'success'
+          STRUCTURED_OUTPUT: ${{ steps.check.outputs.structured_output }}
+          AREA: ${{ matrix.area }}
+        run: node worker/judge-review.mjs check .review "$STAGE" "$AREA"
+      - if: steps.check.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: review-across
-          path: .review/across.json
+          name: review-check-${{ env.STAGE }}-${{ matrix.area }}
+          path: .review/check-${{ env.STAGE }}-${{ matrix.area }}.json
           retention-days: 14
           overwrite: true
-      # So that re-running the failed jobs checks across the shares again.
+      # So that re-running the failed jobs checks this area again.
       - name: Fail when the check didn't finish
-        if: steps.review.outcome != 'success'
+        if: steps.check.outcome != 'success'
         run: |
-          echo "::error::The check across shares didn't finish."
+          echo "::error::This area's checker didn't finish."
           exit 1
 
-  # Fails a review that left any changed file unread, naming each in the one summary comment it
-  # keeps up to date on the pull request. A run a newer push cancelled leaves the summary to the
+  # What no one area can see: a change one area's files rely on in another's, the same fix due in
+  # the other app, and one fact or rule now in two places. A change of one area needs none.
+  review-post:
+    needs: [review-plan, review-check]
+    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      posted: ${{ steps.post.outputs.posted }}
+    env:
+      STAGE: ${{ needs.review-plan.outputs.stage }}
+      AREAS: ${{ needs.review-plan.outputs.areas }}
+    steps: &post-steps
+      - *review-checkout
+      - *setup-node
+      - *download-plan
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: review-check-${{ env.STAGE }}-*
+          path: .review/
+          merge-multiple: true
+      - name: Check across the areas
+        id: across
+        if: env.AREAS > 1
+        continue-on-error: true
+        timeout-minutes: 20
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
+        with:
+          claude_code_oauth_token: *oauth-token
+          anthropic_api_key: *api-key
+          github_token: *run-token
+          show_full_output: true
+          settings: *review-settings
+          claude_args: |
+            --model claude-opus-5-5
+            --max-turns 150
+            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
+            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"weight":{"type":"string","enum":["Important","Nit","Pre-existing","Unsure"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["weight","path","line","body"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["findings","unjudged"]}'
+          prompt: |
+            You make the last check of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}'s review before its findings are posted. Its change is split into ${{ env.AREAS }} areas, and each area's checker confirmed what its reviewers found. Each checker's answer is in `.review/check-${{ env.STAGE }}-<area>.json`.
+
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
+            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files, and each checker's answer.
+            3. Keep each finding a checker confirmed or left unsure, as it wrote it, and leave out the ones it rejected. Weigh an unsure one Unsure.
+            4. Merge findings from different areas that are the same problem into one, on the line that best shows it.
+            5. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each against the code as a checker does, with Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects, and add each you confirm, on a line the diff changes.
+            6. Post nothing. End with your answer: every finding to post, and anything you couldn't judge from the code, and why.
+      # So that re-running the failed jobs checks across the areas again.
+      - name: Fail when the check across areas didn't finish
+        if: env.AREAS > 1 && steps.across.outcome != 'success'
+        run: |
+          echo "::error::The check across areas didn't finish."
+          exit 1
+      - name: Post the confirmed findings
+        id: post
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          STRUCTURED_OUTPUT: ${{ steps.across.outputs.structured_output }}
+        run: node worker/post-review.mjs .review "$STAGE" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: review-post-${{ env.STAGE }}
+          path: .review/post-${{ env.STAGE }}.json
+          retention-days: 14
+          overwrite: true
+
+  # When a review of the pushes since the last full read posts nothing, the whole change is read
+  # once more, one reviewer an area for every kind of problem, to find what the earlier reads
+  # missed, and the summary says what it found.
+  review-final-find:
+    name: review-final-find (${{ matrix.name }}, ${{ matrix.kind }})
+    needs: [review-plan, review-post]
+    if: &final-due ${{ !cancelled() && needs.review-plan.outputs.stage == 'push' && needs.review-post.outputs.posted == '0' && needs.review-plan.outputs.final-count > 0 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.review-plan.outputs.final-reviewers || '[]') }}
+    env:
+      STAGE: final
+    steps: *find-steps
+
+  review-final-check:
+    name: review-final-check (${{ matrix.name }})
+    needs: [review-plan, review-post, review-final-find]
+    if: *final-due
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.review-plan.outputs.final-checkers || '[]') }}
+    env:
+      STAGE: final
+    steps: *check-steps
+
+  review-final-post:
+    needs: [review-plan, review-post, review-final-check]
+    if: *final-due
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      STAGE: final
+      AREAS: ${{ needs.review-plan.outputs.final-areas }}
+    steps: *post-steps
+
+  # Fails a review that left anything due unread or unchecked, naming it in the one summary comment
+  # it keeps up to date on the pull request. A run a newer push cancelled leaves the summary to the
   # newer push's run.
   review:
-    needs: [review-plan, review-share, review-across]
+    needs:
+      [
+        review-plan,
+        review-find,
+        review-check,
+        review-post,
+        review-final-find,
+        review-final-check,
+        review-final-post,
+      ]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -567,21 +736,18 @@ jobs:
       - if: needs.review-plan.outputs.count != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 2
           persist-credentials: false
       - if: needs.review-plan.outputs.count != ''
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
       - if: needs.review-plan.outputs.count != ''
-        run: node worker/plan-review.mjs .review > /dev/null
-      - if: needs.review-plan.outputs.count > 0
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: review-*
           path: .review/
           merge-multiple: true
-      - name: Post the summary, and fail if anything went unread
+      - name: Post the summary, and fail if anything due went unread or unchecked
         if: needs.review-plan.outputs.count != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -603,8 +769,12 @@ jobs:
         burn-in,
         webkit,
         review-plan,
-        review-share,
-        review-across,
+        review-find,
+        review-check,
+        review-post,
+        review-final-find,
+        review-final-check,
+        review-final-post,
         review,
       ]
     runs-on: ubuntu-latest

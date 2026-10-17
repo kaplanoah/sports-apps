@@ -1,20 +1,26 @@
-// Splits a pull request's change into shares small enough for one reviewer to read in full, so CI
-// reviews a change of any size with one reviewer per share at once (the review jobs in ci.yml). A
-// share holds changed files in path order, so a folder's files stay together, up to a share's
-// worth of changed lines; a file bigger than that is a share of its own. A test's recorded data,
-// the lockfile, a binary file, and a drawing or minified library a tool wrote go unread, named in
-// the summary instead.
+// Splits a pull request's change into areas by what its files are about, each test with the code
+// it tests, so CI's review (the review jobs in ci.yml) has four reviewers read each area in full,
+// each for one kind of problem. The first review reads the whole change. A review after it reads
+// only what the pushes since the last full read changed, and when that review posts nothing, the
+// whole change is read once more, one reviewer an area. A push that changes only what a merge of
+// the base brings in is read by no one. A test's recorded data, the lockfile, a binary file, and a
+// drawing or minified library a tool wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, which judge-review.mjs checks.
-// Usage: node worker/plan-review.mjs <folder>, in a checkout of the pull request's merge commit,
-// whose first parent is the base branch. It prints shares=<JSON> and count=<shares> for
-// $GITHUB_OUTPUT.
+// Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
+// commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,
+// GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints the reviewers' and
+// checkers' matrices and counts for $GITHUB_OUTPUT.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createGitHub, readAllPages } from "./github-api.mjs";
+import { findSummary, readReviewedHead } from "./review-state.mjs";
 
-const SHARE_LINES = 800;
-const MOST_SHARES = 20;
+const AREA_LINES = 2000;
+// A smaller area shares its reviewers with the other small ones.
+const SMALL_AREA_LINES = 150;
+const MOST_AREAS = 12;
 // Half the lines one Read returns, and about half the 25,000 tokens it returns at most even for
 // prose of long lines, so a part comes back whole.
 export const PART_LINES = 1000;
@@ -25,6 +31,35 @@ const CONTINUED = "(cont.) ";
 
 const RECORDED_DATA = /(^|\/)tests\/fixtures\/.*\.(json|xml)$/;
 const GENERATED = /\.(svg|min\.js)$/;
+
+const BUG_ITEMS =
+  'REVIEW.md\'s "What to look for" items 1 (Bugs), 4 (Budgets and outside services), 5 (Security), and 6 (Red changes)';
+
+// Each area's reviewers, one for each kind of problem, two for bugs, which matter most and which
+// one reader misses most.
+export const KINDS = [
+  { kind: "bugs", focus: `${BUG_ITEMS}.` },
+  {
+    kind: "bugs-from-end",
+    focus: `${BUG_ITEMS}. Read your diffs from the last part to the first, and each from its end.`,
+  },
+  {
+    kind: "rules",
+    focus:
+      'REVIEW.md\'s "What to look for" items 2 (One fact, one rule, one place), 3 (Both apps, every place), 8 (Leftovers), 9 (Search), 10 (Docs and comments the change makes wrong), and 11 (Any other rule in AGENTS.md). For each new helper, constant, rule, or wording, search the repo for one that already does the same. Start from `.review/stale-names.md`, which lists each place that still names what the change removed.',
+  },
+  {
+    kind: "tests",
+    focus:
+      'REVIEW.md\'s "What to look for" item 7 (Tests). For each change to behavior, find the test that would fail without it, or report that none does. Also report a test the change makes vacuous, and a browser test that would pass only some of the time.',
+  },
+];
+
+// The whole change's last read, which finds what the first review missed.
+export const FINAL_KIND = {
+  kind: "all",
+  focus: 'Every item in REVIEW.md\'s "What to look for".',
+};
 
 /**
  * Each changed file and its changed lines, from `git diff --numstat`, which counts a binary file's
@@ -56,57 +91,160 @@ export function explainUnread({ path, lines }) {
 }
 
 /**
- * The shares of the files to read in path order, each up to so many changed lines.
- * @param {{ path: string, lines: number }[]} files
- * @param {number} shareLines
- * @returns {{ share: number, files: string[], lines: number }[]}
+ * The area a file of code belongs to, by what it's about.
+ * @param {string} path
  */
-function packInOrder(files, shareLines) {
-  /** @type {{ share: number, files: string[], lines: number }[]} */
-  const shares = [];
-  for (const file of files.toSorted((first, second) => first.path.localeCompare(second.path))) {
-    const last = shares.at(-1);
-    if (last && last.lines + file.lines <= shareLines) {
-      last.files.push(file.path);
-      last.lines += file.lines;
+export function nameCodeArea(path) {
+  const app = path.match(/^apps\/([^/]+)\/(page|worker)\//);
+  if (app) return `${app[1]} ${app[2] === "page" ? "page" : "Worker"}`;
+  if (path.startsWith("shared/page/")) return "shared page";
+  if (path.startsWith("shared/worker/")) return "shared Worker";
+  if (/^[^/]+\.md$/.test(path)) return "docs";
+  return "tooling";
+}
+
+/** @param {string} path */
+const isTest = (path) => /^(apps\/[^/]+\/)?tests\//.test(path);
+
+/** @param {string} path */
+const nameTested = (path) => basename(path).replace(/\.(test|spec)\.m?js$|\.m?js$/, "");
+
+/**
+ * The file of code a test tests, by its name, preferring one the change changes, or null when no
+ * file of code has its name.
+ * @param {string} test
+ * @param {string[]} changed
+ * @param {string[]} repoFiles
+ */
+export function findTestedFile(test, changed, repoFiles) {
+  const name = nameTested(test);
+  const app = test.match(/^apps\/([^/]+)\//)?.[1];
+  const scope = app ? `apps/${app}/` : "";
+  /** @param {string} path */
+  const isCandidate = (path) =>
+    !isTest(path) &&
+    path.startsWith(scope) &&
+    /\.m?js$/.test(path) &&
+    basename(path).replace(/\.m?js$/, "") === name;
+  return changed.find(isCandidate) ?? repoFiles.find(isCandidate) ?? null;
+}
+
+/**
+ * The area a test belongs to: its code's, or else its app's page, or the tooling's.
+ * @param {string} test
+ * @param {string | null} tested
+ */
+function nameTestArea(test, tested) {
+  if (tested) return nameCodeArea(tested);
+  const app = test.match(/^apps\/([^/]+)\//)?.[1];
+  return app ? `${app} page` : "tooling";
+}
+
+/**
+ * Items split in order into at most so many groups, each closing where its size comes closest to
+ * an even share.
+ * @template T
+ * @param {T[]} items
+ * @param {(item: T) => number} measure
+ * @param {number} count
+ * @returns {T[][]}
+ */
+export function splitEvenly(items, measure, count) {
+  const share = items.reduce((total, item) => total + measure(item), 0) / count;
+  /** @type {T[][]} */
+  const groups = [[]];
+  let size = 0;
+  for (const item of items) {
+    const itemSize = measure(item);
+    const current = /** @type {T[]} */ (groups.at(-1));
+    const isCloserWithout = Math.abs(size - share) < Math.abs(size + itemSize - share);
+    if (current.length && isCloserWithout && groups.length < count) {
+      groups.push([item]);
+      size = itemSize;
     } else {
-      shares.push({ share: shares.length + 1, files: [file.path], lines: file.lines });
+      current.push(item);
+      size += itemSize;
     }
   }
-  return shares;
+  return groups;
 }
 
 /**
- * The shares of the files to read, each up to a share's worth of changed lines, raised as far as
- * it takes to keep to the most shares.
+ * The areas of the files to read, each test beside its code, an area bigger than so many lines
+ * split in even parts in path order, and the small ones read together.
  * @param {{ path: string, lines: number }[]} files
+ * @param {string[]} repoFiles
+ * @param {number} areaLines
  */
-export function packShares(files) {
-  const total = files.reduce((sum, file) => sum + file.lines, 0);
-  let shareLines = Math.max(SHARE_LINES, Math.ceil(total / MOST_SHARES));
-  let shares = packInOrder(files, shareLines);
-  while (shares.length > MOST_SHARES) {
-    shareLines = Math.ceil(shareLines * 1.1);
-    shares = packInOrder(files, shareLines);
-  }
-  return shares;
+function groupInAreas(files, repoFiles, areaLines) {
+  const changed = files.map((file) => file.path);
+  const placed = files.map((file) => {
+    const tested = isTest(file.path) ? findTestedFile(file.path, changed, repoFiles) : null;
+    const name = isTest(file.path) ? nameTestArea(file.path, tested) : nameCodeArea(file.path);
+    return { ...file, name, order: tested ? `${tested}\u0000${file.path}` : file.path };
+  });
+  const names = [...new Set(placed.map((file) => file.name))].sort();
+  /** @param {{ lines: number }[]} group */
+  const sum = (group) => group.reduce((total, file) => total + file.lines, 0);
+  const byName = names.map((name) => ({
+    name,
+    files: placed
+      .filter((file) => file.name === name)
+      .toSorted((one, other) => one.order.localeCompare(other.order)),
+  }));
+  const isSmall = (/** @type {{ files: { lines: number }[] }} */ area) =>
+    sum(area.files) < SMALL_AREA_LINES;
+  const small = byName.filter(isSmall);
+  const pooled =
+    small.length > 1
+      ? [{ name: "small changes", files: small.flatMap((area) => area.files) }]
+      : small;
+  return [...byName.filter((area) => !isSmall(area)), ...pooled].flatMap(
+    ({ name, files: areaFiles }) => {
+      const partCount = Math.max(1, Math.ceil(sum(areaFiles) / areaLines));
+      const parts = splitEvenly(areaFiles, (file) => file.lines, partCount);
+      return parts.map((part, index) => ({
+        name: parts.length > 1 ? `${name}, part ${index + 1}` : name,
+        files: part.map((file) => file.path),
+        lines: sum(part),
+      }));
+    },
+  );
 }
 
 /**
- * A pull request's review: the shares to read, and the files left unread with why.
- * @param {string} numstat
+ * The areas of the files to read, each up to an area's worth of changed lines, raised as far as it
+ * takes to keep to the most areas.
+ * @param {{ path: string, lines: number }[]} files
+ * @param {string[]} repoFiles
+ * @returns {{ area: number, name: string, files: string[], lines: number }[]}
  */
-export function planReview(numstat) {
+export function listAreas(files, repoFiles) {
+  const total = files.reduce((sum, file) => sum + file.lines, 0);
+  let areaLines = Math.max(AREA_LINES, Math.ceil(total / MOST_AREAS));
+  let areas = groupInAreas(files, repoFiles, areaLines);
+  while (areas.length > MOST_AREAS) {
+    areaLines = Math.ceil(areaLines * 1.1);
+    areas = groupInAreas(files, repoFiles, areaLines);
+  }
+  return areas.map((area, index) => ({ area: index + 1, ...area }));
+}
+
+/**
+ * A change's review: the areas to read, and the files left unread with why.
+ * @param {string} numstat
+ * @param {string[]} repoFiles
+ */
+export function planReview(numstat, repoFiles) {
   const changed = readChangedFiles(numstat);
   const unread = changed.flatMap((file) => {
     const why = explainUnread(file);
     return why ? [{ path: file.path, why }] : [];
   });
-  const toRead = changed.filter((file) => !explainUnread(file));
-  return {
-    shares: packShares(/** @type {{ path: string, lines: number }[]} */ (toRead)),
-    unread,
-  };
+  const toRead = /** @type {{ path: string, lines: number }[]} */ (
+    changed.filter((file) => !explainUnread(file))
+  );
+  return { areas: listAreas(toRead, repoFiles), unread };
 }
 
 /**
@@ -127,6 +265,84 @@ export function splitDiffByFile(diff) {
   }
   return byPath;
 }
+
+/**
+ * What a file's diff adds and removes, without where, so a diff a merge of the base moved reads
+ * the same.
+ * @param {string} fileDiff
+ */
+export const describeChange = (fileDiff) =>
+  fileDiff
+    .split("\n")
+    .filter((line) => /^[+-]/.test(line) && !/^(\+\+\+|---) /.test(line))
+    .join("\n");
+
+/**
+ * The files whose change differs between two of a pull request's diffs, as a push changes them.
+ * @param {string} earlier the diff from the earlier head's base to the earlier head
+ * @param {string} now the diff from the base to the head
+ */
+export function listChangedSince(earlier, now) {
+  const before = splitDiffByFile(earlier);
+  const after = splitDiffByFile(now);
+  const paths = [...new Set([...before.keys(), ...after.keys()])].sort();
+  return paths.filter(
+    (path) => describeChange(before.get(path) ?? "") !== describeChange(after.get(path) ?? ""),
+  );
+}
+
+/**
+ * Which review this run makes: the first, of the whole change; one of what the pushes since the
+ * last full read changed; or none, when they changed only what a merge of the base brings in.
+ * @param {object} review
+ * @param {string | null} review.reviewedHead the head the last full read ended on
+ * @param {boolean} review.isOnBranch whether that head is still in the pull request's history
+ * @param {() => string[]} review.listChanged the files the pushes since changed
+ * @returns {{ stage: "first" } | { stage: "push", files: string[] } | { stage: "none" }}
+ */
+export function chooseStage({ reviewedHead, isOnBranch, listChanged }) {
+  if (!reviewedHead || !isOnBranch) return { stage: "first" };
+  const files = listChanged();
+  return files.length ? { stage: "push", files } : { stage: "none" };
+}
+
+/**
+ * Each place in the repo that still names a function, constant, or file the change removed.
+ * @param {string} diff
+ * @param {(pattern: string, isWord: boolean) => string[]} grep the repo's matching lines as path:line:text
+ * @param {string[]} deletedFiles
+ */
+export function listStaleNames(diff, grep, deletedFiles) {
+  const declared =
+    /^([-+])\s*export\s+(?:async\s+)?(?:function\s*\*?\s*|const\s+|let\s+|class\s+)([A-Za-z_$][\w$]*)/;
+  /** @type {Set<string>} */
+  const removed = new Set();
+  /** @type {Set<string>} */
+  const added = new Set();
+  for (const line of diff.split("\n")) {
+    const match = line.match(declared);
+    if (match) (match[1] === "-" ? removed : added).add(match[2]);
+  }
+  const isGone = (/** @type {string} */ name) =>
+    !grep(`(function\\s*\\*?\\s*|const\\s+|let\\s+|class\\s+)${name}\\b`, false).some((hit) =>
+      /\.m?js:/.test(hit),
+    );
+  const names = [...removed].filter((name) => !added.has(name) && isGone(name));
+  const files = deletedFiles.map((path) => basename(path));
+  return [...names, ...files].flatMap((name) => {
+    const hits = grep(name, true);
+    return hits.length ? [{ name, hits }] : [];
+  });
+}
+
+/** @param {{ name: string, hits: string[] }[]} stale */
+const renderStaleNames = (stale) =>
+  [
+    "# What the change removed that the repo still names",
+    "",
+    stale.length ? "" : "Nothing the change removed is still named.",
+    ...stale.flatMap(({ name, hits }) => [`## ${name}`, "", ...hits.map((hit) => `- ${hit}`), ""]),
+  ].join("\n");
 
 /** @param {string[]} lines */
 const measureBytes = (lines) => lines.reduce((sum, line) => sum + Buffer.byteLength(line) + 1, 0);
@@ -210,26 +426,63 @@ export const splitIntoParts = (fileDiff) =>
 
 /**
  * Where each part of a file's diff is written, under the folder.
+ * @param {string} stage
  * @param {string} path
  * @param {number} partCount
  * @returns {string[]}
  */
-const nameParts = (path, partCount) =>
+const nameParts = (stage, path, partCount) =>
   partCount === 1
-    ? [`diffs/${path}.diff`]
-    : Array.from({ length: partCount }, (_, index) => `diffs/${path}.part-${index + 1}.diff`);
+    ? [`${stage}/${path}.diff`]
+    : Array.from({ length: partCount }, (_, index) => `${stage}/${path}.part-${index + 1}.diff`);
 
 /**
- * The index a reviewer reads first: each share's files with their diff parts, then the files left
- * unread.
- * @param {ReturnType<typeof planReview>} plan
- * @param {Map<string, string[]>} partsByPath
+ * Writes each part of a change's diff for one of the review's stages, and returns its areas with
+ * the parts of each file.
+ * @param {string} folder
+ * @param {string} stage
+ * @param {{ numstat: string, diff: string, repoFiles: string[] }} change
  */
-function renderIndex({ shares, unread }, partsByPath) {
-  const shareLines = shares.flatMap(({ share, files }) => [
-    `## Share ${share}`,
+export function writeStage(folder, stage, { numstat, diff, repoFiles }) {
+  const plan = planReview(numstat, repoFiles);
+  const diffs = splitDiffByFile(diff);
+  const areas = plan.areas.map((area) => {
+    /** @type {Record<string, string[]>} */
+    const partsByFile = {};
+    for (const path of area.files) {
+      const fileDiff = diffs.get(path);
+      if (fileDiff === undefined)
+        throw new Error(`The diff has no part for ${path}, so it can't be read.`);
+      const parts = splitIntoParts(fileDiff);
+      const names = nameParts(stage, path, parts.length);
+      names.forEach((name, index) => {
+        mkdirSync(dirname(join(folder, name)), { recursive: true });
+        writeFileSync(join(folder, name), parts[index]);
+      });
+      partsByFile[path] = names;
+    }
+    return { ...area, partsByFile };
+  });
+  return { areas, unread: plan.unread };
+}
+
+const STAGE_WORDS = {
+  first: "The first review of this pull request: each area's diffs hold its whole change.",
+  push: "The diffs hold only what the pushes since the last full review changed. `git diff HEAD^1 HEAD -- <path>` shows a file's whole change.",
+  final: "The last read of the whole change: each area's diffs hold its whole change.",
+};
+
+/**
+ * The index a reviewer reads first: each area's files with their diff parts, then the files left
+ * unread.
+ * @param {"first" | "push" | "final"} stage
+ * @param {ReturnType<typeof writeStage>} written
+ */
+function renderIndex(stage, { areas, unread }) {
+  const areaLines = areas.flatMap(({ area, name, files, partsByFile }) => [
+    `## Area ${area}: ${name}`,
     "",
-    ...files.map((path) => `- ${path}: ${(partsByPath.get(path) ?? []).join(", ")}`),
+    ...files.map((path) => `- ${path}: ${partsByFile[path].join(", ")}`),
     "",
   ]);
   const unreadLines = unread.length
@@ -238,44 +491,64 @@ function renderIndex({ shares, unread }, partsByPath) {
   return [
     "# The pull request's changed files",
     "",
-    `${shares.length} shares, each read in full by its own reviewer.`,
+    STAGE_WORDS[stage],
     `A diff line longer than ${LONGEST_READ_LINE} characters goes on in the lines after it,`,
     `each starting with the line's sign and \`${CONTINUED.trim()}\`.`,
     "",
-    ...shareLines,
+    ...areaLines,
     ...unreadLines,
   ].join("\n");
 }
 
 /**
- * Writes the plan, the index, and each file's diff parts under the folder.
- * @param {string} folder
- * @param {{ numstat: string, diff: string }} change
+ * The reviewers' and checkers' matrices for a stage's areas.
+ * @param {{ area: number, name: string, lines: number }[]} areas
+ * @param {{ kind: string, focus: string }[]} kinds
  */
-export function writeReview(folder, { numstat, diff }) {
-  const plan = planReview(numstat);
-  const diffs = splitDiffByFile(diff);
-  /** @type {Map<string, string[]>} */
-  const partsByPath = new Map();
-  for (const path of plan.shares.flatMap((share) => share.files)) {
-    const fileDiff = diffs.get(path);
-    if (fileDiff === undefined)
-      throw new Error(`The diff has no part for ${path}, so it can't be read.`);
-    const parts = splitIntoParts(fileDiff);
-    const names = nameParts(path, parts.length);
-    names.forEach((name, index) => {
-      mkdirSync(dirname(join(folder, name)), { recursive: true });
-      writeFileSync(join(folder, name), parts[index]);
-    });
-    partsByPath.set(path, names);
+export const listJobs = (areas, kinds) => ({
+  reviewers: areas.flatMap(({ area, name, lines }) =>
+    kinds.map(({ kind, focus }) => ({ area, name, lines, kind, focus })),
+  ),
+  checkers: areas.map(({ area, name, lines }) => ({ area, name, lines })),
+});
+
+/**
+ * Writes a stage's diffs and index, and returns its areas and files left unread.
+ * @param {string} folder
+ * @param {"first" | "push" | "final"} stage
+ * @param {{ numstat: string, diff: string, repoFiles: string[] }} change
+ */
+function writeIndexedStage(folder, stage, change) {
+  const written = writeStage(folder, stage, change);
+  writeFileSync(join(folder, `${stage}.md`), renderIndex(stage, written));
+  return written;
+}
+
+/**
+ * Writes the review's plan, its stages' diffs and indexes, and the list of stale names.
+ * @param {string} folder
+ * @param {object} review
+ * @param {ReturnType<typeof chooseStage>} review.choice
+ * @param {string | null} review.since the head the pushes are read since
+ * @param {(range: string[], files?: string[]) => { numstat: string, diff: string }} review.readDiff
+ * @param {string[]} review.repoFiles
+ * @param {{ name: string, hits: string[] }[]} review.stale
+ */
+export function writeReview(folder, { choice, since, readDiff, repoFiles, stale }) {
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, "stale-names.md"), renderStaleNames(stale));
+  const whole = ["HEAD^1", "HEAD"];
+  /** @type {{ stage: string, since: string | null, areas: any[], unread: any[], final: any[] }} */
+  const plan = { stage: choice.stage, since: null, areas: [], unread: [], final: [] };
+  if (choice.stage === "first")
+    Object.assign(plan, writeIndexedStage(folder, "first", { ...readDiff(whole), repoFiles }));
+  if (choice.stage === "push") {
+    const pushed = readDiff([/** @type {string} */ (since), "HEAD^2"], choice.files);
+    Object.assign(plan, writeIndexedStage(folder, "push", { ...pushed, repoFiles }), { since });
+    plan.final = writeIndexedStage(folder, "final", { ...readDiff(whole), repoFiles }).areas;
   }
-  const shares = plan.shares.map((share) => ({
-    ...share,
-    partsByFile: Object.fromEntries(share.files.map((path) => [path, partsByPath.get(path)])),
-  }));
-  writeFileSync(join(folder, "plan.json"), JSON.stringify({ shares, unread: plan.unread }));
-  writeFileSync(join(folder, "files.md"), renderIndex(plan, partsByPath));
-  return { shares, unread: plan.unread };
+  writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
+  return plan;
 }
 
 // Paths as they are, not quoted and escaped, so the two diffs name each file alike.
@@ -286,14 +559,84 @@ const runGit = (args) =>
     maxBuffer: 1 << 30,
   });
 
+/** @param {string[]} args */
+const tryGit = (args) => {
+  try {
+    return runGit(args);
+  } catch {
+    return null;
+  }
+};
+
+/** @param {string} pattern @param {boolean} isWord */
+const grepRepo = (pattern, isWord) =>
+  (tryGit(["grep", "-n", isWord ? "-wF" : "-E", pattern, "HEAD"]) ?? "")
+    .split("\n")
+    .filter(Boolean)
+    .map((hit) => hit.replace(/^HEAD:/, "").slice(0, 220))
+    .slice(0, 15);
+
+/** @param {NodeJS.ProcessEnv} env */
+async function readLastReviewedHead(env) {
+  const callGitHub = createGitHub({
+    repository: env.GITHUB_REPOSITORY ?? "",
+    fetchImpl: fetch,
+    env,
+  });
+  const comments = await readAllPages(callGitHub, `/issues/${env.PR}/comments`);
+  return readReviewedHead(findSummary(comments)?.body);
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const folder = process.argv[2];
-  mkdirSync(folder, { recursive: true });
-  const { shares } = writeReview(folder, {
-    numstat: runGit(["diff", "--numstat", "--no-renames", "HEAD^1", "HEAD"]),
-    diff: runGit(["diff", "--no-renames", "HEAD^1", "HEAD"]),
+  const reviewedHead = await readLastReviewedHead(process.env);
+  const isOnBranch =
+    reviewedHead !== null &&
+    tryGit(["merge-base", "--is-ancestor", reviewedHead, "HEAD^2"]) !== null;
+  /** @param {string[]} range @param {string[]} [files] */
+  const readDiff = (range, files = []) => {
+    const paths = files.length ? ["--", ...files] : [];
+    return {
+      numstat: runGit(["diff", "--numstat", "--no-renames", ...range, ...paths]),
+      diff: runGit(["diff", "--no-renames", ...range, ...paths]),
+    };
+  };
+  const choice = chooseStage({
+    reviewedHead,
+    isOnBranch,
+    listChanged: () => {
+      const earlierBase = runGit([
+        "merge-base",
+        "HEAD^1",
+        /** @type {string} */ (reviewedHead),
+      ]).trim();
+      return listChangedSince(
+        readDiff([earlierBase, /** @type {string} */ (reviewedHead)]).diff,
+        readDiff(["HEAD^1", "HEAD"]).diff,
+      );
+    },
   });
-  const matrix = shares.map(({ share, lines }) => ({ share, lines }));
-  console.log(`shares=${JSON.stringify(matrix)}`);
-  console.log(`count=${shares.length}`);
+  const whole = readDiff(["HEAD^1", "HEAD"]).diff;
+  const deleted = runGit(["diff", "--name-only", "--diff-filter=D", "HEAD^1", "HEAD"])
+    .split("\n")
+    .filter(Boolean);
+  const plan = writeReview(folder, {
+    choice,
+    since: reviewedHead,
+    readDiff,
+    repoFiles: runGit(["ls-files"]).split("\n").filter(Boolean),
+    stale: listStaleNames(whole, grepRepo, deleted),
+  });
+  const stageKinds = plan.stage === "first" || plan.stage === "push" ? KINDS : [];
+  const now = listJobs(plan.areas, stageKinds);
+  const last = listJobs(plan.final, [FINAL_KIND]);
+  console.log(`stage=${plan.stage}`);
+  console.log(`reviewers=${JSON.stringify(now.reviewers)}`);
+  console.log(`checkers=${JSON.stringify(now.checkers)}`);
+  console.log(`areas=${now.checkers.length}`);
+  console.log(`count=${now.reviewers.length}`);
+  console.log(`final-reviewers=${JSON.stringify(last.reviewers)}`);
+  console.log(`final-checkers=${JSON.stringify(last.checkers)}`);
+  console.log(`final-areas=${last.checkers.length}`);
+  console.log(`final-count=${last.reviewers.length}`);
 }

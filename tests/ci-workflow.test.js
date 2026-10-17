@@ -100,11 +100,22 @@ test("burn-in runs only when a pull request changes a browser spec, and check re
   );
 });
 
+/**
+ * A job's condition, the anchored one it names when it names one.
+ * @param {string} condition
+ */
+const readCondition = (condition) =>
+  condition.startsWith("*")
+    ? (readRepoFile(".github/workflows/ci.yml").match(
+        new RegExp(`&${condition.slice(1)} (.*)$`, "m"),
+      )?.[1] ?? "")
+    : condition;
+
 // GitHub skips a job once any job before it in its chain of needs was skipped, as passed is on
 // every push to a pull request, unless its condition checks the run's status itself.
 test("each job that needs another runs even when one before it was skipped", () => {
   const skippedWithTheirChain = listJobs().filter((job) => {
-    const condition = readJob(job).match(/^ {4}if: (.*)$/m)?.[1] ?? "success()";
+    const condition = readCondition(readJob(job).match(/^ {4}if: (.*)$/m)?.[1] ?? "success()");
     return /^ {4}needs:/m.test(readJob(job)) && !/!cancelled\(\)|always\(\)/.test(condition);
   });
   assert.deepEqual(skippedWithTheirChain, []);
@@ -154,37 +165,61 @@ test("a draft's run never records its code as reviewed", () => {
   );
 });
 
-// A review reads a change of any size in full: each share's reads are checked, and review fails
-// on any file left unread, from a guide the pull request can't change, on a named model.
-test("the review reads every share in full and fails on any file left unread", () => {
+// A review reads a change of any size in full, area by area: each reviewer's reads are checked,
+// each area's cases are checked before anything is posted, and review fails on anything due left
+// unread or unchecked, from a guide the pull request can't change, on a named model.
+test("the review reads every area in full, checks before it posts, and fails on anything left undone", () => {
+  const plan = readJob("review-plan");
+  assert.match(plan, /node worker\/plan-review\.mjs \.review >> "\$GITHUB_OUTPUT"/);
+  assert.match(plan, /git show "origin\/\$DEFAULT_BRANCH:REVIEW\.md" > \.review\/REVIEW\.md/);
+  assert.match(plan, /fetch-depth: 0/);
+  const find = readJob("review-find");
+  assert.match(find, /include: \$\{\{ fromJSON\(needs\.review-plan\.outputs\.reviewers/);
+  assert.match(find, /--model claude-opus-5-5/);
+  assert.match(find, /disableAllHooks/);
   assert.match(
-    readJob("review-plan"),
-    /node worker\/plan-review\.mjs \.review >> "\$GITHUB_OUTPUT"/,
+    find,
+    /node worker\/judge-review\.mjs find \.review "\$STAGE" "\$AREA" "\$KIND" >> "\$GITHUB_OUTPUT"/,
   );
-  const share = readJob("review-share");
-  assert.match(share, /include: \$\{\{ fromJSON\(needs\.review-plan\.outputs\.shares/);
-  assert.match(share, /git show FETCH_HEAD:REVIEW\.md > \.review\/REVIEW\.md/);
-  assert.match(share, /--model claude-opus-5-5/);
-  assert.match(share, /disableAllHooks/);
+  assert.match(find, /if: \$\{\{ !cancelled\(\) && steps\.first\.outputs\.unread != '' \}\}/);
   assert.match(
-    share,
-    /node worker\/judge-review\.mjs share \.review "\$SHARE" >> "\$GITHUB_OUTPUT"/,
-  );
-  assert.match(share, /if: \$\{\{ !cancelled\(\) && steps\.first\.outputs\.unread != '' \}\}/);
-  const across = readJob("review-across");
-  assert.match(across, /node worker\/judge-review\.mjs across \.review/);
-  assert.match(across, /if: steps\.review\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
-  assert.match(
-    share,
+    find,
     /if: \$\{\{ !cancelled\(\) && steps\.last\.outputs\.unread != '' \}\}\n\s+run: \|\n.*\n\s+exit 1/,
   );
-  const review = readJob("review");
+  const check = readJob("review-check");
+  assert.match(check, /node worker\/judge-review\.mjs candidates \.review "\$STAGE" "\$AREA"/);
+  assert.match(check, /if: steps\.check\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+  const post = readJob("review-post");
+  assert.match(post, /node worker\/post-review\.mjs \.review "\$STAGE" >> "\$GITHUB_OUTPUT"/);
   assert.match(
-    review,
-    /needs: \[review-plan, review-share, review-across\]\n\s+if: \$\{\{ !cancelled\(\) \}\}/,
+    post,
+    /if: env\.AREAS > 1 && steps\.across\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/,
   );
+  const review = readJob("review");
   assert.match(review, /run: node worker\/judge-review\.mjs summary \.review/);
   assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+});
+
+// Only the posting steps hold a token that writes to the pull request; every Claude reviewer and
+// checker reads it alone, and none of them is handed a tool that comments.
+test("no reviewer or checker can write to the pull request", () => {
+  for (const job of ["review-find", "review-check", "review-final-find", "review-final-check"])
+    assert.doesNotMatch(readJob(job), /pull-requests: write/);
+  assert.doesNotMatch(readRepoFile(".github/workflows/ci.yml"), /create_inline_comment/);
+});
+
+// The last read of the whole change runs only after a review of a push posted nothing, with the
+// same steps as the first.
+test("the last read of the whole change runs only once a review of a push posted nothing", () => {
+  assert.match(
+    readJob("review-final-find"),
+    /if: &final-due \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.stage == 'push' && needs\.review-post\.outputs\.posted == '0' && needs\.review-plan\.outputs\.final-count > 0 \}\}/,
+  );
+  assert.match(readJob("review-final-check"), /if: \*final-due/);
+  assert.match(readJob("review-final-post"), /if: \*final-due/);
+  assert.match(readJob("review-final-find"), /steps: \*find-steps/);
+  assert.match(readJob("review-final-check"), /steps: \*check-steps/);
+  assert.match(readJob("review-final-post"), /steps: \*post-steps/);
 });
 
 // A label change skips the review only when a run already passed it on exactly this code, so

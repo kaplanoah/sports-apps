@@ -830,20 +830,25 @@ When a step says to go back to an earlier step, continue in order from there.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
-7. CI's review reads each push to the PR in full, by the root's `REVIEW.md` as `main` has it:
-   it splits the change into shares small enough for one reviewer to read every line of (`worker/plan-review.mjs`),
-   has Claude review every share at once in `review-share`, and then, for more than one share, across them in `review-across`,
-   each posting its findings as comments on the lines they concern.
+7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
+   It splits the change into areas by what the files are about, each test with its code (`worker/plan-review.mjs`),
+   and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests, and list every case they find.
+   A checker for each area confirms each case against the code, merges repeats, and weighs it,
+   and a check across areas posts only what the checkers confirmed, each on the line it concerns.
+   The first review reads the whole change, and each push after it is reviewed for what that push changed.
+   A review that finds nothing reads the whole change once more, one reviewer an area, and the summary names what that pass found.
+   A push that changes only what a merge of its base brings in isn't reviewed again.
    The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
    how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
    and anything it read but couldn't judge (`worker/judge-review.mjs`).
    It fails when any changed file went unread, naming each.
    If the summary names something it couldn't judge, tell the user.
-   Answer every finding: either fix it and go back to step 2, or reply on the comment saying why not.
-   The push with a fix is reviewed again.
-   - If `review` fails, read its summary and the log of the failed `review-share` or `review-across` job, which shows each try's turns and tool calls.
+   Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its comment saying why not.
+   A Nit never gets a push of its own.
+   After three reviews in a row with an Important finding, or when a finding you declined comes back, stop and ask the user.
+   - If `review` fails, read its summary and the log of the failed `review-find`, `review-check`, or `review-post` job, which shows each try's turns and tool calls.
      If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
-     Otherwise don't reproduce it locally or re-run it: each share already tried twice, and the check across them once.
+     Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and each checker and the check across areas once.
      Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
      where a review stalled, or a re-run that failed too.
      `check` can't pass until the job does.

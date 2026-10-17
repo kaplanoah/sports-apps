@@ -4,16 +4,27 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  FINAL_KIND,
+  KINDS,
   PART_BYTES,
   PART_LINES,
+  chooseStage,
+  describeChange,
   explainUnread,
-  packShares,
+  findTestedFile,
+  listAreas,
+  listChangedSince,
+  listJobs,
+  listStaleNames,
+  nameCodeArea,
   planReview,
   readChangedFiles,
   splitDiffByFile,
+  splitEvenly,
   splitIntoParts,
   wrapLongLine,
   writeReview,
+  writeStage,
 } from "../worker/plan-review.mjs";
 
 /**
@@ -63,15 +74,6 @@ test("recorded data, the lockfile, and binary files go unread, but a fixture's r
   assert.equal(explainUnread({ path: "shared/page/sheet.js", lines: 9 }), null);
 });
 
-test("an icon's drawing and a minified library go unread, as a tool wrote them", () => {
-  const plan = planReview("1\t0\tapps/mlb/page/icon.svg\n1\t0\tapps/mlb/page/js/sortable.min.js\n");
-  assert.deepEqual(
-    plan.unread.map((file) => file.why),
-    Array(2).fill("a drawing or a minified library, written by a tool"),
-  );
-  assert.deepEqual(plan.shares, []);
-});
-
 test("a line longer than Read returns whole goes on in lines that each fit, with nothing lost", () => {
   const long = '+const key = "' + "x".repeat(4500) + '";';
   const lines = wrapLongLine(long);
@@ -91,53 +93,6 @@ test("a line longer than Read returns whole goes on in lines that each fit, with
   const diff = diffFile("worker/a.mjs", [1]).replace("+line 0", long);
   const [part] = splitIntoParts(diff);
   assert.ok(part.split("\n").every((line) => line.length <= 2000));
-});
-
-test("shares keep a folder's files together in path order, up to a share's lines", () => {
-  const shares = packShares([
-    { path: "shared/page/sheet.js", lines: 300 },
-    { path: "apps/wnba/page/js/app.js", lines: 500 },
-    { path: "apps/mlb/page/js/app.js", lines: 400 },
-    { path: "apps/mlb/page/js/games-view.js", lines: 300 },
-  ]);
-  assert.deepEqual(shares, [
-    {
-      share: 1,
-      files: ["apps/mlb/page/js/app.js", "apps/mlb/page/js/games-view.js"],
-      lines: 700,
-    },
-    { share: 2, files: ["apps/wnba/page/js/app.js", "shared/page/sheet.js"], lines: 800 },
-  ]);
-});
-
-test("a file bigger than a share is a share of its own", () => {
-  const shares = packShares([
-    { path: "a.js", lines: 10 },
-    { path: "b.js", lines: 2000 },
-    { path: "c.js", lines: 10 },
-  ]);
-  assert.deepEqual(
-    shares.map((share) => share.files),
-    [["a.js"], ["b.js"], ["c.js"]],
-  );
-});
-
-test("a change of any size takes at most twenty shares, each bigger to hold it", () => {
-  const files = Array.from({ length: 300 }, (_, index) => ({
-    path: `file-${String(index).padStart(3, "0")}.js`,
-    lines: ((index * 7919) % 400) + 20,
-  }));
-  const shares = packShares(files);
-  assert.ok(shares.length <= 20);
-  assert.equal(shares.flatMap((share) => share.files).length, 300);
-});
-
-test("a plan reads every file but the unread ones, and names why each goes unread", () => {
-  const plan = planReview("4\t1\tshared/page/sheet.js\n900\t0\tapps/mlb/tests/fixtures/x.json\n");
-  assert.deepEqual(plan.shares, [{ share: 1, files: ["shared/page/sheet.js"], lines: 5 }]);
-  assert.deepEqual(plan.unread, [
-    { path: "apps/mlb/tests/fixtures/x.json", why: "a test's recorded data" },
-  ]);
 });
 
 test("a diff splits into each file's, a deleted file's under the path it had", () => {
@@ -165,14 +120,6 @@ test("a path with a space is found under its name, though git ends its header wi
     "",
   ].join("\n");
   assert.deepEqual([...splitDiffByFile(spaced).keys()], ["a b.js"]);
-});
-
-test("a changed file the diff has no part for stops the review rather than counting as read", () => {
-  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
-  assert.throws(
-    () => writeReview(folder, { numstat: "1\t0\tmissing.js\n", diff: diffFile("other.js", [1]) }),
-    /The diff has no part for missing\.js/,
-  );
 });
 
 test("a file's diff is one part while it fits, and splits between hunks once it doesn't", () => {
@@ -207,28 +154,299 @@ test("a hunk longer than a part is cut into parts, with no line lost", () => {
   assert.equal(parts.join(""), diff);
 });
 
-test("the review is written as each file's parts, the plan, and the index", () => {
+const REPO = [
+  "apps/mlb/page/js/season-games.js",
+  "apps/mlb/page/js/snapshot.js",
+  "apps/mlb/worker/src/snapshot.js",
+  "apps/mlb/worker/src/season-updater.js",
+  "shared/page/sheet.js",
+  "worker/plan-review.mjs",
+];
+
+test("each file of code belongs to the area of what it's about", () => {
+  assert.equal(nameCodeArea("apps/mlb/page/js/app.js"), "mlb page");
+  assert.equal(nameCodeArea("apps/wnba/worker/src/store.js"), "wnba Worker");
+  assert.equal(nameCodeArea("shared/page/sheet.css"), "shared page");
+  assert.equal(nameCodeArea("shared/worker/push.js"), "shared Worker");
+  assert.equal(nameCodeArea("AGENTS.md"), "docs");
+  assert.equal(nameCodeArea(".github/workflows/ci.yml"), "tooling");
+  assert.equal(nameCodeArea("worker/deploy.mjs"), "tooling");
+});
+
+test("a test goes with the file of its name, in its own app, the one the change changes first", () => {
+  assert.equal(
+    findTestedFile("apps/mlb/tests/season-games.test.js", [], REPO),
+    "apps/mlb/page/js/season-games.js",
+  );
+  assert.equal(
+    findTestedFile("apps/mlb/tests/season-updater.test.js", [], REPO),
+    "apps/mlb/worker/src/season-updater.js",
+  );
+  assert.equal(
+    findTestedFile(
+      "apps/mlb/tests/snapshot.test.js",
+      ["apps/mlb/worker/src/snapshot.js", "apps/mlb/tests/snapshot.test.js"],
+      REPO,
+    ),
+    "apps/mlb/worker/src/snapshot.js",
+  );
+  assert.equal(findTestedFile("tests/plan-review.test.js", [], REPO), "worker/plan-review.mjs");
+  assert.equal(findTestedFile("tests/browser/sheet-stack.spec.mjs", [], REPO), null);
+  assert.equal(findTestedFile("apps/wnba/tests/season-games.test.js", [], REPO), null);
+});
+
+test("areas keep each test beside its code, and a test of no file joins its app's page", () => {
+  const areas = listAreas(
+    [
+      { path: "apps/mlb/page/js/season-games.js", lines: 300 },
+      { path: "apps/mlb/tests/season-games.test.js", lines: 100 },
+      { path: "apps/mlb/tests/browser/games-list.spec.mjs", lines: 200 },
+      { path: "apps/mlb/worker/src/season-updater.js", lines: 200 },
+      { path: "apps/mlb/tests/season-updater.test.js", lines: 50 },
+    ],
+    REPO,
+  );
+  assert.deepEqual(
+    areas.map(({ name, files }) => ({ name, files })),
+    [
+      {
+        name: "mlb Worker",
+        files: ["apps/mlb/worker/src/season-updater.js", "apps/mlb/tests/season-updater.test.js"],
+      },
+      {
+        name: "mlb page",
+        files: [
+          "apps/mlb/page/js/season-games.js",
+          "apps/mlb/tests/season-games.test.js",
+          "apps/mlb/tests/browser/games-list.spec.mjs",
+        ],
+      },
+    ],
+  );
+});
+
+test("small areas are read together, and a big one in parts in path order", () => {
+  const areas = listAreas(
+    [
+      { path: "AGENTS.md", lines: 10 },
+      { path: "worker/deploy.mjs", lines: 20 },
+      { path: "shared/page/a.js", lines: 1500 },
+      { path: "shared/page/b.js", lines: 1500 },
+    ],
+    [],
+  );
+  assert.deepEqual(
+    areas.map(({ area, name, files }) => ({ area, name, files })),
+    [
+      { area: 1, name: "shared page, part 1", files: ["shared/page/a.js"] },
+      { area: 2, name: "shared page, part 2", files: ["shared/page/b.js"] },
+      { area: 3, name: "small changes", files: ["AGENTS.md", "worker/deploy.mjs"] },
+    ],
+  );
+});
+
+test("a change of any size takes at most twelve areas, each bigger to hold it", () => {
+  const files = Array.from({ length: 300 }, (_, index) => ({
+    path: `shared/page/file-${String(index).padStart(3, "0")}.js`,
+    lines: ((index * 7919) % 400) + 20,
+  }));
+  const areas = listAreas(files, []);
+  assert.ok(areas.length <= 12);
+  assert.equal(areas.flatMap((area) => area.files).length, 300);
+});
+
+test("a plan reads every file but the unread ones, and names why each goes unread", () => {
+  const plan = planReview(
+    "4\t1\tshared/page/sheet.js\n900\t0\tapps/mlb/tests/fixtures/x.json\n1\t0\ticon.svg\n",
+    REPO,
+  );
+  assert.deepEqual(plan.areas, [
+    { area: 1, name: "shared page", files: ["shared/page/sheet.js"], lines: 5 },
+  ]);
+  assert.deepEqual(plan.unread, [
+    { path: "apps/mlb/tests/fixtures/x.json", why: "a test's recorded data" },
+    { path: "icon.svg", why: "a drawing or a minified library, written by a tool" },
+  ]);
+});
+
+test("each area has a reviewer for each kind of problem, two for bugs, and one checker", () => {
+  const { reviewers, checkers } = listJobs([{ area: 1, name: "mlb page", lines: 40 }], KINDS);
+  assert.deepEqual(
+    reviewers.map((reviewer) => reviewer.kind),
+    ["bugs", "bugs-from-end", "rules", "tests"],
+  );
+  assert.ok(reviewers.every((reviewer) => reviewer.focus.includes("REVIEW.md")));
+  assert.deepEqual(checkers, [{ area: 1, name: "mlb page", lines: 40 }]);
+  assert.deepEqual(
+    listJobs([{ area: 1, name: "mlb page", lines: 40 }], [FINAL_KIND]).reviewers.map(
+      (reviewer) => reviewer.kind,
+    ),
+    ["all"],
+  );
+});
+
+test("a change reads the same wherever a merge of the base moved it", () => {
+  const before = diffFile("a.js", [2]);
+  const moved = before.replace("@@ -1,0 +1,2 @@", "@@ -41,0 +41,2 @@");
+  assert.equal(describeChange(before), describeChange(moved));
+  assert.notEqual(describeChange(before), describeChange(diffFile("a.js", [3])));
+});
+
+test("the files a push changed are those whose change differs, never those a merge only moved", () => {
+  const earlier = diffFile("a.js", [2]) + diffFile("b.js", [1]) + diffFile("gone.js", [1]);
+  const now =
+    diffFile("a.js", [2]).replace("@@ -1,0", "@@ -9,0") +
+    diffFile("b.js", [1, 1]) +
+    diffFile("new.js", [1]);
+  assert.deepEqual(listChangedSince(earlier, now), ["b.js", "gone.js", "new.js"]);
+  assert.deepEqual(listChangedSince(earlier, earlier), []);
+});
+
+test("the first review reads the whole change, a later one what changed, and a merge alone nothing", () => {
+  const listChanged = () => ["a.js"];
+  assert.deepEqual(chooseStage({ reviewedHead: null, isOnBranch: false, listChanged }), {
+    stage: "first",
+  });
+  const head = "a".repeat(40);
+  assert.deepEqual(chooseStage({ reviewedHead: head, isOnBranch: false, listChanged }), {
+    stage: "first",
+  });
+  assert.deepEqual(chooseStage({ reviewedHead: head, isOnBranch: true, listChanged }), {
+    stage: "push",
+    files: ["a.js"],
+  });
+  assert.deepEqual(chooseStage({ reviewedHead: head, isOnBranch: true, listChanged: () => [] }), {
+    stage: "none",
+  });
+});
+
+test("the stale names are what the change removed that the repo still names, and nothing it kept", () => {
+  const diff = [
+    "-export function serveSnapshot(request) {",
+    "+export function loadSnapshot(request) {",
+    "-export const KEPT_NAME = 1;",
+    "+export const KEPT_NAME = 2;",
+    "-export const STILL_DEFINED = 1;",
+    "-function localHelper() {",
+  ].join("\n");
+  /** @type {Record<string, string[]>} */
+  const repo = {
+    "STILL_DEFINED:false": ["shared/page/other.js:3:export const STILL_DEFINED = 1;"],
+    "serveSnapshot:true": ["AGENTS.md:351:  It serves the live snapshot (`serveSnapshot`)"],
+    "old-records.js:true": ["AGENTS.md:197:  (`worker/src/old-records.js`),"],
+  };
+  const grep = (/** @type {string} */ pattern, /** @type {boolean} */ isWord) => {
+    const name = isWord ? pattern : (pattern.match(/\)(\w+)\\b$/)?.[1] ?? "");
+    return repo[`${name}:${isWord}`] ?? [];
+  };
+  assert.deepEqual(listStaleNames(diff, grep, ["apps/mlb/worker/src/old-records.js"]), [
+    {
+      name: "serveSnapshot",
+      hits: ["AGENTS.md:351:  It serves the live snapshot (`serveSnapshot`)"],
+    },
+    { name: "old-records.js", hits: ["AGENTS.md:197:  (`worker/src/old-records.js`),"] },
+  ]);
+});
+
+test("a changed file the diff has no part for stops the review rather than counting as read", () => {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
-  const { shares, unread } = writeReview(folder, {
+  assert.throws(
+    () =>
+      writeStage(folder, "first", {
+        numstat: "1\t0\tmissing.js\n",
+        diff: diffFile("other.js", [1]),
+        repoFiles: [],
+      }),
+    /The diff has no part for missing\.js/,
+  );
+});
+
+test("a stage is written as each file's parts under the stage's folder, with its areas", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  const { areas, unread } = writeStage(folder, "first", {
     numstat: "1200\t0\tshared/page/sheet.js\n2\t0\tshared/page/tabs.js\n-\t-\ticon.png\n",
     diff: diffFile("shared/page/sheet.js", [600, 600]) + diffFile("shared/page/tabs.js", [2]),
+    repoFiles: [],
   });
-  assert.deepEqual(shares[0].partsByFile, {
+  assert.deepEqual(areas[0].partsByFile, {
     "shared/page/sheet.js": [
-      "diffs/shared/page/sheet.js.part-1.diff",
-      "diffs/shared/page/sheet.js.part-2.diff",
+      "first/shared/page/sheet.js.part-1.diff",
+      "first/shared/page/sheet.js.part-2.diff",
     ],
-  });
-  assert.deepEqual(shares[1].partsByFile, {
-    "shared/page/tabs.js": ["diffs/shared/page/tabs.js.diff"],
+    "shared/page/tabs.js": ["first/shared/page/tabs.js.diff"],
   });
   assert.deepEqual(unread, [{ path: "icon.png", why: "a binary file" }]);
-  assert.match(readFileSync(join(folder, "diffs/shared/page/tabs.js.diff"), "utf8"), /^diff --git/);
-  assert.deepEqual(JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")).shares, shares);
-  const index = readFileSync(join(folder, "files.md"), "utf8");
-  assert.match(
-    index,
-    /## Share 2\n\n- shared\/page\/tabs\.js: diffs\/shared\/page\/tabs\.js\.diff/,
+  assert.match(readFileSync(join(folder, "first/shared/page/tabs.js.diff"), "utf8"), /^diff --git/);
+});
+
+test("a review of a push reads what it changed, and keeps the whole change for the last read", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  /** @type {string[][]} */
+  const ranges = [];
+  const readDiff = (/** @type {string[]} */ range, /** @type {string[]} */ files = []) => {
+    ranges.push([...range, ...files]);
+    return files.length
+      ? { numstat: "3\t0\tshared/page/sheet.js\n", diff: diffFile("shared/page/sheet.js", [3]) }
+      : {
+          numstat: "3\t0\tshared/page/sheet.js\n1\t0\tworker/deploy.mjs\n",
+          diff: diffFile("shared/page/sheet.js", [3]) + diffFile("worker/deploy.mjs", [1]),
+        };
+  };
+  const since = "b".repeat(40);
+  const plan = writeReview(folder, {
+    choice: { stage: "push", files: ["shared/page/sheet.js"] },
+    since,
+    readDiff,
+    repoFiles: [],
+    stale: [],
+  });
+  assert.deepEqual(ranges, [
+    [since, "HEAD^2", "shared/page/sheet.js"],
+    ["HEAD^1", "HEAD"],
+  ]);
+  assert.equal(plan.stage, "push");
+  assert.equal(plan.since, since);
+  assert.deepEqual(
+    plan.areas.map((area) => area.files),
+    [["shared/page/sheet.js"]],
   );
-  assert.match(index, /## Not read\n\n- icon\.png: a binary file/);
+  assert.deepEqual(
+    plan.final.map((area) => area.files),
+    [["shared/page/sheet.js", "worker/deploy.mjs"]],
+  );
+  assert.match(readFileSync(join(folder, "push.md"), "utf8"), /only what the pushes since/);
+  assert.match(readFileSync(join(folder, "final.md"), "utf8"), /## Area 1: small changes/);
+  assert.deepEqual(JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")), plan);
+  assert.match(readFileSync(join(folder, "stale-names.md"), "utf8"), /Nothing the change removed/);
+});
+
+test("a push that changes only what a merge brings in reads nothing", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  const plan = writeReview(folder, {
+    choice: { stage: "none" },
+    since: "b".repeat(40),
+    readDiff: () => assert.fail("nothing is read"),
+    repoFiles: [],
+    stale: [],
+  });
+  assert.deepEqual(plan, { stage: "none", since: null, areas: [], unread: [], final: [] });
+});
+
+test("a big area splits into as few parts as it needs, each near an even share, with no part left over", () => {
+  const sizes = [1000, 1000, 1000, 200];
+  assert.deepEqual(
+    splitEvenly(sizes, (size) => size, 2),
+    [
+      [1000, 1000],
+      [1000, 200],
+    ],
+  );
+  assert.deepEqual(
+    splitEvenly([3000, 100, 100, 100], (size) => size, 2),
+    [[3000], [100, 100, 100]],
+  );
+  assert.deepEqual(
+    splitEvenly([0, 0], (size) => size, 1),
+    [[0, 0]],
+  );
 });

@@ -4,17 +4,18 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  SUMMARY_MARKER,
   coversEveryLine,
   findUnreadParts,
+  gatherCandidates,
   judgeReview,
-  listPostedWeights,
+  listDueStages,
   listReads,
   postSummary,
   readAnswer,
-  recordShareTry,
+  recordFindTry,
 } from "../worker/judge-review.mjs";
 import { writeReview } from "../worker/plan-review.mjs";
+import { SUMMARY_MARKER, readReviewedHead } from "../worker/review-state.mjs";
 
 /**
  * The SDK's messages for a run that read each file as given, its Read numbered by its place.
@@ -97,255 +98,292 @@ test("a part read in pieces over two tries is read, and one never opened isn't",
   ]);
 });
 
-test("a reviewer's answer is empty when it gave none or gave something else", () => {
-  const empty = { notes: [], unjudged: [] };
-  assert.deepEqual(readAnswer(undefined), empty);
-  assert.deepEqual(readAnswer("not json"), empty);
-  assert.deepEqual(readAnswer('{"notes": "many"}'), empty);
-  assert.deepEqual(readAnswer('{"notes": ["see the WNBA copy"]}'), {
+test("an answer is empty when it gave none or gave something else", () => {
+  const empty = { items: [], unjudged: [] };
+  assert.deepEqual(readAnswer(undefined, "candidates"), empty);
+  assert.deepEqual(readAnswer("not json", "candidates"), empty);
+  assert.deepEqual(readAnswer('{"candidates": "many"}', "candidates"), empty);
+  assert.deepEqual(readAnswer('{"findings": [{"verdict": "confirmed"}]}', "findings"), {
     ...empty,
-    notes: ["see the WNBA copy"],
+    items: [{ verdict: "confirmed" }],
   });
 });
 
-test("a share's tries are kept, and only the parts no try read stay unread", () => {
+/** @param {string[]} paths */
+const diffOf = (paths) =>
+  [
+    ...paths.flatMap((path) => [
+      `diff --git a/${path} b/${path}`,
+      `--- a/${path}`,
+      `+++ b/${path}`,
+      "@@ -1,0 +1 @@",
+      "+x",
+    ]),
+    "",
+  ].join("\n");
+
+/**
+ * A folder holding a first review's plan of these files, which share one area.
+ * @param {string[]} paths
+ */
+function planFirstReview(paths) {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   writeReview(folder, {
-    numstat: "1\t0\ta.js\n1\t0\tb.js\n",
-    diff: [
-      ...["a.js", "b.js"].flatMap((path) => [
-        `diff --git a/${path} b/${path}`,
-        `--- a/${path}`,
-        `+++ b/${path}`,
-        "@@ -1,0 +1 @@",
-        "+x",
-      ]),
-      "",
-    ].join("\n"),
+    choice: { stage: "first" },
+    since: null,
+    readDiff: () => ({
+      numstat: paths.map((path) => `1\t0\t${path}\n`).join(""),
+      diff: diffOf(paths),
+    }),
+    repoFiles: [],
+    stale: [],
   });
+  return folder;
+}
+
+test("a reviewer's tries are kept, and only the parts no try read stay unread", () => {
+  const folder = planFirstReview(["shared/page/a.js", "shared/page/b.js"]);
   const execution = join(folder, "execution.json");
   const runOn = (/** @type {string} */ part) =>
     writeFileSync(execution, JSON.stringify(runReading([{ file_path: resolve(folder, part) }])));
-  runOn("diffs/a.js.diff");
+  const reviewer = { stage: "first", area: 1, kind: "rules" };
+  runOn("first/shared/page/a.js.diff");
+  const candidate = { path: "shared/page/a.js", line: 1, claim: "a copy of b.js's rule" };
   assert.deepEqual(
-    recordShareTry(folder, 1, {
+    recordFindTry(folder, reviewer, {
       EXECUTION_FILE: execution,
-      STRUCTURED_OUTPUT: '{"notes":["a.js reads the store the other app writes"]}',
+      STRUCTURED_OUTPUT: JSON.stringify({ candidates: [candidate], unjudged: [] }),
     }),
-    ["diffs/b.js.diff"],
+    ["first/shared/page/b.js.diff"],
   );
-  runOn("diffs/b.js.diff");
-  assert.deepEqual(recordShareTry(folder, 1, { EXECUTION_FILE: execution }), []);
-  const record = JSON.parse(readFileSync(join(folder, "share-1.json"), "utf8"));
+  runOn("first/shared/page/b.js.diff");
+  assert.deepEqual(recordFindTry(folder, reviewer, { EXECUTION_FILE: execution }), []);
+  const record = JSON.parse(readFileSync(join(folder, "find-first-1-rules.json"), "utf8"));
   assert.equal(record.tries.length, 2);
-  assert.deepEqual(record.tries[0].answer.notes, ["a.js reads the store the other app writes"]);
+  assert.deepEqual(record.tries[0].answer.items, [candidate]);
 });
 
 test("a try that left no execution file read nothing", () => {
-  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
-  writeReview(folder, {
-    numstat: "1\t0\ta.js\n",
-    diff: "diff --git a/a.js b/a.js\n--- a/a.js\n+++ b/a.js\n@@ -1,0 +1 @@\n+x\n",
-  });
-  assert.deepEqual(recordShareTry(folder, 1, { EXECUTION_FILE: join(folder, "none.json") }), [
-    "diffs/a.js.diff",
-  ]);
+  const folder = planFirstReview(["shared/page/a.js"]);
+  assert.deepEqual(
+    recordFindTry(
+      folder,
+      { stage: "first", area: 1, kind: "bugs" },
+      { EXECUTION_FILE: join(folder, "none.json") },
+    ),
+    ["first/shared/page/a.js.diff"],
+  );
 });
+
+test("an area's candidates are every reviewer's, over every try, each with an id of its own", () => {
+  const triesOf = (/** @type {object[][]} */ lists) => ({
+    tries: lists.map((items) => ({ reads: [], answer: { items, unjudged: [] } })),
+  });
+  assert.deepEqual(
+    gatherCandidates([
+      { kind: "bugs", ...triesOf([[{ claim: "one" }], [{ claim: "two" }]]) },
+      { kind: "tests", ...triesOf([[{ claim: "three" }]]) },
+    ]),
+    [
+      { id: "bugs-1", claim: "one" },
+      { id: "bugs-2", claim: "two" },
+      { id: "tests-1", claim: "three" },
+    ],
+  );
+});
+
+const HEAD = "c".repeat(40);
+const EARLIER = "e".repeat(40);
+const KIND_NAMES = ["bugs", "bugs-from-end", "rules", "tests"];
+
+const AREAS = [
+  { area: 1, name: "mlb page", files: ["a.js"], partsByFile: { "a.js": ["first/a.js.diff"] } },
+  {
+    area: 2,
+    name: "shared page",
+    files: ["b.js", "c.js"],
+    partsByFile: {
+      "b.js": ["first/b.js.part-1.diff", "first/b.js.part-2.diff"],
+      "c.js": ["first/c.js.diff"],
+    },
+  },
+];
 
 const PLAN = {
-  shares: [
-    { share: 1, files: ["a.js"], partsByFile: { "a.js": ["diffs/a.js.diff"] } },
-    {
-      share: 2,
-      files: ["b.js", "c.js"],
-      partsByFile: {
-        "b.js": ["diffs/b.js.part-1.diff", "diffs/b.js.part-2.diff"],
-        "c.js": ["diffs/c.js.diff"],
-      },
-    },
-  ],
+  stage: "first",
+  since: null,
+  areas: AREAS,
   unread: [{ path: "package-lock.json", why: "the lockfile, which npm writes" }],
+  final: [],
 };
 
-/** @param {object} answer */
-const recordOf = (answer, unread = /** @type {string[]} */ ([])) => ({
-  tries: [{ reads: [], answer: { notes: [], unjudged: [], ...answer } }],
-  unread,
-});
+/**
+ * Every record a stage's jobs keep once each finished, with these changes.
+ * @param {string} stage
+ * @param {typeof AREAS} areas
+ * @param {Record<string, any>} [changes] by record name, undefined to leave one out
+ */
+function finishStage(stage, areas, changes = {}) {
+  const kinds = stage === "final" ? ["all"] : KIND_NAMES;
+  /** @type {Record<string, any>} */
+  const records = { [`post-${stage}.json`]: { weights: [], unjudged: [] } };
+  for (const { area } of areas) {
+    records[`check-${stage}-${area}.json`] = { items: [], unjudged: [] };
+    for (const kind of kinds)
+      records[`find-${stage}-${area}-${kind}.json`] = {
+        stage,
+        area,
+        kind,
+        tries: [{ reads: [], answer: { items: [], unjudged: [] } }],
+        unread: [],
+      };
+  }
+  const merged = { ...records, ...changes };
+  return new Map(Object.entries(merged).filter(([, record]) => record !== undefined));
+}
 
-test("a review that read every file passes, counting its findings by weight", () => {
-  const { isComplete, body } = judgeReview({
-    sha: "abc123",
-    plan: PLAN,
-    records: new Map([
-      [1, recordOf({})],
-      [2, recordOf({ unjudged: [{ file: "c.js", why: "only an iPhone shows it" }] })],
-    ]),
-    across: { notes: [], unjudged: [] },
-    weights: ["Important", "Nit", "Important"],
+test("a review that read and checked everything passes, and moves the reviewed head on", () => {
+  const records = finishStage("first", AREAS, {
+    "check-first-2.json": {
+      items: [{ verdict: "confirmed" }, { verdict: "rejected" }, { verdict: "rejected" }],
+      unjudged: [{ file: "c.js", why: "only an iPhone shows it" }],
+    },
+    "post-first.json": { weights: ["Important", "Nit", "Important"], unjudged: [] },
   });
+  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: null, plan: PLAN, records });
   assert.ok(isComplete);
   assert.ok(body.startsWith(SUMMARY_MARKER));
-  assert.match(body, /Claude reviewed abc123 in 2 shares: 3 findings \(2 Important, 1 Nit\)/);
+  assert.equal(readReviewedHead(body), HEAD);
+  assert.match(
+    body,
+    /Claude reviewed c{40}: it read the whole change in 2 areas, four reviewers an area, and posted 3 findings \(2 Important, 1 Nit\)/,
+  );
+  assert.match(body, /the checkers turned down 2 of 3 candidates/);
   assert.match(body, /Read in full: 3 of 3 changed files to read\./);
   assert.match(body, /- `package-lock.json`: the lockfile, which npm writes/);
   assert.match(body, /- `c.js`: only an iPhone shows it/);
   assert.doesNotMatch(body, /fails/);
 });
 
-test("a file with a part its reviewer never read fails the review and is named", () => {
+test("a file a reviewer didn't read in full fails the review, keeping the earlier reviewed head", () => {
+  const records = finishStage("first", AREAS, {
+    "find-first-2-tests.json": {
+      stage: "first",
+      area: 2,
+      kind: "tests",
+      tries: [],
+      unread: ["first/b.js.part-2.diff"],
+    },
+  });
   const { isComplete, body } = judgeReview({
-    sha: "abc123",
+    sha: HEAD,
+    earlierHead: EARLIER,
     plan: PLAN,
-    records: new Map([
-      [1, recordOf({})],
-      [2, recordOf({}, ["diffs/b.js.part-2.diff"])],
-    ]),
-    across: { notes: [], unjudged: [] },
-    weights: [],
+    records,
   });
   assert.ok(!isComplete);
+  assert.equal(readReviewedHead(body), EARLIER);
   assert.match(body, /Read in full: 2 of 3 changed files/);
-  assert.match(body, /a reviewer didn't read every line of them, so the review fails/);
+  assert.match(body, /didn't read every line of them or didn't finish, so the review fails/);
   assert.match(body, /- `b.js`/);
   assert.doesNotMatch(body, /- `c.js`/);
 });
 
-test("a share that never finished leaves its files unread and fails the review", () => {
-  const { isComplete, body } = judgeReview({
-    sha: "abc123",
-    plan: PLAN,
-    records: new Map([[1, recordOf({})]]),
-    across: { notes: [], unjudged: [] },
-    weights: [],
+test("a reviewer, a checker, or the posting step that never finished fails the review, each named", () => {
+  const records = finishStage("first", AREAS, {
+    "find-first-1-bugs.json": undefined,
+    "check-first-2.json": undefined,
+    "post-first.json": undefined,
   });
+  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: null, plan: PLAN, records });
   assert.ok(!isComplete);
-  assert.match(body, /1 share didn't finish/);
-  assert.match(body, /- `b.js`\n- `c.js`/);
-});
-
-test("a share that never finished and one read only in part are each named for their own reason", () => {
-  const plan = {
-    shares: [
-      ...PLAN.shares,
-      { share: 3, files: ["d.js"], partsByFile: { "d.js": ["diffs/d.js.diff"] } },
-    ],
-    unread: [],
-  };
-  const { body } = judgeReview({
-    sha: "abc123",
-    plan,
-    records: new Map([
-      [2, recordOf({}, ["diffs/c.js.diff"])],
-      [3, recordOf({})],
-    ]),
-    across: { notes: [], unjudged: [] },
-    weights: [],
-  });
   assert.match(
     body,
-    /1 share didn't finish, so the review fails until a re-run reads them:\*\*\n- `a.js`\n\n/,
+    /- the bugs reviewer of mlb page\n- the checker of shared page\n- the step that posts the findings/,
   );
-  assert.match(
-    body,
-    /a reviewer didn't read every line of them, so the review fails until a re-run reads them:\*\*\n- `c.js`$/m,
-  );
+  assert.match(body, /- `a.js`/);
+  assert.equal(readReviewedHead(body), null);
 });
 
-test("with more than one share, the review fails until the check across them finishes", () => {
+test("a review of a push that posted nothing is due the last read of the whole change", () => {
+  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
+  const pushed = finishStage("push", [AREAS[0]]);
+  assert.deepEqual(
+    listDueStages(plan, pushed).map((due) => due.stage),
+    ["push", "final"],
+  );
+  const unfinished = judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records: pushed });
+  assert.ok(!unfinished.isComplete);
+  assert.match(unfinished.body, /- the all reviewer of mlb page/);
   const records = new Map([
-    [1, recordOf({})],
-    [2, recordOf({})],
+    ...pushed,
+    ...finishStage("final", AREAS, { "post-final.json": { weights: ["Nit"], unjudged: [] } }),
   ]);
-  const { isComplete, body } = judgeReview({
-    sha: "abc123",
-    plan: PLAN,
-    records,
-    across: null,
-    weights: [],
-  });
-  assert.ok(!isComplete);
-  assert.match(body, /The check across shares didn't finish/);
-  const oneShare = { shares: [PLAN.shares[0]], unread: [] };
-  const single = judgeReview({
-    sha: "abc123",
-    plan: oneShare,
-    records: new Map([[1, recordOf({})]]),
-    across: null,
-    weights: [],
-  });
-  assert.ok(single.isComplete);
-  assert.match(single.body, /in 1 share: no findings/);
+  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records });
+  assert.ok(isComplete);
+  assert.match(
+    body,
+    /it read what the pushes since eeeeeee changed, in 1 area, and posted no findings/,
+  );
+  assert.match(
+    body,
+    /Then it read the whole change once more, one reviewer an area, to find what the earlier reads missed: 1 finding \(1 Nit\)\./,
+  );
 });
 
-test("the findings counted are the review's own comments on the commit, each by its weight", () => {
-  const reviewer = "github-actions[bot]";
-  const comment = (/** @type {object} */ fields) => ({
-    user: { login: reviewer },
-    commit_id: "abc123",
-    original_commit_id: "abc123",
-    body: "**Important** The second try reads stale comments.",
-    ...fields,
+test("a review of a push that posted findings isn't due the last read", () => {
+  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
+  const records = finishStage("push", [AREAS[0]], {
+    "post-push.json": { weights: ["Important"], unjudged: [] },
   });
-  const weights = listPostedWeights(
-    [
-      comment({}),
-      comment({ body: "**Unsure:** A part may pass Read's token cap." }),
-      comment({ body: "**Nit** The comment overstates it.", commit_id: "def456" }),
-      comment({ original_commit_id: "old999" }),
-      comment({ user: { login: "kaplanoah" } }),
-      comment({ in_reply_to_id: 7 }),
-      comment({ body: "A comment with no weight" }),
-    ],
-    { sha: "abc123", author: reviewer },
+  assert.deepEqual(
+    listDueStages(plan, records).map((due) => due.stage),
+    ["push"],
   );
-  assert.deepEqual(weights, ["Important", "Unsure", "Nit"]);
+  assert.ok(judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records }).isComplete);
+});
+
+test("a push that changes only what a merge brings in passes and moves the reviewed head on", () => {
+  const { isComplete, body } = judgeReview({
+    sha: HEAD,
+    earlierHead: EARLIER,
+    plan: { stage: "none", since: null, areas: [], unread: [], final: [] },
+    records: new Map(),
+  });
+  assert.ok(isComplete);
+  assert.equal(readReviewedHead(body), HEAD);
+  assert.match(
+    body,
+    /read nothing new in c{40}: the pushes since eeeeeee change only what a merge of the base brings in/,
+  );
 });
 
 test("a change of only recorded data passes, naming what it left unread", () => {
   const { isComplete, body } = judgeReview({
-    sha: "abc123",
-    plan: { shares: [], unread: [{ path: "a.json", why: "a test's recorded data" }] },
+    sha: HEAD,
+    earlierHead: null,
+    plan: { ...PLAN, areas: [], unread: [{ path: "a.json", why: "a test's recorded data" }] },
     records: new Map(),
-    across: null,
-    weights: [],
   });
   assert.ok(isComplete);
-  assert.match(body, /Claude had nothing to read in abc123\.\n\nLeft unread/);
+  assert.match(body, /Claude had nothing to read in c{40}\.\n\nLeft unread/);
   assert.match(body, /- `a.json`: a test's recorded data/);
 });
 
-test("the summary updates the one an earlier review posted, or posts one, never another's comment", async () => {
+test("the summary updates the one an earlier review posted, or else posts one", async () => {
   /** @type {{ path: string, method?: string, body?: any }[]} */
   const calls = [];
-  /** @param {any[]} comments */
-  const fakeGitHub =
-    (comments) =>
-    async (/** @type {string} */ path, request = {}) => {
-      calls.push({ path, ...request });
-      return request.method ? {} : comments;
-    };
-  await postSummary(
-    fakeGitHub([
-      { id: 1, user: { login: "someone" }, body: `${SUMMARY_MARKER}\nnot the review's` },
-      { id: 2, user: { login: "claude[bot]" }, body: "Claude reviewed an older commit" },
-      { id: 3, user: { login: "github-actions[bot]" }, body: `${SUMMARY_MARKER}\nold` },
-    ]),
-    "7",
-    "new",
-  );
+  const callGitHub = async (/** @type {string} */ path, request = {}) => {
+    calls.push({ path, ...request });
+    return {};
+  };
+  await postSummary(callGitHub, "7", { id: 3 }, "new");
   assert.deepEqual(calls.at(-1), {
     path: "/issues/comments/3",
     method: "PATCH",
     body: { body: "new" },
   });
-  await postSummary(
-    fakeGitHub([
-      { id: 1, user: { login: "someone" }, body: `${SUMMARY_MARKER}\nnot the review's` },
-    ]),
-    "7",
-    "new",
-  );
+  await postSummary(callGitHub, "7", null, "new");
   assert.deepEqual(calls.at(-1), {
     path: "/issues/7/comments",
     method: "POST",

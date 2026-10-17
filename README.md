@@ -232,12 +232,15 @@ something doesn't match, point them to Cloudflare's
 runs the tests, in Node and in a browser, on every pull request, so merge once
 those pass and the pull request has no conflicts with `main`. If the repo has a
 `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret, Claude also reviews
-every push to a pull request in full, as [REVIEW.md](REVIEW.md) says: it splits
-the change into shares one reviewer can read every line of, reviews them all at
-once and then across them, comments on each finding's line, and keeps one
-summary comment up to date. The review is one of the checks that must pass, so
-a review that can't run, or that left a changed file unread, blocks the merge.
-Its findings don't fail the check; answer each one by fixing it or replying. To run the
+each pull request, as [REVIEW.md](REVIEW.md) says: it splits the change into
+areas by what the files are about, has four reviewers read each area in full,
+each for one kind of problem, checks every case they list against the code,
+comments on each finding's line, and keeps one summary comment up to date. The
+first review reads the whole change, and each push after it is reviewed for what
+it changed. The review is one of the checks that must pass, so a review that
+can't run, or that left a changed file unread, blocks the merge. Its findings
+don't fail the check; answer all of a review's findings in one push, by fixing
+each or replying. To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,
 then `npm run check`. `npm run format` fixes formatting.
 

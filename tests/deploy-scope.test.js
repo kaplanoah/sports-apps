@@ -14,7 +14,10 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "eslint.config.mjs",
     "worker/find-passed-ci.mjs",
     "worker/github-api.mjs",
+    "worker/post-review.mjs",
     "worker/report-flaky-tests.mjs",
+    "worker/review-context.mjs",
+    "worker/review-state.mjs",
     "worker/set-app-key.mjs",
   ]);
   assert.equal(decision.isNeeded, false);
