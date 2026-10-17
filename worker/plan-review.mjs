@@ -627,9 +627,10 @@ const grepRepo = (pattern, isWord) =>
  * to the pull request merged onto it, which leaves out the base's own edits, or, where that merge
  * conflicts, from the head to the pull request's head, which holds them too.
  * @param {string} since
+ * @param {(args: string[]) => string | null} git null where git fails, as merge-tree does on a conflict
  */
-function findPushedRange(since) {
-  const mergedTree = tryGit(["merge-tree", "--write-tree", WHOLE_CHANGE[0], since])?.split("\n")[0];
+export function findPushedRange(since, git) {
+  const mergedTree = git(["merge-tree", "--write-tree", WHOLE_CHANGE[0], since])?.split("\n")[0];
   return mergedTree
     ? { range: [mergedTree, "HEAD"], hasBase: false }
     : { range: [since, "HEAD^2"], hasBase: true };
@@ -676,7 +677,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       }),
   });
   const pushed =
-    choice.stage === "push" ? findPushedRange(/** @type {string} */ (reviewedHead)) : null;
+    choice.stage === "push" ? findPushedRange(/** @type {string} */ (reviewedHead), tryGit) : null;
   const deleted = runGit(["diff", "--name-only", "--diff-filter=D", ...WHOLE_CHANGE])
     .split("\n")
     .filter(Boolean);

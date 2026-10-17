@@ -231,6 +231,14 @@ test("the last read of the whole change runs only once a review of a push posted
   assert.match(readJob("review-final-find"), /steps: \*find-steps/);
   assert.match(readJob("review-final-check"), /steps: \*check-steps/);
   assert.match(readJob("review-final-across"), /steps: \*across-steps/);
+  assert.match(
+    readJob("review-final-across"),
+    /if: \$\{\{ !cancelled\(\) && needs\.review-final-check\.result == 'success' && needs\.review-plan\.outputs\.final-areas > 1 \}\}/,
+  );
+  assert.match(
+    readJob("review-across"),
+    /if: \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.areas > 1 \}\}/,
+  );
   assert.match(readJob("review-final-post"), /steps: \*post-steps/);
 });
 

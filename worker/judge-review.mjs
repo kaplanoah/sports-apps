@@ -89,23 +89,35 @@ export function findUnreadParts(parts, triesReads, readPart, folder) {
 }
 
 /**
- * A reviewer's or checker's answer, or null when it gave none, as when a try ran out of turns.
+ * A Claude step's structured answer, its lists by the keys it must hold and what it couldn't
+ * judge, or null when it gave none, as when it ran out of turns, or gave one of another shape.
  * @param {string | undefined} structuredOutput
- * @param {"candidates" | "findings"} list
- * @returns {{ items: any[], unjudged: { file: string, why: string }[] } | null}
+ * @param {string[]} keys
+ * @returns {({ unjudged: { file: string, why: string }[] } & Record<string, any[]>) | null}
  */
-export function readAnswer(structuredOutput, list) {
+export function readAnswer(structuredOutput, keys) {
   try {
     const answer = JSON.parse(structuredOutput || "null");
-    if (!Array.isArray(answer?.[list])) return null;
+    if (!keys.every((key) => Array.isArray(answer?.[key]))) return null;
     return {
-      items: answer[list],
+      ...Object.fromEntries(keys.map((key) => [key, answer[key]])),
       unjudged: Array.isArray(answer.unjudged) ? answer.unjudged : [],
     };
   } catch {
     return null;
   }
 }
+
+/**
+ * A reviewer's or checker's answer as its record keeps it: the cases or findings it listed, and
+ * what it couldn't judge, or null when it gave none.
+ * @param {string | undefined} structuredOutput
+ * @param {"candidates" | "findings"} key
+ */
+const readListAnswer = (structuredOutput, key) => {
+  const answer = readAnswer(structuredOutput, [key]);
+  return answer && { items: answer[key], unjudged: answer.unjudged };
+};
 
 /** @param {string} path */
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -140,7 +152,7 @@ export function recordFindTry(folder, { stage, area, kind }, env) {
   const record = existsSync(recordPath) ? readJson(recordPath) : { stage, area, kind, tries: [] };
   record.tries.push({
     reads: [...listReads(readExecution(env.EXECUTION_FILE ?? "")).entries()],
-    answer: readAnswer(env.STRUCTURED_OUTPUT, "candidates"),
+    answer: readListAnswer(env.STRUCTURED_OUTPUT, "candidates"),
   });
   record.unread = findUnreadParts(
     parts,
@@ -179,12 +191,15 @@ export const listAreaRecords = (records, stage, area) =>
     .filter(([name]) => name.startsWith(`find-${stage}-${area}-`))
     .map(([, record]) => record);
 
-/** @param {string} folder */
-function readRecords(folder) {
+/**
+ * The records the review's jobs leave in the folder, by file name.
+ * @param {string} folder
+ */
+export function readRecords(folder) {
   /** @type {Map<string, any>} */
   const records = new Map();
   for (const name of readdirSync(folder)) {
-    if (/^(find|candidates|check|post)-.+\.json$/.test(name))
+    if (/^(find|candidates|check|across|post)-.+\.json$/.test(name))
       records.set(name, readJson(join(folder, name)));
   }
   return records;
@@ -264,6 +279,8 @@ function judgeStage(stage, areas, records) {
   const judged = areas.map((area) => judgeArea(stage, area, records));
   const post = records.get(`post-${stage}.json`) ?? null;
   const missing = judged.flatMap((area) => area.missing);
+  if (areas.length > 1 && !records.has(`across-${stage}.json`))
+    missing.push("the check across areas");
   if (!post) missing.push("the step that posts the findings");
   const checks = areas.flatMap(({ area }) => records.get(`check-${stage}-${area}.json`) ?? []);
   const verdicts = checks.flatMap((check) =>
@@ -419,7 +436,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       JSON.stringify(gatherCandidates(records), null, 1),
     );
   } else if (command === "check") {
-    const answer = readAnswer(env.STRUCTURED_OUTPUT, "findings");
+    const answer = readListAnswer(env.STRUCTURED_OUTPUT, "findings");
     if (!answer) throw new Error("The checker gave no answer.");
     writeFileSync(join(folder, `check-${stage}-${area}.json`), JSON.stringify(answer));
   } else if (command === "summary") {

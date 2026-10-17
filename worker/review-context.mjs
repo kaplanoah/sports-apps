@@ -56,6 +56,20 @@ export const listOffDiffFindings = (comments) =>
     (comment) => comment.user?.login === REVIEWER && comment.body?.startsWith(OFF_DIFF_HEADING),
   );
 
+/**
+ * What a review reads of a pull request's conversation: every review thread, and the review's
+ * comments of findings off the pull request's files.
+ * @param {object} reads
+ * @param {(query: string, variables: Record<string, unknown>) => Promise<any>} reads.callGraphQL
+ * @param {(path: string) => Promise<any>} reads.callGitHub
+ * @param {{ owner: string, name: string, number: number }} reads.pullRequest
+ */
+export async function readConversation({ callGraphQL, callGitHub, pullRequest }) {
+  const threads = await readThreads(callGraphQL, pullRequest);
+  const comments = await readAllPages(callGitHub, `/issues/${pullRequest.number}/comments`);
+  return { threads, offDiff: listOffDiffFindings(comments) };
+}
+
 /** @param {any} thread */
 const describeState = (thread) =>
   [thread.isResolved ? "resolved" : "open", thread.isOutdated ? "outdated" : ""]
@@ -100,17 +114,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const folder = process.argv[2];
   const { env } = process;
   const [owner, name] = (env.GITHUB_REPOSITORY ?? "").split("/");
-  const threads = await readThreads(createGraphQL({ fetchImpl: fetch, env }), {
-    owner,
-    name,
-    number: Number(env.PR),
+  const { threads, offDiff } = await readConversation({
+    callGraphQL: createGraphQL({ fetchImpl: fetch, env }),
+    callGitHub: createGitHub({ repository: env.GITHUB_REPOSITORY ?? "", fetchImpl: fetch, env }),
+    pullRequest: { owner, name, number: Number(env.PR) },
   });
-  const callGitHub = createGitHub({
-    repository: env.GITHUB_REPOSITORY ?? "",
-    fetchImpl: fetch,
-    env,
-  });
-  const offDiff = listOffDiffFindings(await readAllPages(callGitHub, `/issues/${env.PR}/comments`));
   mkdirSync(folder, { recursive: true });
   writeFileSync(
     join(folder, "pull-request.md"),

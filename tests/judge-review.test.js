@@ -14,6 +14,7 @@ import {
   listUnchecked,
   postSummary,
   readAnswer,
+  readRecords,
   recordFindTry,
 } from "../worker/judge-review.mjs";
 import { FINAL_KIND, KINDS, writeReview } from "../worker/plan-review.mjs";
@@ -101,14 +102,39 @@ test("a part read in pieces over two tries is read, and one never opened isn't",
 });
 
 test("an answer is none when it gave none or gave something else", () => {
-  assert.equal(readAnswer(undefined, "candidates"), null);
-  assert.equal(readAnswer("not json", "candidates"), null);
-  assert.equal(readAnswer('{"candidates": "many"}', "candidates"), null);
-  assert.deepEqual(readAnswer('{"candidates": []}', "candidates"), { items: [], unjudged: [] });
-  assert.deepEqual(readAnswer('{"findings": [{"verdict": "confirmed"}]}', "findings"), {
-    items: [{ verdict: "confirmed" }],
+  assert.equal(readAnswer(undefined, ["candidates"]), null);
+  assert.equal(readAnswer("not json", ["candidates"]), null);
+  assert.equal(readAnswer('{"candidates": "many"}', ["candidates"]), null);
+  assert.equal(readAnswer('{"duplicates": []}', ["duplicates", "added"]), null);
+  assert.deepEqual(readAnswer('{"candidates": [], "unjudged": "x"}', ["candidates"]), {
+    candidates: [],
     unjudged: [],
   });
+  assert.deepEqual(readAnswer('{"findings": [{"verdict": "confirmed"}]}', ["findings"]), {
+    findings: [{ verdict: "confirmed" }],
+    unjudged: [],
+  });
+});
+
+test("the records read back are every job's the review needs, and nothing else in the folder", () => {
+  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
+  for (const name of [
+    "find-first-1-bugs.json",
+    "candidates-first-1.json",
+    "check-first-1.json",
+    "across-first.json",
+    "post-first.json",
+    "plan.json",
+    "confirmed-first.json",
+  ])
+    writeFileSync(join(folder, name), "{}");
+  assert.deepEqual([...readRecords(folder).keys()].sort(), [
+    "across-first.json",
+    "candidates-first-1.json",
+    "check-first-1.json",
+    "find-first-1-bugs.json",
+    "post-first.json",
+  ]);
 });
 
 /** @param {string[]} paths */
@@ -264,7 +290,10 @@ const PLAN = {
 function finishStage(stage, areas, changes = {}) {
   const kinds = (stage === "final" ? [FINAL_KIND] : KINDS).map(({ kind }) => kind);
   /** @type {Record<string, any>} */
-  const records = { [`post-${stage}.json`]: { weights: [], unjudged: [] } };
+  const records = {
+    [`post-${stage}.json`]: { weights: [], unjudged: [] },
+    [`across-${stage}.json`]: { duplicates: [], added: [], unjudged: [] },
+  };
   for (const { area } of areas) {
     records[`check-${stage}-${area}.json`] = { items: [], unjudged: [] };
     for (const kind of kinds)
@@ -280,6 +309,13 @@ function finishStage(stage, areas, changes = {}) {
   const merged = { ...records, ...changes };
   return new Map(Object.entries(merged).filter(([, record]) => record !== undefined));
 }
+
+test("a stage of more than one area isn't finished until the check across them is", () => {
+  const records = finishStage("first", AREAS, { "across-first.json": undefined });
+  const { isComplete, body } = judgeReview({ sha: HEAD, earlierHead: null, plan: PLAN, records });
+  assert.ok(!isComplete);
+  assert.match(body, /- the check across areas\n/);
+});
 
 test("a review that read and checked everything passes, and moves the reviewed head on", () => {
   const records = finishStage("first", AREAS, {

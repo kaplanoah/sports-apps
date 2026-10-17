@@ -737,7 +737,7 @@ jobs:
 
   review-final-across:
     needs: [review-plan, review-post, review-final-check]
-    if: ${{ !cancelled() && needs.review-plan.outputs.stage == 'push' && needs.review-post.outputs.posted == '0' && needs.review-plan.outputs.final-areas > 1 }}
+    if: ${{ !cancelled() && needs.review-final-check.result == 'success' && needs.review-plan.outputs.final-areas > 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

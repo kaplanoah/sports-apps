@@ -15,6 +15,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { readAnswer } from "./judge-review.mjs";
 import {
   OFF_DIFF_HEADING,
   REVIEWER,
@@ -74,9 +75,15 @@ export function listToPost(confirmed, across) {
 export const nameFinding = ({ path, body }) =>
   createHash("sha256").update(`${path}\n${body}`).digest("hex").slice(0, 16);
 
-/** @param {Finding} finding */
-const writeBody = (finding) =>
-  `**${finding.weight}** ${finding.body}\n\n${writeFindingMark(nameFinding(finding))}`;
+/**
+ * A finding's comment: its weight, what it says, shown with any words a form adds, and its mark,
+ * which holds what it says alone, in every form.
+ * @param {Finding} finding
+ * @param {string} head
+ * @param {string} [shown]
+ */
+const writeBody = (finding, head, shown = finding.body) =>
+  `**${finding.weight}** ${shown}\n\n${writeFindingMark(nameFinding(finding), head)}`;
 
 /** @param {unknown} error */
 const isRefusedLine = (error) => /** @type {{ status?: number }} */ (error)?.status === 422;
@@ -93,14 +100,14 @@ async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
   try {
     await callGitHub(comments, {
       method: "POST",
-      body: { body: writeBody(finding), commit_id: sha, path, line, side: "RIGHT" },
+      body: { body: writeBody(finding, sha), commit_id: sha, path, line, side: "RIGHT" },
     });
     return true;
   } catch (error) {
     if (!isRefusedLine(error)) throw error;
   }
   try {
-    const body = writeBody({ ...finding, body: `(about line ${line}) ${finding.body}` });
+    const body = writeBody(finding, sha, `(about line ${line}) ${finding.body}`);
     await callGitHub(comments, {
       method: "POST",
       body: { body, commit_id: sha, path, subject_type: "file" },
@@ -113,12 +120,17 @@ async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
 }
 
 /**
- * Posts each finding not already on the pull request, and returns the weight of each it posted
- * and how many were already there.
+ * Posts each finding not already on the pull request, and returns the weight of each this head's
+ * review posted, an earlier try's too, and how many an earlier head's review had posted.
  * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
- * @param {{ pullNumber: string, sha: string, findings: Finding[], posted: Set<string> }} review
+ * @param {{ pullNumber: string, sha: string, findings: Finding[], posted: Map<string, Set<string>> }} review
  */
 export async function postFindings(callGitHub, { pullNumber, sha, findings, posted }) {
+  /** @param {Finding} finding */
+  const isFromEarlierHead = (finding) => {
+    const heads = posted.get(nameFinding(finding));
+    return Boolean(heads) && !heads?.has(sha);
+  };
   const fresh = findings.filter((finding) => !posted.has(nameFinding(finding)));
   /** @type {Finding[]} */
   const offDiff = [];
@@ -130,26 +142,35 @@ export async function postFindings(callGitHub, { pullNumber, sha, findings, post
     const body = [
       OFF_DIFF_HEADING,
       "",
-      ...offDiff.map((finding) => `- \`${finding.path}:${finding.line}\`: ${writeBody(finding)}`),
+      ...offDiff.map(
+        (finding) => `- \`${finding.path}:${finding.line}\`: ${writeBody(finding, sha)}`,
+      ),
     ].join("\n");
     await callGitHub(`/issues/${pullNumber}/comments`, { method: "POST", body: { body } });
   }
+  const repeated = findings.filter(isFromEarlierHead);
   return {
-    weights: fresh.map((finding) => finding.weight),
-    repeated: findings.length - fresh.length,
+    weights: findings
+      .filter((finding) => !isFromEarlierHead(finding))
+      .map((finding) => finding.weight),
+    repeated: repeated.length,
   };
 }
 
 /**
- * The findings the review already posted, in any form, by their marks.
+ * The findings the review already posted, in any form, each with the heads it was posted on.
  * @param {any[]} comments the pull request's review comments and issue comments
+ * @returns {Map<string, Set<string>>}
  */
-export const listPosted = (comments) =>
-  new Set(
-    comments
-      .filter((comment) => comment.user?.login === REVIEWER)
-      .flatMap((comment) => listFindingMarks(comment.body)),
-  );
+export function listPosted(comments) {
+  /** @type {Map<string, Set<string>>} */
+  const posted = new Map();
+  const marks = comments
+    .filter((comment) => comment.user?.login === REVIEWER)
+    .flatMap((comment) => listFindingMarks(comment.body));
+  for (const { key, head } of marks) posted.set(key, new Set([...(posted.get(key) ?? []), head]));
+  return posted;
+}
 
 /**
  * A check across areas' answer, or null when it gave none, as when it ran out of turns.
@@ -157,14 +178,15 @@ export const listPosted = (comments) =>
  * @returns {Across | null}
  */
 export function readAcross(structuredOutput) {
-  try {
-    const answer = JSON.parse(structuredOutput || "null");
-    return Array.isArray(answer?.duplicates) && Array.isArray(answer?.added)
-      ? { duplicates: answer.duplicates, added: answer.added, unjudged: answer.unjudged ?? [] }
-      : null;
-  } catch {
-    return null;
-  }
+  const answer = readAnswer(structuredOutput, ["duplicates", "added"]);
+  if (!answer) return null;
+  const isGroup = (/** @type {unknown} */ group) =>
+    Array.isArray(group) && group.every((ref) => typeof ref === "string");
+  return {
+    duplicates: answer.duplicates.filter(isGroup),
+    added: answer.added,
+    unjudged: answer.unjudged,
+  };
 }
 
 /** @param {string} path */

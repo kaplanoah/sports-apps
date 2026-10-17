@@ -11,6 +11,7 @@ import {
   chooseStage,
   describeChange,
   explainUnread,
+  findPushedRange,
   findTestedFile,
   listAreas,
   listChangedSince,
@@ -650,5 +651,20 @@ test("a stage's index names each file left unread and why", () => {
   assert.match(
     readFileSync(join(folder, "first.md"), "utf8"),
     /## Not read\n\n- icon\.png: a binary file/,
+  );
+});
+
+test("a push's range starts from the reviewed head merged onto the base, or from the head where that merge conflicts", () => {
+  /** @type {string[][]} */
+  const calls = [];
+  const merged = findPushedRange("r".repeat(40), (args) => {
+    calls.push(args);
+    return "t".repeat(40) + "\nmore output\n";
+  });
+  assert.deepEqual(merged, { range: ["t".repeat(40), "HEAD"], hasBase: false });
+  assert.deepEqual(calls, [["merge-tree", "--write-tree", "HEAD^1", "r".repeat(40)]]);
+  assert.deepEqual(
+    findPushedRange("r".repeat(40), () => null),
+    { range: ["r".repeat(40), "HEAD^2"], hasBase: true },
   );
 });

@@ -36,8 +36,11 @@ test("the summary is the review's own, never another's comment that starts the s
 });
 
 test("a comment's finding marks read back as written, however many it holds", () => {
-  const body = `- one ${writeFindingMark("0123456789abcdef")}\n- two ${writeFindingMark("fedcba9876543210")}`;
-  assert.deepEqual(listFindingMarks(body), ["0123456789abcdef", "fedcba9876543210"]);
+  const body = `- one ${writeFindingMark("0123456789abcdef", HEAD)}\n- two ${writeFindingMark("fedcba9876543210", HEAD)}`;
+  assert.deepEqual(listFindingMarks(body), [
+    { key: "0123456789abcdef", head: HEAD },
+    { key: "fedcba9876543210", head: HEAD },
+  ]);
   assert.deepEqual(listFindingMarks(undefined), []);
-  assert.deepEqual(listFindingMarks("<!-- claude-finding short -->"), []);
+  assert.deepEqual(listFindingMarks("<!-- claude-finding 0123456789abcdef -->"), []);
 });

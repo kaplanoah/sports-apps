@@ -15,6 +15,9 @@ import {
 } from "../worker/post-review.mjs";
 import { OFF_DIFF_HEADING, writeFindingMark } from "../worker/review-state.mjs";
 
+const SHA = "a".repeat(40);
+const EARLIER = "e".repeat(40);
+
 const finding = (/** @type {object} */ fields) => ({
   weight: "Nit",
   path: "shared/page/sheet.js",
@@ -82,11 +85,14 @@ test("a check across areas that gave no answer, or one of another shape, reads a
   assert.equal(readAcross(undefined), null);
   assert.equal(readAcross("not json"), null);
   assert.equal(readAcross('{"findings": []}'), null);
-  assert.deepEqual(readAcross('{"duplicates": [], "added": []}'), {
-    duplicates: [],
-    added: [],
-    unjudged: [],
-  });
+  assert.deepEqual(
+    readAcross('{"duplicates": [["1.1", "2.1"], "1.2"], "added": [], "unjudged": "x"}'),
+    {
+      duplicates: [["1.1", "2.1"]],
+      added: [],
+      unjudged: [],
+    },
+  );
 });
 
 /**
@@ -95,11 +101,12 @@ test("a check across areas that gave no answer, or one of another shape, reads a
  * @param {number} [status] what it answers when it refuses
  */
 function fakeGitHub(accepts, status = 422) {
-  /** @type {{ path: string, body: any }[]} */
+  /** @type {{ path: string, body: any, isTaken: boolean }[]} */
   const calls = [];
   const callGitHub = async (/** @type {string} */ path, /** @type {any} */ request = {}) => {
-    calls.push({ path, body: request.body });
-    if (!accepts(request.body)) throw new GitHubError(status, `POST ${path}`);
+    const isTaken = accepts(request.body);
+    calls.push({ path, body: request.body, isTaken });
+    if (!isTaken) throw new GitHubError(status, `POST ${path}`);
     return {};
   };
   return { calls, callGitHub };
@@ -115,16 +122,17 @@ test("each finding goes on its line, or on its file off the diff, or in one comm
   const offFile = finding({ path: "apps/wnba/page/js/app.js", line: 192, body: "elsewhere" });
   const result = await postFindings(callGitHub, {
     pullNumber: "7",
-    sha: "abc",
+    sha: SHA,
     findings: [onDiff, finding({ line: 400, body: "off the diff" }), offFile],
-    posted: new Set(),
+    posted: new Map(),
   });
   assert.deepEqual(result, { weights: ["Important", "Nit", "Nit"], repeated: 0 });
   assert.deepEqual(calls[0], {
     path: "/pulls/7/comments",
+    isTaken: true,
     body: {
-      body: `**Important** on the diff\n\n${writeFindingMark(nameFinding(onDiff))}`,
-      commit_id: "abc",
+      body: `**Important** on the diff\n\n${writeFindingMark(nameFinding(onDiff), SHA)}`,
+      commit_id: SHA,
       path: "shared/page/sheet.js",
       line: 12,
       side: "RIGHT",
@@ -150,39 +158,50 @@ test("a refusal that isn't about the line stops the step, so a re-run posts the 
   await assert.rejects(
     postFindings(callGitHub, {
       pullNumber: "7",
-      sha: "abc",
+      sha: SHA,
       findings: [finding({})],
-      posted: new Set(),
+      posted: new Map(),
     }),
     /GitHub answered 502/,
   );
   assert.equal(calls.length, 1);
 });
 
-test("a finding already posted in any form isn't posted again, and doesn't count as new", async () => {
-  const onFile = finding({ body: "posted on its file" });
-  const offDiff = finding({ path: "elsewhere.js", body: "posted off the diff" });
-  const posted = listPosted([
+test("a finding already posted in any form isn't posted again, and counts as new only from this head", async () => {
+  const offFile = finding({ line: 400, body: "posted on its file" });
+  const fromEarlier = finding({ body: "an earlier head's" });
+  const { calls: first, callGitHub: postOnce } = fakeGitHub((body) => body.line !== 400);
+  await postFindings(postOnce, {
+    pullNumber: "7",
+    sha: SHA,
+    findings: [offFile],
+    posted: new Map(),
+  });
+  const comments = [
+    ...first
+      .filter((call) => call.isTaken)
+      .map((call) => ({ user: { login: "github-actions[bot]" }, body: call.body.body })),
     {
       user: { login: "github-actions[bot]" },
-      body: `**Nit** (about line 12) posted on its file\n\n${writeFindingMark(nameFinding(onFile))}`,
+      body: `**Nit** an earlier head's\n\n${writeFindingMark(nameFinding(fromEarlier), EARLIER)}`,
     },
     {
-      user: { login: "github-actions[bot]" },
-      body: `${OFF_DIFF_HEADING}\n\n- \`elsewhere.js:12\`: **Nit** posted off the diff\n\n${writeFindingMark(nameFinding(offDiff))}`,
+      user: { login: "someone" },
+      body: writeFindingMark(nameFinding(finding({ body: "new" })), EARLIER),
     },
-    { user: { login: "someone" }, body: writeFindingMark(nameFinding(finding({ body: "new" }))) },
-  ]);
+  ];
   const { calls, callGitHub } = fakeGitHub(() => true);
   const result = await postFindings(callGitHub, {
     pullNumber: "7",
-    sha: "abc",
-    findings: [onFile, offDiff, finding({ body: "new" })],
-    posted,
+    sha: SHA,
+    findings: [offFile, fromEarlier, finding({ body: "new" })],
+    posted: listPosted(comments),
   });
-  assert.deepEqual(result, { weights: ["Nit"], repeated: 2 });
-  assert.equal(calls.length, 1);
-  assert.match(calls[0].body.body, /^\*\*Nit\*\* new/);
+  assert.deepEqual(result, { weights: ["Nit", "Nit"], repeated: 1 });
+  assert.deepEqual(
+    calls.map((call) => call.body.body.split("\n")[0]),
+    ["**Nit** new"],
+  );
 });
 
 test("a stage's checks are read as the checkers leave them, each with its area, and no other stage's", () => {

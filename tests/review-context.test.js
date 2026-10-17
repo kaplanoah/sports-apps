@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listOffDiffFindings, readThreads, renderContext } from "../worker/review-context.mjs";
+import {
+  listOffDiffFindings,
+  readConversation,
+  readThreads,
+  renderContext,
+} from "../worker/review-context.mjs";
 import { OFF_DIFF_HEADING } from "../worker/review-state.mjs";
 
 const thread = (/** @type {object} */ fields) => ({
@@ -74,4 +79,30 @@ test("the findings off the pull request's files are the review's own comments th
     listOffDiffFindings(comments).map((comment) => comment.id),
     [1],
   );
+});
+
+test("the conversation a review reads holds every thread and the review's findings off the files", async () => {
+  const callGraphQL = async () => ({
+    repository: {
+      pullRequest: {
+        reviewThreads: { nodes: [thread({})], pageInfo: { hasNextPage: false, endCursor: null } },
+      },
+    },
+  });
+  /** @type {string[]} */
+  const paths = [];
+  const callGitHub = async (/** @type {string} */ path) => {
+    paths.push(path);
+    return path.includes("page=1")
+      ? [{ user: { login: "github-actions[bot]" }, body: `${OFF_DIFF_HEADING}\n\n- a` }]
+      : [];
+  };
+  const { threads, offDiff } = await readConversation({
+    callGraphQL,
+    callGitHub,
+    pullRequest: { owner: "o", name: "n", number: 7 },
+  });
+  assert.equal(threads.length, 1);
+  assert.equal(offDiff.length, 1);
+  assert.match(paths[0], /^\/issues\/7\/comments\?/);
 });
