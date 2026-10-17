@@ -26,7 +26,7 @@ import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.
  * Why a player is out, while she is: what the injury report says, and whether for the season.
  * @typedef {{ reason: string | null, isForSeason: boolean }} PlayerOut
  */
-/** @typedef {{ id: string, team: string, firstName: string, lastName: string, number: string, out?: PlayerOut | null }} PagePlayer */
+/** @typedef {{ id: string, team: string, firstName: string, lastName: string, number: string | null, out?: PlayerOut | null }} PagePlayer */
 /**
  * A place in the app a search can open, the words of its row, the words that find it, and the
  * icon of the button it's otherwise opened from.
@@ -64,8 +64,9 @@ import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.
 /**
  * What a search's words find: the pages they list, the words left for a search of games, or null
  * when they ask for none, and, for an answer like who is out, the line that says over its rows what
- * they are, as the games line does: its lead, then its facts.
- * @typedef {{ rows: PageRow[], gameText: string | null, read?: { lead: string, facts: string[] } }} FoundPages
+ * they are, as the games line does: its lead, then its facts, and whether its rows show over the
+ * suggestions, as the players a team's number names do, since the words name them as typed.
+ * @typedef {{ rows: PageRow[], gameText: string | null, read?: { lead: string, facts: string[] }, isFirst?: boolean }} FoundPages
  */
 
 /**
@@ -311,38 +312,53 @@ const NUMBER_WORDS = ["number", "no"];
 function readPlayerNumber(typed) {
   const number = typed.at(-1) ?? "";
   const before = typed.slice(0, -1);
-  const isNumberWord = (/** @type {string} */ word) =>
-    NUMBER_WORDS.some((numberWord) => isWordOf(word, numberWord, true));
-  const isLedRight = before.length === 0 || (before.length === 1 && isNumberWord(before[0]));
+  const isLedRight =
+    before.length === 0 || (before.length === 1 && isEveryWordOf(before, NUMBER_WORDS));
   return /^\d{1,2}$/.test(number) && isLedRight ? number : null;
 }
 
 /**
- * The rows of a team's players who wear a number.
+ * Orders numbers as a roster does, shortest first, then by value, so "2" comes before "22".
+ * @param {string} first
+ * @param {string} second
+ */
+const compareNumbers = (first, second) =>
+  first.length - second.length || Number(first) - Number(second);
+
+/**
+ * The rows of a team's players who wear a number, or, while it may be the start of one, each
+ * number it starts, the number itself first.
  * @param {PageTeam} team
  * @param {string} number
+ * @param {boolean} isPartial
  * @param {SearchPages} pages
  * @returns {PageRow[]}
  */
-const listNumberRows = (team, number, pages) =>
+const listNumberRows = (team, number, isPartial, pages) =>
   pages.players
-    .filter((player) => player.team === team.code && player.number === number)
+    .filter(
+      (player) =>
+        player.team === team.code &&
+        (player.number === number || (isPartial && !!player.number?.startsWith(number))),
+    )
+    .toSorted((first, second) => compareNumbers(first.number, second.number))
     .map((player) => ({ kind: "player", team, player }));
 
 /**
- * The rows for a team named alone, with its section's name, or with a player's number.
+ * The rows for a team named alone, with its section's name, or with a player's number, which may
+ * be the start of one while it's the last word typed.
  * @param {PageTeam} team
  * @param {string[]} typed the words beside the team's name
- * @param {SearchPages} pages
+ * @param {{ pages: SearchPages, isNumberPartial: boolean }} search
  * @returns {PageRow[]}
  */
-function listTeamRows(team, typed, pages) {
+function listTeamRows(team, typed, { pages, isNumberPartial }) {
   const section = pages.section;
   /** @type {PageRow[]} */
   const sectionRow = section ? [{ kind: "section", team }] : [];
   if (!typed.length) return [{ kind: "team", team }, ...sectionRow];
   const number = readPlayerNumber(typed);
-  if (number !== null) return listNumberRows(team, number, pages);
+  if (number !== null) return listNumberRows(team, number, isNumberPartial, pages);
   const sectionWords = section ? splitWords(section.name) : [];
   const isSection = typed.every((word) => sectionWords.some((part) => isWordOf(word, part, true)));
   return isSection ? sectionRow : [];
@@ -439,6 +455,7 @@ export function findPages(text, search) {
   return {
     rows: [...places.map((place) => /** @type {PageRow} */ ({ kind: "place", place })), ...rest],
     gameText: found.gameText,
+    isFirst: found.isFirst,
   };
 }
 
@@ -464,7 +481,10 @@ function findAskedPages(text, { dictionary, pages, isTyping }) {
   if (pages.news && isEveryWordOf(otherWords, pages.news.place.words))
     return findTeamNews(team, pages.news);
   if (isEveryWordOf(otherWords, RECORD_WORDS))
-    return { rows: listTeamRows(team, [], pages), gameText: leaveGameText(tokens, otherTokens) };
+    return {
+      rows: listTeamRows(team, [], { pages, isNumberPartial: false }),
+      gameText: leaveGameText(tokens, otherTokens),
+    };
   return null;
 }
 
@@ -502,7 +522,8 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
     const gameText = leaveGameText(tokens, found.named);
     return { rows: [{ kind: "game-part", part: found.part, gameText }], gameText: null };
   }
-  if (teamTokens.length) return findTeamPages(teamTokens, otherTokens, { text, tokens, pages });
+  if (teamTokens.length)
+    return findTeamPages(teamTokens, otherTokens, { text, tokens, pages, isTyping });
   if (!otherWords.length) return findPassedOverPlaces(tokens, text, pages);
   const teams = new Map(pages.teams.map((team) => [team.code, team]));
   const players = findPlayers(otherTokens, pages.players, isTyping).flatMap((player) => {
@@ -584,19 +605,21 @@ function findPassedOverPlaces(tokens, text, pages) {
 
 /**
  * The pages of the one team the words name, alone, with its section's name, or with a player's
- * number.
+ * number, whose players' rows show first.
  * @param {import("./search-words.js").Token[]} teamTokens
  * @param {import("./search-words.js").Token[]} otherTokens
- * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages }} search
+ * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages, isTyping: boolean }} search
  * @returns {FoundPages}
  */
-function findTeamPages(teamTokens, otherTokens, { text, tokens, pages }) {
+function findTeamPages(teamTokens, otherTokens, { text, tokens, pages, isTyping }) {
   const otherWords = otherTokens.flatMap((token) => token.words);
   const team = findOneTeam(teamTokens, pages);
-  const rows = team ? listTeamRows(team, otherWords, pages) : [];
+  const isNumberPartial = isTyping && tokens.at(-1) === otherTokens.at(-1);
+  const rows = team ? listTeamRows(team, otherWords, { pages, isNumberPartial }) : [];
   if (!rows.length) return { rows: [], gameText: text };
   const taken = tokens.filter((token) => !teamTokens.includes(token) && !hasKind(token, "filler"));
-  return { rows, gameText: leaveGameText(tokens, taken) };
+  const isFirst = rows[0].kind === "player";
+  return { rows, gameText: leaveGameText(tokens, taken), isFirst };
 }
 
 /**
