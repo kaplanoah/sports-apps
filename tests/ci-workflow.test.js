@@ -9,6 +9,7 @@ import {
   nameFindRecord,
   namePostRecord,
 } from "../worker/judge-review.mjs";
+import { escapePattern } from "../worker/plan-review.mjs";
 
 /** @param {string} path from the repo's root */
 const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -298,10 +299,7 @@ test("the review reads every area in full, checks before it posts, and fails on 
     check.includes(`pattern: ${findArtifact.slice(0, -kind.length)}*\n`),
     "each checker downloads its area's reviewers' records",
   );
-  const acrossArtifact = nameArtifact(nameAcrossRecord(stage)).replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&",
-  );
+  const acrossArtifact = escapePattern(nameArtifact(nameAcrossRecord(stage)));
   assert.match(
     post,
     new RegExp(

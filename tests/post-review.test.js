@@ -241,20 +241,29 @@ test("each finding goes on its line, or on its file off the diff, or in one comm
   );
 });
 
-test("a finding listed twice in one run is posted and counted once, at the first one's weight", async () => {
-  const { calls, callGitHub } = fakeGitHub(() => true);
-  const result = await postFindings(callGitHub, {
-    pullNumber: "7",
-    sha: SHA,
-    findings: [
-      finding({ weight: "Important", line: 12, body: "said twice" }),
-      finding({ weight: "Nit", line: 30, body: "said twice" }),
-    ],
-    posted: new Map(),
-  });
-  assert.deepEqual(result, { weights: ["Important"], repeated: 0 });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].body.line, 12);
+test("a finding said twice word for word is posted once, at the heaviest weight a checker settled", () => {
+  const posted = (
+    /** @type {ReturnType<typeof finding>[]} */ checked,
+    /** @type {ReturnType<typeof finding>[]} */ added,
+  ) =>
+    listToPost(
+      checked.map((item, index) => ({ ...item, ref: `1.${index + 1}` })),
+      { duplicates: [], added, unjudged: [] },
+    ).map(({ weight, line, body }) => [weight, line, body]);
+  assert.deepEqual(
+    posted(
+      [finding({ weight: "Nit", line: 30, body: "said twice" })],
+      [finding({ weight: "Important", line: 12, body: "said twice" })],
+    ),
+    [["Important", 30, "said twice"]],
+  );
+  assert.deepEqual(
+    posted(
+      [finding({ weight: "Unsure", line: 12, body: "said twice" })],
+      [finding({ weight: "Nit", line: 30, body: "said twice" })],
+    ),
+    [["Nit", 12, "said twice"]],
+  );
 });
 
 test("a refusal that isn't about the line stops the step, so a re-run posts the finding once", async () => {

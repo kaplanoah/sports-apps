@@ -425,7 +425,7 @@ test("the files a change deletes count a renamed file's old path, but not a file
   assert.deepEqual(asked, [["diff", "--name-status", "--find-renames", ...WHOLE_CHANGE]]);
 });
 
-test("a search of the repo returns every line git matches, each cut short, or none", () => {
+test("a search of the repo returns every line git matches, whole, or none", () => {
   const lines = Array.from({ length: 20 }, (_, index) => `AGENTS.md:${index + 1}:const NAME`);
   const long = `README.md:1:${"x".repeat(300)} NAME`;
   /** @type {string[][]} */
@@ -434,7 +434,7 @@ test("a search of the repo returns every line git matches, each cut short, or no
     asked.push(args);
     return `${[...lines, long].map((line) => `HEAD:${line}`).join("\n")}\n`;
   });
-  assert.deepEqual(hits, [...lines, long.slice(0, 220)]);
+  assert.deepEqual(hits, [...lines, long]);
   const none = grepRepo("const\\s+NAME", false, (args) => {
     asked.push(args);
     return null;
@@ -534,20 +534,47 @@ test("a name defined past many matches isn't stale, and a stale one lists its fi
   assert.deepEqual(listStaleNames(diff, grep, []), [{ name: "GONE", hits: docs.slice(0, 15) }]);
 });
 
-test("a deleted file's places leave out those that name only another file of its name", () => {
+test("a deleted file's places that may name it come first, each cut short", () => {
+  const longer = "AGENTS.md:1:`apps/mlb/page/js/updates.json` beside `shared/page/updates.js`";
   const others = Array.from(
     { length: 20 },
-    (_, index) => `AGENTS.md:${index + 1}:the shared one, \`shared/page/updates.js\``,
+    (_, index) => `AGENTS.md:${index + 2}:the shared one, \`shared/page/updates.js\``,
   );
   const naming = [
+    "README.md:3:`apps/mlb/page/js/updates.js` holds MLB's box",
     "README.md:4:MLB's `page/js/updates.js` shows the box",
+    `README.md:5:${"x".repeat(240)} apps/mlb/page/js/updates.js`,
     'apps/mlb/page/index.html:9:<script src="./js/updates.js"></script>',
     "REVIEW.md:2:any `updates.js`",
   ];
-  const grep = () => [...others, ...naming];
+  const grep = () => [longer, ...others, ...naming];
   assert.deepEqual(listStaleNames("", grep, ["apps/mlb/page/js/updates.js"]), [
-    { name: "updates.js", hits: naming },
+    {
+      name: "updates.js",
+      hits: [...naming, longer, ...others].slice(0, 15).map((hit) => hit.slice(0, 220)),
+    },
   ]);
+});
+
+test("a deleted shared page file is named by the pages' #shared/ imports and shared/ links", () => {
+  /** @type {Record<string, string[]>} */
+  const repo = {
+    "updates.js": [
+      "AGENTS.md:1:MLB's `apps/mlb/page/js/updates.js`",
+      'apps/mlb/page/js/updates.js:7:import { listNotesToShow } from "#shared/updates.js";',
+    ],
+    "chrome.css": [
+      "apps/wnba/page/chrome.css:1:a page's own",
+      'apps/mlb/page/index.html:27:<link rel="stylesheet" href="shared/chrome.css" />',
+    ],
+  };
+  const grep = (/** @type {string} */ pattern) => repo[pattern] ?? [];
+  assert.deepEqual(
+    listStaleNames("", grep, ["shared/page/updates.js", "shared/page/chrome.css"]).map(
+      ({ hits }) => hits[0],
+    ),
+    [repo["updates.js"][1], repo["chrome.css"][1]],
+  );
 });
 
 test("a changed file the diff has no part for stops the review rather than counting as read", () => {

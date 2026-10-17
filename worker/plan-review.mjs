@@ -388,15 +388,24 @@ export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
   return files.length ? { stage: "push", files } : { stage: "none" };
 }
 
-// A stale name lists its first places only, enough for the rules reviewer to find the rest.
+// A stale name lists its first places only, enough for the rules reviewer to find the rest, and
+// each place its first characters only, enough to show how it names what was removed.
 const MOST_STALE_HITS = 15;
+const HIT_LENGTH = 220;
+
+/**
+ * Text made safe to match word for word in a regular expression.
+ * @param {string} text
+ */
+export const escapePattern = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * The first places in the repo that still name each function, constant, or file the change
- * removed.
+ * removed, a deleted file's places that may name it ahead of those that name only another file
+ * of its name.
  * @param {string} diff
  * @param {(pattern: string, isWord: boolean) => string[]} grep every matching line in the repo, as
- * path:line:text cut as grepRepo cuts it
+ * path:line:text
  * @param {string[]} deletedFiles
  */
 export function listStaleNames(diff, grep, deletedFiles) {
@@ -419,25 +428,33 @@ export function listStaleNames(diff, grep, deletedFiles) {
     .map((name) => ({ name, hits: grep(name, true) }));
   const files = deletedFiles.map((path) => ({
     name: basename(path),
-    hits: grep(basename(path), true).filter((hit) => mayNameFile(hit, path)),
+    hits: grep(basename(path), true).toSorted(
+      (one, other) => Number(mayNameFile(other, path)) - Number(mayNameFile(one, path)),
+    ),
   }));
   return [...names, ...files].flatMap(({ name, hits }) =>
-    hits.length ? [{ name, hits: hits.slice(0, MOST_STALE_HITS) }] : [],
+    hits.length
+      ? [{ name, hits: hits.slice(0, MOST_STALE_HITS).map((hit) => hit.slice(0, HIT_LENGTH)) }]
+      : [],
   );
 }
 
 /**
  * Whether a place the search found may name a deleted file: some path in its text that the
- * file's path ends with, rather than only another file's of the same name.
+ * file's path ends with, reading `#shared/` and `shared/` as `shared/page/`, as the pages' import
+ * map and links do, rather than only another file's of the same name.
  * @param {string} hit path:line:text
  * @param {string} path the deleted file's
  */
 function mayNameFile(hit, path) {
   const text = hit.replace(/^[^:]*:\d+:/, "");
-  const name = basename(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const mentions = text.match(new RegExp(`[\\w./-]*${name}(?!\\w)`, "g")) ?? [];
+  const name = escapePattern(basename(path));
+  const mentions = text.match(new RegExp(`[\\w#./-]*${name}(?!\\w)`, "g")) ?? [];
   return mentions.some((mention) => {
-    const tail = mention.replace(/^(?:\.{0,2}\/)+/, "");
+    const tail = mention
+      .replace(/^#/, "")
+      .replace(/^(?:\.{0,2}\/)+/, "")
+      .replace(/^shared\/(?!page\/|worker\/)/, "shared/page/");
     return path === tail || path.endsWith(`/${tail}`);
   });
 }
@@ -717,12 +734,8 @@ const tryGit = (args) => {
   }
 };
 
-// A place keeps its first characters only, enough to show how it names what was removed.
-const HIT_LENGTH = 220;
-
 /**
- * Every line in the repo that matches a pattern, as path:line:text cut to its first HIT_LENGTH
- * characters.
+ * Every line in the repo that matches a pattern, as path:line:text.
  * @param {string} pattern
  * @param {boolean} isWord whether the pattern is a whole word rather than a regular expression
  * @param {(args: string[]) => string | null} git null where git fails, as grep does with no match
@@ -731,7 +744,7 @@ export const grepRepo = (pattern, isWord, git) =>
   (git(["grep", "-n", isWord ? "-wF" : "-E", pattern, "HEAD"]) ?? "")
     .split("\n")
     .filter(Boolean)
-    .map((hit) => hit.replace(/^HEAD:/, "").slice(0, HIT_LENGTH));
+    .map((hit) => hit.replace(/^HEAD:/, ""));
 
 /**
  * The range that holds what the pushes since a head changed: from that head merged onto the base
