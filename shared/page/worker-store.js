@@ -1,6 +1,7 @@
 // The page's saved data, kept by the Worker that serves the page and pushed to it as it changes.
 import { reloadWhenSignedOut } from "./access.js";
 import { noteStep } from "./diagnostics.js";
+import { readWorkerError } from "./worker-error.js";
 
 const RECONNECT_FIRST_MS = 1000;
 // Pull to refresh holds the page down while the store catches up, but no longer than this.
@@ -43,11 +44,10 @@ async function requestJson(url) {
   }
   reloadWhenSignedOut(response);
   const body = await response.json().catch(() => null);
-  if (!response.ok)
-    throw new StoreError(
-      body?.error?.code || `http_${response.status}`,
-      body?.error?.message || `The store answered ${response.status}.`,
-    );
+  if (!response.ok) {
+    const { code, message } = readWorkerError(body, response.status, "The store");
+    throw new StoreError(code, message);
+  }
   // Something between the page and the Worker, like a captive portal, can answer instead.
   if (!body || typeof body !== "object")
     throw new StoreError("bad_payload", "The store's answer couldn't be read.");

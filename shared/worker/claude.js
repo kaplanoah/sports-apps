@@ -46,6 +46,9 @@ export const requestClaude = ({ apiKey, fetchImpl, timeoutMs, request, schema })
     });
     const answer = await response.json().catch(() => null);
     if (!response.ok)
-      throw new Error(`Claude answered ${response.status}: ${answer?.error?.message ?? ""}`);
+      throw Object.assign(
+        new Error(`Claude answered ${response.status}: ${answer?.error?.message ?? ""}`),
+        { status: response.status },
+      );
     return { answer: JSON.parse(readFinishedText(answer)), usage: answer.usage ?? {} };
   });

@@ -268,7 +268,12 @@ test("a player asked for with no id, team, or real season, or one the league doe
   const answers = listAnswers();
   assert.deepEqual(await askForPlayer(answers, "id=abc&team=NYL"), {
     status: 400,
-    body: { error: "id must be a player's number in the WNBA's stats" },
+    body: {
+      error: {
+        code: "invalid_argument",
+        message: "id must be a player's number in the WNBA's stats",
+      },
+    },
   });
   assert.equal((await askForPlayer(answers, `id=${STEWART}&team=XYZ`)).status, 400);
   assert.equal((await askForPlayer(answers, `id=${STEWART}&team=NYL&season=1990`)).status, 400);
@@ -279,5 +284,5 @@ test("a player asked for with no id, team, or real season, or one the league doe
   assert.equal((await askForPlayer(unknown, "id=1&team=NYL&season=2026")).status, 404);
   const failed = await askForPlayer({}, `id=${STEWART}&team=NYL&season=2026`);
   assert.equal(failed.status, 502);
-  assert.match(failed.body.error, /^Couldn't read the WNBA: The WNBA answered 404/);
+  assert.match(failed.body.error.message, /^Couldn't read the WNBA: The WNBA answered 404/);
 });

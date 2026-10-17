@@ -6,22 +6,22 @@ import { listUpcomingMeetings } from "../worker/src/preview.js";
 import {
   listNotifications,
   loadCurrentSnapshot,
-  readAverages,
   readSchedule,
   readUpdates,
   saveSnapshot,
 } from "../worker/src/season-updater.js";
 import { createDocs } from "../../../tests/job-context.js";
+import { readSeasonAverages } from "./player-fixtures.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
 );
 const NOW = Date.parse(AFTERNOON.now);
-// The afternoon's recording has no players' averages, so the next day's stand in for them.
+// The next day's games, with the whole season's schedule.
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
-const RESPONSES = { ...AFTERNOON.responses, players: GAMES.preview.players };
+const RESPONSES = AFTERNOON.responses;
 const SNAPSHOT = buildSnapshot(RESPONSES, { season: 2026, now: NOW });
 
 // The afternoon's scores, with the whole season's schedule from the next day, its regular season
@@ -58,21 +58,18 @@ function finishTonight(snapshot, [awayScore, homeScore]) {
   return { ...snapshot, games, series };
 }
 
-test("the season saves its version, games, series, standings, and top scorers, every player's averages apart from it, and only when they change", async () => {
+test("the season saves its version, games, series, and standings, and only when they change", async () => {
   const docs = createDocs();
   await saveSnapshot(docs, SNAPSHOT);
   await saveSnapshot(docs, { ...SNAPSHOT, asOf: "2026-09-30T22:00:00Z" });
 
-  assert.deepEqual(docs.writes, ["seasons/2026", "schedules/2026", "averages/2026"]);
-  const averages = await readAverages(docs, 2026);
-  assert.equal(averages.players.length, SNAPSHOT.averages.length);
-  assert.ok(!("averages" in (await readUpdates(docs, 2026))));
+  assert.deepEqual(docs.writes, ["seasons/2026", "schedules/2026"]);
   const saved = await readUpdates(docs, 2026);
   assert.equal(saved.version, SNAPSHOT.version);
   assert.equal(saved.games.length, 28);
   assert.equal(saved.series.length, 7);
   assert.equal(saved.standings.length, 15);
-  assert.equal(saved.leaders.length, 75);
+  assert.ok(!("averages" in saved));
 });
 
 /**
@@ -247,6 +244,26 @@ test("the season's games stay as they were unless both the scoreboard and the sc
   assert.deepEqual(await readSchedule(docs, 2026), saved);
 });
 
+test("a season keeps its games once the league's schedule lists only the next season's", async () => {
+  const docs = createDocs();
+  await saveSnapshot(docs, WHOLE_SEASON);
+  const savedSchedule = await readSchedule(docs, 2026);
+  const savedSeason = await readUpdates(docs, 2026);
+
+  const nextSeasonsOnly = {
+    leagueSchedule: { ...GAMES.preview.schedule.leagueSchedule, gameDates: [] },
+  };
+  await saveSnapshot(
+    docs,
+    buildSnapshot({ ...RESPONSES, schedule: nextSeasonsOnly }, { season: 2026, now: NOW }),
+  );
+
+  assert.deepEqual(await readSchedule(docs, 2026), savedSchedule);
+  const season = await readUpdates(docs, 2026);
+  assert.deepEqual(season.games, savedSeason.games);
+  assert.deepEqual(season.nearestGames, savedSeason.nearestGames);
+});
+
 /**
  * @param {any} snapshot
  * @param {string} state
@@ -295,13 +312,39 @@ test("a feed that didn't answer leaves its saved field as it was", async () => {
   assert.equal((await readUpdates(docs, 2026)).standings.length, 15);
 });
 
-test("the top scorers and every player's averages stay as they were when the players' averages didn't answer", async () => {
+test("an update leaves the top scorers as the player job saved them, even one that changes the season", async () => {
   const docs = createDocs();
   await saveSnapshot(docs, SNAPSHOT);
-  await saveSnapshot(docs, buildWithout(["players"]));
+  const { leaders } = readSeasonAverages();
+  await docs.write("seasons/2026", { ...(await readUpdates(docs, 2026)), leaders });
 
-  assert.equal((await readUpdates(docs, 2026)).leaders.length, 75);
-  assert.equal((await readAverages(docs, 2026)).players.length, SNAPSHOT.averages.length);
+  await saveSnapshot(docs, { ...finishTonight(SNAPSHOT, [80, 70]), asOf: "2026-10-01T04:00:00Z" });
+
+  const saved = await readUpdates(docs, 2026);
+  assert.equal(findTonight(saved).state, "final");
+  assert.deepEqual(saved.leaders, leaders);
+});
+
+test("an update and the player job that change the season at once each keep the other's change", async () => {
+  const docs = createDocs();
+  await saveSnapshot(docs, SNAPSHOT);
+  const { leaders } = readSeasonAverages();
+  // The store answers a read a moment later, as Cloudflare's storage does.
+  const { read } = docs;
+  docs.read = async (key) => {
+    const doc = await read(key);
+    await new Promise((resolve) => setImmediate(resolve));
+    return doc;
+  };
+
+  await Promise.all([
+    saveSnapshot(docs, { ...finishTonight(SNAPSHOT, [80, 70]), asOf: "2026-10-01T04:00:00Z" }),
+    docs.update("seasons/2026", (/** @type {any} */ record) => ({ ...record, leaders })),
+  ]);
+
+  const saved = await readUpdates(docs, 2026);
+  assert.equal(findTonight(saved).state, "final");
+  assert.deepEqual(saved.leaders, leaders);
 });
 
 // The afternoon's feeds, with some that didn't answer.

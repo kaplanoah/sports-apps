@@ -1,6 +1,7 @@
 import { readGameState } from "../../page/js/snapshot.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
-import { nameGameDetailsKey, readKeptDoc } from "./store-docs.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
+import { nameGameDetailsKey } from "./store-docs.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { fetchWnbaJson } from "./wnba.js";
 
 // Reads the league's box score for one game, for the game sheet: each team's points by quarter,
@@ -8,7 +9,7 @@ import { fetchWnbaJson } from "./wnba.js";
 // (game-details-updater.js), so the route reads the league only for a game still being played, or
 // one the store hasn't kept yet.
 
-/** @typedef {import("./store-docs.js").ReadDoc} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 // A live game's box score changes with every play, so it's kept as briefly as the scoreboard.
 const BOX_SCORE_CACHE_SECONDS = 5;
@@ -107,13 +108,14 @@ export function createBoxScoreServer({ fetchImpl = (input, init) => fetch(input,
    */
   async function serveBoxScore(url, readDoc) {
     const id = url.searchParams.get("id") ?? "";
-    if (!GAME_ID.test(id)) return respondJson({ error: "id must be a WNBA game id" }, 400);
+    if (!GAME_ID.test(id))
+      return respondError(400, "invalid_argument", "id must be a WNBA game id");
     try {
       return respondJson(await loadBoxScore(id, readDoc));
     } catch (error) {
       if (NOT_YET_STATUSES.includes(/** @type {{ status?: number }} */ (error).status))
-        return respondJson({ error: "The WNBA has no box score for that game yet" }, 404);
-      return respondJson({ error: `Couldn't read the WNBA: ${describeError(error)}` }, 502);
+        return respondError(404, "not_found", "The WNBA has no box score for that game yet");
+      return respondError(502, "upstream_error", `Couldn't read the WNBA: ${describeError(error)}`);
     }
   }
 

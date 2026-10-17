@@ -15,12 +15,10 @@ import { listOutPlayers } from "../worker/src/injuries.js";
 import { describeRoster } from "../worker/src/roster.js";
 import { convertToText, Markup } from "../../../shared/page/html.js";
 import { stripTags } from "../../../tests/text.js";
+import { readSeasonAverages } from "./player-fixtures.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
-);
-const GAMES = JSON.parse(
-  readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
 const ROSTERS = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-06-league-rosters.json`, "utf8"),
@@ -28,10 +26,11 @@ const ROSTERS = JSON.parse(
 const INJURIES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-11-espn-injuries.json`, "utf8"),
 );
-const { averages: AVERAGES, series: SERIES } = buildSnapshot(
-  { ...AFTERNOON.responses, players: GAMES.preview.players },
-  { season: 2026, now: Date.parse(AFTERNOON.now) },
-);
+const { series: SERIES } = buildSnapshot(AFTERNOON.responses, {
+  season: 2026,
+  now: Date.parse(AFTERNOON.now),
+});
+const { averages: AVERAGES } = readSeasonAverages();
 const LIBERTY = describeRoster({
   team: "NYL",
   season: 2026,
@@ -86,8 +85,8 @@ test("each player on the roster has her averages from the league, or none before
   const findRow = (lastName) => rows.find((row) => row.lastName === lastName);
   assert.equal(rows.length, 15);
   assert.deepEqual(
-    [findRow("Stewart").averages.points, findRow("Stewart").averages.games],
-    [20.8, 42],
+    [findRow("Stewart").averages.points.toFixed(1), findRow("Stewart").averages.games],
+    ["20.8", 42],
   );
   assert.equal(findRow("Balogun").averages, null);
 });

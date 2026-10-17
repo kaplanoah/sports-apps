@@ -122,6 +122,42 @@ for (const { colorScheme, theme, winner, loser } of /** @type {const} */ ([
   });
 }
 
+for (const { colorScheme, theme, plain } of /** @type {const} */ ([
+  { colorScheme: "light", theme: "Ball", plain: { fill: [253, 250, 244], shade: 0.18 } },
+  { colorScheme: "dark", theme: "Night Game", plain: { fill: [30, 58, 43], shade: 0.44 } },
+])) {
+  test(`in ${theme}, a score chip that isn't the series winner's is filled and shaded as chosen, and the winner's keeps its deep shade`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await openApp(page, {
+      store: { "seasons/2025": SEASON_2025 },
+    });
+    await chooseSeason(page, "2025");
+    const wildCard = page.locator("#bracketWrap .series").filter({ hasText: "Reds" });
+    const readChip = (club) =>
+      wildCard
+        .locator(".matchup-row")
+        .filter({ hasText: club })
+        .locator(".nscore")
+        .evaluate((chip) => {
+          const style = getComputedStyle(chip);
+          const context = document.createElement("canvas").getContext("2d");
+          context.fillStyle = style.backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          const shade = style.boxShadow.match(/^rgba\(0, 0, 0, ([\d.]+)\)/);
+          return {
+            fill: [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)],
+            shade: Number(shade[1]),
+          };
+        });
+
+    const [winner, other] = await Promise.all([readChip("Dodgers"), readChip("Reds")]);
+    expect(other).toEqual(plain);
+    expect(winner.shade).toBe(0.44);
+  });
+}
+
 test("on a wide screen, the whole bracket shows without round dots", async ({ page }) => {
   await page.setViewportSize(WIDE_SCREEN);
   await openApp(page);
