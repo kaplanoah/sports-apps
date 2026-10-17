@@ -29,8 +29,11 @@ const SKIPPED_FILES = new Set([
   "worker/judge-burn-in.mjs",
   "worker/judge-review.mjs",
   "worker/plan-review.mjs",
+  "worker/post-review.mjs",
   "worker/red-change.mjs",
   "worker/report-flaky-tests.mjs",
+  "worker/review-context.mjs",
+  "worker/review-state.mjs",
   "worker/rollback.mjs",
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
@@ -38,12 +41,15 @@ const SKIPPED_FILES = new Set([
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);
-const SKIPPED_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
+const TEST_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
 
-const isSkipped = (path) =>
-  path.endsWith(".md") ||
-  SKIPPED_FILES.has(path) ||
-  SKIPPED_FOLDERS.some((folder) => folder.test(path));
+/**
+ * Whether a path is in the root's tests or an app's.
+ * @param {string} path
+ */
+export const isTestPath = (path) => TEST_FOLDERS.some((folder) => folder.test(path));
+
+const isSkipped = (path) => path.endsWith(".md") || SKIPPED_FILES.has(path) || isTestPath(path);
 
 const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
 

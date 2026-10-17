@@ -1,0 +1,384 @@
+// Posts what a stage of CI's checkers confirmed or left unsure, each finding on the line it's
+// about, so no reviewer or checker holds a token that writes to the pull request. The check across
+// areas names only the repeats to merge and what it adds, so no finding a checker kept can drop
+// out of its answer. A finding on a line the diff doesn't show goes on its file, and one on a
+// file the diff doesn't show goes in one comment on the pull request. Each finding's comment
+// carries a mark, so a finding already posted in any form, as by an earlier try of this step, isn't
+// posted again. A finding counts as posted when this head's review posted it, in this try or an
+// earlier one, and as already on the pull request when an earlier head's review did.
+// Usage: node worker/post-review.mjs list <folder> <stage>, with AREAS set, after the stage's
+// checkers, writes what they confirmed or left unsure for the check across areas. node
+// worker/post-review.mjs across <folder> <stage>, with STRUCTURED_OUTPUT from that check, keeps its
+// answer. node worker/post-review.mjs post <folder> <stage>, with GH_TOKEN, GITHUB_REPOSITORY, PR,
+// SHA, and AREAS set, posts and prints posted=<count of this head's findings> for $GITHUB_OUTPUT.
+import { createHash } from "node:crypto";
+import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createGitHub, readAllPages } from "./github-api.mjs";
+import {
+  nameAcrossRecord,
+  nameCheckRecord,
+  nameCheckedRecord,
+  namePostRecord,
+  readAnswer,
+  readJson,
+} from "./judge-review.mjs";
+import {
+  OFF_DIFF_HEADING,
+  REVIEWER,
+  UNSURE,
+  WEIGHTS,
+  listFindingMarks,
+  writeFindingMark,
+} from "./review-state.mjs";
+
+/**
+ * @typedef {{ weight: string, path: string, line: number, body: string }} Finding
+ */
+
+/**
+ * @typedef {object} Across
+ * @property {string[][]} duplicates
+ * @property {Finding[]} added
+ * @property {{ file: string, why: string }[]} unjudged
+ */
+
+/**
+ * What each area's checker confirmed or left unsure, in area order, each with the ref the check
+ * across areas names it by.
+ * @param {{ area: number, items: any[] }[]} checks
+ * @returns {(Finding & { ref: string })[]}
+ */
+export const listCheckedFindings = (checks) =>
+  checks
+    .toSorted((one, other) => one.area - other.area)
+    .flatMap(({ area, items }) =>
+      items
+        .filter((item) => item.verdict === "confirmed" || item.verdict === "unsure")
+        .map((item, index) => ({
+          ref: `${area}.${index + 1}`,
+          weight: item.verdict === "unsure" ? UNSURE : item.weight,
+          path: item.path,
+          line: item.line,
+          body: item.body,
+        })),
+    );
+
+/** @param {string} one @param {string} other */
+const compareWeights = (one, other) => WEIGHTS.indexOf(one) - WEIGHTS.indexOf(other);
+
+/**
+ * Whether a finding can be posted: it has a weight the review knows, and a file and a body as
+ * text, however Claude's answer shaped it.
+ * @param {Finding} finding
+ */
+const isPostable = (finding) =>
+  WEIGHTS.includes(finding.weight) &&
+  typeof finding.path === "string" &&
+  typeof finding.body === "string" &&
+  Boolean(finding.path) &&
+  Boolean(finding.body);
+
+/**
+ * The weight a finding takes for itself and the repeats it stands in for: the heaviest a checker
+ * settled, or unsure when none did, since unsure is a checker's verdict rather than a weight.
+ * @param {string[]} weights
+ */
+function pickGroupWeight(weights) {
+  const settled = weights.filter((weight) => weight !== UNSURE);
+  return settled.length ? settled.toSorted(compareWeights)[0] : UNSURE;
+}
+
+/**
+ * The checkers' refs the check across areas named as repeats of another, and the weight each kept
+ * ref takes. Each group keeps its first known ref that no earlier group dropped, and drops its
+ * other known refs but any an earlier group kept, so a ref it got wrong, repeated, or crossed with
+ * another group never drops a finding that nothing else stands in for. A kept ref takes the
+ * heaviest settled weight of the refs it stands in for.
+ * @param {string[][]} groups
+ * @param {Map<string, string>} weightByRef the weight of each of the checkers' findings, by ref
+ */
+function listRepeats(groups, weightByRef) {
+  /** @type {Set<string>} */
+  const kept = new Set();
+  /** @type {Set<string>} */
+  const dropped = new Set();
+  /** @type {Map<string, string>} */
+  const leadWeights = new Map();
+  for (const group of groups) {
+    const [lead, ...rest] = group.filter((ref) => weightByRef.has(ref) && !dropped.has(ref));
+    if (!lead) continue;
+    kept.add(lead);
+    const absorbed = rest.filter((ref) => !kept.has(ref));
+    for (const ref of absorbed) dropped.add(ref);
+    const weights = [leadWeights.get(lead) ?? weightByRef.get(lead) ?? ""].concat(
+      absorbed.map((ref) => weightByRef.get(ref) ?? ""),
+    );
+    leadWeights.set(lead, pickGroupWeight(weights));
+  }
+  return { dropped, leadWeights };
+}
+
+/**
+ * What a stage posts: every postable finding its checkers kept but the repeats the check across
+ * areas named, each at the heaviest settled weight of those it stands in for, with what it added,
+ * weightiest first. A finding that can't be posted neither leads nor joins a group of repeats,
+ * and one said word for word in the same file more than once is listed once, at the heaviest
+ * weight a checker settled among its copies.
+ * @param {(Finding & { ref?: string })[]} checked
+ * @param {Across | null} across
+ * @returns {Finding[]}
+ */
+export function listToPost(checked, across) {
+  const postable = checked.filter(isPostable);
+  const weightByRef = new Map(
+    postable.flatMap((finding) => (finding.ref ? [[finding.ref, finding.weight]] : [])),
+  );
+  const { dropped, leadWeights } = listRepeats(across?.duplicates ?? [], weightByRef);
+  const kept = postable
+    .filter((finding) => !dropped.has(finding.ref ?? ""))
+    .map((finding) => ({
+      ...finding,
+      weight: leadWeights.get(finding.ref ?? "") ?? finding.weight,
+    }));
+  return mergeSameFindings([...kept, ...(across?.added ?? []).filter(isPostable)])
+    .toSorted((one, other) => compareWeights(one.weight, other.weight))
+    .map(({ weight, path, line, body }) => ({ weight, path, line, body }));
+}
+
+/**
+ * The findings with each that says the same thing in the same file once, where it first comes,
+ * at the heaviest weight a checker settled among its copies.
+ * @param {Finding[]} findings
+ */
+function mergeSameFindings(findings) {
+  /** @type {Map<string, Finding[]>} */
+  const copiesByKey = new Map();
+  for (const finding of findings) {
+    const key = nameFinding(finding);
+    copiesByKey.set(key, [...(copiesByKey.get(key) ?? []), finding]);
+  }
+  return [...copiesByKey.values()].map((copies) => ({
+    ...copies[0],
+    weight: pickGroupWeight(copies.map((copy) => copy.weight)),
+  }));
+}
+
+/**
+ * The key a finding's mark holds, from where it is and what it says.
+ * @param {Finding} finding
+ */
+export const nameFinding = ({ path, body }) =>
+  createHash("sha256").update(`${path}\n${body}`).digest("hex").slice(0, 16);
+
+/**
+ * A finding's comment: its weight, what it says, shown with any words a form adds, and its mark,
+ * which holds what it says alone, in every form.
+ * @param {Finding} finding
+ * @param {string} head
+ * @param {string} [shown]
+ */
+const writeBody = (finding, head, shown = finding.body) =>
+  `**${finding.weight}** ${shown}\n\n${writeFindingMark(nameFinding(finding), head)}`;
+
+/** @param {unknown} error */
+const isRefusedLine = (error) => /** @type {{ status?: number }} */ (error)?.status === 422;
+
+/**
+ * Posts a finding on its line, or on its file when GitHub won't take the line, and returns false
+ * when GitHub won't take the file either.
+ * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
+ * @param {{ pullNumber: string, sha: string, finding: Finding }} post
+ */
+async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
+  const comments = `/pulls/${pullNumber}/comments`;
+  const { path, line } = finding;
+  try {
+    await callGitHub(comments, {
+      method: "POST",
+      body: { body: writeBody(finding, sha), commit_id: sha, path, line, side: "RIGHT" },
+    });
+    return true;
+  } catch (error) {
+    if (!isRefusedLine(error)) throw error;
+  }
+  try {
+    const body = writeBody(finding, sha, `(about line ${line}) ${finding.body}`);
+    await callGitHub(comments, {
+      method: "POST",
+      body: { body, commit_id: sha, path, subject_type: "file" },
+    });
+    return true;
+  } catch (error) {
+    if (!isRefusedLine(error)) throw error;
+    return false;
+  }
+}
+
+/**
+ * Posts each finding not already on the pull request, and returns the weight of each this head's
+ * review posted, an earlier try's too, and how many an earlier head's review had posted.
+ * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
+ * @param {object} review
+ * @param {string} review.pullNumber
+ * @param {string} review.sha
+ * @param {Finding[]} review.findings
+ * @param {Map<string, Set<string>>} review.posted
+ */
+export async function postFindings(callGitHub, { pullNumber, sha, findings, posted }) {
+  /** @param {Finding} finding */
+  const isFromEarlierHead = (finding) => {
+    const heads = posted.get(nameFinding(finding));
+    return Boolean(heads) && !heads?.has(sha);
+  };
+  const fresh = findings.filter((finding) => !posted.has(nameFinding(finding)));
+  /** @type {Finding[]} */
+  const offDiff = [];
+  for (const finding of fresh) {
+    const isOnDiff = await postOnDiff(callGitHub, { pullNumber, sha, finding });
+    if (!isOnDiff) offDiff.push(finding);
+  }
+  if (offDiff.length) {
+    const body = [
+      OFF_DIFF_HEADING,
+      "",
+      ...offDiff.map(
+        (finding) => `- \`${finding.path}:${finding.line}\`: ${writeBody(finding, sha)}`,
+      ),
+    ].join("\n");
+    await callGitHub(`/issues/${pullNumber}/comments`, { method: "POST", body: { body } });
+  }
+  const repeated = findings.filter(isFromEarlierHead);
+  return {
+    weights: findings
+      .filter((finding) => !isFromEarlierHead(finding))
+      .map((finding) => finding.weight),
+    repeated: repeated.length,
+  };
+}
+
+/**
+ * The findings the review already posted, in any form, each with the heads it was posted on.
+ * @param {any[]} comments the pull request's review comments and issue comments
+ * @returns {Map<string, Set<string>>}
+ */
+export function listPosted(comments) {
+  /** @type {Map<string, Set<string>>} */
+  const posted = new Map();
+  const marks = comments
+    .filter((comment) => comment.user?.login === REVIEWER)
+    .flatMap((comment) => listFindingMarks(comment.body));
+  for (const { key, head } of marks) posted.set(key, new Set([...(posted.get(key) ?? []), head]));
+  return posted;
+}
+
+/**
+ * A check across areas' answer, or null when it gave none, as when it ran out of turns.
+ * @param {string | undefined} structuredOutput
+ * @returns {Across | null}
+ */
+export function readAcross(structuredOutput) {
+  const answer = readAnswer(structuredOutput, ["duplicates", "added"]);
+  if (!answer) return null;
+  const isGroup = (/** @type {unknown} */ group) =>
+    Array.isArray(group) && group.every((ref) => typeof ref === "string");
+  return {
+    duplicates: answer.duplicates.filter(isGroup),
+    added: answer.added,
+    unjudged: answer.unjudged,
+  };
+}
+
+/**
+ * How many areas a stage has, from the job's AREAS, which must name it, so a job that lost it
+ * stops rather than posting nothing and passing as a review that found nothing.
+ * @param {string | undefined} areas
+ */
+export function readAreaCount(areas) {
+  const count = Number(areas);
+  if (!Number.isInteger(count) || count < 1)
+    throw new Error(`AREAS must name how many areas the stage has, not "${areas}".`);
+  return count;
+}
+
+/**
+ * A stage's checkers' records, each with its area, as the checkers leave them in the folder; an
+ * area whose checker left none has none.
+ * @param {string} folder
+ * @param {string} stage
+ * @param {number} areaCount
+ */
+export const readChecks = (folder, stage, areaCount) =>
+  Array.from({ length: areaCount }, (_, index) => index + 1).flatMap((area) => {
+    const path = join(folder, nameCheckRecord(stage, area));
+    return existsSync(path) ? [{ area, ...readJson(path) }] : [];
+  });
+
+/**
+ * What a stage's posting step reads: what its checkers confirmed or left unsure, less the repeats
+ * the check across areas named, and every finding already on the pull request, in a review
+ * comment or in the one comment for files it doesn't change. A stage of more than one area posts
+ * nothing until the check across areas has left its answer.
+ * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
+ * @param {{ folder: string, stage: string, areaCount: number, pullNumber: string }} options
+ */
+export async function readPostInputs(callGitHub, { folder, stage, areaCount, pullNumber }) {
+  const acrossPath = join(folder, nameAcrossRecord(stage));
+  /** @type {Across | null} */
+  const across = existsSync(acrossPath) ? readJson(acrossPath) : null;
+  if (areaCount > 1 && !across)
+    throw new Error("The check across areas didn't leave its answer, so nothing was posted.");
+  const comments = [
+    ...(await readAllPages(callGitHub, `/pulls/${pullNumber}/comments`)),
+    ...(await readAllPages(callGitHub, `/issues/${pullNumber}/comments`)),
+  ];
+  return {
+    findings: listToPost(listCheckedFindings(readChecks(folder, stage, areaCount)), across),
+    posted: listPosted(comments),
+    across,
+  };
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const [command, folder, stage] = process.argv.slice(2);
+  const { env } = process;
+  if (command === "list") {
+    const checks = readChecks(folder, stage, readAreaCount(env.AREAS));
+    writeFileSync(
+      join(folder, nameCheckedRecord(stage)),
+      JSON.stringify(listCheckedFindings(checks), null, 1),
+    );
+  } else if (command === "across") {
+    const across = readAcross(env.STRUCTURED_OUTPUT);
+    if (!across) throw new Error("The check across areas gave no answer.");
+    writeFileSync(join(folder, nameAcrossRecord(stage)), JSON.stringify(across));
+  } else if (command === "post") {
+    const callGitHub = createGitHub({
+      repository: env.GITHUB_REPOSITORY ?? "",
+      fetchImpl: fetch,
+      env,
+    });
+    const pullNumber = env.PR ?? "";
+    const { findings, posted, across } = await readPostInputs(callGitHub, {
+      folder,
+      stage,
+      areaCount: readAreaCount(env.AREAS),
+      pullNumber,
+    });
+    const { weights, repeated } = await postFindings(callGitHub, {
+      pullNumber,
+      sha: env.SHA ?? "",
+      findings,
+      posted,
+    });
+    writeFileSync(
+      join(folder, namePostRecord(stage)),
+      JSON.stringify({ weights, repeated, unjudged: across?.unjudged ?? [] }),
+    );
+    console.log(`posted=${weights.length}`);
+  } else {
+    console.error("Usage: node worker/post-review.mjs list|across|post <folder> <stage>");
+    process.exit(1);
+  }
+}
