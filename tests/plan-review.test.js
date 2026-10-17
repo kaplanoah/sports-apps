@@ -20,7 +20,10 @@ import {
   planReview,
   readChangedFiles,
   splitDiffByFile,
+  listPushedFiles,
+  listStageKinds,
   splitEvenly,
+  WHOLE_CHANGE,
   splitIntoParts,
   wrapLongLine,
   writeReview,
@@ -257,7 +260,7 @@ test("a change of any size takes at most twelve areas, each bigger to hold it", 
 
 test("a plan reads every file but the unread ones, and names why each goes unread", () => {
   const plan = planReview(
-    "4\t1\tshared/page/sheet.js\n900\t0\tapps/mlb/tests/fixtures/x.json\n1\t0\ticon.svg\n",
+    "4\t1\tshared/page/sheet.js\n900\t0\tapps/mlb/tests/fixtures/x.json\n1\t0\ticon.svg\n3\t0\tapps/mlb/page/js/sortable.min.js\n",
     REPO,
   );
   assert.deepEqual(plan.areas, [
@@ -266,6 +269,10 @@ test("a plan reads every file but the unread ones, and names why each goes unrea
   assert.deepEqual(plan.unread, [
     { path: "apps/mlb/tests/fixtures/x.json", why: "a test's recorded data" },
     { path: "icon.svg", why: "a drawing or a minified library, written by a tool" },
+    {
+      path: "apps/mlb/page/js/sortable.min.js",
+      why: "a drawing or a minified library, written by a tool",
+    },
   ]);
 });
 
@@ -512,5 +519,136 @@ test("a big area splits into as few parts as it needs, each near an even share, 
   assert.deepEqual(
     splitEvenly([0, 0], (size) => size, 1),
     [[0, 0]],
+  );
+});
+
+test("a test goes with code outside every app when it's a root test, never an app's of its name", () => {
+  const repo = [
+    "apps/mlb/worker/src/notifications.js",
+    "shared/worker/notifications.js",
+    "apps/mlb/page/js/updates.js",
+    "shared/page/updates.js",
+  ];
+  assert.equal(
+    findTestedFile("tests/notifications.test.js", [], repo),
+    "shared/worker/notifications.js",
+  );
+  assert.equal(findTestedFile("tests/updates.test.js", [], repo), "shared/page/updates.js");
+});
+
+test("more names than areas allow gives each its own area, rather than splitting forever", () => {
+  const apps = ["mlb", "wnba", "nba", "nhl", "nfl"];
+  const files = apps.flatMap((app) => [
+    { path: `apps/${app}/page/js/a.js`, lines: 300 },
+    { path: `apps/${app}/worker/src/a.js`, lines: 300 },
+  ]);
+  const areas = listAreas([...files, { path: "shared/page/a.js", lines: 300 }], []);
+  assert.equal(areas.length, 11);
+  const many = listAreas(
+    [
+      ...files,
+      { path: "shared/page/a.js", lines: 300 },
+      { path: "shared/worker/a.js", lines: 300 },
+      { path: "worker/a.mjs", lines: 300 },
+    ],
+    [],
+  );
+  assert.equal(many.length, 13);
+  assert.ok(many.every((area) => !area.name.includes(", part ")));
+});
+
+test("areas split into fewer parts once their parts would pass twelve", () => {
+  const files = ["apps/mlb/page", "apps/wnba/page", "shared/page", "shared/worker"].flatMap(
+    (folder) =>
+      Array.from({ length: 6 }, (_, index) => ({
+        path: `${folder}/file-${index}.js`,
+        lines: 1000,
+      })),
+  );
+  const areas = listAreas(files, []);
+  assert.ok(areas.length <= 12, String(areas.length));
+  assert.equal(areas.flatMap((area) => area.files).length, 24);
+});
+
+test("equal items still make no more groups than asked for", () => {
+  assert.equal(splitEvenly([15, 15, 15, 15], (size) => size, 3).length, 3);
+});
+
+test("a line whose own text starts like a file header still counts as part of the change", () => {
+  const withComment = (/** @type {string} */ line) =>
+    ["diff --git a/q.sql b/q.sql", "--- a/q.sql", "+++ b/q.sql", "@@ -1 +1 @@", line].join("\n");
+  assert.notEqual(
+    describeChange(withComment("--- a comment")),
+    describeChange(withComment("--- another")),
+  );
+  assert.notEqual(
+    describeChange(withComment("+++ added")),
+    describeChange(withComment("+++ other")),
+  );
+});
+
+test("the files a push changed compare the reviewed head's change from its own base with the whole change now", () => {
+  /** @type {string[][]} */
+  const ranges = [];
+  const files = listPushedFiles({
+    reviewedHead: "r".repeat(40),
+    findMergeBase: (one, other) => `base-of-${one}-and-${other.slice(0, 1)}`,
+    readDiff: (range) => {
+      ranges.push(range);
+      return { diff: range[1] === "HEAD" ? diffFile("a.js", [3]) : diffFile("a.js", [2]) };
+    },
+  });
+  assert.deepEqual(files, ["a.js"]);
+  assert.deepEqual(ranges, [["base-of-HEAD^1-and-r", "r".repeat(40)], WHOLE_CHANGE]);
+});
+
+test("the first review and a push's have every kind of reviewer, and a review that reads nothing none", () => {
+  assert.equal(listStageKinds("first"), KINDS);
+  assert.equal(listStageKinds("push"), KINDS);
+  assert.deepEqual(listStageKinds("none"), []);
+});
+
+test("each kind of reviewer names REVIEW.md's items by the number and title REVIEW.md gives them", () => {
+  const guide = readFileSync(new URL("../REVIEW.md", import.meta.url), "utf8");
+  const titles = new Map(
+    [...guide.matchAll(/^(\d+)\. \*\*(.+?)\.?\*\*/gm)].map(([, number, title]) => [number, title]),
+  );
+  const cited = KINDS.flatMap(({ focus }) => [...focus.matchAll(/(\d+) \(([^)]+)\)/g)]);
+  assert.ok(cited.length >= 11);
+  for (const [, number, title] of cited) assert.equal(titles.get(number), title, number);
+});
+
+test("the stale names are written for the rules reviewer, each with where the repo still names it", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  writeReview(folder, {
+    choice: { stage: "none" },
+    since: null,
+    pushed: null,
+    readDiff: () => assert.fail("nothing is read"),
+    repoFiles: [],
+    stale: [{ name: "serveSnapshot", hits: ["AGENTS.md:351:  the live snapshot"] }],
+  });
+  assert.match(
+    readFileSync(join(folder, "stale-names.md"), "utf8"),
+    /## serveSnapshot\n\n- AGENTS\.md:351:  the live snapshot/,
+  );
+});
+
+test("a stage's index names each file left unread and why", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  writeReview(folder, {
+    choice: { stage: "first" },
+    since: null,
+    pushed: null,
+    readDiff: () => ({
+      numstat: "2\t0\tshared/page/sheet.js\n-\t-\ticon.png\n",
+      diff: diffFile("shared/page/sheet.js", [2]),
+    }),
+    repoFiles: [],
+    stale: [],
+  });
+  assert.match(
+    readFileSync(join(folder, "first.md"), "utf8"),
+    /## Not read\n\n- icon\.png: a binary file/,
   );
 });

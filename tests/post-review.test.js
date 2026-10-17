@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { GitHubError } from "../worker/github-api.mjs";
 import {
   listConfirmed,
@@ -8,6 +11,7 @@ import {
   nameFinding,
   postFindings,
   readAcross,
+  readChecks,
 } from "../worker/post-review.mjs";
 import { OFF_DIFF_HEADING, writeFindingMark } from "../worker/review-state.mjs";
 
@@ -179,4 +183,21 @@ test("a finding already posted in any form isn't posted again, and doesn't count
   assert.deepEqual(result, { weights: ["Nit"], repeated: 2 });
   assert.equal(calls.length, 1);
   assert.match(calls[0].body.body, /^\*\*Nit\*\* new/);
+});
+
+test("a stage's checks are read as the checkers leave them, each with its area, and no other stage's", () => {
+  const folder = mkdtempSync(join(tmpdir(), "post-review-"));
+  const record = (/** @type {string} */ body) =>
+    JSON.stringify({ items: [finding({ verdict: "confirmed", body })], unjudged: [] });
+  writeFileSync(join(folder, "check-push-10.json"), record("ten"));
+  writeFileSync(join(folder, "check-push-1.json"), record("one"));
+  writeFileSync(join(folder, "check-final-1.json"), record("final"));
+  writeFileSync(join(folder, "candidates-push-1.json"), "[]");
+  assert.deepEqual(
+    listConfirmed(readChecks(folder, "push")).map(({ ref, body }) => [ref, body]),
+    [
+      ["1.1", "one"],
+      ["10.1", "ten"],
+    ],
+  );
 });

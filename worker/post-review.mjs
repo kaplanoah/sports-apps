@@ -171,11 +171,11 @@ export function readAcross(structuredOutput) {
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 /**
- * A stage's checkers' records, each with its area.
+ * A stage's checkers' records, each with its area, as the checkers leave them in the folder.
  * @param {string} folder
  * @param {string} stage
  */
-const readChecks = (folder, stage) =>
+export const readChecks = (folder, stage) =>
   readdirSync(folder).flatMap((name) => {
     const area = name.match(new RegExp(`^check-${stage}-(\\d+)\\.json$`))?.[1];
     return area ? [{ area: Number(area), ...readJson(join(folder, name)) }] : [];

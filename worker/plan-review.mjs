@@ -29,6 +29,9 @@ export const PART_BYTES = 48000;
 const LONGEST_READ_LINE = 2000;
 const CONTINUED = "(cont.) ";
 
+// From the base to the pull request merged onto it: the whole change, as the merge would make it.
+export const WHOLE_CHANGE = ["HEAD^1", "HEAD"];
+
 const RECORDED_DATA = /(^|\/)tests\/fixtures\/.*\.(json|xml)$/;
 const GENERATED = /\.(svg|min\.js)$/;
 
@@ -114,8 +117,8 @@ const isTest = (path) => /^(apps\/[^/]+\/)?tests\//.test(path);
 const nameTested = (path) => basename(path).replace(/\.(test|spec)\.m?js$|\.m?js$/, "");
 
 /**
- * The file of code a test tests, by its name, preferring one the change changes, or null when no
- * file of code has its name.
+ * The file of code a test tests, by its name, in the test's own app or, for a root test, outside
+ * every app, preferring one the change changes, or null when no file of code has its name.
  * @param {string} test
  * @param {string[]} changed
  * @param {string[]} repoFiles
@@ -123,11 +126,12 @@ const nameTested = (path) => basename(path).replace(/\.(test|spec)\.m?js$|\.m?js
 export function findTestedFile(test, changed, repoFiles) {
   const name = nameTested(test);
   const app = test.match(/^apps\/([^/]+)\//)?.[1];
-  const scope = app ? `apps/${app}/` : "";
+  /** @param {string} path */
+  const isInScope = (path) => (app ? path.startsWith(`apps/${app}/`) : !path.startsWith("apps/"));
   /** @param {string} path */
   const isCandidate = (path) =>
     !isTest(path) &&
-    path.startsWith(scope) &&
+    isInScope(path) &&
     /\.m?js$/.test(path) &&
     basename(path).replace(/\.m?js$/, "") === name;
   return changed.find(isCandidate) ?? repoFiles.find(isCandidate) ?? null;
@@ -218,7 +222,8 @@ function groupInAreas(files, repoFiles, areaLines) {
 
 /**
  * The areas of the files to read, each up to an area's worth of changed lines, raised as far as it
- * takes to keep to the most areas.
+ * takes to keep to the most areas, or until no area is split, as when more areas each have their
+ * own name.
  * @param {{ path: string, lines: number }[]} files
  * @param {string[]} repoFiles
  * @returns {{ area: number, name: string, files: string[], lines: number }[]}
@@ -227,7 +232,7 @@ export function listAreas(files, repoFiles) {
   const total = files.reduce((sum, file) => sum + file.lines, 0);
   let areaLines = Math.max(AREA_LINES, Math.ceil(total / MOST_AREAS));
   let areas = groupInAreas(files, repoFiles, areaLines);
-  while (areas.length > MOST_AREAS) {
+  while (areas.length > MOST_AREAS && areaLines < total) {
     areaLines = Math.ceil(areaLines * 1.1);
     areas = groupInAreas(files, repoFiles, areaLines);
   }
@@ -271,17 +276,21 @@ export function splitDiffByFile(diff) {
 }
 
 /**
- * A file's diff without the line numbers in its hunks' headers or its own header lines, so a diff
+ * A file's diff from its first hunk on, without the line numbers in its hunks' headers, so a diff
  * that a merge of the base only moved down the file reads the same, while a block moved within
  * the change, which its context shows, reads as changed.
  * @param {string} fileDiff
  */
-export const describeChange = (fileDiff) =>
-  fileDiff
-    .split("\n")
-    .filter((line) => /^[-+ @]/.test(line) && !/^(\+\+\+|---) /.test(line))
-    .map((line) => line.replace(/^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/, "@@"))
-    .join("\n");
+export function describeChange(fileDiff) {
+  const lines = fileDiff.split("\n");
+  const firstHunk = lines.findIndex((line) => line.startsWith("@@ "));
+  return firstHunk < 0
+    ? ""
+    : lines
+        .slice(firstHunk)
+        .map((line) => line.replace(/^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/, "@@"))
+        .join("\n");
+}
 
 /**
  * The files whose change differs between two of a pull request's diffs, as a push changes them.
@@ -295,6 +304,19 @@ export function listChangedSince(earlier, now) {
   return paths.filter(
     (path) => describeChange(before.get(path) ?? "") !== describeChange(after.get(path) ?? ""),
   );
+}
+
+/**
+ * The files the pushes since a reviewed head changed: those whose change from that head's base
+ * differs from the whole change now.
+ * @param {object} review
+ * @param {string} review.reviewedHead
+ * @param {(one: string, other: string) => string} review.findMergeBase
+ * @param {(range: string[]) => { diff: string }} review.readDiff
+ */
+export function listPushedFiles({ reviewedHead, findMergeBase, readDiff }) {
+  const earlierBase = findMergeBase(WHOLE_CHANGE[0], reviewedHead);
+  return listChangedSince(readDiff([earlierBase, reviewedHead]).diff, readDiff(WHOLE_CHANGE).diff);
 }
 
 /**
@@ -509,6 +531,13 @@ function renderIndex(words, { areas, unread }) {
 }
 
 /**
+ * The kinds of reviewer a stage's areas each have: all of them for the first review and a push's,
+ * and none when nothing is read.
+ * @param {string} stage
+ */
+export const listStageKinds = (stage) => (stage === "first" || stage === "push" ? KINDS : []);
+
+/**
  * The reviewers' and checkers' matrices for a stage's areas.
  * @param {{ area: number, name: string, lines: number }[]} areas
  * @param {{ kind: string, focus: string }[]} kinds
@@ -548,16 +577,21 @@ function writeIndexedStage(folder, stage, change, words = stage) {
 export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles, stale }) {
   mkdirSync(folder, { recursive: true });
   writeFileSync(join(folder, "stale-names.md"), renderStaleNames(stale));
-  const whole = ["HEAD^1", "HEAD"];
   /** @type {{ stage: string, since: string | null, areas: any[], unread: any[], final: any[] }} */
   const plan = { stage: choice.stage, since: null, areas: [], unread: [], final: [] };
   if (choice.stage === "first")
-    Object.assign(plan, writeIndexedStage(folder, "first", { ...readDiff(whole), repoFiles }));
+    Object.assign(
+      plan,
+      writeIndexedStage(folder, "first", { ...readDiff(WHOLE_CHANGE), repoFiles }),
+    );
   if (choice.stage === "push" && pushed) {
     const change = { ...readDiff(pushed.range, choice.files), repoFiles };
     const words = pushed.hasBase ? "push-with-base" : "push";
     Object.assign(plan, writeIndexedStage(folder, "push", change, words), { since });
-    plan.final = writeIndexedStage(folder, "final", { ...readDiff(whole), repoFiles }).areas;
+    plan.final = writeIndexedStage(folder, "final", {
+      ...readDiff(WHOLE_CHANGE),
+      repoFiles,
+    }).areas;
   }
   writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
   return plan;
@@ -595,7 +629,7 @@ const grepRepo = (pattern, isWord) =>
  * @param {string} since
  */
 function findPushedRange(since) {
-  const mergedTree = tryGit(["merge-tree", "--write-tree", "HEAD^1", since])?.split("\n")[0];
+  const mergedTree = tryGit(["merge-tree", "--write-tree", WHOLE_CHANGE[0], since])?.split("\n")[0];
   return mergedTree
     ? { range: [mergedTree, "HEAD"], hasBase: false }
     : { range: [since, "HEAD^2"], hasBase: true };
@@ -618,33 +652,32 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const isOnBranch =
     reviewedHead !== null &&
     tryGit(["merge-base", "--is-ancestor", reviewedHead, "HEAD^2"]) !== null;
+  /** @type {Map<string, { numstat: string, diff: string }>} */
+  const diffs = new Map();
   /** @param {string[]} range @param {string[]} [files] */
   const readDiff = (range, files = []) => {
+    const key = JSON.stringify([range, files]);
     const paths = files.length ? ["--", ...files] : [];
-    return {
-      numstat: runGit(["diff", "--numstat", "--no-renames", ...range, ...paths]),
-      diff: runGit(["diff", "--no-renames", ...range, ...paths]),
-    };
+    if (!diffs.has(key))
+      diffs.set(key, {
+        numstat: runGit(["diff", "--numstat", "--no-renames", ...range, ...paths]),
+        diff: runGit(["diff", "--no-renames", ...range, ...paths]),
+      });
+    return /** @type {{ numstat: string, diff: string }} */ (diffs.get(key));
   };
   const choice = chooseStage({
     reviewedHead,
     isOnBranch,
-    listChanged: () => {
-      const earlierBase = runGit([
-        "merge-base",
-        "HEAD^1",
-        /** @type {string} */ (reviewedHead),
-      ]).trim();
-      return listChangedSince(
-        readDiff([earlierBase, /** @type {string} */ (reviewedHead)]).diff,
-        readDiff(["HEAD^1", "HEAD"]).diff,
-      );
-    },
+    listChanged: () =>
+      listPushedFiles({
+        reviewedHead: /** @type {string} */ (reviewedHead),
+        findMergeBase: (one, other) => runGit(["merge-base", one, other]).trim(),
+        readDiff,
+      }),
   });
-  const whole = readDiff(["HEAD^1", "HEAD"]).diff;
   const pushed =
     choice.stage === "push" ? findPushedRange(/** @type {string} */ (reviewedHead)) : null;
-  const deleted = runGit(["diff", "--name-only", "--diff-filter=D", "HEAD^1", "HEAD"])
+  const deleted = runGit(["diff", "--name-only", "--diff-filter=D", ...WHOLE_CHANGE])
     .split("\n")
     .filter(Boolean);
   const plan = writeReview(folder, {
@@ -653,10 +686,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     pushed,
     readDiff,
     repoFiles: runGit(["ls-files"]).split("\n").filter(Boolean),
-    stale: listStaleNames(whole, grepRepo, deleted),
+    stale: listStaleNames(readDiff(WHOLE_CHANGE).diff, grepRepo, deleted),
   });
-  const stageKinds = plan.stage === "first" || plan.stage === "push" ? KINDS : [];
-  const now = listJobs(plan.areas, stageKinds);
+  const now = listJobs(plan.areas, listStageKinds(plan.stage));
   const last = listJobs(plan.final, [FINAL_KIND]);
   console.log(`stage=${plan.stage}`);
   console.log(`reviewers=${JSON.stringify(now.reviewers)}`);
