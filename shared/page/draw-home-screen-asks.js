@@ -5,6 +5,8 @@
 // plain script loads in the head, and the page calls drawHomeScreenAsks() right after its
 // settings, before anything is painted. home-screen.js takes both from there.
 
+/* global isOnHomeScreen, readPickedAppearance -- from pick-theme.js, which loads before it */
+
 // home-screen.js keeps it under the same key once the viewer goes on in the browser.
 const WELCOME_CLOSED_KEY = "homeScreenWelcomeClosed";
 
@@ -31,15 +33,13 @@ const MENU_GLYPH = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="tr
   <circle cx="12" cy="19" r="2" />
 </svg>`;
 
-// The same tests of the device as device.js makes for the page's modules. An iPad says it's a Mac,
-// so its touch screen gives it away.
+// The same tests of the device as device.js makes for the page's modules, with pick-theme.js's of
+// the Home Screen. An iPad says it's a Mac, so its touch screen gives it away.
 const isIosDevice = () =>
   /iPhone|iPad|iPod/.test(navigator.userAgent) ||
   (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isBrowserOnTouchDevice = () =>
-  matchMedia("(hover: none) and (pointer: coarse)").matches &&
-  !matchMedia("(display-mode: standalone)").matches &&
-  /** @type {{ standalone?: boolean }} */ (navigator).standalone !== true;
+  matchMedia("(hover: none) and (pointer: coarse)").matches && !isOnHomeScreen();
 
 // Storage can be empty or refuse access, as in a private window, so the page never depends on it.
 /** @param {string} key */
@@ -48,18 +48,6 @@ function readStoredText(key) {
     return localStorage.getItem(key);
   } catch {
     return null;
-  }
-}
-
-// The appearance the viewer picked, kept as JSON, or, if kept earlier, as its name, as
-// pick-theme.js reads it.
-function readAppearance() {
-  const stored = readStoredText("appearance") ?? "";
-  try {
-    const choice = JSON.parse(stored);
-    return typeof choice === "string" ? choice : "auto";
-  } catch {
-    return stored || "auto";
   }
 }
 
@@ -89,7 +77,7 @@ function copyThemeChoices() {
   const choices = /** @type {HTMLElement} */ (
     document.querySelector(".appearance-row .appearance-choices").cloneNode(true)
   );
-  const picked = readAppearance();
+  const picked = readPickedAppearance();
   choices.setAttribute("aria-labelledby", "welcomePickTitle");
   for (const input of choices.querySelectorAll("input")) {
     input.name = "welcomeAppearance";

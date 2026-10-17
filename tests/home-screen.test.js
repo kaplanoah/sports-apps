@@ -20,10 +20,10 @@ test("the welcome is kept closed under one key wherever it's read or written", (
   );
 });
 
-// For the same reason, the plain script makes device.js's tests of the device itself.
+// For the same reason, the plain scripts make device.js's tests of the device themselves.
 test("the welcome tells a phone, its Home Screen, and an iPhone or iPad as device.js does", () => {
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-  const drawing = read("shared/page/draw-home-screen-asks.js");
+  const drawing = read("shared/page/draw-home-screen-asks.js") + read("shared/page/pick-theme.js");
   const device = read("shared/page/device.js");
   for (const check of [
     '"(hover: none) and (pointer: coarse)"',
@@ -33,6 +33,6 @@ test("the welcome tells a phone, its Home Screen, and an iPhone or iPad as devic
     'navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1',
   ]) {
     assert.ok(device.includes(check), `device.js: ${check}`);
-    assert.ok(drawing.includes(check), `draw-home-screen-asks.js: ${check}`);
+    assert.ok(drawing.includes(check), `the plain scripts: ${check}`);
   }
 });
