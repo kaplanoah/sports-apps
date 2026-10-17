@@ -105,11 +105,11 @@ export function createPushService({ storage, now, fetchImpl }) {
    * once it's forgotten.
    * @param {string} key
    * @param {any} subscription
-   * @param {boolean} isDelivered
+   * @param {boolean} wentThrough
    */
-  async function noteDelivery(key, subscription, isDelivered) {
+  async function noteDelivery(key, subscription, wentThrough) {
     const { failingSince, ...kept } = subscription;
-    if (isDelivered) {
+    if (wentThrough) {
       if (failingSince !== undefined) await storage.put(key, kept);
       return kept;
     }

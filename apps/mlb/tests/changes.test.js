@@ -49,8 +49,9 @@ const TEAMS = {
   BOS: { league: "AL", seed: 5 },
   CWS: { league: "AL", seed: 6 },
 };
-const createFinal = (away, home, score) => ({
-  id: `${away}@${home}`,
+// A final with an id of its own, as MLB's gamePk is, so a doubleheader's two games are kept apart.
+const createFinal = (away, home, score, id = `${away}@${home}`) => ({
+  id,
   away,
   home,
   state: "final",
@@ -146,8 +147,16 @@ test("a doubleheader's change is explained by the game that made it, game 2 here
   const before = updateRow(updateRow(BEFORE, "SEA", { elim: "E" }), "TEX", { elim: "1" });
   const after = updateRow(before, "TEX", { elim: "E" });
   const games = [
-    { ...createFinal("TEX", "MIN", [6, 4]), start: "2026-09-24T17:05:00Z", doubleheader: 1 },
-    { ...createFinal("TEX", "MIN", [4, 6]), start: "2026-09-24T22:05:00Z", doubleheader: 2 },
+    {
+      ...createFinal("TEX", "MIN", [6, 4], "TEX@MIN-1"),
+      start: "2026-09-24T17:05:00Z",
+      doubleheader: 1,
+    },
+    {
+      ...createFinal("TEX", "MIN", [4, 6], "TEX@MIN-2"),
+      start: "2026-09-24T22:05:00Z",
+      doubleheader: 2,
+    },
   ];
   const rangersLoss = { team: "TEX", won: false, opp: "MIN", score: [4, 6] };
   const clinch = {
