@@ -505,7 +505,7 @@ test("the stale names are what the change removed that the repo still names, and
     "old-records.js:true": ["AGENTS.md:197:  (`worker/src/old-records.js`),"],
   };
   const grep = (/** @type {string} */ pattern, /** @type {boolean} */ isWord) => {
-    const name = isWord ? pattern : (pattern.match(/\)(\w+)\\b$/)?.[1] ?? "");
+    const name = isWord ? pattern : (pattern.match(/\)(\w+)\(/)?.[1] ?? "");
     return repo[`${name}:${isWord}`] ?? [];
   };
   assert.deepEqual(listStaleNames(diff, grep, ["apps/mlb/worker/src/old-records.js"]), [
@@ -528,7 +528,7 @@ test("a name defined past many matches isn't stale, and a stale one lists its fi
     "GONE:true": docs,
   };
   const grep = (/** @type {string} */ pattern, /** @type {boolean} */ isWord) => {
-    const name = isWord ? pattern : (pattern.match(/\)(\w+)\\b$/)?.[1] ?? "");
+    const name = isWord ? pattern : (pattern.match(/\)(\w+)\(/)?.[1] ?? "");
     return repo[`${name}:${isWord}`] ?? [];
   };
   assert.deepEqual(listStaleNames(diff, grep, []), [{ name: "GONE", hits: docs.slice(0, 15) }]);
@@ -595,6 +595,16 @@ test("a long line that holds .js: past its start never counts as a removed name'
   const grep = (/** @type {string} */ _pattern, /** @type {boolean} */ isWord) =>
     isWord ? ["AGENTS.md:8:GONE"] : [long];
   assert.deepEqual(listStaleNames(diff, grep, []), [{ name: "GONE", hits: ["AGENTS.md:8:GONE"] }]);
+});
+
+test("a removed name with a $ still defined elsewhere isn't stale", () => {
+  const diff = "-export const $gone = 1;\n-export const gone$ = 1;";
+  const definitions = ["worker/a.js:3:const $gone = 2;", "worker/b.js:4:const gone$ = 2;"];
+  const grep = (/** @type {string} */ pattern, /** @type {boolean} */ isWord) =>
+    isWord
+      ? ["AGENTS.md:8:$gone gone$"]
+      : definitions.filter((hit) => new RegExp(pattern).test(hit.split(":").slice(2).join(":")));
+  assert.deepEqual(listStaleNames(diff, grep, []), []);
 });
 
 test("a changed file the diff has no part for stops the review rather than counting as read", () => {

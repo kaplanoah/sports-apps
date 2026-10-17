@@ -310,6 +310,11 @@ test("the review reads every area in full, checks before it posts, and fails on 
   const review = readJob("review");
   const reviewJobs = listJobs().filter((job) => job.startsWith("review-"));
   for (const job of reviewJobs) assert.match(review, new RegExp(`^\\s+${job},$`, "m"), job);
+  assert.match(
+    review,
+    /- if: needs\.review-plan\.outputs\.count != ''\n\s+uses: actions\/download-artifact@\S+ # \S+\n\s+with:\n\s+pattern: review-\*\n/,
+    "the summary downloads the plan even for a plan with no areas",
+  );
   assert.match(review, /run: node worker\/judge-review\.mjs summary \.review/);
   assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
 });

@@ -689,8 +689,8 @@ jobs:
           exit 1
 
   # Posts what the checkers confirmed or left unsure, less the repeats the check across areas named
-  # and with what it added (worker/post-review.mjs). It's the one review job but the summary that
-  # can write to the pull request, and runs no Claude.
+  # and with what it added (worker/post-review.mjs). It and its final twin are the only review jobs
+  # but the summary that can write to the pull request, and run no Claude.
   review-post:
     needs: [review-plan, review-check, review-across]
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}

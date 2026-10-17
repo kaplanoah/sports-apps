@@ -420,9 +420,10 @@ export function listStaleNames(diff, grep, deletedFiles) {
     if (match) (match[1] === "-" ? removed : added).add(match[2]);
   }
   const isGone = (/** @type {string} */ name) =>
-    !grep(`(function\\s*\\*?\\s*|const\\s+|let\\s+|class\\s+)${name}\\b`, false).some((hit) =>
-      /^[^:]*\.m?js:/.test(hit),
-    );
+    !grep(
+      `(function\\s*\\*?\\s*|const\\s+|let\\s+|class\\s+)${escapePattern(name)}([^A-Za-z0-9_$]|$)`,
+      false,
+    ).some((hit) => /^[^:]*\.m?js:/.test(hit));
   const names = [...removed]
     .filter((name) => !added.has(name) && isGone(name))
     .map((name) => ({ name, hits: grep(name, true) }));

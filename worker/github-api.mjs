@@ -1,5 +1,5 @@
-// Calls GitHub's REST API for one repository, as the tooling's scripts that read and write its
-// pull requests and issues do.
+// Calls GitHub's REST API for one repository, and its GraphQL API, as the tooling's scripts that
+// read and write its pull requests and issues do.
 
 const API = "https://api.github.com";
 const REQUEST_TIMEOUT_MS = 10000;
