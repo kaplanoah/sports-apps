@@ -121,7 +121,7 @@ const readListAnswer = (structuredOutput, key) => {
 };
 
 /** @param {string} path */
-const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
+export const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 /** @param {string} path */
 const readExecution = (path) => (path && existsSync(path) ? readJson(path) : []);
@@ -453,11 +453,22 @@ export function judgeReview({ sha, earlierHead, plan, records }) {
           describeStage(judged[index], { stage, areas, sha, since: plan.since }),
         )
       : [describeNothingDue(plan, sha, earlierHead), ""]),
-    ...(plan.unread.length
-      ? ["Left unread, as nothing to review:", ...plan.unread.map(listUnread)]
-      : []),
+    ...listLeftUnread(plan, stages),
   ];
   return { isComplete, body: lines.join("\n").trimEnd() };
+}
+
+/**
+ * The summary's lines on the files the due stages left unread, as nothing to review, each once,
+ * so the last read of the whole change names the ones the push it follows didn't touch too.
+ * @param {any} plan
+ * @param {{ stage: string }[]} stages
+ */
+function listLeftUnread(plan, stages) {
+  const isFinalDue = stages.some(({ stage }) => stage === "final");
+  const unread = [...plan.unread, ...(isFinalDue ? plan.finalUnread : [])];
+  const once = [...new Map(unread.map((file) => [file.path, file])).values()];
+  return once.length ? ["Left unread, as nothing to review:", ...once.map(listUnread)] : [];
 }
 
 /**

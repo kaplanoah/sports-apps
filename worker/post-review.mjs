@@ -12,7 +12,7 @@
 // answer. node worker/post-review.mjs post <folder> <stage>, with GH_TOKEN, GITHUB_REPOSITORY, PR,
 // SHA, and AREAS set, posts and prints posted=<count of this head's findings> for $GITHUB_OUTPUT.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
@@ -22,6 +22,7 @@ import {
   nameCheckedRecord,
   namePostRecord,
   readAnswer,
+  readJson,
 } from "./judge-review.mjs";
 import {
   OFF_DIFF_HEADING,
@@ -215,9 +216,6 @@ export function readAcross(structuredOutput) {
     unjudged: answer.unjudged,
   };
 }
-
-/** @param {string} path */
-const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 /**
  * How many areas a stage has, from the job's AREAS, which must name it, so a job that lost it

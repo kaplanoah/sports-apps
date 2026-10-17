@@ -198,6 +198,26 @@ test("a refusal that isn't about the line stops the step, so a re-run posts the 
   assert.equal(calls.length, 1);
 });
 
+test("a file comment GitHub refuses for another reason than the line stops the step too, rather than listing the finding off the pull request's files", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const callGitHub = async (/** @type {string} */ path, /** @type {any} */ request = {}) => {
+    calls.push({ path, body: request.body });
+    throw new GitHubError(request.body.subject_type === "file" ? 502 : 422, `POST ${path}`);
+  };
+  await assert.rejects(
+    postFindings(callGitHub, {
+      pullNumber: "7",
+      sha: SHA,
+      findings: [finding({})],
+      posted: new Map(),
+    }),
+    /GitHub answered 502/,
+  );
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every((call) => call.path === "/pulls/7/comments"));
+});
+
 test("a finding already posted in any form isn't posted again, and counts as new only from this head", async () => {
   const offFile = finding({ line: 400, body: "posted on its file" });
   const fromEarlier = finding({ body: "an earlier head's" });
@@ -302,4 +322,26 @@ test("the posting step reads every finding already on the pull request, and the 
   assert.deepEqual(read.across, across);
   assert.deepEqual([...(read.posted.get(nameFinding(onLine)) ?? [])], [EARLIER]);
   assert.deepEqual([...(read.posted.get(nameFinding(offFile)) ?? [])], [EARLIER]);
+});
+
+test("a stage of one area posts its checker's findings with no check across areas", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "post-review-"));
+  writeFileSync(
+    join(folder, "check-push-1.json"),
+    JSON.stringify({
+      items: [{ ...finding({ body: "alone" }), ids: ["bugs-1"], verdict: "confirmed" }],
+      unjudged: [],
+    }),
+  );
+  const read = await readPostInputs(async () => [], {
+    folder,
+    stage: "push",
+    areaCount: 1,
+    pullNumber: "7",
+  });
+  assert.deepEqual(
+    read.findings.map((item) => item.body),
+    ["alone"],
+  );
+  assert.equal(read.across, null);
 });

@@ -15,6 +15,7 @@ import {
   findTestedFile,
   listAreas,
   listChangedSince,
+  listDeletedFiles,
   listJobs,
   listStaleNames,
   nameCodeArea,
@@ -352,6 +353,18 @@ test("the first review reads the whole change, a later one what changed, and a m
   );
 });
 
+test("the files a change deletes count a moved file's old path, so its old name is looked for", () => {
+  /** @type {string[][]} */
+  const asked = [];
+  const deleted = listDeletedFiles((args) => {
+    asked.push(args);
+    return "shared/page/foo.js\n";
+  });
+  assert.deepEqual(deleted, ["shared/page/foo.js"]);
+  assert.ok(asked[0].includes("--no-renames"), "a rename counts as a deletion and an addition");
+  assert.ok(asked[0].includes("--diff-filter=D"));
+});
+
 test("the pull request's head is the merge commit's second parent", () => {
   /** @type {string[][]} */
   const asked = [];
@@ -442,7 +455,7 @@ test("a review of a push reads what it changed, and keeps the whole change for t
     return files.length
       ? { numstat: "3\t0\tshared/page/sheet.js\n", diff: diffFile("shared/page/sheet.js", [3]) }
       : {
-          numstat: "3\t0\tshared/page/sheet.js\n1\t0\tworker/deploy.mjs\n",
+          numstat: "3\t0\tshared/page/sheet.js\n1\t0\tworker/deploy.mjs\n9\t9\tpackage-lock.json\n",
           diff: diffFile("shared/page/sheet.js", [3]) + diffFile("worker/deploy.mjs", [1]),
         };
   };
@@ -469,6 +482,10 @@ test("a review of a push reads what it changed, and keeps the whole change for t
     plan.final.map((area) => area.files),
     [["shared/page/sheet.js", "worker/deploy.mjs"]],
   );
+  assert.deepEqual(plan.unread, []);
+  assert.deepEqual(plan.finalUnread, [
+    { path: "package-lock.json", why: "the lockfile, which npm writes" },
+  ]);
   assert.match(readFileSync(join(folder, "push.md"), "utf8"), /hold only what the pushes since/);
   assert.match(readFileSync(join(folder, "final.md"), "utf8"), /## Area 1: small changes/);
   assert.deepEqual(JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")), plan);
@@ -536,7 +553,14 @@ test("a push that changes only what a merge brings in reads nothing", () => {
     repoFiles: [],
     stale: [],
   });
-  assert.deepEqual(plan, { stage: "none", since: null, areas: [], unread: [], final: [] });
+  assert.deepEqual(plan, {
+    stage: "none",
+    since: null,
+    areas: [],
+    unread: [],
+    final: [],
+    finalUnread: [],
+  });
 });
 
 test("a big area splits into as few parts as it needs, each near an even share, with no part left over", () => {

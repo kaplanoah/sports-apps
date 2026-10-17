@@ -592,8 +592,15 @@ function writeIndexedStage(folder, stage, change, words = stage) {
 export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles, stale }) {
   mkdirSync(folder, { recursive: true });
   writeFileSync(join(folder, "stale-names.md"), renderStaleNames(stale));
-  /** @type {{ stage: string, since: string | null, areas: any[], unread: any[], final: any[] }} */
-  const plan = { stage: choice.stage, since: null, areas: [], unread: [], final: [] };
+  /** @type {{ stage: string, since: string | null, areas: any[], unread: any[], final: any[], finalUnread: any[] }} */
+  const plan = {
+    stage: choice.stage,
+    since: null,
+    areas: [],
+    unread: [],
+    final: [],
+    finalUnread: [],
+  };
   if (choice.stage === "first")
     Object.assign(
       plan,
@@ -603,10 +610,8 @@ export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles
     const change = { ...readDiff(pushed.range, choice.files), repoFiles };
     const words = pushed.hasBase ? "push-with-base" : "push";
     Object.assign(plan, writeIndexedStage(folder, "push", change, words), { since });
-    plan.final = writeIndexedStage(folder, "final", {
-      ...readDiff(WHOLE_CHANGE),
-      repoFiles,
-    }).areas;
+    const last = writeIndexedStage(folder, "final", { ...readDiff(WHOLE_CHANGE), repoFiles });
+    Object.assign(plan, { final: last.areas, finalUnread: last.unread });
   }
   writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
   return plan;
@@ -650,6 +655,16 @@ export function findPushedRange(since, git) {
     ? { range: [mergedTree, "HEAD"], hasBase: false }
     : { range: [since, PULL_HEAD], hasBase: true };
 }
+
+/**
+ * The files the change deletes, a moved one under the path it had, so the names it had are looked
+ * for too.
+ * @param {(args: string[]) => string} git
+ */
+export const listDeletedFiles = (git) =>
+  git(["diff", "--name-only", "--no-renames", "--diff-filter=D", ...WHOLE_CHANGE])
+    .split("\n")
+    .filter(Boolean);
 
 /**
  * The pull request's own head, as a commit.
@@ -704,9 +719,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       }),
   });
   const pushed = choice.stage === "push" ? readPushedRange() : null;
-  const deleted = runGit(["diff", "--name-only", "--diff-filter=D", ...WHOLE_CHANGE])
-    .split("\n")
-    .filter(Boolean);
+  const deleted = listDeletedFiles(runGit);
   const plan = writeReview(folder, {
     choice,
     since: reviewedHead,
