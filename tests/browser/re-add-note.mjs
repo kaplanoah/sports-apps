@@ -74,10 +74,6 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
 const HANDOFF_PATH = "access/handoff";
 const HANDOFF_ROUTE = `**/${HANDOFF_PATH}`;
 
-/** @param {import("@playwright/test").Request} request */
-const isHandoffRequest = (request) =>
-  request.method() === "POST" && request.url().endsWith(`/${HANDOFF_PATH}`);
-
 /** @param {string} look */
 const buildHandoffLink = (look) =>
   new RegExp(
@@ -88,47 +84,48 @@ const buildHandoffLink = (look) =>
 const findReAddLink = (page) =>
   page.locator("#appearanceNote").getByRole("link", { name: "re-add the site" });
 
-// A handoff's answer is read in the page's own steps after the network has finished it, so the
-// page counts each one it has read, and a test can wait for that.
+// The page counts, in its own steps, each handoff it asks for as it asks, each answer as it
+// arrives, and each answer's body as it's read, so a test reads where the page is rather than
+// where the network is, which reports to the test in its own time.
 /** @param {string} handoffPath */
-function countHandoffsRead(handoffPath) {
-  const page = /** @type {any} */ (window);
+function countHandoffs(handoffPath) {
+  const handoffs = { asked: 0, answered: 0, read: 0 };
+  Object.assign(window, { handoffs });
   const fetchFromWorker = window.fetch;
-  page.handoffsRead = 0;
   window.fetch = async (...request) => {
+    if (!String(request[0]).endsWith(handoffPath)) return fetchFromWorker(...request);
+    handoffs.asked += 1;
     const response = await fetchFromWorker(...request);
-    if (!String(request[0]).endsWith(handoffPath)) return response;
+    handoffs.answered += 1;
     const readJson = response.json.bind(response);
     response.json = async () => {
       const body = await readJson();
-      page.handoffsRead += 1;
+      handoffs.read += 1;
       return body;
     };
     return response;
   };
 }
 
-/** @param {import("@playwright/test").Page} page */
-const readHandoffsRead = (page) => page.evaluate(() => /** @type {any} */ (window).handoffsRead);
+/**
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<{ asked: number, answered: number, read: number }>}
+ */
+const readHandoffs = (page) => page.evaluate(() => /** @type {any} */ (window).handoffs);
 
 /**
- * Signs in to an iPhone's Home Screen app behind its access code and opens settings, counting
- * each handoff the page asks for.
+ * Signs in to an iPhone's Home Screen app behind its access code and opens settings, with the
+ * page counting its handoffs.
  * @param {LockedApp} app
  */
 async function openLockedSettings({ page, serveLockedApp, openSettings }) {
   await page.addInitScript(markOnHomeScreen);
-  await page.addInitScript(countHandoffsRead, HANDOFF_PATH);
+  await page.addInitScript(countHandoffs, HANDOFF_PATH);
   await serveLockedApp(page, { accessCode: "FASTBREAK" });
-  const handoffs = { count: 0 };
-  page.on("request", (request) => {
-    if (isHandoffRequest(request)) handoffs.count += 1;
-  });
   await page.goto(LOCKED_PAGE_PATH);
   await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
   await page.getByRole("button", { name: "Open" }).click();
   await openSettings(page);
-  return handoffs;
 }
 
 /**
@@ -147,13 +144,17 @@ async function leaveFor(page, ms) {
  * Picks the light look and then the dark one before the light one's handoff answers, and checks
  * the link stays on the dark one, then that the note renews its handoff halfway through, tries
  * again soon after a renewal fails, renews as it comes back from short trips away once that's
- * due, and leaves with settings, renewing no more.
+ * due, leaves with settings, renewing no more, and renews no more once the Worker makes none.
  * @param {LockedApp} app
  */
 export async function checkHandoffRenewal(app) {
-  const { page, looks } = app;
-  const handoffs = await openLockedSettings(app);
+  const { page, openSettings, looks } = app;
+  await openLockedSettings(app);
   const link = findReAddLink(page);
+  const readAsked = async () => (await readHandoffs(page)).asked;
+  const readAnswered = async () => (await readHandoffs(page)).answered;
+  const readRead = async () => (await readHandoffs(page)).read;
+
   /** @type {(value?: unknown) => void} */
   let releaseFirst = () => {};
   const firstHeld = new Promise((resolve) => {
@@ -168,34 +169,41 @@ export async function checkHandoffRenewal(app) {
   await page.getByRole("radio", { name: looks.dark }).check();
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
   releaseFirst();
-  await expect.poll(() => readHandoffsRead(page)).toBe(2);
+  await expect.poll(readRead).toBe(2);
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
-  expect(handoffs.count).toBe(2);
+  expect(await readAsked()).toBe(2);
 
   await page.route(HANDOFF_ROUTE, (route) => route.fulfill({ status: 503 }), { times: 1 });
   await page.clock.runFor(5 * 60 * 1000);
-  await expect.poll(() => handoffs.count).toBe(3);
-  // The clock moves a little at a time, since a renewal sets its timer only once its answer arrives.
-  const readCountAfterTenSeconds = async () => {
-    await page.clock.runFor(10 * 1000);
-    return handoffs.count;
-  };
-  await expect.poll(readCountAfterTenSeconds).toBe(4);
-  await expect.poll(() => readHandoffsRead(page)).toBe(3);
+  expect(await readAsked()).toBe(3);
+  await expect.poll(readAnswered).toBe(3);
+  await page.clock.runFor(30 * 1000);
+  expect(await readAsked()).toBe(4);
+  await expect.poll(readRead).toBe(3);
 
   // Each trip is short of the two minutes that close settings, and the third passes the renewal.
   await leaveFor(page, 110 * 1000);
   await leaveFor(page, 110 * 1000);
-  expect(handoffs.count).toBe(4);
+  expect(await readAsked()).toBe(4);
   await leaveFor(page, 110 * 1000);
-  await expect.poll(() => handoffs.count).toBe(5);
-  await expect.poll(() => readHandoffsRead(page)).toBe(4);
+  expect(await readAsked()).toBe(5);
+  await expect.poll(readRead).toBe(4);
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
 
   await page.locator("#settingsCloseBtn").click();
   await expect(page.locator("#appearanceNote")).toBeEmpty();
   await page.clock.runFor(15 * 60 * 1000);
-  expect(handoffs.count).toBe(5);
+  expect(await readAsked()).toBe(5);
+
+  await openSettings(page);
+  await page.getByRole("radio", { name: looks.light }).check();
+  await expect.poll(readRead).toBe(5);
+  await page.route(HANDOFF_ROUTE, (route) => route.fulfill({ status: 404 }), { times: 1 });
+  await page.clock.runFor(5 * 60 * 1000);
+  expect(await readAsked()).toBe(7);
+  await expect.poll(readAnswered).toBe(7);
+  await page.clock.runFor(10 * 60 * 1000);
+  expect(await readAsked()).toBe(7);
 }
 
 /**
