@@ -986,7 +986,8 @@ The root's `tests/agents-lines.test.js` checks it.
 
 On the pages, text of one sentence or less, like a label, an empty view's note,
 or a setting's note, ends without a period; text of two or more sentences,
-like a release note or a message that says what to do, ends with one.
+like a release note or a message that says what to do, ends with one,
+but for text that ends in a link, which ends without one, as the Home Screen app's note does.
 An outlet's own words keep their punctuation, in an element marked `data-quoted`.
 The root's `tests/browser/stray-periods.mjs` lists any shown text that breaks this,
 and each app's browser tests check every view with it, wherever they check the type roles.
