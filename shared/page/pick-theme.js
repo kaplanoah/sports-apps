@@ -38,8 +38,8 @@ function keepThemeFromAddress() {
     localStorage.setItem("appearance", JSON.stringify(fromAddress));
 }
 
-function showPickedTheme() {
-  const choice = readPickedAppearance();
+/** @param {string} choice */
+function showTheme(choice) {
   const prefersDark = matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = choice === "dark" || (choice !== "light" && prefersDark);
   document.documentElement.dataset.theme = isDark ? "dark" : "light";
@@ -52,12 +52,12 @@ function keepPickedAppearance(choice) {
   } catch {
     /* appearance.js keeps it for as long as the page is open */
   }
-  showPickedTheme();
+  showTheme(choice);
 }
 
 try {
   keepThemeFromAddress();
-  showPickedTheme();
+  showTheme(readPickedAppearance());
 } catch {
   document.documentElement.dataset.theme = "light";
 }

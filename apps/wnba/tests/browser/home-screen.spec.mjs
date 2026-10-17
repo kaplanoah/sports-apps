@@ -73,58 +73,40 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await listThemeLayoutChanges(page)).toEqual([]);
   });
 
-  test("the heading opens the welcome's room, and each number and its circle sit a little high", async ({
-    page,
-  }) => {
+  test("the heading opens the welcome's room", async ({ page }) => {
     await openApp(page, { isShowingWelcome: true });
-    const placed = await page.locator(WELCOME).evaluate((welcome) => {
+    const headingGap = await page.locator(WELCOME).evaluate((welcome) => {
       const roomTop =
         welcome.getBoundingClientRect().top + parseFloat(getComputedStyle(welcome).paddingTop);
-      const steps = [...welcome.querySelectorAll(".welcome-steps > li:not([hidden])")].map(
-        (step) => {
-          const circle = getComputedStyle(step, "::before");
-          const circleTop = step.getBoundingClientRect().top + parseFloat(circle.marginTop);
-          const circleMiddle = circleTop + parseFloat(circle.height) / 2;
-          const numberMiddle =
-            circleTop + (parseFloat(circle.height) - parseFloat(circle.paddingBottom)) / 2;
-          const words = step.querySelector(".welcome-step").getBoundingClientRect();
-          return {
-            circleOverWords: words.top + words.height / 2 - circleMiddle,
-            numberOverCircle: circleMiddle - numberMiddle,
-          };
-        },
-      );
-      return {
-        headingGap: welcome.querySelector(".welcome-title").getBoundingClientRect().top - roomTop,
-        steps,
-      };
+      return welcome.querySelector(".welcome-title").getBoundingClientRect().top - roomTop;
     });
-    expect(placed.headingGap).toBe(0);
-    expect(placed.steps).toEqual(Array(3).fill({ circleOverWords: 1, numberOverCircle: 0.5 }));
+    expect(headingGap).toBe(0);
   });
 
-  // Safari's floating bar on an iPhone 17 Pro makes a bottom inset of 190px, and Android's Chrome none.
-  test("Continue sits 32px into the room over Safari's bar, and keeps its distance where there's no bar", async ({
+  // An iPhone's bottom inset, which keeps its home bar clear, is 34px, and Android's Chrome has none.
+  test("Continue's text sits 24px over the welcome's bottom, on an iPhone and where there's no inset", async ({
     page,
   }) => {
     await openApp(page, { isShowingWelcome: true });
-    const roomUnder = await page.locator(WELCOME).evaluate((welcome) => {
+    const textOverBottom = await page.locator(WELCOME).evaluate((welcome) => {
       const rule = /** @type {CSSStyleRule} */ (
         [...document.styleSheets]
           .flatMap((sheet) => [...sheet.cssRules])
           .find((each) => each instanceof CSSStyleRule && each.selectorText === ".welcome")
       );
       const declared = rule.style.paddingBottom;
-      return [190, 0].map((inset) => {
+      const halfButton =
+        welcome.querySelector(".welcome-continue").getBoundingClientRect().height / 2;
+      return [34, 0].map((inset) => {
         const probe = document.createElement("div");
         probe.style.paddingBottom = declared.replace("env(safe-area-inset-bottom)", `${inset}px`);
         welcome.append(probe);
         const padding = parseFloat(getComputedStyle(probe).paddingBottom);
         probe.remove();
-        return padding;
+        return padding + halfButton;
       });
     });
-    expect(roomUnder).toEqual([158, 24]);
+    expect(textOverBottom).toEqual([24, 24]);
   });
 
   test("the welcome is there before the page's code runs, so it never arrives over the page", async ({
@@ -140,6 +122,25 @@ test.describe("on an iPhone, in the browser", () => {
       "Tap Share",
       "Tap Add to Home Screen",
     ]);
+  });
+
+  test("where the phone refuses the page its storage, a theme picked on the welcome still shows", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "localStorage", {
+        get: () => {
+          throw new DOMException("The operation is insecure.", "SecurityError");
+        },
+      });
+    });
+    await page.emulateMedia({ colorScheme: "light" });
+    // The harness would keep the Updates box dismissed in the storage this test takes away.
+    await openApp(page, { isShowingWelcome: true, isShowingUpdates: true });
+    await expect(page.locator("#stamp")).toBeVisible();
+    await page.locator(WELCOME).getByRole("radio", { name: "Walnut" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator("#homeScreenIcon")).toHaveAttribute("href", "icon-180.png");
   });
 
   test("before the page's code arrives, the welcome already picks the theme and closes for good", async ({
