@@ -20,6 +20,16 @@ import {
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
+/**
+ * Waits for the page to draw the season the store sent, which names the season's tab Bracket and
+ * adds the header's lines over the tabs, moving them.
+ * @param {import("@playwright/test").Page} page
+ */
+async function expectFirstDrawing(page) {
+  await expect(page.locator("#bracketFace")).toBeVisible();
+  await expect(page.locator("#stamp")).toBeVisible();
+}
+
 test("the page opens on the bracket the Worker saved, and each tab shows its view", async ({
   page,
 }) => {
@@ -422,6 +432,7 @@ test.describe("on a phone", () => {
   }) => {
     // The tab bar's pill would ease to each tab, which this test doesn't need to wait out.
     await openApp(page);
+    await expectFirstDrawing(page);
     const bar = await page.locator("#tabBar").boundingBox();
     expect(bar.y + bar.height).toBeGreaterThan(844 - 40);
     const headerBottom = await page
@@ -546,6 +557,7 @@ test("on a wide screen, the tabs are one segmented control, each as tall as a pi
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openApp(page);
+  await expectFirstDrawing(page);
   const track = page.locator("nav.tabs");
   const tabs = track.getByRole("tab");
   const readBoxes = () =>
