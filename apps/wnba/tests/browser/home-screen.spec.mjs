@@ -91,6 +91,9 @@ test.describe("on an iPhone, in the browser", () => {
       "manifest.webmanifest?theme=dark",
     );
     expect(await listLowContrastText(page)).toEqual([]);
+    await welcome.getByRole("radio", { name: "System" }).check();
+    await expect(page.locator("#manifestLink")).toHaveAttribute("href", "manifest.webmanifest");
+    await welcome.getByRole("radio", { name: "Walnut" }).check();
     await welcome.getByRole("button", CONTINUE).click();
     await openSettings(page);
     await expect(page.locator('input[name="appearance"][value="dark"]')).toBeChecked();
@@ -113,14 +116,18 @@ test.describe("on an iPhone, in the browser", () => {
     );
   });
 
-  test("the Home Screen app's first open takes the theme its address names, but never over one picked since", async ({
+  test("the Home Screen app's first open takes the theme its address names, drops it from the address, and never puts it over one picked since", async ({
     page,
   }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => true });
+    });
     await page.emulateMedia({ colorScheme: "light" });
     await openApp(page);
     await page.goto("/?theme=dark");
     await expect(page.locator("#stamp")).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(new URL(page.url()).search).toBe("");
     await openSettings(page);
     await expect(page.locator('input[name="appearance"][value="dark"]')).toBeChecked();
 
@@ -128,6 +135,19 @@ test.describe("on an iPhone, in the browser", () => {
     await page.goto("/?theme=dark");
     await expect(page.locator("#stamp")).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  });
+
+  test("a shared link that names a theme opens in the browser on the phone's own, and drops it from the address", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page);
+    await page.goto("/?theme=dark");
+    await expect(page.locator("#stamp")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(new URL(page.url()).search).toBe("");
+    await openSettings(page);
+    await expect(page.locator('input[name="appearance"][value="auto"]')).toBeChecked();
   });
 
   test("opened from the Home Screen, the page asks for nothing", async ({ page }) => {

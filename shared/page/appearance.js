@@ -47,11 +47,14 @@ function showTheme(looks, theme) {
   findElement("homeScreenIcon").setAttribute("href", homeScreenIcon);
 }
 
-// A Home Screen app keeps its storage apart from the browser's, so the page's manifest names the
-// pick in the address the app opens at, which pick-theme.js keeps on its first open.
+// A Home Screen app keeps its storage apart from the browser's, so the page's manifest names a
+// picked look in the address the app opens at, which pick-theme.js keeps on its first open. System
+// is what the app opens on anyway.
 /** @param {string} choice */
 function offerPickToHomeScreen(choice) {
-  findElement("manifestLink").setAttribute("href", `manifest.webmanifest?theme=${choice}`);
+  const manifest =
+    choice === "auto" ? "manifest.webmanifest" : `manifest.webmanifest?theme=${choice}`;
+  findElement("manifestLink").setAttribute("href", manifest);
 }
 
 /**
