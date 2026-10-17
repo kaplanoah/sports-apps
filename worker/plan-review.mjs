@@ -421,7 +421,7 @@ export function listStaleNames(diff, grep, deletedFiles) {
   }
   const isGone = (/** @type {string} */ name) =>
     !grep(`(function\\s*\\*?\\s*|const\\s+|let\\s+|class\\s+)${name}\\b`, false).some((hit) =>
-      /\.m?js:/.test(hit),
+      /^[^:]*\.m?js:/.test(hit),
     );
   const names = [...removed]
     .filter((name) => !added.has(name) && isGone(name))
@@ -439,23 +439,27 @@ export function listStaleNames(diff, grep, deletedFiles) {
   );
 }
 
+// Where the pages' `#shared/` imports and `shared/` links lead, by package.json's imports.
+const SHARED_PAGE_FOLDER = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).imports["#shared/*"].replace(/^\.\/|\*$/g, "");
+
 /**
  * Whether a place the search found may name a deleted file: some path in its text that the
- * file's path ends with, reading `#shared/` and `shared/` as `shared/page/`, as the pages' import
- * map and links do, rather than only another file's of the same name.
+ * file's path ends with, as written or with a leading `shared/` read as the pages read it, rather
+ * than only another file's of the same name.
  * @param {string} hit path:line:text
  * @param {string} path the deleted file's
  */
 function mayNameFile(hit, path) {
   const text = hit.replace(/^[^:]*:\d+:/, "");
   const name = escapePattern(basename(path));
-  const mentions = text.match(new RegExp(`[\\w#./-]*${name}(?!\\w)`, "g")) ?? [];
+  const mentions = text.match(new RegExp(`[\\w./-]*${name}(?!\\w)`, "g")) ?? [];
   return mentions.some((mention) => {
-    const tail = mention
-      .replace(/^#/, "")
-      .replace(/^(?:\.{0,2}\/)+/, "")
-      .replace(/^shared\/(?!page\/|worker\/)/, "shared/page/");
-    return path === tail || path.endsWith(`/${tail}`);
+    const tail = mention.replace(/^(?:\.{0,2}\/)+/, "");
+    return [tail, tail.replace(/^shared\//, SHARED_PAGE_FOLDER)].some(
+      (written) => path === written || path.endsWith(`/${written}`),
+    );
   });
 }
 

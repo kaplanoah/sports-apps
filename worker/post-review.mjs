@@ -118,7 +118,9 @@ function listRepeats(groups, weightByRef) {
 /**
  * What a stage posts: every postable finding its checkers kept but the repeats the check across
  * areas named, each at the heaviest settled weight of those it stands in for, with what it added,
- * weightiest first. A finding that can't be posted neither leads nor joins a group of repeats.
+ * weightiest first. A finding that can't be posted neither leads nor joins a group of repeats,
+ * and one said word for word in the same file more than once is listed once, at the heaviest
+ * weight a checker settled among its copies.
  * @param {(Finding & { ref?: string })[]} checked
  * @param {Across | null} across
  * @returns {Finding[]}

@@ -556,7 +556,7 @@ test("a deleted file's places that may name it come first, each cut short", () =
   ]);
 });
 
-test("a deleted shared page file is named by the pages' #shared/ imports and shared/ links", () => {
+test("a deleted shared file is named by its full path, the pages' #shared/ imports, and shared/ links", () => {
   /** @type {Record<string, string[]>} */
   const repo = {
     "updates.js": [
@@ -567,14 +567,34 @@ test("a deleted shared page file is named by the pages' #shared/ imports and sha
       "apps/wnba/page/chrome.css:1:a page's own",
       'apps/mlb/page/index.html:27:<link rel="stylesheet" href="shared/chrome.css" />',
     ],
+    "sheet.js": [
+      "AGENTS.md:2:MLB's `apps/mlb/page/js/sheet.js`",
+      "AGENTS.md:9:`shared/page/sheet.js` holds the stack",
+    ],
+    "notifications.js": [
+      "AGENTS.md:3:MLB's `apps/mlb/worker/src/notifications.js`",
+      "AGENTS.md:5:`shared/worker/notifications.js` caps a night's",
+    ],
   };
   const grep = (/** @type {string} */ pattern) => repo[pattern] ?? [];
+  const deleted = [
+    "shared/page/updates.js",
+    "shared/page/chrome.css",
+    "shared/page/sheet.js",
+    "shared/worker/notifications.js",
+  ];
   assert.deepEqual(
-    listStaleNames("", grep, ["shared/page/updates.js", "shared/page/chrome.css"]).map(
-      ({ hits }) => hits[0],
-    ),
-    [repo["updates.js"][1], repo["chrome.css"][1]],
+    listStaleNames("", grep, deleted).map(({ hits }) => hits[0]),
+    Object.values(repo).map((hits) => hits[1]),
   );
+});
+
+test("a long line that holds .js: past its start never counts as a removed name's definition", () => {
+  const diff = "-export const GONE = 1;";
+  const long = `AGENTS.md:7:const GONE ${"x".repeat(240)} see worker/a.js: for more`;
+  const grep = (/** @type {string} */ _pattern, /** @type {boolean} */ isWord) =>
+    isWord ? ["AGENTS.md:8:GONE"] : [long];
+  assert.deepEqual(listStaleNames(diff, grep, []), [{ name: "GONE", hits: ["AGENTS.md:8:GONE"] }]);
 });
 
 test("a changed file the diff has no part for stops the review rather than counting as read", () => {
