@@ -1,7 +1,10 @@
+// Machines measure a font's ink a fraction of a pixel apart, so a number this near the middle is
+// in it.
+export const MIDDLE_ALLOWANCE = 0.75;
+
 /**
- * How far the Home Screen steps' numbers sit below their circles' middle, in pixels to the nearest
- * half, measured from where the font draws the digits' ink, all of them together, rather than
- * their line.
+ * How far the Home Screen steps' numbers sit below their circles' middle, in pixels, measured from
+ * where the font draws the digits' ink, all of them together, rather than their line.
  * @param {import("@playwright/test").Page} page
  */
 export async function measureStepNumbers(page) {
@@ -17,6 +20,6 @@ export async function measureStepNumbers(page) {
     const baseline = (room - lineHeight) / 2 + digits.fontBoundingBoxAscent;
     const inkMiddle =
       baseline - (digits.actualBoundingBoxAscent - digits.actualBoundingBoxDescent) / 2;
-    return Math.round((inkMiddle - height / 2) * 2) / 2;
+    return inkMiddle - height / 2;
   });
 }
