@@ -1,8 +1,8 @@
 // Keeps one open issue that names each browser test that failed only some of the time, so it's
 // found and fixed rather than retried past on pull requests. Each night it adds main's nightly run
-// (with no retry, .github/workflows/flaky.yml), and the CI runs that finished since the last night
-// that reported: pull requests' runs where a retry passed, and burn-in's runs of tests a pull
-// request didn't write or edit (worker/judge-burn-in.mjs), from the artifacts CI keeps. The issue's
+// (with no retry, .github/workflows/flaky.yml), and what CI's runs kept since the last night that
+// reported: the reports of pull requests' runs where a retry passed, and burn-in's lists of tests a
+// pull request didn't write or edit (worker/judge-burn-in.mjs), each taken once. The issue's
 // body is one table, one row a test, that only the nightly run writes, so no two writes ever race
 // and no run's report is lost; a comment names each test new to it, and starts the routine that
 // fixes the table's top test; a row goes once its test hasn't failed for a week, and the issue
@@ -24,7 +24,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const NIGHTLY_WORKFLOW = "flaky.yml";
 const REPORT_JOB = "report";
 const NIGHTS_LOOKED_BACK = 10;
-// A CI run ends within hours of starting, so one started a day before a window can't end in it.
+// A CI run makes its artifacts within hours of starting, so one started a day before a window made
+// none in it.
 const LONGEST_RUN_MS = DAY_MS;
 // CI keeps a run's report only when a test needed its retry or failed, and burn-in's list only when
 // it named a test.
@@ -316,9 +317,9 @@ async function findJobStart(github, runId, isWanted) {
 const isReport = (job) => job.name === REPORT_JOB;
 
 /**
- * The CI runs this night's report takes: those that finished from when the last night's report
- * that went through began, until this one began. A night whose report failed leaves its runs to
- * the next, and with no such night it looks back over the days the table keeps.
+ * What CI made that this night's report takes: from when the last night's report that went
+ * through began, until this one began. A night whose report failed leaves what it would have
+ * taken to the next, and with no such night it looks back over the days the table keeps.
  * @param {GitHub} github
  * @param {{ runId: string, now: Date }} night
  * @returns {Promise<{ since: Date, until: Date }>}
@@ -341,19 +342,30 @@ export async function findReportWindow(github, { runId, now }) {
 }
 
 /**
- * Whether a CI run finished from `since` until `until`, from a branch of this repository: a
- * fork's run could hand the table anything.
+ * Whether a CI run, from a branch of this repository, may hold artifacts made in the window: a
+ * fork's run could hand the table anything, and a run last changed before the window made none in
+ * it.
  * @param {any} run
- * @param {{ since: Date, until: Date }} window
+ * @param {{ since: Date }} window
  */
-const isRunToReport = (run, { since, until }) =>
-  run.status === "completed" &&
-  run.head_repository?.id === run.repository?.id &&
-  Date.parse(run.updated_at) >= since.getTime() &&
-  Date.parse(run.updated_at) < until.getTime();
+const mayHoldWindow = (run, { since }) =>
+  run.head_repository?.id === run.repository?.id && Date.parse(run.updated_at) >= since.getTime();
 
 /**
- * Each CI run in the window that kept a report or burn-in's list, with those artifacts' names.
+ * Whether an artifact is a report or burn-in's list made from `since` until `until`. A run that
+ * runs a job again keeps its first try's artifacts, which an earlier night already took.
+ * @param {any} artifact
+ * @param {{ since: Date, until: Date }} window
+ */
+const isArtifactToReport = (artifact, { since, until }) =>
+  !artifact.expired &&
+  RUN_ARTIFACT.test(artifact.name) &&
+  Date.parse(artifact.created_at) >= since.getTime() &&
+  Date.parse(artifact.created_at) < until.getTime();
+
+/**
+ * Each CI run that made a report or burn-in's list in the window, with those artifacts' names, so
+ * each artifact is taken by one night only.
  * @param {GitHub} github
  * @param {{ since: Date, until: Date }} window
  * @returns {Promise<FlakyRun[]>}
@@ -362,13 +374,13 @@ export async function listFlakyRuns(github, window) {
   const earliest = new Date(window.since.getTime() - LONGEST_RUN_MS).toISOString();
   const runs = await readAllPages(
     async (path) => (await github(path)).workflow_runs,
-    `/actions/workflows/ci.yml/runs?status=completed&created=>=${earliest}`,
+    `/actions/workflows/ci.yml/runs?created=>=${earliest}`,
   );
   const flakyRuns = [];
-  for (const run of runs.filter((candidate) => isRunToReport(candidate, window))) {
+  for (const run of runs.filter((candidate) => mayHoldWindow(candidate, window))) {
     const { artifacts } = await github(`/actions/runs/${run.id}/artifacts?per_page=100`);
     const names = artifacts
-      .filter((artifact) => !artifact.expired && RUN_ARTIFACT.test(artifact.name))
+      .filter((artifact) => isArtifactToReport(artifact, window))
       .map((artifact) => artifact.name);
     if (names.length) flakyRuns.push({ id: run.id, names });
   }

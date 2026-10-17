@@ -432,12 +432,14 @@ test("without the routine's trigger set, a new test starts no routine", async ()
 const NIGHT_RUN = "900";
 const REPOSITORY_ID = 41;
 
+/** @typedef {string | { name: string, created_at: string }} FakeArtifact */
+
 /**
  * GitHub's API as the nightly report reads it: the nightly runs, newest first, each with its
- * report job, and CI's runs, each with its artifacts.
+ * report job, and CI's runs, each with its artifacts, made as the run last changed unless named.
  * @param {object} state
  * @param {{ id: number | string, report?: { started_at: string, conclusion: string | null } }[]} state.nights
- * @param {{ id: number, updated_at: string, head_repository_id?: number, status?: string, artifacts?: string[] }[]} [state.ciRuns]
+ * @param {{ id: number, updated_at: string, head_repository_id?: number, artifacts?: FakeArtifact[] }[]} [state.ciRuns]
  */
 function createFakeRunsApi({ nights, ciRuns = [] }) {
   /** @type {string[]} */
@@ -456,7 +458,6 @@ function createFakeRunsApi({ nights, ciRuns = [] }) {
       return {
         workflow_runs: ciRuns.map((run) => ({
           id: run.id,
-          status: run.status ?? "completed",
           updated_at: run.updated_at,
           repository: { id: REPOSITORY_ID },
           head_repository: { id: run.head_repository_id ?? REPOSITORY_ID },
@@ -465,7 +466,13 @@ function createFakeRunsApi({ nights, ciRuns = [] }) {
     const artifacts = path.match(/^\/actions\/runs\/(\d+)\/artifacts/);
     if (artifacts) {
       const run = ciRuns.find(({ id }) => String(id) === artifacts[1]);
-      return { artifacts: (run?.artifacts ?? []).map((name) => ({ name, expired: false })) };
+      return {
+        artifacts: (run?.artifacts ?? []).map((artifact) =>
+          typeof artifact === "string"
+            ? { name: artifact, created_at: run?.updated_at, expired: false }
+            : { ...artifact, expired: false },
+        ),
+      };
     }
     throw new Error(`unexpected ${path}`);
   };
@@ -477,7 +484,7 @@ const THIS_NIGHT = {
   report: { started_at: "2026-10-10T07:40:00Z", conclusion: null },
 };
 
-test("a night takes the CI runs that finished since the last night whose report went through", async () => {
+test("a night takes what CI made since the last night whose report went through", async () => {
   const { github } = createFakeRunsApi({
     nights: [
       THIS_NIGHT,
@@ -499,7 +506,9 @@ test("a first night looks back over the week the table keeps", async () => {
   );
 });
 
-test("each of this repository's CI runs that finished in the window and kept a report is taken once", async () => {
+const WINDOW = { since: new Date("2026-10-09T07:40:00Z"), until: new Date("2026-10-10T07:40:00Z") };
+
+test("each report or burn-in list this repository's CI made in the window is taken", async () => {
   const { github, asked } = createFakeRunsApi({
     nights: [],
     ciRuns: [
@@ -517,32 +526,50 @@ test("each of this repository's CI runs that finished in the window and kept a r
       },
       { id: 4, updated_at: "2026-10-09T07:39:59Z", artifacts: ["browser-report-1"] },
       { id: 5, updated_at: "2026-10-10T07:40:00Z", artifacts: ["browser-report-1"] },
-      {
-        id: 6,
-        updated_at: "2026-10-09T15:00:00Z",
-        status: "in_progress",
-        artifacts: ["browser-report-1"],
-      },
     ],
   });
-  const window = {
-    since: new Date("2026-10-09T07:40:00Z"),
-    until: new Date("2026-10-10T07:40:00Z"),
-  };
 
-  assert.deepEqual(await listFlakyRuns(github, window), [
+  assert.deepEqual(await listFlakyRuns(github, WINDOW), [
     { id: 1, names: ["browser-report-3", "burn-in-flaky-2"] },
   ]);
   assert.ok(
-    asked[0].startsWith(
-      "/actions/workflows/ci.yml/runs?status=completed&created=>=2026-10-08T07:40:00.000Z",
-    ),
+    asked[0].startsWith("/actions/workflows/ci.yml/runs?created=>=2026-10-08T07:40:00.000Z"),
     asked[0],
   );
   assert.deepEqual(
     asked.filter((path) => path.includes("/artifacts")),
-    ["/actions/runs/1/artifacts?per_page=100", "/actions/runs/2/artifacts?per_page=100"],
+    [
+      "/actions/runs/1/artifacts?per_page=100",
+      "/actions/runs/2/artifacts?per_page=100",
+      "/actions/runs/5/artifacts?per_page=100",
+    ],
   );
+});
+
+test("a run whose job ran again in the window gives only what the new try made, since a night before took the rest", async () => {
+  const { github } = createFakeRunsApi({
+    nights: [],
+    ciRuns: [
+      {
+        id: 8,
+        updated_at: "2026-10-09T09:00:00Z",
+        artifacts: [
+          { name: "browser-report-2", created_at: "2026-10-09T06:00:00Z" },
+          { name: "burn-in-flaky-1", created_at: "2026-10-09T06:05:00Z" },
+        ],
+      },
+      {
+        id: 9,
+        updated_at: "2026-10-09T10:00:00Z",
+        artifacts: [
+          { name: "browser-report-1", created_at: "2026-10-09T05:00:00Z" },
+          { name: "browser-report-4", created_at: "2026-10-09T09:55:00Z" },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(await listFlakyRuns(github, WINDOW), [{ id: 9, names: ["browser-report-4"] }]);
 });
 
 /**

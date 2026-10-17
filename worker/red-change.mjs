@@ -97,6 +97,12 @@ const LAYER_SETTINGS = [
   },
 ];
 
+// Object.assign(<part>.style, { ... }) sets each key of its object as a style, a number too.
+const STYLE_ASSIGN = /Object\.assign\(\s*[\w$.]+\.style\s*,\s*\{/g;
+const STYLE_KEY = new RegExp(
+  `(?:^|[\\s{,])["']?(?:-webkit-|webkit|Webkit)?(${PROPERTY_NAMES}|${CAMEL_PROPERTY_NAMES})(?:-[a-z]+|[A-Z][a-z]+)*["']?\\s*:`,
+);
+
 // Beside the layers, what in the shared stylesheets decides how iOS stacks, scrolls, and shows
 // the page's parts: where a part sits over others, what scrolls and takes a touch, and whether a
 // part draws at all. Their fonts, colors, spacing, and sizes CI checks as an iPhone shows them.
@@ -247,24 +253,88 @@ function findSharedReasons(file) {
 }
 
 /**
+ * The index of the brace that closes the one at `open`, or the text's end when none does.
+ * @param {string} text
+ * @param {number} open
+ */
+function findClosingBrace(text, open) {
+  let depth = 0;
+  for (let at = open; at < text.length; at += 1) {
+    if (text[at] === "{") depth += 1;
+    if (text[at] === "}") depth -= 1;
+    if (depth === 0) return at;
+  }
+  return text.length;
+}
+
+/**
+ * @param {string} text
+ * @param {number} index
+ */
+const findLineNumber = (text, index) => text.slice(0, index).split("\n").length;
+
+/**
+ * The line numbers, from 1, that lie in an object Object.assign hands a part's style, whose keys
+ * a hunk's lines can't show as styles when the call sits above them.
+ * @param {string} text a script as the change leaves it
+ */
+export function findStyleObjectLines(text) {
+  const lines = new Set();
+  for (const match of text.matchAll(STYLE_ASSIGN)) {
+    const open = (match.index ?? 0) + match[0].length - 1;
+    const last = findLineNumber(text, findClosingBrace(text, open));
+    for (let line = findLineNumber(text, open); line <= last; line += 1) lines.add(line);
+  }
+  return lines;
+}
+
+/**
+ * What an added line sets that makes a layer, given whether it lies in a style's object.
+ * @param {AddedLine} line
+ * @param {Set<number>} styleLines
+ */
+function findAddedSetting({ number, text }, styleLines) {
+  const setting = findLayerSetting(text);
+  if (setting || isComment(text) || !styleLines.has(number)) return setting;
+  const key = text.match(STYLE_KEY);
+  return key ? `a style property that sets ${key[1]}` : null;
+}
+
+/**
+ * The script a path names as the change leaves it, or nothing when there's none to read.
+ * @param {string} path from the repository's root
+ */
+function readChangedScript(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/**
  * @param {ChangedFile} file
+ * @param {(path: string) => string} readScript
  * @returns {string[]}
  */
-function findFileReasons(file) {
+function findFileReasons(file, readScript) {
   const { path, addedLines } = file;
   if (RED_FILES.has(path)) return findSharedReasons(file);
   if (!isPageCode(path)) return [];
-  return addedLines.flatMap(({ number, text }) => {
-    const setting = findLayerSetting(text);
-    return setting ? [`${path}:${number} adds ${setting}: ${text.trim()}`] : [];
+  const styleLines = path.endsWith(".js") ? findStyleObjectLines(readScript(path)) : new Set();
+  return addedLines.flatMap((line) => {
+    const setting = findAddedSetting(line, styleLines);
+    return setting ? [`${path}:${line.number} adds ${setting}: ${line.text.trim()}`] : [];
   });
 }
 
 /**
  * Why a change is red, one reason per file or line, or none when it isn't.
  * @param {ChangedFile[]} files
+ * @param {(path: string) => string} [readScript] a page's script as the change leaves it
  */
-export const findRedReasons = (files) => files.flatMap(findFileReasons);
+export const findRedReasons = (files, readScript = readChangedScript) =>
+  files.flatMap((file) => findFileReasons(file, readScript));
 
 /**
  * @typedef {object} TimelineEvent

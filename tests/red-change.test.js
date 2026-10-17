@@ -5,6 +5,7 @@ import {
   decideGate,
   findLabeling,
   findRedReasons,
+  findStyleObjectLines,
   readDiff,
   readPushTime,
   readTimeline,
@@ -30,14 +31,24 @@ const createDiff = (path, added, { kept = ["kept"], removed = ["removed"] } = {}
     "",
   ].join("\n");
 
+// A script with no style's object in it, so only the diff's lines decide.
+const readPlainScript = () => "";
+
 /** @param {string} path @param {string[]} [addedLines] */
 const findReasons = (path, addedLines = []) =>
-  findRedReasons([
-    { path, addedLines: addedLines.map((text, index) => ({ number: index + 1, text })), hunks: [] },
-  ]);
+  findRedReasons(
+    [
+      {
+        path,
+        addedLines: addedLines.map((text, index) => ({ number: index + 1, text })),
+        hunks: [],
+      },
+    ],
+    readPlainScript,
+  );
 
 /** @param {string} diff */
-const findDiffReasons = (diff) => findRedReasons(readDiff(diff));
+const findDiffReasons = (diff) => findRedReasons(readDiff(diff), readPlainScript);
 
 test("a diff lists each file with its added lines, numbered as the new file has them, and its hunks", () => {
   const diff = createDiff("apps/wnba/page/styles.css", [".a {", "  color: red;"]);
@@ -252,6 +263,51 @@ test("an added line that makes a layer is red in any page's CSS or JavaScript", 
   ])
     for (const line of layerLines)
       assert.equal(findReasons(path, [line]).length, 1, `${path}: ${line}`);
+});
+
+// As shared/page/strip-slide.js places its lens, with the call above what a hunk shows of it.
+const STYLE_SCRIPT = [
+  "function placeLens({ lens, left, width }) {",
+  "  Object.assign(lens.style, {",
+  "    left: `${left}px`,",
+  "    top: `${top}px`,",
+  "    width: `${width}px`,",
+  "    height: `${height}px`,",
+  "    scale: 0.98,",
+  '    "will-change": "transform",',
+  "    willChange: 'transform',",
+  "    // scale: 0.98,",
+  "  });",
+  "  const steps = { scale: 0.98, rotate: 2 };",
+  "}",
+].join("\n");
+
+test("a key of the object Object.assign hands a part's style sets that style, a number too, wherever the call sits", () => {
+  const path = "shared/page/strip-slide-lens.js";
+  /** @param {number} number */
+  const findLineReasons = (number) =>
+    findRedReasons(
+      [
+        {
+          path,
+          addedLines: [{ number, text: STYLE_SCRIPT.split("\n")[number - 1] }],
+          hunks: [],
+        },
+      ],
+      (read) => (read === path ? STYLE_SCRIPT : ""),
+    );
+  assert.deepEqual(findLineReasons(7), [
+    `${path}:7 adds a style property that sets scale: scale: 0.98,`,
+  ]);
+  assert.equal(findLineReasons(8).length, 1, "a style's quoted name");
+  assert.equal(findLineReasons(9).length, 1, "a style's camelCase name");
+  for (const quiet of [3, 6, 10, 12])
+    assert.deepEqual(findLineReasons(quiet), [], STYLE_SCRIPT.split("\n")[quiet - 1]);
+});
+
+test("the lines of each object Object.assign hands a part's style are found, and no others", () => {
+  assert.deepEqual([...findStyleObjectLines(STYLE_SCRIPT)], [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.deepEqual([...findStyleObjectLines("Object.assign(session, { scale: 1 });")], []);
 });
 
 test("lines that only read or name those properties aren't red", () => {
