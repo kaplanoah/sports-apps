@@ -246,6 +246,7 @@ function isStripOnChosenDay() {
 // middle, and its month back over it, from wherever a finger left the strip.
 /** @param {ScrollBehavior} behavior */
 function bringBackChosenCell(behavior) {
+  endStripSlide();
   if (!chosenDay || isStripOnChosenDay()) return;
   dayStripLog.noteStep(`the strip comes back to ${chosenDay}`);
   isStripSwiped = false;

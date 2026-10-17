@@ -714,6 +714,52 @@ for (const { screen, viewport } of [
   });
 }
 
+test("a tap on Games while a flick of the list still slides the dates to today ends the slide at once, today's date in the strip's middle", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await page.clock.runFor(1000);
+  await expectDayAtTop(page, "2026-09-30");
+  const dayBefore = await findDay(page, "2026-09-30").evaluate(
+    (today) => /** @type {HTMLElement} */ (today.previousElementSibling).dataset.day,
+  );
+  // Each frame comes only as the test moves the clock, however slow the machine draws.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  // The list chooses its top day from its scroll event, which comes when the browser draws, so the
+  // clock moves on only once it has. A wheel's turn that moves nothing puts the list in hand.
+  /**
+   * @param {string} day
+   * @param {{ isInHand: boolean }} options
+   */
+  const bringToTop = (day, { isInHand }) =>
+    findList(page).evaluate((list, [shown, isWheeled]) => {
+      const scrolled = new Promise((resolve) => {
+        list.addEventListener("scroll", resolve, { once: true });
+      });
+      if (isWheeled) list.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+      const listed = /** @type {HTMLElement} */ (list.querySelector(`[data-day="${shown}"]`));
+      list.scrollTop = listed.offsetTop - Number.parseFloat(getComputedStyle(list).paddingTop);
+      return scrolled;
+    }, /** @type {[string, boolean]} */ ([day, isInHand]));
+  await bringToTop(dayBefore, { isInHand: false });
+  await page.clock.runFor(100);
+  await expect(findCell(page, dayBefore)).toHaveClass(/is-chosen/);
+  await bringToTop("2026-09-30", { isInHand: true });
+  await page.clock.runFor(100);
+  await expect(page.locator("#seasonGames .strip-lens")).toHaveCount(1);
+
+  await page.getByRole("tab", { name: "Games" }).click();
+
+  await expect(page.locator("#seasonGames .strip-lens")).toHaveCount(0);
+  const offCenter = await findCell(page, "2026-09-30").evaluate((cell) => {
+    const strip = /** @type {HTMLElement} */ (cell.parentElement);
+    const { left, width } = cell.getBoundingClientRect();
+    const box = strip.getBoundingClientRect();
+    return left + width / 2 - (box.left + box.width / 2);
+  });
+  expect(Math.abs(offCenter)).toBeLessThan(1);
+});
+
 test("a scroll the page makes itself, without a finger or wheel on the list, swaps the strip's chosen day at once, without sliding its dates", async ({
   page,
 }) => {
