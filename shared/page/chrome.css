@@ -45,8 +45,9 @@
  *   --tab-bar-height                           the tab bar's height
  *   --tab-bar-clearance                        the space an app's body leaves at its bottom for the bar
  *
- * An app's styles.css also gives .home-screen-icon the icon the Home Screen gets, as its
- * background-image, so the url() is read from the app's own folder.
+ * The icons each look gives the Home Screen come from the stylesheet worker/page-files.mjs builds
+ * from an app's icon PNGs, home-screen-icons.css, as --home-screen-icon-light, -dark, and, for an
+ * app whose System icon is drawn to blend the two, -system.
  *
  * Phones are up to 779px wide, as settings-sheet.js also matches. Focus rings show
  * only while the body has the kbd class, which keyboard-focus.js sets during keyboard navigation.
@@ -543,15 +544,25 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
   height: var(--appearance-icon-size);
   overflow: hidden;
   border-radius: 14px;
+  background: center / cover no-repeat;
   box-shadow: 0 0 0 1px var(--card-border);
 }
-.appearance-icon img {
+.appearance-icon-light,
+.appearance-icon-halves {
+  background-image: var(--home-screen-icon-light);
+}
+.appearance-icon-dark,
+.appearance-icon-halves::after {
+  background-image: var(--home-screen-icon-dark);
+}
+.appearance-icon-system {
+  background-image: var(--home-screen-icon-system);
+}
+.appearance-icon-halves::after {
+  content: "";
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.appearance-icon-auto img + img {
+  background-size: cover;
   clip-path: inset(0 0 0 50%);
 }
 .appearance-choice:has(input:checked) {
@@ -653,9 +664,13 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background-position: center;
-  background-size: cover;
+  background: center / cover no-repeat;
+  background-image: var(--home-screen-icon-light);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+/* The Home Screen box shows the icon the theme showing would give the Home Screen. */
+:root[data-theme="dark"] .home-screen-icon {
+  background-image: var(--home-screen-icon-dark);
 }
 .home-screen-copy {
   flex: 1;

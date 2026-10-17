@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { renderBracket } from "../page/js/bracket-view.js";
 import { renderDot } from "../page/js/clubs.js";
 import { readGameDay } from "../page/js/days.js";
@@ -1354,21 +1354,19 @@ test("each game's score shows in scoreboard digits, the loser's dimmed", () =>
     assert.match(markup, /class="scoreboard"\s*><span class="scoreboard-text">87<\/span>/);
   }));
 
-test("each appearance choice shows the home-screen icon it offers, and the page has each one", () => {
+test("each appearance choice shows the home-screen icon it offers", () => {
   const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
   const choices = Object.fromEntries(
     [...page.matchAll(/<label class="appearance-choice">([\s\S]*?)<\/label>/g)].map(
       ([, choice]) => [
         choice.match(/<span>([^<]+)<\/span>\s*$/)[1],
-        [...choice.matchAll(/<img src="([^"]+)"/g)].map(([, source]) => source),
+        choice.match(/class="appearance-icon (appearance-icon-[a-z]+)"/)[1],
       ],
     ),
   );
   assert.deepEqual(choices, {
-    System: ["icon-system-180.png"],
-    Maple: ["icon-light-180.png"],
-    Walnut: ["icon-180.png"],
+    System: "appearance-icon-system",
+    Maple: "appearance-icon-light",
+    Walnut: "appearance-icon-dark",
   });
-  for (const source of Object.values(choices).flat())
-    assert.ok(existsSync(`${import.meta.dirname}/../page/${source}`), source);
 });

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
@@ -6,6 +7,13 @@ import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
+
+/**
+ * An icon as the page's own stylesheet draws it, with the image in it rather than a file to fetch.
+ * @param {string} file
+ */
+const drawIcon = (file) =>
+  `url("data:image/png;base64,${readFileSync(new URL(`../../page/${file}`, import.meta.url)).toString("base64")}")`;
 
 const IPHONE_AGENT =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -127,9 +135,9 @@ test.describe("on an iPhone, in the browser", () => {
     await page.emulateMedia({ colorScheme: "light" });
     await openApp(page);
     await openSettings(page);
-    await expect(icon).toHaveCSS("background-image", /\/icon-light-180\.png/);
+    await expect(icon).toHaveCSS("background-image", drawIcon("icon-light-180.png"));
     await page.emulateMedia({ colorScheme: "dark" });
-    await expect(icon).toHaveCSS("background-image", /\/icon-180\.png/);
+    await expect(icon).toHaveCSS("background-image", drawIcon("icon-180.png"));
   });
 });
 

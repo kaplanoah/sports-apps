@@ -2409,14 +2409,6 @@ table.standings tr.playoff-line + tr td {
   font-weight: calc(var(--type-detail-weight) + 100);
 }
 
-/* The Home Screen box shows the icon the theme showing would give the Home Screen. */
-.home-screen-icon {
-  background-image: url(icon-light-180.png);
-}
-:root[data-theme="dark"] .home-screen-icon {
-  background-image: url(icon-180.png);
-}
-
 .settings-footer .sep {
   opacity: 0.9;
 }

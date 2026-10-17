@@ -96,13 +96,36 @@ function addModulePreloads(files) {
   return { ...files, "index.html": { ...files["index.html"], text } };
 }
 
+const HOME_SCREEN_ICONS = {
+  light: "icon-light-180.png",
+  dark: "icon-180.png",
+  system: "icon-system-180.png",
+};
+
+// The icons each look gives the Home Screen, as a stylesheet's properties, which the page has
+// before it first draws, so the icons it shows never arrive after the page around them, as on the
+// reload a pick of a theme makes.
+function addHomeScreenIcons(files) {
+  const properties = Object.entries(HOME_SCREEN_ICONS)
+    .filter(([, path]) => files[path])
+    .map(
+      ([look, path]) =>
+        `  --home-screen-icon-${look}: url("data:image/png;base64,${files[path].base64}");\n`,
+    )
+    .join("");
+  const text = `:root {\n${properties}}\n`;
+  return { ...files, "home-screen-icons.css": { contentType: TEXT_TYPES[".css"], text } };
+}
+
 /** @param {string} pageRoot the app's page/ folder */
 export function readPageFiles(pageRoot) {
   const shared = Object.entries(readFolder(SHARED_PAGE_ROOT)).map(([path, file]) => [
     `shared/${path}`,
     file,
   ]);
-  return addModulePreloads({ ...readFolder(pageRoot), ...Object.fromEntries(shared) });
+  return addModulePreloads(
+    addHomeScreenIcons({ ...readFolder(pageRoot), ...Object.fromEntries(shared) }),
+  );
 }
 
 const RELEASE_GUARD = '<script src="shared/release-guard.js"></script>';

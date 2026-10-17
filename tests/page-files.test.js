@@ -49,6 +49,38 @@ for (const app of listApps()) {
     assert.ok(page.indexOf('<script type="importmap">') < preloads[0].index);
     assert.ok(preloads.at(-1).index < page.indexOf('<script type="module" src="js/app.js">'));
   });
+
+  test(`${app}: the page loads each icon its theme choices show before its welcome, from the app's own PNGs`, async () => {
+    const { default: files } = await import(`#page-files/${app}`);
+    const page = files["index.html"].text;
+    const icons = files["home-screen-icons.css"].text;
+    const readIcon = (look) =>
+      icons.match(
+        new RegExp(`--home-screen-icon-${look}: url\\("data:image/png;base64,([^"]+)"\\)`),
+      )?.[1];
+    const LOOK_FILES = {
+      light: "icon-light-180.png",
+      dark: "icon-180.png",
+      system: "icon-system-180.png",
+    };
+    const CHOICE_LOOKS = {
+      light: ["light"],
+      dark: ["dark"],
+      system: ["system"],
+      halves: ["light", "dark"],
+    };
+    const shownLooks = [
+      ...page.matchAll(/class="appearance-icon appearance-icon-([a-z]+)"/g),
+    ].flatMap(([, choice]) => CHOICE_LOOKS[choice]);
+    assert.ok(shownLooks.length > 0);
+    for (const look of shownLooks)
+      assert.ok(
+        readIcon(look) === files[LOOK_FILES[look]].base64,
+        `${look} is ${LOOK_FILES[look]}`,
+      );
+    const iconsLink = page.indexOf('<link rel="stylesheet" href="home-screen-icons.css" />');
+    assert.ok(iconsLink >= 0 && iconsLink < page.indexOf('<dialog id="homeScreenWelcome"'));
+  });
 }
 
 const PAGE = `<!doctype html>
