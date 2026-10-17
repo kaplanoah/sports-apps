@@ -330,15 +330,9 @@ test.describe("with reduced motion", () => {
     await openSeasonPart(page, "Standings");
     await expect(page.locator("#standings-league")).toBeInViewport();
 
-    await page.evaluate(() => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    await setHidden(page, true);
     await page.clock.runFor(2 * 60 * 1000);
-    await page.evaluate(() => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    await setHidden(page, false);
     await page.clock.runFor(100);
     await page.getByRole("tab", { name: "Games" }).click();
 
