@@ -4,6 +4,7 @@ import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { createReusedLoader, fetchUpstream } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
+import { nameTotalsRequest } from "./player.js";
 import { listUpcomingMeetings } from "./preview.js";
 import { ESPN_HEADERS, fetchWnbaJson } from "./wnba.js";
 
@@ -28,6 +29,11 @@ const FEED_DATA = {
 };
 
 const hasFeedData = (name, answer) => Array.isArray(FEED_DATA[name](answer));
+
+// The players' averages a game, a request the snapshot doesn't read, since the player job reads
+// their totals, but whose last answer the slow feeds' storage can still hold until it's forgotten.
+const nameAveragesRequest = (season) =>
+  nameTotalsRequest(season).replace("PerMode=Totals", "PerMode=PerGame");
 
 // Where a game is on rarely changes, so ESPN's scoreboard is read at most this often.
 const NETWORKS_MS = 6 * 60 * 60 * 1000;
@@ -56,6 +62,16 @@ export function createSnapshotServer({
   storage = undefined,
 } = {}) {
   const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, leagueName: "The WNBA", now, storage });
+  /** @type {Set<number>} */
+  const averagesForgotten = new Set();
+
+  /** @param {number} season */
+  async function forgetAverages(season) {
+    if (averagesForgotten.has(season)) return;
+    averagesForgotten.add(season);
+    await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
+  }
+
   const networkMonths = new Map();
   const espnGames = createEspnGameReader({ fetchImpl });
   const gameEnds = createGameEnds({
@@ -164,6 +180,7 @@ export function createSnapshotServer({
   }
 
   async function fetchResponses(season) {
+    await forgetAverages(season);
     const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard).catch(
       () => null,
     );

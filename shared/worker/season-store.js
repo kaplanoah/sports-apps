@@ -144,6 +144,7 @@ function isWatching(socket, path) {
 const createFeedStorage = (storage) => ({
   get: (key) => storage.get(`feed:${key}`),
   put: (key, value) => storage.put(`feed:${key}`, value),
+  delete: (key) => storage.delete(`feed:${key}`),
 });
 
 function openWatchSocket(ctx) {

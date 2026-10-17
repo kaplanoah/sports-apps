@@ -393,8 +393,7 @@ test("a game whose stills Claude didn't answer for saves its highlights with MLB
   wait(10);
   await runUntilChecked(run, mlb);
   assert.equal(
-    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), "William Contreras' solo home run")
-      .still,
+    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), title).still,
     contreras.frames?.replace("%", "0000003"),
   );
 });

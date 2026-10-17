@@ -328,6 +328,21 @@ test("a past season filled before the sheets read a column is filled once more, 
   assert.equal(league.requests.filter((url) => /Season=2025/.test(url)).length, pastReads.length);
 });
 
+test("a past season filled before the store kept every player's averages is filled once more, and saves them", async () => {
+  const filled = createRun();
+  await filled.runJob();
+  const filledWith = await filled.storage.get("filled:2025");
+  const { docs, storage, league, runJob } = createRun();
+  await storage.put("filled:2025", filledWith.replace(/ averages$/, ""));
+
+  await runJob();
+
+  assert.ok(docs.stored.get("averages/2025").players.length > 0);
+  const pastReads = league.requests.filter((url) => /Season=2025/.test(url));
+  assert.equal(pastReads.length, STATS_FEEDS + TEAM_COUNT + 1);
+  assert.equal(await storage.get("filled:2025"), filledWith);
+});
+
 test("ESPN's injury report is read once a run for the whole league, and says who is out only on the teams still playing", async () => {
   /** @type {any[]} */
   const series = [

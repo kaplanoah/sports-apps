@@ -73,8 +73,8 @@ test("past midnight, a reading keeps the night's finals once the slate has moved
   assert.equal(Readings.readReadingDay(pastMidnight), "2026-09-24");
   const reading = Readings.createReading(pastMidnight);
   assert.equal(Object.keys(reading.games).length, lastNight.games.length);
-  assert.ok(`${firstGame.gamePk}-2026-09-24` in reading.games);
-  assert.ok("1-2026-09-24" in reading.games);
+  assert.ok(String(firstGame.gamePk) in reading.games);
+  assert.ok("1" in reading.games);
 
   const morning = buildAt("2026-09-25T10:00:00Z");
   assert.equal(Readings.readReadingDay(morning), "2026-09-25");
@@ -96,8 +96,8 @@ test("two of a day's finals between the same clubs, like a resumed game and the 
 
   const { games } = Readings.createReading(pastMidnight);
 
-  assert.ok(`${firstGame.gamePk}-2026-09-24` in games);
-  assert.ok("2-2026-09-24" in games);
+  assert.ok(String(firstGame.gamePk) in games);
+  assert.ok("2" in games);
 });
 
 test("a reading leaves out each club's schedule, and keeps only final scores", () => {

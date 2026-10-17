@@ -32,11 +32,10 @@ export function createReading(snapshot) {
   for (const [division, clubs] of Object.entries(snapshot.standings?.divisions || {})) {
     for (const { next, then, ...row } of clubs) rows[row.id] = { ...row, div: division };
   }
-  // A game is MLB's by its id on its day, since a postponed game and its makeup share an id, and
-  // two games between the same clubs can share a day, as a resumed game and the day's own do.
-  const day = readReadingDay(snapshot);
+  // Kept by MLB's id, since two games between the same clubs can share a day, as a resumed game
+  // and the day's own do.
   const games = {};
-  for (const game of listDayFinals(snapshot.slate, day)) games[`${game.id}-${day}`] = game;
+  for (const game of listDayFinals(snapshot.slate, readReadingDay(snapshot))) games[game.id] = game;
   return {
     at: snapshot.asOf,
     projected: snapshot.projected,

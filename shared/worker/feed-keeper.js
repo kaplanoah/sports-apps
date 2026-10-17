@@ -16,7 +16,7 @@ const FINALS_KEY = "finals";
 
 /**
  * What a keeper keeps its answers in.
- * @typedef {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void> }} FeedStorage
+ * @typedef {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<unknown> }} FeedStorage
  */
 
 /**
@@ -50,6 +50,7 @@ export function createMemoryStorage() {
     put: async (key, value) => {
       values.set(key, value);
     },
+    delete: async (key) => values.delete(key),
   };
 }
 
@@ -136,6 +137,16 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
       if (finals?.count === count) return;
       const hasNewFinal = finals !== null && count > finals.count;
       await saveRecord(FINALS_KEY, { count, at: hasNewFinal ? now() : (finals?.at ?? null) });
+    },
+
+    /**
+     * Forgets the answer kept for a request no longer read.
+     * @param {string} name the feed's
+     * @param {string} key the request
+     */
+    async forgetFeed(name, key) {
+      records.delete(`${name} ${key}`);
+      await storage.delete(await digestKey(`${name} ${key}`));
     },
 
     /**

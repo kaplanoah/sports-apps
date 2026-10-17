@@ -495,6 +495,44 @@ test("each season's slow feeds are kept apart", async () => {
   assert.equal(league.countReads("schedule"), 1);
 });
 
+// The players' averages a game, as the snapshot once read them for each season.
+const AVERAGES_REQUEST =
+  "https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=2026&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight=";
+
+/** @param {string} key */
+async function digestFeedKey(key) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+  return Buffer.from(digest).subarray(0, 16).toString("hex");
+}
+
+test("the players' averages the snapshot once read are forgotten from the slow feeds' storage, once a season", async () => {
+  const league = createLeague();
+  let clock = NOW;
+  const values = new Map();
+  const deleted = [];
+  const storage = {
+    get: async (key) => values.get(key),
+    put: async (key, value) => {
+      values.set(key, value);
+    },
+    delete: async (key) => {
+      deleted.push(key);
+      return values.delete(key);
+    },
+  };
+  const averagesKey = await digestFeedKey(`players ${AVERAGES_REQUEST}`);
+  values.set(averagesKey, { answer: { at: NOW - 1000, data: RESPONSES.standings } });
+  const server = createSnapshotServer({ fetchImpl: league.fetchImpl, now: () => clock, storage });
+
+  await server.loadSnapshot(2026);
+  clock += 5000;
+  await server.loadSnapshot(2026);
+
+  assert.equal(values.has(averagesKey), false);
+  assert.equal(deleted.filter((key) => key === averagesKey).length, 1);
+  assert.ok(values.size > 0);
+});
+
 test("a slow feed that stops answering keeps its last good answer", async () => {
   /** @type {Record<string, "page" | "error">} */
   const refuse = {};

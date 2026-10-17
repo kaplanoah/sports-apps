@@ -118,16 +118,18 @@ const addOne = (counts, name) => {
 
 /** @param {number} season */
 const nameFilledKey = (season) => `filled:${season}`;
-// What a filled season was kept with, so one filled with fewer columns is filled again.
-const FILLED_COLUMNS = [
+// What a filled season was kept with, its columns and the documents saved from them, so one
+// filled with fewer is filled again.
+const FILLED_WITH = [
   ...new Set([...TOTALS_FEED_COLUMNS, ...GAME_LOG_COLUMNS, ...TEAM_GAME_COLUMNS]),
+  "averages",
 ].join(" ");
-// Says every past season was filled with these columns, and has its list of players, while this
-// one was current, so a run lists the store's seasons again only once the store moves on, which
-// makes the current season a past one, or the sheets come to read another column.
+// Says every past season was filled with these, and has its list of players, while this one was
+// current, so a run lists the store's seasons again only once the store moves on, which makes the
+// current season a past one, or the sheets come to read more.
 const ALL_FILLED_KEY = "allFilled";
 /** @param {number} current */
-const describeAllFilled = (current) => `${current} ${FILLED_COLUMNS} player-index`;
+const describeAllFilled = (current) => `${current} ${FILLED_WITH} player-index`;
 
 /**
  * How many of a season's games, regular season and playoffs, the store has seen end.
@@ -359,13 +361,13 @@ function createStoreUpdate() {
     const allFilled = describeAllFilled(current);
     if ((await context.storage.get(ALL_FILLED_KEY)) === allFilled) return;
     for (const season of await listPastSeasons(context.docs, current)) {
-      if ((await context.storage.get(nameFilledKey(season))) === FILLED_COLUMNS) {
+      if ((await context.storage.get(nameFilledKey(season))) === FILLED_WITH) {
         await indexKeptRosters(context, season);
         continue;
       }
       const isWhole = await updateSeason(context, season, null);
       context.log.pastSeason = { season, isWhole };
-      if (isWhole) await context.storage.put(nameFilledKey(season), FILLED_COLUMNS);
+      if (isWhole) await context.storage.put(nameFilledKey(season), FILLED_WITH);
       return;
     }
     await context.storage.put(ALL_FILLED_KEY, allFilled);

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../worker/src/index.js";
+import { BACKGROUND_JOBS } from "../page/js/background-jobs.js";
 import { SeasonStore } from "../worker/src/store.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 
@@ -169,4 +170,26 @@ test("the page can't change any document, since each device keeps its own rankin
   assert.deepEqual(stored.get("seasons/2026"), season);
   assert.deepEqual(stored.get("standings/2026"), { divisions: {} });
   assert.equal(stored.has("seasons/2030"), false);
+});
+
+test("every background job saves how its run went where the Diagnostics report reads it", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const now = Date.parse("2026-09-24T22:00:00Z");
+  const store = new SeasonStore(
+    ctx,
+    {},
+    {
+      fetchImpl: async () => new Response("", { status: 503 }),
+      loadSnapshot: async () => {
+        throw new Error("MLB didn't answer");
+      },
+      now: () => now,
+    },
+  );
+
+  await store.startDueJobs(now);
+  await Promise.all(store.jobRuns.values());
+
+  const saved = [...stored.keys()].filter((key) => key.endsWith("/status"));
+  assert.deepEqual(saved.sort(), BACKGROUND_JOBS.map((name) => `${name}/status`).sort());
 });
