@@ -491,7 +491,7 @@ jobs:
         run: node worker/judge-review.mjs find .review "$STAGE" "$AREA" "$KIND" >> "$GITHUB_OUTPUT"
       - name: Review what's left
         id: again
-        if: &retry-due ${{ !cancelled() && (steps.first.outputs.unread != '' || steps.first.outputs.answered != 'true') }}
+        if: &retry-due ${{ !cancelled() && steps.first.outcome == 'success' && (steps.first.outputs.unread != '' || steps.first.outputs.answered != 'true') }}
         continue-on-error: true
         timeout-minutes: 15
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
