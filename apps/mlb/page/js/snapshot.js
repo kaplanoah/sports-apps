@@ -17,10 +17,9 @@ import {
 import {
   buildSeries,
   groupPostseason,
-  listCalledOffGameIds,
-  listNeededPostseasonGames,
   listPostseasonGames,
   readOfficialField,
+  splitPostseasonGames,
 } from "./feed-postseason.js";
 import {
   findMissingFields,
@@ -165,17 +164,11 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
   const hasStandings = hasEveryDivision(responses.standings);
   const teams = official || (hasStandings ? projectField(responses.standings) : {});
   const { series, log } = buildSeries(teams, gamesBySeries, readEasternDay(now).date);
-  const clubGames = [
-    ...games.filter((game) => game.type === "R"),
-    ...listNeededPostseasonGames(gamesBySeries, log),
-  ];
+  const { needed, calledOffIds } = splitPostseasonGames(gamesBySeries, log);
+  const clubGames = [...games.filter((game) => game.type === "R"), ...needed];
   const isSeriesKnown = hasStandings || !postseasonGames.some(hasClub);
   const slate = responses.schedule ? buildSlateWithAllStar(responses, games, clubGames, now) : null;
-  const schedule = buildSchedule(
-    responses,
-    gamesBySeries,
-    listCalledOffGameIds(gamesBySeries, log),
-  );
+  const schedule = buildSchedule(responses, gamesBySeries, calledOffIds);
 
   return {
     version: SNAPSHOT_VERSION,

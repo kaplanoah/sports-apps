@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { splitPostseasonGames } from "../page/js/feed-postseason.js";
 import * as MLBSnapshot from "../page/js/snapshot.js";
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 
@@ -1711,4 +1712,28 @@ test("each club's standings row keeps its runs scored and allowed and its record
   );
   assert.equal(yankees.id, "NYY");
   for (const field of ["rs", "ra", "home", "road"]) assert.ok(!(field in yankees), field);
+});
+
+test("a decided series's games it didn't need are called off, and every other playoff game is played", () => {
+  const gamesBySeries = {
+    AL_WC1: [
+      { id: "1", state: "final" },
+      { id: "2", state: "final" },
+      { id: "3", state: "pre" },
+    ],
+    NL_WC1: [
+      { id: "4", state: "final" },
+      { id: "5", state: "pre" },
+    ],
+  };
+  const log = [
+    { kind: "clinch", series: "AL_WC1" },
+    { kind: "win", series: "NL_WC1" },
+  ];
+  const { needed, calledOffIds } = splitPostseasonGames(gamesBySeries, log);
+  assert.deepEqual(
+    needed.map((game) => game.id),
+    ["1", "2", "4", "5"],
+  );
+  assert.deepEqual([...calledOffIds], ["3"]);
 });

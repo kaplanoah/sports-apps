@@ -60,15 +60,25 @@ export function findFeederSeries(seriesId, side) {
   return winnerOf ? `${league}_${winnerOf}` : null;
 }
 
-// Once a series is decided, the games it no longer needs never happen.
-export function listCalledOffGameIds(gamesBySeries, log) {
-  const decided = log.filter((entry) => entry.kind === "clinch").map((entry) => entry.series);
-  return new Set(
-    decided
-      .flatMap((seriesId) => gamesBySeries[seriesId] ?? [])
-      .filter((game) => game.state !== "final")
-      .map((game) => game.id),
+/**
+ * The postseason's games split by whether they're played: once a series is decided, the games it
+ * still lists but no longer needs never happen.
+ * @param {Record<string, any[]>} gamesBySeries
+ * @param {any[]} log
+ */
+export function splitPostseasonGames(gamesBySeries, log) {
+  const decided = new Set(
+    log.filter((entry) => entry.kind === "clinch").map((entry) => entry.series),
   );
+  /** @type {any[]} */
+  const needed = [];
+  /** @type {Set<string>} */
+  const calledOffIds = new Set();
+  for (const [seriesId, games] of Object.entries(gamesBySeries))
+    for (const game of games)
+      if (decided.has(seriesId) && game.state !== "final") calledOffIds.add(game.id);
+      else needed.push(game);
+  return { needed, calledOffIds };
 }
 
 /** @param {Record<string, { id: string }[]>} gamesBySeries */
@@ -226,16 +236,6 @@ function tallySeries(seriesId, games, round, teamA, teamB, today) {
     if (next) record.next = { at: next.start, date: next.date, tbd: next.tbd, game: next.number };
   }
   return { record, log, winner };
-}
-
-// A decided series can still list the games it didn't need.
-export function listNeededPostseasonGames(gamesBySeries, log) {
-  const decided = new Set(
-    log.filter((entry) => entry.kind === "clinch").map((entry) => entry.series),
-  );
-  return Object.entries(gamesBySeries).flatMap(([seriesId, games]) =>
-    decided.has(seriesId) ? games.filter((game) => game.state === "final") : games,
-  );
 }
 
 export function buildSeries(teams, gamesBySeries, today) {

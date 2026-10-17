@@ -181,9 +181,7 @@ const ALL_STAR_LEAGUES = { 159: "AL", 160: "NL" };
  * @param {any} schedule
  */
 function findAllStarGame(schedule) {
-  const game = ((schedule && schedule.dates) || [])
-    .flatMap((day) => day.games || [])
-    .find((each) => each.gameType === "A");
+  const game = listScheduleGames(schedule).find((each) => each.gameType === "A");
   return game ? normalizeAllStarGame(game) : null;
 }
 
