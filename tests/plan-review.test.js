@@ -626,11 +626,11 @@ test("the stale names are written for the rules reviewer, each with where the re
     pushed: null,
     readDiff: () => assert.fail("nothing is read"),
     repoFiles: [],
-    stale: [{ name: "serveSnapshot", hits: ["AGENTS.md:351:  the live snapshot"] }],
+    stale: [{ name: "serveSnapshot", hits: ["AGENTS.md:351: the live snapshot"] }],
   });
   assert.match(
     readFileSync(join(folder, "stale-names.md"), "utf8"),
-    /## serveSnapshot\n\n- AGENTS\.md:351:  the live snapshot/,
+    /## serveSnapshot\n\n- AGENTS\.md:351: the live snapshot/,
   );
 });
 
