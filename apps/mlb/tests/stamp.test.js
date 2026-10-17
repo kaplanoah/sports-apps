@@ -1,7 +1,7 @@
 // `since` is ten minutes before the snapshot: only a final newer than that leads the line.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { describeLastStamp, describeUpNextGame } from "../page/js/stamp.js";
+import { describeLastStamp, describeSeriesNote, describeUpNextGame } from "../page/js/stamp.js";
 import { normalizeSpaces, readStampText } from "../../../tests/text.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 
@@ -383,18 +383,43 @@ test("a first pitch MLB hasn't timed yet says so", () => {
   });
 });
 
-test("in October a final says what it did to the series", () => {
+test("in October a final says what it did to the series: who now leads, that it's even, or who won which round", () => {
   const slate = {
     since: toEasternIso(TODAY, "23:15"),
     today: { date: TODAY, games: [createFinal("CHC", "MIL", "20:08", [1, 4], "23:41")] },
   };
-  const context = createContext({
-    seriesNote: (game) => (game.home === "MIL" ? " \u2014 Brewers now lead 2-0" : ""),
-  });
+  /** @param {{ winsA: number, winsB: number, winner: string | null }} standing */
+  const describeAfter = (standing) =>
+    describeLast(
+      slate,
+      createContext({
+        seriesNote: () =>
+          describeSeriesNote({ id: "NL_DS2", teamA: "MIL", teamB: "CHC", ...standing }),
+      }),
+    );
   assert.equal(
-    describeLast(slate, context),
+    describeAfter({ winsA: 2, winsB: 0, winner: null }),
     "Brewers 4 Cubs 1 final at 11:41 PM \u2014 Brewers now lead 2-0",
   );
+  assert.equal(
+    describeAfter({ winsA: 2, winsB: 2, winner: null }),
+    "Brewers 4 Cubs 1 final at 11:41 PM \u2014 series even 2-2",
+  );
+  assert.equal(
+    describeAfter({ winsA: 3, winsB: 1, winner: "MIL" }),
+    "Brewers 4 Cubs 1 final at 11:41 PM \u2014 Brewers win the NLDS 3-1",
+  );
+});
+
+test("the series a final leaves says who now leads, that it's even, or who won which round", () => {
+  const series = { id: "NL_DS2", teamA: "MIL", teamB: "CHC", winner: null };
+  assert.equal(describeSeriesNote({ ...series, winsA: 1, winsB: 2 }), " \u2014 Cubs now lead 2-1");
+  assert.equal(describeSeriesNote({ ...series, winsA: 2, winsB: 2 }), " \u2014 series even 2-2");
+  assert.equal(
+    describeSeriesNote({ ...series, winsA: 3, winsB: 1, winner: "MIL" }),
+    " \u2014 Brewers win the NLDS 3-1",
+  );
+  assert.equal(describeSeriesNote(null), "");
 });
 
 test("no sentence is ever a bare matchup or 'under way with'", () => {

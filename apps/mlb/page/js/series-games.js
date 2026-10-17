@@ -4,6 +4,7 @@
 import { describeSeriesAfterWin, describeSeriesLead } from "#shared/series-text.js";
 import { nameSeries } from "./bracket.js";
 import { nameTeam } from "./clubs.js";
+import { listCountedGames } from "./season-games.js";
 import { countWinsNeeded } from "./snapshot.js";
 
 /** @param {string} seriesId */
@@ -31,13 +32,13 @@ export const nameSeriesGame = (game) =>
   `${nameSeries(/** @type {string} */ (game.series))} Game ${game.number}`;
 
 /**
- * Each series' finals, by the series' id.
+ * Each series' finals, by the series' id, each game once.
  * @param {any[]} games
  * @returns {Map<string, any[]>}
  */
 export function groupSeriesFinals(games) {
   const finals = new Map();
-  for (const game of games) {
+  for (const game of listCountedGames(games)) {
     if (!isSeriesGame(game) || game.state !== "final") continue;
     if (!finals.has(game.series)) finals.set(game.series, []);
     finals.get(game.series).push(game);
