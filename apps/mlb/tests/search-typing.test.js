@@ -131,9 +131,16 @@ test("under the rows, a search lists its games from today on, soonest first, or,
   assert.deepEqual(show("Mets"), [162, "2026-09-27", "2026-03-26"]);
 });
 
-test("a club's name beside a number, each way fans write it, lists each of its players who wears it, over the club's games", () => {
+test("a club's name beside a number, each way fans write it, lists each of its players who wears it, or while it's typed each number it starts, over the club's games", () => {
   assert.deepEqual(sweepPlayerNumbers({ context: CONTEXT, pages: PAGES }), []);
   assert.deepEqual(showTyped("mets 22"), { rows: ["Juan Soto"], read: "Mets | 162 games" });
+  assert.deepEqual(showTyped("mets 1").rows, [
+    "Marcus Semien",
+    "Jorge Polanco",
+    "Francisco Lindor",
+    "Luis Torrens",
+    "Bo Bichette",
+  ]);
 });
 
 test("a number a club's player wears, after words that ask for a time, a day, or a game, finds games and lists no player", () => {

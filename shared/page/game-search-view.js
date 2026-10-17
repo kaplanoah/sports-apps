@@ -1,9 +1,9 @@
 // A search over a season's games, and the league's teams and players and its other pages too: a
 // field with Cancel, then what the words find. Before anything is
 // typed, quiet examples to tap sit under the field, inside its width. While words are typed,
-// suggestions sit over the pages the words name, like a team's sheet, then a line saying how the
-// search read the words, right over the games it found from today on, which a tap on the line opens
-// whole. A search sent shows the same without the suggestions, or, when its words ask only for
+// suggestions sit over the pages the words name, like a team's sheet, or under the players a
+// team's number names, then a line saying how the search read the words, right over the games it
+// found from today on, which a tap on the line opens whole. A search sent shows the same without the suggestions, or, when its words ask only for
 // games, the games at once, the line under the field and the list opening on the first from today,
 // as does a tap on the line. A tap on the field goes back to what typing showed. A reload shows the
 // search as it was, and two minutes away closes it. A league hands it its season's games and words,
@@ -478,6 +478,7 @@ function draw() {
     suggestions,
     readText,
     rows,
+    isRowsFirst,
     answer,
     others,
     search,
@@ -503,13 +504,13 @@ function draw() {
     showDays(shown, place);
     return;
   }
+  const suggestionList = suggestions.length > 0 && renderSuggestions(suggestions, query);
+  const rowList = pages && rows.length > 0 && renderPageRows(rows, pages, context);
   setHtml(
     list,
-    html`${suggestions.length > 0 && renderSuggestions(suggestions, query)}${
-      pages && rows.length > 0 && renderPageRows(rows, pages, context)
-    }${others.length > 0 && renderSuggestions(others, "")}${
-      read && days.length > 0 && html`${renderGamesLine(read, readText)}${renderDays(days)}`
-    }`,
+    html`${isRowsFirst ? html`${rowList}${suggestionList}` : html`${suggestionList}${rowList}`}${
+      others.length > 0 && renderSuggestions(others, "")
+    }${read && days.length > 0 && html`${renderGamesLine(read, readText)}${renderDays(days)}`}`,
   );
   showDays(shown, place);
 }
