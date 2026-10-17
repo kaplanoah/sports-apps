@@ -267,7 +267,8 @@
   and settings and each setting (`page/js/search-pages.js`), whose settings pick any season the store keeps once it keeps more than one,
   whose page saves nothing to the store, lists each playoff final in an Updates box only on phones and tablets,
   and only for the current season, each keeping its own dismissal (`page/js/updates.js`),
-  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings (the shared `appearance.js`, kept per device), in its own self-hosted fonts.
+  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings or the Home Screen welcome (the shared `appearance.js`, kept per device,
+  and `pick-theme.js`, which the browser's address names it in for the Home Screen app), in its own self-hosted fonts.
   Paths below are inside an app's folder, except `shared/` and the ones named as the root's.
 - Page:
   `page/`.
@@ -325,7 +326,7 @@
   Light for the page's controls, like the tab bar and close buttons,
   and Regular in a line of text, and name the icon and weight in a comment where the code holds it, as `team-view.js` does for its caret-right.
   Never draw an icon by hand or take one from another set, but for the four drawn for their place: the Home Screen steps' Share and menu glyphs,
-  which copy the browser's own buttons so people find them (`shared/page/home-screen.js`),
+  which copy the browser's own buttons so people find them (`shared/page/draw-home-screen-asks.js`),
   MLB's seed lock (`games-view.js`), and the catching-up ring,
   Phosphor's circle-notch at its Light weight with a 55-degree gap, set in a line of text (`shared/page/catch-up-note.js`).
   The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four,
@@ -424,7 +425,16 @@
   any day that changes height as it's drawn whole or as a stand-in,
   and a strip that doesn't scroll where it's told, in `day-strip-log.js`,
   and each error the page's code doesn't catch, in `error-log.js`,
-  each a log made with `step-log.js`, the bar across the top and the box at the bottom of settings that ask a phone's browser to add the page to the Home Screen in `home-screen.js`,
+  each a log made with `step-log.js`, the welcome over the whole screen that a phone's or tablet's browser opens on,
+  whose numbered steps pick the theme the Home Screen icon takes and say how to add the page there,
+  until the page is added or the viewer goes on in the browser, which keeps it closed on that device,
+  and the box at the bottom of settings that keeps the steps, both drawn before the first paint in `draw-home-screen-asks.js`,
+  so the welcome never arrives over the page and its pick and close work at once, with Chrome's Install in `home-screen.js`,
+  the theme picked, shown before the first paint and named in the browser's address,
+  where Safari reloads the page after a pick, since it takes the Home Screen app's address and its own bars' color from the page as it loaded,
+  and which the Home Screen app keeps on its first open,
+  and an iPhone's app, which keeps the icon it was added with, hands Safari with a link to add the site again,
+  opening Safari's page on that theme and the welcome, in `pick-theme.js`,
   telling a phone or tablet from a computer, and the Home Screen from the browser,
   in `device.js`, one tab for a season's standings and its bracket,
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
@@ -526,7 +536,7 @@
   from the cards a league's news job keeps,
   in `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through `package.json`'s imports.
   Its `type.css` lists the type roles, `chrome.css` styles the tab bar,
-  settings sheet and its Diagnostics, round dots, Home Screen bar and box,
+  settings sheet and its Diagnostics, round dots, Home Screen welcome and box,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,
   `pager.css` a pill's names and the standings and bracket under one, `day-strip.css` a season's list of days and its strip,
   `game-search.css` the search's view, `game-row.css` lays out a game row and colors an All-Star team's star,
@@ -538,7 +548,8 @@
   `news.css` the News view's layout, `retry.css` what a sheet shows where a read failed,
   `highlights.css` a final's Highlights, `rank-curve.css` a rank curve and each player's mark on it,
   `no-field-note.css` the bracket before the playoff field is set,
-  and `gate.css` the access code's gate; pages link them before their own `styles.css` and theme them with the tokens their top comments list.
+  and `gate.css` the access code's gate, whose title and button the welcome takes too;
+  pages link them before their own `styles.css` and theme them with the tokens their top comments list.
   The Worker serves all of it under `shared/`.
   `shared/worker/` holds the Worker's routing under the key (`app-worker.js`),
   the store's Durable Object (`season-store.js`, which each app's `worker/src/store.js` hands its league: how it loads and saves a snapshot,
@@ -589,10 +600,12 @@
   The page writes nothing to the store; everything in it is written by the Worker.
   What a viewer chooses, like MLB's ranking, a dismissal of the Updates box,
   or the WNBA's theme, stays on their own device, since nobody signs in and people share a page's address.
+  The theme also rides in the browser's address, as `?theme=`, since a Home Screen app keeps its storage apart from the browser's and opens at the address it was added from,
+  and a shared link's theme is swapped for the viewer's own (`shared/page/pick-theme.js`).
   Each is a choice made with `createViewerChoice` in `shared/page/device-storage.js`,
   which keeps it as JSON under its key, lists it, and tells the page when another tab changes it, so each tab redraws what it shows.
   A new choice that a viewer would want on their other devices is made the same way;
-  what belongs to one device or browser, like the last tab, the Home Screen bar's dismissal,
+  what belongs to one device or browser, like the last tab, the Home Screen welcome's dismissal,
   or the Diagnostics, isn't a viewer choice and stays out of that list.
 
 ## Adding a league
@@ -639,8 +652,8 @@ Delete it once the app's first PR merges.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
    around its own `styles.css`, which sets every token their top comments list,
-   and calls `openLastTab()`, `showLastDrawn()`, and `watchSlowLoad()` right after its views and sheets,
-   in that order, so a part on the shown tab can take back its sideways scroll.
+   and calls `openLastTab()`, `showLastDrawn()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
+   in that order, so a part on the shown tab can take back its sideways scroll, and the welcome opens over any sheet put back.
    Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
    load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
    It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
@@ -973,7 +986,8 @@ The root's `tests/agents-lines.test.js` checks it.
 
 On the pages, text of one sentence or less, like a label, an empty view's note,
 or a setting's note, ends without a period; text of two or more sentences,
-like a release note or a message that says what to do, ends with one.
+like a release note or a message that says what to do, ends with one,
+but for text that ends in a link, which ends without one, as the Home Screen app's note does.
 An outlet's own words keep their punctuation, in an element marked `data-quoted`.
 The root's `tests/browser/stray-periods.mjs` lists any shown text that breaks this,
 and each app's browser tests check every view with it, wherever they check the type roles.

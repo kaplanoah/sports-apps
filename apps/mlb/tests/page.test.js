@@ -2091,23 +2091,21 @@ test("games list: a game away from its home club's own ballpark names the city i
   assert.equal(labels.filter(Boolean).length, 1);
 });
 
-test("each appearance choice shows the home-screen icon it offers, and the page has each one", () => {
+test("each appearance choice shows the home-screen icon it offers", () => {
   const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
   const choices = Object.fromEntries(
     [...page.matchAll(/<label class="appearance-choice">([\s\S]*?)<\/label>/g)].map(
       ([, choice]) => [
         choice.match(/<span>([^<]+)<\/span>\s*$/)[1],
-        [...choice.matchAll(/<img src="([^"]+)"/g)].map(([, source]) => source),
+        choice.match(/class="appearance-icon (appearance-icon-[a-z]+)"/)[1],
       ],
     ),
   );
   assert.deepEqual(choices, {
-    System: ["icon-light-180.png", "icon-180.png"],
-    Ball: ["icon-light-180.png"],
-    "Night Game": ["icon-180.png"],
+    System: "appearance-icon-halves",
+    Ball: "appearance-icon-light",
+    "Night Game": "appearance-icon-dark",
   });
-  for (const source of Object.values(choices).flat())
-    assert.ok(existsSync(`${import.meta.dirname}/../page/${source}`), source);
 });
 
 test("each look offers icons the page has, and Ball's is Night Game's ball on cream", () => {

@@ -2,6 +2,8 @@ import { test, expect, openApp } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
@@ -153,14 +155,19 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Walnut" })).toBeChecked();
 });
 
-test("changing the appearance says how to match the home-screen icon", async ({ page }) => {
-  await openApp(page);
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const note = page.locator("#appearanceNote");
-  await expect(note).toBeHidden();
-  await page.getByRole("radio", { name: "Walnut" }).check();
-  await expect(note).toBeVisible();
-  await expect(note).toHaveText(/Apple sets a home-screen icon only when the page is added/);
+test.describe("in an iPhone's Home Screen app", () => {
+  test.use({ userAgent: IPHONE_AGENT });
+
+  test("changing the appearance says how to update the icon, under the icons, linking to Safari on the theme picked, which the browser and Android leave out", async ({
+    page,
+    context,
+    browser,
+  }) => {
+    const openSettings = (tab) =>
+      tab.getByRole("button", { name: "Settings", exact: true }).click();
+    const looks = { light: "Maple", dark: "Walnut" };
+    await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+  });
 });
 
 test("settings end with the release, NBA.com's credit for the data, and the copyright", async ({
@@ -268,10 +275,10 @@ test.describe("on a phone", () => {
 
     expect(await readSize(page.getByText("Include content from The Athletic"))).toBe(setting);
     expect(await readSize(page.getByText("Most stories need a subscription"))).toBe(note);
-    expect(await readSize(page.locator(".appearance-choice").first())).toBe(note);
+    expect(await readSize(page.locator("#settingsDialog .appearance-choice").first())).toBe(note);
     expect(setting).toBeGreaterThan(body);
     expect(note).toBeGreaterThan(detail);
-    const icon = await page.locator(".appearance-icon").first().boundingBox();
+    const icon = await page.locator("#settingsDialog .appearance-icon").first().boundingBox();
     expect(icon.width).toBe(60);
   });
 
