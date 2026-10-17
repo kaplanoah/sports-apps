@@ -195,18 +195,21 @@ export function sweepMisspellings({ context, pages }) {
 }
 
 /**
- * The ways fans write a team's name beside a player's number: each way with its own name, and its
- * other names, like its full name or its code, just beside the number.
+ * The ways fans write a team's name beside a player's number, each with the name it's written with:
+ * each way with its own name, and its other names, like its full name or its code, just beside the
+ * number.
  * @param {string[]} names the team's own name first
  * @param {string} number
  */
 const listNumberPhrasings = ([name, ...others], number) => [
-  `${name} ${number}`,
-  `${name} #${number}`,
-  `${number} ${name}`,
-  `${name} No. ${number}`,
-  `${name} number ${number}`,
-  ...others.map((other) => `${other} ${number}`),
+  ...[
+    `${name} ${number}`,
+    `${name} #${number}`,
+    `${number} ${name}`,
+    `${name} No. ${number}`,
+    `${name} number ${number}`,
+  ].map((text) => ({ name, text })),
+  ...others.map((other) => ({ name: other, text: `${other} ${number}` })),
 ];
 
 /**
@@ -228,27 +231,36 @@ function listOwnNames(team, { dictionary }) {
 }
 
 /**
- * Each search of a team's name beside each number its players wear, as it's typed, as "search: lists
- * rows, not players", where it lists anything but the team's players who wear it.
+ * Each search of a team's name beside each number its players wear, as it's typed, as "search:
+ * what's wrong", where it lists anything but the team's players who wear it, or finds other games
+ * than the name alone does.
  * @param {{ context: SearchContext, pages: SearchPages }} search
  */
 export function sweepPlayerNumbers({ context, pages }) {
+  /**
+   * @param {string} text
+   * @param {boolean} isTyping
+   */
+  const show = (text, isTyping) =>
+    readTypedSearch(text, { context, pages, isTyping, isGamesOnly: false });
   return context.terms.teams.flatMap((team) => {
     const players = pages.players.filter((player) => player.team === team.code && player.number);
     const names = listOwnNames(team, context);
+    const nameGames = new Map(names.map((name) => [name, describeFound(show(name, false))]));
     return [...new Set(players.map((player) => player.number))].flatMap((number) => {
       const wearing = players.filter((player) => player.number === number).map((each) => each.id);
-      return listNumberPhrasings(names, number).flatMap((text) => {
-        const { rows } = readTypedSearch(text, {
-          context,
-          pages,
-          isTyping: true,
-          isGamesOnly: false,
-        });
-        const listed = rows.map((row) => (row.kind === "player" ? row.player.id : row.kind));
-        return listed.join() === wearing.join()
-          ? []
-          : [`${text}: lists ${listed.join(", ")}, not ${wearing.join(", ")}`];
+      return listNumberPhrasings(names, number).flatMap(({ name, text }) => {
+        const shown = show(text, true);
+        const listed = shown.rows.map((row) => (row.kind === "player" ? row.player.id : row.kind));
+        const found = describeFound(shown);
+        return [
+          ...(listed.join() === wearing.join()
+            ? []
+            : [`${text}: lists ${listed.join(", ")}, not ${wearing.join(", ")}`]),
+          ...(found === nameGames.get(name)
+            ? []
+            : [`${text}: finds ${found}, not ${nameGames.get(name)}`]),
+        ];
       });
     });
   });

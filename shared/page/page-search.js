@@ -6,9 +6,10 @@
 // words find, or the season's: the latest final for a final's part, or the next game for one before
 // it. A player's name lists her sheet, even with one letter wrong in a name of five letters or
 // more, and finds no games, since nobody knows yet which games she'll play, unless a search of games
-// knows the name, as MLB's knows a starter's, finding his starts. A team's name beside a number, as
-// "Valkyries 2" or "Valkyries #2", lists the sheet of each of its players who wears it, over the
-// team's games. Words like "out" or "injured" list who is out, alone, on a team beside its name, or
+// knows the name, as MLB's knows a starter's, finding his starts. A team's name beside a number
+// some player of its wears, as "Valkyries 2" or "Valkyries #2", lists the sheet of each who wears
+// it, over the team's games, since a fan asking for an hour writes it as one, as "2pm", "2 pm", or
+// "at 2" are. Words like "out" or "injured" list who is out, alone, on a team beside its name, or
 // the player they name, saying whether she is. A team's name beside the News tab's words lists the
 // tab and the newest stories about the team. A place's words list it, and leave the games to any of
 // them that a search of games reads, as "East" finds the East's standings and its games. Words that
@@ -582,7 +583,8 @@ function findPassedOverPlaces(tokens, text, pages) {
 }
 
 /**
- * The pages of the one team the words name, alone or with its section's name.
+ * The pages of the one team the words name, alone, with its section's name, or with a player's
+ * number.
  * @param {import("./search-words.js").Token[]} teamTokens
  * @param {import("./search-words.js").Token[]} otherTokens
  * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages }} search
