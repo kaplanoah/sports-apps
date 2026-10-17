@@ -5,7 +5,7 @@
 // and the other team. Every score puts the team's own first. Each league hands it what each card
 // shows, and fitGameCards sizes the cards once they're drawn.
 
-import { countDaysBetween, formatShortDate, nameDay } from "./days.js";
+import { formatShortDate, isStillToComeToday, nameDay } from "./days.js";
 import { html } from "./html.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
@@ -48,15 +48,6 @@ function renderScore({ state, score, time }) {
   if (state === "pre" || !score) return time;
   return state === "live" ? renderMargin(score) : renderResult(score);
 }
-
-/**
- * Whether a game is still to come today, which a team's sheet sets apart as it does one being
- * played.
- * @param {{ state: string, day: Date | null }} game
- * @param {Date} now
- */
-export const isStillToComeToday = ({ state, day }, now) =>
-  state === "pre" && day !== null && countDaysBetween(now, day) === 0;
 
 /**
  * The game's clock while it's on, or its day, with a game still to come today standing out as one
