@@ -180,7 +180,8 @@ export function splitEvenly(items, measure, count) {
   return groups;
 }
 
-// By code point, since a locale's collation ignores some characters, like the NUL in a test's order.
+// By code point, since a locale's collation ignores some characters, like the NUL in a test's
+// order.
 /** @param {string} one @param {string} other */
 const compareText = (one, other) => Number(one > other) - Number(one < other);
 
@@ -225,9 +226,7 @@ function groupInAreas(files, repoFiles, areaLines) {
     name,
     files: placed
       .filter((file) => file.name === name)
-      .toSorted(
-        (one, other) => compareText(one.unit, other.unit) || compareText(one.order, other.order),
-      ),
+      .toSorted((one, other) => compareText(one.order, other.order)),
   }));
   const isSmall = (/** @type {{ files: { lines: number }[] }} */ area) =>
     sum(area.files) < SMALL_AREA_LINES;
@@ -375,7 +374,8 @@ export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
 /**
  * Each place in the repo that still names a function, constant, or file the change removed.
  * @param {string} diff
- * @param {(pattern: string, isWord: boolean) => string[]} grep the repo's matching lines as path:line:text
+ * @param {(pattern: string, isWord: boolean) => string[]} grep the repo's matching lines, as
+ * path:line:text
  * @param {string[]} deletedFiles
  */
 export function listStaleNames(diff, grep, deletedFiles) {
@@ -684,7 +684,8 @@ const grepRepo = (pattern, isWord) =>
  * to the pull request merged onto it, which leaves out the base's own edits, or, where that merge
  * conflicts, from the head to the pull request's head, which holds them too.
  * @param {string} since
- * @param {(args: string[]) => string | null} git null where git fails, as merge-tree does on a conflict
+ * @param {(args: string[]) => string | null} git null where git fails, as merge-tree does on a
+ * conflict
  */
 export function findPushedRange(since, git) {
   const mergedTree = git(["merge-tree", "--write-tree", WHOLE_CHANGE[0], since])?.split("\n")[0];
@@ -716,7 +717,8 @@ export function listDeletedFiles(git) {
  * force-push that drops it leaves it off.
  * @param {string | null} reviewedHead
  * @param {string} head
- * @param {(args: string[]) => string | null} git null where git fails, as merge-base does when it isn't
+ * @param {(args: string[]) => string | null} git null where git fails, as merge-base does when it
+ * isn't
  */
 export const isReviewedOnBranch = (reviewedHead, head, git) =>
   reviewedHead !== null && git(["merge-base", "--is-ancestor", reviewedHead, head]) !== null;

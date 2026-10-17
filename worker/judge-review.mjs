@@ -32,7 +32,8 @@ const READ_LINES = 2000;
 /**
  * The lines each Read call returned, by the absolute path it read, from a run's messages. A Read
  * that answered with an error read nothing.
- * @param {any[]} messages the Claude Agent SDK's messages, as the action's execution file holds them
+ * @param {any[]} messages the Claude Agent SDK's messages, as the action's execution file holds
+ * them
  * @returns {Map<string, [number, number][]>} each read's first and last line
  */
 export function listReads(messages) {
