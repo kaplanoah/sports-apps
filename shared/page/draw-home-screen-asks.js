@@ -6,11 +6,9 @@
 // settings, before anything is painted, and it answers the welcome's own taps from then on, so they
 // work while the modules still load. home-screen.js runs Chrome's Install in both.
 
-/* global isOnHomeScreen, isOpenedFromHomeScreenApp -- from pick-theme.js */
+/* global isOnHomeScreen, WELCOME_CLOSED_KEY -- from pick-theme.js */
 /* global keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
 /* global readStored -- from open-last-tab.js */
-
-const WELCOME_CLOSED_KEY = "homeScreenWelcomeClosed";
 
 const TIP_TITLE = "Use this site like an app";
 const BENEFIT = "It opens full screen, without the browser's bars";
@@ -48,16 +46,6 @@ function keepWelcomeClosed() {
     localStorage.setItem(WELCOME_CLOSED_KEY, "closed");
   } catch {
     /* the welcome opens again on the next visit */
-  }
-}
-
-// The Home Screen app's link to add the site again opens the welcome until it's closed once more,
-// through the reload a theme picked on it brings.
-function reopenWelcome() {
-  try {
-    localStorage.removeItem(WELCOME_CLOSED_KEY);
-  } catch {
-    /* without storage, the welcome opens on every visit */
   }
 }
 
@@ -161,6 +149,5 @@ function drawHomeScreenAsks() {
   drawTip(isOnIos);
   const welcome = drawWelcome(isOnIos);
   wireWelcome(welcome);
-  if (isOpenedFromHomeScreenApp) reopenWelcome();
   if (readStored(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
 }

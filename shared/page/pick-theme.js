@@ -78,20 +78,25 @@ function buildSafariAddress(choice) {
   return `x-safari-${address.href}`;
 }
 
-// The browser keeps the theme the app's link names, and drops it from the address at once.
+// A device keeps the Home Screen welcome closed under this key once the viewer closes it.
+const WELCOME_CLOSED_KEY = "homeScreenWelcomeClosed";
+
+// The browser keeps the theme the app's link names as its own and drops it from the address at
+// once. It opens the welcome again, even where it was closed before, to show the steps that add
+// the site again, on this page or past the gate, whose sign-in reloads the address it leaves.
 function takeThemeFromApp() {
   const address = new URL(location.href);
   const fromApp = address.searchParams.get(APP_THEME_KEY);
-  if (fromApp === null) return false;
+  if (fromApp === null) return;
   address.searchParams.delete(APP_THEME_KEY);
   history.replaceState(history.state, "", address);
-  if (!isAppearanceChoice(fromApp)) return false;
+  if (!isAppearanceChoice(fromApp)) return;
   try {
     localStorage.setItem("appearance", JSON.stringify(fromApp));
+    localStorage.removeItem(WELCOME_CLOSED_KEY);
   } catch {
-    /* without storage, the browser follows the phone, as appearance.js will */
+    /* without storage, the browser follows the phone, and the welcome opens on every visit */
   }
-  return true;
 }
 
 // Only the app takes a theme from its address, on its first open, and drops it at once.
@@ -128,9 +133,7 @@ function keepPickedAppearance(choice) {
   openThemeAddress(choice);
 }
 
-// The welcome opens on a page the app's link opened, even where it was closed before, to show
-// the steps that add the site again.
-const isOpenedFromHomeScreenApp = !isOnHomeScreen() && takeThemeFromApp();
+if (!isOnHomeScreen()) takeThemeFromApp();
 
 try {
   if (isOnHomeScreen()) keepThemeFromAddress();

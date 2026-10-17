@@ -6,13 +6,10 @@ import { readFileSync } from "node:fs";
 const readNamed = (path, pattern) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8").match(pattern)?.[1];
 
-// The tests' harness closes the welcome as the viewer would, under the key the plain script that
-// draws it keeps it closed by.
+// The tests' harness closes the welcome as the viewer would, under the key the page's plain
+// scripts keep it closed by.
 test("the tests close the welcome under the key the page keeps it closed by", () => {
-  const drawn = readNamed(
-    "shared/page/draw-home-screen-asks.js",
-    /const WELCOME_CLOSED_KEY = "([^"]+)";/,
-  );
+  const drawn = readNamed("shared/page/pick-theme.js", /const WELCOME_CLOSED_KEY = "([^"]+)";/);
   assert.ok(drawn);
   assert.equal(
     readNamed("tests/browser/harness.mjs", /localStorage\.setItem\("([^"]+)", "closed"\)/),

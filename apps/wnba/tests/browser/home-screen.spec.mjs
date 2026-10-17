@@ -1,7 +1,7 @@
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
-import { test, expect, openApp } from "./harness.mjs";
+import { test, expect, openApp, serveLockedApp, LOCKED_PAGE_PATH } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -413,6 +413,20 @@ test.describe("on an iPhone, in the browser", () => {
     expect(new URL(page.url()).search).toBe("?theme=dark");
     await expect(page.locator(WELCOME).getByRole("radio", { name: "Walnut" })).toBeChecked();
     expect(await page.evaluate(() => localStorage.getItem("appearance"))).toBe('"dark"');
+  });
+
+  test("the Home Screen app's link opens the welcome past the gate, even once closed", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await serveLockedApp(page, { accessCode: "FASTBREAK" });
+    await page.goto(LOCKED_PAGE_PATH);
+    await page.evaluate((key) => localStorage.setItem(key, "closed"), "homeScreenWelcomeClosed");
+    await page.goto(`${LOCKED_PAGE_PATH}?app-theme=dark`);
+    await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
+    await page.getByRole("button", { name: "Open" }).click();
+    await expect(page.locator(WELCOME)).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
   test("a theme the page doesn't have reads as System, kept or named by a link, which then opens no welcome", async ({
