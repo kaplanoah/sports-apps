@@ -329,7 +329,7 @@ function judgeArea(stage, { area, name, files, partsByFile }, records) {
 /**
  * What one stage read, checked, and posted, and what it left undone.
  * @param {string} stage
- * @param {any[]} areas
+ * @param {PlannedArea[]} areas
  * @param {Map<string, any>} records
  */
 function judgeStage(stage, areas, records) {
@@ -381,7 +381,7 @@ const isStageFinished = (judged) => !judged.unreadFiles.length && !judged.missin
  * whole change when a review of the pushes since finished and posted nothing.
  * @param {import('./plan-review.mjs').Plan} plan
  * @param {Map<string, any>} records
- * @returns {{ stage: string, areas: any[] }[]}
+ * @returns {{ stage: string, areas: PlannedArea[] }[]}
  */
 export function listDueStages(plan, records) {
   if (!plan.areas.length) return [];
@@ -397,7 +397,7 @@ export function listDueStages(plan, records) {
 /**
  * The summary's lines on what one stage read, checked, and posted.
  * @param {ReturnType<typeof judgeStage>} judged
- * @param {{ stage: string, areas: any[], sha: string, since: string | null }} context
+ * @param {{ stage: string, areas: PlannedArea[], sha: string, since: string | null }} context
  */
 function describeStage(judged, { stage, areas, sha, since }) {
   const repeated = judged.repeated
