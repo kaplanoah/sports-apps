@@ -18,8 +18,9 @@ export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
 /** @param {string} tree */
 export const nameTestedArtifact = (tree) => `ci-tested-${tree}`;
 
-// Only CI as main's own workflow ran it, on a branch of this repository: a fork's pull request
-// runs its own copy of the workflow, which could record a tree it never tested.
+// Only a pull request's run of the CI workflow's path, from a branch of this repository. A branch's
+// run uses the branch's own copy of the workflow, which only someone who can push here could
+// change, while a fork's could be anyone's, and could record a tree it never tested.
 const isPullRequestRun = (run) =>
   run.path === CI_WORKFLOW &&
   run.event === "pull_request" &&

@@ -112,11 +112,34 @@ test("a page whose head doesn't load the release guard isn't built", () => {
   assert.throws(() => pinPageFiles(files, "abc1234"), /release-guard\.js/);
 });
 
-for (const app of listApps()) {
-  test(`${app}: every file the built page loads is in its release's folder and served`, async () => {
+test("every page at the folder's top is pinned, the gate too, and each must load the guard", () => {
+  const gate =
+    '<!doctype html>\n  <script src="shared/release-guard.js"></script>\n  <link rel="stylesheet" href="shared/gate.css" />\n';
+  const files = {
+    "index.html": { contentType: "text/html", text: PAGE },
+    "gate.html": { contentType: "text/html", text: gate },
+    "shared/release-guard.js": { contentType: "text/javascript", text: "guardPage();\n" },
+  };
+
+  assert.equal(
+    pinPageFiles(files, "abc1234")["gate.html"].text,
+    '<!doctype html>\n  <script>\nguardPage();\n</script>\n  <link rel="stylesheet" href="release/abc1234/shared/gate.css" />\n',
+  );
+  const unguarded = {
+    ...files,
+    "gate.html": { contentType: "text/html", text: "<!doctype html>\n" },
+  };
+  assert.throws(() => pinPageFiles(unguarded, "abc1234"), /The head of gate\.html/);
+});
+
+for (const [app, page] of listApps().flatMap((app) => [
+  [app, "index.html"],
+  [app, "gate.html"],
+])) {
+  test(`${app}: every file the built ${page} loads is in its release's folder and served`, async () => {
     const { default: files } = await import(`#page-files/${app}`);
-    const page = pinPageFiles(files, "abc1234")["index.html"].text;
-    const loaded = [...page.matchAll(/<(?:script|link)\b[^>]*>/g)]
+    const pinned = pinPageFiles(files, "abc1234")[page].text;
+    const loaded = [...pinned.matchAll(/<(?:script|link)\b[^>]*>/g)]
       .map(([tag]) => tag)
       .filter(
         (tag) =>
@@ -128,6 +151,6 @@ for (const app of listApps()) {
       assert.ok(path.startsWith("release/abc1234/"), path);
       assert.ok(files[path.slice("release/abc1234/".length)], `${path} is served`);
     }
-    assert.ok(!page.includes("release-guard.js"), "the guard is written in");
+    assert.ok(!pinned.includes("release-guard.js"), "the guard is written in");
   });
 }
