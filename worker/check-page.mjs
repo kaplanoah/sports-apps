@@ -196,8 +196,22 @@ export function hideAddress(check, pageUrl) {
 const waitFor = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 /**
+ * Chromium, from CHROMIUM_PATH when it names one.
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {Promise<import("@playwright/test").Browser>}
+ */
+async function launchChromium(env) {
+  // Only a check that has a page to open needs a browser.
+  const { chromium } = await import("@playwright/test");
+  const executablePath = env.CHROMIUM_PATH;
+  return chromium.launch(executablePath ? { executablePath } : {});
+}
+
+/**
  * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
- * broken, up to `attempts` times.
+ * broken, up to `attempts` times. A page with no address, or whose access code the Worker refuses
+ * or rate-limits, goes unchecked; a browser that doesn't start throws, so the deploy puts the
+ * version before back and the watch's run fails.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
@@ -205,6 +219,7 @@ const waitFor = (milliseconds) => new Promise((resolve) => setTimeout(resolve, m
  * @param {NodeJS.ProcessEnv} [options.env]
  * @param {number} [options.attempts]
  * @param {number} [options.pauseMs]
+ * @param {typeof launchChromium} [options.launchBrowser]
  * @returns {Promise<PageCheck>}
  */
 export async function checkAppPage({
@@ -214,13 +229,11 @@ export async function checkAppPage({
   env = process.env,
   attempts = 3,
   pauseMs = 5000,
+  launchBrowser = launchChromium,
 }) {
   const access = readPageAccess(app, channel, env);
   if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
-  // Only a check that has a page to open needs a browser.
-  const { chromium } = await import("@playwright/test");
-  const executablePath = env.CHROMIUM_PATH;
-  const browser = await chromium.launch(executablePath ? { executablePath } : {});
+  const browser = await launchBrowser(env);
   try {
     /** @type {PageCheck} */
     let check = markBroken("the page wasn't opened");

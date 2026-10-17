@@ -58,14 +58,14 @@
   and stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`),
   and GitHub's reporter marks each one that passed only on its retry on the pull request's checks,
   the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
-  and the `check` job adds it to the table in the issue Flaky browser tests,
+  and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
   where a change in a spec outside every test, like an import or a helper,
-  edits them all, and adds any other test that failed to the table in the issue Flaky browser tests (`worker/judge-burn-in.mjs`),
+  edits them all, and the next nightly run adds any other test that failed to the table in the issue Flaky browser tests (`worker/judge-burn-in.mjs`),
   and each night main's browser tests run three times over with no retry and add each test that failed to the table in the open issue Flaky browser tests (`.github/workflows/flaky.yml` and `worker/report-flaky-tests.mjs`),
   which comments on each test new to it and starts the routine that fixes the table's top test,
   through its API trigger, from the `FLAKY_ROUTINE_URL` and `FLAKY_ROUTINE_TOKEN` secrets,
@@ -693,8 +693,9 @@ Delete it once the app's first PR merges.
 - Never push to another session's branch.
 - Run each command so it needs no approval: one command per call, from the repo's root, where every session starts.
   Never start with `cd`, never join `cd` to a `git` command, and never pipe or chain after a command `.claude/settings.json` allows, like the beta force-push.
-  A hook in `.claude/settings.json` blocks a call that starts with `cd` or joins commands with `&&`,
-  `||`, `;`, or a line break (`.claude/hooks/one-command.mjs`).
+  A hook in `.claude/settings.json` blocks a call that starts with `cd`, a subshell's `(cd` too,
+  or joins commands with `&&`, `||`, `;`, a lone `&` that runs one in the background, or a line break,
+  in the call itself or in a script it hands a shell as a string, as `bash -c "a; b"` does (`.claude/hooks/one-command.mjs`).
   When a command still asks, add it to that allow list in the same PR if it's safe for any session to run, or say why it asks.
 - Don't spend time curating commit history.
   Squash merges make it irrelevant.
@@ -741,19 +742,24 @@ Delete it once the app's first PR merges.
   added or removed, in a selector or at-rule, which says which parts a rule reaches,
   or in a property that decides how parts layer, stack, scroll,
   take a touch, or show (any below, any `position`, `overflow`,
-  `overscroll-behavior`, `scroll-snap`, `touch-action`, `z-index`,
+  `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
   `opacity`, `visibility`, `display`, `isolation`, or `mix-blend-mode`),
   but not in their fonts, colors, spacing, or sizes, which CI checks;
   or an added line in a page's CSS or JavaScript that sets a property that gives a part a layer of its own (`transform`,
+  `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`).
   Tests are never red.
-  The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label.
+  The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label,
+  added by the owner after the PR's last push.
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     When you ask the owner to add `phone-ok`, link the PR in the same message.
     Never add `phone-ok`.
     Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push.
+    A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
+    so deploy it to beta and ask.
+    Merge `main` into the branch just before each deploy to beta, so the commit the owner labels is the one that merges, since a PR merges while behind `main` as long as it has no conflicts.
     Merge a red PR once `check` passes with `phone-ok` on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again.
     An OK in chat never stands in for the label.
     Merge it yourself: the owner doesn't.
@@ -875,7 +881,11 @@ When a step says to go back to an earlier step, continue in order from there.
       tell the user that too.
     - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
       Tell the user which.
-    - It says "has moved on": another merge landed first, and its Deploy run covers this one.
+    - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
+      Read that run's log instead.
+      Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.
+      Saying "couldn't be asked", it deploys this merge because GitHub couldn't say how CI went on the newer one, so read on in this run's log too.
+    - It says "already has": a newer merge's deploy went live first, and covers this one.
       Read that run's log instead.
     - The run was skipped:
       CI failed on `main`.
