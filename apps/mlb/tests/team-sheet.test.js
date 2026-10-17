@@ -146,6 +146,18 @@ test("once the season is over, the Regular season part counts no games left", ()
   assert.doesNotMatch(readPart(leader, "Regular season"), /left/);
 });
 
+test("a club a game short for a rainout MLB cancelled counts the games left of its own season", () => {
+  session.standings = {
+    divisions: {
+      "AL East": [
+        row("TB", 96, 62, { gb: "-", elim: "-", lead: true, magic: "1" }),
+        row("NYY", 90, 68, { gb: "6.0", elim: "1", wcgb: "+3.0", wce: "-", scheduled: 161 }),
+      ],
+    },
+  };
+  assert.match(readPart(renderTeamSheet("NYY").body, "Regular season"), /^3 left /);
+});
+
 test("once the field is set, a game rained out and never made up counts as none left", () => {
   session.state = { ...session.state, projected: false };
   session.standings = {
