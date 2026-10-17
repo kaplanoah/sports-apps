@@ -461,13 +461,23 @@ export function judgeReview({ sha, earlierHead, plan, records }) {
 }
 
 /**
+ * Posts the summary, or updates the one an earlier review posted, or, with no summary of this
+ * run's own, leaves the earlier one as it is.
+ * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
+ * @param {{ pullNumber: string, earlier: any | null, body: string | null }} summary
+ */
+export async function settleSummary(callGitHub, { pullNumber, earlier, body }) {
+  if (body) await postSummary(callGitHub, pullNumber, earlier, body);
+}
+
+/**
  * Posts the summary, or updates the one an earlier review posted.
  * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
  * @param {string} pullNumber
  * @param {any | null} earlier the earlier summary
  * @param {string} body
  */
-export async function postSummary(callGitHub, pullNumber, earlier, body) {
+async function postSummary(callGitHub, pullNumber, earlier, body) {
   if (earlier)
     await callGitHub(`/issues/comments/${earlier.id}`, { method: "PATCH", body: { body } });
   else await callGitHub(`/issues/${pullNumber}/comments`, { method: "POST", body: { body } });
@@ -502,7 +512,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       plan: readJson(join(folder, "plan.json")),
       records: readRecords(folder),
     });
-    if (body) await postSummary(callGitHub, env.PR ?? "", earlier, body);
+    await settleSummary(callGitHub, { pullNumber: env.PR ?? "", earlier, body });
     console.log(body ?? "This head was already reviewed in full, so its summary stands.");
     if (!isComplete) {
       console.log("::error::The review didn't read and check everything it was due.");

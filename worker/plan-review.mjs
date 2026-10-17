@@ -325,9 +325,9 @@ export function listPushedFiles({ reviewedHead, pushed, findMergeBase, readDiff 
 }
 
 /**
- * Which review this run makes: the first, of the whole change; none, on the head the last full
- * read ended on, as a label's run is, which leaves that read's summary as it is; one of what the
- * pushes since the last full read changed; or none, when they changed only what a merge of the
+ * Which review this run makes: the first, of the whole change; reviewed, on the head the last
+ * full read ended on, as a label's run is, which leaves that read's summary as it is; one of what
+ * the pushes since the last full read changed; or none, when they changed only what a merge of the
  * base brings in.
  * @param {object} review
  * @param {string | null} review.reviewedHead the head the last full read ended on
@@ -649,6 +649,12 @@ export function findPushedRange(since, git) {
     : { range: [since, "HEAD^2"], hasBase: true };
 }
 
+/**
+ * The pull request's own head, the second parent of the merge commit CI checks out.
+ * @param {(args: string[]) => string} git
+ */
+export const readPullHead = (git) => git(["rev-parse", "HEAD^2"]).trim();
+
 /** @param {NodeJS.ProcessEnv} env */
 async function readLastReviewedHead(env) {
   const callGitHub = createGitHub({
@@ -679,7 +685,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       });
     return /** @type {{ numstat: string, diff: string }} */ (diffs.get(key));
   };
-  const head = runGit(["rev-parse", "HEAD^2"]).trim();
+  const head = readPullHead(runGit);
   /** @type {{ range: string[], hasBase: boolean } | undefined} */
   let pushedRange;
   const readPushedRange = () =>

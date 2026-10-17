@@ -23,6 +23,7 @@ import {
   splitDiffByFile,
   listPushedFiles,
   listStageKinds,
+  readPullHead,
   splitEvenly,
   WHOLE_CHANGE,
   splitIntoParts,
@@ -349,6 +350,17 @@ test("the first review reads the whole change, a later one what changed, and a m
     chooseStage({ reviewedHead: reviewed, head, isOnBranch: true, listChanged: () => [] }),
     { stage: "none" },
   );
+});
+
+test("the pull request's head is the merge commit's second parent", () => {
+  /** @type {string[][]} */
+  const asked = [];
+  const head = readPullHead((args) => {
+    asked.push(args);
+    return `${"a".repeat(40)}\n`;
+  });
+  assert.equal(head, "a".repeat(40));
+  assert.deepEqual(asked, [["rev-parse", "HEAD^2"]]);
 });
 
 test("a run on the head the last full read ended on reads nothing and lists no pushed files", () => {

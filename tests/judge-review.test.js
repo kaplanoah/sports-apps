@@ -13,10 +13,10 @@ import {
   listDueStages,
   listReads,
   listUnchecked,
-  postSummary,
   readAnswer,
   readRecords,
   recordFindTry,
+  settleSummary,
 } from "../worker/judge-review.mjs";
 import { listStageKinds, writeReview } from "../worker/plan-review.mjs";
 import { SUMMARY_MARKER, readReviewedHead } from "../worker/review-state.mjs";
@@ -577,23 +577,25 @@ test("a change of only recorded data passes, naming what it left unread", () => 
   assert.match(body, /- `a.json`: a test's recorded data/);
 });
 
-test("the summary updates the one an earlier review posted, or else posts one", async () => {
+test("the summary updates the one an earlier review posted, or else posts one, and a run with none of its own leaves it", async () => {
   /** @type {{ path: string, method?: string, body?: any }[]} */
   const calls = [];
   const callGitHub = async (/** @type {string} */ path, request = {}) => {
     calls.push({ path, ...request });
     return {};
   };
-  await postSummary(callGitHub, "7", { id: 3 }, "new");
+  await settleSummary(callGitHub, { pullNumber: "7", earlier: { id: 3 }, body: "new" });
   assert.deepEqual(calls.at(-1), {
     path: "/issues/comments/3",
     method: "PATCH",
     body: { body: "new" },
   });
-  await postSummary(callGitHub, "7", null, "new");
+  await settleSummary(callGitHub, { pullNumber: "7", earlier: null, body: "new" });
   assert.deepEqual(calls.at(-1), {
     path: "/issues/7/comments",
     method: "POST",
     body: { body: "new" },
   });
+  await settleSummary(callGitHub, { pullNumber: "7", earlier: { id: 3 }, body: null });
+  assert.equal(calls.length, 2);
 });
