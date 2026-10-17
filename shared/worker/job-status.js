@@ -22,7 +22,7 @@ import { describeError } from "./responses.js";
  * A fetch that counts the requests made through it.
  * @param {typeof fetch} fetchImpl
  */
-export function countRequests(fetchImpl) {
+function countRequests(fetchImpl) {
   const counter = {
     count: 0,
     /** @type {typeof fetch} */
@@ -70,7 +70,7 @@ export async function catchFailure(failures, what, work) {
  * @param {Partial<JobRunStatus> | null} stored the status the last run saved
  * @returns {JobRunStatus}
  */
-export function describeJobRun({ startedAt, endedAt, requests, failure }, stored) {
+function describeJobRun({ startedAt, endedAt, requests, failure }, stored) {
   const ranAt = new Date(startedAt).toISOString();
   return {
     ranAt,
@@ -78,4 +78,43 @@ export function describeJobRun({ startedAt, endedAt, requests, failure }, stored
     requests,
     lastFailure: failure ? { at: ranAt, message: failure } : (stored?.lastFailure ?? null),
   };
+}
+
+/**
+ * What a job's run gets: the store's context, its fetch counted, the store's reading of the league
+ * on that fetch, and what failed so far.
+ * @typedef {import("./season-store.js").JobContext & { failures: string[], loadSnapshot: (season: number) => Promise<any> }} RunContext
+ */
+
+/**
+ * Does one run of a job and saves how it went in the job's status document, with what the job
+ * adds of its own. A failure the run doesn't catch is noted as the run's.
+ * @param {import("./season-store.js").JobContext} context
+ * @param {object} job
+ * @param {string} job.statusKey where the job saves its status, as `<name>/status`
+ * @param {(context: RunContext) => Promise<void>} job.updateStore one run
+ * @param {(context: RunContext) => Promise<Record<string, unknown>>} [job.describeRun] what the
+ *   job adds of its own to the status
+ */
+export async function runWithStatus(context, { statusKey, updateStore, describeRun }) {
+  const startedAt = context.now();
+  const counter = countRequests(context.fetchImpl);
+  /** @type {((season: number) => Promise<any>) | undefined} */
+  let loadSnapshot;
+  /** @type {RunContext} */
+  const runContext = {
+    ...context,
+    fetchImpl: counter.fetchImpl,
+    loadSnapshot: (season) =>
+      (loadSnapshot ??= context.createLoadSnapshot(counter.fetchImpl))(season),
+    failures: [],
+  };
+  await catchFailure(runContext.failures, "The run", () => updateStore(runContext));
+  const stored = await context.docs.read(statusKey);
+  const failure = runContext.failures.join("; ");
+  const requests = counter.count;
+  await context.docs.write(statusKey, {
+    ...describeJobRun({ startedAt, endedAt: context.now(), requests, failure }, stored),
+    ...(await describeRun?.(runContext)),
+  });
 }
