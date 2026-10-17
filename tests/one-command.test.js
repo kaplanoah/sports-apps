@@ -50,6 +50,8 @@ test("commands a shell is handed as one string are blocked as if typed", () => {
     "sh -c 'npm ci && npm test'",
     'bash -lc "a || b"',
     'bash --norc -c "a & b"',
+    '/bin/sh -c "a; b"',
+    "/usr/bin/bash -c 'a && b'",
     'npx something | bash -c "a; b"',
   ])
     assert.match(findCommandProblem(command) ?? "", /^It joins commands with /, command);

@@ -1,8 +1,9 @@
 // Keeps one open issue that names each browser test that failed only some of the time, so it's
 // found and fixed rather than retried past on pull requests. Each night it adds main's nightly run
-// (with no retry, .github/workflows/flaky.yml), and what CI's runs kept since the last night that
-// reported: the reports of pull requests' runs where a retry passed, and burn-in's lists of tests a
-// pull request didn't write or edit (worker/judge-burn-in.mjs), each taken once. The issue's
+// (with no retry, .github/workflows/flaky.yml), and the CI runs that ended since the last night
+// that reported, each try whole and once: the reports of pull requests' runs where a retry passed,
+// and burn-in's lists of tests a pull request didn't write or edit (worker/judge-burn-in.mjs),
+// each test credited to the run that holds its failed try's trace. The issue's
 // body is one table, one row a test, that only the nightly run writes, so no two writes ever race
 // and no run's report is lost; a comment names each test new to it, and starts the routine that
 // fixes the table's top test; a row goes once its test hasn't failed for a week, and the issue
@@ -24,8 +25,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const NIGHTLY_WORKFLOW = "flaky.yml";
 const REPORT_JOB = "report";
 const NIGHTS_LOOKED_BACK = 10;
-// A CI run makes its artifacts within hours of starting, so one started a day before a window made
-// none in it.
+// A CI run ends within hours of starting, so one started a day before a window can't end in it.
 const LONGEST_RUN_MS = DAY_MS;
 // CI keeps a run's report only when a test needed its retry or failed, and burn-in's list only when
 // it named a test.
@@ -34,7 +34,8 @@ const ROUTINE_TIMEOUT_MS = 10000;
 const FAILED_STATUSES = new Set(["failed", "timedOut"]);
 const STATE_PATTERN = /<!-- flaky-tests (.*?) -->/s;
 
-/** @typedef {{ name: string, runs: number, failures: number, message: string }} TestRuns */
+/** @typedef {{ url: string, at: string }} FoundIn the run a test last failed in, and when it ended */
+/** @typedef {{ name: string, runs: number, failures: number, message: string, foundIn?: FoundIn }} TestRuns */
 /** @typedef {TestRuns & { firstSeen: string, lastSeen: string, lastRun: string }} TableRow */
 
 // Playwright colors its messages for a terminal.
@@ -110,8 +111,16 @@ export function listFailedTests(reports, { isRetried = false } = {}) {
 }
 
 /**
- * The tests of several lists of failed tests, each test's runs and failures added up, the most
- * failed first.
+ * The later of two runs a test failed in.
+ * @param {FoundIn | undefined} first
+ * @param {FoundIn | undefined} second
+ */
+const pickLatestRun = (first, second) =>
+  first && (!second || Date.parse(first.at) >= Date.parse(second.at)) ? first : second;
+
+/**
+ * The tests of several lists of failed tests, each test's runs and failures added up, with the
+ * latest run it failed in, the most failed first.
  * @param {TestRuns[][]} lists
  * @returns {TestRuns[]}
  */
@@ -120,11 +129,13 @@ export function mergeFailedTests(lists) {
   const byName = new Map();
   for (const test of lists.flat()) {
     const counted = byName.get(test.name);
+    const foundIn = pickLatestRun(counted?.foundIn, test.foundIn);
     byName.set(test.name, {
       name: test.name,
       runs: (counted?.runs ?? 0) + test.runs,
       failures: (counted?.failures ?? 0) + test.failures,
       message: counted?.message || test.message,
+      ...(foundIn && { foundIn }),
     });
   }
   return [...byName.values()].sort(
@@ -147,7 +158,8 @@ export function readTable(body) {
  * week, the most failed first.
  * @param {TableRow[]} table
  * @param {TestRuns[]} failed
- * @param {{ day: string, runUrl: string }} report the report's day, as YYYY-MM-DD, and its run
+ * @param {{ day: string, runUrl: string }} report the report's day, as YYYY-MM-DD, and its run, for
+ *   a test that names no run of its own
  * @returns {TableRow[]}
  */
 export function addToTable(table, failed, { day, runUrl }) {
@@ -161,7 +173,7 @@ export function addToTable(table, failed, { day, runUrl }) {
       message: test.message || row?.message || "",
       firstSeen: row?.firstSeen ?? day,
       lastSeen: day,
-      lastRun: runUrl,
+      lastRun: test.foundIn?.url ?? runUrl,
     });
   }
   const oldestKept = new Date(Date.parse(day) - (DAYS_KEPT - 1) * DAY_MS)
@@ -199,14 +211,18 @@ export const renderTable = (table) =>
   ].join("\n");
 
 /**
+ * Each test new to the table, with the run that holds its failed try's trace.
  * @param {TestRuns[]} added the tests new to the table
- * @param {string} runUrl
+ * @param {string} runUrl the report's run, for a test that names no run of its own
  */
 export const renderNewTests = (added, runUrl) =>
   [
-    `[This run](${runUrl}) found ${added.length === 1 ? "a test" : `${added.length} tests`} new to the table:`,
+    `Found ${added.length === 1 ? "a test" : `${added.length} tests`} new to the table:`,
     "",
-    ...added.map((test) => `- \`${test.name}\`: ${test.message || "no message"}`),
+    ...added.map(
+      (test) =>
+        `- \`${test.name}\`, in [its run](${test.foundIn?.url ?? runUrl}): ${test.message || "no message"}`,
+    ),
   ].join("\n");
 
 /**
@@ -299,7 +315,7 @@ export async function postReport({
 }
 
 /** @typedef {ReturnType<typeof createGitHub>} GitHub */
-/** @typedef {{ id: number, names: string[] }} FlakyRun */
+/** @typedef {{ id: number, names: string[], foundIn: FoundIn }} FlakyRun */
 
 /**
  * When a job of a run began, or null when the run has no such job.
@@ -317,9 +333,9 @@ async function findJobStart(github, runId, isWanted) {
 const isReport = (job) => job.name === REPORT_JOB;
 
 /**
- * What CI made that this night's report takes: from when the last night's report that went
- * through began, until this one began. A night whose report failed leaves what it would have
- * taken to the next, and with no such night it looks back over the days the table keeps.
+ * The CI runs this night's report takes: those that ended from when the last night's report that
+ * went through began, until this one began. A night whose report failed leaves its runs to the
+ * next, and with no such night it looks back over the days the table keeps.
  * @param {GitHub} github
  * @param {{ runId: string, now: Date }} night
  * @returns {Promise<{ since: Date, until: Date }>}
@@ -342,47 +358,56 @@ export async function findReportWindow(github, { runId, now }) {
 }
 
 /**
- * Whether a CI run, from a branch of this repository, may hold artifacts made in the window: a
- * fork's run could hand the table anything, and a run last changed before the window made none in
- * it.
+ * Whether a night takes a CI run: one of this repository's branches' that ended in its window, so
+ * each try of a run goes whole to one night, its reports read together. A fork's run could hand
+ * the table anything, and a run still going waits for the next night.
  * @param {any} run
- * @param {{ since: Date }} window
- */
-const mayHoldWindow = (run, { since }) =>
-  run.head_repository?.id === run.repository?.id && Date.parse(run.updated_at) >= since.getTime();
-
-/**
- * Whether an artifact is a report or burn-in's list made from `since` until `until`. A run that
- * runs a job again keeps its first try's artifacts, which an earlier night already took.
- * @param {any} artifact
  * @param {{ since: Date, until: Date }} window
  */
-const isArtifactToReport = (artifact, { since, until }) =>
-  !artifact.expired &&
-  RUN_ARTIFACT.test(artifact.name) &&
-  Date.parse(artifact.created_at) >= since.getTime() &&
-  Date.parse(artifact.created_at) < until.getTime();
+const isRunToReport = (run, { since, until }) =>
+  run.status === "completed" &&
+  run.head_repository?.id === run.repository?.id &&
+  Date.parse(run.updated_at) >= since.getTime() &&
+  Date.parse(run.updated_at) < until.getTime();
 
 /**
- * Each CI run that made a report or burn-in's list in the window, with those artifacts' names, so
- * each artifact is taken by one night only.
+ * Whether an artifact is a report or burn-in's list its run's latest try made. A job run again
+ * leaves the try before's artifacts, which the night that took that try counted.
+ * @param {any} artifact
+ * @param {any} run
+ */
+const isArtifactToReport = (artifact, run) =>
+  !artifact.expired &&
+  RUN_ARTIFACT.test(artifact.name) &&
+  Date.parse(artifact.created_at) >= Date.parse(run.run_started_at);
+
+/**
+ * A time as GitHub's search reads one, to the second.
+ * @param {Date} time
+ */
+const formatSearchTime = (time) => time.toISOString().replace(/\.\d{3}Z$/, "Z");
+
+/**
+ * Each CI run the window takes that kept a report or burn-in's list, with those artifacts' names
+ * and the run that holds the failed tries' traces.
  * @param {GitHub} github
  * @param {{ since: Date, until: Date }} window
  * @returns {Promise<FlakyRun[]>}
  */
 export async function listFlakyRuns(github, window) {
-  const earliest = new Date(window.since.getTime() - LONGEST_RUN_MS).toISOString();
+  const earliest = formatSearchTime(new Date(window.since.getTime() - LONGEST_RUN_MS));
   const runs = await readAllPages(
     async (path) => (await github(path)).workflow_runs,
-    `/actions/workflows/ci.yml/runs?created=>=${earliest}`,
+    `/actions/workflows/ci.yml/runs?status=completed&created=>=${earliest}`,
   );
   const flakyRuns = [];
-  for (const run of runs.filter((candidate) => mayHoldWindow(candidate, window))) {
+  for (const run of runs.filter((candidate) => isRunToReport(candidate, window))) {
     const { artifacts } = await github(`/actions/runs/${run.id}/artifacts?per_page=100`);
     const names = artifacts
-      .filter((artifact) => isArtifactToReport(artifact, window))
+      .filter((artifact) => isArtifactToReport(artifact, run))
       .map((artifact) => artifact.name);
-    if (names.length) flakyRuns.push({ id: run.id, names });
+    const foundIn = { url: run.html_url, at: run.updated_at };
+    if (names.length) flakyRuns.push({ id: run.id, names, foundIn });
   }
   return flakyRuns;
 }
@@ -398,16 +423,17 @@ const readJsonFiles = (directory, name) =>
     .map((entry) => JSON.parse(readFileSync(join(entry.parentPath, entry.name), "utf8")));
 
 /**
- * The tests a CI run's kept artifacts name: each its retry passed, unless a test failed every
- * try, and each burn-in found failing that the pull request didn't write.
+ * The tests a CI run's kept artifacts name, each found in that run: each its retry passed, unless
+ * a test failed every try, and each burn-in found failing that the pull request didn't write.
  * @param {string} directory the run's artifacts, each in a folder of its own
+ * @param {FoundIn} foundIn the run
  * @returns {TestRuns[]}
  */
-export const readRunFailures = (directory) =>
+export const readRunFailures = (directory, foundIn) =>
   mergeFailedTests([
     listFailedTests(readJsonFiles(directory, "report.json"), { isRetried: true }),
     ...readJsonFiles(directory, "burn-in-flaky.json"),
-  ]);
+  ]).map((test) => ({ ...test, foundIn }));
 
 /**
  * A CI run's artifacts, each in a folder of its own, downloaded by GitHub's CLI from the
@@ -429,28 +455,31 @@ function downloadRun({ id, names }) {
 }
 
 /**
- * The tests that failed in the nightly run and in each CI run its window takes.
+ * The tests that failed in the nightly run and in each CI run its window takes, each with the
+ * latest run it failed in.
  * @param {object} options
  * @param {any[]} options.nightReports the nightly run's own Playwright JSON reports
  * @param {GitHub} options.github
- * @param {{ runId: string, now: Date }} options.night
+ * @param {{ runId: string, url: string, now: Date }} options.night
  * @param {(run: FlakyRun) => string} [options.download]
  */
 export async function collectFailedTests({ nightReports, github, night, download = downloadRun }) {
   const window = await findReportWindow(github, night);
   const runs = await listFlakyRuns(github, window);
+  const tonight = { url: night.url, at: window.until.toISOString() };
   return mergeFailedTests([
-    listFailedTests(nightReports),
-    ...runs.map((run) => readRunFailures(download(run))),
+    listFailedTests(nightReports).map((test) => ({ ...test, foundIn: tonight })),
+    ...runs.map((run) => readRunFailures(download(run), run.foundIn)),
   ]);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const repository = String(process.env.GITHUB_REPOSITORY);
+  const runUrl = String(process.env.RUN_URL);
   const failed = await collectFailedTests({
     nightReports: process.argv.slice(2).map((path) => JSON.parse(readFileSync(path, "utf8"))),
     github: createGitHub({ repository, fetchImpl: fetch, env: process.env }),
-    night: { runId: String(process.env.GITHUB_RUN_ID), now: new Date() },
+    night: { runId: String(process.env.GITHUB_RUN_ID), url: runUrl, now: new Date() },
   });
-  console.log(await postReport({ repository, failed, runUrl: String(process.env.RUN_URL) }));
+  console.log(await postReport({ repository, failed, runUrl }));
 }

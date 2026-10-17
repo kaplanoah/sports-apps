@@ -318,8 +318,8 @@ deploy when nothing but docs, tests, tooling, and other apps' folders changed
 since its live version's commit, since its Worker would be the same;
 `worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too
 once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
-CI fails. A deploy never puts back code older than the live version's. Without the token, merges
-deploy nothing.
+CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
+always deploys. Without the token, merges deploy nothing.
 Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <app>` for
 one app. `npm run rollback -- <app>` puts the app's previous version back at all
 of its traffic and prints which commit was live and which is now; it refuses

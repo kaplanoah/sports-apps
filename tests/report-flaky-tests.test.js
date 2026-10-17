@@ -314,7 +314,7 @@ test("a run updates the open issue's table, rather than opening another, and com
     ],
   );
   assert.equal(comment.path, `/repos/${REPOSITORY}/issues/5/comments`);
-  assert.match(comment.body.body, /found a test new to the table:/);
+  assert.match(comment.body.body, /Found a test new to the table:/);
   assert.match(comment.body.body, /last-drawn\.spec\.mjs:58/);
   assert.doesNotMatch(comment.body.body, /at-rest/);
 });
@@ -435,11 +435,24 @@ const REPOSITORY_ID = 41;
 /** @typedef {string | { name: string, created_at: string }} FakeArtifact */
 
 /**
+ * @typedef {object} FakeCiRun
+ * @property {number} id
+ * @property {string} updated_at when it ended
+ * @property {string} [run_started_at] when its latest try began, an hour before it ended unless named
+ * @property {string} [status]
+ * @property {number} [head_repository_id]
+ * @property {FakeArtifact[]} [artifacts] each made as the run ended unless named
+ */
+
+/** A CI run's address, apart from the nightly run's. @param {number} id */
+const nameRunUrl = (id) => `https://github.com/${REPOSITORY}/actions/runs/${1000 + id}`;
+
+/**
  * GitHub's API as the nightly report reads it: the nightly runs, newest first, each with its
- * report job, and CI's runs, each with its artifacts, made as the run last changed unless named.
+ * report job, and CI's runs, each with its artifacts.
  * @param {object} state
  * @param {{ id: number | string, report?: { started_at: string, conclusion: string | null } }[]} state.nights
- * @param {{ id: number, updated_at: string, head_repository_id?: number, artifacts?: FakeArtifact[] }[]} [state.ciRuns]
+ * @param {FakeCiRun[]} [state.ciRuns]
  */
 function createFakeRunsApi({ nights, ciRuns = [] }) {
   /** @type {string[]} */
@@ -458,7 +471,11 @@ function createFakeRunsApi({ nights, ciRuns = [] }) {
       return {
         workflow_runs: ciRuns.map((run) => ({
           id: run.id,
+          html_url: nameRunUrl(run.id),
+          status: run.status ?? "completed",
           updated_at: run.updated_at,
+          run_started_at:
+            run.run_started_at ?? new Date(Date.parse(run.updated_at) - 3600000).toISOString(),
           repository: { id: REPOSITORY_ID },
           head_repository: { id: run.head_repository_id ?? REPOSITORY_ID },
         })),
@@ -484,7 +501,7 @@ const THIS_NIGHT = {
   report: { started_at: "2026-10-10T07:40:00Z", conclusion: null },
 };
 
-test("a night takes what CI made since the last night whose report went through", async () => {
+test("a night takes the CI runs that ended since the last night whose report went through", async () => {
   const { github } = createFakeRunsApi({
     nights: [
       THIS_NIGHT,
@@ -508,7 +525,7 @@ test("a first night looks back over the week the table keeps", async () => {
 
 const WINDOW = { since: new Date("2026-10-09T07:40:00Z"), until: new Date("2026-10-10T07:40:00Z") };
 
-test("each report or burn-in list this repository's CI made in the window is taken", async () => {
+test("each of this repository's CI runs that ended in the window and kept a report is taken, with its address", async () => {
   const { github, asked } = createFakeRunsApi({
     nights: [],
     ciRuns: [
@@ -530,29 +547,32 @@ test("each report or burn-in list this repository's CI made in the window is tak
   });
 
   assert.deepEqual(await listFlakyRuns(github, WINDOW), [
-    { id: 1, names: ["browser-report-3", "burn-in-flaky-2"] },
+    {
+      id: 1,
+      names: ["browser-report-3", "burn-in-flaky-2"],
+      foundIn: { url: nameRunUrl(1), at: "2026-10-09T12:00:00Z" },
+    },
   ]);
   assert.ok(
-    asked[0].startsWith("/actions/workflows/ci.yml/runs?created=>=2026-10-08T07:40:00.000Z"),
+    asked[0].startsWith(
+      "/actions/workflows/ci.yml/runs?status=completed&created=>=2026-10-08T07:40:00Z&",
+    ),
     asked[0],
   );
   assert.deepEqual(
     asked.filter((path) => path.includes("/artifacts")),
-    [
-      "/actions/runs/1/artifacts?per_page=100",
-      "/actions/runs/2/artifacts?per_page=100",
-      "/actions/runs/5/artifacts?per_page=100",
-    ],
+    ["/actions/runs/1/artifacts?per_page=100", "/actions/runs/2/artifacts?per_page=100"],
   );
 });
 
-test("a run whose job ran again in the window gives only what the new try made, since a night before took the rest", async () => {
+test("a run whose job ran again gives only what its latest try made, since a night before took the try before", async () => {
   const { github } = createFakeRunsApi({
     nights: [],
     ciRuns: [
       {
         id: 8,
         updated_at: "2026-10-09T09:00:00Z",
+        run_started_at: "2026-10-09T08:55:00Z",
         artifacts: [
           { name: "browser-report-2", created_at: "2026-10-09T06:00:00Z" },
           { name: "burn-in-flaky-1", created_at: "2026-10-09T06:05:00Z" },
@@ -561,6 +581,7 @@ test("a run whose job ran again in the window gives only what the new try made, 
       {
         id: 9,
         updated_at: "2026-10-09T10:00:00Z",
+        run_started_at: "2026-10-09T09:30:00Z",
         artifacts: [
           { name: "browser-report-1", created_at: "2026-10-09T05:00:00Z" },
           { name: "browser-report-4", created_at: "2026-10-09T09:55:00Z" },
@@ -569,7 +590,48 @@ test("a run whose job ran again in the window gives only what the new try made, 
     ],
   });
 
-  assert.deepEqual(await listFlakyRuns(github, WINDOW), [{ id: 9, names: ["browser-report-4"] }]);
+  assert.deepEqual(
+    (await listFlakyRuns(github, WINDOW)).map(({ id, names }) => ({ id, names })),
+    [{ id: 9, names: ["browser-report-4"] }],
+  );
+});
+
+test("a run still going as a night's window closes goes whole to the next night, both its reports together", async () => {
+  const shard1 = { name: "browser-report-1", created_at: "2026-10-10T07:39:00Z" };
+  const shard2 = { name: "browser-report-2", created_at: "2026-10-10T07:41:00Z" };
+  const going = createFakeRunsApi({
+    nights: [],
+    ciRuns: [
+      {
+        id: 10,
+        status: "in_progress",
+        updated_at: "2026-10-10T07:39:00Z",
+        run_started_at: "2026-10-10T07:20:00Z",
+        artifacts: [shard1],
+      },
+    ],
+  });
+  assert.deepEqual(await listFlakyRuns(going.github, WINDOW), []);
+
+  const ended = createFakeRunsApi({
+    nights: [],
+    ciRuns: [
+      {
+        id: 10,
+        updated_at: "2026-10-10T07:42:00Z",
+        run_started_at: "2026-10-10T07:20:00Z",
+        artifacts: [shard1, shard2],
+      },
+    ],
+  });
+  const nextWindow = {
+    since: WINDOW.until,
+    until: new Date("2026-10-11T07:40:00Z"),
+  };
+  assert.deepEqual(
+    (await listFlakyRuns(ended.github, nextWindow)).map(({ id, names }) => ({ id, names })),
+    [{ id: 10, names: ["browser-report-1", "browser-report-2"] }],
+  );
 });
 
 /**
@@ -591,26 +653,53 @@ const BURN_IN_FLAKY = {
   failures: 2,
   message: "Timed out",
 };
+const RETRY_PASSED = "[wnba] resume.spec.mjs:160 > a test its retry passed";
+const CI_RUN = { url: nameRunUrl(1), at: "2026-10-09T12:00:00Z" };
 
-test("a run's tests are those its retry passed and those burn-in named, unless a test failed every try", () => {
+test("a run's tests are those its retry passed and those burn-in named, each found in that run, unless a test failed every try", () => {
   const directory = writeRunFolder({
     "browser-report-3/test-results/report.json": retriedReport([retryPassedSpec]),
     "burn-in-flaky-2/burn-in-flaky.json": [BURN_IN_FLAKY],
   });
+  const failed = readRunFailures(directory, CI_RUN);
   assert.deepEqual(
-    readRunFailures(directory)
-      .map(({ name }) => name)
-      .toSorted(),
-    [BURN_IN_FLAKY.name, "[wnba] resume.spec.mjs:160 > a test its retry passed"].toSorted(),
+    failed.map(({ name }) => name).toSorted(),
+    [BURN_IN_FLAKY.name, RETRY_PASSED].toSorted(),
   );
+  assert.ok(failed.every(({ foundIn }) => foundIn === CI_RUN));
   const broken = writeRunFolder({
     "browser-report-1/test-results/report.json": retriedReport([retryPassedSpec]),
     "browser-report-2/test-results/report.json": retriedReport([failedBothTriesSpec]),
   });
-  assert.deepEqual(readRunFailures(broken), []);
+  assert.deepEqual(readRunFailures(broken, CI_RUN), []);
 });
 
-test("a night's report holds its own tests and every CI run's its window takes, each downloaded once", async () => {
+test("a test only a CI run found names that run as its last, and one found in two runs names the newer", async () => {
+  const earlier = { url: nameRunUrl(1), at: "2026-10-09T12:00:00Z" };
+  const later = { url: nameRunUrl(7), at: "2026-10-09T18:00:00Z" };
+  const test1 = { name: RETRY_PASSED, runs: 2, failures: 1, message: "Expected: null" };
+  const merged = mergeFailedTests([
+    [{ ...test1, foundIn: later }],
+    [{ ...test1, foundIn: earlier }],
+  ]);
+  assert.deepEqual(merged[0].foundIn, later);
+  assert.deepEqual(
+    mergeFailedTests([[{ ...test1, foundIn: earlier }], [test1]])[0].foundIn,
+    earlier,
+  );
+
+  const github = createFakeGitHub([]);
+  await post(github, [{ ...test1, foundIn: earlier }], WITH_ROUTINE);
+  const [opened, fired] = github.written;
+  assert.equal(readTable(opened.body.body)[0].lastRun, nameRunUrl(1));
+  assert.match(
+    fired.body.text,
+    new RegExp(`a test its retry passed\`, in \\[its run\\]\\(${nameRunUrl(1)}\\)`),
+  );
+  assert.doesNotMatch(fired.body.text, new RegExp(RUN_URL.replaceAll("/", "\\/") + "\\)"));
+});
+
+test("a night's report holds its own tests, found in it, and every CI run's its window takes, each downloaded once", async () => {
   const { github } = createFakeRunsApi({
     nights: [
       THIS_NIGHT,
@@ -633,24 +722,24 @@ test("a night's report holds its own tests and every CI run's its window takes, 
   const failed = await collectFailedTests({
     nightReports: [nightReport],
     github,
-    night: { runId: NIGHT_RUN, now: new Date("2026-10-10T08:00:00Z") },
+    night: { runId: NIGHT_RUN, url: RUN_URL, now: new Date("2026-10-10T08:00:00Z") },
     download: (run) => {
       downloaded.push(run);
       return folders[run.id];
     },
   });
 
-  assert.deepEqual(downloaded, [
-    { id: 1, names: ["browser-report-3"] },
-    { id: 7, names: ["burn-in-flaky-1"] },
-  ]);
   assert.deepEqual(
-    failed.map(({ name }) => name).toSorted(),
+    downloaded.map(({ id, names }) => ({ id, names })),
     [
-      LAST_DRAWN,
-      BURN_IN_FLAKY.name,
-      AT_REST,
-      "[wnba] resume.spec.mjs:160 > a test its retry passed",
-    ].toSorted(),
+      { id: 1, names: ["browser-report-3"] },
+      { id: 7, names: ["burn-in-flaky-1"] },
+    ],
   );
+  assert.deepEqual(Object.fromEntries(failed.map(({ name, foundIn }) => [name, foundIn?.url])), {
+    [LAST_DRAWN]: RUN_URL,
+    [AT_REST]: RUN_URL,
+    [RETRY_PASSED]: nameRunUrl(1),
+    [BURN_IN_FLAKY.name]: nameRunUrl(7),
+  });
 });

@@ -57,6 +57,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # A pull request's timeline is an issue's, which the issues scope reads.
+      issues: read
       checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

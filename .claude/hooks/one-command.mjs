@@ -50,7 +50,7 @@ const isBackgroundAmpersand = (text, at) =>
   text[at] === "&" && !/[<>|]/.test(text[at - 1] ?? "") && text[at + 1] !== ">";
 
 // A shell handed its commands as one quoted string, as `bash -c "a; b"` is, still runs each.
-const SHELL_BEFORE_SCRIPT = /(?:^|[\s(|])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\w*\s+$/;
+const SHELL_BEFORE_SCRIPT = /(?:^|[\s(|/])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\w*\s+$/;
 
 /**
  * The first operator outside quotes, heredocs, and `$(...)` that starts another command: `&&`,
