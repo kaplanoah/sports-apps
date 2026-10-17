@@ -598,12 +598,6 @@ function enterSearch() {
   if (view?.hidden) openGameSearch();
 }
 
-// As on iPhone, choosing search while it shows goes back to where it starts: an empty field.
-function startSearchTabOver() {
-  startGameSearchOver();
-  return true;
-}
-
 // A search that closes while it shows goes back to the tab before it.
 function leaveSearchTab() {
   if (readShownTab() === "search") openPageTab(readTabBefore() ?? "games");
@@ -704,7 +698,7 @@ export function startGameSearch(element, searchLeague) {
   element.addEventListener("submit", sendSearch);
   findList()?.addEventListener("scroll", followScroll, { passive: true });
   findList()?.addEventListener("touchmove", putKeyboardAway, { passive: true });
-  setTabStart("search", startSearchTabOver);
+  setTabStart("search", startGameSearchOver);
   setTabEnter("search", enterSearch);
   watchTimeAway((awayMs) => {
     if (isAwayLong(awayMs)) closeGameSearch();

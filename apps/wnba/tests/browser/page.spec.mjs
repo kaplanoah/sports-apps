@@ -369,7 +369,9 @@ test("on a wide screen, the standings keep to one phone's width, under the pill'
   }
 });
 
-test("clicking the tab that's showing scrolls back to the top", async ({ page }) => {
+test("clicking the tab that's showing scrolls back to the top, and then takes it back to the part it's named for", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 400 });
   await openApp(page);
   await openSeasonPart(page, "Standings");
@@ -380,6 +382,13 @@ test("clicking the tab that's showing scrolls back to the top", async ({ page })
   await findSeasonTab(page).dispatchEvent("click");
 
   await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect(page.locator("#standings-league")).toBeVisible();
+
+  await findSeasonTab(page).dispatchEvent("click");
+
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeHidden();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
 });
 
 test("the page reopens on the tab it was last on, showing the part of it last shown", async ({

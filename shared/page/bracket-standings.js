@@ -1,3 +1,5 @@
+import { showOpeningRound } from "./opening-round.js";
+import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
 import { createSlidePanels } from "./slide-panels.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
@@ -140,6 +142,19 @@ export function showSeasonPhase(isFieldSet) {
   panels?.jumpTo(0);
 }
 
+const isReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// A tap on the tab while it shows, with the page at its top, takes it back to where it opens: the
+// part it's named for, and a bracket on its round in progress, as Games goes back to today. A
+// bracket out of sight moves at once, before it slides in.
+function returnToStart() {
+  if (!panels) return;
+  const isBracketShown = readOrder()[panels.readShown()] === "bracket";
+  if (readOrder()[0] === "bracket")
+    showOpeningRound(isBracketShown && !isReducedMotion() ? "smooth" : "instant");
+  if (panels.readShown() !== 0) panels.slideTo(0);
+}
+
 // The pill and the tab's two faces, its name and icon for each part, are drawn whole, as they last
 // showed (show-last-drawn.js), until the season says where it is.
 export function startBracketStandings() {
@@ -153,6 +168,7 @@ export function startBracketStandings() {
   panels = slidePanels;
   slidePanels.jumpTo(readOrder().indexOf(readShownPart()));
   wireTabList(findPill(), (part) => showSeasonPart(/** @type {SeasonPart} */ (part)));
+  setTabStart("bracket-standings", returnToStart, { isAfterTop: true });
   addEventListener("scroll", followPageScroll, { passive: true });
   addEventListener("resize", () => {
     fitPartsToRoomUnderPill();
