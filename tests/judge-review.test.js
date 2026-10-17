@@ -568,6 +568,16 @@ test("the last read of the whole change names the files it left unread too, each
   assert.doesNotMatch(pushOnly.body, /fixtures/);
 });
 
+test("a review of a push whose whole change has nothing left to read is due no last read", () => {
+  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: [] };
+  const pushed = finishStage("push", [AREAS[0]]);
+  assert.deepEqual(
+    listDueStages(plan, pushed).map((due) => due.stage),
+    ["push"],
+  );
+  assert.ok(judgeReview({ sha: HEAD, plan, records: pushed }).isComplete);
+});
+
 test("a review of a push that finished and posted nothing is due the last read of the whole change", () => {
   const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
   const pushed = finishStage("push", [AREAS[0]]);

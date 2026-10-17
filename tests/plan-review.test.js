@@ -441,8 +441,8 @@ test("a search of the repo returns every line git matches, whole, or none", () =
   });
   assert.deepEqual(none, []);
   assert.deepEqual(asked, [
-    ["grep", "-n", "-wF", "NAME", "HEAD"],
-    ["grep", "-n", "-E", "const\\s+NAME", "HEAD"],
+    ["grep", "-n", "-I", "-wF", "NAME", "HEAD"],
+    ["grep", "-n", "-I", "-E", "const\\s+NAME", "HEAD"],
   ]);
 });
 

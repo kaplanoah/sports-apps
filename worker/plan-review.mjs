@@ -745,7 +745,7 @@ const tryGit = (args) => {
  * @param {(args: string[]) => string | null} git null where git fails, as grep does with no match
  */
 export const grepRepo = (pattern, isWord, git) =>
-  (git(["grep", "-n", isWord ? "-wF" : "-E", pattern, "HEAD"]) ?? "")
+  (git(["grep", "-n", "-I", isWord ? "-wF" : "-E", pattern, "HEAD"]) ?? "")
     .split("\n")
     .filter(Boolean)
     .map((hit) => hit.replace(/^HEAD:/, ""));

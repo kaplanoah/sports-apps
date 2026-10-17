@@ -330,11 +330,12 @@ jobs:
   # (worker/plan-review.mjs). In each area a reviewer for each kind of problem in KINDS reads every
   # line, listing every case of its kind; a checker confirms each case against the code; a check
   # across areas names repeats and looks for what spans them; and one step with no Claude posts
-  # what the checkers confirmed or left unsure (worker/post-review.mjs), so no reviewer or checker
-  # can write to the pull request. The first review reads the whole change. A review after it reads
-  # what the pushes since the last full read changed, and when that finishes and posts nothing, the
-  # whole change is read once more, by FINAL_KIND's reviewer. A run on the head the last full read
-  # ended on reads nothing and leaves that read's summary as it is.
+  # what the checkers confirmed or left unsure, less the repeats the check across areas named and
+  # with what it added (worker/post-review.mjs), so no reviewer or checker can write to the pull
+  # request. The first review reads the whole change. A review after it reads what the pushes since
+  # the last full read changed, and when that finishes and posts nothing, the whole change is read
+  # once more, by FINAL_KIND's reviewer. A run on the head the last full read ended on reads nothing
+  # and leaves that read's summary as it is.
   # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
   # nothing to review, such as a push to main, it plans nothing and passes, since check fails on a
   # skipped job. A label change brings no new code, so it reviews again only when no run passed

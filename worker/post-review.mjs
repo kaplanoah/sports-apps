@@ -55,7 +55,7 @@ export const listCheckedFindings = (checks) =>
     .toSorted((one, other) => one.area - other.area)
     .flatMap(({ area, items }) =>
       items
-        .filter((item) => item.verdict === "confirmed" || item.verdict === "unsure")
+        .filter((item) => item?.verdict === "confirmed" || item?.verdict === "unsure")
         .map((item, index) => ({
           ref: `${area}.${index + 1}`,
           weight: item.verdict === "unsure" ? UNSURE : item.weight,
@@ -69,11 +69,16 @@ export const listCheckedFindings = (checks) =>
 const compareWeights = (one, other) => WEIGHTS.indexOf(one) - WEIGHTS.indexOf(other);
 
 /**
- * Whether a finding can be posted: it has a weight the review knows, a file, and a body.
+ * Whether a finding can be posted: it has a weight the review knows, and a file and a body as
+ * text, however Claude's answer shaped it.
  * @param {Finding} finding
  */
 const isPostable = (finding) =>
-  WEIGHTS.includes(finding.weight) && Boolean(finding.path) && Boolean(finding.body);
+  WEIGHTS.includes(finding?.weight) &&
+  typeof finding.path === "string" &&
+  typeof finding.body === "string" &&
+  Boolean(finding.path) &&
+  Boolean(finding.body);
 
 /**
  * The weight a finding takes for itself and the repeats it stands in for: the heaviest a checker
