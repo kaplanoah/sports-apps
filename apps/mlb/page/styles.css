@@ -121,6 +121,7 @@
   --ink: #1e1b18;
   --ink-dim: #625a52;
   --catch-up-fade: 0.75;
+  --step-number-lift: 0px;
   --ink-mid: color-mix(in srgb, var(--ink-dim) 55%, var(--ink));
   --ink-hover: color-mix(in srgb, var(--ink) 75%, var(--accent));
   --divider: #ebe4d6;

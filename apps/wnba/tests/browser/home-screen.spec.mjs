@@ -1,4 +1,5 @@
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
+import { measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
@@ -82,6 +83,11 @@ test.describe("on an iPhone, in the browser", () => {
     await openApp(page, { isShowingWelcome: true });
     await expect(page.locator(WELCOME)).toBeVisible();
     expect(await listThemeLayoutChanges(page)).toEqual([]);
+  });
+
+  test("each step's number sits in the middle of its circle", async ({ page }) => {
+    await openApp(page, { isShowingWelcome: true });
+    expect(await measureStepNumbers(page)).toBe(0);
   });
 
   test("the heading opens the welcome's room", async ({ page }) => {

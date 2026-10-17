@@ -40,6 +40,8 @@
  *   --tab-bar-pill                             the selected tab's pill
  *   --catch-up-fade                            the opacity the header's lines fade to as a sweep
  *                                              passes once the page catches up, like 0.75
+ *   --step-number-lift                         how far a Home Screen step's number rises in its
+ *                                              circle, so the app's digits sit in its middle
  * and on phones this sets:
  *   --tab-bar-bottom                           how far the tab bar floats above the screen's bottom
  *   --tab-bar-height                           the tab bar's height
@@ -775,8 +777,10 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   top: 1px;
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   width: 28px;
   height: 28px;
+  padding-bottom: calc(2 * var(--step-number-lift));
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-ink);

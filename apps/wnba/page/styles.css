@@ -131,6 +131,9 @@
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
+  /* Barlow's digits sit a pixel low in their line, which would leave each step's number under its
+     circle's middle. */
+  --step-number-lift: 1px;
   --orange: #a23a0a;
   --orange-ink: #ffffff;
   --teal: #0b6860;
