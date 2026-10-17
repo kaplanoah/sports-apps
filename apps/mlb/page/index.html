@@ -40,16 +40,19 @@
   <link rel="stylesheet" href="shared/highlights.css" />
   <link rel="stylesheet" href="shared/rank-curve.css" />
   <link rel="stylesheet" href="shared/no-field-note.css" />
+  <link rel="stylesheet" href="shared/gate.css" />
+  <link rel="stylesheet" href="home-screen-icons.css" />
   <link rel="stylesheet" href="styles.css" />
   <script src="shared/pick-theme.js"></script>
   <script src="shared/open-last-tab.js"></script>
+  <script src="shared/draw-home-screen-asks.js"></script>
   <script src="shared/show-last-drawn.js"></script>
   <script src="shared/slow-load.js"></script>
   <script type="importmap">
     { "imports": { "#shared/": "./shared/" } }
   </script>
 
-  <div class="home-screen-bar" id="homeScreenBar" hidden></div>
+  <dialog id="homeScreenWelcome" class="welcome" aria-labelledby="welcomeTitle"></dialog>
   <header class="top">
     <div class="title-row">
       <h1>
@@ -284,32 +287,25 @@
           <div class="control-row appearance-row" data-setting="settings:appearance">
             <span class="control-label">
               <span id="appearanceTitle">Appearance</span>
-              <span class="control-note" id="appearanceNote" role="status"></span>
             </span>
             <div class="appearance-choices" role="radiogroup" aria-labelledby="appearanceTitle">
               <label class="appearance-choice">
                 <input type="radio" name="appearance" value="auto" />
-                <span class="appearance-icon appearance-icon-auto" aria-hidden="true">
-                  <img src="icon-light-180.png" alt="" />
-                  <img src="icon-180.png" alt="" />
-                </span>
+                <span class="appearance-icon appearance-icon-halves" aria-hidden="true"></span>
                 <span>System</span>
               </label>
               <label class="appearance-choice">
                 <input type="radio" name="appearance" value="light" />
-                <span class="appearance-icon" aria-hidden="true">
-                  <img src="icon-light-180.png" alt="" />
-                </span>
+                <span class="appearance-icon appearance-icon-light" aria-hidden="true"></span>
                 <span>Ball</span>
               </label>
               <label class="appearance-choice">
                 <input type="radio" name="appearance" value="dark" />
-                <span class="appearance-icon" aria-hidden="true">
-                  <img src="icon-180.png" alt="" />
-                </span>
+                <span class="appearance-icon appearance-icon-dark" aria-hidden="true"></span>
                 <span>Night Game</span>
               </label>
             </div>
+            <span class="control-note" id="appearanceNote" role="status"></span>
           </div>
         </div>
         <div class="settings-news" role="group" aria-labelledby="newsSettingsTitle">
@@ -614,6 +610,7 @@
     openLastTab();
     showLastDrawn();
     watchSlowLoad();
+    drawHomeScreenAsks();
   </script>
 
   <script src="js/sortable.min.js"></script>
