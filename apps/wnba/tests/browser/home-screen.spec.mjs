@@ -10,6 +10,8 @@ import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.m
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
+test.use({ contextOptions: { reducedMotion: "reduce" } });
+
 const PAGE_FOLDER = new URL("../../page/", import.meta.url);
 
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
@@ -78,7 +80,6 @@ test.describe("on an iPhone, in the browser", () => {
   test("the welcome lays out the same in Walnut as in Maple, which change only colors", async ({
     page,
   }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page, { isShowingWelcome: true });
     await expect(page.locator(WELCOME)).toBeVisible();
     expect(await listThemeLayoutChanges(page)).toEqual([]);
