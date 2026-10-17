@@ -263,6 +263,7 @@ test("the review reads every area in full, checks before it posts, and fails on 
   );
   assert.match(check, /run: node worker\/judge-review\.mjs check .* >> "\$GITHUB_OUTPUT"/);
   assert.match(check, /id: check\n\s+if: steps\.gather\.outputs\.count != '0'/);
+  assert.match(check, /if: steps\.keep\.outcome == 'success'\n\s+uses: actions\/upload-artifact/);
   assert.match(
     check,
     /id: keep\n\s+if: steps\.check\.outcome == 'success' \|\| steps\.gather\.outputs\.count == '0'/,

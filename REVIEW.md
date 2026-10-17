@@ -77,8 +77,8 @@ Don't run the tests: CI runs them all.
 
 ## How to report
 
-In CI, each area's reviewers each look for one kind of problem,
-or, in the last read of the whole change, one reviewer an area looks for every kind,
+In CI, each area's reviewers each look for one kind of problem
+(in the last read of the whole change, one reviewer an area looks for every kind)
 and list every case they find,
 a checker confirms each against the code before anything is posted, and a step posts what the checkers confirmed or left unsure.
 

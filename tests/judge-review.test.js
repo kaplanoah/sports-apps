@@ -8,6 +8,7 @@ import {
   findUnreadParts,
   gatherCandidates,
   judgeReview,
+  keepCandidates,
   keepCheck,
   listAreaRecords,
   listDueStages,
@@ -295,6 +296,18 @@ test("a checker's job counts the cases it left unchecked as the judge does, from
     unchecked,
   );
   assert.throws(() => keepCheck(folder, { stage: "first", area: 2 }, ""), /gave no answer/);
+});
+
+test("an area's candidates are kept for its check and counted, so one with none skips its checker", () => {
+  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
+  const reviewer = (/** @type {string} */ kind, /** @type {object[]} */ items) =>
+    JSON.stringify({ kind, tries: [{ reads: [], answer: { items, unjudged: [] } }] });
+  writeFileSync(join(folder, "find-first-1-bugs.json"), reviewer("bugs", []));
+  writeFileSync(join(folder, "find-first-1-tests.json"), reviewer("tests", []));
+  writeFileSync(join(folder, "find-first-2-bugs.json"), reviewer("bugs", [{ claim: "one" }]));
+  assert.equal(keepCandidates(folder, { stage: "first", area: 1 }), 0);
+  assert.equal(readFileSync(join(folder, "candidates-first-1.json"), "utf8"), "[]");
+  assert.equal(keepCandidates(folder, { stage: "first", area: 2 }), 1);
 });
 
 test("an area with no candidates keeps an empty check with no checker, which the judge counts as done", () => {

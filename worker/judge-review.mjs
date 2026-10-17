@@ -7,13 +7,12 @@
 // that left any of its reviewers' cases unnamed hasn't finished.
 // Usage, after each try of a reviewer: node worker/judge-review.mjs find <folder> <stage> <area>
 // <kind>, with EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> and
-// answered=<true|false> for $GITHUB_OUTPUT. Before an area's checker: node
-// worker/judge-review.mjs candidates <folder> <stage> <area>; it prints count=<candidates> for
-// $GITHUB_OUTPUT. After it, or in its place when there are none: node worker/judge-review.mjs
-// check <folder> <stage> <area>, with STRUCTURED_OUTPUT; it prints unchecked=<count of cases it
-// left unnamed> for $GITHUB_OUTPUT. Last: node
-// worker/judge-review.mjs summary <folder>, with GH_TOKEN, GITHUB_REPOSITORY, PR, and SHA set,
-// which fails when anything due went unread or unchecked.
+// answered=<true|false> for $GITHUB_OUTPUT. Before an area's check: node worker/judge-review.mjs
+// candidates <folder> <stage> <area>; it prints count=<candidates> for $GITHUB_OUTPUT. After the
+// checker, or in its place when there are none: node worker/judge-review.mjs check <folder>
+// <stage> <area>, with STRUCTURED_OUTPUT; it prints unchecked=<count of cases it left unnamed>
+// for $GITHUB_OUTPUT. Last: node worker/judge-review.mjs summary <folder>, with GH_TOKEN,
+// GITHUB_REPOSITORY, PR, and SHA set, which fails when anything due went unread or unchecked.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -267,6 +266,21 @@ export function listUnchecked(candidates, findings) {
 }
 
 /**
+ * Keeps an area's candidates, every reviewer's over every try, for its check, and returns how
+ * many there are.
+ * @param {string} folder
+ * @param {{ stage: string, area: number }} checker
+ */
+export function keepCandidates(folder, { stage, area }) {
+  const candidates = gatherCandidates(listAreaRecords(readRecords(folder), stage, area));
+  writeFileSync(
+    join(folder, nameCandidatesRecord(stage, area)),
+    JSON.stringify(candidates, null, 1),
+  );
+  return candidates.length;
+}
+
+/**
  * Keeps a checker's answer as its area's record, an empty one for an area with no candidates,
  * which has no checker, and returns the candidates it left unchecked, which the judge counts the
  * same way, so the job fails where the judge would.
@@ -507,12 +521,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`unread=${unread.join(" ")}`);
     console.log(`answered=${isAnswered}`);
   } else if (command === "candidates") {
-    const candidates = gatherCandidates(listAreaRecords(readRecords(folder), stage, Number(area)));
-    writeFileSync(
-      join(folder, nameCandidatesRecord(stage, Number(area))),
-      JSON.stringify(candidates, null, 1),
-    );
-    console.log(`count=${candidates.length}`);
+    console.log(`count=${keepCandidates(folder, { stage, area: Number(area) })}`);
   } else if (command === "check") {
     const unchecked = keepCheck(folder, { stage, area: Number(area) }, env.STRUCTURED_OUTPUT);
     console.log(`unchecked=${unchecked.length}`);
