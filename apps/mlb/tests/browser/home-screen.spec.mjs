@@ -80,6 +80,18 @@ test.describe("on an iPhone, in the browser", () => {
     expect(belowSettings).toBeGreaterThan(0);
     expect(aboveRanking).toBeGreaterThan(0);
   });
+
+  test("the settings' box shows the icon the Home Screen takes in the theme on screen", async ({
+    page,
+  }) => {
+    const icon = page.locator("#homeScreenTip .home-screen-icon");
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page);
+    await openSettings(page);
+    await expect(icon).toHaveCSS("background-image", /\/icon-light-180\.png/);
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(icon).toHaveCSS("background-image", /\/icon-180\.png/);
+  });
 });
 
 test.describe("on a tablet, in the browser", () => {
