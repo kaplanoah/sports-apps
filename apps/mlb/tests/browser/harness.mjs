@@ -311,14 +311,9 @@ export function buildSnapshotWithStarters() {
     .find((candidate) => candidate.gamePk === 824950);
   game.teams.away.probablePitcher = { id: 1 };
   game.teams.home.probablePitcher = { id: 2 };
-  const describePerson = (id, useLastName, code, era) => ({
-    id,
-    useLastName,
-    pitchHand: { code },
-    stats: [{ splits: [{ stat: { era } }] }],
-  });
+  const describePerson = (id, useLastName, code) => ({ id, useLastName, pitchHand: { code } });
   fixture.responses.pitchers = {
-    people: [describePerson(1, "Blubaugh", "R", "3.66"), describePerson(2, "Springs", "L", "4.02")],
+    people: [describePerson(1, "Blubaugh", "R"), describePerson(2, "Springs", "L")],
   };
   return buildFixtureSnapshot(fixture);
 }

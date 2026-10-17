@@ -1539,6 +1539,23 @@ test("a seed is final only once no club can still pass or tie it", () => {
   assert.equal(isSeedFinal("CHC"), true, "MLB has set the bracket");
 });
 
+test("a division winner's seed is final once a rival a game short for a rainout MLB cancelled can no longer reach it", () => {
+  session.state = { teams: { TB: { seed: 1 }, CLE: { seed: 2 }, HOU: { seed: 3 } } };
+  const listStandings = (scheduled) => ({
+    divisions: {
+      ...FINAL_DAY_STANDINGS.divisions,
+      "AL West": [
+        { id: "HOU", w: 84, l: 77, elim: "-", wce: "-", lead: true, ...scheduled },
+        { id: "TEX", w: 80, l: 81, elim: "-", wce: "E", ...scheduled },
+      ],
+    },
+  });
+  session.standings = listStandings({ scheduled: 161 });
+  assert.equal(isSeedFinal("CLE"), true, "the Astros can win 84 at most, under the Guardians' 85");
+  session.standings = listStandings({});
+  assert.equal(isSeedFinal("CLE"), false, "over 162 games the Astros could still tie");
+});
+
 test("games list: a season with no live data says why", () => {
   const { activeYear, currentSeason } = session;
   try {

@@ -1307,6 +1307,33 @@ test("a leader tied with a club a game short for a rainout never made up counts 
   assert.equal(leader.magic, "4");
 });
 
+test("a division leader whose chaser MLB never eliminates wins it once both have played out their own seasons, one a game short for a rainout never made up", () => {
+  const fixture = structuredClone(SEASON_GAMES);
+  const east = fixture.responses.standings.records.find((record) => record.division.id === 201);
+  const set = (id, fields) =>
+    Object.assign(
+      east.teamRecords.find((record) => record.team.id === id),
+      fields,
+    );
+  set(147, { divisionLeader: true, divisionRank: "1", divisionChamp: false, clinchIndicator: "x" });
+  set(139, {
+    wins: 93,
+    losses: 69,
+    divisionLeader: false,
+    divisionRank: "2",
+    divisionChamp: false,
+    clinchIndicator: "x",
+    eliminationNumber: "-",
+    wildCardRank: "1",
+  });
+  const [yankees, rays] = buildSnapshot(fixture).standings.divisions["AL East"];
+  assert.deepEqual(
+    [yankees.id, yankees.w + yankees.l, yankees.scheduled, rays.id, rays.elim],
+    ["NYY", 161, 161, "TB", "-"],
+  );
+  assert.equal(yankees.clinched, true);
+});
+
 test("the season's whole schedule lists every game by month, from Opening Day to the World Series", () => {
   const snapshot = buildSnapshot(SEASON_GAMES);
   assert.deepEqual(Object.keys(snapshot.schedule), [
