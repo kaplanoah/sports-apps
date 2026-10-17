@@ -38,18 +38,21 @@ const BUG_ITEMS =
 // Each area's reviewers, one for each kind of problem, two for bugs, which matter most and which
 // one reader misses most.
 export const KINDS = [
-  { kind: "bugs", focus: `${BUG_ITEMS}.` },
+  { kind: "bugs", role: "bugs reviewer", focus: `${BUG_ITEMS}.` },
   {
     kind: "bugs-from-end",
+    role: "second bugs reviewer",
     focus: `${BUG_ITEMS}. Read your diffs from the last part to the first, and each from its end.`,
   },
   {
     kind: "rules",
+    role: "rules reviewer",
     focus:
       'REVIEW.md\'s "What to look for" items 2 (One fact, one rule, one place), 3 (Both apps, every place), 8 (Leftovers), 9 (Search), 10 (Docs and comments the change makes wrong), and 11 (Any other rule in AGENTS.md). For each new helper, constant, rule, or wording, search the repo for one that already does the same. Start from `.review/stale-names.md`, which lists each place that still names what the change removed.',
   },
   {
     kind: "tests",
+    role: "tests reviewer",
     focus:
       'REVIEW.md\'s "What to look for" item 7 (Tests). For each change to behavior, find the test that would fail without it, or report that none does. Also report a test the change makes vacuous, and a browser test that would pass only some of the time.',
   },
@@ -58,6 +61,7 @@ export const KINDS = [
 // The whole change's last read, which finds what the first review missed.
 export const FINAL_KIND = {
   kind: "all",
+  role: "last reviewer",
   focus: 'Every item in REVIEW.md\'s "What to look for".',
 };
 
@@ -267,14 +271,16 @@ export function splitDiffByFile(diff) {
 }
 
 /**
- * What a file's diff adds and removes, without where, so a diff a merge of the base moved reads
- * the same.
+ * A file's diff without the line numbers in its hunks' headers or its own header lines, so a diff
+ * that a merge of the base only moved down the file reads the same, while a block moved within
+ * the change, which its context shows, reads as changed.
  * @param {string} fileDiff
  */
 export const describeChange = (fileDiff) =>
   fileDiff
     .split("\n")
-    .filter((line) => /^[+-]/.test(line) && !/^(\+\+\+|---) /.test(line))
+    .filter((line) => /^[-+ @]/.test(line) && !/^(\+\+\+|---) /.test(line))
+    .map((line) => line.replace(/^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/, "@@"))
     .join("\n");
 
 /**
@@ -469,16 +475,18 @@ export function writeStage(folder, stage, { numstat, diff, repoFiles }) {
 const STAGE_WORDS = {
   first: "The first review of this pull request: each area's diffs hold its whole change.",
   push: "The diffs hold only what the pushes since the last full review changed. `git diff HEAD^1 HEAD -- <path>` shows a file's whole change.",
+  "push-with-base":
+    "The diffs hold what the pushes since the last full review changed, and, where those pushes merged the base and git couldn't set the base's own edits apart, those edits too: judge only what the pull request changed. `git diff HEAD^1 HEAD -- <path>` shows a file's whole change.",
   final: "The last read of the whole change: each area's diffs hold its whole change.",
 };
 
 /**
  * The index a reviewer reads first: each area's files with their diff parts, then the files left
  * unread.
- * @param {"first" | "push" | "final"} stage
+ * @param {keyof typeof STAGE_WORDS} words
  * @param {ReturnType<typeof writeStage>} written
  */
-function renderIndex(stage, { areas, unread }) {
+function renderIndex(words, { areas, unread }) {
   const areaLines = areas.flatMap(({ area, name, files, partsByFile }) => [
     `## Area ${area}: ${name}`,
     "",
@@ -491,7 +499,7 @@ function renderIndex(stage, { areas, unread }) {
   return [
     "# The pull request's changed files",
     "",
-    STAGE_WORDS[stage],
+    STAGE_WORDS[words],
     `A diff line longer than ${LONGEST_READ_LINE} characters goes on in the lines after it,`,
     `each starting with the line's sign and \`${CONTINUED.trim()}\`.`,
     "",
@@ -517,10 +525,11 @@ export const listJobs = (areas, kinds) => ({
  * @param {string} folder
  * @param {"first" | "push" | "final"} stage
  * @param {{ numstat: string, diff: string, repoFiles: string[] }} change
+ * @param {keyof typeof STAGE_WORDS} [words]
  */
-function writeIndexedStage(folder, stage, change) {
+function writeIndexedStage(folder, stage, change, words = stage) {
   const written = writeStage(folder, stage, change);
-  writeFileSync(join(folder, `${stage}.md`), renderIndex(stage, written));
+  writeFileSync(join(folder, `${stage}.md`), renderIndex(words, written));
   return written;
 }
 
@@ -530,11 +539,13 @@ function writeIndexedStage(folder, stage, change) {
  * @param {object} review
  * @param {ReturnType<typeof chooseStage>} review.choice
  * @param {string | null} review.since the head the pushes are read since
+ * @param {{ range: string[], hasBase: boolean } | null} review.pushed the range that holds what
+ *   they changed, and whether it also holds the base's own edits
  * @param {(range: string[], files?: string[]) => { numstat: string, diff: string }} review.readDiff
  * @param {string[]} review.repoFiles
  * @param {{ name: string, hits: string[] }[]} review.stale
  */
-export function writeReview(folder, { choice, since, readDiff, repoFiles, stale }) {
+export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles, stale }) {
   mkdirSync(folder, { recursive: true });
   writeFileSync(join(folder, "stale-names.md"), renderStaleNames(stale));
   const whole = ["HEAD^1", "HEAD"];
@@ -542,9 +553,10 @@ export function writeReview(folder, { choice, since, readDiff, repoFiles, stale 
   const plan = { stage: choice.stage, since: null, areas: [], unread: [], final: [] };
   if (choice.stage === "first")
     Object.assign(plan, writeIndexedStage(folder, "first", { ...readDiff(whole), repoFiles }));
-  if (choice.stage === "push") {
-    const pushed = readDiff([/** @type {string} */ (since), "HEAD^2"], choice.files);
-    Object.assign(plan, writeIndexedStage(folder, "push", { ...pushed, repoFiles }), { since });
+  if (choice.stage === "push" && pushed) {
+    const change = { ...readDiff(pushed.range, choice.files), repoFiles };
+    const words = pushed.hasBase ? "push-with-base" : "push";
+    Object.assign(plan, writeIndexedStage(folder, "push", change, words), { since });
     plan.final = writeIndexedStage(folder, "final", { ...readDiff(whole), repoFiles }).areas;
   }
   writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
@@ -575,6 +587,19 @@ const grepRepo = (pattern, isWord) =>
     .filter(Boolean)
     .map((hit) => hit.replace(/^HEAD:/, "").slice(0, 220))
     .slice(0, 15);
+
+/**
+ * The range that holds what the pushes since a head changed: from that head merged onto the base
+ * to the pull request merged onto it, which leaves out the base's own edits, or, where that merge
+ * conflicts, from the head to the pull request's head, which holds them too.
+ * @param {string} since
+ */
+function findPushedRange(since) {
+  const mergedTree = tryGit(["merge-tree", "--write-tree", "HEAD^1", since])?.split("\n")[0];
+  return mergedTree
+    ? { range: [mergedTree, "HEAD"], hasBase: false }
+    : { range: [since, "HEAD^2"], hasBase: true };
+}
 
 /** @param {NodeJS.ProcessEnv} env */
 async function readLastReviewedHead(env) {
@@ -617,12 +642,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     },
   });
   const whole = readDiff(["HEAD^1", "HEAD"]).diff;
+  const pushed =
+    choice.stage === "push" ? findPushedRange(/** @type {string} */ (reviewedHead)) : null;
   const deleted = runGit(["diff", "--name-only", "--diff-filter=D", "HEAD^1", "HEAD"])
     .split("\n")
     .filter(Boolean);
   const plan = writeReview(folder, {
     choice,
     since: reviewedHead,
+    pushed,
     readDiff,
     repoFiles: runGit(["ls-files"]).split("\n").filter(Boolean),
     stale: listStaleNames(whole, grepRepo, deleted),

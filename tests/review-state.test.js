@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   SUMMARY_MARKER,
   findSummary,
+  listFindingMarks,
   readReviewedHead,
+  writeFindingMark,
   writeReviewedHead,
 } from "../worker/review-state.mjs";
 
@@ -31,4 +33,11 @@ test("the summary is the review's own, never another's comment that starts the s
   ];
   assert.equal(findSummary(comments)?.id, 3);
   assert.equal(findSummary(comments.slice(0, 2)), null);
+});
+
+test("a comment's finding marks read back as written, however many it holds", () => {
+  const body = `- one ${writeFindingMark("0123456789abcdef")}\n- two ${writeFindingMark("fedcba9876543210")}`;
+  assert.deepEqual(listFindingMarks(body), ["0123456789abcdef", "fedcba9876543210"]);
+  assert.deepEqual(listFindingMarks(undefined), []);
+  assert.deepEqual(listFindingMarks("<!-- claude-finding short -->"), []);
 });

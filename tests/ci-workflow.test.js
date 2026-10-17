@@ -181,30 +181,41 @@ test("the review reads every area in full, checks before it posts, and fails on 
     find,
     /node worker\/judge-review\.mjs find \.review "\$STAGE" "\$AREA" "\$KIND" >> "\$GITHUB_OUTPUT"/,
   );
-  assert.match(find, /if: \$\{\{ !cancelled\(\) && steps\.first\.outputs\.unread != '' \}\}/);
   assert.match(
     find,
-    /if: \$\{\{ !cancelled\(\) && steps\.last\.outputs\.unread != '' \}\}\n\s+run: \|\n.*\n\s+exit 1/,
+    /if: \$\{\{ !cancelled\(\) && \(steps\.first\.outputs\.unread != '' \|\| steps\.first\.outputs\.answered != 'true'\) \}\}/,
+  );
+  assert.match(
+    find,
+    /if: \$\{\{ !cancelled\(\) && \(steps\.last\.outputs\.unread != '' \|\| steps\.last\.outputs\.answered == 'false'\) \}\}\n\s+run: \|\n.*\n\s+exit 1/,
   );
   const check = readJob("review-check");
   assert.match(check, /node worker\/judge-review\.mjs candidates \.review "\$STAGE" "\$AREA"/);
   assert.match(check, /if: steps\.check\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+  assert.match(check, /\.review\/candidates-\$\{\{ env\.STAGE \}\}-\$\{\{ matrix\.area \}\}\.json/);
+  const across = readJob("review-across");
+  assert.match(across, /node worker\/post-review\.mjs list \.review "\$STAGE"/);
+  assert.match(across, /node worker\/post-review\.mjs across \.review "\$STAGE"/);
+  assert.match(across, /if: steps\.across\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
   const post = readJob("review-post");
-  assert.match(post, /node worker\/post-review\.mjs \.review "\$STAGE" >> "\$GITHUB_OUTPUT"/);
-  assert.match(
-    post,
-    /if: env\.AREAS > 1 && steps\.across\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/,
-  );
+  assert.match(post, /node worker\/post-review\.mjs post \.review "\$STAGE" >> "\$GITHUB_OUTPUT"/);
   const review = readJob("review");
+  const reviewJobs = listJobs().filter((job) => job.startsWith("review-"));
+  for (const job of reviewJobs) assert.match(review, new RegExp(`^\\s+${job},$`, "m"), job);
   assert.match(review, /run: node worker\/judge-review\.mjs summary \.review/);
   assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
 });
 
-// Only the posting steps hold a token that writes to the pull request; every Claude reviewer and
-// checker reads it alone, and none of them is handed a tool that comments.
-test("no reviewer or checker can write to the pull request", () => {
-  for (const job of ["review-find", "review-check", "review-final-find", "review-final-check"])
-    assert.doesNotMatch(readJob(job), /pull-requests: write/);
+// Only the posting and summary steps hold a token that writes to the pull request; no job that runs
+// Claude, which reads the pull request's untrusted text, can write to it, and none is handed a
+// tool that comments.
+test("no job that runs Claude can write to the pull request", () => {
+  const withClaude = listJobs().filter((job) =>
+    /anthropics\/claude-code-action|steps: \*(find|check|across)-steps/.test(readJob(job)),
+  );
+  assert.ok(withClaude.includes("review-across") && withClaude.includes("review-final-check"));
+  for (const job of withClaude) assert.doesNotMatch(readJob(job), /pull-requests: write/, job);
+  assert.doesNotMatch(readJob("review-post"), /claude-code-action/);
   assert.doesNotMatch(readRepoFile(".github/workflows/ci.yml"), /create_inline_comment/);
 });
 
@@ -219,6 +230,7 @@ test("the last read of the whole change runs only once a review of a push posted
   assert.match(readJob("review-final-post"), /if: \*final-due/);
   assert.match(readJob("review-final-find"), /steps: \*find-steps/);
   assert.match(readJob("review-final-check"), /steps: \*check-steps/);
+  assert.match(readJob("review-final-across"), /steps: \*across-steps/);
   assert.match(readJob("review-final-post"), /steps: \*post-steps/);
 });
 

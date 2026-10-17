@@ -1,12 +1,17 @@
-// The review's one summary comment on a pull request, and the last head it reviewed in full,
-// which the summary carries so the next push's review reads only what changed since
-// (plan-review.mjs), and which only a review that read everything it was due moves on
-// (judge-review.mjs).
+// What CI's review keeps on a pull request: one summary comment, which carries the last head the
+// review read in full so the next push's review reads only what changed since, and the findings
+// it posts, each by its weight and marked so no try posts one twice.
 
 export const SUMMARY_MARKER = "<!-- claude-review-summary -->";
-// The reviewers' steps post with the run's own token.
+// The posting and summary steps post with the run's own token.
 export const REVIEWER = "github-actions[bot]";
+// Each finding's weight, in the order the review posts and counts them.
+export const WEIGHTS = ["Important", "Unsure", "Nit", "Pre-existing"];
+// The comment that holds the findings on files a pull request doesn't change, which GitHub takes
+// on no line.
+export const OFF_DIFF_HEADING = "Findings on files this pull request doesn't change:";
 const STATE = /<!-- claude-review-state (\{.*?\}) -->/;
+const FINDING_MARK = /<!-- claude-finding ([0-9a-f]{16}) -->/g;
 
 /**
  * The review's own summary among a pull request's comments, never anyone else's that starts the
@@ -36,3 +41,16 @@ export function readReviewedHead(body) {
 /** @param {string} head */
 export const writeReviewedHead = (head) =>
   `<!-- claude-review-state ${JSON.stringify({ head })} -->`;
+
+/**
+ * The mark a finding's comment carries, the same in every form it's posted in.
+ * @param {string} key
+ */
+export const writeFindingMark = (key) => `<!-- claude-finding ${key} -->`;
+
+/**
+ * The findings a comment carries, by their marks.
+ * @param {string | undefined} body
+ */
+export const listFindingMarks = (body) =>
+  [...(body ?? "").matchAll(FINDING_MARK)].map((match) => match[1]);

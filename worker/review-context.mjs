@@ -1,15 +1,16 @@
 // Writes what CI's reviewers and checkers read besides the code: the pull request's title and
-// description, and every review thread on it so far, each with its replies and whether it's
-// resolved or outdated, so a finding that was answered or fixed isn't raised again unless the
-// answer is wrong or the fix didn't hold.
+// description, every review thread on it so far, each with its replies and whether it's resolved
+// or outdated, and the findings the review posted on files the pull request doesn't change, so a
+// finding that was answered or fixed isn't raised again unless the answer is wrong or the fix
+// didn't hold.
 // Usage: node worker/review-context.mjs <folder>, with GH_TOKEN, GITHUB_REPOSITORY, PR, TITLE,
 // and DESCRIPTION set.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
+import { OFF_DIFF_HEADING, REVIEWER } from "./review-state.mjs";
 
-const GRAPHQL = "https://api.github.com/graphql";
-const REQUEST_TIMEOUT_MS = 10000;
 const THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -46,6 +47,15 @@ export async function readThreads(callGraphQL, pullRequest) {
   }
 }
 
+/**
+ * The comments in which the review posted findings on files the pull request doesn't change.
+ * @param {any[]} comments as GitHub lists an issue's comments
+ */
+export const listOffDiffFindings = (comments) =>
+  comments.filter(
+    (comment) => comment.user?.login === REVIEWER && comment.body?.startsWith(OFF_DIFF_HEADING),
+  );
+
 /** @param {any} thread */
 const describeState = (thread) =>
   [thread.isResolved ? "resolved" : "open", thread.isOutdated ? "outdated" : ""]
@@ -53,10 +63,11 @@ const describeState = (thread) =>
     .join(", ");
 
 /**
- * The pull request's description and threads as one page a reviewer reads.
- * @param {{ title: string, description: string, threads: any[] }} context
+ * The pull request's description, threads, and findings off its files as one page a reviewer
+ * reads.
+ * @param {{ title: string, description: string, threads: any[], offDiff: any[] }} context
  */
-export function renderContext({ title, description, threads }) {
+export function renderContext({ title, description, threads, offDiff }) {
   const threadLines = threads.flatMap((thread) => [
     `## ${thread.path}:${thread.line ?? thread.originalLine ?? "file"} (${describeState(thread)})`,
     "",
@@ -74,7 +85,14 @@ export function renderContext({ title, description, threads }) {
     "",
     `# Review threads (${threads.length})`,
     "",
-    ...(threads.length ? threadLines : ["None yet."]),
+    ...(threads.length ? threadLines : ["None yet.", ""]),
+    ...(offDiff.length
+      ? [
+          "# Findings posted on files the pull request doesn't change",
+          "",
+          ...offDiff.map((comment) => comment.body),
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -82,23 +100,25 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const folder = process.argv[2];
   const { env } = process;
   const [owner, name] = (env.GITHUB_REPOSITORY ?? "").split("/");
-  /** @param {string} query @param {Record<string, unknown>} variables */
-  const callGraphQL = async (query, variables) => {
-    const response = await fetch(GRAPHQL, {
-      method: "POST",
-      headers: { authorization: `Bearer ${env.GH_TOKEN}`, "content-type": "application/json" },
-      body: JSON.stringify({ query, variables }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    const answer = await response.json();
-    if (!response.ok || answer.errors)
-      throw new Error(`GitHub answered ${response.status} for the review threads`);
-    return answer.data;
-  };
-  const threads = await readThreads(callGraphQL, { owner, name, number: Number(env.PR) });
+  const threads = await readThreads(createGraphQL({ fetchImpl: fetch, env }), {
+    owner,
+    name,
+    number: Number(env.PR),
+  });
+  const callGitHub = createGitHub({
+    repository: env.GITHUB_REPOSITORY ?? "",
+    fetchImpl: fetch,
+    env,
+  });
+  const offDiff = listOffDiffFindings(await readAllPages(callGitHub, `/issues/${env.PR}/comments`));
   mkdirSync(folder, { recursive: true });
   writeFileSync(
     join(folder, "pull-request.md"),
-    renderContext({ title: env.TITLE ?? "", description: env.DESCRIPTION ?? "", threads }),
+    renderContext({
+      title: env.TITLE ?? "",
+      description: env.DESCRIPTION ?? "",
+      threads,
+      offDiff,
+    }),
   );
 }

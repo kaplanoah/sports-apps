@@ -307,9 +307,9 @@ jobs:
 
   # Each pull request is reviewed in areas, by what its files are about, each test with its code
   # (worker/plan-review.mjs). In each area four reviewers read every line, each listing every case
-  # of one kind of problem; a checker confirms each case against the code; and one step posts what
-  # the checkers confirmed, after a check across areas merges repeats and looks for what spans them
-  # (worker/post-review.mjs), so no reviewer or checker can write to the pull request. The first
+  # of one kind of problem; a checker confirms each case against the code; a check across areas
+  # names repeats and looks for what spans them; and one step with no Claude posts what they
+  # confirmed (worker/post-review.mjs), so no reviewer or checker can write to the pull request. The first
   # review reads the whole change. A review after it reads what the pushes since the last full read
   # changed, and when that posts nothing, the whole change is read once more, one reviewer an area.
   # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
@@ -466,7 +466,7 @@ jobs:
         run: node worker/judge-review.mjs find .review "$STAGE" "$AREA" "$KIND" >> "$GITHUB_OUTPUT"
       - name: Review what's left
         id: again
-        if: ${{ !cancelled() && steps.first.outputs.unread != '' }}
+        if: ${{ !cancelled() && (steps.first.outputs.unread != '' || steps.first.outputs.answered != 'true') }}
         continue-on-error: true
         timeout-minutes: 15
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
@@ -478,16 +478,16 @@ jobs:
           settings: *review-settings
           claude_args: *find-args
           prompt: |
-            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ matrix.area }}, "${{ matrix.name }}", and look only for this: ${{ matrix.focus }} An earlier try left these of its diff files unread: ${{ steps.first.outputs.unread }}
+            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ matrix.area }}, "${{ matrix.name }}", and look only for this: ${{ matrix.focus }} An earlier try didn't finish: it gave no answer, or left these of its diff files unread: ${{ steps.first.outputs.unread }}
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps. `.review/pull-request.md` holds the pull request's description and every review thread on it.
-            2. Read each of those diff files, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read.
-            3. Read what else you need to judge them, with Read, Grep, Glob, git log, git show, git diff, and git blame, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
-            4. List every case of your kind of problem you find in them, unsure ones too, with your confidence. Leave out a case a thread already raised, unless its reply is wrong or a fix it claims didn't hold.
+            2. Read each diff file the earlier try left unread, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read. `.review/${{ env.STAGE }}.md` lists your area's diff files; read the rest of them as you need to judge your area again, since the earlier try's answer may be lost.
+            3. Read what else you need, with Read, Grep, Glob, git log, git show, git diff, and git blame, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
+            4. List every case of your kind of problem you find in your area, unsure ones too, with your confidence. Leave out a case a thread already raised, unless its reply is wrong or a fix it claims didn't hold.
             5. Post nothing. End with your answer: each case, on a line the diff changes, and each file you read but couldn't judge from the code, and why.
       - name: Find what's still unread
         id: last
-        if: ${{ !cancelled() && steps.first.outputs.unread != '' }}
+        if: ${{ !cancelled() && (steps.first.outputs.unread != '' || steps.first.outputs.answered != 'true') }}
         env:
           EXECUTION_FILE: ${{ steps.again.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.again.outputs.structured_output }}
@@ -503,10 +503,10 @@ jobs:
           # A re-run of the job uploads its record again.
           overwrite: true
       # So that re-running the failed jobs reviews this area again.
-      - name: Fail when parts are still unread
-        if: ${{ !cancelled() && steps.last.outputs.unread != '' }}
+      - name: Fail when parts are still unread or the reviewer gave no answer
+        if: ${{ !cancelled() && (steps.last.outputs.unread != '' || steps.last.outputs.answered == 'false') }}
         run: |
-          echo "::error::This reviewer didn't read every line of its area's diffs."
+          echo "::error::This reviewer didn't read every line of its area's diffs, or gave no answer."
           exit 1
 
   # Each area's checker confirms its reviewers' cases against the code, merges repeats, and weighs
@@ -562,7 +562,7 @@ jobs:
             2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, and `.review/${{ env.STAGE }}.md`, which lists your area's diff files, and read those as you need.
             3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with git show HEAD^1:<path>. Use Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects.
             4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
-            5. Merge candidates that are the same problem into one finding, naming every id it merges.
+            5. Merge candidates that are the same problem into one finding, naming every id it merges. Every candidate's id appears in exactly one finding, rejected ones too: a step after you checks.
             6. Weigh each as the guide says: Important for a bug, meaning a wrong result someone can see, wrong data kept, or a failure, and for a security hole or a broken AGENTS.md rule; Nit for something worth fixing that doesn't block; Pre-existing for a problem in code the change didn't make worse.
             7. Write each finding's body as the guide's "How to report" says: what is wrong, when it goes wrong, and how to fix it, in a few sentences, without its weight, which a later step adds. Put it on a line the diff changes, nearest the one it's about, naming that one if it's another.
             8. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
@@ -576,7 +576,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: review-check-${{ env.STAGE }}-${{ matrix.area }}
-          path: .review/check-${{ env.STAGE }}-${{ matrix.area }}.json
+          path: |
+            .review/check-${{ env.STAGE }}-${{ matrix.area }}.json
+            .review/candidates-${{ env.STAGE }}-${{ matrix.area }}.json
           retention-days: 14
           overwrite: true
       # So that re-running the failed jobs checks this area again.
@@ -587,32 +589,34 @@ jobs:
           exit 1
 
   # What no one area can see: a change one area's files rely on in another's, the same fix due in
-  # the other app, and one fact or rule now in two places. A change of one area needs none.
-  review-post:
+  # the other app, and one fact or rule now in two places. It names only the repeats to merge and
+  # what it adds, so no finding a checker confirmed drops out of its answer, and leaves its answer
+  # for the posting step. A change of one area needs none.
+  review-across:
     needs: [review-plan, review-check]
-    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
+    if: ${{ !cancelled() && needs.review-plan.outputs.areas > 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: write
-    outputs:
-      posted: ${{ steps.post.outputs.posted }}
+      pull-requests: read
     env:
       STAGE: ${{ needs.review-plan.outputs.stage }}
       AREAS: ${{ needs.review-plan.outputs.areas }}
-    steps: &post-steps
+    steps: &across-steps
       - *review-checkout
       - *setup-node
       - *download-plan
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - &download-checks
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: review-check-${{ env.STAGE }}-*
           path: .review/
           merge-multiple: true
+      - name: List what the checkers confirmed
+        run: node worker/post-review.mjs list .review "$STAGE"
       - name: Check across the areas
         id: across
-        if: env.AREAS > 1
         continue-on-error: true
         timeout-minutes: 20
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
@@ -626,30 +630,67 @@ jobs:
             --model claude-opus-5-5
             --max-turns 150
             --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
-            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"weight":{"type":"string","enum":["Important","Nit","Pre-existing","Unsure"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["weight","path","line","body"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["findings","unjudged"]}'
+            --json-schema '{"type":"object","properties":{"duplicates":{"type":"array","items":{"type":"array","items":{"type":"string"}}},"added":{"type":"array","items":{"type":"object","properties":{"weight":{"type":"string","enum":["Important","Nit","Pre-existing","Unsure"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["weight","path","line","body"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["duplicates","added","unjudged"]}'
           prompt: |
-            You make the last check of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}'s review before its findings are posted. Its change is split into ${{ env.AREAS }} areas, and each area's checker confirmed what its reviewers found. Each checker's answer is in `.review/check-${{ env.STAGE }}-<area>.json`.
+            You make the last check of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}'s review before its findings are posted. Its change is split into ${{ env.AREAS }} areas, and each area's checker confirmed what its reviewers found. Every finding they confirmed or left unsure is in `.review/confirmed-${{ env.STAGE }}.json`, each with a ref, and all of them are posted unless you name them as repeats.
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
-            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files, and each checker's answer.
-            3. Keep each finding a checker confirmed or left unsure, as it wrote it, and leave out the ones it rejected. Weigh an unsure one Unsure.
-            4. Merge findings from different areas that are the same problem into one, on the line that best shows it.
-            5. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each against the code as a checker does, with Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects, and add each you confirm, on a line the diff changes.
-            6. Post nothing. End with your answer: every finding to post, and anything you couldn't judge from the code, and why.
+            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files, and `.review/confirmed-${{ env.STAGE }}.json`.
+            3. Name each group of findings from different areas that are the same problem, by their refs, the one that best shows it first: only the first of each group is posted.
+            4. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each against the code as a checker does, with Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects. Add each you confirm that no listed finding already says, on a line the diff changes, weighed as the guide says, its body saying what is wrong, when it goes wrong, and how to fix it, without its weight.
+            5. Post nothing. End with your answer: the groups of repeats, the findings you add, and anything you couldn't judge from the code, and why.
+      - name: Keep the check's answer
+        if: steps.across.outcome == 'success'
+        env:
+          STRUCTURED_OUTPUT: ${{ steps.across.outputs.structured_output }}
+        run: node worker/post-review.mjs across .review "$STAGE"
+      - if: steps.across.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: review-across-${{ env.STAGE }}
+          path: .review/across-${{ env.STAGE }}.json
+          retention-days: 14
+          overwrite: true
       # So that re-running the failed jobs checks across the areas again.
       - name: Fail when the check across areas didn't finish
-        if: env.AREAS > 1 && steps.across.outcome != 'success'
+        if: steps.across.outcome != 'success'
         run: |
           echo "::error::The check across areas didn't finish."
           exit 1
+
+  # Posts what the checkers confirmed, less the repeats the check across areas named and with what
+  # it added (worker/post-review.mjs). It's the one review job but the summary that can write to
+  # the pull request, and runs no Claude.
+  review-post:
+    needs: [review-plan, review-check, review-across]
+    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      posted: ${{ steps.post.outputs.posted }}
+    env:
+      STAGE: ${{ needs.review-plan.outputs.stage }}
+      AREAS: ${{ needs.review-plan.outputs.areas }}
+    steps: &post-steps
+      - *review-checkout
+      - *setup-node
+      - *download-plan
+      - *download-checks
+      - if: env.AREAS > 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-across-${{ env.STAGE }}
+          path: .review/
       - name: Post the confirmed findings
         id: post
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
-          STRUCTURED_OUTPUT: ${{ steps.across.outputs.structured_output }}
-        run: node worker/post-review.mjs .review "$STAGE" >> "$GITHUB_OUTPUT"
+        run: node worker/post-review.mjs post .review "$STAGE" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: review-post-${{ env.STAGE }}
@@ -694,11 +735,24 @@ jobs:
       STAGE: final
     steps: *check-steps
 
-  review-final-post:
+  review-final-across:
     needs: [review-plan, review-post, review-final-check]
-    if: *final-due
+    if: ${{ !cancelled() && needs.review-plan.outputs.stage == 'push' && needs.review-post.outputs.posted == '0' && needs.review-plan.outputs.final-areas > 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      STAGE: final
+      AREAS: ${{ needs.review-plan.outputs.final-areas }}
+    steps: *across-steps
+
+  review-final-post:
+    needs: [review-plan, review-post, review-final-check, review-final-across]
+    if: *final-due
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write
@@ -716,9 +770,11 @@ jobs:
         review-plan,
         review-find,
         review-check,
+        review-across,
         review-post,
         review-final-find,
         review-final-check,
+        review-final-across,
         review-final-post,
       ]
     if: ${{ !cancelled() }}
@@ -771,9 +827,11 @@ jobs:
         review-plan,
         review-find,
         review-check,
+        review-across,
         review-post,
         review-final-find,
         review-final-check,
+        review-final-across,
         review-final-post,
         review,
       ]

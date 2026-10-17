@@ -3,12 +3,15 @@
 // summary comment on the pull request up to date. A reviewer has read a diff part once a Read of
 // it returned every line, so a part it never opened, or opened only in part, is named for its
 // retry and, still unread then, fails the review (plan-review.mjs writes the parts).
+// A reviewer that gave no answer, as one that ran out of turns, is tried again too, and a checker
+// that left any of its reviewers' cases unnamed hasn't finished.
 // Usage, after each try of a reviewer: node worker/judge-review.mjs find <folder> <stage> <area>
-// <kind>, with EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> for
-// $GITHUB_OUTPUT. Before an area's checker: node worker/judge-review.mjs candidates <folder>
-// <stage> <area>. After it: node worker/judge-review.mjs check <folder> <stage> <area>, with
-// STRUCTURED_OUTPUT. Last: node worker/judge-review.mjs summary <folder>, with GH_TOKEN,
-// GITHUB_REPOSITORY, PR, and SHA set, which fails when anything due went unread or unchecked.
+// <kind>, with EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> and
+// answered=<true|false> for $GITHUB_OUTPUT. Before an area's checker: node
+// worker/judge-review.mjs candidates <folder> <stage> <area>. After it: node
+// worker/judge-review.mjs check <folder> <stage> <area>, with STRUCTURED_OUTPUT. Last: node
+// worker/judge-review.mjs summary <folder>, with GH_TOKEN, GITHUB_REPOSITORY, PR, and SHA set,
+// which fails when anything due went unread or unchecked.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,12 +19,12 @@ import { createGitHub, readAllPages } from "./github-api.mjs";
 import { FINAL_KIND, KINDS } from "./plan-review.mjs";
 import {
   SUMMARY_MARKER,
+  WEIGHTS,
   findSummary,
   readReviewedHead,
   writeReviewedHead,
 } from "./review-state.mjs";
 
-const WEIGHTS = ["Important", "Nit", "Pre-existing", "Unsure"];
 // What Claude Code's Read returns when it's given no limit.
 const READ_LINES = 2000;
 
@@ -86,21 +89,21 @@ export function findUnreadParts(parts, triesReads, readPart, folder) {
 }
 
 /**
- * A reviewer's or checker's answer, or an empty one when it gave none, as when a try ran out of
- * turns.
+ * A reviewer's or checker's answer, or null when it gave none, as when a try ran out of turns.
  * @param {string | undefined} structuredOutput
  * @param {"candidates" | "findings"} list
- * @returns {{ items: any[], unjudged: { file: string, why: string }[] }}
+ * @returns {{ items: any[], unjudged: { file: string, why: string }[] } | null}
  */
 export function readAnswer(structuredOutput, list) {
   try {
-    const answer = JSON.parse(structuredOutput || "{}");
+    const answer = JSON.parse(structuredOutput || "null");
+    if (!Array.isArray(answer?.[list])) return null;
     return {
-      items: Array.isArray(answer[list]) ? answer[list] : [],
+      items: answer[list],
       unjudged: Array.isArray(answer.unjudged) ? answer.unjudged : [],
     };
   } catch {
-    return { items: [], unjudged: [] };
+    return null;
   }
 }
 
@@ -122,7 +125,8 @@ const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.a
 const nameFindRecord = (stage, area, kind) => `find-${stage}-${area}-${kind}.json`;
 
 /**
- * Adds a try to a reviewer's record and returns the parts it still hasn't read.
+ * Adds a try to a reviewer's record, and returns the parts it still hasn't read and whether its
+ * last try answered.
  * @param {string} folder
  * @param {{ stage: string, area: number, kind: string }} reviewer
  * @param {NodeJS.ProcessEnv} env
@@ -144,8 +148,9 @@ export function recordFindTry(folder, { stage, area, kind }, env) {
     (part) => readFileSync(join(folder, part), "utf8"),
     folder,
   );
+  record.isAnswered = record.tries.at(-1).answer !== null;
   writeFileSync(recordPath, JSON.stringify(record));
-  return record.unread;
+  return { unread: record.unread, isAnswered: record.isAnswered };
 }
 
 /**
@@ -156,19 +161,31 @@ export function recordFindTry(folder, { stage, area, kind }, env) {
 export const gatherCandidates = (records) =>
   records.flatMap((record) =>
     record.tries
-      .flatMap((/** @type {any} */ attempt) => attempt.answer.items)
+      .flatMap((/** @type {any} */ attempt) => attempt.answer?.items ?? [])
       .map((/** @type {any} */ candidate, /** @type {number} */ index) => ({
         id: `${record.kind}-${index + 1}`,
         ...candidate,
       })),
   );
 
+/**
+ * The records of one area's reviewers, never another area's whose number starts the same.
+ * @param {Map<string, any>} records by file name
+ * @param {string} stage
+ * @param {number} area
+ */
+export const listAreaRecords = (records, stage, area) =>
+  [...records.entries()]
+    .filter(([name]) => name.startsWith(`find-${stage}-${area}-`))
+    .map(([, record]) => record);
+
 /** @param {string} folder */
 function readRecords(folder) {
   /** @type {Map<string, any>} */
   const records = new Map();
   for (const name of readdirSync(folder)) {
-    if (/^(find|check|post)-.+\.json$/.test(name)) records.set(name, readJson(join(folder, name)));
+    if (/^(find|candidates|check|post)-.+\.json$/.test(name))
+      records.set(name, readJson(join(folder, name)));
   }
   return records;
 }
@@ -196,50 +213,75 @@ const describeFound = (weights) =>
     : "no findings";
 
 /**
+ * The ids of an area's candidates that no finding of its checker names.
+ * @param {{ id: string }[]} candidates
+ * @param {{ ids: string[] }[]} findings
+ */
+export function listUnchecked(candidates, findings) {
+  const named = new Set(findings.flatMap((finding) => finding.ids ?? []));
+  return candidates.map((candidate) => candidate.id).filter((id) => !named.has(id));
+}
+
+/**
+ * The files an area's reviewers left unread, and the reviewers and checker that didn't finish.
+ * @param {string} stage
+ * @param {{ area: number, name: string, files: string[], partsByFile: Record<string, string[]> }} area
+ * @param {Map<string, any>} records
+ */
+function judgeArea(stage, { area, name, files, partsByFile }, records) {
+  /** @type {string[]} */
+  const unreadFiles = [];
+  /** @type {string[]} */
+  const missing = [];
+  for (const { kind, role } of stage === "final" ? [FINAL_KIND] : KINDS) {
+    const record = records.get(nameFindRecord(stage, area, kind));
+    if (!record || !record.isAnswered) missing.push(`the ${role} of ${name}`);
+    unreadFiles.push(
+      ...files.filter(
+        (path) => !record || partsByFile[path].some((part) => record.unread.includes(part)),
+      ),
+    );
+  }
+  const check = records.get(`check-${stage}-${area}.json`);
+  const unchecked = check
+    ? listUnchecked(records.get(`candidates-${stage}-${area}.json`) ?? [], check.items)
+    : [];
+  if (!check) missing.push(`the checker of ${name}`);
+  else if (unchecked.length)
+    missing.push(
+      `the checker of ${name}, which left ${pluralize(unchecked.length, "case")} unchecked`,
+    );
+  return { unreadFiles, missing };
+}
+
+/**
  * What one stage read, checked, and posted, and what it left undone.
  * @param {string} stage
  * @param {any[]} areas
  * @param {Map<string, any>} records
  */
 function judgeStage(stage, areas, records) {
-  const kinds = stage === "final" ? [FINAL_KIND] : KINDS;
-  /** @type {string[]} */
-  const unreadFiles = [];
-  /** @type {string[]} */
-  const missing = [];
-  for (const { area, name, files, partsByFile } of areas) {
-    for (const { kind } of kinds) {
-      const record = records.get(nameFindRecord(stage, area, kind));
-      if (!record) {
-        missing.push(`the ${kind} reviewer of ${name}`);
-        unreadFiles.push(...files);
-      } else
-        unreadFiles.push(
-          ...files.filter((path) => partsByFile[path].some((part) => record.unread.includes(part))),
-        );
-    }
-    if (!records.has(`check-${stage}-${area}.json`)) missing.push(`the checker of ${name}`);
-  }
+  const judged = areas.map((area) => judgeArea(stage, area, records));
   const post = records.get(`post-${stage}.json`) ?? null;
+  const missing = judged.flatMap((area) => area.missing);
   if (!post) missing.push("the step that posts the findings");
   const checks = areas.flatMap(({ area }) => records.get(`check-${stage}-${area}.json`) ?? []);
   const verdicts = checks.flatMap((check) =>
     check.items.map((/** @type {any} */ item) => item.verdict),
   );
-  const findAnswers = [...records.values()].filter(
-    (record) => record.stage === stage && record.tries,
-  );
+  const reviewers = areas.flatMap(({ area }) => listAreaRecords(records, stage, area));
   const unjudged = [
-    ...findAnswers.flatMap((record) =>
-      record.tries.flatMap((/** @type {any} */ attempt) => attempt.answer.unjudged),
+    ...reviewers.flatMap((record) =>
+      record.tries.flatMap((/** @type {any} */ attempt) => attempt.answer?.unjudged ?? []),
     ),
     ...checks.flatMap((check) => check.unjudged),
     ...(post?.unjudged ?? []),
   ];
   return {
-    unreadFiles: [...new Set(unreadFiles)],
+    unreadFiles: [...new Set(judged.flatMap((area) => area.unreadFiles))],
     missing,
     weights: post?.weights ?? [],
+    repeated: post?.repeated ?? 0,
     rejected: verdicts.filter((verdict) => verdict === "rejected").length,
     checked: verdicts.length,
     unjudged,
@@ -249,7 +291,7 @@ function judgeStage(stage, areas, records) {
 
 const LEADS = {
   first: (/** @type {number} */ areaCount) =>
-    `read the whole change in ${pluralize(areaCount, "area")}, four reviewers an area`,
+    `read the whole change in ${pluralize(areaCount, "area")}, ${KINDS.length} reviewers an area`,
   push: (/** @type {number} */ areaCount, /** @type {string} */ since) =>
     `read what the pushes since ${since.slice(0, 7)} changed, in ${pluralize(areaCount, "area")}`,
 };
@@ -277,11 +319,14 @@ export function listDueStages(plan, records) {
  * @param {{ stage: string, areas: any[], sha: string, since: string | null }} context
  */
 function describeStage(judged, { stage, areas, sha, since }) {
-  const found = describeFound(judged.weights);
+  const repeated = judged.repeated
+    ? `, and found ${pluralize(judged.repeated, "finding")} already on it`
+    : "";
+  const found = `${describeFound(judged.weights)}${repeated}`;
   const lines = [
     stage === "final"
       ? `Then it read the whole change once more, one reviewer an area, to find what the earlier reads missed: ${found}.`
-      : `Claude reviewed ${sha}: it ${LEADS[/** @type {"first" | "push"} */ (stage)](areas.length, since ?? "")}, and posted ${found}, each on the line it's about.`,
+      : `Claude reviewed ${sha}: it ${LEADS[/** @type {"first" | "push"} */ (stage)](areas.length, since ?? "")}, and posted ${found}.`,
     "",
     `Checked: the checkers turned down ${judged.rejected} of ${pluralize(judged.checked, "candidate")} the reviewers listed, after merging repeats.`,
     `Read in full: ${judged.fileCount - judged.unreadFiles.length} of ${pluralize(judged.fileCount, "changed file")} to read.`,
@@ -364,21 +409,19 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, folder, stage, area, kind] = process.argv.slice(2);
   const { env } = process;
   if (command === "find") {
-    const unread = recordFindTry(folder, { stage, area: Number(area), kind }, env);
+    const { unread, isAnswered } = recordFindTry(folder, { stage, area: Number(area), kind }, env);
     console.log(`unread=${unread.join(" ")}`);
+    console.log(`answered=${isAnswered}`);
   } else if (command === "candidates") {
-    const records = [...readRecords(folder).entries()]
-      .filter(([name]) => name.startsWith(`find-${stage}-${area}-`))
-      .map(([, record]) => record);
+    const records = listAreaRecords(readRecords(folder), stage, Number(area));
     writeFileSync(
       join(folder, `candidates-${stage}-${area}.json`),
       JSON.stringify(gatherCandidates(records), null, 1),
     );
   } else if (command === "check") {
-    writeFileSync(
-      join(folder, `check-${stage}-${area}.json`),
-      JSON.stringify(readAnswer(env.STRUCTURED_OUTPUT, "findings")),
-    );
+    const answer = readAnswer(env.STRUCTURED_OUTPUT, "findings");
+    if (!answer) throw new Error("The checker gave no answer.");
+    writeFileSync(join(folder, `check-${stage}-${area}.json`), JSON.stringify(answer));
   } else if (command === "summary") {
     const callGitHub = createGitHub({
       repository: env.GITHUB_REPOSITORY ?? "",

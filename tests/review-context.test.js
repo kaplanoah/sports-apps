@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readThreads, renderContext } from "../worker/review-context.mjs";
+import { listOffDiffFindings, readThreads, renderContext } from "../worker/review-context.mjs";
+import { OFF_DIFF_HEADING } from "../worker/review-state.mjs";
 
 const thread = (/** @type {object} */ fields) => ({
   isResolved: false,
@@ -44,16 +45,33 @@ test("the context names each thread's place and state, with every reply, under t
     title: "fix: Hold the sheet's title",
     description: "Holds every sheet's title in one spot.",
     threads: [thread({}), thread({ isResolved: true, isOutdated: true, line: null })],
+    offDiff: [{ body: `${OFF_DIFF_HEADING}\n\n- \`a.js:3\`: **Nit** elsewhere` }],
   });
   assert.match(page, /^# fix: Hold the sheet's title\n\nHolds every sheet's title in one spot\./);
   assert.match(page, /# Review threads \(2\)/);
   assert.match(page, /## shared\/page\/sheet\.js:12 \(open\)/);
   assert.match(page, /## shared\/page\/sheet\.js:10 \(resolved, outdated\)/);
   assert.match(page, /\*\*kaplanoah:\*\*\n\nStays: the file moves back in the next PR\./);
+  assert.match(
+    page,
+    /# Findings posted on files the pull request doesn't change\n\nFindings on files this pull request doesn't change:\n\n- `a\.js:3`: \*\*Nit\*\* elsewhere/,
+  );
 });
 
 test("a pull request with no description or threads says so", () => {
-  const page = renderContext({ title: "ci: x", description: "", threads: [] });
+  const page = renderContext({ title: "ci: x", description: "", threads: [], offDiff: [] });
   assert.match(page, /\(No description\.\)/);
   assert.match(page, /# Review threads \(0\)\n\nNone yet\./);
+});
+
+test("the findings off the pull request's files are the review's own comments that hold them", () => {
+  const comments = [
+    { id: 1, user: { login: "github-actions[bot]" }, body: `${OFF_DIFF_HEADING}\n\n- a` },
+    { id: 2, user: { login: "github-actions[bot]" }, body: "<!-- claude-review-summary -->" },
+    { id: 3, user: { login: "someone" }, body: `${OFF_DIFF_HEADING}\n\n- b` },
+  ];
+  assert.deepEqual(
+    listOffDiffFindings(comments).map((comment) => comment.id),
+    [1],
+  );
 });

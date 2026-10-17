@@ -285,11 +285,19 @@ test("each area has a reviewer for each kind of problem, two for bugs, and one c
   );
 });
 
-test("a change reads the same wherever a merge of the base moved it", () => {
+test("a change reads the same wherever a merge of the base moved it, but not once a block moves within it", () => {
   const before = diffFile("a.js", [2]);
-  const moved = before.replace("@@ -1,0 +1,2 @@", "@@ -41,0 +41,2 @@");
-  assert.equal(describeChange(before), describeChange(moved));
+  const shifted = before.replace("@@ -1,0 +1,2 @@", "@@ -41,0 +41,2 @@");
+  assert.equal(describeChange(before), describeChange(shifted));
   assert.notEqual(describeChange(before), describeChange(diffFile("a.js", [3])));
+  const guarded = (/** @type {string[]} */ context) =>
+    ["diff --git a/a.js b/a.js", "--- a/a.js", "+++ b/a.js", "@@ -1,2 +1,3 @@", ...context].join(
+      "\n",
+    );
+  assert.notEqual(
+    describeChange(guarded([" check();", "+if (!ok) return;", " work();"])),
+    describeChange(guarded([" work();", "+if (!ok) return;", " check();"])),
+  );
 });
 
 test("the files a push changed are those whose change differs, never those a merge only moved", () => {
@@ -332,6 +340,9 @@ test("the stale names are what the change removed that the repo still names, and
   /** @type {Record<string, string[]>} */
   const repo = {
     "STILL_DEFINED:false": ["shared/page/other.js:3:export const STILL_DEFINED = 1;"],
+    "KEPT_NAME:true": ["AGENTS.md:1:KEPT_NAME"],
+    "STILL_DEFINED:true": ["AGENTS.md:2:STILL_DEFINED"],
+    "localHelper:true": ["AGENTS.md:3:localHelper"],
     "serveSnapshot:true": ["AGENTS.md:351:  It serves the live snapshot (`serveSnapshot`)"],
     "old-records.js:true": ["AGENTS.md:197:  (`worker/src/old-records.js`),"],
   };
@@ -396,12 +407,13 @@ test("a review of a push reads what it changed, and keeps the whole change for t
   const plan = writeReview(folder, {
     choice: { stage: "push", files: ["shared/page/sheet.js"] },
     since,
+    pushed: { range: ["merged-tree", "HEAD"], hasBase: false },
     readDiff,
     repoFiles: [],
     stale: [],
   });
   assert.deepEqual(ranges, [
-    [since, "HEAD^2", "shared/page/sheet.js"],
+    ["merged-tree", "HEAD", "shared/page/sheet.js"],
     ["HEAD^1", "HEAD"],
   ]);
   assert.equal(plan.stage, "push");
@@ -414,10 +426,61 @@ test("a review of a push reads what it changed, and keeps the whole change for t
     plan.final.map((area) => area.files),
     [["shared/page/sheet.js", "worker/deploy.mjs"]],
   );
-  assert.match(readFileSync(join(folder, "push.md"), "utf8"), /only what the pushes since/);
+  assert.match(readFileSync(join(folder, "push.md"), "utf8"), /hold only what the pushes since/);
   assert.match(readFileSync(join(folder, "final.md"), "utf8"), /## Area 1: small changes/);
   assert.deepEqual(JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")), plan);
   assert.match(readFileSync(join(folder, "stale-names.md"), "utf8"), /Nothing the change removed/);
+});
+
+test("a push whose merge of the base git can't set apart says its diffs may hold the base's edits", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  writeReview(folder, {
+    choice: { stage: "push", files: ["shared/page/sheet.js"] },
+    since: "b".repeat(40),
+    pushed: { range: ["b".repeat(40), "HEAD^2"], hasBase: true },
+    readDiff: () => ({
+      numstat: "3\t0\tshared/page/sheet.js\n",
+      diff: diffFile("shared/page/sheet.js", [3]),
+    }),
+    repoFiles: [],
+    stale: [],
+  });
+  assert.match(
+    readFileSync(join(folder, "push.md"), "utf8"),
+    /the base's own edits apart, those edits too/,
+  );
+});
+
+test("the first review reads the whole change and keeps nothing for a last read", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  /** @type {string[][]} */
+  const ranges = [];
+  const plan = writeReview(folder, {
+    choice: { stage: "first" },
+    since: null,
+    pushed: null,
+    readDiff: (/** @type {string[]} */ range) => {
+      ranges.push(range);
+      return {
+        numstat: "2\t0\tshared/page/sheet.js\n",
+        diff: diffFile("shared/page/sheet.js", [2]),
+      };
+    },
+    repoFiles: [],
+    stale: [],
+  });
+  assert.deepEqual(ranges, [["HEAD^1", "HEAD"]]);
+  assert.deepEqual(
+    plan.areas.map((area) => area.files),
+    [["shared/page/sheet.js"]],
+  );
+  assert.deepEqual(plan.final, []);
+  const index = readFileSync(join(folder, "first.md"), "utf8");
+  assert.match(index, /The first review of this pull request/);
+  assert.match(
+    index,
+    /## Area 1: shared page\n\n- shared\/page\/sheet\.js: first\/shared\/page\/sheet\.js\.diff/,
+  );
 });
 
 test("a push that changes only what a merge brings in reads nothing", () => {
@@ -425,6 +488,7 @@ test("a push that changes only what a merge brings in reads nothing", () => {
   const plan = writeReview(folder, {
     choice: { stage: "none" },
     since: "b".repeat(40),
+    pushed: null,
     readDiff: () => assert.fail("nothing is read"),
     repoFiles: [],
     stale: [],
