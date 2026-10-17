@@ -504,12 +504,20 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
   align-items: stretch;
   gap: 14px;
 }
+/* As on the Home Screen, each icon sits a set step from the next, its name centered under it and
+   reaching past its sides when longer, so a long name never pushes an icon along. */
 .appearance-choices {
-  display: flex;
+  --appearance-icon-size: 60px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--appearance-icon-size);
+  justify-content: start;
   gap: 18px;
 }
 .appearance-choice {
   position: relative;
+  justify-self: center;
+  width: max-content;
   display: grid;
   justify-items: center;
   gap: 6px;
@@ -531,8 +539,8 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
 .appearance-icon {
   position: relative;
   display: block;
-  width: 60px;
-  height: 60px;
+  width: var(--appearance-icon-size);
+  height: var(--appearance-icon-size);
   overflow: hidden;
   border-radius: 14px;
   box-shadow: 0 0 0 1px var(--card-border);
@@ -744,8 +752,12 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .welcome-steps > li[hidden] {
   display: none;
 }
+/* Words read centered on their lowercase letters, which sit below the middle of their line, so
+   the circle beside them sits a pixel lower. */
 .welcome-steps > li::before {
   content: counter(step);
+  position: relative;
+  top: 1px;
   display: grid;
   place-items: center;
   width: 28px;

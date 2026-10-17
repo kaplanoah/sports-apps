@@ -59,6 +59,45 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await listLowContrastText(page)).toEqual([]);
   });
 
+  test("the theme icons sit evenly apart from the start of their row, on the welcome and in Settings, however long their names", async ({
+    page,
+  }) => {
+    /** The first icon's distance from the start of its row, and each next icon's from the one before. */
+    const listIconSteps = (where) =>
+      page.locator(`${where} .appearance-choices`).evaluate((row) => {
+        const lefts = [row, ...row.querySelectorAll(".appearance-icon")].map(
+          (box) => box.getBoundingClientRect().left,
+        );
+        return lefts.slice(1).map((left, index) => left - lefts[index]);
+      });
+    await openApp(page, { isShowingWelcome: true });
+    expect(await listIconSteps("#homeScreenWelcome")).toEqual([0, 82, 82]);
+    await page
+      .locator("#homeScreenWelcome")
+      .getByRole("button", { name: "Continue in browser" })
+      .click();
+    await openSettings(page);
+    expect(await listIconSteps("#settingsDialog")).toEqual([0, 78, 78]);
+  });
+
+  test("each step's circle sits a pixel under the middle of its words", async ({ page }) => {
+    await openApp(page, { isShowingWelcome: true });
+    const offsets = await page
+      .locator("#homeScreenWelcome .welcome-steps > li:visible")
+      .evaluateAll((steps) =>
+        steps.map((step) => {
+          const circle = getComputedStyle(step, "::before");
+          const circleMiddle =
+            step.getBoundingClientRect().top +
+            parseFloat(circle.top) +
+            parseFloat(circle.height) / 2;
+          const words = step.querySelector(".welcome-step").getBoundingClientRect();
+          return circleMiddle - (words.top + words.height / 2);
+        }),
+      );
+    expect(offsets).toEqual([1, 1, 1]);
+  });
+
   test("the welcome lays out the same in Night Game as in Ball, which change only colors", async ({
     page,
   }) => {

@@ -3,7 +3,7 @@
 // sets the theme before the first paint; this keeps it, and the icons and bar color that go with
 // it, current. Each app hands it its looks' icons and bar colors.
 
-/* global nameThemeInAddress -- from pick-theme.js, which every page that loads this runs first */
+/* global openThemeAddress -- from pick-theme.js, which every page that loads this runs first */
 
 import { createViewerChoice } from "./device-storage.js";
 
@@ -90,7 +90,7 @@ export function startAppearance(looks) {
   for (const choice of choices) {
     choice.addEventListener("change", () => {
       appearance.keep(choice.value);
-      nameThemeInAddress(choice.value);
+      openThemeAddress(choice.value);
       checkSavedChoice(choices);
       showChosenTheme();
       if (choice.name === "appearance")
@@ -98,7 +98,7 @@ export function startAppearance(looks) {
     });
   }
   appearance.watch(() => {
-    nameThemeInAddress(appearance.read());
+    openThemeAddress(appearance.read());
     checkSavedChoice(choices);
     showChosenTheme();
   });

@@ -25,6 +25,17 @@ function readPickedAppearance() {
   }
 }
 
+// Only Apple's browsers tell a page whether it runs from the Home Screen this way.
+const isAppleBrowser = () => "standalone" in navigator;
+
+/** @param {string} choice */
+function buildThemeAddress(choice) {
+  const address = new URL(location.href);
+  if (choice === "light" || choice === "dark") address.searchParams.set("theme", choice);
+  else address.searchParams.delete("theme");
+  return address;
+}
+
 // A Home Screen app keeps its storage apart from the browser's, and Safari opens it at the page's
 // address as it stood when it was added, so the browser's address always names the theme picked
 // in it, and the app's first open keeps that. A theme in a shared link is the sender's, which the
@@ -32,10 +43,19 @@ function readPickedAppearance() {
 /** @param {string} choice */
 function nameThemeInAddress(choice) {
   if (isOnHomeScreen()) return;
-  const address = new URL(location.href);
-  if (choice === "light" || choice === "dark") address.searchParams.set("theme", choice);
-  else address.searchParams.delete("theme");
+  const address = buildThemeAddress(choice);
   if (address.href !== location.href) history.replaceState(history.state, "", address);
+}
+
+// Safari takes the Home Screen app's address, and the color of its own bars, from the page as it
+// loaded, so a pick it keeps loads the page again at the address that names it.
+/** @param {string} choice */
+function openThemeAddress(choice) {
+  const address = buildThemeAddress(choice);
+  const isKept = readPickedAppearance() === choice;
+  if (isOnHomeScreen() || address.href === location.href) return;
+  if (isAppleBrowser() && isKept) location.replace(address);
+  else nameThemeInAddress(choice);
 }
 
 // Only the app takes a theme from its address, on its first open, and drops it at once.
@@ -64,7 +84,7 @@ function keepPickedAppearance(choice) {
     /* appearance.js keeps it for as long as the page is open */
   }
   showTheme(choice);
-  nameThemeInAddress(choice);
+  openThemeAddress(choice);
 }
 
 try {

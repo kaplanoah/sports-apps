@@ -124,10 +124,11 @@ test.describe("on an iPhone, in the browser", () => {
     ]);
   });
 
-  test("where the phone refuses the page its storage, a theme picked on the welcome still shows", async ({
+  test("where Safari refuses the page its storage, a theme picked on the welcome still shows, without loading the page again", async ({
     page,
   }) => {
     await page.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => false });
       Object.defineProperty(window, "localStorage", {
         get: () => {
           throw new DOMException("The operation is insecure.", "SecurityError");
@@ -138,9 +139,11 @@ test.describe("on an iPhone, in the browser", () => {
     // The harness would keep the Updates box dismissed in the storage this test takes away.
     await openApp(page, { isShowingWelcome: true, isShowingUpdates: true });
     await expect(page.locator("#stamp")).toBeVisible();
+    await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
     await page.locator(WELCOME).getByRole("radio", { name: "Walnut" }).check();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(page.locator("#homeScreenIcon")).toHaveAttribute("href", "icon-180.png");
+    expect(await page.evaluate(() => "isBeforePick" in window)).toBe(true);
   });
 
   test("before the page's code arrives, the welcome already picks the theme and closes for good", async ({
@@ -197,6 +200,23 @@ test.describe("on an iPhone, in the browser", () => {
     await openSettings(page);
     await page.locator("#settingsDialog").getByRole("radio", { name: "Maple" }).check();
     await expect.poll(readTheme).toBe("light");
+  });
+
+  test("in Safari, a pick loads the page again at the address that names it, still on the welcome", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => false });
+    });
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page, { isShowingWelcome: true });
+    await expect(page.locator(WELCOME)).toBeVisible();
+    await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
+    await page.locator(WELCOME).getByRole("radio", { name: "Walnut" }).check();
+    await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("dark");
+    await expect.poll(() => page.evaluate(() => "isBeforePick" in window)).toBe(false);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator(WELCOME).getByRole("radio", { name: "Walnut" })).toBeChecked();
   });
 
   test("a theme picked in another tab renames this tab's address too", async ({
