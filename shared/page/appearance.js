@@ -98,6 +98,7 @@ export function startAppearance(looks) {
     });
   }
   appearance.watch(() => {
+    nameThemeInAddress(appearance.read());
     checkSavedChoice(choices);
     showChosenTheme();
   });

@@ -199,6 +199,20 @@ test.describe("on an iPhone, in the browser", () => {
     await expect.poll(readTheme).toBe("light");
   });
 
+  test("a theme picked in another tab renames this tab's address too", async ({
+    page,
+    context,
+  }) => {
+    const readTheme = () => new URL(page.url()).searchParams.get("theme");
+    await openApp(page);
+    await expect(page.locator("#stamp")).toBeVisible();
+    const otherTab = await context.newPage();
+    await openApp(otherTab);
+    await openSettings(otherTab);
+    await otherTab.locator("#settingsDialog").getByRole("radio", { name: "Walnut" }).check();
+    await expect.poll(readTheme).toBe("dark");
+  });
+
   test("going on in the browser closes the welcome for good on this device, and Settings keeps the steps", async ({
     page,
   }) => {
