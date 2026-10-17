@@ -1,8 +1,8 @@
 import { readEasternDay } from "#shared/days.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
-import { namePlayerIndexKey } from "#shared/page-search.js";
-import { createSeasonDocFollower, readPlayerIndex } from "#shared/season-doc-follower.js";
+import { namePlayerIndexKey, readPlayerIndex } from "#shared/page-search.js";
+import { createSeasonDocFollower } from "#shared/season-doc-follower.js";
 import { nameOvertimesKey } from "./search-pages.js";
 import { session } from "./session.js";
 import { SNAPSHOT_VERSION, nameScheduleKey } from "./snapshot.js";

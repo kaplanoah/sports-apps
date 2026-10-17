@@ -88,6 +88,13 @@ export const describePlayerIndex = (season, players) => ({
   players: players.toSorted(compareNames),
 });
 
+/**
+ * The list of a season's players the store keeps beside its rosters, or null for one the page
+ * can't read.
+ * @param {any} index
+ */
+export const readPlayerIndex = (index) => (Array.isArray(index?.players) ? index : null);
+
 // A word this short only finds a team, a name, or a place once it's whole, or it would find too
 // many.
 export const SHORTEST_PREFIX = 3;

@@ -58,6 +58,22 @@ function collectChangedFields(doc, snapshot, log) {
 }
 
 /**
+ * The finals the record's slate lists before the slate's day: its clubs' last games, and the
+ * finals of its own day once MLB's day has moved on past it.
+ * @param {any} saved the record's slate
+ * @param {string} day
+ */
+function listPlayedBefore(saved, day) {
+  const savedDay = saved?.today?.date;
+  const savedToday = (saved?.today?.games ?? [])
+    .filter((/** @type {any} */ game) => game.state === "final")
+    .map((/** @type {any} */ game) => ({ date: savedDay, ...game }));
+  return sortInScheduleOrder(
+    [...(saved?.previous ?? []), ...savedToday].filter((game) => game.date < day),
+  );
+}
+
+/**
  * The slate to save: a read without the standings lists no club's last and next games, so the
  * record keeps those it has that still come before or after the slate's day, since MLB's day may
  * have moved on since they were read.
@@ -69,7 +85,7 @@ function keepClubGames({ slate, isSeriesKnown }, saved) {
   const day = slate.today.date;
   return {
     ...slate,
-    previous: (saved?.previous ?? []).filter((/** @type {any} */ game) => game.date < day),
+    previous: listPlayedBefore(saved, day),
     next: (saved?.next ?? []).filter((/** @type {any} */ game) => game.date > day),
   };
 }

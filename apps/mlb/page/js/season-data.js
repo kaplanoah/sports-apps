@@ -1,8 +1,8 @@
 import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { buildBracket } from "./bracket.js";
-import { namePlayerIndexKey } from "#shared/page-search.js";
-import { createSeasonDocFollower, readPlayerIndex } from "#shared/season-doc-follower.js";
+import { namePlayerIndexKey, readPlayerIndex } from "#shared/page-search.js";
+import { createSeasonDocFollower } from "#shared/season-doc-follower.js";
 import { SNAPSHOT_VERSION, nameScheduleCollection } from "./snapshot.js";
 import { composeState, guessSeasonYear, session } from "./session.js";
 import { TEAMS } from "./teams.js";

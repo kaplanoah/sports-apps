@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSeasonDocFollower, readPlayerIndex } from "../shared/page/season-doc-follower.js";
+import { readPlayerIndex } from "../shared/page/page-search.js";
+import { createSeasonDocFollower } from "../shared/page/season-doc-follower.js";
 
 /** A store whose documents a test delivers, with each key's latest listener and the keys unwatched. */
 function createStore() {

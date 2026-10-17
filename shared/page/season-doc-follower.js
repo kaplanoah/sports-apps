@@ -2,13 +2,6 @@
 // search finds, keeping what the page makes of it and redrawing as it changes.
 
 /**
- * The list of a season's players the store keeps beside its rosters, or null for one the page
- * can't read.
- * @param {any} index
- */
-export const readPlayerIndex = (index) => (Array.isArray(index?.players) ? index : null);
-
-/**
  * A follower of one kind of document, by season: it keeps what `read` makes of the season's, or
  * null for one the page can't read, with `keep`, and redraws with `showChange` as it changes, but
  * not while there is still none. One for a season the page has moved on from is left out.
