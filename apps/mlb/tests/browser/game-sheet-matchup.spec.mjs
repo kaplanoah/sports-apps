@@ -363,7 +363,7 @@ test("while the starters' numbers load, the matchup holds their shape, then fill
   await expect(body).toHaveAttribute("aria-busy", "true");
   await expect(sheet.locator(".pitcher-last")).toHaveText(["Blubaugh", "Springs"]);
   await expect(sheet.locator(".pitcher-first .placeholder")).toHaveCount(2);
-  await expect(sheet.locator(".tape-label")).toHaveText(["ERA", "K/9", "BB/9", "Velo"]);
+  await expect(sheet.locator(".tape-label")).toHaveText(["ERA", "K/9", "BB/9", "Fastball mph"]);
   await expect(sheet.locator(".scout h3 span")).toHaveText(["What he throws", "What he throws"]);
   await expect(sheet.locator(".pitch-mix")).toHaveCount(2);
   await expect(sheet.locator(".recent-starts li")).toHaveCount(6);

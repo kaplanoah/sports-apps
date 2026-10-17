@@ -20,7 +20,7 @@ export const STARTER_MEASURES = [
   { key: "era", label: "ERA", write: (value) => value.toFixed(2), isFewestFirst: true },
   { key: "k9", label: "K/9", write: (value) => value.toFixed(1) },
   { key: "bb9", label: "BB/9", write: (value) => value.toFixed(1), isFewestFirst: true },
-  { key: "speed", label: "Velo", write: (value) => value.toFixed(1) },
+  { key: "speed", label: "Fastball mph", write: (value) => value.toFixed(1) },
 ];
 
 /**

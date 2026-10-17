@@ -484,7 +484,7 @@ test("a starter's sheet ranks him among the qualified starters, each rank all in
     "ERA",
     "K/9",
     "BB/9",
-    "Velo",
+    "Fastball mph",
   ]);
   await expect(playerSheet.locator(".pitch-mix")).toBeVisible();
   expect(await checkRanksAreDim(playerSheet, ".player-rank")).toEqual(Array(4).fill(true));

@@ -164,7 +164,7 @@ test("each measure shows each starter's number and rank under his side, the high
   const tape = readTape(markup);
   assert.deepEqual(
     tape.map((measure) => measure.label),
-    ["ERA", "K/9", "BB/9", "Velo"],
+    ["ERA", "K/9", "BB/9", "Fastball mph"],
   );
   assert.deepEqual(
     tape.map(({ away, home }) => [away, home]),
@@ -188,7 +188,7 @@ test("each measure shows each starter's number and rank under his side, the high
     ],
   );
   assert.deepEqual(readClass(markup, "tape-note"), [
-    "Rank among qualified starters (1 inning per team game)",
+    "Rank among qualified starters",
     "ERA and BB/9 ranked by fewest",
   ]);
 });
@@ -323,7 +323,7 @@ test("a starter outside the qualified starters and short of a quarter of their i
   assert.ok(tape.every(({ marks }) => marks.away !== undefined && marks.home === undefined));
   assert.ok(readProvisionalMarks(markup).every((line) => line.home === undefined));
   assert.deepEqual(readClass(markup, "tape-note"), [
-    "Rank among qualified starters (1 inning per team game)",
+    "Rank among qualified starters",
     "ERA and BB/9 ranked by fewest",
     "Springs has pitched 39 1/3 of the 158 innings needed to qualify",
   ]);
@@ -353,7 +353,7 @@ test("an unranked starter whose innings or club's games aren't known yet still s
     renderStarters(BLUBAUGH, { ...SPRINGS, ranks: null }, {}),
   ])
     assert.deepEqual(readClass(markup, "tape-note"), [
-      "Rank among qualified starters (1 inning per team game)",
+      "Rank among qualified starters",
       "ERA and BB/9 ranked by fewest",
       "Springs hasn't pitched the innings needed to qualify",
     ]);
