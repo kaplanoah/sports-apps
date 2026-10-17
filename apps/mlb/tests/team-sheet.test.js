@@ -471,6 +471,37 @@ test("a club's card names its next game's day on the viewer's own calendar, as i
   });
 });
 
+test("a club's next game without a set time takes MLB's day, though its placeholder start falls the day before out west", () => {
+  const placeholder = "2026-09-25T04:00:00Z";
+  session.state = {
+    ...session.state,
+    slate: {
+      today: { date: "2026-09-24", games: [] },
+      next: [
+        {
+          id: "920001",
+          date: "2026-09-25",
+          away: "SEA",
+          home: "TEX",
+          state: "pre",
+          start: placeholder,
+          tbd: true,
+        },
+      ],
+    },
+  };
+  const afternoon = Date.parse("2026-09-24T22:00:00Z");
+  const next = { at: placeholder, date: "2026-09-25", tbd: true, home: false, opp: "TEX" };
+
+  assert.deepEqual(
+    checkInTimeZone("America/Los_Angeles", () => ({
+      card: listCards(renderTeamSheet("SEA", { now: afternoon }).body),
+      row: readText(renderNextCell({ id: "SEA", next }, { now: afternoon })),
+    })),
+    { card: ["Next game Tomorrow Time TBD @ TEX"], row: "Fri @ TEX" },
+  );
+});
+
 test("a club with no games on the slate, as in a past season, shows no cards", () => {
   session.state = { ...session.state, slate: null };
   assert.doesNotMatch(renderTeamSheet("HOU").body.text, /game-cards/);
