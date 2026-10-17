@@ -32,6 +32,8 @@ const CONTINUED = "(cont.) ";
 
 // From the base to the pull request merged onto it: the whole change, as the merge would make it.
 export const WHOLE_CHANGE = ["HEAD^1", "HEAD"];
+// The pull request's own head, the second parent of the merge commit CI checks out.
+const PULL_HEAD = "HEAD^2";
 
 const RECORDED_DATA = /(^|\/)tests\/fixtures\/.*\.(json|xml)$/;
 const GENERATED = /\.(svg|min\.js)$/;
@@ -646,14 +648,14 @@ export function findPushedRange(since, git) {
   const mergedTree = git(["merge-tree", "--write-tree", WHOLE_CHANGE[0], since])?.split("\n")[0];
   return mergedTree
     ? { range: [mergedTree, "HEAD"], hasBase: false }
-    : { range: [since, "HEAD^2"], hasBase: true };
+    : { range: [since, PULL_HEAD], hasBase: true };
 }
 
 /**
- * The pull request's own head, the second parent of the merge commit CI checks out.
+ * The pull request's own head, as a commit.
  * @param {(args: string[]) => string} git
  */
-export const readPullHead = (git) => git(["rev-parse", "HEAD^2"]).trim();
+export const readPullHead = (git) => git(["rev-parse", PULL_HEAD]).trim();
 
 /** @param {NodeJS.ProcessEnv} env */
 async function readLastReviewedHead(env) {
@@ -669,9 +671,9 @@ async function readLastReviewedHead(env) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const folder = process.argv[2];
   const reviewedHead = await readLastReviewedHead(process.env);
+  const head = readPullHead(runGit);
   const isOnBranch =
-    reviewedHead !== null &&
-    tryGit(["merge-base", "--is-ancestor", reviewedHead, "HEAD^2"]) !== null;
+    reviewedHead !== null && tryGit(["merge-base", "--is-ancestor", reviewedHead, head]) !== null;
   /** @type {Map<string, { numstat: string, diff: string }>} */
   const diffs = new Map();
   /** @param {string[]} range @param {string[]} [files] */
@@ -685,7 +687,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       });
     return /** @type {{ numstat: string, diff: string }} */ (diffs.get(key));
   };
-  const head = readPullHead(runGit);
   /** @type {{ range: string[], hasBase: boolean } | undefined} */
   let pushedRange;
   const readPushedRange = () =>
