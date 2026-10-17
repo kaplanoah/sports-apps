@@ -604,14 +604,16 @@ function writeIndexedStage(folder, stage, change, words = stage) {
   return written;
 }
 
+/** @typedef {ReturnType<typeof writeStage>["areas"][number]} PlannedArea */
+
 /**
  * @typedef {object} Plan
  * @property {string} stage
  * @property {string | null} since the head the last full read ended on, which the summary keeps
  *   until this review finishes
- * @property {any[]} areas the stage's areas
+ * @property {PlannedArea[]} areas the stage's areas
  * @property {any[]} unread the files the stage leaves unread, and why
- * @property {any[]} final the last read's areas, when a push's review is due one
+ * @property {PlannedArea[]} final the last read's areas, when a push's review is due one
  * @property {any[]} finalUnread the files the last read leaves unread, and why
  */
 

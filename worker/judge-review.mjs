@@ -121,19 +121,12 @@ export const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 /** @param {string} path */
 const readExecution = (path) => (path && existsSync(path) ? readJson(path) : []);
 
-/**
- * @typedef {object} PlannedArea
- * @property {number} area
- * @property {string} name
- * @property {string[]} files
- * @property {Record<string, string[]>} partsByFile
- */
+/** @typedef {import('./plan-review.mjs').PlannedArea} PlannedArea */
 
 /**
  * The areas of a stage, from the plan.
  * @param {import('./plan-review.mjs').Plan} plan
  * @param {string} stage
- * @returns {PlannedArea[]}
  */
 const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.areas);
 
