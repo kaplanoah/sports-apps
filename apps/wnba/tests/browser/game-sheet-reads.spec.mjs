@@ -171,7 +171,8 @@ test("a preview's meetings that didn't load read again on a tap on Try again, ho
 }) => {
   await openApp(page);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 502, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 502, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(matchPath("/preview"), refuse);
   const preview = await openGameSheet(page, FEVER_AT_ACES);
   const meetings = preview.locator(".sheet-part").first();
@@ -234,7 +235,10 @@ test("a box score the Worker can't load says so over Try again, which holds the 
   await openApp(page);
   /** @param {import("@playwright/test").Route} route */
   const refuse = (route) =>
-    route.fulfill({ status: 502, json: { error: "Couldn't read the WNBA: test" } });
+    route.fulfill({
+      status: 502,
+      json: { error: { code: "upstream_error", message: "Couldn't read the WNBA: test" } },
+    });
   await page.route(matchPath("/box-score"), refuse);
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
   const block = sheet.locator("#gameBody .retry-block");
@@ -258,7 +262,8 @@ test("a box score that didn't load reads again as the phone comes back online", 
 }) => {
   await openApp(page);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 502, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 502, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(matchPath("/box-score"), refuse);
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
   await expect(sheet.locator("#gameBody .retry-block")).toBeVisible();

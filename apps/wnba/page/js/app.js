@@ -38,6 +38,7 @@ import {
   showSeasonPhase,
   startBracketStandings,
 } from "#shared/bracket-standings.js";
+import { BACKGROUND_JOBS } from "./background-jobs.js";
 import { LOOKS } from "./looks.js";
 import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
@@ -299,7 +300,7 @@ async function boot() {
   startBracket();
   startBracketStandings();
   session.db = createWorkerStore();
-  showJobStatuses(session.db, ["news", "players"]);
+  showJobStatuses(session.db, BACKGROUND_JOBS);
   drawLastSeen();
   reopenLastSheets();
   startCatchUpNote(session.db, renderStamp);

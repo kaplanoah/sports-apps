@@ -13,6 +13,7 @@ import {
 import { renderScoreboard } from "../page/js/scoreboard.js";
 import { describeSeriesStanding, isFieldSet, isPlayoffsOver } from "../page/js/series.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
+import { readSeasonAverages } from "./player-fixtures.js";
 import { describeStampProblem, renderStampLines } from "../page/js/stamp.js";
 import { renderStandings, renderStandingsLists } from "../page/js/standings-view.js";
 import { renderTeamSheet } from "../page/js/team-view.js";
@@ -29,10 +30,11 @@ const NOW = Date.parse(AFTERNOON.now);
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
-const SEASON = buildSnapshot(
-  { ...AFTERNOON.responses, players: GAMES.preview.players },
-  { season: 2026, now: NOW },
-);
+// The afternoon, with the leading scorers the store works out from the season's totals.
+const SEASON = {
+  ...buildSnapshot(AFTERNOON.responses, { season: 2026, now: NOW }),
+  leaders: readSeasonAverages().leaders,
+};
 
 // Each tag reads as a space, and the page's separator as a bar.
 const readText = (markup) =>
@@ -239,7 +241,7 @@ test("a date without games a tap brings into the list says so beside its date, n
 test("the All-Star Game's row names it, and shows each team's name beside its star, the visitors' orange and the home team's white, and opens nothing", () =>
   inEastern(() => {
     const whole = buildSnapshot(
-      { ...AFTERNOON.responses, schedule: GAMES.preview.schedule, players: GAMES.preview.players },
+      { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
       { season: 2026, now: NOW },
     );
     const { days } = listDays(whole, { schedule: { games: whole.schedule } });
@@ -661,10 +663,13 @@ function readTeam(season, code) {
 }
 
 // The afternoon, with the whole season's schedule from the next day, its regular season and all.
-const WHOLE_SEASON = buildSnapshot(
-  { ...AFTERNOON.responses, schedule: GAMES.preview.schedule, players: GAMES.preview.players },
-  { season: 2026, now: NOW },
-);
+const WHOLE_SEASON = {
+  ...buildSnapshot(
+    { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
+    { season: 2026, now: NOW },
+  ),
+  leaders: readSeasonAverages().leaders,
+};
 const SEATTLES_LAST = WHOLE_SEASON.nearestGames.find((game) => game.id === "1022600325");
 
 /**

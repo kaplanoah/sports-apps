@@ -21,7 +21,9 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../worker/src/roster.js";
+import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
+import { findTeamLeaders } from "../page/js/team-view.js";
 
 // Every player's totals and every team's games as the league answered the morning after the
 // Liberty's last game, with the game logs of a few players standing in for every player's, beside
@@ -108,7 +110,8 @@ function createLeagueFetch(answers) {
   return { requests, fetchImpl };
 }
 
-const FINAL_GAME = { id: "1", state: "final" };
+// The season's record keeps only its playoff games, and its schedule every game.
+const FINAL_GAME = { id: "1", round: null, state: "final" };
 
 /**
  * A store whose current season is 2026, with 2025 kept from before, and the job that keeps its
@@ -118,7 +121,8 @@ const FINAL_GAME = { id: "1", state: "final" };
 function createRun({ series = [], answers = listAnswers(), job = createPlayerJob() } = {}) {
   const docs = createDocs({
     "live/current": { season: 2026 },
-    "seasons/2026": { year: 2026, games: [FINAL_GAME], series },
+    "seasons/2026": { year: 2026, games: [], series },
+    "schedules/2026": { year: 2026, games: [FINAL_GAME] },
     "seasons/2025": { year: 2025, games: [], series: [] },
   });
   const storage = createJobStorage();
@@ -128,7 +132,7 @@ function createRun({ series = [], answers = listAnswers(), job = createPlayerJob
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => null,
+      createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: league.fetchImpl,
       now: () => clock.now,
@@ -139,12 +143,13 @@ function createRun({ series = [], answers = listAnswers(), job = createPlayerJob
   };
   /** @param {number} count */
   const endGames = async (count) => {
-    const season = docs.stored.get("seasons/2026");
+    const schedule = docs.stored.get("schedules/2026");
     const games = Array.from({ length: count }, (_, index) => ({
       id: String(index),
+      round: null,
       state: "final",
     }));
-    docs.stored.set("seasons/2026", { ...season, games });
+    docs.stored.set("schedules/2026", { ...schedule, games });
   };
   return { docs, storage, league, runJob, wait, endGames };
 }
@@ -196,6 +201,79 @@ test("a player's sheet from the store is the one the league's feeds make, and re
     assert.equal(fromStore.status, 200);
     assert.deepEqual(fromStore.body, fromLeague.body);
     assert.deepEqual(fromStore.requests, []);
+  }
+});
+
+/** @param {any} numbers */
+const readAverages = (numbers) => [numbers.points, numbers.rebounds, numbers.assists];
+
+test("a player's Roster averages, her team's leading scorers, and her sheet show the same numbers, from one read of the season's totals", async () => {
+  const { docs, runJob } = createRun();
+  await runJob();
+
+  const averages = docs.stored.get("averages/2026").players;
+  const liberty = findTeamLeaders(docs.stored.get("seasons/2026"), "NYL");
+  assert.equal(liberty.length, 5);
+  assert.ok(liberty.some((leader) => String(leader.id) === STEWART));
+  for (const leader of liberty) {
+    const sheet = (await askForPlayer(`id=${leader.id}&team=NYL&season=2026`, { docs })).body;
+    const onRoster = averages.find((/** @type {any} */ player) => player.id === leader.id);
+    const { games, averages: onSheet } = sheet.regularSeason;
+    assert.deepEqual(readAverages(onRoster), readAverages(onSheet), leader.lastName);
+    assert.deepEqual(readAverages(leader), readAverages(onSheet), leader.lastName);
+    assert.deepEqual([onRoster.games, leader.games], [games, games], leader.lastName);
+  }
+});
+
+/**
+ * The season's totals with one more game for a player, in which she scored `points`.
+ * @param {any} answer
+ * @param {string} id
+ * @param {number} points
+ */
+const addGame = (answer, id, points) => ({
+  ...answer,
+  resultSets: answer.resultSets.map((/** @type {any} */ table) => {
+    const at = (/** @type {string} */ column) => table.headers.indexOf(column);
+    return {
+      ...table,
+      rowSet: table.rowSet.map((/** @type {any[]} */ row) => {
+        if (String(row[at("PLAYER_ID")]) !== id) return row;
+        const played = [...row];
+        played[at("GP")] += 1;
+        played[at("PTS")] += points;
+        return played;
+      }),
+    };
+  }),
+});
+
+test("once the job saves new averages, a team's leading scorers show the numbers its Roster does, without waiting for the season's next update", async () => {
+  const answers = listAnswers();
+  const { docs, runJob, wait, endGames } = createRun({ answers });
+  await runJob();
+  const findStewart = () =>
+    findTeamLeaders(docs.stored.get("seasons/2026"), "NYL").find(
+      (leader) => String(leader.id) === STEWART,
+    );
+  const before = findStewart();
+
+  answers[nameTotalsRequest(2026)] = addGame(answers[nameTotalsRequest(2026)], STEWART, 40);
+  await endGames(2);
+  wait(5);
+  await runJob();
+
+  const roster = docs.stored.get("averages/2026").players;
+  const shown = findTeamLeaders(docs.stored.get("seasons/2026"), "NYL");
+  assert.equal(shown.length, 5);
+  assert.ok(Number(findStewart()?.points) > Number(before?.points));
+  for (const leader of shown) {
+    const onRoster = roster.find((/** @type {any} */ player) => player.id === leader.id);
+    assert.deepEqual(
+      [leader.games, ...readAverages(leader)],
+      [onRoster.games, ...readAverages(onRoster)],
+      leader.lastName,
+    );
   }
 });
 
@@ -290,6 +368,49 @@ test("a past season filled before the sheets read a column is filled once more, 
 
   assert.equal(pastReads.length, STATS_FEEDS + TEAM_COUNT + 1);
   assert.equal(league.requests.filter((url) => /Season=2025/.test(url)).length, pastReads.length);
+});
+
+// Each season's totals as the player job kept them before it kept each player's team.
+/** @param {number} season */
+const nameOldTotalsRequest = (season) =>
+  `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Totals&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight= PLAYER_ID PLAYER_NAME GP MIN PTS REB AST STL BLK TOV FGM FGA FG3M FG3A FTM FTA`;
+
+test("each season's totals kept without each player's team are forgotten, once", async () => {
+  const { storage, runJob, wait } = createRun();
+  const oldKeys = await Promise.all(
+    [2025, 2026].map((season) => nameFeedKey("totals", nameOldTotalsRequest(season))),
+  );
+  for (const key of oldKeys) await storage.put(key, { answer: { at: 0, data: [] } });
+  const deletes = [];
+  const deleteKey = storage.delete;
+  storage.delete = (key) => {
+    deletes.push(key);
+    return deleteKey(key);
+  };
+
+  await runJob();
+  wait(5);
+  await runJob();
+
+  for (const key of oldKeys) {
+    assert.equal(await storage.get(key), undefined);
+    assert.equal(deletes.filter((deleted) => deleted === key).length, 1);
+  }
+});
+
+test("a past season filled before the store kept every player's averages is filled once more, and saves them", async () => {
+  const filled = createRun();
+  await filled.runJob();
+  const filledWith = await filled.storage.get("filled:2025");
+  const { docs, storage, league, runJob } = createRun();
+  await storage.put("filled:2025", filledWith.replace(/ averages$/, ""));
+
+  await runJob();
+
+  assert.ok(docs.stored.get("averages/2025").players.length > 0);
+  const pastReads = league.requests.filter((url) => /Season=2025/.test(url));
+  assert.equal(pastReads.length, STATS_FEEDS + TEAM_COUNT + 1);
+  assert.equal(await storage.get("filled:2025"), filledWith);
 });
 
 test("ESPN's injury report is read once a run for the whole league, and says who is out only on the teams still playing", async () => {
@@ -412,7 +533,7 @@ test("a past season filled before the store kept its list of players gets one fr
   await createPlayerJob().updateStore({
     docs,
     storage,
-    loadSnapshot: async () => null,
+    createLoadSnapshot: () => async () => null,
     env: {},
     fetchImpl: league.fetchImpl,
     now: () => NOW + 5 * MINUTE_MS,
@@ -480,13 +601,16 @@ test("each run saves its status: the requests it made by feed, what it saved, an
     out: 1,
   });
   assert.deepEqual(Object.keys(first.saved).sort(), [
+    "averages",
     "overtimes",
     "player-index",
     "players",
     "ranks",
     "rosters",
+    "seasons",
   ]);
   assert.equal(first.saved.ranks, 2);
+  assert.equal(first.saved.seasons, 2);
   assert.equal(first.saved["player-index"], 2);
   assert.deepEqual(first.pastSeason, { season: 2025, isWhole: true });
   assert.equal(first.lastFailure, null);
@@ -559,6 +683,10 @@ test("a sheet read from the league is counted only when the store could have had
   docs.stored.delete(nameRanksKey(2026));
   assert.equal((await askWithCount(`id=${STEWART}&team=NYL&season=2026`)).status, 200);
   assert.equal(counted, 1);
+
+  docs.stored.delete(nameRanksKey(2025));
+  await askWithCount(`id=${STEWART}&team=NYL&season=2025`);
+  assert.equal(counted, 1, "a season before the current one isn't counted, as MLB's aren't");
 });
 
 test("a count the store can't take still answers the sheet", async (t) => {

@@ -10,7 +10,14 @@ import {
   nameStartersKey,
 } from "../worker/src/pitchers.js";
 import { SIDE_VERSION, createPitcherJob, nameReadsKey } from "../worker/src/pitcher-updater.js";
-import { createRotationServer, nameRotationKey } from "../worker/src/rotations.js";
+import {
+  LOOKBACK_DAYS,
+  createRotationServer,
+  listScheduleRequest,
+  nameRotationKey,
+} from "../worker/src/rotations.js";
+import { addDays } from "#shared/days.js";
+import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // MLB's tables, the last two weeks of games, and the pitchers the matchup sheet reads, as MLB
@@ -108,7 +115,7 @@ function createRun({ answers = listAnswers(), job = createPitcherJob() } = {}) {
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => null,
+      createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: mlb.fetchImpl,
       now: () => clock.now,
@@ -176,7 +183,7 @@ async function askForPitcher(query, { docs, answers = listAnswers() } = {}) {
 async function askForRotation(query, { docs } = {}) {
   const { requests, fetchImpl } = createMlbFetch(listAnswers());
   const counter = createLeagueReadCounter();
-  const response = await createRotationServer({ fetchImpl }).serveRotation(
+  const response = await createRotationServer({ fetchImpl, now: () => NOW }).serveRotation(
     new URL(`https://mlb-app.example/k3y/rotation?${query}`),
     docs ? readFromStore(docs) : undefined,
     counter.countLeagueRead,
@@ -227,6 +234,76 @@ test("a club's starters from the store are the ones MLB's feeds make, and read n
       assert.deepEqual(fromStore.requests, []);
       assert.equal(fromStore.leagueReads, 0);
     }
+});
+
+test("a day after tomorrow reads only the store's starts, which reach today, the last day played", async () => {
+  const { docs, runJob } = createRun();
+  await runJob();
+
+  const later = await askForRotation("club=CLE&date=2026-10-09", { docs });
+  assert.deepEqual(later.requests, []);
+  assert.equal(later.leagueReads, 0);
+  // Tomorrow's starters two days more rested, but for those whose starts fall out of the two weeks.
+  const tomorrow = await askForRotation(`club=CLE&date=${TOMORROW}`, { docs });
+  const stillCounted = tomorrow.body.starters.filter(
+    (/** @type {any} */ starter) => starter.start.date >= "2026-09-25",
+  );
+  assert.ok(stillCounted.length > 0);
+  assert.deepEqual(
+    later.body.starters,
+    stillCounted.map((/** @type {any} */ starter) => ({ ...starter, rest: starter.rest + 2 })),
+  );
+});
+
+test("starts the store saved before today have the sheet read MLB for a later day, counted", async () => {
+  const { docs, runJob } = createRun();
+  await runJob();
+  const key = nameRotationKey(2026, "CLE");
+  docs.stored.set(key, { ...docs.stored.get(key), through: "2026-10-05" });
+
+  const later = await askForRotation("club=CLE&date=2026-10-09", { docs });
+  assert.ok(later.requests.length > 0);
+  assert.equal(later.leagueReads, 1);
+});
+
+test("past midnight, the store's starts are read again to reach the new day, though no game has ended", async () => {
+  const answers = listAnswers();
+  const recorded = listScheduleRequest(null, addDays(TODAY, -LOOKBACK_DAYS), TODAY);
+  answers[listScheduleRequest(null, addDays(TOMORROW, -LOOKBACK_DAYS), TOMORROW)] =
+    answers[recorded];
+  const { docs, mlb, runJob, wait } = createRun({ answers });
+  const lateEvening = Date.parse(`${TODAY}T23:50:00-04:00`);
+  wait((lateEvening - NOW) / MINUTE_MS);
+  await runJob();
+  assert.equal(docs.stored.get(nameRotationKey(2026, "CLE")).through, TODAY);
+  const before = mlb.requests.length;
+
+  wait(20);
+  await runJob();
+
+  const scheduleReads = mlb.requests
+    .slice(before)
+    .filter((path) => path.startsWith("/api/v1/schedule?"));
+  assert.equal(scheduleReads.length, 1);
+  assert.equal(docs.stored.get(nameRotationKey(2026, "CLE")).through, TOMORROW);
+});
+
+test("a kept schedule that doesn't say the day it reaches is read again", async () => {
+  const earlier = createRun();
+  await earlier.runJob();
+  const { docs, storage, mlb, runJob, wait } = createRun();
+  const scheduleKey = await nameFeedKey("schedule", "2026");
+  for (const [key, value] of earlier.storage.stored)
+    storage.stored.set(key, structuredClone(value));
+  for (const [key, value] of earlier.docs.stored) docs.stored.set(key, structuredClone(value));
+  delete storage.stored.get(scheduleKey).answer.data.through;
+
+  wait(10);
+  await runJob();
+
+  const scheduleReads = mlb.requests.filter((path) => path.startsWith("/api/v1/schedule?"));
+  assert.equal(scheduleReads.length, 1);
+  assert.equal(docs.stored.get(nameRotationKey(2026, "CLE")).through, TODAY);
 });
 
 test("a club whose starters the store doesn't keep, or a day its starts don't reach back to, has the sheet read MLB, counted", async () => {
@@ -306,6 +383,17 @@ test("sides saved before they gained a field are each read once more, and then n
 
   assert.equal(reread.length, 2 * Math.ceil(RECORDED_IDS.length / 30));
   assert.deepEqual(listPitcherReads(mlb.requests.slice(before)), reread);
+});
+
+test("the reads kept under an earlier version of the sides are forgotten as the job saves its own", async () => {
+  const { storage, runJob } = createRun();
+  await storage.put("reads:2026", { 1: { games: 1, at: 0, isSettled: true } });
+
+  await runJob();
+
+  assert.equal(nameReadsKey(2026, 1), "reads:2026");
+  assert.equal(await storage.get("reads:2026"), undefined);
+  assert.ok(await storage.get(nameReadsKey(2026)));
 });
 
 test("a final MLB answers the same for saves no document", async () => {
