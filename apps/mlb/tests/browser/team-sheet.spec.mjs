@@ -244,6 +244,18 @@ test("a club's row in the standings opens its sheet, with its nearest games, rac
   await expect(sheet).toBeHidden();
 });
 
+test("a club's card of a game being played draws its inning in the color of what's happening now", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await page.locator('.div-grid tr[data-team="TB"] .team-open').click();
+
+  const inning = page.locator("#teamSheet .game-card-now");
+  await expect(inning).toHaveText("Top 6th");
+  await expect(inning).toHaveCSS("color", await readColor(page, "--now"));
+});
+
 test("a club in the bracket opens its sheet", async ({ page }) => {
   await openBracket(page);
   const club = page.locator("#bracketWrap .team-id .team-open").first();

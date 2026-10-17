@@ -1,10 +1,11 @@
 // A team's nearest games across the top of its sheet, side by side: its last, the one it's playing,
 // and its next, each under its title in a card that opens the game's sheet. A card says the game's
-// day, or its clock while it's on, over one line: the result and the score, how far the team is up
-// or down, or the start time, then vs or @ and the other team. Every score puts the team's own
-// first. Each league hands it what each card shows, and fitGameCards sizes the cards once they're
-// drawn.
+// day, as yesterday, today, or tomorrow when it's one of them, or its clock while it's on, over one
+// line: the result and the score, how far the team is up or down, or the start time, then vs or @
+// and the other team. Every score puts the team's own first. Each league hands it what each card
+// shows, and fitGameCards sizes the cards once they're drawn.
 
+import { countDaysBetween, formatShortDate, nameDay } from "./days.js";
 import { html } from "./html.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
@@ -13,7 +14,8 @@ import { html } from "./html.js";
  * @property {string} id the game's, which its sheet opens by
  * @property {string} label what the card's button says it opens, as "Sky at Storm, Aug 19"
  * @property {"final" | "live" | "pre"} state
- * @property {Markup | string} when its day, or its clock while it's on, in a .game-card-clock
+ * @property {Date | null} day its day
+ * @property {string} clock how far along it is, while it's on
  * @property {{ own: number, theirs: number } | null} score
  * @property {string} time when it starts, for a game not yet started
  * @property {boolean} isHome
@@ -47,8 +49,33 @@ function renderScore({ state, score, time }) {
   return state === "live" ? renderMargin(score) : renderResult(score);
 }
 
-/** @param {GameCard} card */
-const renderCard = (card) =>
+/**
+ * Whether a game is still to come today, which a team's sheet sets apart as it does one being
+ * played.
+ * @param {{ state: string, day: Date | null }} game
+ * @param {Date} now
+ */
+export const isStillToComeToday = ({ state, day }, now) =>
+  state === "pre" && day !== null && countDaysBetween(now, day) === 0;
+
+/**
+ * The game's clock while it's on, or its day, with a game still to come today standing out as one
+ * being played does.
+ * @param {GameCard} card
+ * @param {Date} now
+ */
+function renderWhen(card, now) {
+  if (card.state === "live") return html`<span class="game-card-now">${card.clock}</span>`;
+  if (!card.day) return "";
+  const name = nameDay(card.day, now, { nameOtherDay: formatShortDate, isCapitalized: true });
+  return isStillToComeToday(card, now) ? html`<span class="game-card-now">${name}</span>` : name;
+}
+
+/**
+ * @param {GameCard} card
+ * @param {Date} now
+ */
+const renderCard = (card, now) =>
   html`<div class="game-card">
     <div class="sheet-part-head"><h3>${TITLES[card.state]}</h3></div>
     <button
@@ -57,7 +84,7 @@ const renderCard = (card) =>
       data-game="${card.id}"
       aria-label="Game details: ${card.label}"
     >
-      <span class="game-card-when">${card.when}</span>
+      <span class="game-card-when">${renderWhen(card, now)}</span>
       <span class="game-card-line">
         <span class="game-card-score tabular">${renderScore(card)}</span>
         <span class="game-card-opponent"
@@ -73,9 +100,11 @@ const renderCard = (card) =>
 /**
  * The cards in order, last, now, and next, or nothing when there are none.
  * @param {GameCard[]} cards
+ * @param {Date} now
  */
-export const renderGameCards = (cards) =>
-  cards.length > 0 && html`<div class="game-cards">${cards.map(renderCard)}</div>`;
+export const renderGameCards = (cards, now) =>
+  cards.length > 0 &&
+  html`<div class="game-cards">${cards.map((card) => renderCard(card, now))}</div>`;
 
 /**
  * @param {CSSStyleDeclaration} style

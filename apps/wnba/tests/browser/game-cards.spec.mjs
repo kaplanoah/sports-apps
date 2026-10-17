@@ -190,7 +190,7 @@ test("a card's lines sit at their spacing, from the tops of their capitals to th
         belowTeam: button.bottom - 1 - readBox(".game-card-name").bottom,
         title: readType("h3"),
         day: readType(".game-card-when"),
-        clock: card.querySelector(".game-card-clock") && readType(".game-card-clock"),
+        clock: card.querySelector(".game-card-now") && readType(".game-card-now"),
         result: card.querySelector(".game-card-result") && readType(".game-card-result"),
         margin: card.querySelector(".game-card-margin") && readType(".game-card-margin"),
         score: readType(".game-card-score"),
