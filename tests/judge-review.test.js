@@ -17,7 +17,7 @@ import {
   readRecords,
   recordFindTry,
 } from "../worker/judge-review.mjs";
-import { FINAL_KIND, KINDS, writeReview } from "../worker/plan-review.mjs";
+import { listStageKinds, writeReview } from "../worker/plan-review.mjs";
 import { SUMMARY_MARKER, readReviewedHead } from "../worker/review-state.mjs";
 
 /**
@@ -288,12 +288,13 @@ const PLAN = {
  * @param {Record<string, any>} [changes] by record name, undefined to leave one out
  */
 function finishStage(stage, areas, changes = {}) {
-  const kinds = (stage === "final" ? [FINAL_KIND] : KINDS).map(({ kind }) => kind);
+  const kinds = listStageKinds(stage).map(({ kind }) => kind);
   /** @type {Record<string, any>} */
   const records = {
     [`post-${stage}.json`]: { weights: [], unjudged: [] },
-    [`across-${stage}.json`]: { duplicates: [], added: [], unjudged: [] },
   };
+  if (areas.length > 1)
+    records[`across-${stage}.json`] = { duplicates: [], added: [], unjudged: [] };
   for (const { area } of areas) {
     records[`check-${stage}-${area}.json`] = { items: [], unjudged: [] };
     for (const kind of kinds)
@@ -472,6 +473,16 @@ test("findings found again that were already on the pull request don't count as 
   assert.match(
     judgeReview({ sha: HEAD, earlierHead: EARLIER, plan, records }).body,
     /posted no findings, and found 2 findings already on it\./,
+  );
+});
+
+test("a review of a push whose checker didn't finish isn't due the last read, though it posted nothing", () => {
+  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
+  const records = finishStage("push", [AREAS[0]]);
+  records.delete(`check-push-${AREAS[0].area}.json`);
+  assert.deepEqual(
+    listDueStages(plan, records).map((due) => due.stage),
+    ["push"],
   );
 });
 

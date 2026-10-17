@@ -278,18 +278,18 @@ export function splitDiffByFile(diff) {
 /**
  * A file's diff from its first hunk on, without the line numbers in its hunks' headers, so a diff
  * that a merge of the base only moved down the file reads the same, while a block moved within
- * the change, which its context shows, reads as changed.
+ * the change, which its context shows, reads as changed. A diff with no hunk, as a binary file's
+ * or a change of mode alone, reads as its header, whose blob hashes and modes change with it.
  * @param {string} fileDiff
  */
 export function describeChange(fileDiff) {
   const lines = fileDiff.split("\n");
   const firstHunk = lines.findIndex((line) => line.startsWith("@@ "));
-  return firstHunk < 0
-    ? ""
-    : lines
-        .slice(firstHunk)
-        .map((line) => line.replace(/^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/, "@@"))
-        .join("\n");
+  if (firstHunk < 0) return lines.slice(1).join("\n");
+  return lines
+    .slice(firstHunk)
+    .map((line) => line.replace(/^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/, "@@"))
+    .join("\n");
 }
 
 /**
@@ -494,11 +494,12 @@ export function writeStage(folder, stage, { numstat, diff, repoFiles }) {
   return { areas, unread: plan.unread };
 }
 
+const SHOW_WHOLE_FILE = `\`git diff ${WHOLE_CHANGE.join(" ")} -- <path>\` shows a file's whole change.`;
+
 const STAGE_WORDS = {
   first: "The first review of this pull request: each area's diffs hold its whole change.",
-  push: "The diffs hold only what the pushes since the last full review changed. `git diff HEAD^1 HEAD -- <path>` shows a file's whole change.",
-  "push-with-base":
-    "The diffs hold what the pushes since the last full review changed, and, where those pushes merged the base and git couldn't set the base's own edits apart, those edits too: judge only what the pull request changed. `git diff HEAD^1 HEAD -- <path>` shows a file's whole change.",
+  push: `The diffs hold only what the pushes since the last full review changed. ${SHOW_WHOLE_FILE}`,
+  "push-with-base": `The diffs hold what the pushes since the last full review changed, and, where those pushes merged the base and git couldn't set the base's own edits apart, those edits too: judge only what the pull request changed. ${SHOW_WHOLE_FILE}`,
   final: "The last read of the whole change: each area's diffs hold its whole change.",
 };
 
@@ -532,10 +533,13 @@ function renderIndex(words, { areas, unread }) {
 
 /**
  * The kinds of reviewer a stage's areas each have: all of them for the first review and a push's,
- * and none when nothing is read.
+ * one that looks for everything for the last read, and none when nothing is read.
  * @param {string} stage
  */
-export const listStageKinds = (stage) => (stage === "first" || stage === "push" ? KINDS : []);
+export function listStageKinds(stage) {
+  if (stage === "first" || stage === "push") return KINDS;
+  return stage === "final" ? [FINAL_KIND] : [];
+}
 
 /**
  * The reviewers' and checkers' matrices for a stage's areas.
@@ -690,7 +694,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     stale: listStaleNames(readDiff(WHOLE_CHANGE).diff, grepRepo, deleted),
   });
   const now = listJobs(plan.areas, listStageKinds(plan.stage));
-  const last = listJobs(plan.final, [FINAL_KIND]);
+  const last = listJobs(plan.final, listStageKinds("final"));
   console.log(`stage=${plan.stage}`);
   console.log(`reviewers=${JSON.stringify(now.reviewers)}`);
   console.log(`checkers=${JSON.stringify(now.checkers)}`);

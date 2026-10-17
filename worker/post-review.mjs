@@ -4,18 +4,19 @@
 // out of its answer. A finding on a line the diff doesn't show goes on its file, and one on a file
 // the diff doesn't show goes in one comment on the pull request. Each finding's comment carries a
 // mark, so a finding already posted in any form, as by an earlier try of this step, isn't posted
-// again, and only new findings count as posted.
-// Usage: node worker/post-review.mjs list <folder> <stage>, after the stage's checkers, writes
-// what they confirmed for the check across areas. node worker/post-review.mjs across <folder>
+// again. A finding counts as posted when this head's review posted it, in this try or an earlier
+// one, and as already on the pull request when an earlier head's review did.
+// Usage: node worker/post-review.mjs list <folder> <stage>, with AREAS set, after the stage's
+// checkers, writes what they confirmed for the check across areas. node worker/post-review.mjs across <folder>
 // <stage>, with STRUCTURED_OUTPUT from that check, keeps its answer. node worker/post-review.mjs
 // post <folder> <stage>, with GH_TOKEN, GITHUB_REPOSITORY, PR, SHA, and AREAS set, posts and
-// prints posted=<count of new findings> for $GITHUB_OUTPUT.
+// prints posted=<count of this head's findings> for $GITHUB_OUTPUT.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { readAnswer } from "./judge-review.mjs";
+import { nameAcrossRecord, nameCheckRecord, namePostRecord, readAnswer } from "./judge-review.mjs";
 import {
   OFF_DIFF_HEADING,
   REVIEWER,
@@ -193,24 +194,27 @@ export function readAcross(structuredOutput) {
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 /**
- * A stage's checkers' records, each with its area, as the checkers leave them in the folder.
+ * A stage's checkers' records, each with its area, as the checkers leave them in the folder; an
+ * area whose checker left none has none.
  * @param {string} folder
  * @param {string} stage
+ * @param {number} areaCount
  */
-export const readChecks = (folder, stage) =>
-  readdirSync(folder).flatMap((name) => {
-    const area = name.match(new RegExp(`^check-${stage}-(\\d+)\\.json$`))?.[1];
-    return area ? [{ area: Number(area), ...readJson(join(folder, name)) }] : [];
+export const readChecks = (folder, stage, areaCount) =>
+  Array.from({ length: areaCount }, (_, index) => index + 1).flatMap((area) => {
+    const path = join(folder, nameCheckRecord(stage, area));
+    return existsSync(path) ? [{ area, ...readJson(path) }] : [];
   });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, folder, stage] = process.argv.slice(2);
   const { env } = process;
-  const acrossPath = join(folder, `across-${stage}.json`);
+  const acrossPath = join(folder, nameAcrossRecord(stage));
+  const areaCount = Number(env.AREAS);
   if (command === "list") {
     writeFileSync(
       join(folder, `confirmed-${stage}.json`),
-      JSON.stringify(listConfirmed(readChecks(folder, stage)), null, 1),
+      JSON.stringify(listConfirmed(readChecks(folder, stage, areaCount)), null, 1),
     );
   } else if (command === "across") {
     const across = readAcross(env.STRUCTURED_OUTPUT);
@@ -218,7 +222,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     writeFileSync(acrossPath, JSON.stringify(across));
   } else if (command === "post") {
     const across = existsSync(acrossPath) ? readJson(acrossPath) : null;
-    if (Number(env.AREAS) > 1 && !across)
+    if (areaCount > 1 && !across)
       throw new Error("The check across areas didn't leave its answer, so nothing was posted.");
     const callGitHub = createGitHub({
       repository: env.GITHUB_REPOSITORY ?? "",
@@ -232,11 +236,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const { weights, repeated } = await postFindings(callGitHub, {
       pullNumber: env.PR ?? "",
       sha: env.SHA ?? "",
-      findings: listToPost(listConfirmed(readChecks(folder, stage)), across),
+      findings: listToPost(listConfirmed(readChecks(folder, stage, areaCount)), across),
       posted: listPosted(comments),
     });
     writeFileSync(
-      join(folder, `post-${stage}.json`),
+      join(folder, namePostRecord(stage)),
       JSON.stringify({ weights, repeated, unjudged: across?.unjudged ?? [] }),
     );
     console.log(`posted=${weights.length}`);

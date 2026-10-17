@@ -719,13 +719,13 @@ jobs:
           retention-days: 14
           overwrite: true
 
-  # When a review of the pushes since the last full read posts nothing, the whole change is read
-  # once more, one reviewer an area for every kind of problem, to find what the earlier reads
-  # missed, and the summary says what it found.
+  # When a review of the pushes since the last full read finishes and posts nothing, the whole
+  # change is read once more, one reviewer an area for every kind of problem, to find what the
+  # earlier reads missed, and the summary says what it found.
   review-final-find:
     name: review-final-find (${{ matrix.name }}, ${{ matrix.kind }})
-    needs: [review-plan, review-post]
-    if: &final-due ${{ !cancelled() && needs.review-plan.outputs.stage == 'push' && needs.review-post.outputs.posted == '0' && needs.review-plan.outputs.final-count > 0 }}
+    needs: [review-plan, review-find, review-check, review-post]
+    if: &final-due ${{ !cancelled() && needs.review-plan.outputs.stage == 'push' && needs.review-find.result == 'success' && needs.review-check.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-plan.outputs.final-count > 0 }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -741,7 +741,7 @@ jobs:
 
   review-final-check:
     name: review-final-check (${{ matrix.name }})
-    needs: [review-plan, review-post, review-final-find]
+    needs: [review-plan, review-find, review-check, review-post, review-final-find]
     if: *final-due
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -770,7 +770,8 @@ jobs:
     steps: *across-steps
 
   review-final-post:
-    needs: [review-plan, review-post, review-final-check, review-final-across]
+    needs:
+      [review-plan, review-find, review-check, review-post, review-final-check, review-final-across]
     if: *final-due
     runs-on: ubuntu-latest
     timeout-minutes: 10

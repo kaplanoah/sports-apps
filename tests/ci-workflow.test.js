@@ -277,10 +277,16 @@ test("no job that runs Claude can write to the pull request", () => {
 test("the last read of the whole change runs only once a review of a push posted nothing", () => {
   assert.match(
     readJob("review-final-find"),
-    /if: &final-due \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.stage == 'push' && needs\.review-post\.outputs\.posted == '0' && needs\.review-plan\.outputs\.final-count > 0 \}\}/,
+    /if: &final-due \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.stage == 'push' && needs\.review-find\.result == 'success' && needs\.review-check\.result == 'success' && needs\.review-post\.outputs\.posted == '0' && needs\.review-plan\.outputs\.final-count > 0 \}\}/,
   );
   assert.match(readJob("review-final-check"), /if: \*final-due/);
   assert.match(readJob("review-final-post"), /if: \*final-due/);
+  for (const job of ["review-final-find", "review-final-check", "review-final-post"])
+    assert.match(
+      readJob(job),
+      /needs:\s*\[review-plan, review-find, review-check, review-post/,
+      job,
+    );
   assert.match(readJob("review-final-find"), /steps: \*find-steps/);
   assert.match(readJob("review-final-check"), /steps: \*check-steps/);
   assert.match(readJob("review-final-across"), /steps: \*across-steps/);

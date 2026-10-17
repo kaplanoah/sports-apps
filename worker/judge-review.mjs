@@ -16,7 +16,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { FINAL_KIND, KINDS } from "./plan-review.mjs";
+import { listStageKinds } from "./plan-review.mjs";
 import {
   SUMMARY_MARKER,
   WEIGHTS,
@@ -133,8 +133,17 @@ const readExecution = (path) => (path && existsSync(path) ? readJson(path) : [])
  */
 const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.areas);
 
+// Each job's record, by the name it's saved under in the review's folder.
 /** @param {string} stage @param {number} area @param {string} kind */
 const nameFindRecord = (stage, area, kind) => `find-${stage}-${area}-${kind}.json`;
+/** @param {string} stage @param {number} area */
+const nameCandidatesRecord = (stage, area) => `candidates-${stage}-${area}.json`;
+/** @param {string} stage @param {number} area */
+export const nameCheckRecord = (stage, area) => `check-${stage}-${area}.json`;
+/** @param {string} stage */
+export const nameAcrossRecord = (stage) => `across-${stage}.json`;
+/** @param {string} stage */
+export const namePostRecord = (stage) => `post-${stage}.json`;
 
 /**
  * Adds a try to a reviewer's record, and returns the parts it still hasn't read and whether its
@@ -248,7 +257,7 @@ function judgeArea(stage, { area, name, files, partsByFile }, records) {
   const unreadFiles = [];
   /** @type {string[]} */
   const missing = [];
-  for (const { kind, role } of stage === "final" ? [FINAL_KIND] : KINDS) {
+  for (const { kind, role } of listStageKinds(stage)) {
     const record = records.get(nameFindRecord(stage, area, kind));
     if (!record || !record.isAnswered) missing.push(`the ${role} of ${name}`);
     unreadFiles.push(
@@ -257,9 +266,9 @@ function judgeArea(stage, { area, name, files, partsByFile }, records) {
       ),
     );
   }
-  const check = records.get(`check-${stage}-${area}.json`);
+  const check = records.get(nameCheckRecord(stage, area));
   const unchecked = check
-    ? listUnchecked(records.get(`candidates-${stage}-${area}.json`) ?? [], check.items)
+    ? listUnchecked(records.get(nameCandidatesRecord(stage, area)) ?? [], check.items)
     : [];
   if (!check) missing.push(`the checker of ${name}`);
   else if (unchecked.length)
@@ -277,12 +286,12 @@ function judgeArea(stage, { area, name, files, partsByFile }, records) {
  */
 function judgeStage(stage, areas, records) {
   const judged = areas.map((area) => judgeArea(stage, area, records));
-  const post = records.get(`post-${stage}.json`) ?? null;
+  const post = records.get(namePostRecord(stage)) ?? null;
   const missing = judged.flatMap((area) => area.missing);
-  if (areas.length > 1 && !records.has(`across-${stage}.json`))
+  if (areas.length > 1 && !records.has(nameAcrossRecord(stage)))
     missing.push("the check across areas");
   if (!post) missing.push("the step that posts the findings");
-  const checks = areas.flatMap(({ area }) => records.get(`check-${stage}-${area}.json`) ?? []);
+  const checks = areas.flatMap(({ area }) => records.get(nameCheckRecord(stage, area)) ?? []);
   const verdicts = checks.flatMap((check) =>
     check.items.map((/** @type {any} */ item) => item.verdict),
   );
@@ -308,14 +317,20 @@ function judgeStage(stage, areas, records) {
 
 const LEADS = {
   first: (/** @type {number} */ areaCount) =>
-    `read the whole change in ${pluralize(areaCount, "area")}, ${KINDS.length} reviewers an area`,
+    `read the whole change in ${pluralize(areaCount, "area")}, ${listStageKinds("first").length} reviewers an area`,
   push: (/** @type {number} */ areaCount, /** @type {string} */ since) =>
     `read what the pushes since ${since.slice(0, 7)} changed, in ${pluralize(areaCount, "area")}`,
 };
 
 /**
+ * Whether a stage read every file and finished every job.
+ * @param {ReturnType<typeof judgeStage>} judged
+ */
+const isStageFinished = (judged) => !judged.unreadFiles.length && !judged.missing.length;
+
+/**
  * The stages the review was due to finish: the one the plan chose, and the last read of the
- * whole change when a review of the pushes since posted nothing.
+ * whole change when a review of the pushes since finished and posted nothing.
  * @param {any} plan
  * @param {Map<string, any>} records
  * @returns {{ stage: string, areas: any[] }[]}
@@ -326,7 +341,8 @@ export function listDueStages(plan, records) {
   const isFinalDue =
     plan.stage === "push" &&
     plan.final.length > 0 &&
-    records.get(`post-${plan.stage}.json`)?.weights.length === 0;
+    isStageFinished(judgeStage(plan.stage, plan.areas, records)) &&
+    records.get(namePostRecord(plan.stage))?.weights.length === 0;
   return isFinalDue ? [...stages, { stage: "final", areas: plan.final }] : stages;
 }
 
@@ -392,7 +408,7 @@ const describeNothingDue = (plan, sha, earlierHead) =>
 export function judgeReview({ sha, earlierHead, plan, records }) {
   const stages = listDueStages(plan, records);
   const judged = stages.map(({ stage, areas }) => judgeStage(stage, areas, records));
-  const isComplete = judged.every((stage) => !stage.unreadFiles.length && !stage.missing.length);
+  const isComplete = judged.every(isStageFinished);
   const reviewedHead = isComplete ? sha : earlierHead;
   const lines = [
     SUMMARY_MARKER,
@@ -432,13 +448,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else if (command === "candidates") {
     const records = listAreaRecords(readRecords(folder), stage, Number(area));
     writeFileSync(
-      join(folder, `candidates-${stage}-${area}.json`),
+      join(folder, nameCandidatesRecord(stage, Number(area))),
       JSON.stringify(gatherCandidates(records), null, 1),
     );
   } else if (command === "check") {
     const answer = readListAnswer(env.STRUCTURED_OUTPUT, "findings");
     if (!answer) throw new Error("The checker gave no answer.");
-    writeFileSync(join(folder, `check-${stage}-${area}.json`), JSON.stringify(answer));
+    writeFileSync(join(folder, nameCheckRecord(stage, Number(area))), JSON.stringify(answer));
   } else if (command === "summary") {
     const callGitHub = createGitHub({
       repository: env.GITHUB_REPOSITORY ?? "",

@@ -213,7 +213,7 @@ test("a stage's checks are read as the checkers leave them, each with its area, 
   writeFileSync(join(folder, "check-final-1.json"), record("final"));
   writeFileSync(join(folder, "candidates-push-1.json"), "[]");
   assert.deepEqual(
-    listConfirmed(readChecks(folder, "push")).map(({ ref, body }) => [ref, body]),
+    listConfirmed(readChecks(folder, "push", 10)).map(({ ref, body }) => [ref, body]),
     [
       ["1.1", "one"],
       ["10.1", "ten"],

@@ -308,6 +308,20 @@ test("a change reads the same wherever a merge of the base moved it, but not onc
   );
 });
 
+test("a binary file a push replaced reads as changed, and one it left alone doesn't", () => {
+  const logo = (/** @type {string} */ blob) =>
+    [
+      "diff --git a/shared/page/networks/abc.png b/shared/page/networks/abc.png",
+      `index 0000000..${blob} 100644`,
+      "Binary files /dev/null and b/shared/page/networks/abc.png differ",
+      "",
+    ].join("\n");
+  assert.deepEqual(listChangedSince(logo("1111111"), logo("2222222")), [
+    "shared/page/networks/abc.png",
+  ]);
+  assert.deepEqual(listChangedSince(logo("1111111"), logo("1111111")), []);
+});
+
 test("the files a push changed are those whose change differs, never those a merge only moved", () => {
   const earlier = diffFile("a.js", [2]) + diffFile("b.js", [1]) + diffFile("gone.js", [1]);
   const now =
@@ -606,6 +620,7 @@ test("the files a push changed compare the reviewed head's change from its own b
 test("the first review and a push's have every kind of reviewer, and a review that reads nothing none", () => {
   assert.equal(listStageKinds("first"), KINDS);
   assert.equal(listStageKinds("push"), KINDS);
+  assert.deepEqual(listStageKinds("final"), [FINAL_KIND]);
   assert.deepEqual(listStageKinds("none"), []);
 });
 
