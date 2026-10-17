@@ -410,20 +410,25 @@ test("the files a change deletes count a renamed file's old path, but not a file
   assert.deepEqual(asked, [["diff", "--name-status", "--find-renames", ...WHOLE_CHANGE]]);
 });
 
-test("a search of the repo returns every line git matches, and none where git finds nothing", () => {
+test("a search of the repo returns every line git matches, each cut short, or none", () => {
   const lines = Array.from({ length: 20 }, (_, index) => `AGENTS.md:${index + 1}:const NAME`);
+  const long = `README.md:1:${"x".repeat(300)} NAME`;
   /** @type {string[][]} */
   const asked = [];
   const hits = grepRepo("NAME", true, (args) => {
     asked.push(args);
-    return `${lines.map((line) => `HEAD:${line}`).join("\n")}\n`;
+    return `${[...lines, long].map((line) => `HEAD:${line}`).join("\n")}\n`;
   });
-  assert.deepEqual(hits, lines);
-  assert.deepEqual(asked, [["grep", "-n", "-wF", "NAME", "HEAD"]]);
-  assert.deepEqual(
-    grepRepo("const\\s+NAME", false, () => null),
-    [],
-  );
+  assert.deepEqual(hits, [...lines, long.slice(0, 220)]);
+  const none = grepRepo("const\\s+NAME", false, (args) => {
+    asked.push(args);
+    return null;
+  });
+  assert.deepEqual(none, []);
+  assert.deepEqual(asked, [
+    ["grep", "-n", "-wF", "NAME", "HEAD"],
+    ["grep", "-n", "-E", "const\\s+NAME", "HEAD"],
+  ]);
 });
 
 test("the pull request's head is the merge commit's second parent", () => {

@@ -375,7 +375,8 @@ export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
 const MOST_STALE_HITS = 15;
 
 /**
- * Each place in the repo that still names a function, constant, or file the change removed.
+ * The first places in the repo that still name each function, constant, or file the change
+ * removed.
  * @param {string} diff
  * @param {(pattern: string, isWord: boolean) => string[]} grep every matching line in the repo, as
  * path:line:text
@@ -679,8 +680,12 @@ const tryGit = (args) => {
   }
 };
 
+// A place keeps its first characters only, enough to show how it names what was removed.
+const HIT_LENGTH = 220;
+
 /**
- * Every line in the repo that matches a pattern, as path:line:text.
+ * Every line in the repo that matches a pattern, as path:line:text cut to its first HIT_LENGTH
+ * characters.
  * @param {string} pattern
  * @param {boolean} isWord whether the pattern is a whole word rather than a regular expression
  * @param {(args: string[]) => string | null} git null where git fails, as grep does with no match
@@ -689,7 +694,7 @@ export const grepRepo = (pattern, isWord, git) =>
   (git(["grep", "-n", isWord ? "-wF" : "-E", pattern, "HEAD"]) ?? "")
     .split("\n")
     .filter(Boolean)
-    .map((hit) => hit.replace(/^HEAD:/, "").slice(0, 220));
+    .map((hit) => hit.replace(/^HEAD:/, "").slice(0, HIT_LENGTH));
 
 /**
  * The range that holds what the pushes since a head changed: from that head merged onto the base
