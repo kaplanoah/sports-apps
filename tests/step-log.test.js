@@ -136,7 +136,7 @@ test("no line holds an address, which holds the page's key, even one kept before
 
 test("a log holds its lines as it logs, reading the device once, and keeps them there as the page leaves the screen", (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
-  const log = createLog();
+  const log = createStepLog({ key: "heldLog", title: "Games list", isWatched: () => false });
   log.watchSteps(
     () => true,
     () => {},
@@ -145,10 +145,10 @@ test("a log holds its lines as it logs, reading the device once, and keeps them 
 
   for (let tap = 1; tap <= 50; tap += 1) log.noteStep(`tap ${tap}`);
   assert.deepEqual(storageCalls, { reads: before.reads + 1, writes: before.writes });
+  assert.equal(stored.has("heldLog"), false);
   hidePage();
 
-  assert.equal(storageCalls.writes, before.writes + onPageHide.length);
-  assert.equal(log.readLines().length, 50);
+  assert.equal(JSON.parse(stored.get("heldLog") ?? "[]").length, 50);
 });
 
 test("a log keeps a steady stream of lines on the device while they still come, as a fling's", (context) => {
