@@ -275,7 +275,7 @@ test("MLB failing is reported", async () => {
   const { requestPitcher } = createTestServer({ status: 503 });
   const response = await requestPitcher("?id=1&season=2026");
   assert.equal(response.status, 502);
-  assert.match((await response.json()).error, /MLB Stats API answered 503/);
+  assert.match((await response.json()).error.message, /MLB Stats API answered 503/);
 });
 
 test("the speeds of the qualified starters come in batches of 30", async () => {

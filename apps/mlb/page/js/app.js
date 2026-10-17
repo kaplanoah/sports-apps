@@ -1,3 +1,4 @@
+import { BACKGROUND_JOBS } from "./background-jobs.js";
 import { renderBracket, watchBracketSpace } from "./bracket-view.js";
 import { listRankedOrder, renderTeamDot } from "./clubs.js";
 import { startCatchUpNote } from "#shared/catch-up-note.js";
@@ -294,7 +295,7 @@ async function boot() {
   watchPresses();
   wireControls();
   session.db = createWorkerStore();
-  showJobStatuses(session.db, ["news", "pitchers"]);
+  showJobStatuses(session.db, BACKGROUND_JOBS);
   drawLastSeen();
   reopenLastSheets();
   startCatchUpNote(session.db, renderStamp);

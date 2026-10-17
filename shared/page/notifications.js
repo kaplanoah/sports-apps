@@ -4,7 +4,9 @@ import { reloadWhenSignedOut } from "./access.js";
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
+import { chooseFailedSyncStatus, isTurnedAway, TOO_MANY_DEVICES } from "./notification-status.js";
 import { registerServiceWorker } from "./service-worker.js";
+import { readWorkerError } from "./worker-error.js";
 
 const NOTES = {
   blockedOnIos:
@@ -15,6 +17,7 @@ const NOTES = {
     "To get notifications on an iPhone, add this page to your Home Screen and open it from there",
   unsupported: "This browser can't show notifications",
   failed: "Couldn't change notifications. Try again in a moment.",
+  tooManyDevices: TOO_MANY_DEVICES,
 };
 
 const SWITCHABLE = new Set(["off", "on", "failed"]);
@@ -73,10 +76,20 @@ function encodeBase64Url(buffer) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/**
+ * The Worker's error, with the code it names.
+ * @param {Response} response
+ */
+async function readPushFailure(response) {
+  const body = await response.json().catch(() => null);
+  const { code, message } = readWorkerError(body, response.status);
+  return Object.assign(new Error(message), { code });
+}
+
 async function requestPush(path, init = {}) {
   const response = await fetch(new URL(path, location.href), { cache: "no-store", ...init });
   reloadWhenSignedOut(response);
-  if (!response.ok) throw new Error(`The Worker answered ${response.status}`);
+  if (!response.ok) throw await readPushFailure(response);
   return response.status === 204 ? null : response.json();
 }
 
@@ -99,12 +112,27 @@ async function saveSubscription(current) {
   });
 }
 
+// A device the Worker turns away never gets a message, so the browser doesn't keep it either, and
+// the switch shows it off, now and on the next visit. A save that fails any other way keeps the
+// subscription, which the next visit saves again.
+async function saveOrForget(current) {
+  try {
+    await saveSubscription(current);
+  } catch (error) {
+    if (isTurnedAway(error)) {
+      await current.unsubscribe().catch(() => {});
+      subscription = null;
+    }
+    throw error;
+  }
+}
+
 async function subscribe(publicKey) {
   subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: decodeBase64Url(publicKey),
   });
-  await saveSubscription(subscription);
+  await saveOrForget(subscription);
 }
 
 // Saving again on every visit restores a subscription the Worker lost, and a new signing key
@@ -114,10 +142,17 @@ async function syncSubscription() {
   const subscribedKey = subscription.options.applicationServerKey;
   if (subscribedKey && encodeBase64Url(subscribedKey) !== publicKey) {
     await subscription.unsubscribe();
+    subscription = null;
     await subscribe(publicKey);
     return;
   }
-  await saveSubscription(subscription);
+  await saveOrForget(subscription);
+}
+
+/** @param {unknown} error */
+function showFailedSync(error) {
+  const shown = chooseFailedSyncStatus(error, !!subscription);
+  if (shown) setStatus(shown.status, shown.note);
 }
 
 async function showBusyDuring(task) {
@@ -141,8 +176,9 @@ async function turnOn() {
   try {
     await subscribe(await fetchPublicKey());
     setStatus("on");
-  } catch {
-    setStatus("failed");
+  } catch (error) {
+    if (isTurnedAway(error)) setStatus("off", NOTES.tooManyDevices);
+    else setStatus("failed");
   }
 }
 
@@ -187,6 +223,5 @@ export async function startNotifications(options = {}) {
     return;
   }
   setStatus(describeStartStatus());
-  // A sync that fails is tried again on the next visit.
-  if (status === "on") syncSubscription().catch(() => {});
+  if (status === "on") syncSubscription().catch(showFailedSync);
 }

@@ -1,7 +1,8 @@
-import { REQUESTS } from "../../page/js/snapshot.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
+import { noteLeagueRead, readKeptDocs } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { nameRosterKey, readTeam } from "./roster.js";
+import { averageTotals, readPerGame, readShare, splitName } from "./season-averages.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
 
 // What a player's sheet shows for a season: her facts from her team's roster that season, her last
@@ -37,21 +38,6 @@ const LEADER_GAMES = 31;
  * @property {boolean} [isShare] whether the rule counts only what she counts, not her games
  * @property {boolean} [isFewestFirst] whether the fewest ranks first, as turnovers do
  */
-
-/**
- * @param {string} total
- * @returns {(row: Record<string, number>) => number | null}
- */
-const readPerGame = (total) => (row) =>
-  row.GP > 0 && row[total] != null ? row[total] / row.GP : null;
-
-/**
- * @param {string} made
- * @param {string} attempted
- * @returns {(row: Record<string, number>) => number | null}
- */
-const readShare = (made, attempted) => (row) =>
-  row[attempted] > 0 ? row[made] / row[attempted] : null;
 
 /** @type {RankedStat[]} */
 const RANKED_STATS = [
@@ -106,6 +92,8 @@ export const TOTALS_COLUMNS = [
   "FTM",
   "FTA",
 ];
+// The totals are read with each player's team too, for her team's Roster and its leading scorers.
+export const TOTALS_FEED_COLUMNS = [...TOTALS_COLUMNS, "TEAM_ID"];
 export const GAME_LOG_COLUMNS = [
   ...TOTALS_COLUMNS.filter((column) => column !== "GP"),
   "TEAM_ID",
@@ -146,14 +134,48 @@ export const nameTeamGameLogRequest = (season, seasonType) =>
   })}`;
 
 /**
- * Every player's totals in a regular season, from the feed the season's averages come from.
+ * Every player's totals in a regular season, which her sheet, her team's Roster, and its leading
+ * scorers are all worked out from.
  * @param {number} season
  */
-export function nameTotalsRequest(season) {
-  const url = new URL(REQUESTS.players(season));
-  url.searchParams.set("PerMode", "Totals");
-  return String(url);
-}
+export const nameTotalsRequest = (season) =>
+  `${WNBA_STATS}/leaguedashplayerstats?${new URLSearchParams({
+    College: "",
+    Conference: "",
+    Country: "",
+    DateFrom: "",
+    DateTo: "",
+    Division: "",
+    DraftPick: "",
+    DraftYear: "",
+    GameScope: "",
+    GameSegment: "",
+    Height: "",
+    LastNGames: "0",
+    LeagueID: "10",
+    Location: "",
+    MeasureType: "Base",
+    Month: "0",
+    OpponentTeamID: "0",
+    Outcome: "",
+    PORound: "0",
+    PaceAdjust: "N",
+    PerMode: "Totals",
+    Period: "0",
+    PlayerExperience: "",
+    PlayerPosition: "",
+    PlusMinus: "N",
+    Rank: "N",
+    Season: String(season),
+    SeasonSegment: "",
+    SeasonType: "Regular Season",
+    ShotClockRange: "",
+    StarterBench: "",
+    TeamID: "0",
+    VsConference: "",
+    VsDivision: "",
+    Weight: "",
+  })}`;
 
 /**
  * Where the store keeps a player's numbers for a season.
@@ -168,13 +190,6 @@ export const nameNumbersKey = (season, id) => `players/${season}-${id}`;
  * @param {number} season
  */
 export const nameRanksKey = (season) => `ranks/${season}`;
-
-// The feeds write a player's name whole; everything after the first space is her last name.
-/** @param {string} name */
-function splitName(name) {
-  const [firstName, ...rest] = String(name).split(" ");
-  return { firstName, lastName: rest.join(" ") };
-}
 
 /**
  * The most games any team has played, which the rule's share of a season counts from.
@@ -314,12 +329,7 @@ export function describeRegularSeason(her, ranks) {
   return {
     games: her.GP,
     gamesNeeded: prorate(ranks.seasonGames, LEADER_GAMES),
-    averages: {
-      points: her.PTS / her.GP,
-      rebounds: her.REB / her.GP,
-      assists: her.AST / her.GP,
-      minutes: her.MIN / her.GP,
-    },
+    averages: averageTotals(her),
     stats: RANKED_STATS.filter((stat) => hasStat(her, stat)).map((stat) =>
       rankStat(her, ranks, stat),
     ),
@@ -490,7 +500,7 @@ function readId(searchParams) {
   return /^\d{1,12}$/.test(id) ? id : null;
 }
 
-/** @typedef {import("./store-docs.js").ReadDoc} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 /**
  * @param {object} options
@@ -573,40 +583,29 @@ export function createPlayerServer({
   }
 
   /**
-   * Her sheet from what the store keeps, or undefined when it doesn't keep the season, or can't be
-   * read.
+   * Her sheet from what the store keeps, undefined when it doesn't keep the season, or can't be
+   * read, and whether the season is the store's current one.
    * @param {{ id: string, team: string, season: number }} asked
    * @param {ReadDoc} readDoc
    */
   async function readPlayerFromStore({ id, team, season }, readDoc) {
-    try {
-      const [ranks, numbers, roster] = await Promise.all([
-        readDoc(nameRanksKey(season)),
-        readDoc(nameNumbersKey(season, id)),
-        readDoc(nameRosterKey(season, team)),
-      ]);
-      return ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined;
-    } catch (error) {
-      console.error(`Reading player ${id} from the store failed: ${describeError(error)}`);
-      return undefined;
-    }
-  }
-
-  /**
-   * Counts a read of the league the store should have spared, which never holds up the sheet.
-   * @param {() => Promise<void>} countLeagueRead
-   */
-  async function noteLeagueRead(countLeagueRead) {
-    try {
-      await countLeagueRead();
-    } catch (error) {
-      console.error(`Counting a player read from the league failed: ${describeError(error)}`);
-    }
+    const kept = await readKeptDocs(readDoc, [
+      nameRanksKey(season),
+      nameNumbersKey(season, id),
+      nameRosterKey(season, team),
+      "live/current",
+    ]);
+    if (!kept) return { player: undefined, isCurrentSeason: false };
+    const [ranks, numbers, roster, current] = kept;
+    return {
+      player: ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined,
+      isCurrentSeason: season === current?.season,
+    };
   }
 
   /**
    * Her sheet from the store, or from the league for a season the store hasn't saved, counted when
-   * the store could have had it.
+   * the season is the store's current one, which the store keeps as it goes.
    * @param {{ id: string, team: string, season: number }} asked
    * @param {ReadDoc} [readDoc]
    * @param {() => Promise<void>} [countLeagueRead]
@@ -614,10 +613,10 @@ export function createPlayerServer({
   async function readPlayer(asked, readDoc, countLeagueRead) {
     if (!readDoc) return readPlayerFromLeague(asked);
     const saved = await readPlayerFromStore(asked, readDoc);
-    if (saved !== undefined) return saved;
+    if (saved.player !== undefined) return saved.player;
     const [player] = await Promise.all([
       readPlayerFromLeague(asked),
-      countLeagueRead && noteLeagueRead(countLeagueRead),
+      saved.isCurrentSeason && countLeagueRead && noteLeagueRead("a player", countLeagueRead),
     ]);
     return player;
   }
@@ -630,17 +629,23 @@ export function createPlayerServer({
    */
   async function servePlayer(url, readDoc, countLeagueRead) {
     const id = readId(url.searchParams);
-    if (!id) return respondJson({ error: "id must be a player's number in the WNBA's stats" }, 400);
+    if (!id)
+      return respondError(
+        400,
+        "invalid_argument",
+        "id must be a player's number in the WNBA's stats",
+      );
     const team = readTeam(url.searchParams);
-    if (!team) return respondJson({ error: "team must name a WNBA team" }, 400);
+    if (!team) return respondError(400, "invalid_argument", "team must name a WNBA team");
     const season = SEASON_PARAM.readSeason(url.searchParams, now());
-    if (season == null) return respondJson({ error: SEASON_PARAM.rule }, 400);
+    if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     try {
       const player = await readPlayer({ id, team, season }, readDoc, countLeagueRead);
-      if (!player) return respondJson({ error: `The WNBA has no player ${id} in ${season}` }, 404);
+      if (!player)
+        return respondError(404, "not_found", `The WNBA has no player ${id} in ${season}`);
       return respondJson(player);
     } catch (error) {
-      return respondJson({ error: `Couldn't read the WNBA: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read the WNBA: ${describeError(error)}`);
     }
   }
 

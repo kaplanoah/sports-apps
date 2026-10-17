@@ -1,8 +1,7 @@
 import * as MLBSnapshot from "../../page/js/snapshot.js";
 import { guessSeasonYear } from "../../page/js/session.js";
-import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS, SEASON_PARAM } from "./mlb.js";
+import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
-import { serveSeasonSnapshot } from "../../../../shared/worker/seasons.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
 const EDGE_CACHE_SECONDS = 15; // under MLB's own 20-second cache
@@ -21,7 +20,7 @@ const SLOW_FEEDS = {
   postseason: { maxAgeMs: HOUR_MS, changesWithGames: true },
 };
 
-// Reads MLB for the page, so every open page shares one trip to MLB at a time. A season before
+// Reads MLB for the store, and reads moments apart share one trip to MLB. A season before
 // the one under way is over, so once it's read whole, it's kept.
 /**
  * @param {object} [options]
@@ -29,7 +28,7 @@ const SLOW_FEEDS = {
  * @param {() => number} [options.now]
  * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} [options.storage]
  */
-export function createSnapshotServer({
+export function createSnapshotLoader({
   fetchImpl = (input, init) => fetch(input, init),
   now = () => Date.now(),
   storage = undefined,
@@ -79,9 +78,5 @@ export function createSnapshotServer({
   const loadSnapshot = (season) =>
     season < guessSeasonYear(now()) ? loadPastSnapshot(season) : loadCurrentSnapshot(season);
 
-  /** @param {URL} url */
-  const serveSnapshot = (url) =>
-    serveSeasonSnapshot(url, { seasonParam: SEASON_PARAM, loadSnapshot, leagueName: "MLB", now });
-
-  return { loadSnapshot, serveSnapshot };
+  return { loadSnapshot };
 }
