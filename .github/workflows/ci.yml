@@ -168,8 +168,8 @@ jobs:
         id: flaky
         if: ${{ !cancelled() && hashFiles('test-results/report.json') != '' }}
         run: echo "found=$(node -p 'require("./test-results/report.json").stats.flaky > 0')" >> "$GITHUB_OUTPUT"
-      # A test that passed only on its retry keeps its failed try's trace, and the workflow Report
-      # flaky tests names it in the issue Flaky browser tests.
+      # A test that passed only on its retry keeps its failed try's trace, and the next nightly run
+      # names it in the issue Flaky browser tests (worker/report-flaky-tests.mjs).
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure() || steps.flaky.outputs.found == 'true'
         with:
@@ -203,11 +203,11 @@ jobs:
   # A browser spec a pull request adds or changes runs ten times over, with no retry, so a test
   # that passes only some of the time fails on the pull request that brings it, rather than on
   # later ones. Only a test the pull request wrote or edited fails it: any other that failed goes
-  # to the issue Flaky browser tests from the workflow Report flaky tests
-  # (worker/judge-burn-in.mjs). Ten runs of every spec a large pull request changes take longer
-  # than one machine's limit, so they're split across machines too, and a machine whose share
-  # holds no test passes. It runs in Playwright's own image, as the webkit job does, so the at-rest
-  # specs repeat in WebKit too, where they've failed most.
+  # to the issue Flaky browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten
+  # runs of every spec a large pull request changes take longer than one machine's limit, so
+  # they're split across machines too, and a machine whose share holds no test passes. It runs in
+  # Playwright's own image, as the webkit job does, so the at-rest specs repeat in WebKit too,
+  # where they've failed most.
   burn-in:
     needs: changed-specs
     if: ${{ !cancelled() && needs.changed-specs.result == 'success' && needs.changed-specs.outputs.specs != '' }}

@@ -38,7 +38,6 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "apps/mlb/tests/browser/page.spec.mjs",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
-    ".github/workflows/flaky-report.yml",
     "eslint.config.mjs",
     "worker/report-flaky-tests.mjs",
     "worker/set-app-key.mjs",

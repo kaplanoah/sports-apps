@@ -55,39 +55,22 @@ test("the nightly run's report can start the routine that fixes flaky tests", ()
 });
 
 // Each report reads the issue's table and writes it back, so two at once would lose one's runs.
-test("every report to the issue Flaky browser tests takes its turn in one group, alone holding the token that writes issues", () => {
-  for (const workflow of ["flaky.yml", "flaky-report.yml"]) {
-    const report = readJob("report", workflow);
-    assert.match(report, /node worker\/report-flaky-tests\.mjs/, workflow);
-    assert.match(
-      report,
-      /concurrency:\n\s+group: flaky-tests-issue\n\s+cancel-in-progress: false/,
-      workflow,
-    );
-    assert.match(report, /issues: write/, workflow);
-    assert.doesNotMatch(
-      readRepoFile(`.github/workflows/${workflow}`).split(/^jobs:$/m)[0],
-      /issues: write/,
-      workflow,
-    );
-  }
-});
-
-// The report holds the routine's token, so it runs the default branch's code, after CI.
-test("a pull request's flaky tests are reported from the default branch, for this repository's branches only", () => {
-  const workflow = readRepoFile(".github/workflows/flaky-report.yml");
-  assert.match(workflow, /on:\n {2}workflow_run:\n {4}workflows: \[CI\]\n {4}types: \[completed\]/);
-  assert.doesNotMatch(workflow, /\bref:/);
-  const report = readJob("report", "flaky-report.yml");
-  assert.match(report, /github\.event\.workflow_run\.event == 'pull_request'/);
-  assert.match(
-    report,
-    /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/,
+test("only the nightly run writes the issue Flaky browser tests, from main's code, reading CI's runs it can list", () => {
+  const writers = WORKFLOWS.filter((workflow) =>
+    /node worker\/report-flaky-tests\.mjs|FLAKY_ROUTINE_TOKEN/.test(
+      readRepoFile(`.github/workflows/${workflow}`),
+    ),
   );
-  assert.match(report, /pattern: burn-in-flaky-\*/);
-  assert.match(report, /run-id: \$\{\{ github\.event\.workflow_run\.id \}\}/);
-  assert.match(report, /--retried "\$\{listed\[@\]\}"/);
-  assert.match(report, /FLAKY_ROUTINE_TOKEN: \$\{\{ secrets\.FLAKY_ROUTINE_TOKEN \}\}/);
+  assert.deepEqual(writers, ["flaky.yml"]);
+  assert.doesNotMatch(readRepoFile(".github/workflows/ci.yml"), /issues: write/);
+  const workflow = readRepoFile(".github/workflows/flaky.yml");
+  assert.doesNotMatch(workflow.split(/^jobs:$/m)[0], /issues: write/);
+  const report = readJob("report", "flaky.yml");
+  assert.match(report, /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' \}\}/);
+  assert.match(report, /permissions:\n\s+contents: read\n\s+actions: read\n\s+issues: write/);
+  assert.match(report, /run: node worker\/report-flaky-tests\.mjs nightly-report\/report\.json/);
+  assert.match(report, /GH_REPO: \$\{\{ github\.repository \}\}/);
+  assert.doesNotMatch(report, /\bref:/);
 });
 
 /** @returns {string[]} the workflow's jobs, by the names they're keyed under */
@@ -165,13 +148,6 @@ test("each job that needs another runs even when one before it was skipped", () 
     return /^ {4}needs:/m.test(readJob(job)) && !/!cancelled\(\)|always\(\)/.test(condition);
   });
   assert.deepEqual(skippedWithTheirChain, []);
-});
-
-// The pull request's own code runs in CI, so nothing there holds the fix routine's token or writes
-// issues: the workflow Report flaky tests does, after CI, from the default branch.
-test("CI never runs the flaky report, holds the fix routine's token, or writes issues", () => {
-  const workflow = readRepoFile(".github/workflows/ci.yml");
-  assert.doesNotMatch(workflow, /report-flaky-tests|FLAKY_ROUTINE_TOKEN|issues: write/);
 });
 
 // GitHub refuses a pull request's diff past 20,000 lines, and git lists a change of any size.

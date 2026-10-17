@@ -1,19 +1,34 @@
 // Keeps one open issue that names each browser test that failed only some of the time, so it's
-// found and fixed rather than retried past on pull requests. Main's nightly runs (with no retry,
-// .github/workflows/flaky.yml), pull requests' runs (where a retry passed), and burn-in's runs of
-// tests a pull request didn't write or edit (worker/judge-burn-in.mjs) all report to it. The
-// issue's body is one table, one row a test, that each report adds its runs to; a comment names
-// each test new to it, and starts the routine that fixes the table's top test; a row goes once its
-// test hasn't failed for a week, and the issue closes once no row is left.
-import { appendFileSync, readFileSync } from "node:fs";
+// found and fixed rather than retried past on pull requests. Each night it adds main's nightly run
+// (with no retry, .github/workflows/flaky.yml), and the CI runs that finished since the last night
+// that reported: pull requests' runs where a retry passed, and burn-in's runs of tests a pull
+// request didn't write or edit (worker/judge-burn-in.mjs), from the artifacts CI keeps. The issue's
+// body is one table, one row a test, that only the nightly run writes, so no two writes ever race
+// and no run's report is lost; a comment names each test new to it, and starts the routine that
+// fixes the table's top test; a row goes once its test hasn't failed for a week, and the issue
+// closes once no row is left.
+// Usage: node worker/report-flaky-tests.mjs <the nightly run's report.json files>
+// with GH_TOKEN, GH_REPO, RUN_URL, GITHUB_REPOSITORY, and GITHUB_RUN_ID set, as Actions sets the
+// last two.
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
 export const ISSUE_TITLE = "Flaky browser tests";
 
 const DAYS_KEPT = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const NIGHTLY_WORKFLOW = "flaky.yml";
+const REPORT_JOB = "report";
+const NIGHTS_LOOKED_BACK = 10;
+// A CI run ends within hours of starting, so one started a day before a window can't end in it.
+const LONGEST_RUN_MS = DAY_MS;
+// CI keeps a run's report only when a test needed its retry or failed, and burn-in's list only when
+// it named a test.
+const RUN_ARTIFACT = /^(?:browser-report|burn-in-flaky)-/;
 const ROUTINE_TIMEOUT_MS = 10000;
 const FAILED_STATUSES = new Set(["failed", "timedOut"]);
 const STATE_PATTERN = /<!-- flaky-tests (.*?) -->/s;
@@ -282,34 +297,148 @@ export async function postReport({
   return `Updated #${open.number}: ${failed.length} tests failed, ${added.length} new. ${started}`;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({
-    options: {
-      retried: { type: "boolean", default: false },
-      listed: { type: "string", multiple: true, default: [] },
-    },
-    allowPositionals: true,
-  });
-  const reports = positionals.map((path) => JSON.parse(readFileSync(path, "utf8")));
-  // --listed names lists of failed tests already sorted out, like burn-in's.
-  const listed = values.listed.map((path) => JSON.parse(readFileSync(path, "utf8")));
-  const failed = mergeFailedTests([
-    listFailedTests(reports, { isRetried: values.retried }),
-    ...listed,
-  ]);
-  if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, `found=${failed.length > 0}\n`);
-  }
-  // A retried run that found nothing leaves the issue alone, so only the nightly drops old rows.
-  if (values.retried && !failed.length) {
-    console.log("No browser test needed its retry.");
-  } else {
-    console.log(
-      await postReport({
-        repository: String(process.env.GITHUB_REPOSITORY),
-        failed,
-        runUrl: String(process.env.RUN_URL),
-      }),
+/** @typedef {ReturnType<typeof createGitHub>} GitHub */
+/** @typedef {{ id: number, names: string[] }} FlakyRun */
+
+/**
+ * When a job of a run began, or null when the run has no such job.
+ * @param {GitHub} github
+ * @param {number | string} runId
+ * @param {(job: any) => boolean} isWanted
+ */
+async function findJobStart(github, runId, isWanted) {
+  const { jobs } = await github(`/actions/runs/${runId}/jobs?per_page=100`);
+  const job = jobs.find(isWanted);
+  return job?.started_at ? new Date(job.started_at) : null;
+}
+
+/** @param {any} job */
+const isReport = (job) => job.name === REPORT_JOB;
+
+/**
+ * The CI runs this night's report takes: those that finished from when the last night's report
+ * that went through began, until this one began. A night whose report failed leaves its runs to
+ * the next, and with no such night it looks back over the days the table keeps.
+ * @param {GitHub} github
+ * @param {{ runId: string, now: Date }} night
+ * @returns {Promise<{ since: Date, until: Date }>}
+ */
+export async function findReportWindow(github, { runId, now }) {
+  const until = (await findJobStart(github, runId, isReport)) ?? now;
+  const { workflow_runs: nights } = await github(
+    `/actions/workflows/${NIGHTLY_WORKFLOW}/runs?event=schedule&per_page=${NIGHTS_LOOKED_BACK}`,
+  );
+  for (const night of nights) {
+    if (String(night.id) === String(runId)) continue;
+    const since = await findJobStart(
+      github,
+      night.id,
+      (job) => isReport(job) && job.conclusion === "success",
     );
+    if (since) return { since, until };
   }
+  return { since: new Date(until.getTime() - DAYS_KEPT * DAY_MS), until };
+}
+
+/**
+ * Whether a CI run finished from `since` until `until`, from a branch of this repository: a
+ * fork's run could hand the table anything.
+ * @param {any} run
+ * @param {{ since: Date, until: Date }} window
+ */
+const isRunToReport = (run, { since, until }) =>
+  run.status === "completed" &&
+  run.head_repository?.id === run.repository?.id &&
+  Date.parse(run.updated_at) >= since.getTime() &&
+  Date.parse(run.updated_at) < until.getTime();
+
+/**
+ * Each CI run in the window that kept a report or burn-in's list, with those artifacts' names.
+ * @param {GitHub} github
+ * @param {{ since: Date, until: Date }} window
+ * @returns {Promise<FlakyRun[]>}
+ */
+export async function listFlakyRuns(github, window) {
+  const earliest = new Date(window.since.getTime() - LONGEST_RUN_MS).toISOString();
+  const runs = await readAllPages(
+    async (path) => (await github(path)).workflow_runs,
+    `/actions/workflows/ci.yml/runs?status=completed&created=>=${earliest}`,
+  );
+  const flakyRuns = [];
+  for (const run of runs.filter((candidate) => isRunToReport(candidate, window))) {
+    const { artifacts } = await github(`/actions/runs/${run.id}/artifacts?per_page=100`);
+    const names = artifacts
+      .filter((artifact) => !artifact.expired && RUN_ARTIFACT.test(artifact.name))
+      .map((artifact) => artifact.name);
+    if (names.length) flakyRuns.push({ id: run.id, names });
+  }
+  return flakyRuns;
+}
+
+/**
+ * Every file of a name under a folder, read as JSON.
+ * @param {string} directory
+ * @param {string} name
+ */
+const readJsonFiles = (directory, name) =>
+  readdirSync(directory, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name === name)
+    .map((entry) => JSON.parse(readFileSync(join(entry.parentPath, entry.name), "utf8")));
+
+/**
+ * The tests a CI run's kept artifacts name: each its retry passed, unless a test failed every
+ * try, and each burn-in found failing that the pull request didn't write.
+ * @param {string} directory the run's artifacts, each in a folder of its own
+ * @returns {TestRuns[]}
+ */
+export const readRunFailures = (directory) =>
+  mergeFailedTests([
+    listFailedTests(readJsonFiles(directory, "report.json"), { isRetried: true }),
+    ...readJsonFiles(directory, "burn-in-flaky.json"),
+  ]);
+
+/**
+ * A CI run's artifacts, each in a folder of its own, downloaded by GitHub's CLI from the
+ * repository GH_REPO names.
+ * @param {FlakyRun} run
+ * @returns {string} the folder that holds them
+ */
+function downloadRun({ id, names }) {
+  const directory = mkdtempSync(join(tmpdir(), `ci-run-${id}-`));
+  execFileSync("gh", [
+    "run",
+    "download",
+    String(id),
+    "--dir",
+    directory,
+    ...names.flatMap((name) => ["--name", name]),
+  ]);
+  return directory;
+}
+
+/**
+ * The tests that failed in the nightly run and in each CI run its window takes.
+ * @param {object} options
+ * @param {any[]} options.nightReports the nightly run's own Playwright JSON reports
+ * @param {GitHub} options.github
+ * @param {{ runId: string, now: Date }} options.night
+ * @param {(run: FlakyRun) => string} [options.download]
+ */
+export async function collectFailedTests({ nightReports, github, night, download = downloadRun }) {
+  const window = await findReportWindow(github, night);
+  const runs = await listFlakyRuns(github, window);
+  return mergeFailedTests([
+    listFailedTests(nightReports),
+    ...runs.map((run) => readRunFailures(download(run))),
+  ]);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const repository = String(process.env.GITHUB_REPOSITORY);
+  const failed = await collectFailedTests({
+    nightReports: process.argv.slice(2).map((path) => JSON.parse(readFileSync(path, "utf8"))),
+    github: createGitHub({ repository, fetchImpl: fetch, env: process.env }),
+    night: { runId: String(process.env.GITHUB_RUN_ID), now: new Date() },
+  });
+  console.log(await postReport({ repository, failed, runUrl: String(process.env.RUN_URL) }));
 }

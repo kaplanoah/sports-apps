@@ -241,10 +241,11 @@ Its findings don't fail the check; answer each one by fixing it or replying.
 
 A pull request from a fork runs without the repo's secrets, so Claude can't review
 it, and it runs the fork's own copy of the workflows, which its author can change
-to pass. In the repo's **Settings > Actions > General**, under **Approval for
-running fork pull request workflows from contributors**, choose **Require
-approval for all external contributors**, so nothing a fork sends runs until
-you've read it and approved its run.
+to pass. The repo's **Settings > Actions > General**, under **Approval for
+running fork pull request workflows from contributors**, is set to **Require
+approval for first-time contributors**. GitHub counts anyone without a commit
+merged into the repo as a first-time contributor, and only the owner merges, so
+nothing a fork sends runs until the owner has read it and approved its run.
 
 To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,

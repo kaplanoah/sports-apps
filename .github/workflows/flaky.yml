@@ -77,21 +77,19 @@ jobs:
             playwright-report/
             test-results/
 
-  # Each report reads the issue's table and writes it back, so this one and each pull request's
-  # (flaky-report.yml) take turns in one group. GitHub keeps one report waiting in it, so a newer
-  # one replaces a report still waiting, whose runs the table never gets. A test new to the issue
-  # starts the routine that fixes flaky tests, through its API trigger.
+  # The one writer of the issue's table, once a night, so no two writes race. It adds this run's
+  # tests and those CI's runs kept since the last night that reported, read from their artifacts
+  # with GitHub's CLI. A test new to the issue starts the routine that fixes flaky tests, through
+  # its API trigger.
   report:
     needs: browser
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
+      actions: read
       issues: write
-    concurrency:
-      group: flaky-tests-issue
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -106,6 +104,7 @@ jobs:
       - name: Name each test that failed in the open issue
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           FLAKY_ROUTINE_URL: ${{ secrets.FLAKY_ROUTINE_URL }}
           FLAKY_ROUTINE_TOKEN: ${{ secrets.FLAKY_ROUTINE_TOKEN }}
