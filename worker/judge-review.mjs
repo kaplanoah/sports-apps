@@ -8,9 +8,10 @@
 // Usage, after each try of a reviewer: node worker/judge-review.mjs find <folder> <stage> <area>
 // <kind>, with EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> and
 // answered=<true|false> for $GITHUB_OUTPUT. Before an area's checker: node
-// worker/judge-review.mjs candidates <folder> <stage> <area>. After it: node
-// worker/judge-review.mjs check <folder> <stage> <area>, with STRUCTURED_OUTPUT; it prints
-// unchecked=<count of cases it left unnamed> for $GITHUB_OUTPUT. Last: node
+// worker/judge-review.mjs candidates <folder> <stage> <area>; it prints count=<candidates> for
+// $GITHUB_OUTPUT. After it, or in its place when there are none: node worker/judge-review.mjs
+// check <folder> <stage> <area>, with STRUCTURED_OUTPUT; it prints unchecked=<count of cases it
+// left unnamed> for $GITHUB_OUTPUT. Last: node
 // worker/judge-review.mjs summary <folder>, with GH_TOKEN, GITHUB_REPOSITORY, PR, and SHA set,
 // which fails when anything due went unread or unchecked.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -266,17 +267,21 @@ export function listUnchecked(candidates, findings) {
 }
 
 /**
- * Keeps a checker's answer as its area's record, and returns the candidates it left unchecked,
- * which the judge counts the same way, so the job fails where the judge would.
+ * Keeps a checker's answer as its area's record, an empty one for an area with no candidates,
+ * which has no checker, and returns the candidates it left unchecked, which the judge counts the
+ * same way, so the job fails where the judge would.
  * @param {string} folder
  * @param {{ stage: string, area: number }} checker
  * @param {string | undefined} structuredOutput
  */
 export function keepCheck(folder, { stage, area }, structuredOutput) {
-  const answer = readListAnswer(structuredOutput, "findings");
+  const candidates = readJson(join(folder, nameCandidatesRecord(stage, area)));
+  const answer = candidates.length
+    ? readListAnswer(structuredOutput, "findings")
+    : { items: [], unjudged: [] };
   if (!answer) throw new Error("The checker gave no answer.");
   writeFileSync(join(folder, nameCheckRecord(stage, area)), JSON.stringify(answer));
-  return listUnchecked(readJson(join(folder, nameCandidatesRecord(stage, area))), answer.items);
+  return listUnchecked(candidates, answer.items);
 }
 
 /**
@@ -502,11 +507,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`unread=${unread.join(" ")}`);
     console.log(`answered=${isAnswered}`);
   } else if (command === "candidates") {
-    const records = listAreaRecords(readRecords(folder), stage, Number(area));
+    const candidates = gatherCandidates(listAreaRecords(readRecords(folder), stage, Number(area)));
     writeFileSync(
       join(folder, nameCandidatesRecord(stage, Number(area))),
-      JSON.stringify(gatherCandidates(records), null, 1),
+      JSON.stringify(candidates, null, 1),
     );
+    console.log(`count=${candidates.length}`);
   } else if (command === "check") {
     const unchecked = keepCheck(folder, { stage, area: Number(area) }, env.STRUCTURED_OUTPUT);
     console.log(`unchecked=${unchecked.length}`);

@@ -251,6 +251,24 @@ test("small areas are read together, and a big one in parts in path order", () =
   );
 });
 
+test("a big area splits between units, never between a file and its test", () => {
+  const areas = listAreas(
+    [
+      { path: "worker/a.mjs", lines: 1500 },
+      { path: "tests/a.test.js", lines: 600 },
+      { path: "worker/b.mjs", lines: 1300 },
+    ],
+    [],
+  );
+  assert.deepEqual(
+    areas.map(({ name, files }) => ({ name, files })),
+    [
+      { name: "tooling, part 1", files: ["worker/a.mjs", "tests/a.test.js"] },
+      { name: "tooling, part 2", files: ["worker/b.mjs"] },
+    ],
+  );
+});
+
 test("a change of any size takes at most twelve areas, each bigger to hold it", () => {
   const files = Array.from({ length: 300 }, (_, index) => ({
     path: `shared/page/file-${String(index).padStart(3, "0")}.js`,

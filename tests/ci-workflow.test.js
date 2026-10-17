@@ -257,8 +257,16 @@ test("the review reads every area in full, checks before it posts, and fails on 
     "a retry judges its whole area again only when the first try gave no answer",
   );
   const check = readJob("review-check");
-  assert.match(check, /node worker\/judge-review\.mjs candidates \.review "\$STAGE" "\$AREA"/);
+  assert.match(
+    check,
+    /node worker\/judge-review\.mjs candidates \.review "\$STAGE" "\$AREA" >> "\$GITHUB_OUTPUT"/,
+  );
   assert.match(check, /run: node worker\/judge-review\.mjs check .* >> "\$GITHUB_OUTPUT"/);
+  assert.match(check, /id: check\n\s+if: steps\.gather\.outputs\.count != '0'/);
+  assert.match(
+    check,
+    /id: keep\n\s+if: steps\.check\.outcome == 'success' \|\| steps\.gather\.outputs\.count == '0'/,
+  );
   assert.match(check, /if: steps\.keep\.outputs\.unchecked != '0'\n\s+run: \|\n.*\n\s+exit 1/);
   const across = readJob("review-across");
   assert.match(across, /node worker\/post-review\.mjs list \.review "\$STAGE"/);

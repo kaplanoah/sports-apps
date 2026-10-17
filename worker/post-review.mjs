@@ -270,11 +270,11 @@ export async function readPostInputs(callGitHub, { folder, stage, areaCount, pul
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, folder, stage] = process.argv.slice(2);
   const { env } = process;
-  const areaCount = readAreaCount(env.AREAS);
   if (command === "list") {
+    const checks = readChecks(folder, stage, readAreaCount(env.AREAS));
     writeFileSync(
       join(folder, nameCheckedRecord(stage)),
-      JSON.stringify(listCheckedFindings(readChecks(folder, stage, areaCount)), null, 1),
+      JSON.stringify(listCheckedFindings(checks), null, 1),
     );
   } else if (command === "across") {
     const across = readAcross(env.STRUCTURED_OUTPUT);
@@ -290,7 +290,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const { findings, posted, across } = await readPostInputs(callGitHub, {
       folder,
       stage,
-      areaCount,
+      areaCount: readAreaCount(env.AREAS),
       pullNumber,
     });
     const { weights, repeated } = await postFindings(callGitHub, {

@@ -1,11 +1,11 @@
 // Splits a pull request's change into areas by what its files are about, each test with the code
-// it tests, so CI's review (the review jobs in ci.yml) has four reviewers read each area in full,
-// each for one kind of problem. The first review reads the whole change. A review after it reads
+// it tests, so CI's review (the review jobs in ci.yml) has a reviewer for each kind of problem in
+// KINDS read each area in full. The first review reads the whole change. A review after it reads
 // only what the pushes since the last full read changed, and when that review finishes and posts
-// nothing, the whole change is read once more, one reviewer an area. A push that changes only what
-// a merge of the base brings in is read by no one, and neither is a run on the head the last full
-// read ended on, as a label's is. A test's recorded data, the lockfile, a binary file, and a
-// drawing or minified library a tool wrote go unread, named in the summary instead.
+// nothing, the whole change is read once more, by FINAL_KIND's reviewer. A push that changes
+// only what a merge of the base brings in is read by no one, and neither is a run on the head the
+// last full read ended on, as a label's is. A test's recorded data, the lockfile, a binary file,
+// and a drawing or minified library a tool wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
 // commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,
@@ -181,8 +181,27 @@ export function splitEvenly(items, measure, count) {
 }
 
 /**
+ * Files in order grouped into units, each code file with the tests beside it, so a split between
+ * parts never falls between them.
+ * @template {{ unit: string }} T
+ * @param {T[]} files
+ * @returns {T[][]}
+ */
+function groupInUnits(files) {
+  /** @type {T[][]} */
+  const units = [];
+  for (const file of files) {
+    const last = units.at(-1);
+    if (last?.[0].unit === file.unit) last.push(file);
+    else units.push([file]);
+  }
+  return units;
+}
+
+/**
  * The areas of the files to read, each test beside its code, an area bigger than so many lines
- * split in even parts in path order, and the small ones read together.
+ * split in even parts in path order, never between a file and its tests, and the small ones read
+ * together.
  * @param {{ path: string, lines: number }[]} files
  * @param {string[]} repoFiles
  * @param {number} areaLines
@@ -192,7 +211,8 @@ function groupInAreas(files, repoFiles, areaLines) {
   const placed = files.map((file) => {
     const tested = isTest(file.path) ? findTestedFile(file.path, changed, repoFiles) : null;
     const name = isTest(file.path) ? nameTestArea(file.path, tested) : nameCodeArea(file.path);
-    return { ...file, name, order: tested ? `${tested}\u0000${file.path}` : file.path };
+    const unit = tested ?? file.path;
+    return { ...file, name, unit, order: tested ? `${tested}\u0000${file.path}` : file.path };
   });
   const names = [...new Set(placed.map((file) => file.name))].sort();
   /** @param {{ lines: number }[]} group */
@@ -213,7 +233,8 @@ function groupInAreas(files, repoFiles, areaLines) {
   return [...byName.filter((area) => !isSmall(area)), ...pooled].flatMap(
     ({ name, files: areaFiles }) => {
       const partCount = Math.max(1, Math.ceil(sum(areaFiles) / areaLines));
-      const parts = splitEvenly(areaFiles, (file) => file.lines, partCount);
+      const units = groupInUnits(areaFiles);
+      const parts = splitEvenly(units, (unit) => sum(unit), partCount).map((group) => group.flat());
       return parts.map((part, index) => ({
         name: parts.length > 1 ? `${name}, part ${index + 1}` : name,
         files: part.map((file) => file.path),

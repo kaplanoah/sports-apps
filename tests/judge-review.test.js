@@ -297,6 +297,13 @@ test("a checker's job counts the cases it left unchecked as the judge does, from
   assert.throws(() => keepCheck(folder, { stage: "first", area: 2 }, ""), /gave no answer/);
 });
 
+test("an area with no candidates keeps an empty check with no checker, which the judge counts as done", () => {
+  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
+  writeFileSync(join(folder, "candidates-first-1.json"), "[]");
+  assert.deepEqual(keepCheck(folder, { stage: "first", area: 1 }, undefined), []);
+  assert.deepEqual(readRecords(folder).get("check-first-1.json"), { items: [], unjudged: [] });
+});
+
 const HEAD = "c".repeat(40);
 const EARLIER = "e".repeat(40);
 

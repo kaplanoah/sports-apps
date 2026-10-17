@@ -560,11 +560,14 @@ jobs:
           path: .review/
           merge-multiple: true
       - name: Gather the area's candidates
+        id: gather
         env:
           AREA: ${{ matrix.area }}
-        run: node worker/judge-review.mjs candidates .review "$STAGE" "$AREA"
+        run: node worker/judge-review.mjs candidates .review "$STAGE" "$AREA" >> "$GITHUB_OUTPUT"
+      # An area whose reviewers found nothing has nothing to check.
       - name: Check the candidates
         id: check
+        if: steps.gather.outputs.count != '0'
         continue-on-error: true
         timeout-minutes: 20
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
@@ -592,12 +595,12 @@ jobs:
             8. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
       - name: Keep the checker's answer
         id: keep
-        if: steps.check.outcome == 'success'
+        if: steps.check.outcome == 'success' || steps.gather.outputs.count == '0'
         env:
           STRUCTURED_OUTPUT: ${{ steps.check.outputs.structured_output }}
           AREA: ${{ matrix.area }}
         run: node worker/judge-review.mjs check .review "$STAGE" "$AREA" >> "$GITHUB_OUTPUT"
-      - if: steps.check.outcome == 'success'
+      - if: steps.keep.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: review-check-${{ env.STAGE }}-${{ matrix.area }}
