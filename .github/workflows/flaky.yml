@@ -78,7 +78,7 @@ jobs:
             test-results/
 
   # The one writer of the issue's table, once a night, so no two writes race. It adds this run's
-  # tests and those CI's runs kept since the last night that reported, read from their artifacts
+  # tests and those of each artifact CI's runs kept that the issue doesn't list as counted, read
   # with GitHub's CLI. A test new to the issue starts the routine that fixes flaky tests, through
   # its API trigger.
   report:

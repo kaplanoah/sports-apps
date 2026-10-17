@@ -209,8 +209,9 @@ async function launchChromium(env) {
 
 /**
  * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
- * broken, up to `attempts` times. Only a page with no address goes unchecked: a browser that
- * doesn't start throws, so the deploy puts the version before back and the watch's run fails.
+ * broken, up to `attempts` times. A page with no address, or whose access code the Worker refuses
+ * or rate-limits, goes unchecked; a browser that doesn't start throws, so the deploy puts the
+ * version before back and the watch's run fails.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel

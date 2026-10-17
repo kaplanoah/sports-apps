@@ -71,21 +71,27 @@ const listTrackedFiles = () =>
     .filter((path) => path && !BINARY_FILES.test(path));
 
 /**
+ * Each secret a text holds, by what it is and the line it's on.
+ * @param {string} text
+ */
+const scan = (text) =>
+  SECRETS.flatMap(({ name, pattern, isPlaceholder }) =>
+    [...text.matchAll(pattern)]
+      .filter((match) => !isPlaceholder?.(match))
+      .map((match) => ({ name, line: text.slice(0, match.index).split("\n").length })),
+  );
+
+/** @param {string} text */
+const nameSecrets = (text) => scan(text).map(({ name }) => name);
+
+/**
  * Each secret a file holds, as "<path>:<line> <name>".
  * @param {string} path
  */
-function listSecretsIn(path) {
-  const text = readFileSync(`${REPO_ROOT}/${path}`, "utf8");
-  const found = [];
-  for (const { name, pattern, isPlaceholder } of SECRETS) {
-    for (const match of text.matchAll(pattern)) {
-      if (isPlaceholder?.(match)) continue;
-      const line = text.slice(0, match.index).split("\n").length;
-      found.push(`${path}:${line} ${name}`);
-    }
-  }
-  return found;
-}
+const listSecretsIn = (path) =>
+  scan(readFileSync(`${REPO_ROOT}/${path}`, "utf8")).map(
+    ({ name, line }) => `${path}:${line} ${name}`,
+  );
 
 test("no tracked file names a real Worker, a page's key, the Cloudflare account, or an API key", () => {
   const found = listTrackedFiles().flatMap(listSecretsIn);
@@ -93,44 +99,45 @@ test("no tracked file names a real Worker, a page's key, the Cloudflare account,
 });
 
 test("the scan knows a real address from a placeholder", () => {
-  const scan = (text) =>
-    SECRETS.flatMap(({ name, pattern, isPlaceholder }) =>
-      [...text.matchAll(pattern)].filter((match) => !isPlaceholder?.(match)).map(() => name),
-    );
-  assert.deepEqual(scan("https://wnba-app.example-subdomain.workers.dev/k3y/ and <key>"), []);
-  assert.deepEqual(scan("https://mlb-app.example.workers.dev/k3y/"), []);
+  assert.deepEqual(
+    nameSecrets("https://wnba-app.example-subdomain.workers.dev/k3y/ and <key>"),
+    [],
+  );
+  assert.deepEqual(nameSecrets("https://mlb-app.example.workers.dev/k3y/"), []);
   const realSubdomain = ["wnba-app", "someone", "workers", "dev"].join(".");
-  assert.deepEqual(scan(`https://${realSubdomain}/k3y/`), ["a Worker's real subdomain"]);
-  assert.deepEqual(scan(`workers.dev/${"a1B2".repeat(8)}/`), ["a page's key in its address"]);
-  assert.deepEqual(scan(`accounts/${"7".repeat(32)}/workers`), ["a Cloudflare account id"]);
-  assert.deepEqual(scan(["sk", "ant", "api03", "a".repeat(20)].join("-")), [
+  assert.deepEqual(nameSecrets(`https://${realSubdomain}/k3y/`), ["a Worker's real subdomain"]);
+  assert.deepEqual(nameSecrets(`workers.dev/${"a1B2".repeat(8)}/`), [
+    "a page's key in its address",
+  ]);
+  assert.deepEqual(nameSecrets(`accounts/${"7".repeat(32)}/workers`), ["a Cloudflare account id"]);
+  assert.deepEqual(nameSecrets(["sk", "ant", "api03", "a".repeat(20)].join("-")), [
     "an Anthropic API key",
   ]);
 });
 
 test("the scan finds an account's own subdomain, a key, an id, and a token wherever they stand", () => {
-  const scan = (text) =>
-    SECRETS.flatMap(({ name, pattern, isPlaceholder }) =>
-      [...text.matchAll(pattern)].filter((match) => !isPlaceholder?.(match)).map(() => name),
-    );
   const accountSubdomain = ["someone", "workers", "dev"].join(".");
-  assert.deepEqual(scan(`https://${accountSubdomain}/`), [
+  assert.deepEqual(nameSecrets(`https://${accountSubdomain}/`), [
     "an account's real workers.dev subdomain",
   ]);
-  assert.deepEqual(scan("the example.workers.dev subdomain"), []);
+  assert.deepEqual(nameSecrets("the example.workers.dev subdomain"), []);
   const key = "a1B2".repeat(8);
-  assert.deepEqual(scan(`APP_KEY=${key}`), ["a page's key"]);
-  assert.deepEqual(scan(`{ "APP_KEY": "${key}" }`), ["a page's key"]);
-  assert.deepEqual(scan(`APP_KEY=${"k".repeat(32)} APP_KEY=k3y`), []);
+  assert.deepEqual(nameSecrets(`APP_KEY=${key}`), ["a page's key"]);
+  assert.deepEqual(nameSecrets(`{ "APP_KEY": "${key}" }`), ["a page's key"]);
+  assert.deepEqual(scan(`[vars]\nAPP_KEY=${key}`), [{ name: "a page's key", line: 2 }]);
+  assert.deepEqual(nameSecrets(`APP_KEY=${"k".repeat(32)} APP_KEY=k3y`), []);
   const accountId = "0123456789abcdef".repeat(2);
-  assert.deepEqual(scan(`CLOUDFLARE_ACCOUNT_ID=${accountId}`), ["a Cloudflare account id"]);
-  assert.deepEqual(scan(`"${"7".repeat(32)}" and /feed/${accountId}.mp3 and ${accountId}-x`), []);
+  assert.deepEqual(nameSecrets(`CLOUDFLARE_ACCOUNT_ID=${accountId}`), ["a Cloudflare account id"]);
+  assert.deepEqual(
+    nameSecrets(`"${"7".repeat(32)}" and /feed/${accountId}.mp3 and ${accountId}-x`),
+    [],
+  );
   const token = "Ab3_".repeat(10);
-  assert.deepEqual(scan(`CLOUDFLARE_API_TOKEN=${token}`), ["a Cloudflare API token"]);
-  assert.deepEqual(scan(`authorization: Bearer ${token}`), ["a Cloudflare API token"]);
-  assert.deepEqual(scan(`Bearer ${"t".repeat(40)} and Bearer t0k`), []);
-  assert.deepEqual(scan(["ghp", "A1b2".repeat(9)].join("_")), ["a GitHub token"]);
-  assert.deepEqual(scan(["github", "pat", "11ABCDEFG0123456789abc", "xyz"].join("_")), [
+  assert.deepEqual(nameSecrets(`CLOUDFLARE_API_TOKEN=${token}`), ["a Cloudflare API token"]);
+  assert.deepEqual(nameSecrets(`authorization: Bearer ${token}`), ["a Cloudflare API token"]);
+  assert.deepEqual(nameSecrets(`Bearer ${"t".repeat(40)} and Bearer t0k`), []);
+  assert.deepEqual(nameSecrets(["ghp", "A1b2".repeat(9)].join("_")), ["a GitHub token"]);
+  assert.deepEqual(nameSecrets(["github", "pat", "11ABCDEFG0123456789abc", "xyz"].join("_")), [
     "a GitHub token",
   ]);
 });
