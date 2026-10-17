@@ -1,6 +1,8 @@
 // Which of a club's games its standings row's Next column shows: its game under way today, from
 // the slate, or else its next game still to start, from its row.
 
+import { isPlayedBy } from "#shared/game-clubs.js";
+
 /**
  * @typedef {{ at?: string, tbd?: boolean, postseason?: boolean }} RowGame a game a standings row
  *   lists still to come
@@ -30,13 +32,6 @@ export function findNextGame(row, now) {
  * @param {boolean} isOut
  */
 export const isNextShown = (next, isOut) => !!next?.at && (!isOut || !!next.postseason);
-
-/**
- * Whether a club plays in a game the slate lists.
- * @param {{ away?: string | null, home?: string | null }} game
- * @param {string} id
- */
-export const isPlayedBy = (game, id) => game.away === id || game.home === id;
 
 /** @param {{ tbd?: boolean, start: string }} game @param {number} now */
 const hasPassedStart = (game, now) => !game.tbd && Date.parse(game.start) <= now;

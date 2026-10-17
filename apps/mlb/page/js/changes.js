@@ -1,5 +1,5 @@
 import { readEasternDay } from "#shared/days.js";
-import { isPlayedBy } from "./next-game.js";
+import { isPlayedBy } from "#shared/game-clubs.js";
 import { sortInScheduleOrder } from "./schedule-order.js";
 import { countSeasonGames, hasWonDivision } from "./snapshot.js";
 

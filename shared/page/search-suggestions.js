@@ -9,6 +9,7 @@
 // games. Runs in the page and in Node, so it uses no DOM.
 
 import { shiftMonth } from "./days.js";
+import { isPlayedBy } from "./game-clubs.js";
 import { nameMonth } from "./search-dates.js";
 import {
   describeCount,
@@ -86,13 +87,6 @@ function findGames(text, context) {
   const search = readSearch(text, context);
   return { search, found: findSearchGames(search, context) };
 }
-
-/**
- * Whether a team plays in a game.
- * @param {import("./game-search.js").SearchGame} game
- * @param {string} team
- */
-const isPlayedBy = (game, team) => game.away === team || game.home === team;
 
 /**
  * When a team next plays, or last did, against another team when one is named, for offering the

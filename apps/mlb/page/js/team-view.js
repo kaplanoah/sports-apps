@@ -4,6 +4,7 @@
 
 import { formatShortDate, readCalendarDate } from "#shared/days.js";
 import { renderGameCards } from "#shared/game-cards.js";
+import { isPlayedBy } from "#shared/game-clubs.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { findNearestGames } from "#shared/nearest-games.js";
 import { formatOrdinal } from "#shared/ordinal.js";
@@ -29,7 +30,6 @@ import {
 } from "./clubs.js";
 import { describeGameLabel, describeInning, describeStart } from "./games-view.js";
 import { renderLeaders } from "./leaders-view.js";
-import { isPlayedBy } from "./next-game.js";
 import {
   DIVISION_ELIMINATION_TITLE,
   MAGIC_NUMBER_TITLE,
