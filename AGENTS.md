@@ -876,6 +876,7 @@ When a step says to go back to an earlier step, continue in order from there.
    Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its comment saying why not.
    A Nit you fix rides a push the PR needs anyway,
    or, when none is left, one last push just before the merge,
+   which on a red change comes before its last deploy to beta,
    and never waits for a later PR or the next change to its file.
    After three reviews in a row with an Important finding, or when a finding you declined comes back, stop and ask the user.
    - If `review` fails, read its summary and the log of the failed `review-find`, `review-check`, `review-across`, or `review-post` job, or its `review-final-` twin, which shows each try's turns and tool calls.
