@@ -236,6 +236,33 @@ test.describe("on a phone, the bracket", () => {
     for (const gap of gaps.between) expect(gap).toBeCloseTo(TIGHTEST_CARD_GAP, 0);
   });
 
+  test("never scrolls down, nor further sideways, once the screen shrinks after it spread its cards", async ({
+    page,
+  }) => {
+    const shortScreen = { width: 375, height: 667 };
+    await page.setViewportSize(shortScreen);
+    await openApp(page);
+    const tree = page.locator(".bracket");
+    const readScrollRoom = () =>
+      tree.evaluate((element) => ({
+        down: element.scrollHeight - element.clientHeight,
+        sideways: element.scrollWidth - element.clientWidth,
+      }));
+    expect((await readCardGaps(page)).between[0]).toBeCloseTo(TIGHTEST_CARD_GAP, 0);
+    const roomOnOpen = await readScrollRoom();
+    expect(roomOnOpen.down).toBe(0);
+
+    await page.setViewportSize({ width: 430, height: 932 });
+    await expect
+      .poll(async () => (await readCardGaps(page)).between[0])
+      .toBeGreaterThan(TIGHTEST_CARD_GAP);
+    await page.setViewportSize(shortScreen);
+    await expect
+      .poll(async () => (await readCardGaps(page)).between[0])
+      .toBeCloseTo(TIGHTEST_CARD_GAP, 0);
+    expect(await readScrollRoom()).toEqual(roomOnOpen);
+  });
+
   test("on the Semifinals, the first round's lines run off the screen's edge without turning at it", async ({
     page,
   }) => {
