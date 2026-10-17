@@ -65,7 +65,7 @@
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
   where a change in a spec outside every test, like an import or a helper,
-  edits them all, and adds any other test that failed to the table in the issue Flaky browser tests (`worker/judge-burn-in.mjs`),
+  edits them all, and the next nightly run adds any other test that failed to the table in the issue Flaky browser tests (`worker/judge-burn-in.mjs`),
   and each night main's browser tests run three times over with no retry and add each test that failed to the table in the open issue Flaky browser tests (`.github/workflows/flaky.yml` and `worker/report-flaky-tests.mjs`),
   which comments on each test new to it and starts the routine that fixes the table's top test,
   through its API trigger, from the `FLAKY_ROUTINE_URL` and `FLAKY_ROUTINE_TOKEN` secrets,
