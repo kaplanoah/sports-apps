@@ -92,15 +92,20 @@ function showOn(index, isSliding) {
   showPillName(findTabList(), part, { isHandoff: isSliding });
 }
 
+// Brings the page up so the parts start just under the pill, when it's further down.
+function scrollUpToPartsTop() {
+  const partsTopScroll = measurePartsTopScroll();
+  if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
+}
+
 // A part newly at rest keeps its place on screen: the page scrolls back by as much as it held the
 // part down.
 /** @param {number} index */
 function restOn(index) {
   const part = readOrder()[index];
   if (part !== restingPart) {
-    const partsTopScroll = measurePartsTopScroll();
     restingPart = part;
-    if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
+    scrollUpToPartsTop();
   }
   followPageScroll();
 }
@@ -129,8 +134,7 @@ export function showSeasonPart(part, { isInstant = false } = {}) {
     return;
   }
   panels.jumpTo(index);
-  const partsTopScroll = measurePartsTopScroll();
-  if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
+  scrollUpToPartsTop();
 }
 
 /**
