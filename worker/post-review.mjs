@@ -69,8 +69,8 @@ export const listCheckedFindings = (checks) =>
 const compareWeights = (one, other) => WEIGHTS.indexOf(one) - WEIGHTS.indexOf(other);
 
 /**
- * Whether a finding can be posted: it has a weight the review knows, a file and a body as text,
- * and a line, however Claude's answer shaped it.
+ * Whether a finding can be posted: it has a weight the review knows, and a file and a body as
+ * text, however Claude's answer shaped it.
  * @param {Finding} finding
  */
 const isPostable = (finding) =>
@@ -78,9 +78,20 @@ const isPostable = (finding) =>
   typeof finding.path === "string" &&
   typeof finding.body === "string" &&
   Boolean(finding.path) &&
-  Boolean(finding.body) &&
-  Number.isInteger(finding.line) &&
-  finding.line > 0;
+  Boolean(finding.body);
+
+/**
+ * Whether a finding names a line it can be posted on, which one about a whole file, or of
+ * another shape, doesn't.
+ * @param {Finding} finding
+ */
+const hasLine = (finding) => Number.isInteger(finding.line) && finding.line > 0;
+
+/**
+ * Where a finding is, as its file and line, or its file alone when it names no line.
+ * @param {Finding} finding
+ */
+const nameSpot = (finding) => (hasLine(finding) ? `${finding.path}:${finding.line}` : finding.path);
 
 /**
  * The weight a finding takes for itself and the repeats it stands in for: the heaviest a checker
@@ -188,25 +199,28 @@ const writeBody = (finding, head, shown = finding.body) =>
 const isRefusedLine = (error) => /** @type {{ status?: number }} */ (error)?.status === 422;
 
 /**
- * Posts a finding on its line, or on its file when GitHub won't take the line, and returns false
- * when GitHub won't take the file either.
+ * Posts a finding on its line, or on its file when it names no line or GitHub won't take it, and
+ * returns false when GitHub won't take the file either.
  * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
  * @param {{ pullNumber: string, sha: string, finding: Finding }} post
  */
 async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
   const comments = `/pulls/${pullNumber}/comments`;
   const { path, line } = finding;
-  try {
-    await callGitHub(comments, {
-      method: "POST",
-      body: { body: writeBody(finding, sha), commit_id: sha, path, line, side: "RIGHT" },
-    });
-    return true;
-  } catch (error) {
-    if (!isRefusedLine(error)) throw error;
+  if (hasLine(finding)) {
+    try {
+      await callGitHub(comments, {
+        method: "POST",
+        body: { body: writeBody(finding, sha), commit_id: sha, path, line, side: "RIGHT" },
+      });
+      return true;
+    } catch (error) {
+      if (!isRefusedLine(error)) throw error;
+    }
   }
   try {
-    const body = writeBody(finding, sha, `(about line ${line}) ${finding.body}`);
+    const shown = hasLine(finding) ? `(about line ${line}) ${finding.body}` : finding.body;
+    const body = writeBody(finding, sha, shown);
     await callGitHub(comments, {
       method: "POST",
       body: { body, commit_id: sha, path, subject_type: "file" },
@@ -245,9 +259,7 @@ export async function postFindings(callGitHub, { pullNumber, sha, findings, post
     const body = [
       OFF_DIFF_HEADING,
       "",
-      ...offDiff.map(
-        (finding) => `- \`${finding.path}:${finding.line}\`: ${writeBody(finding, sha)}`,
-      ),
+      ...offDiff.map((finding) => `- \`${nameSpot(finding)}\`: ${writeBody(finding, sha)}`),
     ].join("\n");
     await callGitHub(`/issues/${pullNumber}/comments`, { method: "POST", body: { body } });
   }

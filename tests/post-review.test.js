@@ -179,9 +179,6 @@ test("a finding of another shape the check across areas added is left out rather
         "a string",
         { weight: "Nit", path: 3, body: "a number for a path" },
         { weight: "Nit", path: "a.js", body: 5 },
-        { weight: "Nit", path: "a.js", body: "no line" },
-        { weight: "Nit", path: "a.js", line: "3", body: "a string for a line" },
-        { weight: "Nit", path: "a.js", line: 0, body: "line zero" },
       ],
       unjudged: [
         null,
@@ -267,6 +264,39 @@ test("each finding goes on its line, or on its file off the diff, or in one comm
       .at(-1)
       ?.body.body.startsWith(
         `${OFF_DIFF_HEADING}\n\n- \`apps/wnba/page/js/app.js:192\`: **Nit** elsewhere`,
+      ),
+  );
+});
+
+test("a finding that names no line goes on its file without one, or off the pull request's files by its file alone", async () => {
+  const { calls, callGitHub } = fakeGitHub(
+    (body) =>
+      body.path === undefined ||
+      (body.subject_type === "file" && body.path !== "apps/wnba/page/js/app.js"),
+  );
+  const checks = [
+    {
+      area: 1,
+      items: [finding({ verdict: "confirmed", weight: "Important", line: 0, body: "whole file" })],
+    },
+  ];
+  const wholeFile = listToPost(listCheckedFindings(checks), null);
+  const offFile = finding({ path: "apps/wnba/page/js/app.js", line: 0, body: "elsewhere" });
+  const result = await postFindings(callGitHub, {
+    pullNumber: "7",
+    sha: SHA,
+    findings: [...wholeFile, offFile],
+    posted: new Map(),
+  });
+  assert.deepEqual(result, { weights: ["Important", "Nit"], repeated: 0 });
+  assert.ok(calls.every(({ body }) => body.line === undefined));
+  assert.match(calls[0].body.body, /^\*\*Important\*\* whole file\n\n<!-- claude-finding/);
+  assert.equal(calls[0].body.subject_type, "file");
+  assert.ok(
+    calls
+      .at(-1)
+      ?.body.body.startsWith(
+        `${OFF_DIFF_HEADING}\n\n- \`apps/wnba/page/js/app.js\`: **Nit** elsewhere`,
       ),
   );
 });
