@@ -31,8 +31,12 @@ export function findNextGame(row, now) {
  */
 export const isNextShown = (next, isOut) => !!next?.at && (!isOut || !!next.postseason);
 
-/** @param {{ away?: string, home?: string }} game @param {string} id */
-const isPlayedBy = (game, id) => game.away === id || game.home === id;
+/**
+ * Whether a club plays in a game the slate lists.
+ * @param {{ away?: string | null, home?: string | null }} game
+ * @param {string} id
+ */
+export const isPlayedBy = (game, id) => game.away === id || game.home === id;
 
 /** @param {{ tbd?: boolean, start: string }} game @param {number} now */
 const hasPassedStart = (game, now) => !game.tbd && Date.parse(game.start) <= now;

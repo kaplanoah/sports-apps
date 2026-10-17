@@ -25,6 +25,7 @@ import { pickReadCards } from "./news-picks.js";
  * @property {SettingRow[]} settings in the order the settings sheet shows them
  * @property {GamePart[]} gameParts the parts of a game's sheet beside a final's Highlights
  * @property {string[]} examples
+ * @property {boolean} isOutKnown whether its list of players says who is out
  */
 
 const ROSTER_SECTION = { key: "roster", name: "Roster" };
@@ -162,6 +163,7 @@ export function composeSearchPages(
     places: [...league.places, ...listSettings(league.settings, isSettingShown)],
     gameParts: [HIGHLIGHTS_PART, ...league.gameParts],
     examples: league.examples,
+    isOutKnown: league.isOutKnown,
     news: { place: NEWS_TAB, stories: listNewestFirst(stories) },
   };
 }

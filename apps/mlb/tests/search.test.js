@@ -460,6 +460,25 @@ const findListedPages = (text) =>
     isTyping: false,
   });
 
+test("asked who is out, search never says a player isn't, since MLB's list of players doesn't say who is", () => {
+  const named = findListedPages("lindor injured");
+  assert.deepEqual(
+    named.rows.map((row) => row.kind === "player" && row.player.lastName),
+    ["Lindor"],
+  );
+  assert.equal(named.read, undefined);
+  const club = findListedPages("mets injured");
+  assert.deepEqual(
+    club.rows.map((row) => row.kind),
+    ["section"],
+  );
+  assert.equal(club.read, undefined);
+  for (const text of ["injured", "out", "injury report"]) {
+    const found = findListedPages(text);
+    assert.deepEqual([found.rows, found.read], [[], undefined], text);
+  }
+});
+
 test("every club's row has its record from the standings, and its record's words list it over its games", () => {
   const mets = Object.values(SNAPSHOT.standings.divisions)
     .flat()

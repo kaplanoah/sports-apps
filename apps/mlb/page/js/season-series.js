@@ -6,6 +6,7 @@ import { formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html } from "#shared/html.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { nameTeam, renderClub } from "./clubs.js";
+import { sortInScheduleOrder } from "./schedule-order.js";
 
 const TITLE = "Season series";
 
@@ -24,16 +25,16 @@ const isMeetingOf = (game, first, second) =>
  * @param {string} home
  */
 const listMeetings = (games, away, home) =>
-  games
-    .filter(
+  sortInScheduleOrder(
+    games.filter(
       (game) =>
         !game.postseason &&
         !game.allStar &&
         game.state === "final" &&
         game.score &&
         isMeetingOf(game, away, home),
-    )
-    .sort((first, second) => Date.parse(first.start) - Date.parse(second.start));
+    ),
+  );
 
 /** @param {any} meeting */
 function readResult(meeting) {

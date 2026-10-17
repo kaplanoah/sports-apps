@@ -7,7 +7,7 @@ import {
   compareStarts,
   hasBothClubs,
   hasClub,
-  isPlayedBy,
+  isFeedGamePlayedBy,
   listScheduledGames,
 } from "./feed-games.js";
 
@@ -109,7 +109,7 @@ function findSeriesId(game, { champions, bestRecords }) {
       if (/Wild Card #[12]/.test(names)) return `${league}_WC2`;
       return champions.has(game.home.id) ? `${league}_WC1` : `${league}_WC2`;
     case "D":
-      if (/4\/5|#1 Seed/.test(names) || (bestRecord && isPlayedBy(game, bestRecord)))
+      if (/4\/5|#1 Seed/.test(names) || (bestRecord && isFeedGamePlayedBy(game, bestRecord)))
         return `${league}_DS1`;
       if (/3\/6|#2 Seed/.test(names) || (bestRecord && hasClub(game))) return `${league}_DS2`;
       return null;
@@ -159,7 +159,7 @@ export function readOfficialField(gamesBySeries, records) {
       seatClub(game.away.id, league, lowerSeed);
     }
     const wildCardGames = [...listSeriesGames("WC1"), ...listSeriesGames("WC2")];
-    const playedWildCard = (id) => wildCardGames.some((game) => isPlayedBy(game, id));
+    const playedWildCard = (id) => wildCardGames.some((game) => isFeedGamePlayedBy(game, id));
     for (const [key, seed] of [
       ["DS1", 1],
       ["DS2", 2],

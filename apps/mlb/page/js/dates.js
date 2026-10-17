@@ -5,7 +5,7 @@ import { addDays, readEasternDay, readPlayingDay } from "#shared/days.js";
 export const readGameDay = (game) =>
   readPlayingDay({ start: game.at, isTimeSet: !game.tbd, leagueDate: game.date });
 
-export const NIGHT_END_HOUR = 6;
+const NIGHT_END_HOUR = 6;
 
 // MLB's day runs through its night games, so before 6am Eastern it's still the night before.
 /** @param {number} ms */

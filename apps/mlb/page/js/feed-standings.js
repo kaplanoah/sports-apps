@@ -2,7 +2,7 @@
 // they project before the postseason's is set.
 // Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 
-import { compareStarts, hasClub, isNumber } from "./feed-games.js";
+import { compareStarts, hasClub, isNumber, listScheduleGames } from "./feed-games.js";
 import { LEAGUES } from "./feed-postseason.js";
 import { MLB_DIVISION, readClubId } from "./mlb-ids.js";
 
@@ -78,7 +78,6 @@ function buildStandingsRow(id, record) {
     wcgb: record.wildCardGamesBack,
     elim: record.eliminationNumber,
     wce: record.wildCardEliminationNumber,
-    magic: null,
     lead: !!record.divisionLeader,
     // MLB's own marker: x a playoff spot, w a wild card, y the division, z a bye.
     clinch: record.clinchIndicator || null,
@@ -139,9 +138,8 @@ function setMagicNumber(rows) {
 export function countScheduledGames(seasonGames) {
   if (!seasonGames) return null;
   const lastListings = new Map();
-  for (const day of seasonGames.dates ?? [])
-    for (const game of day.games ?? [])
-      if (game.gameType === "R") lastListings.set(game.gamePk, game);
+  for (const game of listScheduleGames(seasonGames))
+    if (game.gameType === "R") lastListings.set(game.gamePk, game);
   const counts = new Map();
   for (const game of lastListings.values()) {
     if (game.status?.codedGameState === "C") continue;

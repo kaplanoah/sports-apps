@@ -79,6 +79,7 @@ const LEAGUE_PAGES = {
   ],
   gameParts: [],
   examples: ["Stewart", "Aces roster"],
+  isOutKnown: true,
 };
 
 /**

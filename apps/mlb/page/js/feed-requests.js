@@ -10,6 +10,7 @@ import {
   isHalfInning,
   isLive,
   isNumber,
+  listScheduleGames,
 } from "./feed-games.js";
 import { hasEveryDivision } from "./feed-standings.js";
 
@@ -324,7 +325,7 @@ function findMissingStandingsFields(standings) {
 
 function findMissingGameFields(schedule, rules) {
   if (!Array.isArray(schedule?.dates)) return ["dates"];
-  const games = schedule.dates.flatMap((date) => date.games || []);
+  const games = listScheduleGames(schedule);
   return [
     ...findInvalidFields(schedule.dates, FIELD_RULES.date),
     ...findInvalidFields(games, rules),

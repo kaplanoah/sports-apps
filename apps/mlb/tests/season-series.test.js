@@ -73,3 +73,15 @@ test("clubs that haven't met say so, and a game under way or over, one without b
   assert.equal(renderSeasonSeries({ ...BREWERS_AT_PADRES, away: null }, GAMES), false);
   assert.equal(renderSeasonSeries(BREWERS_AT_PADRES, null), false);
 });
+
+test("a doubleheader's meetings list in game order, even when MLB lists its second game with the earlier start", () => {
+  const meeting = { away: "MIL", home: "SD", date: "2026-05-20", state: "final", doubleheader: 1 };
+  const games = [
+    { ...meeting, id: "2", doubleheader: 2, start: "2026-05-20T20:10:00Z", score: [1, 4] },
+    { ...meeting, id: "1", start: "2026-05-20T21:10:00Z", score: [5, 2] },
+  ];
+  assert.deepEqual(listMeetings(renderSeasonSeries(BREWERS_AT_PADRES, games)), [
+    "May 20 Brewers 5-2 at Padres",
+    "May 20 Padres 4-1 vs Brewers",
+  ]);
+});

@@ -29,6 +29,7 @@ import {
 } from "./clubs.js";
 import { describeGameLabel, describeInning, describeStart } from "./games-view.js";
 import { renderLeaders } from "./leaders-view.js";
+import { isPlayedBy } from "./next-game.js";
 import {
   DIVISION_ELIMINATION_TITLE,
   MAGIC_NUMBER_TITLE,
@@ -256,8 +257,6 @@ function renderPlayoffs(id) {
     renderStatusChip(status),
   );
 }
-
-const isPlayedBy = (game, id) => game.away === id || game.home === id;
 
 // A postseason game whose other club isn't known yet may never be played.
 const hasBothClubs = (game) => Boolean(game.away && game.home);

@@ -209,7 +209,7 @@ export function choosePollDelay(snapshot, now = Date.now()) {
   });
 }
 
-export { countFinals, readGameState } from "./feed-games.js";
+export { countFinals, listScheduleGames, readGameState } from "./feed-games.js";
 export {
   BEST_OF,
   LEAGUES,

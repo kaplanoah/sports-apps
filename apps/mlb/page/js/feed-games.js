@@ -3,9 +3,10 @@
 // Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 
 import { addDays, readEasternDay } from "#shared/days.js";
-import { NIGHT_END_HOUR } from "./dates.js";
+import { isPastMidnight } from "./dates.js";
 import { sortInScheduleOrder } from "./schedule-order.js";
 import { MLB_TEAM, readClubId } from "./mlb-ids.js";
+import { isPlayedBy } from "./next-game.js";
 
 export const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
 
@@ -208,19 +209,14 @@ function summarizeAllStarGame(game) {
 // A suspended game is listed again on the day it resumes; the later listing counts.
 export function listScheduledGames(...responses) {
   const gamesByPk = new Map();
-  for (const response of responses) {
-    for (const day of (response && response.dates) || []) {
-      for (const game of day.games || []) {
-        if (GAME_TYPES.has(game.gameType)) gamesByPk.set(game.gamePk, normalizeGame(game));
-      }
-    }
-  }
+  for (const game of responses.flatMap(listScheduleGames))
+    if (GAME_TYPES.has(game.gameType)) gamesByPk.set(game.gamePk, normalizeGame(game));
   return [...gamesByPk.values()];
 }
 
 export const hasBothClubs = (game) => !!(game.away.id && game.home.id);
 export const hasClub = (game) => !!(game.away.id || game.home.id);
-export const isPlayedBy = (game, club) => game.away.id === club || game.home.id === club;
+export const isFeedGamePlayedBy = (game, club) => game.away.id === club || game.home.id === club;
 export const compareStarts = (first, second) => Date.parse(first.start) - Date.parse(second.start);
 export const compareEnds = (first, second) => Date.parse(first.end) - Date.parse(second.end);
 
@@ -295,12 +291,11 @@ function listClubGames(games, day, summarize) {
   const ahead = sortInScheduleOrder(
     counted.filter((game) => game.state === "pre" && game.date > day),
   );
-  const isListedFor = (game, club) => game.away === club || game.home === club;
   const previousDates = new Set();
   const nextDates = new Set();
   for (const club of Object.values(MLB_TEAM)) {
-    const last = played.filter((game) => isListedFor(game, club)).pop();
-    const first = ahead.find((game) => isListedFor(game, club));
+    const last = played.filter((game) => isPlayedBy(game, club)).pop();
+    const first = ahead.find((game) => isPlayedBy(game, club));
     if (last) previousDates.add(last.date);
     if (first) nextDates.add(first.date);
   }
@@ -313,16 +308,16 @@ function listClubGames(games, day, summarize) {
 // what changes then.
 function buildSlate(games, clubGames, now, pitchers) {
   const summarize = (game) => summarizeGame(game, pitchers);
-  const clock = readEasternDay(now);
+  const { date: easternDate } = readEasternDay(now);
   const playable = games.filter((game) => game.state !== "off" && hasBothClubs(game));
   const listGamesOn = (date) =>
     sortInScheduleOrder(playable.filter((game) => game.date === date).map(summarize));
-  const lastNight = addDays(clock.date, -1);
-  const isNight = clock.hour < NIGHT_END_HOUR;
+  const lastNight = addDays(easternDate, -1);
+  const isNight = isPastMidnight(now);
   const isLastNightUnfinished = playable.some(
     (game) => game.date === lastNight && game.state !== "final",
   );
-  const day = isNight && isLastNightUnfinished ? lastNight : clock.date;
+  const day = isNight && isLastNightUnfinished ? lastNight : easternDate;
   const hasLastNightEnded = isNight && day !== lastNight;
 
   const nextDay = [...new Set(playable.map((game) => game.date))]

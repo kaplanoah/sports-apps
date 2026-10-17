@@ -1,4 +1,5 @@
 import { readEasternDay } from "#shared/days.js";
+import { isPlayedBy } from "./next-game.js";
 import { sortInScheduleOrder } from "./schedule-order.js";
 import { countSeasonGames, hasWonDivision } from "./snapshot.js";
 
@@ -20,8 +21,7 @@ function findClosestRoute(row) {
 // The club's latest final is the one that moved it.
 function findResult(games, club) {
   const game = games.findLast(
-    (candidate) =>
-      candidate.state === "final" && club && (candidate.away === club || candidate.home === club),
+    (candidate) => candidate.state === "final" && club && isPlayedBy(candidate, club),
   );
   if (!game) return null;
   const [awayScore, homeScore] = game.score;

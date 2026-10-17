@@ -101,6 +101,7 @@ const LEAGUE_PAGES = {
     },
   ],
   examples: ["Yamamoto", "Mets roster"],
+  isOutKnown: false,
 };
 
 /**
