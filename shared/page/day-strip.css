@@ -24,7 +24,6 @@
 :root {
   height: 100%;
 }
-/* The Home Screen bar takes its own height off the page's top (chrome.css). */
 :root:has(.view.active > .day-view) body {
   display: flex;
   flex-direction: column;

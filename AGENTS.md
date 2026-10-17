@@ -529,7 +529,7 @@
   from the cards a league's news job keeps,
   in `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through `package.json`'s imports.
   Its `type.css` lists the type roles, `chrome.css` styles the tab bar,
-  settings sheet and its Diagnostics, round dots, Home Screen bar and box,
+  settings sheet and its Diagnostics, round dots, Home Screen welcome and box,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,
   `pager.css` a pill's names and the standings and bracket under one, `day-strip.css` a season's list of days and its strip,
   `game-search.css` the search's view, `game-row.css` lays out a game row and colors an All-Star team's star,
@@ -595,7 +595,7 @@
   Each is a choice made with `createViewerChoice` in `shared/page/device-storage.js`,
   which keeps it as JSON under its key, lists it, and tells the page when another tab changes it, so each tab redraws what it shows.
   A new choice that a viewer would want on their other devices is made the same way;
-  what belongs to one device or browser, like the last tab, the Home Screen bar's dismissal,
+  what belongs to one device or browser, like the last tab, the Home Screen welcome's dismissal,
   or the Diagnostics, isn't a viewer choice and stays out of that list.
 
 ## Adding a league

@@ -192,8 +192,9 @@ says why the Worker couldn't read the league, and `write` names the save that fa
 **5. Save it to the home screen.** On an iPhone, have them open the address
 in Safari and choose **Share > Add to Home Screen**. It then opens full
 screen with its own icon. On a phone, the page shows these steps itself, in a
-bar across the top until it's closed and at the bottom of settings, and on
-Android its **Install** button opens Chrome's own install dialog.
+welcome over the whole screen until the page is added or the viewer goes on in
+the browser, and at the bottom of settings, and on Android its **Install**
+button opens Chrome's own install dialog.
 
 **6. Turn on notifications.** From the home screen icon, have them tap the
 sliders at the top right to open settings, turn on **Notifications**, and allow
