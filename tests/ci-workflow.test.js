@@ -295,7 +295,10 @@ test("the review reads every area in full, checks before it posts, and fails on 
     check.includes(`pattern: ${findArtifact.slice(0, -kind.length)}*\n`),
     "each checker downloads its area's reviewers' records",
   );
-  const acrossArtifact = nameArtifact(nameAcrossRecord(stage)).replace(/[$.{}]/g, "\\$&");
+  const acrossArtifact = nameArtifact(nameAcrossRecord(stage)).replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
   assert.match(
     post,
     new RegExp(

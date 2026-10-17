@@ -325,6 +325,22 @@ test("an area a reviewer left no record for stops rather than counting its cases
   assert.ok(!existsSync(join(folder, "candidates-first-1.json")));
 });
 
+test("the last read's area has only its one reviewer's record to gather", () => {
+  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
+  const answer = { items: [{ claim: "one" }], unjudged: [] };
+  writeFileSync(
+    join(folder, "find-final-1-all.json"),
+    JSON.stringify({ kind: "all", tries: [{ reads: [], answer }] }),
+  );
+  assert.equal(keepCandidates(folder, { stage: "final", area: 1 }), 1);
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(folder, "candidates-final-1.json"), "utf8")).map(
+      (/** @type {{ claim: string }} */ candidate) => candidate.claim,
+    ),
+    ["one"],
+  );
+});
+
 test("an area with no candidates keeps an empty check with no checker, which the judge counts as done", () => {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   writeFileSync(join(folder, "candidates-first-1.json"), "[]");
