@@ -161,6 +161,7 @@ test("under a card whose game is under way, the score, inning, and outs show ins
     snapshot.series[seriesId].next = { at: start, date: "2026-09-24", tbd: false, game: 1 };
   snapshot.slate.today.games.push(
     {
+      id: "NYY-BOS",
       away: "NYY",
       home: "BOS",
       state: "live",
@@ -170,8 +171,18 @@ test("under a card whose game is under way, the score, inning, and outs show ins
       half: "top",
       outs: 1,
     },
-    { away: "PHI", home: "ATL", state: "live", start, score: [4, 1], inning: 5, half: "middle" },
     {
+      id: "PHI-ATL",
+      away: "PHI",
+      home: "ATL",
+      state: "live",
+      start,
+      score: [4, 1],
+      inning: 5,
+      half: "middle",
+    },
+    {
+      id: "SD-CHC",
       away: "SD",
       home: "CHC",
       state: "live",
@@ -218,7 +229,14 @@ const buildFirstPitchSnapshot = (start, slateGame = {}) => {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   for (const seriesId of WILD_CARD_SERIES)
     snapshot.series[seriesId].next = { at: start, date: "2026-09-24", tbd: false, game: 1 };
-  snapshot.slate.today.games.push({ away: "NYY", home: "BOS", state: "pre", start, ...slateGame });
+  snapshot.slate.today.games.push({
+    id: "NYY-BOS",
+    away: "NYY",
+    home: "BOS",
+    state: "pre",
+    start,
+    ...slateGame,
+  });
   return snapshot;
 };
 

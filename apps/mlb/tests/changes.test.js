@@ -201,6 +201,12 @@ test("an elimination names the race and the most wins the club can reach", () =>
   });
 });
 
+test("an elimination counts the most wins from the club's own games, one fewer for a rainout never made up", () => {
+  const before = updateRow(updateRow(CHASE, "BAL", { l: 79 }), "BAL", { scheduled: 161 });
+  const after = updateRow(before, "CWS", { w: 86 });
+  assert.equal(findChaseElimination(before, after).most, 82);
+});
+
 test("of a loss and the chaser's win, the one the standings took in last decided it", () => {
   const lossFirst = updateRow(CHASE, "BAL", { l: 79 });
   assert.equal(

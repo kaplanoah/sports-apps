@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
+import { sortInScheduleOrder } from "../page/js/schedule-order.js";
 import * as MLBSnapshot from "../page/js/snapshot.js";
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import { composeLog, createReading, sortParts } from "../worker/src/readings.js";
@@ -310,6 +312,70 @@ test("each month of the season's games is saved apart from its record, and only 
     ["schedules-2026/2026-10"],
   );
   assert.deepEqual(read("schedules-2026/2026-10").games, october);
+});
+
+test("a read without the standings during the playoffs leaves the playoff games' months and each club's last and next games as they were", async () => {
+  const { store, harness, read, context, clock } = createUpdatingStore({
+    snapshot: WHOLE_SEASON,
+    now: SEASON_NOW,
+  });
+  await store.alarm();
+  const october = read("schedules-2026/2026-10");
+  const september = read("schedules-2026/2026-09");
+  assert.ok(september.games.some((game) => game.postseason));
+  const { previous, next } = read("seasons/2026").slate;
+  assert.ok(next.some((game) => game.postseason));
+
+  const responses = { ...SEASON_GAMES.responses, standings: null };
+  harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: SEASON_NOW });
+  await updateSeasonAgain(store, context, clock);
+  assert.deepEqual(read("schedules-2026/2026-10"), october);
+  assert.deepEqual(read("schedules-2026/2026-09"), september);
+  const slate = read("seasons/2026").slate;
+  assert.deepEqual([slate.previous, slate.next], [previous, next]);
+});
+
+test("a read without the standings on the next day keeps each club's last and next games only where they still come before or after it, and the day before's finals among the last", async () => {
+  const { store, harness, read, context, clock } = createUpdatingStore();
+  await store.alarm();
+  const saved = read("seasons/2026").slate;
+  const nextDay = NOW + 24 * 60 * 60 * 1000;
+  const responses = { ...EVENING.responses, standings: null };
+  harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: nextDay });
+  const today = harness.snapshot.slate.today.date;
+  assert.ok(saved.next.some((game) => game.date === today));
+  const dayBefore = saved.today.games
+    .filter((game) => game.state === "final")
+    .map((game) => ({ date: saved.today.date, ...game }));
+  assert.ok(dayBefore.length > 0);
+  await updateSeasonAgain(store, context, clock);
+
+  const slate = read("seasons/2026").slate;
+  assert.equal(slate.today.date, today);
+  assert.deepEqual(
+    slate.next,
+    saved.next.filter((game) => game.date > today),
+  );
+  assert.ok(slate.previous.every((game) => game.date < today));
+  for (const game of dayBefore)
+    assert.ok(slate.previous.some((kept) => isDeepStrictEqual(kept, game)));
+  assert.deepEqual(slate.previous, sortInScheduleOrder(slate.previous));
+});
+
+test("a read without the season's whole schedule keeps each club's season's games as the record has them", async () => {
+  const { store, harness, read, context, clock } = createUpdatingStore({
+    snapshot: WHOLE_SEASON,
+    now: SEASON_NOW,
+  });
+  await store.alarm();
+  const responses = { ...SEASON_GAMES.responses, seasonGames: null };
+  harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: SEASON_NOW });
+  const yankees = (standings) => standings.divisions["AL East"].find((row) => row.id === "NYY");
+  assert.equal(yankees(harness.snapshot.standings).scheduled, undefined);
+  await updateSeasonAgain(store, context, clock);
+
+  assert.equal(yankees(read("seasons/2026").standings).scheduled, 161);
+  assert.deepEqual(read("seasons/2026").standings, WHOLE_SEASON.standings);
 });
 
 test("a read without the season's whole schedule leaves its months as they were", async () => {

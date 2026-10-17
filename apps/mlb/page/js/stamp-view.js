@@ -1,4 +1,4 @@
-import { findSeriesBetween, isEliminated, nameSeries } from "./bracket.js";
+import { findSeriesBetween, isEliminated } from "./bracket.js";
 import { renderCatchUpLines } from "#shared/catch-up-note.js";
 import { nameDay } from "#shared/days.js";
 import { html } from "#shared/html.js";
@@ -6,24 +6,15 @@ import { fillStamp, renderStampLine, renderStampWhen } from "#shared/stamp.js";
 import { readRanking } from "./kept-on-device.js";
 import { findStandingsRow } from "./race.js";
 import { isFieldSet, session } from "./session.js";
-import { formatStampName, describeLastStamp, describeUpNextGame } from "./stamp.js";
+import { describeLastStamp, describeSeriesNote, describeUpNextGame } from "./stamp.js";
 
 function isAliveInStandings(id) {
   const row = findStandingsRow(id);
   return !row || !(row.elim === "E" && row.wce === "E");
 }
 
-function describeSeriesAfter(game) {
-  const series = findSeriesBetween(session.state, game.away, game.home);
-  if (!series) return "";
-  const high = Math.max(series.winsA, series.winsB);
-  const low = Math.min(series.winsA, series.winsB);
-  const leader = series.winsA > series.winsB ? series.teamA : series.teamB;
-  if (series.winner)
-    return ` \u2014 ${formatStampName(series.winner)} win the ${nameSeries(series.id)} ${high}-${low}`;
-  if (high === low) return ` \u2014 series even ${high}-${low}`;
-  return ` \u2014 ${formatStampName(leader)} now lead ${high}-${low}`;
-}
+const describeSeriesAfter = (game) =>
+  describeSeriesNote(findSeriesBetween(session.state, game.away, game.home));
 
 function buildStampContext() {
   const projected = !isFieldSet();
