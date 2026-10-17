@@ -15,6 +15,7 @@ import {
   listLowContrastText,
   listLowContrastTextAsShown,
 } from "../../../../tests/browser/contrast.mjs";
+import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
 import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -236,6 +237,22 @@ test("tapping the Games tab while it shows goes back to today", async ({ page })
   await page.getByRole("tab", { name: "Games" }).click();
 
   await expect(page.locator('#seasonGames .listed-day[data-day="2026-09-24"]')).toBeInViewport();
+  await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
+    "data-day",
+    "2026-09-24",
+  );
+});
+
+test("tapping the Games tab brings back today at once, even with the page left a pixel from its top", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await page.locator('#seasonGames .day-cell[data-day="2026-06-10"]').click();
+  await expect(page.locator('#seasonGames .listed-day[data-day="2026-06-10"]')).toBeInViewport();
+  expect(await leavePagePixelDown(page)).toBe(1);
+
+  await page.getByRole("tab", { name: "Games" }).click();
+
   await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
     "data-day",
     "2026-09-24",
