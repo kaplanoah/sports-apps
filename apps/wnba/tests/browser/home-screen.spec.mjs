@@ -46,6 +46,14 @@ const CONTINUE = { name: "Continue in browser" };
 /** @param {import("@playwright/test").Page} page */
 const listWelcomeSteps = (page) => page.locator(`${WELCOME} .welcome-steps > li:visible`);
 
+/**
+ * Taps a theme where Safari loads the page again for the pick, as a check would wait to see the
+ * radio checked on the page the pick replaced.
+ * @param {import("@playwright/test").Locator} choices
+ * @param {string} name
+ */
+const pickReloadingTheme = (choices, name) => choices.getByRole("radio", { name }).click();
+
 const PICK_STEP = "Pick your theme You can change it later in Settings System Maple Walnut";
 
 test.describe("on an iPhone, in the browser", () => {
@@ -220,7 +228,7 @@ test.describe("on an iPhone, in the browser", () => {
     await openApp(page, { isShowingWelcome: true });
     await expect(page.locator(WELCOME)).toBeVisible();
     await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
-    await page.locator(WELCOME).getByRole("radio", { name: "Walnut" }).check();
+    await pickReloadingTheme(page.locator(WELCOME), "Walnut");
     await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("dark");
     await expect.poll(() => page.evaluate(() => "isBeforePick" in window)).toBe(false);
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -252,7 +260,7 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator("#stamp")).toBeVisible();
     await openSettings(page);
     await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
-    await page.locator("#settingsDialog").getByRole("radio", { name: "Walnut" }).check();
+    await pickReloadingTheme(page.locator("#settingsDialog"), "Walnut");
     await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("dark");
     await expect.poll(() => page.evaluate(() => "isBeforePick" in window)).toBe(false);
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -274,7 +282,7 @@ test.describe("on an iPhone, in the browser", () => {
     const otherTab = await context.newPage();
     await openApp(otherTab);
     await openSettings(otherTab);
-    await otherTab.locator("#settingsDialog").getByRole("radio", { name: "Walnut" }).check();
+    await pickReloadingTheme(otherTab.locator("#settingsDialog"), "Walnut");
     await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("dark");
     await expect.poll(() => page.evaluate(() => "isBeforePick" in window)).toBe(false);
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
