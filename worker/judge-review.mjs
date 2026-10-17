@@ -349,7 +349,7 @@ function judgeStage(stage, areas, records) {
 
 const LEADS = {
   first: (/** @type {number} */ areaCount) =>
-    `read the whole change in ${pluralize(areaCount, "area")}, ${listStageKinds("first").length} reviewers an area`,
+    `read the whole change in ${pluralize(areaCount, "area")}, ${pluralize(listStageKinds("first").length, "reviewer")} an area`,
   push: (/** @type {number} */ areaCount, /** @type {string} */ since) =>
     `read what the pushes since ${since.slice(0, 7)} changed, in ${pluralize(areaCount, "area")}`,
 };
@@ -390,7 +390,7 @@ function describeStage(judged, { stage, areas, sha, since }) {
   const found = `${describeFound(judged.weights)}${repeated}`;
   const lines = [
     stage === "final"
-      ? `Then it read the whole change once more, one reviewer an area, to find what the earlier reads missed: ${found}.`
+      ? `Then it read the whole change once more, ${pluralize(listStageKinds("final").length, "reviewer")} an area, to find what the earlier reads missed: ${found}.`
       : `Claude reviewed ${sha}: it ${LEADS[/** @type {"first" | "push"} */ (stage)](areas.length, since ?? "")}, and posted ${found}.`,
     "",
     `Checked: the checkers turned down ${judged.rejected} of ${pluralize(judged.checked, "candidate")} the reviewers listed, after merging repeats.`,

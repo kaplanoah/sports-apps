@@ -237,10 +237,10 @@ areas by what the files are about, has four reviewers read each area in full,
 each for one kind of problem, checks every case they list against the code,
 comments on each finding's line, and keeps one summary comment up to date. The
 first review reads the whole change, and each review after it reads what changed
-since the last review that finished. The review is one of the checks that must pass, so a review that
-can't run, or that left a changed file unread, blocks the merge. Its findings
-don't fail the check; answer all of a review's findings in one push, by fixing
-each or replying.
+since the last review that finished. The review is one of the checks that must
+pass, so a review that can't run, or that left a changed file unread, blocks the
+merge. Its findings don't fail the check; answer all of a review's findings in
+one push, by fixing each or replying.
 
 A pull request from a fork runs without the repo's secrets, so Claude can't review
 it, and it runs the fork's own copy of the workflows, which its author can change

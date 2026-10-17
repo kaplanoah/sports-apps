@@ -13,6 +13,7 @@ import {
   readAcross,
   readAreaCount,
   readChecks,
+  readPostInputs,
 } from "../worker/post-review.mjs";
 import { OFF_DIFF_HEADING, writeFindingMark } from "../worker/review-state.mjs";
 
@@ -79,6 +80,28 @@ test("the check across areas drops only the later repeats it names, and adds wha
   assert.deepEqual(
     listToPost(listConfirmed(CHECKS), across).map((item) => item.body),
     ["a bug", "can't settle", "spans two areas"],
+  );
+});
+
+test("a repeat group the check across areas got wrong never drops a finding nothing else stands in for", () => {
+  const confirmed = listConfirmed(CHECKS);
+  const posted = (/** @type {string[][]} */ duplicates) =>
+    listToPost(confirmed, { duplicates, added: [], unjudged: [] }).map((item) => item.body);
+  assert.deepEqual(posted([["9.9", "1.1"]]), ["a bug", "can't settle", "a nit"]);
+  assert.deepEqual(posted([["1.1", "1.1"]]), ["a bug", "can't settle", "a nit"]);
+  assert.deepEqual(
+    posted([
+      ["1.1", "2.2"],
+      ["2.2", "1.1"],
+    ]),
+    ["can't settle", "a nit"],
+  );
+  assert.deepEqual(
+    posted([
+      ["2.1", "1.1"],
+      ["1.1", "2.2"],
+    ]),
+    ["a bug", "can't settle"],
   );
 });
 
@@ -226,4 +249,37 @@ test("a stage's count of areas must be named, so a job that lost it stops rather
   assert.equal(readAreaCount("3"), 3);
   for (const areas of [undefined, "", "0", "two", "1.5"])
     assert.throws(() => readAreaCount(areas), /AREAS must name how many areas/, String(areas));
+});
+
+test("the posting step reads the marks of findings off the pull request's files, and waits for the check across areas", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "post-review-"));
+  const offFile = finding({ path: "apps/wnba/page/js/app.js", body: "elsewhere" });
+  writeFileSync(
+    join(folder, "check-push-1.json"),
+    JSON.stringify({
+      items: [{ ...offFile, ids: ["bugs-1"], verdict: "confirmed" }],
+      unjudged: [],
+    }),
+  );
+  const offDiffComment = {
+    user: { login: "github-actions[bot]" },
+    body: `${OFF_DIFF_HEADING}\n\n- \`apps/wnba/page/js/app.js:12\`: **Nit** elsewhere\n\n${writeFindingMark(nameFinding(offFile), EARLIER)}`,
+  };
+  const callGitHub = async (/** @type {string} */ path) =>
+    path.startsWith("/issues/7/comments") ? [offDiffComment] : [];
+  const read = await readPostInputs(callGitHub, {
+    folder,
+    stage: "push",
+    areaCount: 1,
+    pullNumber: "7",
+  });
+  assert.deepEqual(
+    read.findings.map((item) => item.body),
+    ["elsewhere"],
+  );
+  assert.deepEqual([...(read.posted.get(nameFinding(offFile)) ?? [])], [EARLIER]);
+  await assert.rejects(
+    readPostInputs(callGitHub, { folder, stage: "push", areaCount: 2, pullNumber: "7" }),
+    /check across areas didn't leave its answer/,
+  );
 });

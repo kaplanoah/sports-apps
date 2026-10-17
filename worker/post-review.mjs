@@ -58,14 +58,39 @@ export const listConfirmed = (checks) =>
     );
 
 /**
- * What a stage posts: every confirmed finding but the later ones of each group of repeats the
- * check across areas named, with what it added, weightiest first.
+ * The confirmed refs the check across areas named as repeats of another. Each group keeps its
+ * first confirmed ref that no earlier group dropped, and drops its other confirmed refs but any
+ * an earlier group kept, so a ref it got wrong, repeated, or crossed with another group never
+ * drops a finding that nothing else stands in for.
+ * @param {string[][]} groups
+ * @param {Set<string>} confirmedRefs
+ */
+function listRepeats(groups, confirmedRefs) {
+  /** @type {Set<string>} */
+  const kept = new Set();
+  /** @type {Set<string>} */
+  const dropped = new Set();
+  for (const group of groups) {
+    const [lead, ...rest] = [...new Set(group)].filter(
+      (ref) => confirmedRefs.has(ref) && !dropped.has(ref),
+    );
+    if (!lead) continue;
+    kept.add(lead);
+    for (const ref of rest) if (!kept.has(ref)) dropped.add(ref);
+  }
+  return dropped;
+}
+
+/**
+ * What a stage posts: every confirmed finding but the repeats the check across areas named, with
+ * what it added, weightiest first.
  * @param {(Finding & { ref?: string })[]} confirmed
  * @param {Across | null} across
  * @returns {Finding[]}
  */
 export function listToPost(confirmed, across) {
-  const repeats = new Set(across?.duplicates.flatMap((group) => group.slice(1)) ?? []);
+  const confirmedRefs = new Set(confirmed.flatMap((finding) => finding.ref ?? []));
+  const repeats = listRepeats(across?.duplicates ?? [], confirmedRefs);
   return [
     ...confirmed.filter((finding) => !repeats.has(finding.ref ?? "")),
     ...(across?.added ?? []),
@@ -224,10 +249,34 @@ export const readChecks = (folder, stage, areaCount) =>
     return existsSync(path) ? [{ area, ...readJson(path) }] : [];
   });
 
+/**
+ * What a stage's posting step reads: what its checkers confirmed, less the repeats the check
+ * across areas named, and every finding already on the pull request, in a review comment or in
+ * the one comment for files it doesn't change. A stage of more than one area posts nothing until
+ * the check across areas has left its answer.
+ * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
+ * @param {{ folder: string, stage: string, areaCount: number, pullNumber: string }} stage
+ */
+export async function readPostInputs(callGitHub, { folder, stage, areaCount, pullNumber }) {
+  const acrossPath = join(folder, nameAcrossRecord(stage));
+  /** @type {Across | null} */
+  const across = existsSync(acrossPath) ? readJson(acrossPath) : null;
+  if (areaCount > 1 && !across)
+    throw new Error("The check across areas didn't leave its answer, so nothing was posted.");
+  const comments = [
+    ...(await readAllPages(callGitHub, `/pulls/${pullNumber}/comments`)),
+    ...(await readAllPages(callGitHub, `/issues/${pullNumber}/comments`)),
+  ];
+  return {
+    findings: listToPost(listConfirmed(readChecks(folder, stage, areaCount)), across),
+    posted: listPosted(comments),
+    across,
+  };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, folder, stage] = process.argv.slice(2);
   const { env } = process;
-  const acrossPath = join(folder, nameAcrossRecord(stage));
   const areaCount = readAreaCount(env.AREAS);
   if (command === "list") {
     writeFileSync(
@@ -237,25 +286,25 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else if (command === "across") {
     const across = readAcross(env.STRUCTURED_OUTPUT);
     if (!across) throw new Error("The check across areas gave no answer.");
-    writeFileSync(acrossPath, JSON.stringify(across));
+    writeFileSync(join(folder, nameAcrossRecord(stage)), JSON.stringify(across));
   } else if (command === "post") {
-    const across = existsSync(acrossPath) ? readJson(acrossPath) : null;
-    if (areaCount > 1 && !across)
-      throw new Error("The check across areas didn't leave its answer, so nothing was posted.");
     const callGitHub = createGitHub({
       repository: env.GITHUB_REPOSITORY ?? "",
       fetchImpl: fetch,
       env,
     });
-    const comments = [
-      ...(await readAllPages(callGitHub, `/pulls/${env.PR}/comments`)),
-      ...(await readAllPages(callGitHub, `/issues/${env.PR}/comments`)),
-    ];
+    const pullNumber = env.PR ?? "";
+    const { findings, posted, across } = await readPostInputs(callGitHub, {
+      folder,
+      stage,
+      areaCount,
+      pullNumber,
+    });
     const { weights, repeated } = await postFindings(callGitHub, {
-      pullNumber: env.PR ?? "",
+      pullNumber,
       sha: env.SHA ?? "",
-      findings: listToPost(listConfirmed(readChecks(folder, stage, areaCount)), across),
-      posted: listPosted(comments),
+      findings,
+      posted,
     });
     writeFileSync(
       join(folder, namePostRecord(stage)),

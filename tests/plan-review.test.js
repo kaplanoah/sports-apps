@@ -573,16 +573,22 @@ test("more names than areas allow gives each its own area, rather than splitting
 });
 
 test("areas split into fewer parts once their parts would pass twelve", () => {
-  const files = ["apps/mlb/page", "apps/wnba/page", "shared/page", "shared/worker"].flatMap(
-    (folder) =>
-      Array.from({ length: 6 }, (_, index) => ({
-        path: `${folder}/file-${index}.js`,
-        lines: 1000,
-      })),
+  const folders = [
+    "apps/mlb/page/js",
+    "apps/mlb/worker/src",
+    "apps/wnba/page/js",
+    "apps/wnba/worker/src",
+    "shared/page",
+    "shared/worker",
+    "worker",
+  ];
+  const files = folders.flatMap((folder) =>
+    Array.from({ length: 3 }, (_, index) => ({ path: `${folder}/file-${index}.js`, lines: 700 })),
   );
   const areas = listAreas(files, []);
-  assert.ok(areas.length <= 12, String(areas.length));
-  assert.equal(areas.flatMap((area) => area.files).length, 24);
+  assert.equal(areas.length, 7);
+  assert.ok(areas.every((area) => !area.name.includes(", part ")));
+  assert.equal(areas.flatMap((area) => area.files).length, 21);
 });
 
 test("equal items still make no more groups than asked for", () => {

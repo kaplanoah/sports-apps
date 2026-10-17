@@ -475,7 +475,7 @@ test("a review of a push that finished and posted nothing is due the last read o
   );
   assert.match(
     body,
-    /Then it read the whole change once more, one reviewer an area, to find what the earlier reads missed: 1 finding \(1 Nit\)\./,
+    /Then it read the whole change once more, 1 reviewer an area, to find what the earlier reads missed: 1 finding \(1 Nit\)\./,
   );
 });
 

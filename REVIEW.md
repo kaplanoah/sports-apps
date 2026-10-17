@@ -78,7 +78,7 @@ Don't run the tests: CI runs them all.
 ## How to report
 
 In CI, each area's reviewers each look for one kind of problem and list every case they find,
-a checker confirms each against the code before anything is posted, and a step posts what it confirmed.
+a checker confirms each against the code before anything is posted, and a step posts what the checkers confirmed or left unsure.
 
 - List every case you find, not a sample, and each place it shows.
   Include one you're unsure of, with your confidence, rather than leaving it out.
