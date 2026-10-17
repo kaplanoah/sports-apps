@@ -241,6 +241,22 @@ test("each finding goes on its line, or on its file off the diff, or in one comm
   );
 });
 
+test("a finding listed twice in one run is posted and counted once, at the first one's weight", async () => {
+  const { calls, callGitHub } = fakeGitHub(() => true);
+  const result = await postFindings(callGitHub, {
+    pullNumber: "7",
+    sha: SHA,
+    findings: [
+      finding({ weight: "Important", line: 12, body: "said twice" }),
+      finding({ weight: "Nit", line: 30, body: "said twice" }),
+    ],
+    posted: new Map(),
+  });
+  assert.deepEqual(result, { weights: ["Important"], repeated: 0 });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.line, 12);
+});
+
 test("a refusal that isn't about the line stops the step, so a re-run posts the finding once", async () => {
   const { calls, callGitHub } = fakeGitHub(() => false, 502);
   await assert.rejects(

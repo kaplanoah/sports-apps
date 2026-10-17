@@ -490,7 +490,7 @@ jobs:
         run: node worker/judge-review.mjs find .review "$STAGE" "$AREA" "$KIND" >> "$GITHUB_OUTPUT"
       - name: Review what's left
         id: again
-        if: ${{ !cancelled() && (steps.first.outputs.unread != '' || steps.first.outputs.answered != 'true') }}
+        if: &retry-due ${{ !cancelled() && (steps.first.outputs.unread != '' || steps.first.outputs.answered != 'true') }}
         continue-on-error: true
         timeout-minutes: 15
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
@@ -511,7 +511,7 @@ jobs:
             5. Post nothing. End with your answer: each case, on a line the diff changes, and each file you read but couldn't judge from the code, and why.
       - name: Find what's still unread
         id: last
-        if: ${{ !cancelled() && (steps.first.outputs.unread != '' || steps.first.outputs.answered != 'true') }}
+        if: *retry-due
         env:
           EXECUTION_FILE: ${{ steps.again.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.again.outputs.structured_output }}
@@ -623,7 +623,7 @@ jobs:
   # for the posting step. A change of one area needs none.
   review-across:
     needs: [review-plan, review-check]
-    if: ${{ !cancelled() && needs.review-plan.outputs.areas > 1 }}
+    if: ${{ !cancelled() && needs.review-check.result != 'skipped' && needs.review-plan.outputs.areas > 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -766,7 +766,7 @@ jobs:
 
   review-final-across:
     needs: [review-plan, review-final-check]
-    if: ${{ !cancelled() && needs.review-final-check.result == 'success' && needs.review-plan.outputs.final-areas > 1 }}
+    if: ${{ !cancelled() && needs.review-final-check.result != 'skipped' && needs.review-plan.outputs.final-areas > 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

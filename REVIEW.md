@@ -5,7 +5,9 @@ AGENTS.md holds the rules the code keeps; this file says how to check a change a
 
 ## Read all of it
 
-- Read every changed file's diff in full.
+- Read in full every diff your review hands you:
+  the whole change in a first review and in the last read of it,
+  and what the pushes since the last finished review changed in a review of a later push.
   A recorded fixture (`tests/fixtures/`) or `package-lock.json` needs only its name and size,
   and whether a test reads it.
 - Read past the diff: each caller of a function the change touches,

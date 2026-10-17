@@ -414,11 +414,31 @@ export function listStaleNames(diff, grep, deletedFiles) {
     !grep(`(function\\s*\\*?\\s*|const\\s+|let\\s+|class\\s+)${name}\\b`, false).some((hit) =>
       /\.m?js:/.test(hit),
     );
-  const names = [...removed].filter((name) => !added.has(name) && isGone(name));
-  const files = deletedFiles.map((path) => basename(path));
-  return [...names, ...files].flatMap((name) => {
-    const hits = grep(name, true).slice(0, MOST_STALE_HITS);
-    return hits.length ? [{ name, hits }] : [];
+  const names = [...removed]
+    .filter((name) => !added.has(name) && isGone(name))
+    .map((name) => ({ name, hits: grep(name, true) }));
+  const files = deletedFiles.map((path) => ({
+    name: basename(path),
+    hits: grep(basename(path), true).filter((hit) => mayNameFile(hit, path)),
+  }));
+  return [...names, ...files].flatMap(({ name, hits }) =>
+    hits.length ? [{ name, hits: hits.slice(0, MOST_STALE_HITS) }] : [],
+  );
+}
+
+/**
+ * Whether a place the search found may name a deleted file: some path in its text that the
+ * file's path ends with, rather than only another file's of the same name.
+ * @param {string} hit path:line:text
+ * @param {string} path the deleted file's
+ */
+function mayNameFile(hit, path) {
+  const text = hit.replace(/^[^:]*:\d+:/, "");
+  const name = basename(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const mentions = text.match(new RegExp(`[\\w./-]*${name}(?!\\w)`, "g")) ?? [];
+  return mentions.some((mention) => {
+    const tail = mention.replace(/^(?:\.{0,2}\/)+/, "");
+    return path === tail || path.endsWith(`/${tail}`);
   });
 }
 

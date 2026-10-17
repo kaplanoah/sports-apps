@@ -247,8 +247,9 @@ test("the review reads every area in full, checks before it posts, and fails on 
   );
   assert.match(
     find,
-    /if: \$\{\{ !cancelled\(\) && \(steps\.first\.outputs\.unread != '' \|\| steps\.first\.outputs\.answered != 'true'\) \}\}/,
+    /id: again\n\s+if: &retry-due \$\{\{ !cancelled\(\) && \(steps\.first\.outputs\.unread != '' \|\| steps\.first\.outputs\.answered != 'true'\) \}\}/,
   );
+  assert.match(find, /id: last\n\s+if: \*retry-due\n/);
   assert.match(
     find,
     /if: \$\{\{ !cancelled\(\) && \(steps\.last\.outputs\.unread != '' \|\| steps\.last\.outputs\.answered == 'false'\) \}\}\n\s+run: \|\n.*\n\s+exit 1/,
@@ -346,14 +347,16 @@ test("the last read of the whole change runs only once a review of a push finish
   assert.match(readJob("review-final-find"), /steps: \*find-steps/);
   assert.match(readJob("review-final-check"), /steps: \*check-steps/);
   assert.match(readJob("review-final-across"), /steps: \*across-steps/);
-  assert.match(
-    readJob("review-final-across"),
-    /if: \$\{\{ !cancelled\(\) && needs\.review-final-check\.result == 'success' && needs\.review-plan\.outputs\.final-areas > 1 \}\}/,
-  );
-  assert.match(
-    readJob("review-across"),
-    /if: \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.areas > 1 \}\}/,
-  );
+  for (const [across, check, areas] of [
+    ["review-across", "review-check", "areas"],
+    ["review-final-across", "review-final-check", "final-areas"],
+  ])
+    assert.ok(
+      readJob(across).includes(
+        `if: \${{ !cancelled() && needs.${check}.result != 'skipped' && needs.review-plan.outputs.${areas} > 1 }}`,
+      ),
+      `${across} runs by the one rule, whenever its check ran and there's more than one area`,
+    );
   assert.match(readJob("review-final-post"), /steps: \*post-steps/);
 });
 

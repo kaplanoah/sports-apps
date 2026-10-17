@@ -192,8 +192,24 @@ async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
 }
 
 /**
- * Posts each finding not already on the pull request, and returns the weight of each this head's
- * review posted, an earlier try's too, and how many an earlier head's review had posted.
+ * The findings with the first of each that says the same thing in the same file, the weightiest
+ * where they come weightiest first.
+ * @param {Finding[]} findings
+ */
+function keepFirstOfEach(findings) {
+  const seen = new Set();
+  return findings.filter((finding) => {
+    const key = nameFinding(finding);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Posts each finding not already on the pull request, once however often it's listed, and
+ * returns the weight of each this head's review posted, an earlier try's too, and how many an
+ * earlier head's review had posted.
  * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
  * @param {object} review
  * @param {string} review.pullNumber
@@ -201,12 +217,13 @@ async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
  * @param {Finding[]} review.findings
  * @param {Map<string, Set<string>>} review.posted
  */
-export async function postFindings(callGitHub, { pullNumber, sha, findings, posted }) {
+export async function postFindings(callGitHub, { pullNumber, sha, findings: listed, posted }) {
   /** @param {Finding} finding */
   const isFromEarlierHead = (finding) => {
     const heads = posted.get(nameFinding(finding));
     return Boolean(heads) && !heads?.has(sha);
   };
+  const findings = keepFirstOfEach(listed);
   const fresh = findings.filter((finding) => !posted.has(nameFinding(finding)));
   /** @type {Finding[]} */
   const offDiff = [];

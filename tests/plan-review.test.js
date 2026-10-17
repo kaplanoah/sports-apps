@@ -534,6 +534,22 @@ test("a name defined past many matches isn't stale, and a stale one lists its fi
   assert.deepEqual(listStaleNames(diff, grep, []), [{ name: "GONE", hits: docs.slice(0, 15) }]);
 });
 
+test("a deleted file's places leave out those that name only another file of its name", () => {
+  const others = Array.from(
+    { length: 20 },
+    (_, index) => `AGENTS.md:${index + 1}:the shared one, \`shared/page/updates.js\``,
+  );
+  const naming = [
+    "README.md:4:MLB's `page/js/updates.js` shows the box",
+    'apps/mlb/page/index.html:9:<script src="./js/updates.js"></script>',
+    "REVIEW.md:2:any `updates.js`",
+  ];
+  const grep = () => [...others, ...naming];
+  assert.deepEqual(listStaleNames("", grep, ["apps/mlb/page/js/updates.js"]), [
+    { name: "updates.js", hits: naming },
+  ]);
+});
+
 test("a changed file the diff has no part for stops the review rather than counting as read", () => {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
   assert.throws(
