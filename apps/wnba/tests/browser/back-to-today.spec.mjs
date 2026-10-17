@@ -90,6 +90,27 @@ test.describe("with reduced motion", () => {
   });
 });
 
+test("a tap on Games with the page left a pixel down glides the page to its top while the list flies to today", async ({
+  page,
+}) => {
+  await openWholeSeason(page);
+  await openSeasonPart(page, "Standings");
+  await page.mouse.wheel(0, 2000);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page.clock.runFor(1000);
+  await findCell(page, "2026-09-29").click();
+  await page.clock.runFor(2000);
+  await expectDayAtTop(page, "2026-09-29");
+  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+
+  await page.getByRole("tab", { name: "Games" }).click();
+  await page.clock.runFor(2000);
+
+  await expectDayAtTop(page, "2026-09-30");
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+});
+
 test("a tap on Today flies the list there on a spring, never stepping back, and lands on today", async ({
   page,
 }) => {

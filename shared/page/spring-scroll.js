@@ -9,8 +9,9 @@ const ARRIVED_WITHIN_PX = 0.5;
 // Any touch, click, wheel or key stops the scroll where it is, as a touch does on a phone.
 const INTERRUPTING_EVENTS = ["pointerdown", "touchstart", "wheel", "keydown"];
 
-/** @type {{ frame: number, scroller: Element | null, startTop: number, endTop: number, startTime: number }} */
-const scroll = { frame: 0, scroller: null, startTop: 0, endTop: 0, startTime: 0 };
+// Each scroller eases on a spring of its own, so the page and a list inside it can move at once.
+/** @type {Map<Element, { frame: number, startTop: number, endTop: number, startTime: number }>} */
+const springs = new Map();
 
 /** @param {number} seconds */
 const readRemainingFraction = (seconds) =>
@@ -22,25 +23,36 @@ const readRemainingFraction = (seconds) =>
  */
 const jumpTo = (scroller, top) => scroller.scrollTo({ top, behavior: "instant" });
 
-function stopScrolling() {
-  cancelAnimationFrame(scroll.frame);
-  scroll.frame = 0;
+/** @param {Element} scroller */
+function stopSpring(scroller) {
+  const spring = springs.get(scroller);
+  if (!spring) return;
+  cancelAnimationFrame(spring.frame);
+  springs.delete(scroller);
+  if (springs.size) return;
   for (const type of INTERRUPTING_EVENTS) removeEventListener(type, stopScrolling, true);
 }
 
-/** @param {number} time */
-function stepScroll(time) {
-  const { scroller, startTop, endTop, startTime } = scroll;
-  if (!scroller) return;
-  const seconds = Math.max((time - startTime) / 1000, 0);
-  const remaining = (startTop - endTop) * readRemainingFraction(seconds);
+function stopScrolling() {
+  for (const scroller of [...springs.keys()]) stopSpring(scroller);
+}
+
+/**
+ * @param {Element} scroller
+ * @param {number} time
+ */
+function stepScroll(scroller, time) {
+  const spring = springs.get(scroller);
+  if (!spring) return;
+  const seconds = Math.max((time - spring.startTime) / 1000, 0);
+  const remaining = (spring.startTop - spring.endTop) * readRemainingFraction(seconds);
   if (Math.abs(remaining) < ARRIVED_WITHIN_PX) {
-    jumpTo(scroller, endTop);
-    stopScrolling();
+    jumpTo(scroller, spring.endTop);
+    stopSpring(scroller);
     return;
   }
-  jumpTo(scroller, endTop + remaining);
-  scroll.frame = requestAnimationFrame(stepScroll);
+  jumpTo(scroller, spring.endTop + remaining);
+  spring.frame = requestAnimationFrame((next) => stepScroll(scroller, next));
 }
 
 /**
@@ -49,21 +61,20 @@ function stepScroll(time) {
  * @param {number} top
  */
 export function scrollWithSpring(scroller, top) {
-  stopScrolling();
+  stopSpring(scroller);
   if (Math.abs(scroller.scrollTop - top) < ARRIVED_WITHIN_PX) return;
   if (isReducedMotion()) {
     jumpTo(scroller, top);
     return;
   }
-  Object.assign(scroll, {
-    scroller,
+  for (const type of INTERRUPTING_EVENTS)
+    addEventListener(type, stopScrolling, { capture: true, passive: true });
+  springs.set(scroller, {
     startTop: scroller.scrollTop,
     endTop: top,
     startTime: performance.now(),
+    frame: requestAnimationFrame((time) => stepScroll(scroller, time)),
   });
-  for (const type of INTERRUPTING_EVENTS)
-    addEventListener(type, stopScrolling, { capture: true, passive: true });
-  scroll.frame = requestAnimationFrame(stepScroll);
 }
 
 export const scrollToTop = () =>
