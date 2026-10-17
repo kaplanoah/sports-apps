@@ -83,6 +83,23 @@ test.describe("on an iPhone, in the browser", () => {
     expect(headingGap).toBe(0);
   });
 
+  test("the 1 sits a pixel right of its circle's middle, and every other number on it", async ({
+    page,
+  }) => {
+    await openApp(page, { isShowingWelcome: true });
+    const offMiddle = await page.locator(WELCOME).evaluate((welcome) =>
+      [...welcome.querySelectorAll(".welcome-steps > li:not([hidden])")].map((step) => {
+        const circle = getComputedStyle(step, "::before");
+        const contentWidth =
+          parseFloat(circle.width) -
+          parseFloat(circle.paddingLeft) -
+          parseFloat(circle.paddingRight);
+        return parseFloat(circle.paddingLeft) + contentWidth / 2 - parseFloat(circle.width) / 2;
+      }),
+    );
+    expect(offMiddle).toEqual([1, 0, 0]);
+  });
+
   // An iPhone's bottom inset, which keeps its home bar clear, is 34px, and Android's Chrome has none.
   test("Continue's text sits 24px over the welcome's bottom, on an iPhone and where there's no inset", async ({
     page,
