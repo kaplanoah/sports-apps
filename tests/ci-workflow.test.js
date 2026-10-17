@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { nameAcrossRecord, nameCheckedRecord, namePostRecord } from "../worker/judge-review.mjs";
+import {
+  nameAcrossRecord,
+  nameCandidatesRecord,
+  nameCheckRecord,
+  nameCheckedRecord,
+  nameFindRecord,
+  namePostRecord,
+} from "../worker/judge-review.mjs";
 
 /** @param {string} path from the repo's root */
 const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -253,17 +260,23 @@ test("the review reads every area in full, checks before it posts, and fails on 
   assert.match(check, /node worker\/judge-review\.mjs candidates \.review "\$STAGE" "\$AREA"/);
   assert.match(check, /run: node worker\/judge-review\.mjs check .* >> "\$GITHUB_OUTPUT"/);
   assert.match(check, /if: steps\.keep\.outputs\.unchecked != '0'\n\s+run: \|\n.*\n\s+exit 1/);
-  assert.match(check, /\.review\/candidates-\$\{\{ env\.STAGE \}\}-\$\{\{ matrix\.area \}\}\.json/);
   const across = readJob("review-across");
   assert.match(across, /node worker\/post-review\.mjs list \.review "\$STAGE"/);
   assert.match(across, /node worker\/post-review\.mjs across \.review "\$STAGE"/);
   assert.match(across, /if: steps\.across\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
-  const stage = "${{ env.STAGE }}";
-  assert.ok(across.includes(`.review/${nameCheckedRecord(stage)}`), "the checked record's name");
-  assert.ok(across.includes(`.review/${nameAcrossRecord(stage)}`), "the across record's name");
   const post = readJob("review-post");
   assert.match(post, /node worker\/post-review\.mjs post \.review "\$STAGE" >> "\$GITHUB_OUTPUT"/);
-  assert.ok(post.includes(`.review/${namePostRecord(stage)}`), "the post record's name");
+  const [stage, area, kind] = ["${{ env.STAGE }}", "${{ matrix.area }}", "${{ matrix.kind }}"];
+  const records = [
+    ["review-find", nameFindRecord(stage, area, kind)],
+    ["review-check", nameCandidatesRecord(stage, area)],
+    ["review-check", nameCheckRecord(stage, area)],
+    ["review-across", nameCheckedRecord(stage)],
+    ["review-across", nameAcrossRecord(stage)],
+    ["review-post", namePostRecord(stage)],
+  ];
+  for (const [job, record] of records)
+    assert.ok(readJob(job).includes(`.review/${record}`), `${job} names ${record}`);
   const review = readJob("review");
   const reviewJobs = listJobs().filter((job) => job.startsWith("review-"));
   for (const job of reviewJobs) assert.match(review, new RegExp(`^\\s+${job},$`, "m"), job);

@@ -135,7 +135,8 @@ const readExecution = (path) => (path && existsSync(path) ? readJson(path) : [])
 const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.areas);
 
 // Each job's record, by the name it's saved under in the review's folder: its job, then what it
-// covers, so the judge reads back each job's records, and only theirs, by the job alone.
+// covers, so the judge reads back each job's records, and only theirs, by the job alone. An area
+// can be the expression ci.yml names it by, so a test can check ci.yml's paths against these.
 const RECORD_JOBS = Object.freeze({
   find: "find",
   candidates: "candidates",
@@ -145,13 +146,13 @@ const RECORD_JOBS = Object.freeze({
 });
 /** @param {(string | number)[]} parts */
 const joinRecordName = (...parts) => parts.join("-");
-/** @param {string} stage @param {number} area @param {string} kind */
-const nameFindRecord = (stage, area, kind) =>
+/** @param {string} stage @param {number | string} area @param {string} kind */
+export const nameFindRecord = (stage, area, kind) =>
   `${joinRecordName(RECORD_JOBS.find, stage, area, kind)}.json`;
-/** @param {string} stage @param {number} area */
-const nameCandidatesRecord = (stage, area) =>
+/** @param {string} stage @param {number | string} area */
+export const nameCandidatesRecord = (stage, area) =>
   `${joinRecordName(RECORD_JOBS.candidates, stage, area)}.json`;
-/** @param {string} stage @param {number} area */
+/** @param {string} stage @param {number | string} area */
 export const nameCheckRecord = (stage, area) =>
   `${joinRecordName(RECORD_JOBS.check, stage, area)}.json`;
 /** @param {string} stage */
