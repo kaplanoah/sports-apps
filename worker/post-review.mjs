@@ -1,16 +1,16 @@
-// Posts what a stage of CI's review confirmed, each finding on the line it's about, so no
-// reviewer or checker holds a token that writes to the pull request. The check across areas
-// names only the repeats to merge and what it adds, so no finding a checker confirmed can drop
-// out of its answer. A finding on a line the diff doesn't show goes on its file, and one on a file
-// the diff doesn't show goes in one comment on the pull request. Each finding's comment carries a
+// Posts what a stage of CI's checkers confirmed or left unsure, each finding on the line it's
+// about, so no reviewer or checker holds a token that writes to the pull request. The check across
+// areas names only the repeats to merge and what it adds, so no finding a checker confirmed can
+// drop out of its answer. A finding on a line the diff doesn't show goes on its file, and one on a
+// file the diff doesn't show goes in one comment on the pull request. Each finding's comment carries a
 // mark, so a finding already posted in any form, as by an earlier try of this step, isn't posted
 // again. A finding counts as posted when this head's review posted it, in this try or an earlier
 // one, and as already on the pull request when an earlier head's review did.
 // Usage: node worker/post-review.mjs list <folder> <stage>, with AREAS set, after the stage's
-// checkers, writes what they confirmed for the check across areas. node worker/post-review.mjs across <folder>
-// <stage>, with STRUCTURED_OUTPUT from that check, keeps its answer. node worker/post-review.mjs
-// post <folder> <stage>, with GH_TOKEN, GITHUB_REPOSITORY, PR, SHA, and AREAS set, posts and
-// prints posted=<count of this head's findings> for $GITHUB_OUTPUT.
+// checkers, writes what they confirmed or left unsure for the check across areas. node
+// worker/post-review.mjs across <folder> <stage>, with STRUCTURED_OUTPUT from that check, keeps its
+// answer. node worker/post-review.mjs post <folder> <stage>, with GH_TOKEN, GITHUB_REPOSITORY, PR,
+// SHA, and AREAS set, posts and prints posted=<count of this head's findings> for $GITHUB_OUTPUT.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

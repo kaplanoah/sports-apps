@@ -219,6 +219,28 @@ test("a try that left no execution file read nothing", () => {
   );
 });
 
+test("a reviewer of an area the plan doesn't have stops rather than reading as done", () => {
+  const folder = planFirstReview(["shared/page/a.js"]);
+  assert.throws(
+    () =>
+      recordFindTry(
+        folder,
+        { stage: "first", area: 2, kind: "bugs" },
+        { EXECUTION_FILE: join(folder, "none.json") },
+      ),
+    /The plan's first stage has no area 2/,
+  );
+  assert.throws(
+    () =>
+      recordFindTry(
+        folder,
+        { stage: "final", area: 1, kind: "all" },
+        { EXECUTION_FILE: join(folder, "none.json") },
+      ),
+    /The plan's final stage has no area 1/,
+  );
+});
+
 test("an area's candidates are every reviewer's, over every try, each with an id of its own", () => {
   const triesOf = (/** @type {object[][]} */ lists) => ({
     tries: lists.map((items) => ({ reads: [], answer: { items, unjudged: [] } })),

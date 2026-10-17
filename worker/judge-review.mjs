@@ -170,9 +170,9 @@ export const nameConfirmedRecord = (stage) => `${joinRecordName("confirmed", sta
  */
 export function recordFindTry(folder, { stage, area, kind }, env) {
   const plan = readJson(join(folder, "plan.json"));
-  const { partsByFile } = listStageAreas(plan, stage).find((entry) => entry.area === area) ?? {};
-  /** @type {string[]} */
-  const parts = Object.values(partsByFile ?? {}).flat();
+  const planned = listStageAreas(plan, stage).find((entry) => entry.area === area);
+  if (!planned) throw new Error(`The plan's ${stage} stage has no area ${area}.`);
+  const parts = Object.values(planned.partsByFile).flat();
   const recordPath = join(folder, nameFindRecord(stage, area, kind));
   const record = existsSync(recordPath) ? readJson(recordPath) : { stage, area, kind, tries: [] };
   record.tries.push({

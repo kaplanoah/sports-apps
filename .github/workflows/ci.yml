@@ -329,11 +329,11 @@ jobs:
   # Each pull request is reviewed in areas, by what its files are about, each test with its code
   # (worker/plan-review.mjs). In each area four reviewers read every line, each listing every case
   # of one kind of problem; a checker confirms each case against the code; a check across areas
-  # names repeats and looks for what spans them; and one step with no Claude posts what they
-  # confirmed (worker/post-review.mjs), so no reviewer or checker can write to the pull request. The first
-  # review reads the whole change. A review after it reads what the pushes since the last full read
-  # changed, and when that finishes and posts nothing, the whole change is read once more, one
-  # reviewer an area.
+  # names repeats and looks for what spans them; and one step with no Claude posts what the
+  # checkers confirmed or left unsure (worker/post-review.mjs), so no reviewer or checker can write
+  # to the pull request. The first review reads the whole change. A review after it reads what the
+  # pushes since the last full read changed, and when that finishes and posts nothing, the whole
+  # change is read once more, one reviewer an area.
   # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
   # nothing to review, such as a push to main, it plans nothing and passes, since check fails on a
   # skipped job. A label change brings no new code, so it reviews again only when no run passed
@@ -388,7 +388,8 @@ jobs:
       - if: steps.decision.outputs.review == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # The whole history, to read since the last review's head and to look back as reviewers do.
+          # The whole history, to read since the last review's head and to look back as reviewers
+          # do.
           fetch-depth: 0
           # Claude reads the checkout, and the review needs no git credentials on disk.
           persist-credentials: false
@@ -500,12 +501,12 @@ jobs:
           settings: *review-settings
           claude_args: *find-args
           prompt: |
-            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ matrix.area }}, "${{ matrix.name }}", and look only for this: ${{ matrix.focus }} An earlier try didn't finish: it gave no answer, or left these of its diff files unread: ${{ steps.first.outputs.unread }}
+            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ matrix.area }}, "${{ matrix.name }}", and look only for this: ${{ matrix.focus }} An earlier try didn't finish. Diff files it left unread: ${{ steps.first.outputs.unread || 'none' }}. ${{ steps.first.outputs.answered == 'true' && 'Its answer is kept, so judge only what those files change.' || 'It gave no answer, so judge your whole area again.' }}
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps. `.review/pull-request.md` holds the pull request's description and every review thread on it.
-            2. Read each diff file the earlier try left unread, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read. `.review/${{ env.STAGE }}.md` lists your area's diff files; read the rest of them as you need to judge your area again, since the earlier try's answer may be lost.
+            2. Read each diff file the earlier try left unread, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read. `.review/${{ env.STAGE }}.md` lists your area's diff files, to read as you need.
             3. Read what else you need, with Read, Grep, Glob, git log, git show, git diff, and git blame, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
-            4. List every case of your kind of problem you find in your area, unsure ones too, with your confidence. Leave out a case a thread already raised, unless its reply is wrong or a fix it claims didn't hold.
+            4. List every case of your kind of problem you find in what you judge, unsure ones too, with your confidence. Leave out a case a thread already raised, unless its reply is wrong or a fix it claims didn't hold.
             5. Post nothing. End with your answer: each case, on a line the diff changes, and each file you read but couldn't judge from the code, and why.
       - name: Find what's still unread
         id: last
@@ -637,7 +638,7 @@ jobs:
           pattern: review-check-${{ env.STAGE }}-*
           path: .review/
           merge-multiple: true
-      - name: List what the checkers confirmed
+      - name: List the checkers' findings
         run: node worker/post-review.mjs list .review "$STAGE"
       - name: Check across the areas
         id: across
@@ -682,9 +683,9 @@ jobs:
           echo "::error::The check across areas didn't finish."
           exit 1
 
-  # Posts what the checkers confirmed, less the repeats the check across areas named and with what
-  # it added (worker/post-review.mjs). It's the one review job but the summary that can write to
-  # the pull request, and runs no Claude.
+  # Posts what the checkers confirmed or left unsure, less the repeats the check across areas named
+  # and with what it added (worker/post-review.mjs). It's the one review job but the summary that
+  # can write to the pull request, and runs no Claude.
   review-post:
     needs: [review-plan, review-check, review-across]
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
@@ -708,7 +709,7 @@ jobs:
         with:
           name: review-across-${{ env.STAGE }}
           path: .review/
-      - name: Post the confirmed findings
+      - name: Post the findings
         id: post
         env:
           GH_TOKEN: ${{ github.token }}
