@@ -378,7 +378,7 @@ test("Highlights find the latest final, and the Matchup the next game, of the se
   assert.equal(findPartGame(CONTEXT.games, matchup)?.state, "pre");
 });
 
-test("a game search finds opens by its listing's key, so a makeup and never the listing called off that shares its id opens", () => {
+test("a game search opens a game by its listing's key, so a makeup opens itself and never the called-off listing that shares its id", () => {
   const listed = listSeasonGames(SNAPSHOT.slate, Object.values(SNAPSHOT.schedule).flat());
   const listings = listed.filter((game) => game.id === "823471");
   assert.deepEqual(
