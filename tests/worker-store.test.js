@@ -515,6 +515,7 @@ test("on a network that refuses sockets, the page was current as each read of ev
 
   mock.timers.tick(RECONNECT_FIRST_MS);
   sockets[1].close();
+  mock.timers.tick(500);
   reads[0].answer({ data: {} });
   await settle();
 
