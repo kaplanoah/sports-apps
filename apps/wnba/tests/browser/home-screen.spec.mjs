@@ -83,7 +83,7 @@ test.describe("on an iPhone, in the browser", () => {
     expect(headingGap).toBe(0);
   });
 
-  test("the 1 sits a pixel right of its circle's middle, and every other number on it", async ({
+  test("the 1 sits half a pixel right of its circle's middle, and every other number on it", async ({
     page,
   }) => {
     await openApp(page, { isShowingWelcome: true });
@@ -97,7 +97,7 @@ test.describe("on an iPhone, in the browser", () => {
         return parseFloat(circle.paddingLeft) + contentWidth / 2 - parseFloat(circle.width) / 2;
       }),
     );
-    expect(offMiddle).toEqual([1, 0, 0]);
+    expect(offMiddle).toEqual([0.5, 0, 0]);
   });
 
   // An iPhone's bottom inset, which keeps its home bar clear, is 34px, and Android's Chrome has none.

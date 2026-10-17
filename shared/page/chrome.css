@@ -754,10 +754,10 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   font-size: var(--type-detail-size);
   font-weight: calc(var(--type-detail-weight) + 200);
 }
-/* A 1 reads left of its circle's middle where the other numbers don't, so it sits a pixel right. */
+/* A 1 reads left of its circle's middle, so it sits half a pixel right. */
 .welcome-steps > li:first-child::before {
   box-sizing: border-box;
-  padding-left: 2px;
+  padding-left: 1px;
 }
 .welcome-step {
   display: flex;
