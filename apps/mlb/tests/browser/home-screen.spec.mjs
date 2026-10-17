@@ -128,7 +128,7 @@ test.describe("on an iPhone, in the browser", () => {
     expect(aboveRanking).toBeGreaterThan(0);
   });
 
-  test("the settings' box shows the icon the Home Screen takes in the theme on screen", async ({
+  test("the settings' box shows the icon the Home Screen takes in the theme on screen, and each theme choice its own, from the page's stylesheet", async ({
     page,
   }) => {
     const icon = page.locator("#homeScreenTip .home-screen-icon");
@@ -138,6 +138,21 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(icon).toHaveCSS("background-image", drawIcon("icon-light-180.png"));
     await page.emulateMedia({ colorScheme: "dark" });
     await expect(icon).toHaveCSS("background-image", drawIcon("icon-180.png"));
+    const nameIcon = (image) =>
+      ["icon-light-180.png", "icon-180.png"].find((file) => drawIcon(file) === image) ?? image;
+    const choiceIcons = await page
+      .locator("#settingsDialog .appearance-icon")
+      .evaluateAll((icons) =>
+        icons.map((choiceIcon) => [
+          getComputedStyle(choiceIcon).backgroundImage,
+          getComputedStyle(choiceIcon, "::after").backgroundImage,
+        ]),
+      );
+    expect(choiceIcons.map((images) => images.map(nameIcon))).toEqual([
+      ["icon-light-180.png", "icon-180.png"],
+      ["icon-light-180.png", "none"],
+      ["icon-180.png", "none"],
+    ]);
   });
 });
 
