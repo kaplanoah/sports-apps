@@ -50,17 +50,25 @@ function renderScore({ state, score, time }) {
 }
 
 /**
+ * Whether a game is still to come today, which a team's sheet sets apart as it does one being
+ * played.
+ * @param {{ state: string, day: Date | null }} game
+ * @param {Date} now
+ */
+export const isStillToComeToday = ({ state, day }, now) =>
+  state === "pre" && day !== null && countDaysBetween(now, day) === 0;
+
+/**
  * The game's clock while it's on, or its day, with a game still to come today standing out as one
  * being played does.
  * @param {GameCard} card
  * @param {Date} now
  */
-function renderWhen({ state, day, clock }, now) {
-  if (state === "live") return html`<span class="game-card-now">${clock}</span>`;
-  if (!day) return "";
-  const name = nameDay(day, now, { nameOtherDay: formatShortDate, isCapitalized: true });
-  const isLaterToday = state === "pre" && countDaysBetween(now, day) === 0;
-  return isLaterToday ? html`<span class="game-card-now">${name}</span>` : name;
+function renderWhen(card, now) {
+  if (card.state === "live") return html`<span class="game-card-now">${card.clock}</span>`;
+  if (!card.day) return "";
+  const name = nameDay(card.day, now, { nameOtherDay: formatShortDate, isCapitalized: true });
+  return isStillToComeToday(card, now) ? html`<span class="game-card-now">${name}</span>` : name;
 }
 
 /**

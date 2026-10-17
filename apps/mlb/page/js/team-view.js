@@ -2,7 +2,6 @@
 // games, then once the field is set how far it has gone in the postseason, its race this season,
 // and every World Series it won.
 
-import { readCalendarDate } from "#shared/days.js";
 import { renderGameCards } from "#shared/game-cards.js";
 import { isPlayedBy } from "#shared/game-clubs.js";
 import { html, joinWithSeparator } from "#shared/html.js";
@@ -28,6 +27,7 @@ import {
   renderStatusChip,
   renderTeamDot,
 } from "./clubs.js";
+import { readSlateGameDay } from "./dates.js";
 import { describeGameLabel, describeInning, describeStart } from "./games-view.js";
 import { renderLeaders } from "./leaders-view.js";
 import {
@@ -286,7 +286,7 @@ function describeGameCard(game, id) {
     id: nameGameKey(game),
     label: describeGameLabel(game),
     state: game.state,
-    day: readCalendarDate(game.date),
+    day: readSlateGameDay(game),
     clock: game.state === "live" ? describeInning(game) : "",
     score: describeScore(game, isHome),
     time: describeStart(game),

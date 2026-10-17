@@ -2,12 +2,13 @@ import { beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { nameClubFully } from "../page/js/clubs.js";
 import { session } from "../page/js/session.js";
+import { renderNextCell } from "../page/js/standings.js";
 import { keepRanking } from "../page/js/kept-on-device.js";
 import { reopenRoster } from "../page/js/roster-section.js";
 import { renderTeamSheet } from "../page/js/team-view.js";
 import { TEAMS } from "../page/js/teams.js";
 import { stripTags } from "../../../tests/text.js";
-import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
+import { EASTERN, checkInTimeZone, useTimeZone } from "../../../tests/time-zone.js";
 
 // The expected times below are what a viewer in Eastern time sees.
 useTimeZone(EASTERN);
@@ -364,12 +365,11 @@ const listCardButtons = (body) =>
     label,
   ]);
 
-// The night of Sep 24, in the fifth inning at the Athletics.
-const ASTROS_NIGHT = Date.parse("2026-09-25T02:30:00Z");
+const DURING_TONIGHTS_GAMES = Date.parse("2026-09-25T02:30:00Z");
 
 test("a club's sheet opens on cards of its last game, the one it's playing, and its next, each opening the game", () => {
   session.state = { ...session.state, slate: ASTROS_SLATE };
-  const { body } = renderTeamSheet("HOU", { now: ASTROS_NIGHT });
+  const { body } = renderTeamSheet("HOU", { now: DURING_TONIGHTS_GAMES });
 
   assert.deepEqual(listCards(body), [
     "Last game Yesterday L 5-6 @ SEA",
@@ -439,7 +439,7 @@ test("a club's cards take a doubleheader's games in game order, and skip a postp
 
 test("a club's game still to come today says Today in the color of a game being played, and one a day further off its date", () => {
   session.state = { ...session.state, slate: ASTROS_SLATE };
-  const { body } = renderTeamSheet("SEA", { now: ASTROS_NIGHT });
+  const { body } = renderTeamSheet("SEA", { now: DURING_TONIGHTS_GAMES });
 
   assert.deepEqual(listCards(body), [
     "Last game Yesterday W 6-5 vs HOU",
@@ -450,6 +450,25 @@ test("a club's game still to come today says Today in the color of a game being 
     listCards(renderTeamSheet("SEA", { now: Date.parse("2026-09-27T16:00:00Z") }).body),
     ["Last game Sep 23 W 6-5 vs HOU", "Next game Sep 24 9:40 PM vs LAA"],
   );
+});
+
+test("a club's card names its next game's day on the viewer's own calendar, as its standings row does", () => {
+  session.state = { ...session.state, slate: ASTROS_SLATE };
+  const afternoon = Date.parse("2026-09-24T20:00:00Z");
+  const next = { at: "2026-09-25T01:40:00Z", date: "2026-09-24", home: true, opp: "LAA" };
+  const readNext = () => ({
+    card: listCards(renderTeamSheet("SEA", { now: afternoon }).body)[1],
+    row: readText(renderNextCell({ id: "SEA", next }, { now: afternoon })),
+  });
+
+  assert.deepEqual(readNext(), {
+    card: "Next game Today 9:40 PM vs LAA",
+    row: "Today 9:40 vs LAA",
+  });
+  assert.deepEqual(checkInTimeZone("Europe/Paris", readNext), {
+    card: "Next game Tomorrow 3:40 AM vs LAA",
+    row: "Fri 3:40 vs LAA",
+  });
 });
 
 test("a club with no games on the slate, as in a past season, shows no cards", () => {

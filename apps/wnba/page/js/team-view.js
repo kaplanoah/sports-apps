@@ -1,5 +1,5 @@
-import { countDaysBetween, describeDay, formatClockTime, formatShortDate } from "#shared/days.js";
-import { renderGameCards } from "#shared/game-cards.js";
+import { describeDay, formatClockTime, formatShortDate } from "#shared/days.js";
+import { isStillToComeToday, renderGameCards } from "#shared/game-cards.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import {
@@ -124,15 +124,6 @@ function listTeamGames(season, team) {
   const next = games.find((game) => game.state !== "final" && !decided.has(game.series ?? ""));
   return { finished, next: next ?? null };
 }
-
-/**
- * @param {Game} game
- * @param {number} now
- */
-const isToday = (game, now) => {
-  const day = readGameDay(game);
-  return !!day && countDaysBetween(new Date(now), day) === 0;
-};
 
 /**
  * @param {Game} game
@@ -395,7 +386,9 @@ const NEXT_GAME_ICON = html`<svg class="next-game-icon" viewBox="0 0 256 256" fi
  * @param {number} now
  */
 export function renderNextGame(game, team, now) {
-  const isSoon = game.state === "live" || isToday(game, now);
+  const isSoon =
+    game.state === "live" ||
+    isStillToComeToday({ state: game.state, day: readGameDay(game) }, new Date(now));
   return html`<div class="team-game next${isSoon ? " soon" : ""}">
     <span class="team-game-number">G${game.number}</span>
     <span class="team-result" aria-hidden="true">${NEXT_GAME_ICON}</span>

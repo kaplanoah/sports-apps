@@ -644,6 +644,21 @@ test("a team's next game is marked with Phosphor's caret-right icon, which readi
   );
 });
 
+test("a game later today stands out the same on the team's card and in its playoff games, and a game tomorrow in neither", () =>
+  inEastern(() => {
+    /** @param {string} code */
+    const readNext = (code) => {
+      const { body } = renderTeamSheet(SEASON, code, { year: 2026, now: NOW });
+      const row = body.text.match(/<div class="team-game next[^"]*">/)?.[0] ?? "";
+      return {
+        isCardSet: body.text.includes('class="game-card-now"'),
+        isRowSet: row.includes(" soon"),
+      };
+    };
+    assert.deepEqual(readNext("ATL"), { isCardSet: true, isRowSet: true });
+    assert.deepEqual(readNext("LVA"), { isCardSet: false, isRowSet: false });
+  }));
+
 test("a winning streak reads as the rest of its column, below the line as the rest of its row", () => {
   const rows = renderStandings(REGULAR_SEASON).text.split("<tr").slice(1);
   const fire = rows.find((row) => row.includes(">Fire<"));
