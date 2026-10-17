@@ -90,14 +90,16 @@
   Every sheet's top is a band, from `.sheet-page .sheet-top` in `shared/page/sheet.css`,
   never a list of sheets, as tall as what it holds: the WNBA's is the floor's color over the card's,
   ending in a line, with each title at the same height on every sheet and what goes with it, like a game's teams and score, in the band under it.
+  A title holds its name and one line under it, and anything more, like a player's facts or hometown, goes in the band under the title,
+  so the title and its close or back button, which holds the top of the title's row (`shared/page/chrome.css`), sit in one spot on every sheet and the band grows below them.
   Sheets, and a sheet's sections, slide side by side with the app's `--sheet-gap` of the sheet's color between them,
   each band's sides edged in its line while they move, so two bands never have to meet.
-  `tests/browser/sheet-stack.spec.mjs` opens every sheet on the page and checks each top; a new sheet joins its list, or the test fails.
+  Each app's `tests/browser/sheet-stack.spec.mjs` opens every sheet on the page and checks each top; a new sheet joins its list, or the test fails.
 - A reload draws each open sheet as it was.
   A sheet that reads from the Worker keeps what it read in its `keeper` (`wireSheet` in `shared/page/sheet.js`),
   beside what it shows, and draws again from that while it reads again,
   never its placeholders, as the game sheet does with its box score and a team's sheet with its roster (`sectionsKeeper` in `shared/page/team-sheet.js`).
-  The WNBA's `tests/browser/sheet-reload.spec.mjs` reloads each sheet with its reads held and checks it shows the same; a new sheet joins its list, or the test fails.
+  Each app's `tests/browser/sheet-reload.spec.mjs` reloads each sheet with its reads held and checks it shows the same; a new sheet joins its list, or the test fails.
 - A browser test that isn't about motion asks for reduced motion,
   with `page.emulateMedia({ reducedMotion: "reduce" })` or, for a whole file,
   `test.use({ contextOptions: { reducedMotion: "reduce" } })`, so it doesn't wait out eased scrolls and springs.
@@ -265,7 +267,7 @@
   and settings and each setting (`page/js/search-pages.js`), whose settings pick any season the store keeps once it keeps more than one,
   whose page saves nothing to the store, lists each playoff final in an Updates box only on phones and tablets,
   and only for the current season, each keeping its own dismissal (`page/js/updates.js`),
-  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings (`page/js/appearance.js`, kept per device), in its own self-hosted fonts.
+  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings (the shared `appearance.js`, kept per device), in its own self-hosted fonts.
   Paths below are inside an app's folder, except `shared/` and the ones named as the root's.
 - Page:
   `page/`.
@@ -292,6 +294,12 @@
   as both apps' searches and Season pickers do, never a viewport that stops a pinch.
   The root's `tests/browser/type-roles.mjs` lists every shown text off its app's role sizes,
   or in a weight its font has no face for, and each app's browser tests check every view with it.
+  Each role draws in one font and one case,
+  and in a second only where the app's `tests/browser/role-looks.spec.mjs` names the text and why,
+  like MLB's numbers in Chivo Mono and the WNBA Games list's dates in Barlow, as a wall calendar's;
+  it walks the theme specs' views from the app's `tests/browser/views.mjs`,
+  the gate, the Updates box, and the bracket before the playoff field is set,
+  and fails on any look its tables don't name, and on any they name that nothing draws.
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pill, and `--radius-sheet` for a sheet on a wide screen,
@@ -340,7 +348,9 @@
   and colors from its `page/styles.css` instead of inventing new ones.
 - Worker:
   `worker/src/`.
-  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key.
+  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key,
+  but at the address its `PAGE_HOST` secret names, where it serves them without the key, behind the access code alone,
+  and so only while it has one (`findAppPrefix` in `shared/worker/app-worker.js`).
   `health` says whether the Worker and its store answer, 200 or 503 with the release's commit,
   so an uptime monitor can watch it without holding a secret, and asks the store once a minute at most however often it's hit (`shared/worker/health.js`).
   An alarm in its Durable Object (`worker/src/season-updater.js`) keeps the current season's saved data up to date from the league,
@@ -526,6 +536,7 @@
   `game-cards.css` the cards of its nearest games, `updates.css` the Updates box,
   `news.css` the News view's layout, `retry.css` what a sheet shows where a read failed,
   `highlights.css` a final's Highlights, `rank-curve.css` a rank curve and each player's mark on it,
+  `no-field-note.css` the bracket before the playoff field is set,
   and `gate.css` the access code's gate; pages link them before their own `styles.css` and theme them with the tokens their top comments list.
   The Worker serves all of it under `shared/`.
   `shared/worker/` holds the Worker's routing under the key (`app-worker.js`),
@@ -549,7 +560,7 @@
   and tells a red change for CI's gate, and comments on each open pull request a merge to main leaves in conflict,
   from its own `Conflicts` workflow (`apps.mjs`, `build.mjs`, `deploy.mjs`,
   `deploy-scope.mjs`, `flag-conflicts.mjs`, `red-change.mjs`, `release.mjs`,
-  `rollback.mjs`, `set-app-key.mjs`, `set-access-code.mjs`, the secrets calls they share in `worker-secrets.mjs`,
+  `rollback.mjs`, `set-app-key.mjs`, `set-access-code.mjs`, `set-page-host.mjs`, the secrets calls they share in `worker-secrets.mjs`,
   and the channels each command's `--channel` names in `channels.mjs`); its tests are in the root `tests/`.
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`),
   which each deploy does for its new version, putting the one before back when it doesn't,
@@ -585,9 +596,28 @@
 ## Adding a league
 
 A new league is a new app.
-Copy the WNBA's: it's the newest, and every file below has a working example in `apps/wnba/`.
+Copy the WNBA's: it was built on the shared code from its start,
+while MLB still carries pieces from before it, and every file below has a working example in `apps/wnba/`.
 
-1. **Worker config.** `apps/<app>/worker/wrangler.toml` names the Worker and binds the store, as the WNBA's does.
+A league ships in parts.
+Its first PR holds what a fan opens the app for, by the steps below:
+the Worker and its store, the Games tab, the standings and bracket,
+each game's sheet with its box score, each team's sheet with its numbers,
+search, settings, the gate, the page's copy on the phone, both themes, and the beta channel.
+Each later PR adds one more of the WNBA's parts, copying it,
+like rosters and players' sheets, a final's Highlights, a game's preview and lead chart,
+the News tab and its notifications, or the Updates box,
+with its tests and its places in search.
+
+While a league is being built, a sandbox Worker may try its feeds from Cloudflare,
+since a league can answer Cloudflare differently than it answers a cloud session.
+Name it `<app>-sandbox`, upload it from a scratch folder outside git with Cloudflare's API, as `worker/deploy.mjs` does,
+and give it no page, store, key, or secret.
+Delete it once the app's first PR merges.
+
+1. **Worker config.** `apps/<app>/worker/wrangler.toml` names the Worker `<app>-app`,
+   binds the store and the gate's rate limit, and names the beta channel's Worker `<app>-app-beta` under `[env.beta]`,
+   as the WNBA's does, which the root's `tests/deploy.test.js` checks for every app.
    The tooling finds apps by this file, and `package.json`'s `#page-files/*` import,
    the lint, type, and dead code globs, and Playwright's projects all pick the new folder up from `apps/*`.
    Add `worker/page-files.mjs`, a one-line call to the root's `readPageFiles`.
@@ -605,19 +635,22 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
    `worker/src/index.js` builds the Worker with `createAppWorker` and exports the store's class.
 5. **The page.** `index.html` keeps the shared tab bar and settings markup, its element IDs, and the import map for `#shared/`.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
-   It links `shared/type.css`, `shared/chrome.css`, `shared/game-row.css`,
-   `shared/pager.css`, and `shared/day-strip.css` before its own `styles.css`,
-   which sets every token their top comments list, loads `shared/release-guard.js` first in its head and `shared/open-last-tab.js`,
-   `shared/show-last-drawn.js`, and `shared/slow-load.js` after its stylesheets,
-   marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
-   with `data-last-drawn`, keeps the empty `#loadNote` above its views,
+   It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
+   around its own `styles.css`, which sets every token their top comments list,
    and calls `openLastTab()`, `showLastDrawn()`, and `watchSlowLoad()` right after its views and sheets,
    in that order, so a part on the shown tab can take back its sideways scroll.
-   `gate.html` asks for the access code: copy the WNBA's, with the league's icon and colors,
-   which `styles.css` hands `shared/gate.css`, linked after `shared/type.css`, through the tokens its top comment lists.
-   `sw.js` sets `self.pageName` and imports `shared/service-worker-steps.js`, `shared/push-worker.js`, and `shared/offline-worker.js`, in that order.
-   Give it a manifest, icons, and an `apple-mobile-web-app-title` of the league's short name.
-   Choose the league's All-Star colors with the owner: each All-Star team's star takes its uniform's color,
+   Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
+   load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
+   It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
+   with `data-last-drawn`, and keeps the empty `#loadNote` above its views.
+   Give it a manifest, icons, and an `apple-mobile-web-app-title` of the league's short name,
+   which its manifest's `name` and `short_name` match.
+   Agree on the league's look with the owner from a mockup first: its fonts,
+   self-hosted in `page/fonts/`, with each type role's size and weight set in its `:root`, as "Repo" says,
+   and its light and dark themes, each a set of colors, the dark one under `:root[data-theme="dark"]`,
+   with an icon and a bar color of its own, which `page/js/looks.js` hands the shared `appearance.js`
+   for the page and, through `page/js/gate-theme.js`, for the gate.
+   Choose the league's All-Star colors with the owner too: each All-Star team's star takes its uniform's color,
    as the WNBA's orange West and white East do, its visitors orange and its home team white in a year of captains' teams,
    and MLB's American and National League colors do, through `renderAllStarMark` in `shared/page/all-star.js`,
    and `styles.css` sets the star's tokens that `game-row.css` lists from the league's own dot.
@@ -625,15 +658,30 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
    as "Writing" below says, and its search terms hand it to the shared search as `words`.
 6. **Tests.** Record a real afternoon of the league's feeds as a fixture in `tests/fixtures/`,
    and test the snapshot, the Worker, the season updater, and the page's views against it.
-   Browser tests in `tests/browser/` run the page against the real store, as the WNBA's harness does,
-   and its `release-check.spec.mjs` opens the page with the release check, as the WNBA's does.
-   Hand the deploy and the `Watch apps` workflow the page's secrets in `.github/workflows/deploy.yml` and `watch.yml`,
-   which the root's `tests/deploy.test.js` checks.
+   Copy each of the WNBA's tests of what the PR builds, since they run the shared checks:
+   its browser harness, which runs the page against the real store,
+   `page.spec.mjs`, `themes.spec.mjs`, and `role-looks.spec.mjs`,
+   which check every view for type roles, contrast, periods, words, taps, and theme layout,
+   the last two walking the views listed in `tests/browser/views.mjs`,
+   `at-rest.spec.mjs`, which runs in WebKit too,
+   and `release-check.spec.mjs`, `access.spec.mjs`, and `offline.spec.mjs`.
+   Its `tests/search.test.js` names each place in `COVERAGE`, as "Search finds every place" says,
+   and its `tests/search-typing.test.js` types every team, place, and player with the root's `tests/search-sweep.js`,
+   from a recorded list of the league's players.
+   Each sheet joins `sheet-stack.spec.mjs` and `sheet-reload.spec.mjs` in the PR that adds it.
+   Hand the deploy each channel's page secrets in `.github/workflows/deploy.yml`,
+   and the `Watch apps` workflow production's in `watch.yml`, which the root's `tests/deploy.test.js` checks.
 7. **Docs.** Add the app to the README's table and its setup section's list of apps, and to the "Apps" bullet above.
-8. **Ship it.** Open it as a `feat:` PR.
-   The app starts at version 1.0.0, and the merge's deploy creates its Worker,
-   which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app>` gives it a key and prints the page's address.
-   Ask the owner to add that address, and the page's code once it has one, as its secrets in the `production` environment,
+8. **Ship it.** Open it as a `feat:` PR, which starts the app at version 1.0.0.
+   Its page adds lines that give parts layers of their own, so it's a red change,
+   tried on the owner's phone from beta before it merges, as "Workflow" says.
+   Once its CI passes, push it to `beta`, whose deploy creates `<app>-app-beta`,
+   which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
+   Give the owner that address, and ask them to set its code with `npm run set-access-code -- <app> <code> --channel beta`,
+   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `production` environment's secrets,
+   add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
+   The merge's deploy then creates `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
+   and the owner adds its address and code as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
 
 ## Workflow
@@ -679,7 +727,7 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
   To use a PR's change on the owner's phone before it merges, reset `beta` to the PR's branch and push (`git push -f origin <branch>:beta`),
   wait for that push's Deploy run to say `worker check: ok` for each app, and tell the user to use the beta app on the Home Screen.
   `beta` is a scratch branch: never commit to it or open a PR from it.
-  Each of `deploy:api`, `rollback`, `set-app-key`, and `set-access-code` takes `--channel beta`.
+  Each of `deploy:api`, `rollback`, `set-app-key`, `set-access-code`, and `set-page-host` takes `--channel beta`.
 - A red change is one whose bugs no CI browser would show, since none touches,
   scrolls, layers, and draws as an iPhone does, or that touches what iOS has drawn wrong before: parts left undrawn by how layers and sheets stack.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
@@ -717,6 +765,10 @@ Copy the WNBA's: it's the newest, and every file below has a working example in 
 - `npm run set-access-code -- <app> <code>` sets the code an app's page asks for, with a new random `ACCESS_SIGNING_KEY`; the user picks the code.
   A new code signs every phone out, and `--remove` stops asking.
   Never commit, log, or post the code.
+- `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,
+  so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
+  The address with the key keeps working as it was, and phones stay signed in there.
+  Keep the host out of the repo, as the Worker's own address is.
 - The repo is public.
   Never commit secrets, keys, account IDs, real Worker addresses or subdomains, or personal data; use placeholders in tests and docs:
   `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
@@ -778,17 +830,20 @@ When a step says to go back to an earlier step, continue in order from there.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
-7. CI's `review` job has Claude review each push to the PR, post its findings as comments on the lines they concern,
-   and update one summary comment that says which commit it reviewed,
-   how many findings it posted, and anything it couldn't check.
-   If the summary names something it couldn't check, tell the user.
+7. CI's review reads each push to the PR in full, by the root's `REVIEW.md` as `main` has it:
+   it splits the change into shares small enough for one reviewer to read every line of (`worker/plan-review.mjs`),
+   has Claude review every share at once in `review-share`, and then, for more than one share, across them in `review-across`,
+   each posting its findings as comments on the lines they concern.
+   The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
+   how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
+   and anything it read but couldn't judge (`worker/judge-review.mjs`).
+   It fails when any changed file went unread, naming each.
+   If the summary names something it couldn't judge, tell the user.
    Answer every finding: either fix it and go back to step 2, or reply on the comment saying why not.
    The push with a fix is reviewed again.
-   - A PR that changes `.github/workflows/ci.yml` isn't reviewed: the review runs only from the workflow as `main` has it, and passes without a summary otherwise.
-     Keep a change to that file in its own small PR, so nothing else goes unreviewed with it.
-   - If the `review` job fails without posting any comments, read its log, which shows each attempt's turns and tool calls.
-     If both attempts stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
-     Otherwise don't reproduce it locally or re-run it: it already tried twice, eight minutes each at most.
+   - If `review` fails, read its summary and the log of the failed `review-share` or `review-across` job, which shows each try's turns and tool calls.
+     If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
+     Otherwise don't reproduce it locally or re-run it: each share already tried twice, and the check across them once.
      Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
      where a review stalled, or a re-run that failed too.
      `check` can't pass until the job does.
@@ -830,7 +885,7 @@ When a step says to go back to an earlier step, continue in order from there.
       Tell the user what failed and recommend a fix.
 11. Run `npm run deploy:api` yourself only when step 10 found no successful deploy and the user agrees.
     Say why the automatic deploy didn't happen and recommend whether to deploy by hand.
-    Never deploy any other way.
+    Never deploy any other way, but for a new league's sandbox Worker ("Adding a league").
 12. Related changes can ship together in one PR.
     Split work into several PRs only when its parts can be reviewed or rolled back on their own.
     A PR that needs another PR's unmerged changes doesn't wait for it: stack it.

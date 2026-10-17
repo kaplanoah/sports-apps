@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { noteFailedImage } from "../../../shared/page/failed-images.js";
 import { pickReadCards } from "../../../shared/page/news-picks.js";
 import { renderNews as renderLeagueNews } from "../../../shared/page/news-view.js";
 import { NEWS_LEAGUE } from "../page/js/news-league.js";
@@ -95,6 +96,20 @@ test("a story whose link isn't a web address is never shown, nor a photo whose a
   assert.doesNotMatch(markup, /javascript:/);
   assert.match(markup, /href="https:\/\/example\.com\/plain"/);
   assert.doesNotMatch(markup, /<img/);
+});
+
+test("a photo that didn't load is left out with its credit", () => {
+  const url = "https://example.com/moved.jpg";
+  const cards = createCards([
+    createStory({ id: "moved", photo: { url, credit: "Eakin Howard/Getty Images" } }),
+  ]);
+  assert.match(renderNews(cards, ALL_ON, NOW).text, /<img/);
+
+  noteFailedImage(url);
+
+  const markup = renderNews(cards, ALL_ON, NOW).text;
+  assert.doesNotMatch(markup, /<img|news-photo-credit|Getty/);
+  assert.match(markup, /example\.com\/moved/);
 });
 
 test("a card shows its first two teams, the photo's credit, the headline, writer, outlet, day, and summary", () => {

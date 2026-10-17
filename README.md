@@ -171,6 +171,12 @@ opens, and each phone types it once. Case, spaces, and hyphens don't count.
 Running it again with a new code signs every phone out until it types the new
 one, and `--remove` stops asking. Never commit or post the code.
 
+To give the page an address of its own, on a domain in the Cloudflare account,
+run `npm run set-page-host -- <app> <host>` once the page has a code. It points
+`https://<host>/` at the Worker, which opens the page there without the key,
+behind the code alone. The address with the key keeps working as before. Keep
+the host out of the repo, as the Worker's own address is.
+
 Each app's news needs an Anthropic API key, as its Worker's `ANTHROPIC_API_KEY`
 secret. Have the user add it themselves in the Cloudflare dashboard (the Worker's
 **Settings**, then **Variables and Secrets**, as a **Secret**), never in chat.
@@ -226,10 +232,12 @@ something doesn't match, point them to Cloudflare's
 runs the tests, in Node and in a browser, on every pull request, so merge once
 those pass and the pull request has no conflicts with `main`. If the repo has a
 `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret, Claude also reviews
-every push to a pull request, comments on bugs, rule breaks, security problems,
-and missing tests, and keeps one summary comment up to date. The review is one
-of the checks that must pass, so a review that can't run blocks the merge. Its
-findings don't fail the check; answer each one by fixing it or replying. To run the
+every push to a pull request in full, as [REVIEW.md](REVIEW.md) says: it splits
+the change into shares one reviewer can read every line of, reviews them all at
+once and then across them, comments on each finding's line, and keeps one
+summary comment up to date. The review is one of the checks that must pass, so
+a review that can't run, or that left a changed file unread, blocks the merge.
+Its findings don't fail the check; answer each one by fixing it or replying. To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,
 then `npm run check`. `npm run format` fixes formatting.
 

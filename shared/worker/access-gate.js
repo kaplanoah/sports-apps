@@ -80,12 +80,13 @@ export async function readAccess(request, env) {
 /**
  * @param {Request} request
  * @param {any} env
+ * @param {string} prefix what the page's paths start with at the address the phone used
  */
-export async function createAccessCookie(request, env) {
+export async function createAccessCookie(request, env, prefix) {
   const isSecure = new URL(request.url).protocol === "https:";
   return [
     `${COOKIE_NAME}=${await signCode(env.ACCESS_CODE, env.ACCESS_SIGNING_KEY)}`,
-    `Path=/${env.APP_KEY}/`,
+    `Path=${prefix}/`,
     `Max-Age=${COOKIE_MAX_AGE_SECONDS}`,
     "HttpOnly",
     // Lax, not Strict, so a link tapped in another site's page still opens the app.
@@ -117,8 +118,9 @@ async function readSentCode(request) {
 /**
  * @param {Request} request
  * @param {any} env
+ * @param {string} prefix
  */
-async function checkSentCode(request, env) {
+async function checkSentCode(request, env, prefix) {
   const code = await readSentCode(request);
   if (code === null) return respondError(400, "bad_request", "Send the code as { code }.");
   if (!env.ACCESS_SIGNING_KEY)
@@ -130,7 +132,7 @@ async function checkSentCode(request, env) {
     return respondError(401, "wrong_code", "That code isn't right.");
   return new Response(null, {
     status: 204,
-    headers: { "set-cookie": await createAccessCookie(request, env) },
+    headers: { "set-cookie": await createAccessCookie(request, env, prefix) },
   });
 }
 
@@ -139,12 +141,13 @@ async function checkSentCode(request, env) {
  * code signs the phone in.
  * @param {Request} request
  * @param {any} env
+ * @param {string} prefix what the page's paths start with at the address the phone used
  */
-export async function serveAccess(request, env) {
+export async function serveAccess(request, env, prefix) {
   if (!env.ACCESS_CODE) return respondError(404, "not_found", "This page needs no code.");
   if (request.method === "GET")
     return respondJson({ isChanged: (await readAccess(request, env)) === "changed" });
-  if (request.method === "POST") return checkSentCode(request, env);
+  if (request.method === "POST") return checkSentCode(request, env, prefix);
   return respondError(405, "method_not_allowed", "GET or POST only.");
 }
 

@@ -3,6 +3,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 const findCodeField = (page) => page.getByRole("textbox", { name: "Access code" });
@@ -27,20 +28,30 @@ test("the gate's text keeps to its type roles", async ({ page }) => {
   expect(await listStrayPeriods(page)).toEqual([]);
 });
 
-test("the gate's heading is set as a sheet's title, and Open as the app's other buttons", async ({
+test("the gate's heading is set as a sheet's title, Open as the app's other buttons, and the code field inside an outlined button's line", async ({
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   const heading = await readRole(page, "heading");
-  const label = await readRole(page, "label");
+  const body = await readRole(page, "body");
   await expect(findGate(page)).toHaveCSS("font-size", `${heading.size}px`);
   await expect(findGate(page)).toHaveCSS("font-weight", String(heading.weight));
   await expect(findGate(page)).toHaveCSS("text-transform", "uppercase");
 
   const open = page.getByRole("button", { name: "Open" });
-  await expect(open).toHaveCSS("font-size", `${label.size}px`);
-  await expect(open).toHaveCSS("font-weight", String(label.weight));
+  await expect(open).toHaveCSS("font-size", `${body.size}px`);
+  await expect(open).toHaveCSS("font-weight", String(body.weight));
   await expect(open).toHaveCSS("text-transform", "uppercase");
+  await expect(open).toHaveCSS("height", "36px");
+  const box = /** @type {{ y: number, height: number }} */ (await open.boundingBox());
+  expect((await readCapitals(open)).middle - (box.y + box.height / 2)).toBeCloseTo(0, 0);
+
+  const field = findCodeField(page);
+  await expect(field).toHaveCSS("background-color", await readColor(page, "--card"));
+  await expect(field).toHaveCSS(
+    "box-shadow",
+    `${await readColor(page, "--card-border")} 0px 0px 0px 1px inset`,
+  );
 });
 
 test("the page asks for its code in the theme's accent, and the right one opens the app for good", async ({

@@ -16,7 +16,7 @@
 // games. Runs in the page and in Node, so it uses no DOM.
 
 import { describeCount } from "./game-search.js";
-import { isForgivenTypo, readTokens, splitWords } from "./search-words.js";
+import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.js";
 
 /** @typedef {{ code: string, name: string, fullName: string, record?: string }} PageTeam */
 /**
@@ -45,6 +45,8 @@ import { isForgivenTypo, readTokens, splitWords } from "./search-words.js";
  * @property {PagePlace[]} places
  * @property {GamePart[]} gameParts
  * @property {string[]} examples
+ * @property {boolean} isOutKnown whether its players say who is out, or the words that ask find
+ *   their pages without saying
  * @property {{ place: PagePlace, stories: import("./news-picks.js").NewsStory[] }} [news] the News
  *   tab, and the stories it shows, newest first, so a team's news lists the newest about it
  */
@@ -87,6 +89,13 @@ export const describePlayerIndex = (season, players) => ({
   season,
   players: players.toSorted(compareNames),
 });
+
+/**
+ * The list of a season's players the store keeps beside its rosters, or null for one the page
+ * can't read.
+ * @param {any} index
+ */
+export const readPlayerIndex = (index) => (Array.isArray(index?.players) ? index : null);
 
 // A word this short only finds a team, a name, or a place once it's whole, or it would find too
 // many.
@@ -272,12 +281,6 @@ export const findPartGame = (games, part) =>
   (part.game === "latest-final"
     ? games.findLast((game) => game.state === "final")
     : games.find((game) => game.state !== "final")) ?? null;
-
-/**
- * @param {import("./search-words.js").Token} token
- * @param {string} kind
- */
-const hasKind = (token, kind) => token.meanings.some((meaning) => meaning.kind === kind);
 
 /**
  * The words left for a search of games once some have found a page: all but those the search of
@@ -487,14 +490,15 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
 
 /**
  * Who is out, when the words ask with no name, or the players they name, each saying whether
- * she's out, or no page when they name no one.
+ * she's out, or no page when they name no one. A league whose players don't say who is out lists
+ * no one for the words alone, and the players named without a word on it.
  * @param {import("./search-words.js").Token[]} rest the tokens besides those that ask who is out
  * @param {{ text: string, pages: SearchPages, isTyping: boolean }} search
  * @returns {FoundPages}
  */
 function findOutPages(rest, { text, pages, isTyping }) {
   if (!rest.length) {
-    const rows = listOutRows(pages.players, pages);
+    const rows = pages.isOutKnown ? listOutRows(pages.players, pages) : [];
     if (!rows.length) return { rows: [], gameText: text };
     return { rows, gameText: null, read: describeWhoIsOut(rows) };
   }
@@ -505,6 +509,7 @@ function findOutPages(rest, { text, pages, isTyping }) {
     return team ? [/** @type {PageRow} */ ({ kind: "player", team, player, out: "named" })] : [];
   });
   if (!rows.length) return { rows: [], gameText: text };
+  if (!pages.isOutKnown) return { rows, gameText: null };
   const [player] = players;
   const read =
     players.length === 1
@@ -561,19 +566,21 @@ function findTeamPages(teamTokens, otherTokens, { text, tokens, pages }) {
 }
 
 /**
- * Who is out on a team, or, when no one is, its section, which lists every player.
+ * Who is out on a team, or, when no one is or its players don't say, its section, which lists
+ * every player.
  * @param {PageTeam} team
  * @param {SearchPages} pages
  * @returns {FoundPages}
  */
 function findTeamOutPages(team, pages) {
+  const section = pages.section ? [/** @type {PageRow} */ ({ kind: "section", team })] : [];
+  if (!pages.isOutKnown) return { rows: section, gameText: null };
   const rows = listOutRows(
     pages.players.filter((player) => player.team === team.code),
     pages,
   );
   const read = { lead: team.name, facts: ["Who's out", describeCount(rows.length, "player")] };
-  if (rows.length) return { rows, gameText: null, read };
-  return { rows: pages.section ? [{ kind: "section", team }] : [], gameText: null, read };
+  return { rows: rows.length ? rows : section, gameText: null, read };
 }
 
 /**

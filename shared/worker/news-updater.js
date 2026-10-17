@@ -1,6 +1,6 @@
 import { isSameJson } from "../page/compare.js";
 import { readEasternDay } from "../page/days.js";
-import { isWebAddress } from "../page/news-picks.js";
+import { isWebAddress } from "../page/html.js";
 import { hashText } from "./hash-text.js";
 import { countRequests, describeJobRun } from "./job-status.js";
 import { askClaude } from "./news-claude.js";
@@ -125,10 +125,24 @@ function createStory(entry, id, now, readRuleDrop) {
   };
 }
 
-async function addNewStories({ storage, stories, entries, now, league }) {
+/**
+ * @param {NewsStory["photo"]} first
+ * @param {NewsStory["photo"]} second
+ */
+const isSamePhoto = (first, second) =>
+  first?.url === second?.url && first?.credit === second?.credit;
+
+// An outlet can move a story's photo to a new address and take the old one down, so a story the
+// news keeps takes its feed's photo as it is now.
+async function saveFeedEntries({ storage, stories, entries, now, league }) {
   for (const entry of entries) {
     const id = await hashText(entry.url);
-    if (stories.has(id)) continue;
+    const kept = stories.get(id);
+    if (kept) {
+      if (!isSamePhoto(kept.photo, entry.photo))
+        await saveStories(storage, stories, [{ ...kept, photo: entry.photo }]);
+      continue;
+    }
     const story = createStory(entry, id, now, league.readRuleDrop);
     if (now - Date.parse(story.publishedAt) > SHOWN_MS) continue;
     await saveStories(storage, stories, [story]);
@@ -439,7 +453,7 @@ async function updateNews(context, league) {
   const { fetchImpl } = counter;
   const { entries, missing } = await league.readFeeds(fetchImpl);
   const stories = await readStories(storage);
-  await addNewStories({ storage, stories, entries, now, league });
+  await saveFeedEntries({ storage, stories, entries, now, league });
   await forgetOldStories(storage, stories, now);
   await judgeAgainOnNewRules(storage, stories, league.prompt);
   const problem = await curateStories({ storage, stories, env, fetchImpl, now, league });

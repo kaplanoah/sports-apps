@@ -44,10 +44,13 @@ const listJobs = () => {
   return [...jobs.matchAll(/^ {2}([a-z-]+):$/gm)].map(([, job]) => job);
 };
 
+// Prettier writes a long list of needs on a line of its own for each.
 const readCheckNeeds = () =>
   readRepoFile(".github/workflows/ci.yml")
-    .match(/^ {2}check:\n(?: {4}.*\n)*? {4}needs: \[(.*)\]$/m)?.[1]
-    .split(", ");
+    .match(/^ {2}check:\n(?: {4}.*\n)*? {4}needs:\s*\[([^\]]*)\]/m)?.[1]
+    .split(",")
+    .map((job) => job.trim())
+    .filter(Boolean);
 
 // check is the one job a merge waits on, so a job it doesn't need could fail without stopping
 // one. caches only costs pull requests their cache when it fails.
@@ -137,7 +140,59 @@ test("a label change runs only the gate again once a run passed every test on th
   const check = readJob("check");
   assert.match(
     check,
-    /if: github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true'\n.*\n\s+name: ci-tested-/,
+    /github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true' &&\n\s+steps\.tested\.outputs\.reviewed == 'true'\n.*\n\s+name: ci-tested-/,
   );
   assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
+});
+
+// A draft's run passes with its review skipped, which comes once it's ready on the same code, so
+// it never records its code for a later label change to skip the review.
+test("a draft's run never records its code as reviewed", () => {
+  assert.match(
+    readJob("check"),
+    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.count != '' \|\|\n\s+!github\.event\.pull_request\.draft \}\}/,
+  );
+});
+
+// A review reads a change of any size in full: each share's reads are checked, and review fails
+// on any file left unread, from a guide the pull request can't change, on a named model.
+test("the review reads every share in full and fails on any file left unread", () => {
+  assert.match(
+    readJob("review-plan"),
+    /node worker\/plan-review\.mjs \.review >> "\$GITHUB_OUTPUT"/,
+  );
+  const share = readJob("review-share");
+  assert.match(share, /include: \$\{\{ fromJSON\(needs\.review-plan\.outputs\.shares/);
+  assert.match(share, /git show FETCH_HEAD:REVIEW\.md > \.review\/REVIEW\.md/);
+  assert.match(share, /--model claude-opus-5-5/);
+  assert.match(share, /disableAllHooks/);
+  assert.match(
+    share,
+    /node worker\/judge-review\.mjs share \.review "\$SHARE" >> "\$GITHUB_OUTPUT"/,
+  );
+  assert.match(share, /if: \$\{\{ !cancelled\(\) && steps\.first\.outputs\.unread != '' \}\}/);
+  const across = readJob("review-across");
+  assert.match(across, /node worker\/judge-review\.mjs across \.review/);
+  assert.match(across, /if: steps\.review\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+  assert.match(
+    share,
+    /if: \$\{\{ !cancelled\(\) && steps\.last\.outputs\.unread != '' \}\}\n\s+run: \|\n.*\n\s+exit 1/,
+  );
+  const review = readJob("review");
+  assert.match(
+    review,
+    /needs: \[review-plan, review-share, review-across\]\n\s+if: \$\{\{ !cancelled\(\) \}\}/,
+  );
+  assert.match(review, /run: node worker\/judge-review\.mjs summary \.review/);
+  assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+});
+
+// A label change skips the review only when a run already passed it on exactly this code, so
+// adding a label never turns a failed review into a passing check.
+test("a label change reviews again unless a run passed the review on the same code", () => {
+  const plan = readJob("review-plan");
+  assert.match(plan, /needs: passed/);
+  assert.match(plan, /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
+  assert.match(plan, /elif \[ -n "\$PASSED_RUN" \]; then/);
+  assert.doesNotMatch(plan, /"\$ACTION" = "labeled"/);
 });

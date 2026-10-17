@@ -1,5 +1,5 @@
 import { session } from "./session.js";
-import { SEASON_GAMES } from "./snapshot.js";
+import { countSeasonGames } from "./snapshot.js";
 
 const isAhead = (gamesBack) => gamesBack === "-" || String(gamesBack).startsWith("+");
 
@@ -33,7 +33,7 @@ export function findStandingsRow(id) {
     .find((row) => row.id === id);
 }
 
-const countMostWins = (row) => SEASON_GAMES - Number(row.l);
+const countMostWins = (row) => countSeasonGames(row) - Number(row.l);
 
 // The fewest and most wins the division's eventual winner can finish with.
 function findDivisionWinnerRange(rows) {

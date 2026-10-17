@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { noteFailedImage } from "../shared/page/failed-images.js";
 import { formatClipLength, renderHighlights } from "../shared/page/highlights-view.js";
+import { renderReadButton } from "../shared/page/news-view.js";
 import { stripTags } from "./text.js";
 
 const NOW = Date.parse("2026-10-08T12:00:00Z");
@@ -104,6 +106,26 @@ test("a clip whose video isn't a web address leaves the list", () => {
   assert.doesNotMatch(readText(renderHighlights(highlights, { describePlay, now: NOW })), /Odd/);
 });
 
+test("a story whose address isn't a web address shows without a button to read it", () => {
+  const highlights = {
+    ...HIGHLIGHTS,
+    story: { ...HIGHLIGHTS.story, url: "javascript:alert(1)" },
+  };
+
+  const markup = renderHighlights(highlights, { describePlay, now: NOW });
+  assert.match(readText(markup), /Story Padres force Game 4 SAN DIEGO -- The Padres found a way\./);
+  assert.doesNotMatch(markup.text, /href|Read on/);
+});
+
+test("a news story's links open it only at a web address", () => {
+  const story = { url: "javascript:alert(1)", outlet: "ESPN", title: "Liberty win" };
+  assert.equal(renderReadButton(story).text, "");
+  assert.match(
+    renderReadButton({ ...story, url: "https://www.espn.com/story" }).text,
+    /href="https:\/\/www\.espn\.com\/story"/,
+  );
+});
+
 test("a game with no clips or story yet says so", () => {
   const markup = renderHighlights(
     { recap: null, story: null, plays: [] },
@@ -111,4 +133,16 @@ test("a game with no clips or story yet says so", () => {
   );
 
   assert.equal(readText(markup), "No highlights for this game yet");
+});
+
+test("a still that didn't load is left out, and its clip still plays", () => {
+  const clip = describeClip("Moved still", { inning: 2, still: "https://img.test/moved.jpg" });
+  const highlights = { recap: null, story: null, plays: [clip] };
+
+  noteFailedImage(clip.still);
+
+  const markup = renderHighlights(highlights, { describePlay, now: NOW }).text;
+  assert.doesNotMatch(markup, /<img/);
+  assert.match(markup, /class="clip-still"[\s\S]*class="clip-play"/);
+  assert.match(markup, /data-video="https:\/\/video\.test\/11\.mp4"/);
 });

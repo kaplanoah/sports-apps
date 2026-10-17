@@ -12,7 +12,20 @@
  * @property {{ name: string, words: string[] } | null} crossConference a game between its two
  *   leagues or conferences, or null where fans have no name for one
  * @property {string[]} neverShown words its pages never show, like another sport's or the press's
+ * @property {string[]} searchFiller words its fans put in a search of its games that ask for
+ *   nothing a game has, besides every league's, like baseball's "pitching"
+ * @property {boolean} seasonSpansYears whether its season runs from one year into the next, as
+ *   the NBA's does
  */
+
+/**
+ * A season's name, as fans write it: its year, or, for a season that runs into the next year,
+ * both, like 2025-26.
+ * @param {number} year the year the season starts
+ * @param {Pick<LeagueWords, "seasonSpansYears">} words
+ */
+export const nameSeason = (year, { seasonSpansYears }) =>
+  seasonSpansYears ? `${year}-${String((year + 1) % 100).padStart(2, "0")}` : String(year);
 
 /** @param {string} word */
 const matchWholeWord = (word) =>

@@ -13,13 +13,19 @@
  *   --sheet-shadow                             their shadow on wide screens, or none
  *   --ink, --ink-mid, --ink-dim                text, from brightest to dimmest
  *   --ink-hover                                text under a mouse, the one change a hover makes
- *   --accent, --accent-ink                     the selected tab and a switch that is on, and text on it
+ *   --accent, --accent-ink                     a sheet's close and back buttons, a switch that is on,
+ *                                              and the Home Screen bar's button, and text on it
  *   --focus-ring                               the keyboard focus ring
  *   --radius-card                              a card's corners, like the Updates box's
  *   --radius-chip                              a chip's corners, like a status beside a title
  *   --radius-control                           a button's or a field's corners
+ *   --radius-tabs                              the corners of a wide screen's track of tabs
  *   --radius-sheet                             a sheet's corners, and the settings dialog's, on wide
  *                                              screens; on phones they fill the screen
+ *   --control-height, --control-room           a button's height, and the room beside its words
+ *   --tabs-track, --tabs-track-edge            a wide screen's track of tabs, and the line inside it
+ *   --tabs-chosen, --tabs-chosen-edge          the open tab's fill, and the line inside it
+ *   --tabs-chosen-ink                          the open tab's words
  *   --switch-knob                              a switch's knob, one light color in every theme, as the
  *                                              phone keeps its own
  *   --select-arrow                             a url() of a select field's down arrow, in --ink-dim, if
@@ -79,18 +85,13 @@
 
 nav.tabs {
   display: flex;
-  gap: 8px;
   margin-bottom: 28px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 .tab-bar {
   display: contents;
 }
 .tab-list {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 .tab-backing,
 .tab-pill,
@@ -104,26 +105,39 @@ nav.tabs {
   display: contents;
 }
 /* Only the tabs themselves, and search, a tab beside them: the tabs' row can hold other buttons
-   too. */
+   too. An app's styles.css sets their words as its other buttons'. */
 .tab-list button,
 nav.tabs .search-tab {
   font: inherit;
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: none;
-  border: 1px solid var(--card-border);
-  color: var(--ink-dim);
-  padding: 6px 18px;
-  border-radius: var(--radius-control);
   cursor: pointer;
 }
-.tab-list button.active,
-nav.tabs .search-tab.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+/* On a wide screen, the tabs are one segmented control: each as tall as any other button, in a
+   track just around them, the open one filled. */
+@media (min-width: 780px) {
+  nav.tabs {
+    width: max-content;
+    padding: 2px;
+    border-radius: var(--radius-tabs);
+    background: var(--tabs-track);
+    box-shadow: inset 0 0 0 1px var(--tabs-track-edge);
+  }
+  .tab-list button,
+  nav.tabs .search-tab {
+    height: var(--control-height);
+    padding: 0 var(--control-room);
+    border: 0;
+    border-radius: var(--radius-control);
+    background: none;
+    color: var(--ink);
+    align-content: center;
+    text-box: trim-both cap alphabetic;
+  }
+  .tab-list button.active,
+  nav.tabs .search-tab.active {
+    background: var(--tabs-chosen);
+    box-shadow: inset 0 0 0 1px var(--tabs-chosen-edge);
+    color: var(--tabs-chosen-ink);
+  }
 }
 
 /* A sideways bracket's round dots, as round-dots.js draws them, sit under it. */
@@ -302,7 +316,7 @@ section.view.active {
    swipe down at the top moves the sheet instead. An app that fills the whole sheet sizes its
    sections from --section-gap and --bottom-padding. */
 .settings-panel {
-  --head-height: 64px;
+  --head-height: 63px;
   --section-gap: 14px;
   --bottom-padding: 22px;
   width: calc(100% - 24px);
@@ -337,13 +351,15 @@ section.view.active {
   min-height: 100%;
   padding: 0 22px var(--bottom-padding);
 }
+/* A sheet's or settings' header has the same room above and below on every screen. On a phone,
+   where it reaches the screen's top, it also clears the status bar by --top-inset. */
 .sheet-top {
+  --top-inset: 0px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   min-height: var(--head-height);
   margin-inline: -22px;
-  padding: 10px 22px;
+  padding: calc(var(--top-inset) + 8px) 22px 6px;
   background: var(--sheet);
 }
 /* A sheet's title is centered, clear of the close or back button at the head's left. */
@@ -395,17 +411,17 @@ section.view.active {
   white-space: normal;
 }
 /* A sheet's close button, a caret down, or its back button, an arrow, in place of it on a sheet
-   opened from another: just the icon, in --accent, its words only for screen readers. */
+   opened from another: just the icon, in --accent, its words only for screen readers. It holds the
+   head's top 44px, whatever the title under it holds. */
 .sheet-close,
 .sheet-back {
   position: absolute;
   left: -12px;
-  top: 50%;
+  top: 0;
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  margin-top: -22px;
   padding: 0;
   border: 0;
   background: none;
@@ -479,7 +495,8 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
 }
 
 /* Settings: the appearance choices show the home-screen icon each one offers. System shows
-   both, the light look's on the left half and the dark look's on the right. */
+   both, the light look's on the left half and the dark look's on the right, from the two icons
+   or, where their halves would meet with a seam, from one icon drawn to blend them. */
 .appearance-row {
   flex-direction: column;
   align-items: stretch;
@@ -783,7 +800,6 @@ body:has(> .home-screen-bar:not([hidden])) {
   /* On phones, settings rise from the bottom to fill the screen, and a swipe down closes them.
      sheet-swipe.js moves them with the finger. */
   .settings-panel {
-    --head-height: 63px;
     --bottom-padding: max(22px, env(safe-area-inset-bottom));
     width: 100%;
     max-width: none;
@@ -805,14 +821,9 @@ body:has(> .home-screen-bar:not([hidden])) {
   }
   /* A sheet's top clears the status bar, which a Home Screen page draws over it. */
   .sheet-top {
-    justify-content: flex-start;
+    --top-inset: env(safe-area-inset-top);
     margin-inline: -18px;
-    padding: calc(env(safe-area-inset-top) + 8px) 18px 6px;
-  }
-  .sheet-head h2 {
-    font-size: var(--type-heading-size);
-    font-weight: var(--type-heading-weight);
-    letter-spacing: var(--type-heading-tracking);
+    padding-inline: 18px;
   }
 
   /*
@@ -895,8 +906,6 @@ body:has(> .home-screen-bar:not([hidden])) {
     position: absolute;
     z-index: 1;
     inset: 0;
-    flex-wrap: nowrap;
-    gap: 0;
     padding: 5px 9px;
     touch-action: none;
     user-select: none;

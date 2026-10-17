@@ -203,6 +203,10 @@ test("with no field yet, the bracket says it fills in once MLB projects one", as
 
   await expect(page.getByRole("heading", { name: "No playoff field yet" })).toBeVisible();
   expect(await listStrayPeriods(page)).toEqual([]);
+  const note = page.locator("#noFieldNote");
+  await expect(note).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(note).toHaveCSS("border-top-style", "none");
+  await expect(note.locator("p")).toHaveCSS("text-wrap-style", "balance");
   await expect(page.getByRole("button", { name: "Set the field" })).toHaveCount(0);
   await openSettings(page);
   await expect(page.locator("#rankList")).toHaveText(

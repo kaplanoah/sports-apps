@@ -10,7 +10,7 @@ import {
   watchNews,
 } from "#shared/news.js";
 import { readNewsChoices } from "#shared/news-choices.js";
-import { pickReadCards } from "#shared/news-picks.js";
+import { listShownStories } from "#shared/page-places.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
@@ -43,6 +43,7 @@ import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js
 import { renderBracket } from "./bracket-view.js";
 import { openGameSection, refreshGameSheet, startGameSheet } from "./game-sheet.js";
 import { renderDot } from "./clubs.js";
+import { LEAGUE_WORDS } from "./league-words.js";
 import { listFoundGameDays, listListedGames, listSeasonDays } from "./games-view.js";
 import { NEWS_LEAGUE } from "./news-league.js";
 import { refreshPlayerSheet, startPlayerSheet } from "./player-sheet.js";
@@ -81,7 +82,7 @@ function drawNews() {
 function renderTitleYear() {
   const { year: shownYear, currentYear } = session;
   const isSeasonOver = isPlayoffsOver(session.season?.series ?? []);
-  showTitleYear(chooseTitleYear({ shownYear, currentYear, isSeasonOver }));
+  showTitleYear(chooseTitleYear({ shownYear, currentYear, isSeasonOver }), LEAGUE_WORDS);
 }
 
 function renderAll() {
@@ -163,7 +164,8 @@ async function listSeasonYears() {
 }
 
 /** @param {string[]} years */
-const fillSeasonList = (years) => fillSeasonPicker(findSeasonPicker(), years, session.year);
+const fillSeasonList = (years) =>
+  fillSeasonPicker(findSeasonPicker(), years, session.year, LEAGUE_WORDS);
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 /** @param {number} year */
@@ -186,18 +188,12 @@ function returnGamesToToday() {
   return true;
 }
 
-// Every story the News tab shows, for search to list a team's newest.
-const listReadStories = () =>
-  pickReadCards(session.news?.cards ?? [], readNewsChoices(), NEWS_LEAGUE.outletSwitches).flatMap(
-    (card) => [card.lead, ...card.more],
-  );
-
 const readSearchPages = () =>
   listSearchPages({
     index: session.playerIndex,
     isSettingShown,
     standings: session.season?.standings ?? [],
-    stories: listReadStories(),
+    stories: listShownStories(session.news, readNewsChoices(), NEWS_LEAGUE.outletSwitches),
   });
 
 /**

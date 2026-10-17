@@ -16,6 +16,7 @@ import {
   readWeekday,
   shiftMonth,
 } from "./days.js";
+import { capitalize } from "./html.js";
 
 /** @typedef {import("./search-words.js").Meaning} Meaning */
 /**
@@ -75,7 +76,7 @@ const RANGES = {
   "this-month": ["this month"],
   "next-month": ["next month"],
   "last-month": ["last month"],
-  "past-week": ["past week", "the past week", "past 7 days", "last 7 days"],
+  "past-week": ["past week", "the past week"],
   "so-far": ["so far", "this season so far"],
   "rest-of-season": ["rest of the season", "rest of season", "rest of the year"],
 };
@@ -105,12 +106,18 @@ const TIMES_OF_DAY = {
 
 const PARTS_OF_MONTH = { early: [1, 10], mid: [11, 20], middle: [11, 20], late: [21, 31] };
 
+/**
+ * A month's name as a search reads it, in English whatever the viewer's language, as "June".
+ * @param {number} month 1 to 12
+ */
+export const nameMonth = (month) => capitalize(MONTHS[month - 1][0]);
+
 /** @returns {{ phrase: string, meaning: Meaning }[]} */
 function listMonthEntries() {
   return MONTHS.flatMap((names, index) =>
     names.map((phrase) => ({
       phrase,
-      meaning: { kind: "month", value: index + 1, display: capitalize(names[0]) },
+      meaning: { kind: "month", value: index + 1, display: nameMonth(index + 1) },
     })),
   );
 }
@@ -143,9 +150,6 @@ function listTimeEntries() {
   );
 }
 
-/** @param {string} word */
-const capitalize = (word) => word.charAt(0).toUpperCase() + word.slice(1);
-
 /** The calendar's words, for a search's dictionary. */
 export const CALENDAR_ENTRIES = [
   ...listMonthEntries(),
@@ -177,7 +181,7 @@ const formatDay = (day) => formatWeekdayAndDate(readCalendarDate(day));
  * @param {string} from
  * @param {string} to
  */
-export function formatDays(from, to) {
+function formatDays(from, to) {
   if (from === to) return formatDay(from);
   const end = isSameMonth(from, to)
     ? String(readDayOfMonth(to))
@@ -191,15 +195,30 @@ export function formatDays(from, to) {
  * @param {boolean} [isFromFridayEvening]
  * @returns {DayRange}
  */
-const createRange = (from, to, isFromFridayEvening = false) => ({
+export const createRange = (from, to, isFromFridayEvening = false) => ({
   from,
   to,
   label: formatDays(from, to),
   ...(isFromFridayEvening && { isFromFridayEvening }),
 });
 
+/** @param {number} number */
+const padDate = (number) => String(number).padStart(2, "0");
+
 /**
- * The days of a month of the season's year.
+ * A day of a month of a year, as "YYYY-MM-DD", or null for one the calendar doesn't have, like
+ * February 30 or a 13th month's day.
+ * @param {number} month 1 to 12
+ * @param {number} day
+ * @param {number} year
+ */
+export function readMonthDay(month, day, year) {
+  const isDay = month >= 1 && month <= 12 && day >= 1 && day <= countDaysInMonth(month, year);
+  return isDay ? `${year}-${padDate(month)}-${padDate(day)}` : null;
+}
+
+/**
+ * The days of a month of a year.
  * @param {number} month 1 to 12
  * @param {number} year
  * @param {[number, number]} [days] the first and last day of the month to cover
@@ -207,9 +226,8 @@ const createRange = (from, to, isFromFridayEvening = false) => ({
  */
 export function readMonthDays(month, year, [firstDay, lastDay] = [1, 31]) {
   const lengthOfMonth = countDaysInMonth(month, year);
-  const pad = (/** @type {number} */ number) => String(number).padStart(2, "0");
-  const from = `${year}-${pad(month)}-${pad(firstDay)}`;
-  const to = `${year}-${pad(month)}-${pad(Math.min(lastDay, lengthOfMonth))}`;
+  const from = `${year}-${padDate(month)}-${padDate(firstDay)}`;
+  const to = `${year}-${padDate(month)}-${padDate(Math.min(lastDay, lengthOfMonth))}`;
   const isWhole = firstDay === 1 && lastDay >= lengthOfMonth;
   return isWhole ? { from, to, label: formatMonth(readCalendarDate(from)) } : createRange(from, to);
 }
@@ -276,11 +294,16 @@ export function readNamedRange(name, { today, seasonStart, seasonEnd }) {
 export const RANGE_TIMES = { tonight: "night", "last-night": "night" };
 
 /**
- * The days from today a count of days covers, as "next 7 days" does.
+ * The days a count of days covers, from today on, as "next 7 days" does, or up to today, as "last
+ * 10 days" and "past 10 days" do.
  * @param {number} count
  * @param {string} today
+ * @param {"next" | "last"} which
  */
-export const readNextDays = (count, today) => createRange(today, addDays(today, count - 1));
+export const readCountedDays = (count, today, which) =>
+  which === "next"
+    ? createRange(today, addDays(today, count - 1))
+    : createRange(addDays(today, 1 - count), today);
 
 /**
  * The part of a day a word names.

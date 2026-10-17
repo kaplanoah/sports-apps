@@ -278,11 +278,11 @@ test("update log: a series game's result and where the series stands join with a
   const describeGame = (entry) => describeEntry({ kind: "game", series: "AL_DS1", ...entry });
   assert.equal(
     describeGame({ won: "NYY", lost: "TOR", runs: [5, 3], game: 2, score: [2, 0] }),
-    "Yankees beat the Blue Jays 5-3 in Game&nbsp;2, lead the ALDS 2&ndash;0",
+    "Yankees beat the Blue Jays 5-3 in Game&nbsp;2, lead the ALDS 2-0",
   );
   assert.equal(
     describeGame({ won: "TOR", lost: "NYY", runs: [4, 1], game: 3, score: [1, 2] }),
-    "Blue Jays beat the Yankees 4-1 in Game&nbsp;3, trail the ALDS 1&ndash;2",
+    "Blue Jays beat the Yankees 4-1 in Game&nbsp;3, trail the ALDS 1-2",
   );
 });
 
@@ -988,6 +988,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
       date: "2026-09-25",
       games: [
         {
+          id: "900001",
           away: "BAL",
           home: "NYY",
           state: "pre",
@@ -996,6 +997,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
           doubleheader: 2,
         },
         {
+          id: "900002",
           away: "BAL",
           home: "NYY",
           state: "final",
@@ -1004,6 +1006,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
           doubleheader: 1,
         },
         {
+          id: "900003",
           away: "CLE",
           home: "BOS",
           state: "live",
@@ -1015,6 +1018,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
       ],
       postponed: [
         {
+          id: "900004",
           away: "TOR",
           home: "BAL",
           state: "off",
@@ -1024,7 +1028,14 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
       ],
     },
     next: [
-      { date: "2026-10-03", away: null, home: "TB", state: "pre", start: "2026-10-03T17:08:00Z" },
+      {
+        id: "900005",
+        date: "2026-10-03",
+        away: null,
+        home: "TB",
+        state: "pre",
+        start: "2026-10-03T17:08:00Z",
+      },
     ],
   };
   assert.deepEqual(describeGameList(slate), [
@@ -1053,6 +1064,24 @@ const seasonSnapshot = buildSnapshot(SEASON_FIXTURE.responses, {
   now: SEASON_FIXTURE_NOW,
 });
 const seasonSchedule = Object.values(seasonSnapshot.schedule).flat();
+
+test("every playoff game listed before its clubs are known keeps a row and a button of its own", () => {
+  const responses = {
+    ...eveningFixture.responses,
+    seasonGames: eveningFixture.responses.postseason,
+  };
+  const now = Date.parse(eveningFixture.now);
+  const snapshot = buildSnapshot(responses, { season: eveningFixture.season, now });
+  session.state = snapshot;
+  const schedule = Object.values(snapshot.schedule).flat();
+  const wildCardDay = schedule.filter((game) => game.date === "2026-09-29");
+  assert.equal(wildCardDay.length, 4);
+  const { days } = listSeasonDays(snapshot.slate, schedule, now);
+  const markup = String(days.find((listed) => listed.day === "2026-09-29")?.markup ?? "");
+  const keys = [...markup.matchAll(/data-game="([^"]*)"/g)].map(([, key]) => key);
+  assert.equal(keys.length, 4);
+  assert.equal(new Set(keys).size, 4);
+});
 
 /** @param {string} row @param {RegExp} pattern */
 const readRowText = (row, pattern) => normalizeSpaces(stripTags(pattern.exec(row)?.[1] ?? ""));
@@ -1153,21 +1182,23 @@ test("games list: a game still to play names its starters with their arm, leavin
       date: "2026-09-29",
       games: [
         {
+          id: "900006",
           away: "BOS",
           home: "NYY",
           state: "pre",
           start: "2026-09-30T00:08:00Z",
           starters: [
-            { id: 801139, name: "Tolle", hand: "L", era: "3.03" },
-            { id: 693645, name: "Schlittler", hand: "R", era: "1.95" },
+            { id: 801139, name: "Tolle", hand: "L" },
+            { id: 693645, name: "Schlittler", hand: "R" },
           ],
         },
         {
+          id: "900007",
           away: "CHC",
           home: "SD",
           state: "pre",
           start: "2026-09-30T02:08:00Z",
-          starters: [{ id: 571510 }, { id: 650633, name: "King", hand: "R", era: null }],
+          starters: [{ id: 571510 }, { id: 650633, name: "King", hand: "R" }],
         },
       ],
     },
@@ -1189,7 +1220,7 @@ test("games list: a game still to play names its starters with their arm, leavin
       rendered,
     );
   assert.equal(button[1], "Game details: Red Sox at Yankees, Tue, Sep 29");
-  assert.equal(button[2], "2026-09-29 BOS NYY 1");
+  assert.equal(button[2], "900006 2026-09-29");
 });
 
 test("a game's sheet heads its Game section with the game's row, whose clubs open their sheets, without its starters or the button that opens it", () => {
@@ -1298,6 +1329,7 @@ test("games list: a delay shows under the start time or the score", () => {
       date: "2026-09-27",
       games: [
         {
+          id: "900008",
           away: "BAL",
           home: "NYY",
           state: "pre",
@@ -1305,6 +1337,7 @@ test("games list: a delay shows under the start time or the score", () => {
           delay: "Delayed: Rain",
         },
         {
+          id: "900009",
           away: "TB",
           home: "PHI",
           state: "live",
@@ -1373,8 +1406,16 @@ test("games list: a finished game marks its winner and dims only the losing scor
     today: {
       date: "2026-09-26",
       games: [
-        { away: "BAL", home: "NYY", state: "final", start: "2026-09-26T17:05:00Z", score: [3, 7] },
         {
+          id: "900010",
+          away: "BAL",
+          home: "NYY",
+          state: "final",
+          start: "2026-09-26T17:05:00Z",
+          score: [3, 7],
+        },
+        {
+          id: "900011",
           away: "TB",
           home: "BOS",
           state: "live",
@@ -1404,8 +1445,15 @@ test("games list: a club out of the race or knocked out of the postseason shows 
     today: {
       date: "2026-10-01",
       games: [
-        { away: "DET", home: "BOS", state: "final", start: "2026-10-01T17:05:00Z", score: [1, 4] },
-        { away: "BAL", home: "TOR", state: "pre", start: "2026-10-01T23:07:00Z" },
+        {
+          id: "900012",
+          away: "DET",
+          home: "BOS",
+          state: "final",
+          start: "2026-10-01T17:05:00Z",
+          score: [1, 4],
+        },
+        { id: "900013", away: "BAL", home: "TOR", state: "pre", start: "2026-10-01T23:07:00Z" },
       ],
     },
   };
@@ -1489,6 +1537,23 @@ test("a seed is final only once no club can still pass or tie it", () => {
 
   session.state = { ...session.state, projected: false };
   assert.equal(isSeedFinal("CHC"), true, "MLB has set the bracket");
+});
+
+test("a division winner's seed is final once a rival a game short for a rainout MLB cancelled can no longer reach it", () => {
+  session.state = { teams: { TB: { seed: 1 }, CLE: { seed: 2 }, HOU: { seed: 3 } } };
+  const listStandings = (scheduled) => ({
+    divisions: {
+      ...FINAL_DAY_STANDINGS.divisions,
+      "AL West": [
+        { id: "HOU", w: 84, l: 77, elim: "-", wce: "-", lead: true, ...scheduled },
+        { id: "TEX", w: 80, l: 81, elim: "-", wce: "E", ...scheduled },
+      ],
+    },
+  });
+  session.standings = listStandings({ scheduled: 161 });
+  assert.equal(isSeedFinal("CLE"), true, "the Astros can win 84 at most, under the Guardians' 85");
+  session.standings = listStandings({});
+  assert.equal(isSeedFinal("CLE"), false, "over 162 games the Astros could still tie");
 });
 
 test("games list: a season with no live data says why", () => {
@@ -1600,7 +1665,15 @@ test("an update finds the one game all its entries came from, and none when they
 });
 
 test("games list: a game under way shows its outs as two lights beside the inning", () => {
-  const live = (away, outs) => ({ away, home: "NYY", state: "live", inning: 5, half: "top", outs });
+  const live = (away, outs) => ({
+    id: `${away}-NYY`,
+    away,
+    home: "NYY",
+    state: "live",
+    inning: 5,
+    half: "top",
+    outs,
+  });
   const slate = {
     today: { date: "2026-09-24", games: [live("BOS", 1), live("TB", 2), live("TOR", 0)] },
   };

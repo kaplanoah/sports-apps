@@ -15,6 +15,7 @@ import { scrollSettingsToEnd, waitForSheetToRise, WITH_A_PAST_SEASON } from "./s
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -33,6 +34,21 @@ test("settings leave the page behind them as it is, as every sheet does", async 
     (dialog) => getComputedStyle(dialog, "::backdrop").backgroundColor,
   );
   expect(dim).toBe("rgba(0, 0, 0, 0)");
+});
+
+test("settings' header holds its title, its close button, and the room under them alike on a phone and a wide screen", async ({
+  page,
+}) => {
+  const top = page.locator("#settingsDialog .sheet-top");
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSettings(page);
+  await expect(top).toBeVisible();
+  const onPhone = await readTopSpacing(top);
+
+  await page.setViewportSize(LAPTOP);
+
+  expect(await readTopSpacing(top)).toEqual(onPhone);
 });
 
 test("the sliders button opens settings, and its close button, Escape, or the backdrop closes it", async ({

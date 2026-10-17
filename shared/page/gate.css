@@ -1,9 +1,11 @@
 /*
  * The page a phone sees until it sends the access code (an app's gate.html): the app's icon, the
  * code, and Open, together in the middle of the screen, however short. Pages theme it with
- * --card, --card-border, --ink, --ink-dim, --accent, --accent-ink, --focus-ring, --radius-control,
- * --gate-problem (what was typed is wrong), and --gate-code-font. Its title is set as a sheet's
- * title, and Open as a pager's buttons, which an app's styles.css sets for both.
+ * --card-border, --ink, --ink-dim, --raised and --edge (a field's fill and the line inside it, as
+ * an outlined button's), --accent, --accent-ink, --pager-chosen-edge, --focus-ring,
+ * --radius-control, --control-height, --control-room, --gate-problem (what was typed is wrong), and
+ * --gate-code-font. Its title is set as a sheet's title, and Open as the app's other buttons, which
+ * an app's styles.css sets for both.
  */
 body.gate-page {
   display: flex;
@@ -45,14 +47,16 @@ body.gate-page {
   gap: 12px;
   width: 100%;
 }
+/* The field is raised inside the same line as an outlined button. */
 .code-field {
   width: 100%;
   max-width: 250px;
   height: 44px;
   padding: 0 12px;
-  border: 1.5px solid color-mix(in srgb, var(--card-border), var(--ink) 25%);
+  border: 0;
   border-radius: var(--radius-control);
-  background: var(--card);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--edge);
   color: var(--ink);
   font-family: var(--gate-code-font);
   font-size: 1.5rem;
@@ -63,28 +67,27 @@ body.gate-page {
 }
 .code-field::placeholder {
   color: var(--ink-dim);
-  opacity: 0.55;
+  opacity: 1;
   letter-spacing: 0.06em;
 }
 .code-field:focus {
   outline: none;
 }
 .code-field.is-wrong {
-  border-color: var(--gate-problem);
+  box-shadow: inset 0 0 0 1px var(--gate-problem);
 }
+/* Open is filled like the app's chosen buttons, its words centered on their capitals. */
 .open-button {
-  height: 40px;
-  min-width: 120px;
-  padding: 0 26px;
+  height: var(--control-height);
+  padding: 0 var(--control-room);
   border: 0;
   border-radius: var(--radius-control);
   background: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--pager-chosen-edge);
   color: var(--accent-ink);
   font: inherit;
-  font-size: var(--type-label-size);
-  font-weight: calc(var(--type-label-weight) - 100);
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  align-content: center;
+  text-box: trim-both cap alphabetic;
   cursor: pointer;
 }
 body.kbd .open-button:focus {
