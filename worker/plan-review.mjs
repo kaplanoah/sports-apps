@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { findSummary, readReviewedHead } from "./review-state.mjs";
 
@@ -114,9 +115,6 @@ export function nameCodeArea(path) {
 }
 
 /** @param {string} path */
-const isTest = (path) => /^(apps\/[^/]+\/)?tests\//.test(path);
-
-/** @param {string} path */
 const nameTested = (path) => basename(path).replace(/\.(test|spec)\.m?js$|\.m?js$/, "");
 
 /**
@@ -133,7 +131,7 @@ export function findTestedFile(test, changed, repoFiles) {
   const isInScope = (path) => (app ? path.startsWith(`apps/${app}/`) : !path.startsWith("apps/"));
   /** @param {string} path */
   const isCandidate = (path) =>
-    !isTest(path) &&
+    !isTestPath(path) &&
     isInScope(path) &&
     /\.m?js$/.test(path) &&
     basename(path).replace(/\.m?js$/, "") === name;
@@ -214,8 +212,8 @@ function groupInUnits(files) {
 function groupInAreas(files, repoFiles, areaLines) {
   const changed = files.map((file) => file.path);
   const placed = files.map((file) => {
-    const tested = isTest(file.path) ? findTestedFile(file.path, changed, repoFiles) : null;
-    const name = isTest(file.path) ? nameTestArea(file.path, tested) : nameCodeArea(file.path);
+    const tested = isTestPath(file.path) ? findTestedFile(file.path, changed, repoFiles) : null;
+    const name = isTestPath(file.path) ? nameTestArea(file.path, tested) : nameCodeArea(file.path);
     const unit = tested ?? file.path;
     return { ...file, name, unit, order: tested ? `${tested}\u0000${file.path}` : file.path };
   });

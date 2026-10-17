@@ -233,6 +233,20 @@ test("areas keep each test beside its code, and a test of no file joins its app'
   );
 });
 
+test("a root test of no file joins the tooling", () => {
+  const areas = listAreas(
+    [
+      { path: "worker/deploy.mjs", lines: 200 },
+      { path: "tests/browser/sheet-stack.spec.mjs", lines: 200 },
+    ],
+    REPO,
+  );
+  assert.deepEqual(
+    areas.map(({ name, files }) => ({ name, files })),
+    [{ name: "tooling", files: ["tests/browser/sheet-stack.spec.mjs", "worker/deploy.mjs"] }],
+  );
+});
+
 test("small areas are read together, and a big one in parts in path order", () => {
   const areas = listAreas(
     [
