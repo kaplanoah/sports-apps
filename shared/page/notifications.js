@@ -115,20 +115,27 @@ async function saveSubscription(current) {
 const isTurnedAway = (error) =>
   /** @type {{ code?: string } | undefined} */ (error)?.code === "too_many_devices";
 
-// A device the Worker doesn't keep never gets a message, so the browser doesn't keep it either,
-// and the switch shows it off, now and on the next visit.
+// A device the Worker turns away never gets a message, so the browser doesn't keep it either, and
+// the switch shows it off, now and on the next visit. A save that fails any other way keeps the
+// subscription, which the next visit saves again.
+async function saveOrForget(current) {
+  try {
+    await saveSubscription(current);
+  } catch (error) {
+    if (isTurnedAway(error)) {
+      await current.unsubscribe().catch(() => {});
+      subscription = null;
+    }
+    throw error;
+  }
+}
+
 async function subscribe(publicKey) {
-  const created = await registration.pushManager.subscribe({
+  subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: decodeBase64Url(publicKey),
   });
-  try {
-    await saveSubscription(created);
-  } catch (error) {
-    await created.unsubscribe().catch(() => {});
-    throw error;
-  }
-  subscription = created;
+  await saveOrForget(subscription);
 }
 
 // Saving again on every visit restores a subscription the Worker lost, and a new signing key
@@ -142,15 +149,7 @@ async function syncSubscription() {
     await subscribe(publicKey);
     return;
   }
-  try {
-    await saveSubscription(subscription);
-  } catch (error) {
-    if (isTurnedAway(error)) {
-      await subscription.unsubscribe().catch(() => {});
-      subscription = null;
-    }
-    throw error;
-  }
+  await saveOrForget(subscription);
 }
 
 // A sync that leaves the browser unsubscribed shows the switch off. Any other is tried again on

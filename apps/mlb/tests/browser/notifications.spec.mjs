@@ -143,6 +143,45 @@ test("a device the Worker no longer has room for on a later visit is turned off"
     .toBeNull();
 });
 
+test("a new signing key whose save fails for a moment leaves the switch on, and the next visit saves it", async ({
+  page,
+}) => {
+  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await openApp(page);
+  await openSettings(page);
+  const toggle = page.getByRole("switch", { name: "Notifications" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  const newKey = Buffer.from(new Uint8Array(65).fill(4)).toString("base64url");
+  await page.route(matchPath("/push/key"), (route) =>
+    route.fulfill({ json: { publicKey: newKey } }),
+  );
+  const answerUnavailable = (/** @type {import("@playwright/test").Route} */ route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 503,
+          json: { error: { code: "unavailable", message: "The store is busy." } },
+        })
+      : route.fallback();
+  await page.route(matchPath("/push/subscription"), answerUnavailable);
+  const failedSave = page.waitForResponse(
+    (response) => response.url().endsWith("/push/subscription") && response.status() === 503,
+  );
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await failedSave;
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+  await page.unroute(matchPath("/push/subscription"), answerUnavailable);
+  const save = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/push/subscription") && response.request().method() === "PUT",
+  );
+  await page.reload({ waitUntil: "domcontentloaded" });
+  expect((await save).status()).toBe(204);
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+});
+
 test("blocked notifications point to the browser's site settings", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(Notification, "permission", { get: () => "denied" });
