@@ -153,14 +153,28 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Walnut" })).toBeChecked();
 });
 
-test("changing the appearance says how to match the home-screen icon", async ({ page }) => {
+test("changing the appearance on the Home Screen says how to match its icon, which the browser leaves out", async ({
+  page,
+  context,
+}) => {
+  const openSettings = (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", { get: () => true });
+  });
   await openApp(page);
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openSettings(page);
   const note = page.locator("#appearanceNote");
   await expect(note).toBeHidden();
   await page.getByRole("radio", { name: "Walnut" }).check();
   await expect(note).toBeVisible();
   await expect(note).toHaveText(/Apple sets a home-screen icon only when the page is added/);
+
+  const browserTab = await context.newPage();
+  await openApp(browserTab);
+  await openSettings(browserTab);
+  await browserTab.getByRole("radio", { name: "Maple" }).check();
+  await expect(browserTab.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(browserTab.locator("#appearanceNote")).toBeHidden();
 });
 
 test("settings end with the release, NBA.com's credit for the data, and the copyright", async ({

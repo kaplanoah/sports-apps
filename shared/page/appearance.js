@@ -5,6 +5,7 @@
 
 /* global openThemeAddress -- from pick-theme.js, which every page that loads this runs first */
 
+import { isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
 
 /**
@@ -93,7 +94,7 @@ export function startAppearance(looks) {
       openThemeAddress(choice.value);
       checkSavedChoice(choices);
       showChosenTheme();
-      if (choice.name === "appearance")
+      if (choice.name === "appearance" && isOnHomeScreen())
         findElement("appearanceNote").textContent = HOME_SCREEN_NOTE;
     });
   }

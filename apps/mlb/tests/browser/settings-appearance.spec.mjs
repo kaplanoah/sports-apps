@@ -83,7 +83,13 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Night Game" })).toBeChecked();
 });
 
-test("changing the appearance says how to match the home-screen icon", async ({ page }) => {
+test("changing the appearance on the Home Screen says how to match its icon, which the browser leaves out", async ({
+  page,
+  context,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", { get: () => true });
+  });
   await openApp(page);
   await openSettings(page);
   const note = page.locator("#appearanceNote");
@@ -91,6 +97,13 @@ test("changing the appearance says how to match the home-screen icon", async ({ 
   await page.getByRole("radio", { name: "Night Game" }).check();
   await expect(note).toBeVisible();
   await expect(note).toHaveText(/Apple sets a home-screen icon only when the page is added/);
+
+  const browserTab = await context.newPage();
+  await openApp(browserTab);
+  await openSettings(browserTab);
+  await browserTab.getByRole("radio", { name: "Ball" }).check();
+  await expect(browserTab.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(browserTab.locator("#appearanceNote")).toBeHidden();
 });
 
 test("Appearance sits under Notifications, above the News switches, each choice showing the icon it offers", async ({
