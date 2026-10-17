@@ -597,14 +597,18 @@ test("a long line that holds .js: past its start never counts as a removed name'
   assert.deepEqual(listStaleNames(diff, grep, []), [{ name: "GONE", hits: ["AGENTS.md:8:GONE"] }]);
 });
 
-test("a removed name with a $ still defined elsewhere isn't stale", () => {
-  const diff = "-export const $gone = 1;\n-export const gone$ = 1;";
-  const definitions = ["worker/a.js:3:const $gone = 2;", "worker/b.js:4:const gone$ = 2;"];
+test("a removed name with a $ still defined elsewhere isn't stale, and one only a longer name starts is", () => {
+  const diff = "-export const $gone = 1;\n-export const gone$ = 1;\n-export const $gon = 1;";
+  const definitions = [
+    "worker/a.js:3:const $gone = 2;",
+    "worker/b.js:4:const gone$ = 2;",
+    "worker/c.js:5:const $gonex = 3;",
+  ];
   const grep = (/** @type {string} */ pattern, /** @type {boolean} */ isWord) =>
     isWord
-      ? ["AGENTS.md:8:$gone gone$"]
+      ? [`AGENTS.md:8:${pattern}`]
       : definitions.filter((hit) => new RegExp(pattern).test(hit.split(":").slice(2).join(":")));
-  assert.deepEqual(listStaleNames(diff, grep, []), []);
+  assert.deepEqual(listStaleNames(diff, grep, []), [{ name: "$gon", hits: ["AGENTS.md:8:$gon"] }]);
 });
 
 test("a changed file the diff has no part for stops the review rather than counting as read", () => {
