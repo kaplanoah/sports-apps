@@ -13,20 +13,11 @@ import {
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 // How Search comes and goes: starting over, closing, and coming back after a reload, on a phone.
 
 test.use({ ...ON_A_PHONE, contextOptions: { reducedMotion: "reduce" } });
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} hidden
- */
-const setHidden = (page, hidden) =>
-  page.evaluate((isHidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, hidden);
 
 /** @param {import("@playwright/test").Page} page */
 async function leaveForTwoMinutes(page) {

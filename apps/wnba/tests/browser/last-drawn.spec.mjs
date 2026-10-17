@@ -2,6 +2,7 @@ import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
 import { findSeasonPill, findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -115,10 +116,7 @@ test.describe("on a phone", () => {
     // The copy the page put back has already taken the load note away, so only the page's loading
     // says its code has run and is there to note when the page leaves the screen.
     await page.waitForLoadState("domcontentloaded");
-    await page.evaluate(() => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    await setHidden(page, true);
     await page.clock.runFor(2 * 60_000);
     release = await holdPageCode(page);
 
@@ -180,10 +178,7 @@ test.describe("on a phone", () => {
     const chosen = page.locator("#seasonGames .day-cell.is-chosen");
     await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
     await expect(chosen).toHaveAttribute("data-day", "2026-09-30");
-    await page.evaluate(() => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    await setHidden(page, true);
     await page.clock.fastForward("12:00:00");
     await app.changeSeasonWhileAway((season) => {
       const game = season.games.find((each) => each.id === "1042600132");

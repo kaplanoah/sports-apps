@@ -5,6 +5,7 @@ import {
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
 const LAST_RELEASE = { version: "1.4.0", commit: "abc1234", builtAt: "2026-10-01T22:00:00Z" };
@@ -97,16 +98,6 @@ test("a page asleep half an hour reads what it missed when it wakes, without rel
   await expect(row.locator(".game-status .clock")).toHaveText("Q2 5:10");
   expect(await isSameLoad(page)).toBe(true);
 });
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} hidden
- */
-const setHidden = (page, hidden) =>
-  page.evaluate((isHidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, hidden);
 
 test("a page hidden a minute closes its socket, and opens another when it's shown", async ({
   page,

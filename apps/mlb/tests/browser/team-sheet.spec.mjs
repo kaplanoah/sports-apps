@@ -26,6 +26,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -545,12 +546,8 @@ test("a roster that didn't load says so over Try again, and reads again as the p
   expect(await listStrayPeriods(page)).toEqual([]);
 
   await answer();
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-    document.dispatchEvent(new Event("visibilitychange"));
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
+  await setHidden(page, true);
+  await setHidden(page, false);
   await expect(sheet.locator("#rosterBody .box-name").first()).toHaveText("Jo Adell");
 });
 

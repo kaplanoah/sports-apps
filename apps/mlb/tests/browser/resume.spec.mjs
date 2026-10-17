@@ -12,6 +12,7 @@ import {
   ON_A_PHONE,
   matchPath,
 } from "./harness.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
 
@@ -82,16 +83,6 @@ async function lockBracketWhileAway(app) {
   await expect.poll(() => app.countOpenSockets()).toBeGreaterThan(0);
   await app.lockBracketWhileAway();
 }
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} hidden
- */
-const setHidden = (page, hidden) =>
-  page.evaluate((isHidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, hidden);
 
 /** @param {import("@playwright/test").Page} page */
 async function hideAndShow(page) {
