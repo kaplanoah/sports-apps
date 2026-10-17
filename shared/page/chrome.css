@@ -705,8 +705,11 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   height: 100%;
   max-height: none;
   margin: 0;
-  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
-    max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right));
+  /* Safari's floating bar counts in the bottom inset, and Continue sits a little into the room it
+     leaves above the bar. */
+  padding-bottom: max(24px, env(safe-area-inset-bottom) - 32px);
   border: 0;
   background: var(--bg);
   color: var(--ink);
@@ -720,7 +723,7 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   background: var(--bg);
 }
 .welcome .gate-title {
-  margin: 28px 0 22px;
+  margin: 0 0 22px;
 }
 .welcome-steps {
   display: grid;
@@ -739,12 +742,17 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .welcome-steps > li[hidden] {
   display: none;
 }
+/* Centered by its box, a number reads low in its circle, and the circle low beside words that are
+   mostly lowercase, so each sits a little higher. */
 .welcome-steps > li::before {
   content: counter(step);
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   width: 28px;
   height: 28px;
+  margin-top: -1px;
+  padding-bottom: 1px;
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-ink);

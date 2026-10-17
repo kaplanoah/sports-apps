@@ -115,7 +115,7 @@ function drawWelcome(isOnIos) {
           </span>
         </li>
       </ol>
-      <button type="button" class="welcome-continue">Continue in the browser</button>`),
+      <button type="button" class="welcome-continue">Continue in browser</button>`),
   );
   const appName = document.querySelector('meta[name="apple-mobile-web-app-title"]');
   welcome.querySelector(".welcome-title").textContent =
@@ -131,7 +131,7 @@ function wireWelcome(welcome) {
     keepPickedAppearance(/** @type {HTMLInputElement} */ (event.target).value),
   );
   welcome.querySelector(".welcome-continue").addEventListener("click", () => welcome.close());
-  // Continue in the browser, Escape, and Android's back all close it, and it stays closed.
+  // Continue in browser, Escape, and Android's back all close it, and it stays closed.
   welcome.addEventListener("close", keepWelcomeClosed);
 }
 

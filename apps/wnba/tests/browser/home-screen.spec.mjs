@@ -33,7 +33,7 @@ const offerInstall = (page, outcome) =>
   }, outcome);
 
 const WELCOME = "#homeScreenWelcome";
-const CONTINUE = { name: "Continue in the browser" };
+const CONTINUE = { name: "Continue in browser" };
 
 /** @param {import("@playwright/test").Page} page */
 const listWelcomeSteps = (page) => page.locator(`${WELCOME} .welcome-steps > li:visible`);
@@ -71,6 +71,60 @@ test.describe("on an iPhone, in the browser", () => {
     await openApp(page, { isShowingWelcome: true });
     await expect(page.locator(WELCOME)).toBeVisible();
     expect(await listThemeLayoutChanges(page)).toEqual([]);
+  });
+
+  test("the heading opens the welcome's room, and each number and its circle sit a little high", async ({
+    page,
+  }) => {
+    await openApp(page, { isShowingWelcome: true });
+    const placed = await page.locator(WELCOME).evaluate((welcome) => {
+      const roomTop =
+        welcome.getBoundingClientRect().top + parseFloat(getComputedStyle(welcome).paddingTop);
+      const steps = [...welcome.querySelectorAll(".welcome-steps > li:not([hidden])")].map(
+        (step) => {
+          const circle = getComputedStyle(step, "::before");
+          const circleTop = step.getBoundingClientRect().top + parseFloat(circle.marginTop);
+          const circleMiddle = circleTop + parseFloat(circle.height) / 2;
+          const numberMiddle =
+            circleTop + (parseFloat(circle.height) - parseFloat(circle.paddingBottom)) / 2;
+          const words = step.querySelector(".welcome-step").getBoundingClientRect();
+          return {
+            circleOverWords: words.top + words.height / 2 - circleMiddle,
+            numberOverCircle: circleMiddle - numberMiddle,
+          };
+        },
+      );
+      return {
+        headingGap: welcome.querySelector(".welcome-title").getBoundingClientRect().top - roomTop,
+        steps,
+      };
+    });
+    expect(placed.headingGap).toBe(0);
+    expect(placed.steps).toEqual(Array(3).fill({ circleOverWords: 1, numberOverCircle: 0.5 }));
+  });
+
+  // Safari's floating bar on an iPhone 17 Pro makes a bottom inset of 190px, and Android's Chrome none.
+  test("Continue sits 32px into the room over Safari's bar, and keeps its distance where there's no bar", async ({
+    page,
+  }) => {
+    await openApp(page, { isShowingWelcome: true });
+    const roomUnder = await page.locator(WELCOME).evaluate((welcome) => {
+      const rule = /** @type {CSSStyleRule} */ (
+        [...document.styleSheets]
+          .flatMap((sheet) => [...sheet.cssRules])
+          .find((each) => each instanceof CSSStyleRule && each.selectorText === ".welcome")
+      );
+      const declared = rule.style.paddingBottom;
+      return [190, 0].map((inset) => {
+        const probe = document.createElement("div");
+        probe.style.paddingBottom = declared.replace("env(safe-area-inset-bottom)", `${inset}px`);
+        welcome.append(probe);
+        const padding = parseFloat(getComputedStyle(probe).paddingBottom);
+        probe.remove();
+        return padding;
+      });
+    });
+    expect(roomUnder).toEqual([158, 24]);
   });
 
   test("the welcome is there before the page's code runs, so it never arrives over the page", async ({
