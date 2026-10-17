@@ -307,7 +307,7 @@ test("a checker's job counts the cases it left unchecked as the judge does, from
   assert.throws(() => keepCheck(folder, { stage: "first", area: 2 }, ""), /gave no answer/);
 });
 
-test("a checker's answer keeps only its findings that are objects, and what it couldn't judge that names a file", () => {
+test("a checker's answer keeps only its findings that are objects, and what it couldn't judge that names a file and why", () => {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   writeFileSync(join(folder, "candidates-first-1.json"), JSON.stringify([{ id: "bugs-1" }]));
   const finding = { ids: ["bugs-1"], verdict: "rejected" };
