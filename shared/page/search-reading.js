@@ -220,9 +220,9 @@ export function listShownExamples(context, pages) {
 
 /**
  * What the search shows for words in the field: while they're typed, suggestions over the pages
- * they name, other readings, and a line over the games they find from today on, or, when none are
- * left, every one, the latest first; otherwise, or once nothing sits over them, every game they
- * find.
+ * they name, or under them when the words name them as typed, other readings, and a line over the
+ * games they find from today on, or, when none are left, every one, the latest first; otherwise,
+ * or once nothing sits over them, every game they find.
  * @param {string} query the words as typed
  * @param {SearchState} state
  */
@@ -232,7 +232,7 @@ export function readTypedSearch(query, state) {
   const typed = isTyping ? suggest(query, context, state.pages) : [];
   const reading = isTyping ? readWhileTyping(text, typed, context) : { readText: text, name: null };
   const { readText } = reading;
-  const { rows: pageRows, gameText, read: answer } = readPages(text, reading, state);
+  const { rows: pageRows, gameText, read: answer, isFirst } = readPages(text, reading, state);
   const rows = placeGameParts(pageRows, context);
   const suggestions = dropTeamsShown(typed, rows);
   const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];
@@ -248,6 +248,7 @@ export function readTypedSearch(query, state) {
     suggestions,
     readText,
     rows,
+    isRowsFirst: !!isFirst,
     answer,
     others,
     search,
