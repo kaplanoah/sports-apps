@@ -1194,9 +1194,7 @@ table.st td.team .team-name {
   margin-bottom: 0;
   background: var(--accent);
   color: var(--accent-ink);
-  box-shadow:
-    inset 0 2px 3px var(--won-chip-shade),
-    0 1px 0 rgba(241, 234, 212, 0.13);
+  --score-chip-shade: var(--won-chip-shade);
 }
 :root[data-theme="dark"] .nscore:not(.lead) {
   padding-top: 3.5px;
