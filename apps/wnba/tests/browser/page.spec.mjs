@@ -391,6 +391,26 @@ test("clicking the tab that's showing scrolls back to the top, and then takes it
   expect(await page.evaluate(() => scrollY)).toBe(0);
 });
 
+test("on a phone, each tab comes back where it was left, and a tab not shown yet opens at its top", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-league tbody tr").first()).toBeVisible();
+  await page.mouse.wheel(0, 800);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
+  const left = await page.evaluate(() => scrollY);
+
+  await page.getByRole("tab", { name: "News" }).click();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await findSeasonTab(page).click();
+
+  expect(await page.evaluate(() => scrollY)).toBe(left);
+  await expect(page.locator("#standings-league")).toBeVisible();
+});
+
 test("the page reopens on the tab it was last on, showing the part of it last shown", async ({
   page,
 }) => {

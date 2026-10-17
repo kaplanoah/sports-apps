@@ -121,6 +121,25 @@ test("on a phone, tapping the tab that's showing scrolls back to the top, and th
   expect(await page.evaluate(() => scrollY)).toBe(0);
 });
 
+test("on a phone, each tab comes back where it was left, and a tab not shown yet opens at its top", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await page.mouse.wheel(0, 800);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
+  const left = await page.evaluate(() => scrollY);
+
+  await page.getByRole("tab", { name: "News" }).click();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await findSeasonTab(page).click();
+
+  expect(await page.evaluate(() => scrollY)).toBe(left);
+  await expect(page.locator("#standingsWrap")).toBeVisible();
+});
+
 test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing animates", async ({
   page,
 }) => {
