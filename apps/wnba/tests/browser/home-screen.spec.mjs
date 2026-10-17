@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
@@ -8,12 +8,7 @@ import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.m
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
-/**
- * An icon as the page's own stylesheet draws it, with the image in it rather than a file to fetch.
- * @param {string} file
- */
-const drawIcon = (file) =>
-  `url("data:image/png;base64,${readFileSync(new URL(`../../page/${file}`, import.meta.url)).toString("base64")}")`;
+const PAGE_FOLDER = new URL("../../page/", import.meta.url);
 
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 const IPHONE_AGENT =
@@ -312,13 +307,22 @@ test.describe("on an iPhone, in the browser", () => {
     await page.emulateMedia({ colorScheme: "light" });
     await openApp(page);
     await openSettings(page);
-    await expect(icon).toHaveCSS("background-image", drawIcon("icon-light-180.png"));
+    await expect(icon).toHaveCSS("background-image", drawIcon(PAGE_FOLDER, "icon-light-180.png"));
     await page.emulateMedia({ colorScheme: "dark" });
-    await expect(icon).toHaveCSS("background-image", drawIcon("icon-180.png"));
+    await expect(icon).toHaveCSS("background-image", drawIcon(PAGE_FOLDER, "icon-180.png"));
     const choiceIcons = page.locator("#settingsDialog .appearance-icon");
-    await expect(choiceIcons.nth(0)).toHaveCSS("background-image", drawIcon("icon-system-180.png"));
-    await expect(choiceIcons.nth(1)).toHaveCSS("background-image", drawIcon("icon-light-180.png"));
-    await expect(choiceIcons.nth(2)).toHaveCSS("background-image", drawIcon("icon-180.png"));
+    await expect(choiceIcons.nth(0)).toHaveCSS(
+      "background-image",
+      drawIcon(PAGE_FOLDER, "icon-system-180.png"),
+    );
+    await expect(choiceIcons.nth(1)).toHaveCSS(
+      "background-image",
+      drawIcon(PAGE_FOLDER, "icon-light-180.png"),
+    );
+    await expect(choiceIcons.nth(2)).toHaveCSS(
+      "background-image",
+      drawIcon(PAGE_FOLDER, "icon-180.png"),
+    );
   });
 
   test("the Home Screen app's first open takes the theme its address names, drops it from the address, and never puts it over one picked since", async ({

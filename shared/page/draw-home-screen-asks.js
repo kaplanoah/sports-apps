@@ -7,6 +7,7 @@
 // work while the modules still load. home-screen.js runs Chrome's Install in both.
 
 /* global isOnHomeScreen, keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
+/* global readStored -- from open-last-tab.js */
 
 const WELCOME_CLOSED_KEY = "homeScreenWelcomeClosed";
 
@@ -40,16 +41,6 @@ const isIosDevice = () =>
   (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isBrowserOnTouchDevice = () =>
   matchMedia("(hover: none) and (pointer: coarse)").matches && !isOnHomeScreen();
-
-// Storage can be empty or refuse access, as in a private window, so the page never depends on it.
-/** @param {string} key */
-function readStoredText(key) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
 
 function keepWelcomeClosed() {
   try {
@@ -159,5 +150,5 @@ function drawHomeScreenAsks() {
   drawTip(isOnIos);
   const welcome = drawWelcome(isOnIos);
   wireWelcome(welcome);
-  if (readStoredText(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
+  if (readStored(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
 }
