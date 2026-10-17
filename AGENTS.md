@@ -874,7 +874,9 @@ When a step says to go back to an earlier step, continue in order from there.
    It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each.
    If the summary names something it couldn't judge, tell the user.
    Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its comment saying why not.
-   A Nit never gets a push of its own.
+   A Nit you fix rides a push the PR needs anyway,
+   or, when none is left, one last push just before the merge,
+   and never waits for a later PR or the next change to its file.
    After three reviews in a row with an Important finding, or when a finding you declined comes back, stop and ask the user.
    - If `review` fails, read its summary and the log of the failed `review-find`, `review-check`, `review-across`, or `review-post` job, or its `review-final-` twin, which shows each try's turns and tool calls.
      If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
