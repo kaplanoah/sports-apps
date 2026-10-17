@@ -1,5 +1,10 @@
 import { addDays } from "#shared/days.js";
-import { readClubId, readGameState, readMlbTeamId } from "../../page/js/snapshot.js";
+import {
+  listScheduleGames,
+  readClubId,
+  readGameState,
+  readMlbTeamId,
+} from "../../page/js/snapshot.js";
 import { DATE_RULE, fetchMlbJson, readDateParam } from "./mlb.js";
 import { listGameLogRequest, listStarts, noteLeagueRead } from "./pitchers.js";
 import { describeError, respondJson } from "../../../../shared/worker/responses.js";
@@ -65,8 +70,7 @@ const findClubSide = (game, mlbTeamId) =>
  * @returns {{ date: string, id: number }[]}
  */
 function listClubStarts(scheduleResponse, mlbTeamId) {
-  return (scheduleResponse?.dates || [])
-    .flatMap((/** @type {any} */ day) => day.games || [])
+  return listScheduleGames(scheduleResponse)
     .filter((/** @type {any} */ game) => readGameState(game.status ?? {}) === "final")
     .map((/** @type {any} */ game) => ({
       date: game.officialDate,
@@ -95,8 +99,7 @@ export const listClubStarterIds = (scheduleResponse, club) => [
  */
 export const listScheduleClubs = (scheduleResponse) => [
   ...new Set(
-    (scheduleResponse?.dates || [])
-      .flatMap((/** @type {any} */ day) => day.games || [])
+    listScheduleGames(scheduleResponse)
       .flatMap((/** @type {any} */ game) => [game.teams?.away, game.teams?.home])
       .map((/** @type {any} */ side) => readClubId(side?.team?.id))
       .filter(Boolean),

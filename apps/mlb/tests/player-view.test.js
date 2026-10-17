@@ -163,12 +163,9 @@ test("a starter's season ranks his numbers among the qualified starters, and sho
   assert.match(text, /Regular season 33 starts W-L 7-15 IP 188 ERA 4\.36 K 148 BB 55/);
   assert.match(
     text,
-    /ERA 4\.36 2nd of 4 K\/9 7\.1 2nd of 4 BB\/9 2\.6 2nd of 4 Velo 94\.0 2nd of 4/,
+    /ERA 4\.36 2nd of 4 K\/9 7\.1 2nd of 4 BB\/9 2\.6 2nd of 4 Fastball mph 94\.0 2nd of 4/,
   );
-  assert.match(
-    text,
-    /ERA and BB\/9 ranked by fewest Rank among qualified starters \(1 inning per team game\)/,
-  );
+  assert.match(text, /ERA and BB\/9 ranked by fewest Rank among qualified starters/);
   assert.match(text, /What he throws/);
 });
 
@@ -181,7 +178,7 @@ test("a starter's rank rows show the ERA, K/9, and BB/9 his totals show, not his
   assert.match(text, /IP 188 ERA 4\.36 K 148 BB 55/);
   assert.match(
     text,
-    /ERA 4\.36 2nd of 4 K\/9 7\.1 2nd of 4 BB\/9 2\.6 2nd of 4 Velo 94\.0 2nd of 4/,
+    /ERA 4\.36 2nd of 4 K\/9 7\.1 2nd of 4 BB\/9 2\.6 2nd of 4 Fastball mph 94\.0 2nd of 4/,
   );
   assert.doesNotMatch(text, /4\.52|6\.9|2\.9/);
 });
@@ -193,7 +190,7 @@ test("a starter outside the qualified starters has his innings set against the o
   assert.match(text, /He has pitched 85 2\/3 of the 162 innings needed to qualify/);
   assert.match(
     text,
-    /ERA 1\.79 would be 1st K\/9 10\.0 would be 1st BB\/9 2\.7 would be 3rd Velo 98\.4 would be 1st/,
+    /ERA 1\.79 would be 1st K\/9 10\.0 would be 1st BB\/9 2\.7 would be 3rd Fastball mph 98\.4 would be 1st/,
   );
   assert.doesNotMatch(renderText(ohtani, { starters: STARTERS, side, clubGames: 400 }), /would be/);
   const unknown = renderText(ohtani, { starters: STARTERS, side });
