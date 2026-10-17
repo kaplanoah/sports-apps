@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import {
   coversEveryLine,
   findUnreadParts,
+  formatFindOutputs,
   gatherCandidates,
   judgeReview,
   keepCandidates,
@@ -206,6 +207,14 @@ test("a reviewer whose last try read everything but gave no answer hasn't finish
     recordFindTry(folder, { stage: "first", area: 1, kind: "bugs" }, { EXECUTION_FILE: execution }),
     { unread: [], isAnswered: false },
   );
+});
+
+test("a reviewer's try hands its job its unread parts and whether it answered", () => {
+  assert.equal(
+    formatFindOutputs({ unread: ["first/a.js.diff", "first/b.js.diff"], isAnswered: true }),
+    "unread=first/a.js.diff first/b.js.diff\nanswered=true",
+  );
+  assert.equal(formatFindOutputs({ unread: [], isAnswered: false }), "unread=\nanswered=false");
 });
 
 test("a try that left no execution file read nothing", () => {

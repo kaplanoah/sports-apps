@@ -665,7 +665,7 @@ jobs:
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
             2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files, and `.review/checked-${{ env.STAGE }}.json`.
-            3. Name each group of findings from different areas that are the same problem, by their refs, the one that best shows it first: only the first of each group is posted.
+            3. Name each group of findings from different areas that are the same problem, by their refs, the one that best shows it first: only the first of each group is posted, at the heaviest weight in its group.
             4. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each against the code as a checker does, with Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects. Add each you confirm that no listed finding already says, on a line the diff changes, weighed as the guide says, its body saying what is wrong, when it goes wrong, and how to fix it, without its weight.
             5. Post nothing. End with your answer: the groups of repeats, the findings you add, and anything you couldn't judge from the code, and why.
       - name: Keep the check's answer
@@ -765,7 +765,7 @@ jobs:
     steps: *check-steps
 
   review-final-across:
-    needs: [review-plan, review-post, review-final-check]
+    needs: [review-plan, review-final-check]
     if: ${{ !cancelled() && needs.review-final-check.result == 'success' && needs.review-plan.outputs.final-areas > 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30

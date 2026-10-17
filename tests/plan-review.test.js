@@ -195,6 +195,7 @@ test("a test goes with the file of its name, in its own app, the one the change 
       "apps/mlb/tests/snapshot.test.js",
       ["apps/mlb/worker/src/snapshot.js", "apps/mlb/tests/snapshot.test.js"],
       REPO,
+      () => [],
     ),
     "apps/mlb/worker/src/snapshot.js",
   );
@@ -706,13 +707,28 @@ test("a big area splits into as few parts as it needs, each near an even share, 
 test("a test goes with code outside every app when it's a root test, never an app's of its name", () => {
   const repo = [
     "apps/mlb/worker/src/notifications.js",
+    "shared/page/notifications.js",
     "shared/worker/notifications.js",
     "apps/mlb/page/js/updates.js",
     "shared/page/updates.js",
   ];
+  const readImports = () => ["../shared/page/html.js", "../shared/worker/notifications.js"];
   assert.equal(
-    findTestedFile("tests/notifications.test.js", [], repo),
+    findTestedFile("tests/notifications.test.js", [], repo, readImports),
     "shared/worker/notifications.js",
+  );
+  assert.equal(
+    findTestedFile(
+      "tests/notifications.test.js",
+      ["shared/page/notifications.js"],
+      repo,
+      readImports,
+    ),
+    "shared/worker/notifications.js",
+  );
+  assert.equal(
+    findTestedFile("tests/notifications.test.js", [], repo, () => []),
+    "shared/page/notifications.js",
   );
   assert.equal(findTestedFile("tests/updates.test.js", [], repo), "shared/page/updates.js");
 });

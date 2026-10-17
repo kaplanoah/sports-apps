@@ -112,6 +112,16 @@ const readJob = (job, workflow = "ci.yml") =>
     new RegExp(`^ {2}${job}:\\n(?:(?: {4}.*)?\\n)*`, "m"),
   )?.[0] ?? "";
 
+/**
+ * The jobs a ci.yml job needs, however its needs are written.
+ * @param {string} job
+ */
+const readNeeds = (job) =>
+  (readJob(job).match(/^ {4}needs:\s*(\[[^\]]*\]|\S+)/m)?.[1] ?? "")
+    .replace(/[[\]\s]/g, "")
+    .split(",")
+    .filter(Boolean);
+
 test("the browser job's traces leave out the page at each step, which burn-in's keep", () => {
   assert.match(readJob("browser"), /TRACE_SNAPSHOTS: "off"/);
   assert.doesNotMatch(readJob("burn-in"), /TRACE_SNAPSHOTS/);
@@ -353,6 +363,22 @@ test("the last read of the whole change runs only once a review of a push finish
     /if: \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.areas > 1 \}\}/,
   );
   assert.match(readJob("review-final-post"), /steps: \*post-steps/);
+});
+
+// Each review job runs only once the jobs whose records it reads have finished.
+test("each review job waits for the jobs whose records it reads", () => {
+  /** @type {[string, string[]][]} */
+  const order = [
+    ["review-check", ["review-plan", "review-find"]],
+    ["review-across", ["review-plan", "review-check"]],
+    ["review-post", ["review-plan", "review-check", "review-across"]],
+    ["review-final-check", ["review-plan", "review-final-find"]],
+    ["review-final-across", ["review-plan", "review-final-check"]],
+    ["review-final-post", ["review-plan", "review-final-check", "review-final-across"]],
+  ];
+  for (const [job, before] of order)
+    for (const need of before) assert.ok(readNeeds(job).includes(need), `${job} needs ${need}`);
+  assert.deepEqual(readNeeds("review-final-across"), ["review-plan", "review-final-check"]);
 });
 
 // A label change skips the review only when a run already passed it on exactly this code, so

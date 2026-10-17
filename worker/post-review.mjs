@@ -64,39 +64,61 @@ export const listCheckedFindings = (checks) =>
         })),
     );
 
+/** @param {string} weight */
+const rankWeight = (weight) =>
+  WEIGHTS.includes(weight) ? WEIGHTS.indexOf(weight) : WEIGHTS.length;
+
 /**
- * The checkers' refs the check across areas named as repeats of another. Each group keeps its
- * first known ref that no earlier group dropped, and drops its other known refs but any an earlier
- * group kept, so a ref it got wrong, repeated, or crossed with another group never drops a finding
- * that nothing else stands in for.
+ * The checkers' refs the check across areas named as repeats of another, and the weight each kept
+ * ref takes. Each group keeps its first known ref that no earlier group dropped, and drops its
+ * other known refs but any an earlier group kept, so a ref it got wrong, repeated, or crossed with
+ * another group never drops a finding that nothing else stands in for. A kept ref takes the
+ * heaviest weight of the refs it stands in for, so a repeat weighed heavier than it keeps that
+ * weight.
  * @param {string[][]} groups
- * @param {Set<string>} knownRefs the refs of the checkers' findings
+ * @param {Map<string, string>} weightByRef the weight of each of the checkers' findings, by ref
  */
-function listRepeats(groups, knownRefs) {
+function listRepeats(groups, weightByRef) {
   /** @type {Set<string>} */
   const kept = new Set();
   /** @type {Set<string>} */
   const dropped = new Set();
+  /** @type {Map<string, string>} */
+  const leadWeights = new Map();
   for (const group of groups) {
-    const [lead, ...rest] = group.filter((ref) => knownRefs.has(ref) && !dropped.has(ref));
+    const [lead, ...rest] = group.filter((ref) => weightByRef.has(ref) && !dropped.has(ref));
     if (!lead) continue;
     kept.add(lead);
-    for (const ref of rest) if (!kept.has(ref)) dropped.add(ref);
+    const absorbed = rest.filter((ref) => !kept.has(ref));
+    for (const ref of absorbed) dropped.add(ref);
+    const weights = [leadWeights.get(lead) ?? weightByRef.get(lead) ?? ""].concat(
+      absorbed.map((ref) => weightByRef.get(ref) ?? ""),
+    );
+    leadWeights.set(lead, weights.toSorted((one, other) => rankWeight(one) - rankWeight(other))[0]);
   }
-  return dropped;
+  return { dropped, leadWeights };
 }
 
 /**
  * What a stage posts: every finding its checkers kept but the repeats the check across areas
- * named, with what it added, weightiest first.
+ * named, each at the heaviest weight of those it stands in for, with what it added, weightiest
+ * first.
  * @param {(Finding & { ref?: string })[]} checked
  * @param {Across | null} across
  * @returns {Finding[]}
  */
 export function listToPost(checked, across) {
-  const knownRefs = new Set(checked.flatMap((finding) => finding.ref ?? []));
-  const repeats = listRepeats(across?.duplicates ?? [], knownRefs);
-  return [...checked.filter((finding) => !repeats.has(finding.ref ?? "")), ...(across?.added ?? [])]
+  const weightByRef = new Map(
+    checked.flatMap((finding) => (finding.ref ? [[finding.ref, finding.weight]] : [])),
+  );
+  const { dropped, leadWeights } = listRepeats(across?.duplicates ?? [], weightByRef);
+  const kept = checked
+    .filter((finding) => !dropped.has(finding.ref ?? ""))
+    .map((finding) => ({
+      ...finding,
+      weight: leadWeights.get(finding.ref ?? "") ?? finding.weight,
+    }));
+  return [...kept, ...(across?.added ?? [])]
     .filter((finding) => WEIGHTS.includes(finding.weight) && finding.path && finding.body)
     .toSorted((one, other) => WEIGHTS.indexOf(one.weight) - WEIGHTS.indexOf(other.weight))
     .map(({ weight, path, line, body }) => ({ weight, path, line, body }));

@@ -12,7 +12,7 @@
 // GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints the reviewers' and
 // checkers' matrices and counts for $GITHUB_OUTPUT.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isTestPath } from "./deploy-scope.mjs";
@@ -118,13 +118,29 @@ export function nameCodeArea(path) {
 const nameTested = (path) => basename(path).replace(/\.(test|spec)\.m?js$|\.m?js$/, "");
 
 /**
+ * The relative paths a test imports, as it writes them, or none when it can't be read.
+ * @param {string} test
+ */
+function readTestImports(test) {
+  try {
+    return [...readFileSync(test, "utf8").matchAll(/from\s+["'](\.{1,2}\/[^"']+)["']/g)].map(
+      (match) => match[1],
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
  * The file of code a test tests, by its name, in the test's own app or, for a root test, outside
- * every app, preferring one the change changes, or null when no file of code has its name.
+ * every app, preferring the one it imports where more than one has its name, then one the change
+ * changes, or null when no file of code has its name.
  * @param {string} test
  * @param {string[]} changed
  * @param {string[]} repoFiles
+ * @param {(test: string) => string[]} [readImports] the relative paths the test imports
  */
-export function findTestedFile(test, changed, repoFiles) {
+export function findTestedFile(test, changed, repoFiles, readImports = readTestImports) {
   const name = nameTested(test);
   const app = test.match(/^apps\/([^/]+)\//)?.[1];
   /** @param {string} path */
@@ -135,7 +151,10 @@ export function findTestedFile(test, changed, repoFiles) {
     isInScope(path) &&
     /\.m?js$/.test(path) &&
     basename(path).replace(/\.m?js$/, "") === name;
-  return changed.find(isCandidate) ?? repoFiles.find(isCandidate) ?? null;
+  const candidates = [...changed, ...repoFiles].filter(isCandidate);
+  if (candidates.length < 2) return candidates[0] ?? null;
+  const imported = new Set(readImports(test).map((path) => join(dirname(test), path)));
+  return candidates.find((path) => imported.has(path)) ?? candidates[0];
 }
 
 /**

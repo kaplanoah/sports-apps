@@ -29,16 +29,20 @@ const thread = (/** @type {object} */ fields) => ({
 test("every thread is read, page after page, until GitHub says there are no more", async () => {
   /** @type {(string | null)[]} */
   const afters = [];
+  /** @type {string[]} */
+  const queries = [];
   const pages = [
     { nodes: [thread({})], pageInfo: { hasNextPage: true, endCursor: "one" } },
     { nodes: [thread({ line: 30 })], pageInfo: { hasNextPage: false, endCursor: "two" } },
   ];
-  const callGraphQL = async (/** @type {string} */ _query, /** @type {any} */ variables) => {
+  const callGraphQL = async (/** @type {string} */ query, /** @type {any} */ variables) => {
+    queries.push(query);
     afters.push(variables.after);
     return { repository: { pullRequest: { reviewThreads: pages[afters.length - 1] } } };
   };
   const threads = await readThreads(callGraphQL, { owner: "o", name: "n", number: 7 });
   assert.deepEqual(afters, [null, "one"]);
+  assert.match(queries[0], /comments\(last: \d+\)/, "a long thread keeps its newest replies");
   assert.deepEqual(
     threads.map((each) => each.line),
     [12, 30],

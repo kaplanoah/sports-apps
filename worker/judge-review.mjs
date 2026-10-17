@@ -159,6 +159,14 @@ export const namePostRecord = (stage) => `${joinRecordName(RECORD_JOBS.post, sta
 export const nameCheckedRecord = (stage) => `${joinRecordName("checked", stage)}.json`;
 
 /**
+ * A reviewer's try as the lines its job hands $GITHUB_OUTPUT, which ci.yml's retry and fail steps
+ * read.
+ * @param {{ unread: string[], isAnswered: boolean }} kept
+ */
+export const formatFindOutputs = ({ unread, isAnswered }) =>
+  `unread=${unread.join(" ")}\nanswered=${isAnswered}`;
+
+/**
  * Adds a try to a reviewer's record, and returns the parts it still hasn't read and whether its
  * last try answered.
  * @param {string} folder
@@ -517,9 +525,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, folder, stage, area, kind] = process.argv.slice(2);
   const { env } = process;
   if (command === "find") {
-    const { unread, isAnswered } = recordFindTry(folder, { stage, area: Number(area), kind }, env);
-    console.log(`unread=${unread.join(" ")}`);
-    console.log(`answered=${isAnswered}`);
+    const kept = recordFindTry(folder, { stage, area: Number(area), kind }, env);
+    console.log(formatFindOutputs(kept));
   } else if (command === "candidates") {
     console.log(`count=${keepCandidates(folder, { stage, area: Number(area) })}`);
   } else if (command === "check") {
