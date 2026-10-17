@@ -1,26 +1,26 @@
 import { html } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
-import { describeSeriesLead } from "#shared/series-text.js";
 import { describeFinishedDay, renderStampNow, renderStampTime } from "#shared/stamp.js";
+import { nameSeries } from "./bracket.js";
 import { TEAMS } from "./teams.js";
 
 export function formatStampName(id) {
   return TEAMS[id] ? TEAMS[id].name : String(id ?? "");
 }
 /**
- * Where a playoff series stands, after a final of it on the header's line, or nothing for a game
- * of no series.
- * @param {{ teamA: string, teamB: string, winsA: number, winsB: number, winner?: string | null } | null} series
+ * Where a playoff series stands after a final of it, as the header's line says it, or nothing for
+ * a game of no series.
+ * @param {{ id: string, teamA: string, teamB: string, winsA: number, winsB: number, winner?: string | null } | null} series
  */
 export function describeSeriesNote(series) {
   if (!series) return "";
-  const lead = describeSeriesLead({
-    leader: formatStampName(series.winsA > series.winsB ? series.teamA : series.teamB),
-    wins: Math.max(series.winsA, series.winsB),
-    losses: Math.min(series.winsA, series.winsB),
-    isOver: !!series.winner,
-  });
-  return ` \u2014 ${lead}`;
+  const high = Math.max(series.winsA, series.winsB);
+  const low = Math.min(series.winsA, series.winsB);
+  const leader = series.winsA > series.winsB ? series.teamA : series.teamB;
+  if (series.winner)
+    return ` \u2014 ${formatStampName(series.winner)} win the ${nameSeries(series.id)} ${high}-${low}`;
+  if (high === low) return ` \u2014 series even ${high}-${low}`;
+  return ` \u2014 ${formatStampName(leader)} now lead ${high}-${low}`;
 }
 
 function describeFinal(game, day) {

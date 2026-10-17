@@ -345,6 +345,22 @@ test("a read without the standings on the next day keeps each club's last and ne
   assert.ok(slate.previous.every((game) => game.date < today));
 });
 
+test("a read without the season's whole schedule keeps each club's season's games as the record has them", async () => {
+  const { store, harness, read, context, clock } = createUpdatingStore({
+    snapshot: WHOLE_SEASON,
+    now: SEASON_NOW,
+  });
+  await store.alarm();
+  const responses = { ...SEASON_GAMES.responses, seasonGames: null };
+  harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: SEASON_NOW });
+  const yankees = (standings) => standings.divisions["AL East"].find((row) => row.id === "NYY");
+  assert.equal(yankees(harness.snapshot.standings).scheduled, undefined);
+  await updateSeasonAgain(store, context, clock);
+
+  assert.equal(yankees(read("seasons/2026").standings).scheduled, 161);
+  assert.deepEqual(read("seasons/2026").standings, WHOLE_SEASON.standings);
+});
+
 test("a read without the season's whole schedule leaves its months as they were", async () => {
   const { store, harness, read, context, clock } = createUpdatingStore({
     snapshot: WHOLE_SEASON,

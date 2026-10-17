@@ -317,10 +317,13 @@ function buildSlate(games, clubGames, now, pitchers) {
   const summarize = (game) => summarizeGame(game, pitchers);
   const clock = readEasternDay(now);
   const playable = games.filter((game) => game.state !== "off" && hasBothClubs(game));
-  const listGamesOn = (date) => playable.filter((game) => game.date === date).sort(compareStarts);
+  const listGamesOn = (date) =>
+    sortInScheduleOrder(playable.filter((game) => game.date === date).map(summarize));
   const lastNight = addDays(clock.date, -1);
   const isNight = clock.hour < NIGHT_END_HOUR;
-  const isLastNightUnfinished = listGamesOn(lastNight).some((game) => game.state !== "final");
+  const isLastNightUnfinished = playable.some(
+    (game) => game.date === lastNight && game.state !== "final",
+  );
   const day = isNight && isLastNightUnfinished ? lastNight : clock.date;
   const hasLastNightEnded = isNight && day !== lastNight;
 
@@ -331,19 +334,15 @@ function buildSlate(games, clubGames, now, pitchers) {
     .filter((game) => game.state === "final" && game.date < day)
     .sort(compareEnds)
     .pop();
-  const postponed = games
-    .filter((game) => game.state === "off" && game.date === day && hasBothClubs(game))
-    .sort(compareStarts);
+  const postponed = sortInScheduleOrder(
+    games
+      .filter((game) => game.state === "off" && game.date === day && hasBothClubs(game))
+      .map(summarize),
+  );
   return {
-    today: {
-      date: day,
-      games: listGamesOn(day).map(summarize),
-      postponed: postponed.map(summarize),
-    },
-    nextDay: nextDay ? { date: nextDay, games: listGamesOn(nextDay).map(summarize) } : null,
-    lastNight: hasLastNightEnded
-      ? { date: lastNight, games: listGamesOn(lastNight).map(summarize) }
-      : null,
+    today: { date: day, games: listGamesOn(day), postponed },
+    nextDay: nextDay ? { date: nextDay, games: listGamesOn(nextDay) } : null,
+    lastNight: hasLastNightEnded ? { date: lastNight, games: listGamesOn(lastNight) } : null,
     lastFinal: lastFinal ? summarize(lastFinal) : null,
     ...listClubGames(clubGames, day, summarize),
   };

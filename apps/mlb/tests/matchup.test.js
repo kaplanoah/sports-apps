@@ -223,6 +223,17 @@ test("each starter's marks take his club's color in each theme, the away club ta
   );
 });
 
+test("an ERA MLB can't figure yet, before a starter's first out, shows the dash an empty stat shows, marked neither ahead nor behind", () => {
+  const opener = {
+    ...BLUBAUGH,
+    line: { ...BLUBAUGH.line, era: "-.--" },
+    ranks: { ...BLUBAUGH.ranks, era: null },
+  };
+  const [era] = readTape(renderStarters(opener, SPRINGS));
+  assert.deepEqual(era.away, { value: "-", rank: null, standing: "unranked" });
+  assert.equal(era.home.standing, null);
+});
+
 test("two numbers that read the same mark neither starter as ahead", () => {
   const tied = { ...SPRINGS, line: { ...SPRINGS.line, k9: 9.1 } };
   const [, strikeouts] = readTape(renderStarters(BLUBAUGH, tied));

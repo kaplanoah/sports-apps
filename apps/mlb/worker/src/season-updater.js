@@ -151,8 +151,38 @@ async function saveSchedule(docs, snapshot) {
   }
 }
 
-export async function saveSnapshot(docs, snapshot) {
-  const year = snapshot.season;
+/**
+ * The snapshot with each club's season's games as the record has them where a read without the
+ * season's whole schedule couldn't count them, and each division's race settled from them.
+ * @param {any} snapshot
+ * @param {any} saved the record's standings
+ */
+function keepScheduledGames(snapshot, saved) {
+  if (!snapshot.standings || !saved) return snapshot;
+  const savedRows = new Map(
+    Object.values(saved.divisions ?? {})
+      .flat()
+      .map((/** @type {any} */ row) => [row.id, row]),
+  );
+  const keepRow = (/** @type {any} */ row) => {
+    const scheduled = savedRows.get(row.id)?.scheduled;
+    return row.scheduled == null && scheduled != null ? { ...row, scheduled } : row;
+  };
+  const divisions = Object.fromEntries(
+    Object.entries(snapshot.standings.divisions).map(([name, rows]) => [
+      name,
+      /** @type {any[]} */ (rows).map(keepRow),
+    ]),
+  );
+  return {
+    ...snapshot,
+    standings: { ...snapshot.standings, divisions: MLBSnapshot.settleDivisionRaces(divisions) },
+  };
+}
+
+export async function saveSnapshot(docs, read) {
+  const year = read.season;
+  const snapshot = keepScheduledGames(read, (await docs.read(nameSeasonKey(year)))?.standings);
   const parts = await saveReading(docs, year, snapshot);
   await saveSeason(docs, year, snapshot, parts);
   await saveSchedule(docs, snapshot);

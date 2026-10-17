@@ -23,7 +23,7 @@ import {
   QUALIFIED_STARTERS_NOTE,
   readInnings,
 } from "./qualifying.js";
-import { describeGamePitching, formatInnings } from "./stat-table.js";
+import { describeGamePitching, formatInnings, NO_NUMBER } from "./stat-table.js";
 import { FEWEST_FIRST_LABELS, isStarter, STARTER_MEASURES } from "./starter-measures.js";
 
 /**
@@ -74,7 +74,7 @@ const HITTER_FEWEST_FIRST = HITTER_RANKS.filter((rank) => rank.isFewestFirst).ma
  * @param {any} hitting
  */
 function formatShare(count, hitting) {
-  if (!hitting.plateAppearances) return "-";
+  if (!hitting.plateAppearances) return NO_NUMBER;
   return `${((count / hitting.plateAppearances) * 100).toFixed(1)}%`;
 }
 

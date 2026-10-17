@@ -6,8 +6,7 @@ import { countOuts, formatInnings } from "./stat-table.js";
 
 const PLATE_APPEARANCES_PER_GAME = 3.1;
 
-export const QUALIFIED_HITTERS_NOTE =
-  "Rank among qualified hitters (3.1 plate appearances per team game)";
+export const QUALIFIED_HITTERS_NOTE = `Rank among qualified hitters (${PLATE_APPEARANCES_PER_GAME} plate appearances per team game)`;
 export const QUALIFIED_STARTERS_NOTE = "Rank among qualified starters (1 inning per team game)";
 
 /**

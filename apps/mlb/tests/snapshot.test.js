@@ -1273,6 +1273,45 @@ test("each club's last games list two doubleheaders on one day each in game orde
   );
 });
 
+test("today's games list a doubleheader in game order even when MLB lists its second game with the earlier start", () => {
+  /** @param {number} gamePk @param {number} away @param {number} home @param {string} start @param {number} [gameNumber] */
+  const listGame = (gamePk, away, home, start, gameNumber) => ({
+    gamePk,
+    gameType: "R",
+    gameDate: start,
+    officialDate: "2026-09-26",
+    status: {
+      abstractGameState: "Preview",
+      codedGameState: "S",
+      detailedState: "Scheduled",
+      startTimeTBD: false,
+    },
+    teams: { away: { team: { id: away } }, home: { team: { id: home } } },
+    doubleHeader: gameNumber ? "S" : "N",
+    gameNumber: gameNumber ?? 1,
+  });
+  const schedule = {
+    dates: [
+      {
+        date: "2026-09-26",
+        games: [
+          listGame(1, 110, 147, "2026-09-26T17:05:00Z", 2),
+          listGame(2, 141, 116, "2026-09-26T18:10:00Z"),
+          listGame(3, 110, 147, "2026-09-26T22:05:00Z", 1),
+        ],
+      },
+    ],
+  };
+  const snapshot = MLBSnapshot.buildSnapshot(
+    { schedule, postseason: { dates: [] } },
+    { season: 2026, now: Date.parse("2026-09-26T12:00:00Z") },
+  );
+  assert.deepEqual(
+    snapshot.slate.today.games.map((game) => `${game.away}@${game.home}${game.doubleheader ?? ""}`),
+    ["BAL@NYY1", "BAL@NYY2", "TOR@DET"],
+  );
+});
+
 test("each club's standings row counts its season's games, one fewer for a rainout MLB cancelled", () => {
   const rows = Object.values(buildSnapshot(SEASON_GAMES).standings.divisions).flat();
   const shortened = rows.filter((row) => row.scheduled !== 162);

@@ -233,5 +233,5 @@ export {
   nameLiveGameRequest,
 } from "./feed-requests.js";
 export { SCHEDULE_EDITION, nameScheduleCollection, nameScheduleKey } from "./feed-schedule.js";
-export { countSeasonGames, hasWonDivision } from "./feed-standings.js";
+export { countSeasonGames, hasWonDivision, settleDivisionRaces } from "./feed-standings.js";
 export { listClubs, readClubId, readMlbTeamId } from "./mlb-ids.js";

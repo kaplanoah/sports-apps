@@ -2,6 +2,8 @@
 // is ranked in among MLB's qualified starters, as his matchup and his own sheet show them: each
 // one's label, how it's written, and whether it ranks from the fewest.
 
+import { NO_NUMBER } from "./stat-table.js";
+
 /**
  * A pitcher who has started at least half the games he has pitched in.
  * @param {any} pitching his season's pitching line
@@ -22,13 +24,14 @@ export const STARTER_MEASURES = [
 ];
 
 /**
- * A starter's number in a measure as it's shown, or a dash where his line holds none MLB counted.
+ * A starter's number in a measure as it's shown, or the mark of no number where his line holds
+ * none MLB counted.
  * @param {StarterMeasure} measure
  * @param {Record<string, unknown>} line
  */
 export function formatStarterMeasure(measure, line) {
   const value = Number(line[measure.key]);
-  return Number.isFinite(value) ? measure.write(value) : "-";
+  return Number.isFinite(value) ? measure.write(value) : NO_NUMBER;
 }
 
 /** The labels of the measures ranked from the fewest, which a starter's notes name. */

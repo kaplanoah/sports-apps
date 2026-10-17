@@ -165,12 +165,26 @@ export function buildStandings(response, games, scheduled) {
     if (then) row.then = then;
     (divisions[division] = divisions[division] || []).push(row);
   }
-  for (const rows of Object.values(divisions)) {
+  for (const rows of Object.values(divisions))
     rows.sort((first, second) => first.rank - second.rank).forEach((row) => delete row.rank);
-    for (const row of rows) row.clinched = hasWonDivision(row, rows);
-    setMagicNumber(rows);
-  }
-  return { divisions };
+  return { divisions: settleDivisionRaces(divisions) };
+}
+
+/**
+ * Each division's rows with whether its leader has won it and the leader's magic number, from
+ * each club's record and its season's games.
+ * @param {Record<string, any[]>} divisions each division's rows, in the order of its standings
+ * @returns {Record<string, any[]>}
+ */
+export function settleDivisionRaces(divisions) {
+  return Object.fromEntries(
+    Object.entries(divisions).map(([name, divisionRows]) => {
+      const rows = divisionRows.map((row) => ({ ...row, magic: null }));
+      for (const row of rows) row.clinched = hasWonDivision(row, rows);
+      setMagicNumber(rows);
+      return [name, rows];
+    }),
+  );
 }
 
 // MLB sometimes answers with no divisions, or only some, and a field projected from that
