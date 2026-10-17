@@ -578,6 +578,16 @@ function writeIndexedStage(folder, stage, change, words = stage) {
 }
 
 /**
+ * @typedef {object} Plan
+ * @property {string} stage
+ * @property {string | null} since
+ * @property {any[]} areas the stage's areas
+ * @property {any[]} unread the files the stage leaves unread, and why
+ * @property {any[]} final the last read's areas, when a push's review is due one
+ * @property {any[]} finalUnread the files the last read leaves unread, and why
+ */
+
+/**
  * Writes the review's plan, its stages' diffs and indexes, and the list of stale names.
  * @param {string} folder
  * @param {object} review
@@ -592,7 +602,7 @@ function writeIndexedStage(folder, stage, change, words = stage) {
 export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles, stale }) {
   mkdirSync(folder, { recursive: true });
   writeFileSync(join(folder, "stale-names.md"), renderStaleNames(stale));
-  /** @type {{ stage: string, since: string | null, areas: any[], unread: any[], final: any[], finalUnread: any[] }} */
+  /** @type {Plan} */
   const plan = {
     stage: choice.stage,
     since: null,
@@ -657,14 +667,22 @@ export function findPushedRange(since, git) {
 }
 
 /**
- * The files the change deletes, a moved one under the path it had, so the names it had are looked
- * for too.
+ * The files the change deletes, a renamed one under the path it had, so the name it had is looked
+ * for too, but not one only moved to another folder under the same name, which is still named so.
  * @param {(args: string[]) => string} git
  */
-export const listDeletedFiles = (git) =>
-  git(["diff", "--name-only", "--no-renames", "--diff-filter=D", ...WHOLE_CHANGE])
+export function listDeletedFiles(git) {
+  const changes = git(["diff", "--name-status", "--no-renames", ...WHOLE_CHANGE])
     .split("\n")
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((line) => line.split("\t"));
+  const added = new Set(
+    changes.filter(([status]) => status === "A").map(([, path]) => basename(path)),
+  );
+  return changes
+    .filter(([status, path]) => status === "D" && !added.has(basename(path)))
+    .map(([, path]) => path);
+}
 
 /**
  * The pull request's own head, as a commit.

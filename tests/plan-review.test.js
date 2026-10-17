@@ -353,16 +353,22 @@ test("the first review reads the whole change, a later one what changed, and a m
   );
 });
 
-test("the files a change deletes count a moved file's old path, so its old name is looked for", () => {
+test("the files a change deletes count a renamed file's old path, but not a file only moved under its name", () => {
   /** @type {string[][]} */
   const asked = [];
   const deleted = listDeletedFiles((args) => {
     asked.push(args);
-    return "shared/page/foo.js\n";
+    return [
+      "D\tshared/page/foo.js",
+      "A\tshared/page/bar.js",
+      "D\tapps/wnba/page/js/moved.js",
+      "A\tshared/page/moved.js",
+      "M\tworker/deploy.mjs",
+      "",
+    ].join("\n");
   });
   assert.deepEqual(deleted, ["shared/page/foo.js"]);
   assert.ok(asked[0].includes("--no-renames"), "a rename counts as a deletion and an addition");
-  assert.ok(asked[0].includes("--diff-filter=D"));
 });
 
 test("the pull request's head is the merge commit's second parent", () => {
