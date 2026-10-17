@@ -136,19 +136,28 @@ const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.a
 
 // Each job's record, by the name it's saved under in the review's folder: its job, then what it
 // covers, so the judge reads back each job's records, and only theirs, by the job alone.
-const RECORD_JOBS = ["find", "candidates", "check", "across", "post"];
+const RECORD_JOBS = Object.freeze({
+  find: "find",
+  candidates: "candidates",
+  check: "check",
+  across: "across",
+  post: "post",
+});
 /** @param {(string | number)[]} parts */
 const joinRecordName = (...parts) => parts.join("-");
 /** @param {string} stage @param {number} area @param {string} kind */
-const nameFindRecord = (stage, area, kind) => `${joinRecordName("find", stage, area, kind)}.json`;
+const nameFindRecord = (stage, area, kind) =>
+  `${joinRecordName(RECORD_JOBS.find, stage, area, kind)}.json`;
 /** @param {string} stage @param {number} area */
-const nameCandidatesRecord = (stage, area) => `${joinRecordName("candidates", stage, area)}.json`;
+const nameCandidatesRecord = (stage, area) =>
+  `${joinRecordName(RECORD_JOBS.candidates, stage, area)}.json`;
 /** @param {string} stage @param {number} area */
-export const nameCheckRecord = (stage, area) => `${joinRecordName("check", stage, area)}.json`;
+export const nameCheckRecord = (stage, area) =>
+  `${joinRecordName(RECORD_JOBS.check, stage, area)}.json`;
 /** @param {string} stage */
-export const nameAcrossRecord = (stage) => `${joinRecordName("across", stage)}.json`;
+export const nameAcrossRecord = (stage) => `${joinRecordName(RECORD_JOBS.across, stage)}.json`;
 /** @param {string} stage */
-export const namePostRecord = (stage) => `${joinRecordName("post", stage)}.json`;
+export const namePostRecord = (stage) => `${joinRecordName(RECORD_JOBS.post, stage)}.json`;
 /** @param {string} stage */
 export const nameConfirmedRecord = (stage) => `${joinRecordName("confirmed", stage)}.json`;
 
@@ -204,7 +213,7 @@ export const gatherCandidates = (records) =>
  */
 export const listAreaRecords = (records, stage, area) =>
   [...records.entries()]
-    .filter(([name]) => name.startsWith(`${joinRecordName("find", stage, area)}-`))
+    .filter(([name]) => name.startsWith(`${joinRecordName(RECORD_JOBS.find, stage, area)}-`))
     .map(([, record]) => record);
 
 /**
@@ -216,7 +225,8 @@ export function readRecords(folder) {
   const records = new Map();
   for (const name of readdirSync(folder)) {
     const isRecord =
-      RECORD_JOBS.some((job) => name.startsWith(`${job}-`)) && name.endsWith(".json");
+      Object.values(RECORD_JOBS).some((job) => name.startsWith(`${job}-`)) &&
+      name.endsWith(".json");
     if (isRecord) records.set(name, readJson(join(folder, name)));
   }
   return records;

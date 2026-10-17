@@ -604,8 +604,8 @@ jobs:
             .review/candidates-${{ env.STAGE }}-${{ matrix.area }}.json
           retention-days: 14
           overwrite: true
-      # So that re-running the failed jobs checks this area again. A check that didn't finish, or
-      # whose answer wasn't kept, counts no cases.
+      # So that re-running the failed jobs checks this area again. A check that didn't finish leaves
+      # unchecked unset, so it fails here as one that left cases unchecked does.
       - name: Fail when the check didn't finish
         if: steps.keep.outputs.unchecked != '0'
         run: |
