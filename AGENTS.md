@@ -58,7 +58,7 @@
   and stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`),
   and GitHub's reporter marks each one that passed only on its retry on the pull request's checks,
   the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
-  and, once CI ends, the `Report flaky tests` workflow adds it to the table in the issue Flaky browser tests from the default branch's code (`.github/workflows/flaky-report.yml`),
+  and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
@@ -757,6 +757,7 @@ Delete it once the app's first PR merges.
     Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push.
     A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
     so deploy it to beta and ask.
+    Merge `main` into the branch just before each deploy to beta, so the commit the owner labels is the one that merges, since a PR merges while behind `main` as long as it has no conflicts.
     Merge a red PR once `check` passes with `phone-ok` on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again.
     An OK in chat never stands in for the label.
     Merge it yourself: the owner doesn't.
