@@ -359,28 +359,40 @@ test("a handoff is made only for a phone signed in, and only while the page asks
   assert.equal(deleted.status, 405);
 });
 
-test("a handoff past the ten minutes it says it lasts, under an old code, or made up opens the page without signing in", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-17T20:00:00Z") });
+/**
+ * @param {string} address
+ * @param {object} env
+ */
+async function assertOpensWithoutSigningIn(address, env) {
+  const opened = await openHandoff(address, env);
+  assert.equal(opened.status, 302, address);
+  assert.equal(opened.headers.get("location"), "https://worker.example/key/", address);
+  assert.equal(opened.headers.get("set-cookie"), null, address);
+}
+
+test("a handoff under an old code, made up, or on a Worker that can't sign one opens the page without signing in", async () => {
   const cookie = await signIn();
-  const { address, expiresInMs } = await requestHandoff(cookie);
-  assert.equal(expiresInMs, 10 * 60 * 1000);
+  const { address } = await requestHandoff(cookie);
   const signature = cookie.split("=")[1];
   const farOff = Date.parse("2027-01-01T00:00:00Z") / 1000;
-  const refused = [
-    [address, { ...LOCKED_ENV, ACCESS_CODE: "LAYUP" }],
-    ["https://worker.example/key/access/handoff?token=made-up", LOCKED_ENV],
-    ["https://worker.example/key/access/handoff", LOCKED_ENV],
-    [`https://worker.example/key/access/handoff?token=${farOff}.${signature}`, LOCKED_ENV],
-  ];
+  await assertOpensWithoutSigningIn(address, { ...LOCKED_ENV, ACCESS_CODE: "LAYUP" });
+  await assertOpensWithoutSigningIn(address, { APP_KEY: "key" });
+  await assertOpensWithoutSigningIn(address, { APP_KEY: "key", ACCESS_CODE: "fast break" });
+  for (const madeUp of ["?token=made-up", "", `?token=${farOff}.${signature}`])
+    await assertOpensWithoutSigningIn(
+      `https://worker.example/key/access/handoff${madeUp}`,
+      LOCKED_ENV,
+    );
+});
+
+test("a handoff opens the page signed in for the ten minutes it says it lasts, and only for them", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-17T20:00:00Z") });
+  const { address, expiresInMs } = await requestHandoff(await signIn());
+  assert.equal(expiresInMs, 10 * 60 * 1000);
   t.mock.timers.tick(expiresInMs);
   assert.ok(readCookie(await openHandoff(address)));
   t.mock.timers.tick(1000);
-  refused.push([address, LOCKED_ENV]);
-  for (const [refusedAddress, env] of refused) {
-    const opened = await openHandoff(refusedAddress, env);
-    assert.equal(opened.headers.get("location"), "https://worker.example/key/", refusedAddress);
-    assert.equal(opened.headers.get("set-cookie"), null, refusedAddress);
-  }
+  await assertOpensWithoutSigningIn(address, LOCKED_ENV);
 });
 
 const PAGE_HOST = "mlb.sports.example";

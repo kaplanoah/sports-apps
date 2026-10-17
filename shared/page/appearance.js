@@ -9,7 +9,6 @@
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
 import { html, setHtml } from "./html.js";
-import { watchTimeAway } from "./resume.js";
 
 /**
  * @typedef {{ barColor: string, tabIcon: string, homeScreenIcon: string }} Look
@@ -85,14 +84,18 @@ function drawReAddNote(choice, address) {
   );
 }
 
-// The Worker answers only a phone signed in, and only while it asks for a code.
-/** @returns {Promise<{ address: string, expiresInMs: number } | null>} */
+const HANDOFF_RETRY_MS = 30 * 1000;
+
+// The Worker makes one only for a phone signed in, and only while it asks for a code, so only a
+// read that didn't reach it, or that it failed, is worth trying again.
+/** @returns {Promise<{ address: string, expiresInMs: number } | "none" | "failed">} */
 async function requestHandoff() {
   try {
     const response = await fetch("access/handoff", { method: "POST" });
-    return response.ok ? await response.json() : null;
+    if (response.ok) return await response.json();
+    return response.status < 500 ? "none" : "failed";
   } catch {
-    return null;
+    return "failed";
   }
 }
 
@@ -101,17 +104,29 @@ let reAddChoice = null;
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let renewTimer;
 
-// A handoff lasts minutes and a Home Screen app stays open for hours, so the note asks for a new
-// one halfway through each, and again whenever the app comes back, since a phone freezes timers
-// while it's away. A wake can come with the timer, so the last answer alone sets the next.
+// A handoff lasts minutes and settings can stay open longer, so the note asks for a new one
+// halfway through each. Settings closes after two minutes away, well before a handoff a phone's
+// frozen timer held could run out. Two picks in a row ask at once, so the last answer alone sets
+// the next.
 async function renewHandoff() {
   const choice = reAddChoice;
   if (choice === null) return;
-  const handoff = await requestHandoff();
-  if (handoff === null || choice !== reAddChoice) return;
-  drawReAddNote(choice, handoff.address);
+  const answer = await requestHandoff();
+  if (choice !== reAddChoice || answer === "none") return;
   clearTimeout(renewTimer);
-  renewTimer = setTimeout(renewHandoff, handoff.expiresInMs / 2);
+  if (answer === "failed") {
+    renewTimer = setTimeout(renewHandoff, HANDOFF_RETRY_MS);
+    return;
+  }
+  drawReAddNote(choice, answer.address);
+  renewTimer = setTimeout(renewHandoff, answer.expiresInMs / 2);
+}
+
+// The note answers a pick, so it leaves as settings closes, and its handoff stops renewing.
+function forgetReAdd() {
+  reAddChoice = null;
+  clearTimeout(renewTimer);
+  setHtml(findElement("appearanceNote"), html``);
 }
 
 // An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
@@ -150,5 +165,5 @@ export function startAppearance(looks) {
     checkSavedChoice(choices);
     showChosenTheme();
   });
-  watchTimeAway(renewHandoff);
+  findElement("settingsDialog").addEventListener("close", forgetReAdd);
 }

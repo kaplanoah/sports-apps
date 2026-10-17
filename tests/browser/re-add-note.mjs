@@ -62,51 +62,108 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
 }
 
 /**
- * Signs in to an iPhone's Home Screen app behind its access code, picks the dark look, checks the
- * note asks for a new handoff when the app wakes and halfway through each, keeping one renewal
- * when a wake comes with it, and opens the note's link in a browser that has never been signed
- * in, as Safari is, which opens the welcome on that look without asking for the code, with no
- * token left in its address.
- * @param {{
+ * @typedef {{
  *   page: import("@playwright/test").Page,
- *   browser: import("@playwright/test").Browser,
  *   serveLockedApp: (page: import("@playwright/test").Page, options: { accessCode: string }) => Promise<unknown>,
  *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
  *   looks: { light: string, dark: string },
- * }} app
+ * }} LockedApp
  */
-export async function checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks }) {
+
+const HANDOFF_ROUTE = "**/access/handoff";
+
+/** @param {string} look */
+const buildHandoffLink = (look) =>
+  new RegExp(
+    `^x-safari-http://[^/]+${LOCKED_PAGE_PATH}access/handoff\\?token=[^&]+&app-theme=${look}$`,
+  );
+
+/** @param {import("@playwright/test").Page} page */
+const findReAddLink = (page) =>
+  page.locator("#appearanceNote").getByRole("link", { name: "re-add the site" });
+
+/**
+ * Signs in to an iPhone's Home Screen app behind its access code and opens settings, counting
+ * each handoff the page asks for.
+ * @param {LockedApp} app
+ */
+async function openLockedSettings({ page, serveLockedApp, openSettings }) {
   await page.addInitScript(markOnHomeScreen);
   await serveLockedApp(page, { accessCode: "FASTBREAK" });
-  let handoffCount = 0;
+  const handoffs = { count: 0 };
   page.on("request", (request) => {
-    if (request.method() === "POST" && request.url().endsWith("/access/handoff")) handoffCount += 1;
+    if (request.method() === "POST" && request.url().endsWith("/access/handoff"))
+      handoffs.count += 1;
   });
   await page.goto(LOCKED_PAGE_PATH);
   await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
   await page.getByRole("button", { name: "Open" }).click();
   await openSettings(page);
-  await page.getByRole("radio", { name: looks.dark }).check();
-  const link = page.locator("#appearanceNote").getByRole("link", { name: "re-add the site" });
-  await expect(link).toHaveAttribute(
-    "href",
-    new RegExp(
-      `^x-safari-http://[^/]+${LOCKED_PAGE_PATH}access/handoff\\?token=[^&]+&app-theme=dark$`,
-    ),
-  );
-  expect(handoffCount).toBe(1);
-  // A jump past the page's timers is how a phone wakes it, here as the renewal comes due, so the
-  // wake and the timer each ask.
-  await page.clock.fastForward(6 * 60 * 1000);
-  await expect.poll(() => handoffCount).toBe(3);
-  // The clock moves a minute at a time, since a renewal sets its timer only once its answer arrives.
-  const readCountAfterMinute = async () => {
-    await page.clock.runFor(60 * 1000);
-    return handoffCount;
+  return handoffs;
+}
+
+/**
+ * Picks the light look and then the dark one before the light one's handoff answers, and checks
+ * the link stays on the dark one, then that the note renews its handoff halfway through, tries
+ * again soon after a renewal fails, and leaves with settings, renewing no more.
+ * @param {LockedApp} app
+ */
+export async function checkHandoffRenewal(app) {
+  const { page, looks } = app;
+  const handoffs = await openLockedSettings(app);
+  const link = findReAddLink(page);
+  /** @type {(value?: unknown) => void} */
+  let releaseFirst = () => {};
+  const firstHeld = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const holdFirstAnswer = async (route) => {
+    await firstHeld;
+    await route.fallback();
   };
-  await expect.poll(readCountAfterMinute, { timeout: 15 * 1000 }).toBe(4);
-  await page.clock.runFor(2 * 60 * 1000);
-  expect(handoffCount).toBe(4);
+  await page.route(HANDOFF_ROUTE, holdFirstAnswer, { times: 1 });
+  await page.getByRole("radio", { name: looks.light }).check();
+  await page.getByRole("radio", { name: looks.dark }).check();
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  const lateAnswer = page.waitForEvent("requestfinished", (request) =>
+    request.url().endsWith("/access/handoff"),
+  );
+  releaseFirst();
+  await lateAnswer;
+  // A trip to the page lets it read the late answer before the link is checked again.
+  await page.evaluate(() => document.readyState);
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  expect(handoffs.count).toBe(2);
+
+  await page.route(HANDOFF_ROUTE, (route) => route.fulfill({ status: 503 }), { times: 1 });
+  await page.clock.runFor(5 * 60 * 1000);
+  await expect.poll(() => handoffs.count).toBe(3);
+  // The clock moves a little at a time, since a renewal sets its timer only once its answer arrives.
+  const readCountAfterTenSeconds = async () => {
+    await page.clock.runFor(10 * 1000);
+    return handoffs.count;
+  };
+  await expect.poll(readCountAfterTenSeconds).toBe(4);
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+
+  await page.locator("#settingsCloseBtn").click();
+  await expect(page.locator("#appearanceNote")).toBeEmpty();
+  await page.clock.runFor(15 * 60 * 1000);
+  expect(handoffs.count).toBe(4);
+}
+
+/**
+ * Signs in to an iPhone's Home Screen app behind its access code, picks the dark look, and opens
+ * the note's link in a browser that has never been signed in, as Safari is, which opens the
+ * welcome on that look without asking for the code, with no token left in its address.
+ * @param {LockedApp & { browser: import("@playwright/test").Browser }} app
+ */
+export async function checkReAddHandoff(app) {
+  const { page, browser, serveLockedApp, looks } = app;
+  await openLockedSettings(app);
+  await page.getByRole("radio", { name: looks.dark }).check();
+  const link = findReAddLink(page);
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
   const safariAddress = (await link.getAttribute("href")).replace("x-safari-", "");
 
   const safari = await browser.newContext({

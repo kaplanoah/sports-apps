@@ -162,7 +162,7 @@ const signHandoff = (expiresAt, env) =>
  * @param {string} prefix
  */
 async function createHandoff(request, env, prefix) {
-  if (!env.ACCESS_CODE) return respondError(404, "not_found", "This page needs no code.");
+  if (!env.ACCESS_CODE) return respondNeedsNoCode();
   if ((await readAccess(request, env)) !== "open") return respondAccessRequired();
   const expiresAt = String(Math.floor(Date.now() / 1000) + HANDOFF_SECONDS);
   const address = new URL(`${prefix}${HANDOFF_PATH}`, request.url);
@@ -209,7 +209,7 @@ async function redeemHandoff(request, env, prefix) {
 export function serveHandoff(request, env, prefix) {
   if (request.method === "POST") return createHandoff(request, env, prefix);
   if (request.method === "GET") return redeemHandoff(request, env, prefix);
-  return respondError(405, "method_not_allowed", "GET or POST only.");
+  return respondMethodNotAllowed();
 }
 
 /**
@@ -220,12 +220,16 @@ export function serveHandoff(request, env, prefix) {
  * @param {string} prefix what the page's paths start with at the address the phone used
  */
 export async function serveAccess(request, env, prefix) {
-  if (!env.ACCESS_CODE) return respondError(404, "not_found", "This page needs no code.");
+  if (!env.ACCESS_CODE) return respondNeedsNoCode();
   if (request.method === "GET")
     return respondJson({ isChanged: (await readAccess(request, env)) === "changed" });
   if (request.method === "POST") return checkSentCode(request, env, prefix);
-  return respondError(405, "method_not_allowed", "GET or POST only.");
+  return respondMethodNotAllowed();
 }
 
 export const respondAccessRequired = () =>
   respondError(401, "access_required", "This page needs its access code.");
+
+const respondNeedsNoCode = () => respondError(404, "not_found", "This page needs no code.");
+
+const respondMethodNotAllowed = () => respondError(405, "method_not_allowed", "GET or POST only.");
