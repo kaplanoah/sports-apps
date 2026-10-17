@@ -213,6 +213,23 @@ test("a return to the page is recorded with how long it was away", async ({ page
 const findViewportLog = (page) =>
   findRecords(page).locator(".diagnostics-record", { hasText: "Viewport" });
 
+/**
+ * The page reads the viewport on the frame after its resize event, and a slow machine can send that
+ * event only after the test has opened a sheet, so the clock moves on once the page has it.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ width: number, height: number }} size
+ */
+async function resizeViewport(page, size) {
+  const resize = await page.evaluateHandle(() => ({
+    seen: new Promise((resolve) =>
+      visualViewport?.addEventListener("resize", () => resolve(true), { once: true }),
+    ),
+  }));
+  await page.setViewportSize(size);
+  await resize.evaluate((pending) => pending.seen);
+  await page.clock.runFor(100);
+}
+
 test("with Diagnostics on, the viewport is logged as the page opens, and again when it changes", async ({
   page,
 }) => {
@@ -220,8 +237,7 @@ test("with Diagnostics on, the viewport is logged as the page opens, and again w
   await turnOnDiagnostics(page);
   await reloadAndRecord(page);
 
-  await page.setViewportSize({ width: 390, height: 700 });
-  await page.clock.runFor(100);
+  await resizeViewport(page, { width: 390, height: 700 });
   await openSettings(page);
 
   const lines = findViewportLog(page).locator("li");
