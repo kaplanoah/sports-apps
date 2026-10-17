@@ -1,7 +1,6 @@
 {
   "name": "MLB",
   "short_name": "MLB",
-  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

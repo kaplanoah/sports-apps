@@ -267,7 +267,8 @@
   and settings and each setting (`page/js/search-pages.js`), whose settings pick any season the store keeps once it keeps more than one,
   whose page saves nothing to the store, lists each playoff final in an Updates box only on phones and tablets,
   and only for the current season, each keeping its own dismissal (`page/js/updates.js`),
-  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings (the shared `appearance.js`, kept per device), in its own self-hosted fonts.
+  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings or the Home Screen welcome (the shared `appearance.js`, kept per device,
+  and `pick-theme.js`, which the browser's address names it in for the Home Screen app), in its own self-hosted fonts.
   Paths below are inside an app's folder, except `shared/` and the ones named as the root's.
 - Page:
   `page/`.
@@ -429,6 +430,9 @@
   until the page is added or the viewer goes on in the browser, which keeps it closed on that device,
   and the box at the bottom of settings that keeps the steps, both drawn before the first paint in `draw-home-screen-asks.js`,
   so the welcome never arrives over the page and its pick and close work at once, with Chrome's Install in `home-screen.js`,
+  the theme picked, shown before the first paint and named in the browser's address,
+  where Safari reloads the page after a pick, since it takes the Home Screen app's address and its own bars' color from the page as it loaded,
+  and which the Home Screen app keeps on its first open, in `pick-theme.js`,
   telling a phone or tablet from a computer, and the Home Screen from the browser,
   in `device.js`, one tab for a season's standings and its bracket,
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
@@ -594,6 +598,8 @@
   The page writes nothing to the store; everything in it is written by the Worker.
   What a viewer chooses, like MLB's ranking, a dismissal of the Updates box,
   or the WNBA's theme, stays on their own device, since nobody signs in and people share a page's address.
+  The theme also rides in the browser's address, as `?theme=`, since a Home Screen app keeps its storage apart from the browser's and opens at the address it was added from,
+  and a shared link's theme is swapped for the viewer's own (`shared/page/pick-theme.js`).
   Each is a choice made with `createViewerChoice` in `shared/page/device-storage.js`,
   which keeps it as JSON under its key, lists it, and tells the page when another tab changes it, so each tab redraws what it shows.
   A new choice that a viewer would want on their other devices is made the same way;

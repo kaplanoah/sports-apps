@@ -377,7 +377,7 @@ const AGENTS = {
 };
 
 test("Safari's manifest leaves out start_url, so a Home Screen app opens at the address it was added from, and Chrome's keeps it", async () => {
-  const manifest = { name: "WNBA", id: "./", start_url: "./", scope: "./" };
+  const manifest = { name: "WNBA", start_url: "./", scope: "./" };
   const worker = createPageWorker({
     "manifest.webmanifest": {
       contentType: "application/manifest+json",
