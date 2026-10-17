@@ -267,7 +267,7 @@
   --game-card-edge: var(--edge);
   /* A player's Out box takes the floor's edge a little lighter, richer, and toward the orange. */
   --out-box-edge: #e6c89f;
-  --game-card-live: var(--now);
+  --game-card-now: var(--now);
   --game-card-won: var(--result);
   --game-card-team-font: var(--team-name);
   --game-row-height: 90px;

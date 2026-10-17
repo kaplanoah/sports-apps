@@ -364,14 +364,17 @@ const listCardButtons = (body) =>
     label,
   ]);
 
+// The night of Sep 24, in the fifth inning at the Athletics.
+const ASTROS_NIGHT = Date.parse("2026-09-25T02:30:00Z");
+
 test("a club's sheet opens on cards of its last game, the one it's playing, and its next, each opening the game", () => {
   session.state = { ...session.state, slate: ASTROS_SLATE };
-  const { body } = renderTeamSheet("HOU");
+  const { body } = renderTeamSheet("HOU", { now: ASTROS_NIGHT });
 
   assert.deepEqual(listCards(body), [
-    "Last game Sep 23 L 5-6 @ SEA",
+    "Last game Yesterday L 5-6 @ SEA",
     "Now Top 5th UP 2-1 @ ATH",
-    "Next game Sep 25 9:40 PM @ ATH",
+    "Next game Tomorrow 9:40 PM @ ATH",
   ]);
   assert.deepEqual(listCardButtons(body), [
     ["910001 2026-09-23", "Game details: Astros at Mariners, Wed, Sep 23"],
@@ -432,6 +435,21 @@ test("a club's cards take a doubleheader's games in game order, and skip a postp
     "Next game Sep 24 After 1st game @ PHI",
   ]);
   assert.deepEqual(listCards(renderTeamSheet("MIL").body), ["Next game Oct 1 6:40 PM vs NYM"]);
+});
+
+test("a club's game still to come today says Today in the color of a game being played, and one a day further off its date", () => {
+  session.state = { ...session.state, slate: ASTROS_SLATE };
+  const { body } = renderTeamSheet("SEA", { now: ASTROS_NIGHT });
+
+  assert.deepEqual(listCards(body), [
+    "Last game Yesterday W 6-5 vs HOU",
+    "Next game Today 9:40 PM vs LAA",
+  ]);
+  assert.match(body.text, /<span class="game-card-now">Today<\/span>/);
+  assert.deepEqual(
+    listCards(renderTeamSheet("SEA", { now: Date.parse("2026-09-27T16:00:00Z") }).body),
+    ["Last game Sep 23 W 6-5 vs HOU", "Next game Sep 24 9:40 PM vs LAA"],
+  );
 });
 
 test("a club with no games on the slate, as in a past season, shows no cards", () => {

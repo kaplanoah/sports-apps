@@ -713,7 +713,7 @@ test("a team's sheet opens on its last game, the one it's playing, and its next,
     );
     assert.equal(
       readGameCards(addSeattleAtChicago({ state: "pre" })),
-      "Last game Sep 23 L 91-103 vs Wings Next game Sep 30 7:00 PM @ Sky",
+      "Last game Sep 23 L 91-103 vs Wings Next game Today 7:00 PM @ Sky",
     );
     assert.match(readTeam(WHOLE_SEASON, "ATL").body, /^Last game Sep 27 W 92-77 vs Mystics /);
   }));
@@ -724,6 +724,26 @@ test("a game being played says whether the team is up, down, or tied, and betwee
     assert.match(readGameCards(playSeattleAtChicago(60, 60)), / Now Q3 4:12 TIED 60-60 @ Sky$/);
     const halftime = { period: 2, clock: "0.0", status: "Half" };
     assert.match(readGameCards(playSeattleAtChicago(40, 38, halftime)), / Now Half UP 40-38 /);
+  }));
+
+test("a card names yesterday, today, and tomorrow, and only a game still to come today takes the color of one being played", () =>
+  inEastern(() => {
+    const tomorrow = addSeattleAtChicago({ state: "pre", start: "2026-10-01T23:00:00Z" });
+    assert.match(readGameCards(tomorrow), / Next game Tomorrow 7:00 PM @ Sky$/);
+    const final = addSeattleAtChicago({
+      state: "final",
+      away: { ...SEATTLES_LAST.home, score: 80 },
+      home: { ...SEATTLES_LAST.away, team: "CHI", score: 75 },
+    });
+    assert.match(readGameCards(final), /^Last game Today W 80-75 @ Sky$/);
+
+    const readMarkup = (/** @type {object} */ season) =>
+      renderTeamSheet(season, "SEA", { year: 2026, now: NOW }).body.text;
+    assert.match(
+      readMarkup(addSeattleAtChicago({ state: "pre" })),
+      /<span class="game-card-now">Today<\/span>/,
+    );
+    assert.doesNotMatch(readMarkup(final), /game-card-now/);
   }));
 
 test("a next game whose time isn't set says TBD", () =>
@@ -767,7 +787,7 @@ test("a season saved before it kept each team's nearest games takes them from it
     assert.ok(nearestGames.length > 0);
     assert.match(
       readTeam(saved, "ATL").body,
-      /^Last game Sep 27 W 92-77 vs Mystics Next game Sep 30 7:00 PM @ Mystics Playoffs /,
+      /^Last game Sep 27 W 92-77 vs Mystics Next game Today 7:00 PM @ Mystics Playoffs /,
     );
   }));
 
@@ -801,7 +821,7 @@ test("a team's sheet shows its nearest games, its playoffs across from the field
   inEastern(() => {
     assert.equal(
       readTeam(SEASON, "ATL").body,
-      "Last game Sep 27 W 92-77 vs Mystics Next game Sep 30 7:00 PM @ Mystics " +
+      "Last game Sep 27 W 92-77 vs Mystics Next game Today 7:00 PM @ Mystics " +
         "Playoffs 1st Rd G1 W vs Mystics 1st Rd 92-77 G2 at Mystics 1st Rd Today 7:00 PM " +
         "Dream 1-0 Playoff field PPG 92.0 87.7 Opp PPG 77.0 87.7 Margin +15.0 0.0 " +
         "Home 1-0 5-1 Road 0-0 1-5 " +
@@ -818,7 +838,7 @@ test("a team's sheet shows its nearest games, its playoffs across from the field
     );
     assert.match(
       readTeam(SEASON, "MIN").body,
-      /^Last game Sep 29 L 71-87 @ Liberty Playoffs Out 1st Rd G1 L vs Liberty 1st Rd 75-91 G2 L at Liberty 1st Rd 71-87 Lynx 0-2 Playoff field .* Regular season /,
+      /^Last game Yesterday L 71-87 @ Liberty Playoffs Out 1st Rd G1 L vs Liberty 1st Rd 75-91 G2 L at Liberty 1st Rd 71-87 Lynx 0-2 Playoff field .* Regular season /,
     );
     assert.match(readTeam(SEASON, "SEA").body, /^Regular season .* Playoffs Missed Titles /);
   }));
