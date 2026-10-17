@@ -54,7 +54,7 @@ export const KINDS = [
     kind: "rules",
     role: "rules reviewer",
     focus:
-      'REVIEW.md\'s "What to look for" items 2 (One fact, one rule, one place), 3 (Both apps, every place), 8 (Leftovers), 9 (Search), 10 (Docs and comments the change makes wrong), and 11 (Any other rule in AGENTS.md). For each new helper, constant, rule, or wording, search the repo for one that already does the same. Start from `.review/stale-names.md`, which lists each place that still names what the change removed.',
+      'REVIEW.md\'s "What to look for" items 2 (One fact, one rule, one place), 3 (Both apps, every place), 8 (Leftovers), 9 (Search), 10 (Docs and comments the change makes wrong), and 11 (Any other rule in AGENTS.md). For each new helper, constant, rule, or wording, search the repo for one that already does the same. Start from `.review/stale-names.md`, which lists the first places that still name each thing the change removed, and search the repo for the rest.',
   },
   {
     kind: "tests",
@@ -679,9 +679,14 @@ const tryGit = (args) => {
   }
 };
 
-/** @param {string} pattern @param {boolean} isWord */
-const grepRepo = (pattern, isWord) =>
-  (tryGit(["grep", "-n", isWord ? "-wF" : "-E", pattern, "HEAD"]) ?? "")
+/**
+ * Every line in the repo that matches a pattern, as path:line:text.
+ * @param {string} pattern
+ * @param {boolean} isWord whether the pattern is a whole word rather than a regular expression
+ * @param {(args: string[]) => string | null} git null where git fails, as grep does with no match
+ */
+export const grepRepo = (pattern, isWord, git) =>
+  (git(["grep", "-n", isWord ? "-wF" : "-E", pattern, "HEAD"]) ?? "")
     .split("\n")
     .filter(Boolean)
     .map((hit) => hit.replace(/^HEAD:/, "").slice(0, 220));
@@ -789,7 +794,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     readDiff,
     repoFiles: runGit(["ls-files"]).split("\n").filter(Boolean),
     listStale: () =>
-      listStaleNames(readDiff(WHOLE_CHANGE).diff, grepRepo, listDeletedFiles(runGit)),
+      listStaleNames(
+        readDiff(WHOLE_CHANGE).diff,
+        (pattern, isWord) => grepRepo(pattern, isWord, tryGit),
+        listDeletedFiles(runGit),
+      ),
   });
   const now = listJobs(plan.areas, listStageKinds(plan.stage));
   const last = listJobs(plan.final, listStageKinds("final"));
