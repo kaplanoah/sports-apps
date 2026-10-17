@@ -366,6 +366,7 @@ const listCardButtons = (body) =>
   ]);
 
 const DURING_TONIGHTS_GAMES = Date.parse("2026-09-25T02:30:00Z");
+const WEEKS_LATER = Date.parse("2026-10-20T16:00:00Z");
 
 test("a club's sheet opens on cards of its last game, the one it's playing, and its next, each opening the game", () => {
   session.state = { ...session.state, slate: ASTROS_SLATE };
@@ -430,11 +431,13 @@ test("a club's cards take a doubleheader's games in game order, and skip a postp
     },
   };
 
-  assert.deepEqual(listCards(renderTeamSheet("NYM").body), [
+  assert.deepEqual(listCards(renderTeamSheet("NYM", { now: WEEKS_LATER }).body), [
     "Last game Sep 24 L 3-4 @ PHI",
     "Next game Sep 24 After 1st game @ PHI",
   ]);
-  assert.deepEqual(listCards(renderTeamSheet("MIL").body), ["Next game Oct 1 6:40 PM vs NYM"]);
+  assert.deepEqual(listCards(renderTeamSheet("MIL", { now: WEEKS_LATER }).body), [
+    "Next game Oct 1 6:40 PM vs NYM",
+  ]);
 });
 
 test("a club's game still to come today says Today in the color of a game being played, and one a day further off its date", () => {
@@ -469,6 +472,19 @@ test("a club's card names its next game's day on the viewer's own calendar, as i
     card: "Next game Tomorrow 3:40 AM vs LAA",
     row: "Fri 3:40 vs LAA",
   });
+});
+
+test("a club's card button names its game by MLB's day, as the Games list files it, wherever the viewer is", () => {
+  session.state = { ...session.state, slate: ASTROS_SLATE };
+  const readLabels = () =>
+    listCardButtons(renderTeamSheet("SEA", { now: DURING_TONIGHTS_GAMES }).body).map(
+      ([, label]) => label,
+    );
+
+  assert.deepEqual(checkInTimeZone("Europe/Paris", readLabels), [
+    "Game details: Astros at Mariners, Wed, Sep 23",
+    "Game details: Angels at Mariners, Thu, Sep 24",
+  ]);
 });
 
 test("a club's next game without a set time takes MLB's day, though its placeholder start falls the day before out west", () => {
