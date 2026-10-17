@@ -26,7 +26,7 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
   await expect(note).toBeHidden();
   await page.getByRole("radio", { name: looks.dark }).check();
   await expect(note).toHaveText(
-    "Apple only sets icons when you add a site to your home screen. To update yours, re-add the site.",
+    "Apple only sets icons when you add a site to your home screen. To update your icon, re-add the site",
   );
   const safariAddress = new URL(page.url());
   safariAddress.searchParams.set("app-theme", "dark");
@@ -39,7 +39,8 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
       document.querySelector("#appearanceNote").getBoundingClientRect().top -
       document.querySelector("#settingsDialog .appearance-choices").getBoundingClientRect().bottom,
   );
-  expect(noteBelowIcons).toBeGreaterThan(0);
+  // The row's 14px gap, less the 3px the note's tall lines and the names over it add.
+  expect(noteBelowIcons).toBe(11);
 
   const browserTab = await context.newPage();
   await openApp(browserTab);

@@ -594,6 +594,11 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .control-note:empty {
   display: none;
 }
+/* The note's tall lines and the names over it add their own room, so it comes up to sit as far
+   under the names as the icons sit under the title. */
+.appearance-row .control-note {
+  margin-top: -3px;
+}
 .control-note a {
   color: var(--accent);
   text-decoration: none;

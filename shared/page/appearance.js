@@ -78,8 +78,8 @@ function checkSavedChoice(choices) {
 function drawReAddNote(choice) {
   setHtml(
     findElement("appearanceNote"),
-    html`Apple only sets icons when you add a site to your home screen. To update yours,
-      <a href="${buildSafariAddress(choice)}">re-add the site</a>.`,
+    html`Apple only sets icons when you add a site to your home screen. To update your icon,
+      <a href="${buildSafariAddress(choice)}">re-add the site</a>`,
   );
 }
 
