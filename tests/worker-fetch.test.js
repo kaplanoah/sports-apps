@@ -57,7 +57,10 @@ test("each path keeps its own read, and each caller its own reuse time", async (
 });
 
 test("a failed read is forgotten, so the next one asks again", async () => {
-  const failure = { body: { error: "Couldn't read the WNBA" }, status: 502 };
+  const failure = {
+    body: { error: { code: "upstream_error", message: "Couldn't read the WNBA" } },
+    status: 502,
+  };
   const reads = startWorker(failure, { body: { id: "1" } });
 
   await assert.rejects(fetchFromWorker("failing", RULES), {

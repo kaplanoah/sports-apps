@@ -161,7 +161,7 @@ test("a game without a box score yet is a 404, and a league that fails is a 502"
     "id=1042600123",
   );
   assert.equal(notStarted.status, 404);
-  assert.match((await notStarted.json()).error, /no box score for that game yet/);
+  assert.match((await notStarted.json()).error.message, /no box score for that game yet/);
 
   const url = nameBoxScoreRequest(ACES_AT_FEVER);
   for (const refusal of /** @type {(number | "page" | "empty")[]} */ ([503, "page", "empty"])) {
@@ -171,7 +171,7 @@ test("a game without a box score yet is a 404, and a league that fails is a 502"
       `id=${ACES_AT_FEVER}`,
     );
     assert.equal(response.status, 502);
-    assert.match((await response.json()).error, /^Couldn't read the WNBA: /);
+    assert.match((await response.json()).error.message, /^Couldn't read the WNBA: /);
   }
 });
 

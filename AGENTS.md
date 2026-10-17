@@ -194,7 +194,7 @@
   reading MLB as a game ends and only the pitchers who pitched in it,
   so a sheet reads only the store (`worker/src/pitcher-updater.js`),
   and which fills in each past season's record once, with its standings,
-  from MLB (`worker/src/past-seasons.js`), and removes the live scores and standings the store once kept apart from each season's record (`worker/src/old-records.js`),
+  from MLB (`worker/src/past-seasons.js`),
   and whose News tab shows the news as the WNBA's does, from MLB's outlets and the Mets' own,
   which the same shared news job keeps by MLB's prompt: anything about the Mets,
   and another club's news only when it matters across baseball,
@@ -210,13 +210,13 @@
   keeps each finished game's for good, read as it ends and once more after the league and ESPN catch up,
   and a few at a time back through each season it keeps (`worker/src/game-details-updater.js`),
   and keeps each upcoming game's meetings from the schedule each update reads,
-  so the sheet's routes read the league only for what the store doesn't keep (`worker/src/store-docs.js`),
+  so the sheet's routes read the league only for what the store doesn't keep (the shared `store-reads.js`),
   and, from ESPN's game summary, the score through each game for the sheet's lead chart (`worker/src/lead.js` and `page/js/lead-chart.js`) and when each game it saw live ended (`worker/src/game-ends.js`),
   and each team's roster for any season, from the league's roster of that season and its list of every player it has had,
   with ESPN's injury report, read once for the whole league, saying who is out and why (`worker/src/injuries.js`),
   which shows only while the team still plays, which the team's sheet shows under its Roster pill,
   beside its stats under its Team pill, with each player's averages,
-  which the store keeps apart from the season (`worker/src/roster.js`,
+  which the store keeps apart from the season, worked out once for the Roster, the leaders, and her sheet (`worker/src/roster.js`, `season-averages.js`,
   `page/js/roster-section.js`, and `roster-view.js`), and each player's sheet,
   which a tap on her name in a roster, a box score, or a list of leaders opens over the sheet it's in,
   with her facts from that roster, then, while she is out, a box saying why,
@@ -348,7 +348,7 @@
   and colors from its `page/styles.css` instead of inventing new ones.
 - Worker:
   `worker/src/`.
-  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key,
+  It serves the page, its store, and its sheets' reads, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key,
   but at the address its `PAGE_HOST` secret names, where it serves them without the key, behind the access code alone,
   and so only while it has one (`findAppPrefix` in `shared/worker/app-worker.js`).
   `health` says whether the Worker and its store answer, 200 or 503 with the release's commit,
@@ -452,7 +452,8 @@
   rounds, a conference's own rounds, kinds of game, doubleheaders,
   and starters, finding the games, and saying in a line under the field what it read,
   with suggestions and examples, in `game-search-view.js`, from `search-words.js`,
-  `search-dates.js`, `game-search.js`, and `search-suggestions.js`,
+  `search-dates.js`, `game-search.js`, which reads what's typed in `game-search-read.js` with the words in `game-search-dictionary.js`,
+  finds the games in `game-search-match.js`, and says what it read in `game-search-describe.js`, and `search-suggestions.js`,
   what it shows for words as they're typed, a name half typed read as the name the first suggestion finishes once three letters of it are,
   or five with one wrong, in `search-reading.js`,
   which each app's `tests/search-typing.test.js` types a key at a time, as fans do, and with a letter wrong each way a thumb gets one wrong,
@@ -501,7 +502,7 @@
   in `team-sheet.js`, the cards of a team's nearest games across its sheet's top,
   each as wide as the row's widest line, in `game-cards.js`, and which games those are in `nearest-games.js`,
   reading what a sheet shows from the app's own Worker, sharing a recent read of it,
-  in `worker-fetch.js`, the face-off rows of a sheet a tap opens in `tape.js`,
+  in `worker-fetch.js`, reading the Worker's error answers in `worker-error.js`, the face-off rows of a sheet a tap opens in `tape.js`,
   the placeholders that hold a sheet's shape while it loads in `placeholder.js`,
   what a sheet shows where a read of its Worker failed, a centered block for a whole sheet or section and a note for one part,
   each with a Try again button, which, like the phone coming back online or the page coming back,
@@ -552,10 +553,11 @@
   reading a league's feeds and reusing a recent load in `upstream.js`,
   reading a league's slower feeds again only when they may have changed in `feed-keeper.js`,
   keeping each final's highlights, read over the hours after it ends,
-  in `highlights-job.js`, a story's first lines as plain text in `story-lead.js`,
+  in `highlights-job.js`, keeping each finished game's details, a few at a time, in `game-details-job.js`,
+  reading the documents the store keeps for a sheet in `store-reads.js`, a story's first lines as plain text in `story-lead.js`,
   keeping a league's news from its outlets' feeds, judged by Claude with the prompt the league hands it,
   in `news-updater.js`, `news-feeds.js`, `news-parse.js`, `news-rules.js`,
-  `news-prompts.js`, and `news-claude.js`, the season a request names and serving its snapshot in `seasons.js`,
+  `news-prompts.js`, and `news-claude.js`, the season a request names in `seasons.js`,
   capping a night's notifications in `notifications.js`, push, and responses.
   A change there reaches every app, so shared code never imports an app's modules: an app hands it what it needs, as `watchReturns({ isBusy, catchUp })` does.
   Logic or a view that more than one app needs lives there once,
@@ -631,7 +633,7 @@ Delete it once the app's first PR merges.
    series, and standings and a `missing` list of feeds that didn't answer,
    and `choosePollDelay(snapshot, now)`, which hands the shared one in `shared/page/poll-schedule.js` whether a game is live, the starts still to come, and the league's live pace.
    It runs in both the page and the Worker, so it uses no DOM and no globals.
-3. **Reading the feeds.** `worker/src/snapshot.js` fetches them with `createSnapshotServer()`,
+3. **Reading the feeds.** `worker/src/snapshot.js` fetches them with `createSnapshotLoader()`,
    reading each slow feed again only as a game ends or once it's old,
    and keeping its last good answer for when a read fails, with the shared `createFeedKeeper` in `shared/worker/feed-keeper.js`.
 4. **Keeping the season.** `worker/src/season-updater.js` saves each snapshot into the store,

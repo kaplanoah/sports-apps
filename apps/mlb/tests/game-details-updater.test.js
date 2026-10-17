@@ -9,7 +9,7 @@ import {
   nameFeedRequest,
   nameGameDetailsKey,
 } from "../worker/src/box-score.js";
-import { createGameDetailsJob } from "../worker/src/game-details-updater.js";
+import { createMlbGameDetailsJob } from "../worker/src/game-details-updater.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // The season as MLB had it on the evening of Oct 7, and its Division Series games' live feeds.
@@ -21,6 +21,13 @@ const GAMES = JSON.parse(
 );
 const MLB_API = "https://statsapi.mlb.com";
 const MINUTE_MS = 60 * 1000;
+const STATUS_KEY = "games/status";
+
+/**
+ * The details the job saved, apart from its status.
+ * @param {{ writes: string[] }} docs
+ */
+const listDetailWrites = (docs) => docs.writes.filter((key) => key !== STATUS_KEY);
 const NOW = Date.parse(EVENING.now);
 const SLATE = buildSnapshot(EVENING.responses, { season: EVENING.season, now: NOW }).slate;
 const DODGERS_AT_BRAVES = "849819";
@@ -81,12 +88,12 @@ function createRun({ slate = SLATE, minutesAfter = 0, stored = {}, kept = {} } =
   const mlb = createMlbFetch({ isDown: () => outage.isDown });
   const clock = { now: NOW + minutesAfter * MINUTE_MS };
   const storage = createJobStorage(kept);
-  const job = createGameDetailsJob();
+  const job = createMlbGameDetailsJob();
   const runJob = () =>
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => null,
+      createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: mlb.fetchImpl,
       now: () => clock.now,
@@ -132,7 +139,11 @@ test("a game that just ended is read at once, again once MLB has caught up, and 
   wait(5);
   await runJob();
   assert.deepEqual(takeReads(), [BREWERS_AT_PADRES]);
-  assert.deepEqual(docs.writes, [nameGameDetailsKey(BREWERS_AT_PADRES)], "nothing changed to save");
+  assert.deepEqual(
+    listDetailWrites(docs),
+    [nameGameDetailsKey(BREWERS_AT_PADRES)],
+    "nothing changed to save",
+  );
   for (const minutes of [10, 60, 24 * 60]) {
     wait(minutes);
     await runJob();
@@ -170,7 +181,7 @@ test("a game still to start or being played is left to the pages watching it", a
 
   assert.ok(unfinished.length > 0);
   assert.deepEqual(takeReads(), []);
-  assert.deepEqual(docs.writes, []);
+  assert.deepEqual(listDetailWrites(docs), []);
 });
 
 test("a read that fails saves nothing, and is tried again every ten minutes for two hours", async () => {
@@ -188,7 +199,7 @@ test("a read that fails saves nothing, and is tried again every ten minutes for 
   }
 
   assert.deepEqual(readAt, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]);
-  assert.deepEqual(docs.writes, []);
+  assert.deepEqual(listDetailWrites(docs), []);
 });
 
 test("a store with no season's slate reads nothing", async () => {

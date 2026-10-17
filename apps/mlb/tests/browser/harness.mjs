@@ -328,7 +328,7 @@ const isWriteRequest = (request) => request.method() !== "GET";
 /**
  * The page as the Worker serves it, with the Worker's store behind it. The store starts with the
  * current season's record, as the Worker's last update saved it, under any fields `store` gives
- * it, unless MLB isn't available, when the Worker's snapshot can't be read either.
+ * it, unless MLB isn't available.
  * @param {import("@playwright/test").Page} page
  * @param {object} [options]
  * @param {Record<string, object>} [options.store] documents by path
@@ -369,7 +369,6 @@ export async function openApp(
     ...snapshots,
   };
   const harness = {
-    snapshotRequests: 0,
     storeReads: [],
     transformSnapshot: (snapshot) => snapshot,
   };
@@ -392,29 +391,31 @@ export async function openApp(
   const { context, store: seasonStore } = testStore;
 
   const openSockets = await connectToStore(page, testStore);
-  await page.route(matchPath("/snapshot"), (route) => {
-    harness.snapshotRequests++;
-    const season = new URL(route.request().url()).searchParams.get("season");
-    const snapshot = snapshotsBySeason[season];
-    if (!liveAvailable || !snapshot)
-      return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
-    return route.fulfill({ json: harness.transformSnapshot(structuredClone(snapshot)) });
-  });
   await page.route(matchPath("/pitcher"), (route) => {
     const pitcher = pitchers[Number(new URL(route.request().url()).searchParams.get("id"))];
-    if (!pitcher) return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+    if (!pitcher)
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: pitcher });
   });
   await page.route(matchPath("/rotation"), (route) => {
     const rotation = rotations[new URL(route.request().url()).searchParams.get("club")];
     if (!rotation)
-      return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: rotation });
   });
   await page.route(matchPath("/box-score"), (route) => {
     const boxScore = boxScores[new URL(route.request().url()).searchParams.get("id") ?? ""];
     if (!boxScore)
-      return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: boxScore });
   });
   await page.route(matchPath("/highlights"), (route) => {
@@ -461,7 +462,6 @@ export async function openApp(
     holdStore: () => holdStore(page),
     // What the Worker's alarm does on its own schedule.
     updateFromWorker: () => testStore.fireAlarm(),
-    countSnapshotRequests: () => harness.snapshotRequests,
     countSeasonReads: () =>
       harness.storeReads.filter((path) => path === `/store/${currentPath}`).length,
     listStoreReads: () => [...harness.storeReads],
@@ -593,7 +593,6 @@ export function serveLockedApp(page, { accessCode }) {
   const testStore = createTestStore(SeasonStore, { loadSnapshot, now: EVENING_FIXTURE.now });
   const worker = createAppWorker({
     pageFiles: PAGE_FILES,
-    serveSnapshot: () => Response.json(snapshot),
     forwardToStore,
     isStoreAnswering: async () => true,
   });

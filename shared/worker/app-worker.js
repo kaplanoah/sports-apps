@@ -114,11 +114,10 @@ const writeBody = ({ path, body }, request) =>
 
 /**
  * @param {Parameters<typeof decodePageFiles>[0]} pageFiles
- * @param {string | null} releaseCommit
+ * @param {string | null} releaseFolder
  */
-function createPageServer(pageFiles, releaseCommit) {
+function createPageServer(pageFiles, releaseFolder) {
   const files = decodePageFiles(pageFiles);
-  const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
   // Every load asks again for a file outside the release's folder, and a browser that already has
   // it gets a 304 instead of the file.
   return async function servePageFile(request, pagePath) {
@@ -186,34 +185,26 @@ function findAppPath(pathname, prefix) {
 const isStorePath = (appPath) =>
   appPath === "/watch" || appPath.startsWith("/store/") || appPath.startsWith("/push/");
 
-const isIndexPath = (appPath) => appPath === "/" || appPath === "/index.html";
-
 const GATE_PATH = "/gate.html";
 
 /**
- * An app's Worker: its page, its store, its live snapshot, and any reads of its own, all under the
- * APP_KEY secret or at the PAGE_HOST address, and behind the ACCESS_CODE secret when the Worker
- * has one.
+ * An app's Worker: its page, its store, and any reads of its own, all under the APP_KEY secret or
+ * at the PAGE_HOST address, and behind the ACCESS_CODE secret when the Worker has one.
  * @param {object} app
  * @param {Parameters<typeof decodePageFiles>[0]} app.pageFiles
- * @param {(url: URL) => Response | Promise<Response>} app.serveSnapshot
  * @param {(request: Request, env: any, storePath: string) => Response | Promise<Response>} app.forwardToStore
  * @param {(env: any) => Promise<boolean>} app.isStoreAnswering
  * @param {Record<string, (url: URL, env: any) => Response | Promise<Response>>} [app.reads] more GET
  *   paths, each handed the Worker's bindings, so it can read the store
  */
-export function createAppWorker({
-  pageFiles,
-  serveSnapshot,
-  forwardToStore,
-  isStoreAnswering,
-  reads = {},
-}) {
+export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, reads = {} }) {
   const releaseCommit = readReleaseCommit(pageFiles);
-  const servePageFile = createPageServer(pageFiles, releaseCommit);
+  const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
+  const servePageFile = createPageServer(pageFiles, releaseFolder);
+  // Decided by the file a path names, since the release's folder names the page too.
+  const isIndexPath = (appPath) => findPageFile(appPath, releaseFolder).path === "index.html";
   const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
-  const isDataPath = (appPath) =>
-    isStorePath(appPath) || appPath === "/snapshot" || Object.hasOwn(reads, appPath);
+  const isDataPath = (appPath) => isStorePath(appPath) || Object.hasOwn(reads, appPath);
 
   // Until the phone sends the access code, the page's address shows the gate instead, and
   // nothing from the season answers. The page's other files are the repo's own, and public.
@@ -245,7 +236,6 @@ export function createAppWorker({
       if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
       if ((await readAccess(request, env)) !== "open") return serveLocked(request, appPath);
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
-      if (request.method === "GET" && appPath === "/snapshot") return serveSnapshot(url);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))
         return reads[appPath](url, env);
       if (isIndexPath(appPath)) return servePage(request, env, appPath, prefix);

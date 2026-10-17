@@ -2,12 +2,17 @@ import * as WebPush from "./web-push.js";
 import { respondError, respondJson } from "./responses.js";
 
 // Push subscriptions and the key that signs messages for them. Both are kept under keys the
-// store's own paths can't name, so the page's store never hands them out.
+// store's own paths can't name, so the page's store never hands them out. The store keeps a hundred
+// devices at most, since anyone with the page's address can subscribe one, and forgets a device
+// its push service says is gone, or that has failed every message for a week, long enough for a
+// fault of the store's own to be fixed first.
 
 const SIGNING_KEY = "push:signing-key";
 const SUBSCRIPTION_PREFIX = "push:subscription:";
 const MAX_BODY_BYTES = 4 * 1024;
 const GONE_STATUSES = new Set([404, 410]);
+const MAX_SUBSCRIPTIONS = 100;
+const FAILING_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Only real push services, so a stored address can't point the Worker anywhere else.
 const PUSH_SERVICE_HOSTS = [
@@ -22,6 +27,9 @@ const TEST_MESSAGE = {
   body: "You'll hear here when something happens to a team in your ranking.",
   tag: "test",
 };
+
+/** @param {number} status */
+const isDelivered = (status) => status >= 200 && status < 300;
 
 const isPushServiceHost = (host) =>
   PUSH_SERVICE_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
@@ -91,17 +99,56 @@ export function createPushService({ storage, now, fetchImpl }) {
     return signingKey;
   }
 
+  /**
+   * Keeps when the device's messages started failing, and forgets it once they have failed long
+   * enough. A message that goes through clears it. Answers the device as it's now kept, or null
+   * once it's forgotten.
+   * @param {string} key
+   * @param {any} subscription
+   * @param {boolean} wentThrough
+   */
+  async function noteDelivery(key, subscription, wentThrough) {
+    const { failingSince, ...kept } = subscription;
+    if (wentThrough) {
+      if (failingSince !== undefined) await storage.put(key, kept);
+      return kept;
+    }
+    if (failingSince === undefined) {
+      const failing = { ...kept, failingSince: now() };
+      await storage.put(key, failing);
+      return failing;
+    }
+    if (now() - failingSince < FAILING_FOR_MS) return subscription;
+    await storage.delete(key);
+    return null;
+  }
+
+  /**
+   * Sends the device a message, and answers the push service's status with the device as it's
+   * now kept, or null once it's forgotten.
+   * @param {string} key
+   * @param {any} subscription
+   * @param {object} message
+   */
   async function deliver(key, subscription, message) {
-    const status = await WebPush.sendPush({
-      subscription,
-      message,
-      signingKey: await readSigningKey(),
-      subject: subscription.subject,
-      now: now(),
-      fetchImpl,
-    });
-    if (GONE_STATUSES.has(status)) await storage.delete(key);
-    return status;
+    let status;
+    try {
+      status = await WebPush.sendPush({
+        subscription,
+        message,
+        signingKey: await readSigningKey(),
+        subject: subscription.subject,
+        now: now(),
+        fetchImpl,
+      });
+    } catch (error) {
+      await noteDelivery(key, subscription, false);
+      throw error;
+    }
+    if (!GONE_STATUSES.has(status))
+      return { status, kept: await noteDelivery(key, subscription, isDelivered(status)) };
+    await storage.delete(key);
+    return { status, kept: null };
   }
 
   async function serveKey() {
@@ -115,8 +162,11 @@ export function createPushService({ storage, now, fetchImpl }) {
     if (!isSubscription(body))
       return respondError(400, "invalid_argument", "That isn't a push subscription.");
     const { endpoint, keys } = body;
+    const key = await findSubscriptionKey(endpoint);
+    if (!(await storage.get(key)) && (await countSubscriptions()) >= MAX_SUBSCRIPTIONS)
+      return respondError(429, "too_many_devices", "Too many devices get notifications already.");
     const subject = new URL(request.url).origin;
-    await storage.put(await findSubscriptionKey(endpoint), { endpoint, keys, subject });
+    await storage.put(key, { endpoint, keys, subject });
     return new Response(null, { status: 204 });
   }
 
@@ -139,11 +189,11 @@ export function createPushService({ storage, now, fetchImpl }) {
     if (!subscription) return respondError(404, "not_found", "This device isn't subscribed.");
     let status;
     try {
-      status = await deliver(key, subscription, TEST_MESSAGE);
+      ({ status } = await deliver(key, subscription, TEST_MESSAGE));
     } catch {
       return respondError(502, "push_failed", "The push service didn't answer.");
     }
-    if (status >= 200 && status < 300) return new Response(null, { status: 204 });
+    if (isDelivered(status)) return new Response(null, { status: 204 });
     return respondError(502, "push_failed", `The push service answered ${status}.`);
   }
 
@@ -159,14 +209,19 @@ export function createPushService({ storage, now, fetchImpl }) {
 
   // Each device gets its messages in order, and one device failing doesn't stop the others.
   async function sendInOrder(key, subscription, messages) {
+    let kept = subscription;
     for (const message of messages) {
-      const status = await deliver(key, subscription, message);
-      if (GONE_STATUSES.has(status)) return;
+      ({ kept } = await deliver(key, kept, message));
+      if (!kept) return;
     }
   }
 
+  const listSubscriptions = () => storage.list({ prefix: SUBSCRIPTION_PREFIX });
+
+  const countSubscriptions = async () => (await listSubscriptions()).size;
+
   async function sendToAll(messages) {
-    const stored = await storage.list({ prefix: SUBSCRIPTION_PREFIX });
+    const stored = await listSubscriptions();
     return Promise.allSettled(
       [...stored].map(([key, subscription]) => sendInOrder(key, subscription, messages)),
     );

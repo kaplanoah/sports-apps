@@ -40,7 +40,7 @@ export function createTestStore(
     context.ctx,
     {},
     {
-      loadSnapshot,
+      createLoadSnapshot: () => loadSnapshot,
       now: () => clock.now,
       fetchImpl,
     },

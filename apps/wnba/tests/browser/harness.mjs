@@ -171,7 +171,6 @@ function readAfternoonSnapshot(season) {
       buildSnapshot(
         {
           ...AFTERNOON.responses,
-          players: GAMES.preview.players,
           networks: Object.values(ESPN_SCOREBOARD.answers),
         },
         { season, now: Date.parse(NOW) },
@@ -207,8 +206,8 @@ export function readWholeSeasonSchedule() {
 
 /**
  * The Worker's store, already updated once from the afternoon's feeds, with each upcoming game's
- * meetings from the schedule, and what its jobs keep: the rosters, players' numbers, and finals'
- * box scores and leads.
+ * meetings from the schedule, and what its jobs keep: the rosters, players' numbers, every
+ * player's averages with each team's leading scorers, and finals' box scores and leads.
  * @param {Parameters<typeof listLeagueAnswers>[0]} [league]
  */
 async function createAfternoonStore(league = {}) {

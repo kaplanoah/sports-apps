@@ -14,7 +14,6 @@ const answerNothing = () => new Response(null, { status: 500 });
 export function buildReleaseServer(app, release) {
   const worker = createAppWorker({
     pageFiles: listBundledFiles(app, release),
-    serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
     isStoreAnswering: async () => false,
   });
