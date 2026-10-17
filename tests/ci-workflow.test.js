@@ -244,7 +244,8 @@ test("the review reads every area in full, checks before it posts, and fails on 
   );
   const check = readJob("review-check");
   assert.match(check, /node worker\/judge-review\.mjs candidates \.review "\$STAGE" "\$AREA"/);
-  assert.match(check, /if: steps\.check\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+  assert.match(check, /run: node worker\/judge-review\.mjs check .* >> "\$GITHUB_OUTPUT"/);
+  assert.match(check, /if: steps\.keep\.outputs\.unchecked != '0'\n\s+run: \|\n.*\n\s+exit 1/);
   assert.match(check, /\.review\/candidates-\$\{\{ env\.STAGE \}\}-\$\{\{ matrix\.area \}\}\.json/);
   const across = readJob("review-across");
   assert.match(across, /node worker\/post-review\.mjs list \.review "\$STAGE"/);
@@ -272,9 +273,9 @@ test("no job that runs Claude can write to the pull request", () => {
   assert.doesNotMatch(readRepoFile(".github/workflows/ci.yml"), /create_inline_comment/);
 });
 
-// The last read of the whole change runs only after a review of a push posted nothing, with the
-// same steps as the first.
-test("the last read of the whole change runs only once a review of a push posted nothing", () => {
+// The last read of the whole change runs only after a review of a push finished and posted
+// nothing, with the same steps as the first.
+test("the last read of the whole change runs only once a review of a push finished and posted nothing", () => {
   assert.match(
     readJob("review-final-find"),
     /if: &final-due \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.stage == 'push' && needs\.review-find\.result == 'success' && needs\.review-check\.result == 'success' && needs\.review-post\.outputs\.posted == '0' && needs\.review-plan\.outputs\.final-count > 0 \}\}/,

@@ -8,6 +8,7 @@ import {
   findUnreadParts,
   gatherCandidates,
   judgeReview,
+  keepCheck,
   listAreaRecords,
   listDueStages,
   listReads,
@@ -257,6 +258,23 @@ test("a candidate no finding of its checker names is unchecked", () => {
   );
 });
 
+test("a checker's job counts the cases it left unchecked as the judge does, from the record it keeps", () => {
+  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
+  writeFileSync(
+    join(folder, "candidates-first-2.json"),
+    JSON.stringify([{ id: "bugs-1" }, { id: "rules-1" }]),
+  );
+  const answer = { findings: [{ ids: ["bugs-1"], verdict: "rejected" }], unjudged: [] };
+  const unchecked = keepCheck(folder, { stage: "first", area: 2 }, JSON.stringify(answer));
+  assert.deepEqual(unchecked, ["rules-1"]);
+  const kept = readRecords(folder);
+  assert.deepEqual(
+    listUnchecked(kept.get("candidates-first-2.json"), kept.get("check-first-2.json").items),
+    unchecked,
+  );
+  assert.throws(() => keepCheck(folder, { stage: "first", area: 2 }, ""), /gave no answer/);
+});
+
 const HEAD = "c".repeat(40);
 const EARLIER = "e".repeat(40);
 
@@ -435,7 +453,7 @@ test("a reviewer, a checker, or the posting step that never finished fails the r
   assert.equal(readReviewedHead(body), null);
 });
 
-test("a review of a push that posted nothing is due the last read of the whole change", () => {
+test("a review of a push that finished and posted nothing is due the last read of the whole change", () => {
   const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
   const pushed = finishStage("push", [AREAS[0]]);
   assert.deepEqual(

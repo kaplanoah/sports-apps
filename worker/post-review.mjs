@@ -16,7 +16,13 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { nameAcrossRecord, nameCheckRecord, namePostRecord, readAnswer } from "./judge-review.mjs";
+import {
+  nameAcrossRecord,
+  nameCheckRecord,
+  nameConfirmedRecord,
+  namePostRecord,
+  readAnswer,
+} from "./judge-review.mjs";
 import {
   OFF_DIFF_HEADING,
   REVIEWER,
@@ -194,6 +200,18 @@ export function readAcross(structuredOutput) {
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 /**
+ * How many areas a stage has, from the job's AREAS, which must name it, so a job that lost it
+ * stops rather than posting nothing and passing as a review that found nothing.
+ * @param {string | undefined} areas
+ */
+export function readAreaCount(areas) {
+  const count = Number(areas);
+  if (!Number.isInteger(count) || count < 1)
+    throw new Error(`AREAS must name how many areas the stage has, not "${areas}".`);
+  return count;
+}
+
+/**
  * A stage's checkers' records, each with its area, as the checkers leave them in the folder; an
  * area whose checker left none has none.
  * @param {string} folder
@@ -210,10 +228,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, folder, stage] = process.argv.slice(2);
   const { env } = process;
   const acrossPath = join(folder, nameAcrossRecord(stage));
-  const areaCount = Number(env.AREAS);
+  const areaCount = readAreaCount(env.AREAS);
   if (command === "list") {
     writeFileSync(
-      join(folder, `confirmed-${stage}.json`),
+      join(folder, nameConfirmedRecord(stage)),
       JSON.stringify(listConfirmed(readChecks(folder, stage, areaCount)), null, 1),
     );
   } else if (command === "across") {

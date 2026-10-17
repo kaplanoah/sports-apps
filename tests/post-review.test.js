@@ -11,6 +11,7 @@ import {
   nameFinding,
   postFindings,
   readAcross,
+  readAreaCount,
   readChecks,
 } from "../worker/post-review.mjs";
 import { OFF_DIFF_HEADING, writeFindingMark } from "../worker/review-state.mjs";
@@ -219,4 +220,10 @@ test("a stage's checks are read as the checkers leave them, each with its area, 
       ["10.1", "ten"],
     ],
   );
+});
+
+test("a stage's count of areas must be named, so a job that lost it stops rather than posting nothing", () => {
+  assert.equal(readAreaCount("3"), 3);
+  for (const areas of [undefined, "", "0", "two", "1.5"])
+    assert.throws(() => readAreaCount(areas), /AREAS must name how many areas/, String(areas));
 });

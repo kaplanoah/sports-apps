@@ -332,7 +332,8 @@ jobs:
   # names repeats and looks for what spans them; and one step with no Claude posts what they
   # confirmed (worker/post-review.mjs), so no reviewer or checker can write to the pull request. The first
   # review reads the whole change. A review after it reads what the pushes since the last full read
-  # changed, and when that posts nothing, the whole change is read once more, one reviewer an area.
+  # changed, and when that finishes and posts nothing, the whole change is read once more, one
+  # reviewer an area.
   # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
   # nothing to review, such as a push to main, it plans nothing and passes, since check fails on a
   # skipped job. A label change brings no new code, so it reviews again only when no run passed
@@ -588,11 +589,12 @@ jobs:
             7. Write each finding's body as the guide's "How to report" says: what is wrong, when it goes wrong, and how to fix it, in a few sentences, without its weight, which a later step adds. Put it on a line the diff changes, nearest the one it's about, naming that one if it's another.
             8. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
       - name: Keep the checker's answer
+        id: keep
         if: steps.check.outcome == 'success'
         env:
           STRUCTURED_OUTPUT: ${{ steps.check.outputs.structured_output }}
           AREA: ${{ matrix.area }}
-        run: node worker/judge-review.mjs check .review "$STAGE" "$AREA"
+        run: node worker/judge-review.mjs check .review "$STAGE" "$AREA" >> "$GITHUB_OUTPUT"
       - if: steps.check.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -602,11 +604,12 @@ jobs:
             .review/candidates-${{ env.STAGE }}-${{ matrix.area }}.json
           retention-days: 14
           overwrite: true
-      # So that re-running the failed jobs checks this area again.
+      # So that re-running the failed jobs checks this area again. A check that didn't finish, or
+      # whose answer wasn't kept, counts no cases.
       - name: Fail when the check didn't finish
-        if: steps.check.outcome != 'success'
+        if: steps.keep.outputs.unchecked != '0'
         run: |
-          echo "::error::This area's checker didn't finish."
+          echo "::error::This area's checker didn't finish, or left cases unchecked."
           exit 1
 
   # What no one area can see: a change one area's files rely on in another's, the same fix due in

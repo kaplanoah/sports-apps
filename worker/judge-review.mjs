@@ -9,7 +9,8 @@
 // <kind>, with EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> and
 // answered=<true|false> for $GITHUB_OUTPUT. Before an area's checker: node
 // worker/judge-review.mjs candidates <folder> <stage> <area>. After it: node
-// worker/judge-review.mjs check <folder> <stage> <area>, with STRUCTURED_OUTPUT. Last: node
+// worker/judge-review.mjs check <folder> <stage> <area>, with STRUCTURED_OUTPUT; it prints
+// unchecked=<count of cases it left unnamed> for $GITHUB_OUTPUT. Last: node
 // worker/judge-review.mjs summary <folder>, with GH_TOKEN, GITHUB_REPOSITORY, PR, and SHA set,
 // which fails when anything due went unread or unchecked.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -133,17 +134,23 @@ const readExecution = (path) => (path && existsSync(path) ? readJson(path) : [])
  */
 const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.areas);
 
-// Each job's record, by the name it's saved under in the review's folder.
+// Each job's record, by the name it's saved under in the review's folder: its job, then what it
+// covers, so the judge reads back each job's records, and only theirs, by the job alone.
+const RECORD_JOBS = ["find", "candidates", "check", "across", "post"];
+/** @param {(string | number)[]} parts */
+const joinRecordName = (...parts) => parts.join("-");
 /** @param {string} stage @param {number} area @param {string} kind */
-const nameFindRecord = (stage, area, kind) => `find-${stage}-${area}-${kind}.json`;
+const nameFindRecord = (stage, area, kind) => `${joinRecordName("find", stage, area, kind)}.json`;
 /** @param {string} stage @param {number} area */
-const nameCandidatesRecord = (stage, area) => `candidates-${stage}-${area}.json`;
+const nameCandidatesRecord = (stage, area) => `${joinRecordName("candidates", stage, area)}.json`;
 /** @param {string} stage @param {number} area */
-export const nameCheckRecord = (stage, area) => `check-${stage}-${area}.json`;
+export const nameCheckRecord = (stage, area) => `${joinRecordName("check", stage, area)}.json`;
 /** @param {string} stage */
-export const nameAcrossRecord = (stage) => `across-${stage}.json`;
+export const nameAcrossRecord = (stage) => `${joinRecordName("across", stage)}.json`;
 /** @param {string} stage */
-export const namePostRecord = (stage) => `post-${stage}.json`;
+export const namePostRecord = (stage) => `${joinRecordName("post", stage)}.json`;
+/** @param {string} stage */
+export const nameConfirmedRecord = (stage) => `${joinRecordName("confirmed", stage)}.json`;
 
 /**
  * Adds a try to a reviewer's record, and returns the parts it still hasn't read and whether its
@@ -197,7 +204,7 @@ export const gatherCandidates = (records) =>
  */
 export const listAreaRecords = (records, stage, area) =>
   [...records.entries()]
-    .filter(([name]) => name.startsWith(`find-${stage}-${area}-`))
+    .filter(([name]) => name.startsWith(`${joinRecordName("find", stage, area)}-`))
     .map(([, record]) => record);
 
 /**
@@ -208,8 +215,9 @@ export function readRecords(folder) {
   /** @type {Map<string, any>} */
   const records = new Map();
   for (const name of readdirSync(folder)) {
-    if (/^(find|candidates|check|across|post)-.+\.json$/.test(name))
-      records.set(name, readJson(join(folder, name)));
+    const isRecord =
+      RECORD_JOBS.some((job) => name.startsWith(`${job}-`)) && name.endsWith(".json");
+    if (isRecord) records.set(name, readJson(join(folder, name)));
   }
   return records;
 }
@@ -244,6 +252,20 @@ const describeFound = (weights) =>
 export function listUnchecked(candidates, findings) {
   const named = new Set(findings.flatMap((finding) => finding.ids ?? []));
   return candidates.map((candidate) => candidate.id).filter((id) => !named.has(id));
+}
+
+/**
+ * Keeps a checker's answer as its area's record, and returns the candidates it left unchecked,
+ * which the judge counts the same way, so the job fails where the judge would.
+ * @param {string} folder
+ * @param {{ stage: string, area: number }} checker
+ * @param {string | undefined} structuredOutput
+ */
+export function keepCheck(folder, { stage, area }, structuredOutput) {
+  const answer = readListAnswer(structuredOutput, "findings");
+  if (!answer) throw new Error("The checker gave no answer.");
+  writeFileSync(join(folder, nameCheckRecord(stage, area)), JSON.stringify(answer));
+  return listUnchecked(readJson(join(folder, nameCandidatesRecord(stage, area))), answer.items);
 }
 
 /**
@@ -452,9 +474,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       JSON.stringify(gatherCandidates(records), null, 1),
     );
   } else if (command === "check") {
-    const answer = readListAnswer(env.STRUCTURED_OUTPUT, "findings");
-    if (!answer) throw new Error("The checker gave no answer.");
-    writeFileSync(join(folder, nameCheckRecord(stage, Number(area))), JSON.stringify(answer));
+    const unchecked = keepCheck(folder, { stage, area: Number(area) }, env.STRUCTURED_OUTPUT);
+    console.log(`unchecked=${unchecked.length}`);
   } else if (command === "summary") {
     const callGitHub = createGitHub({
       repository: env.GITHUB_REPOSITORY ?? "",
