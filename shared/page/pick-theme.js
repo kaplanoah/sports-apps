@@ -25,13 +25,25 @@ function readPickedAppearance() {
   }
 }
 
-// A Home Screen app keeps its storage apart from the browser's, so its address (its manifest's
-// start_url) names the theme picked before it was added, which its first open keeps. Only the app
-// takes it, and the address drops it at once, so a link shared from either never hands on a theme.
+// A Home Screen app keeps its storage apart from the browser's, and Safari opens it at the page's
+// address as it stood when it was added, so a theme picked in the browser rides there until then,
+// and the app's first open keeps it.
+/** @param {string} choice */
+function nameThemeInAddress(choice) {
+  if (isOnHomeScreen()) return;
+  const address = new URL(location.href);
+  if (choice === "light" || choice === "dark") address.searchParams.set("theme", choice);
+  else address.searchParams.delete("theme");
+  history.replaceState(history.state, "", address);
+}
+
+// Only the app takes a theme from its address, and drops it at once. The browser keeps one only
+// where it's the browser's own pick, so a link shared from either never hands on a theme.
 function keepThemeFromAddress() {
   const address = new URL(location.href);
   const fromAddress = address.searchParams.get("theme");
   if (fromAddress === null) return;
+  if (!isOnHomeScreen() && fromAddress === readPickedAppearance()) return;
   address.searchParams.delete("theme");
   history.replaceState(history.state, "", address);
   if (isOnHomeScreen() && localStorage.getItem("appearance") === null)
@@ -53,6 +65,7 @@ function keepPickedAppearance(choice) {
     /* appearance.js keeps it for as long as the page is open */
   }
   showTheme(choice);
+  nameThemeInAddress(choice);
 }
 
 try {

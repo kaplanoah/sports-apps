@@ -3,6 +3,8 @@
 // sets the theme before the first paint; this keeps it, and the icons and bar color that go with
 // it, current. Each app hands it its looks' icons and bar colors.
 
+/* global nameThemeInAddress -- from pick-theme.js, which every page that loads this runs first */
+
 import { createViewerChoice } from "./device-storage.js";
 
 /**
@@ -47,16 +49,6 @@ function showTheme(looks, theme) {
   findElement("homeScreenIcon").setAttribute("href", homeScreenIcon);
 }
 
-// A Home Screen app keeps its storage apart from the browser's, so the page's manifest names a
-// picked look in the address the app opens at, which pick-theme.js keeps on its first open. System
-// is what the app opens on anyway.
-/** @param {string} choice */
-function offerPickToHomeScreen(choice) {
-  const manifest =
-    choice === "auto" ? "manifest.webmanifest" : `manifest.webmanifest?theme=${choice}`;
-  findElement("manifestLink").setAttribute("href", manifest);
-}
-
 /**
  * Shows the theme the viewer picked, or the phone's for System, now and whenever the phone's
  * changes.
@@ -64,11 +56,7 @@ function offerPickToHomeScreen(choice) {
  * @param {() => string} readPicked
  */
 function followTheme(looks, readPicked) {
-  const showChosenTheme = () => {
-    const choice = readPicked();
-    showTheme(looks, resolveTheme(choice));
-    offerPickToHomeScreen(choice);
-  };
+  const showChosenTheme = () => showTheme(looks, resolveTheme(readPicked()));
   showChosenTheme();
   darkScheme.addEventListener("change", showChosenTheme);
   return showChosenTheme;
@@ -102,6 +90,7 @@ export function startAppearance(looks) {
   for (const choice of choices) {
     choice.addEventListener("change", () => {
       appearance.keep(choice.value);
+      nameThemeInAddress(choice.value);
       checkSavedChoice(choices);
       showChosenTheme();
       if (choice.name === "appearance")

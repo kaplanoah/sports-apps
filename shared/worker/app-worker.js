@@ -86,21 +86,31 @@ function findPageFile(pagePath, releaseFolder) {
 
 const MANIFEST_PATH = "manifest.webmanifest";
 
-// A Home Screen app opens at its manifest's start_url, with storage apart from the browser's, so
-// the theme picked before the page was added rides in that address, which pick-theme.js keeps on
-// the app's first open.
-/**
- * @param {string} manifest
- * @param {URL} url
- */
-function addThemeToStartUrl(manifest, url) {
-  const theme = url.searchParams.get("theme");
-  if (!theme) return manifest;
-  return JSON.stringify({
-    ...JSON.parse(manifest),
-    start_url: `./?${new URLSearchParams({ theme })}`,
-  });
+// An iPhone, an iPad, which names itself a Mac, or a Mac's Safari.
+/** @param {Request} request */
+function isFromSafari(request) {
+  const agent = request.headers.get("user-agent") ?? "";
+  const isMacSafari =
+    /Macintosh/.test(agent) && /Safari\//.test(agent) && !/Chrome|Edg\//.test(agent);
+  return /iPhone|iPad/.test(agent) || isMacSafari;
 }
+
+// Safari reads a manifest once, as the page loads, and opens a Home Screen app at its start_url,
+// or, without one, at the page's address as it stands when it's added, which names the theme
+// picked before then (pick-theme.js). Chrome offers its own install only with a start_url.
+/** @param {string} manifest */
+function dropStartUrl(manifest) {
+  const parsed = JSON.parse(manifest);
+  delete parsed.start_url;
+  return JSON.stringify(parsed);
+}
+
+/**
+ * @param {{ path: string, body: string }} file
+ * @param {Request} request
+ */
+const writeBody = ({ path, body }, request) =>
+  path === MANIFEST_PATH && isFromSafari(request) ? dropStartUrl(body) : body;
 
 /**
  * @param {Parameters<typeof decodePageFiles>[0]} pageFiles
@@ -119,11 +129,15 @@ function createPageServer(pageFiles, releaseCommit) {
     if (replaced) return serveReplacedRelease(replaced[1]);
     const file = files.get(path);
     if (!file) return serveNotFound();
-    const body =
-      path === MANIFEST_PATH ? addThemeToStartUrl(file.body, new URL(request.url)) : file.body;
+    const body = writeBody({ path, body: file.body }, request);
     file.etag ??= hashBody(file.body);
     const etag = body === file.body ? await file.etag : await hashBody(body);
-    const headers = { "content-type": file.contentType, etag, ...cacheHeaders };
+    const headers = {
+      "content-type": file.contentType,
+      etag,
+      ...cacheHeaders,
+      ...(path === MANIFEST_PATH ? { vary: "user-agent" } : {}),
+    };
     if (hasMatchingTag(request, etag)) return new Response(null, { status: 304, headers });
     return new Response(request.method === "HEAD" ? null : body, { headers });
   };

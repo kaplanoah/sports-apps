@@ -190,17 +190,30 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(page.locator("#homeScreenIcon")).toHaveAttribute("href", "icon-180.png");
     await expect(welcome.getByRole("radio", { name: "Walnut" })).toBeChecked();
-    await expect(page.locator("#manifestLink")).toHaveAttribute(
-      "href",
-      "manifest.webmanifest?theme=dark",
-    );
     expect(await listLowContrastText(page)).toEqual([]);
-    await welcome.getByRole("radio", { name: "System" }).check();
-    await expect(page.locator("#manifestLink")).toHaveAttribute("href", "manifest.webmanifest");
-    await welcome.getByRole("radio", { name: "Walnut" }).check();
     await welcome.getByRole("button", CONTINUE).click();
     await openSettings(page);
     await expect(page.locator('input[name="appearance"][value="dark"]')).toBeChecked();
+  });
+
+  // Safari opens a Home Screen app at the page's address as it stood when it was added.
+  test("a theme picked in the browser rides in the page's address, which keeps it through a reload, and System takes it out", async ({
+    page,
+  }) => {
+    const readTheme = () => new URL(page.url()).searchParams.get("theme");
+    await openApp(page, { isShowingWelcome: true });
+    await page.locator(WELCOME).getByRole("radio", { name: "Walnut" }).check();
+    await expect.poll(readTheme).toBe("dark");
+    await page.reload();
+    await expect(page.locator("#stamp")).toBeVisible();
+    expect(readTheme()).toBe("dark");
+
+    await page.locator(WELCOME).getByRole("radio", { name: "System" }).check();
+    await expect.poll(readTheme).toBe(null);
+    await page.locator(WELCOME).getByRole("button", CONTINUE).click();
+    await openSettings(page);
+    await page.locator("#settingsDialog").getByRole("radio", { name: "Maple" }).check();
+    await expect.poll(readTheme).toBe("light");
   });
 
   test("going on in the browser closes the welcome for good on this device, and Settings keeps the steps", async ({

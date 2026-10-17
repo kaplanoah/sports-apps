@@ -6,6 +6,7 @@ declare const Sortable: {
 declare function isOnHomeScreen(): boolean;
 declare function readPickedAppearance(): string;
 declare function keepPickedAppearance(choice: string): void;
+declare function nameThemeInAddress(choice: string): void;
 
 // Cloudflare Workers runtime: a Durable Object answers a WebSocket upgrade with one end of a pair.
 declare class WebSocketPair {

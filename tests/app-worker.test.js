@@ -344,7 +344,17 @@ test("with an address of its own, the page still answers under its key, and only
   assert.equal((await requestAtPageHost("/key/", { cookie })).status, 404);
 });
 
-test("the manifest names the theme its address asks for in the address the Home Screen app opens at", async () => {
+const AGENTS = {
+  iPhone:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
+  iPad: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+  android:
+    "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36",
+  macChrome:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+};
+
+test("Safari's manifest leaves out start_url, so a Home Screen app opens at the address it was added from, and Chrome's keeps it", async () => {
   const manifest = { name: "WNBA", id: "./", start_url: "./", scope: "./" };
   const worker = createPageWorker({
     "manifest.webmanifest": {
@@ -352,10 +362,22 @@ test("the manifest names the theme its address asks for in the address the Home 
       text: JSON.stringify(manifest),
     },
   });
+  /** @param {string} agent */
+  const requestManifest = (agent) =>
+    worker.fetch(
+      new Request("https://worker.example/key/manifest.webmanifest", {
+        headers: { "user-agent": agent },
+      }),
+      { APP_KEY: "key" },
+    );
 
-  const picked = await requestPageFile(worker, "manifest.webmanifest?theme=dark");
-  assert.deepEqual(await picked.json(), { ...manifest, start_url: "./?theme=dark" });
-  const plain = await requestPageFile(worker, "manifest.webmanifest");
-  assert.deepEqual(await plain.json(), manifest);
-  assert.notEqual(picked.headers.get("etag"), plain.headers.get("etag"));
+  const { start_url: _startUrl, ...withoutStartUrl } = manifest;
+  for (const agent of [AGENTS.iPhone, AGENTS.iPad])
+    assert.deepEqual(await (await requestManifest(agent)).json(), withoutStartUrl);
+  for (const agent of [AGENTS.android, AGENTS.macChrome])
+    assert.deepEqual(await (await requestManifest(agent)).json(), manifest);
+  const safari = await requestManifest(AGENTS.iPhone);
+  const chrome = await requestManifest(AGENTS.android);
+  assert.notEqual(safari.headers.get("etag"), chrome.headers.get("etag"));
+  assert.equal(safari.headers.get("vary"), "user-agent");
 });
