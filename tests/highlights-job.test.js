@@ -151,6 +151,34 @@ test("a read with misses saves what it brought and is tried again ten minutes la
   assert.deepEqual(takeReads(), []);
 });
 
+test("games whose reads keep missing wait longer each try, so every final gets its turn", async () => {
+  const games = Array.from({ length: 24 }, (_, index) => endGame(String(24 - index), 20 + index));
+  const { runJob, wait, takeReads } = createRun(games, { hasMisses: () => true });
+
+  const read = new Set();
+  for (let minutes = 0; minutes <= 2 * 60; minutes += 2) {
+    await runJob();
+    for (const id of takeReads()) read.add(id);
+    wait(2);
+  }
+
+  assert.deepEqual([...read].sort(), games.map((game) => game.id).sort());
+});
+
+test("a game whose reads keep missing waits twice as long each try, up to six hours", async () => {
+  const { runJob, wait, takeReads } = createRun([endGame("1", 30)], { hasMisses: () => true });
+
+  const triesByMinute = [];
+  for (let minutes = 0; minutes <= 24 * 60; minutes += 2) {
+    await runJob();
+    if (takeReads().length) triesByMinute.push(minutes);
+    wait(2);
+  }
+
+  assert.deepEqual(triesByMinute.slice(0, 7), [0, 10, 30, 70, 150, 310, 630]);
+  assert.equal(triesByMinute[7] - triesByMinute[6], 6 * 60);
+});
+
 test("each run saves its status, with a read that failed", async (t) => {
   t.mock.method(console, "error", () => {});
   const { docs, runJob } = createRun([endGame("1", 0)], {

@@ -2,22 +2,12 @@
 // the same path is shared, so the read a finger starts as it comes down on a row serves the sheet
 // the tap opens, and a sheet opened again soon doesn't wait on another.
 import { reloadWhenSignedOut } from "./access.js";
+import { readWorkerError } from "./worker-error.js";
 
 /** @typedef {{ timeoutMs: number, isExpected: (body: any) => boolean }} ReadRules */
 
 /** @type {Map<string, { at: number, promise: Promise<any> }>} */
 const recentReads = new Map();
-
-/**
- * What the Worker said went wrong, which every one of its routes says as `{ code, message }`.
- * @param {any} body
- * @param {number} status
- * @returns {string}
- */
-function readFailure(body, status) {
-  const message = body?.error?.message;
-  return typeof message === "string" && message ? message : `The Worker answered ${status}`;
-}
 
 /**
  * @param {string} path
@@ -32,7 +22,7 @@ async function requestFromWorker(path, { timeoutMs, isExpected }) {
   reloadWhenSignedOut(response);
   const body = await response.json().catch(() => null);
   if (!response.ok)
-    throw Object.assign(new Error(readFailure(body, response.status)), {
+    throw Object.assign(new Error(readWorkerError(body, response.status).message), {
       status: response.status,
     });
   if (!body || !isExpected(body))

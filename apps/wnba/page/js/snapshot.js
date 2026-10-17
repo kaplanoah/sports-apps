@@ -2,9 +2,9 @@
 // The league's own feeds: today's scoreboard and the season's schedule from its CDN, and the
 // playoff bracket and the standings from its stats site. When the scoreboard doesn't answer,
 // ESPN's stands in for today's scores and clocks, and for a game the schedule still holds as under
-// way once the scoreboard no longer lists it. The league's feeds
-// don't say where a game is on, so ESPN's scoreboard does, and it says when a game starts while the
-// league's schedule still has its time to be decided.
+// way once the scoreboard no longer lists it. The league's feeds don't say where a game is on, so
+// ESPN's scoreboard does, and it says when a game starts while the league's schedule still has its
+// time to be decided.
 
 import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";

@@ -10,7 +10,13 @@ import {
   nameStartersKey,
 } from "../worker/src/pitchers.js";
 import { SIDE_VERSION, createPitcherJob, nameReadsKey } from "../worker/src/pitcher-updater.js";
-import { createRotationServer, nameRotationKey } from "../worker/src/rotations.js";
+import {
+  LOOKBACK_DAYS,
+  createRotationServer,
+  listScheduleRequest,
+  nameRotationKey,
+} from "../worker/src/rotations.js";
+import { addDays } from "#shared/days.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // MLB's tables, the last two weeks of games, and the pitchers the matchup sheet reads, as MLB
@@ -257,6 +263,28 @@ test("starts the store saved before today have the sheet read MLB for a later da
   const later = await askForRotation("club=CLE&date=2026-10-09", { docs });
   assert.ok(later.requests.length > 0);
   assert.equal(later.leagueReads, 1);
+});
+
+test("past midnight, the store's starts are read again to reach the new day, though no game has ended", async () => {
+  const answers = listAnswers();
+  const recorded = listScheduleRequest(null, addDays(TODAY, -LOOKBACK_DAYS), TODAY);
+  answers[listScheduleRequest(null, addDays(TOMORROW, -LOOKBACK_DAYS), TOMORROW)] =
+    answers[recorded];
+  const { docs, mlb, runJob, wait } = createRun({ answers });
+  const lateEvening = Date.parse(`${TODAY}T23:50:00-04:00`);
+  wait((lateEvening - NOW) / MINUTE_MS);
+  await runJob();
+  assert.equal(docs.stored.get(nameRotationKey(2026, "CLE")).through, TODAY);
+  const before = mlb.requests.length;
+
+  wait(20);
+  await runJob();
+
+  const scheduleReads = mlb.requests
+    .slice(before)
+    .filter((path) => path.startsWith("/api/v1/schedule?"));
+  assert.equal(scheduleReads.length, 1);
+  assert.equal(docs.stored.get(nameRotationKey(2026, "CLE")).through, TOMORROW);
 });
 
 test("a club whose starters the store doesn't keep, or a day its starts don't reach back to, has the sheet read MLB, counted", async () => {

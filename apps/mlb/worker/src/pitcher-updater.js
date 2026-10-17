@@ -123,9 +123,12 @@ function createStoreUpdate() {
    * @param {string} name which feed's limits apply
    * @param {string} key what the answer is kept under
    * @param {() => Promise<any>} load
+   * @param {(answer: any) => boolean} [isBehind] whether a kept answer is behind
    */
-  const readFeed = (context, name, key, load) =>
-    /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(name, key, load);
+  const readFeed = (context, name, key, load, isBehind) =>
+    /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(name, key, load, {
+      isBehind,
+    });
 
   /**
    * @param {JobContext} context
@@ -134,17 +137,24 @@ function createStoreUpdate() {
   const fetchJson = (context, path) => fetchMlbJson(context.fetchImpl, path, null);
 
   /**
-   * The last two weeks of every club's games, through today.
+   * The last two weeks of every club's games, through today, read again once today is a day the
+   * last read didn't reach, so a club's starts reach today however long the night's been quiet.
    * @param {JobContext} context
    * @param {number} season
    */
   function readSchedule(context, season) {
-    return readFeed(context, "schedule", String(season), async () => {
-      const today = readEasternDay(context.now()).date;
-      const from = addDays(today, -LOOKBACK_DAYS);
-      const schedule = await fetchJson(context, listScheduleRequest(null, from, today));
-      return { from, through: today, schedule };
-    });
+    return readFeed(
+      context,
+      "schedule",
+      String(season),
+      async () => {
+        const today = readEasternDay(context.now()).date;
+        const from = addDays(today, -LOOKBACK_DAYS);
+        const schedule = await fetchJson(context, listScheduleRequest(null, from, today));
+        return { from, through: today, schedule };
+      },
+      (recent) => recent.through < readEasternDay(context.now()).date,
+    );
   }
 
   /**

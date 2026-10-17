@@ -22,7 +22,7 @@ import { describeError } from "./responses.js";
  * A fetch that counts the requests made through it.
  * @param {typeof fetch} fetchImpl
  */
-export function countRequests(fetchImpl) {
+function countRequests(fetchImpl) {
   const counter = {
     count: 0,
     /** @type {typeof fetch} */
@@ -70,7 +70,7 @@ export async function catchFailure(failures, what, work) {
  * @param {Partial<JobRunStatus> | null} stored the status the last run saved
  * @returns {JobRunStatus}
  */
-export function describeJobRun({ startedAt, endedAt, requests, failure }, stored) {
+function describeJobRun({ startedAt, endedAt, requests, failure }, stored) {
   const ranAt = new Date(startedAt).toISOString();
   return {
     ranAt,

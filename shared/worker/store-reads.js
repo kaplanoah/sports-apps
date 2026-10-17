@@ -9,20 +9,31 @@ import { describeError } from "./responses.js";
  */
 
 /**
- * The document the store keeps at `key`, or null when it keeps none, the Worker has no store, or
- * the store can't be read, for the route to read the league instead.
+ * The documents the store keeps at `keys`, each null when it keeps none, or null for them all
+ * when the Worker has no store or the store can't be read, for the route to read the league
+ * instead, so a sheet never shows some of what it reads from the store and not the rest.
  * @param {ReadDoc | undefined} readDoc
- * @param {string} key
+ * @param {string[]} keys
+ * @returns {Promise<any[] | null>}
  */
-export async function readKeptDoc(readDoc, key) {
+export async function readKeptDocs(readDoc, keys) {
   if (!readDoc) return null;
   try {
-    return await readDoc(key);
+    return await Promise.all(keys.map((key) => readDoc(key)));
   } catch (error) {
-    console.error(`Reading ${key} from the store failed: ${describeError(error)}`);
+    console.error(`Reading ${keys.join(", ")} from the store failed: ${describeError(error)}`);
     return null;
   }
 }
+
+/**
+ * The document the store keeps at `key`, or null when it keeps none, the Worker has no store, or
+ * the store can't be read.
+ * @param {ReadDoc | undefined} readDoc
+ * @param {string} key
+ */
+export const readKeptDoc = async (readDoc, key) =>
+  (await readKeptDocs(readDoc, [key]))?.[0] ?? null;
 
 /**
  * Counts a read of the league the store should have spared, which never holds up the sheet.

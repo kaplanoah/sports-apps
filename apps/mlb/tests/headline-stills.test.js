@@ -196,6 +196,24 @@ test("a read isn't finished until each still Claude missed has been asked about 
   assert.deepEqual(asked.slice(0, 7).toSorted(), stills.toSorted());
 });
 
+test("once Claude answers again after a round it missed, a read isn't finished until the round's every still is asked about", async () => {
+  const stills = Array.from({ length: 30 }, (_, index) => `${STILL}?play=${index}`);
+  const claude = { isDown: true };
+  const fake = createClaude(() => (claude.isDown ? "overloaded" : false));
+  const context = createContext({ fetchImpl: fake.fetchImpl });
+  for (let read = 0; read < stills.length / STILLS_PER_READ; read += 1)
+    await findHeadlineStills(context, "849826", stills);
+  assert.equal(Object.keys(context.stored.get("headline-still-misses:849826")).length, 30);
+
+  claude.isDown = false;
+  const reads = [];
+  for (let read = 0; read < stills.length / STILLS_PER_READ; read += 1)
+    reads.push((await findHeadlineStills(context, "849826", stills)).isFinished);
+
+  assert.deepEqual(reads, [false, false, false, false, false, true]);
+  assert.equal(Object.keys(context.stored.get("headline-stills:849826")).length, 30);
+});
+
 test("the answers for any game but the current season's finals are forgotten once the season changes", async () => {
   const claude = createClaude(() => true);
   const context = createContext({ fetchImpl: claude.fetchImpl });

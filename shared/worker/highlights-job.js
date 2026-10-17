@@ -8,7 +8,8 @@ import { noteFailure, runWithStatus } from "./job-status.js";
 // of the season's, which are read once each, a few at a time. A read the league couldn't finish
 // in one run, like one with more stills to check than a run may ask about, saves what it has and
 // is read again at the next run, until it's finished, and one that saved what it has with some of
-// it unanswered is tried again later, as a read that failed is. A league that changes how it reads
+// it unanswered is tried again later, as a read that failed is, each try in a row waiting twice as
+// long, so a game that keeps failing never holds back the rest. A league that changes how it reads
 // a game's highlights raises its edition, and each final it kept is read once more the same way.
 // Each run saves how it went in `highlights/status`.
 
@@ -17,6 +18,7 @@ const HOUR_MS = 60 * MINUTE_MS;
 const RUN_DELAY_MS = 2 * MINUTE_MS;
 const GAMES_PER_RUN = 4;
 const RETRY_MS = 10 * MINUTE_MS;
+const MAX_RETRY_MS = 6 * HOUR_MS;
 const READ_AFTER_END_MS = [0, HOUR_MS, 3 * HOUR_MS, 12 * HOUR_MS];
 const STATUS_KEY = "highlights/status";
 
@@ -28,6 +30,7 @@ const STATUS_KEY = "highlights/status";
  * @property {number} triedAt when it was last read, whole or not
  * @property {number} [edition]
  * @property {boolean} [isUnfinished] whether the last read saved what it had with more to read
+ * @property {number} [tries] how many reads in a row have failed or had misses
  */
 
 /**
@@ -72,6 +75,9 @@ function findNextRead(end, readAt) {
   return next ?? null;
 }
 
+/** @param {HighlightsRead} read */
+const chooseRetryWait = (read) => Math.min(RETRY_MS * 2 ** ((read.tries ?? 1) - 1), MAX_RETRY_MS);
+
 /**
  * @param {number} end
  * @param {HighlightsRead | undefined} read
@@ -81,7 +87,7 @@ function findNextRead(end, readAt) {
  */
 function isDue(end, read, { now, edition }) {
   if (!read || read.isUnfinished) return true;
-  if (now - read.triedAt < RETRY_MS) return false;
+  if (now - read.triedAt < chooseRetryWait(read)) return false;
   if ((read.edition ?? 0) !== edition) return true;
   const next = findNextRead(end, read.readAt);
   return next !== null && now >= next;
@@ -107,7 +113,10 @@ const stampEdition = (read, edition) => (edition ? { ...read, edition } : read);
  */
 async function keepGame(context, league, game, read) {
   const now = context.now();
-  const tried = stampEdition({ readAt: read?.readAt ?? null, triedAt: now }, read?.edition);
+  const tried = stampEdition(
+    { readAt: read?.readAt ?? null, triedAt: now, tries: (read?.tries ?? 0) + 1 },
+    read?.edition,
+  );
   const brought = await league.readHighlights(context, game).catch((error) => {
     noteFailure(context.failures, `Reading game ${game.id}'s highlights`, error);
     return undefined;

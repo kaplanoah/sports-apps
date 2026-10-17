@@ -62,16 +62,6 @@ export function createSnapshotServer({
   storage = undefined,
 } = {}) {
   const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, leagueName: "The WNBA", now, storage });
-  /** @type {Set<number>} */
-  const averagesForgotten = new Set();
-
-  /** @param {number} season */
-  async function forgetAverages(season) {
-    if (averagesForgotten.has(season)) return;
-    averagesForgotten.add(season);
-    await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
-  }
-
   const networkMonths = new Map();
   const espnGames = createEspnGameReader({ fetchImpl });
   const gameEnds = createGameEnds({
@@ -180,7 +170,7 @@ export function createSnapshotServer({
   }
 
   async function fetchResponses(season) {
-    await forgetAverages(season);
+    await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
     const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard).catch(
       () => null,
     );

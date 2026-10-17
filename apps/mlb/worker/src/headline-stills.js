@@ -105,16 +105,16 @@ async function checkStills({ apiKey, fetchImpl }, stills) {
 }
 
 /**
- * The first few stills without an answer of those that have gone unanswered least often, so each
- * is asked about once a round.
+ * The stills without an answer that have gone unanswered least often: this round's, which a read
+ * asks about the first few of, so each is asked about once a round.
  * @param {string[]} stills
  * @param {Record<string, boolean>} kept
  * @param {Record<string, number>} missed
  */
-function chooseStillsToAsk(stills, kept, missed) {
+function listRoundStills(stills, kept, missed) {
   const unanswered = stills.filter((still) => !Object.hasOwn(kept, still));
   const fewest = Math.min(...unanswered.map((still) => missed[still] ?? 0));
-  return unanswered.filter((still) => (missed[still] ?? 0) === fewest).slice(0, STILLS_PER_READ);
+  return unanswered.filter((still) => (missed[still] ?? 0) === fewest);
 }
 
 /**
@@ -136,19 +136,6 @@ const countMisses = (stills, { answered, missed, missedNow }) =>
       )
       .filter(([, count]) => count > 0),
   );
-
-/**
- * Whether every still without an answer has gone unanswered as often as each other one, and at
- * least once, so none is still waiting to be asked about this time round.
- * @param {string[]} stills
- * @param {{ checks: Record<string, boolean>, misses: Record<string, number> }} answers
- */
-function isRoundAsked(stills, { checks, misses }) {
-  const counts = new Set(
-    stills.filter((still) => !Object.hasOwn(checks, still)).map((still) => misses[still] ?? 0),
-  );
-  return counts.size === 0 || (counts.size === 1 && !counts.has(0));
-}
 
 /**
  * @param {JobContext["storage"]} storage
@@ -179,7 +166,8 @@ export async function findHeadlineStills(context, id, stills) {
   const kept = (await context.storage.get(nameChecksKey(id))) ?? {};
   /** @type {Record<string, number>} */
   const missed = (await context.storage.get(nameMissesKey(id))) ?? {};
-  const asked = chooseStillsToAsk(stills, kept, missed);
+  const round = listRoundStills(stills, kept, missed);
+  const asked = round.slice(0, STILLS_PER_READ);
   const checked = await checkStills({ apiKey, fetchImpl: context.fetchImpl }, asked);
   const unanswered = checked.missed.length + checked.refused.length;
   if (unanswered)
@@ -202,7 +190,7 @@ export async function findHeadlineStills(context, id, stills) {
   const isKeyRefused = checked.refused.length > 0;
   return {
     withHeadlines: new Set(stills.filter((still) => checks[still])),
-    isFinished: isKeyRefused || isRoundAsked(stills, { checks, misses }),
+    isFinished: isKeyRefused || round.length <= STILLS_PER_READ,
     hasMisses: isKeyRefused || Object.keys(misses).length > 0,
   };
 }

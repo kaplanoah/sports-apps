@@ -4,6 +4,7 @@ import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { readNameLetters } from "../../../../shared/worker/injury-report.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
+import { splitName } from "./season-averages.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
 
 // Reads a team's roster for a season, for its sheet's Roster page: each player's number, position,
@@ -115,8 +116,7 @@ function chooseAgeDay(season, now) {
  */
 function readNames(row, listed) {
   if (listed) return { firstName: listed.PLAYER_FIRST_NAME, lastName: listed.PLAYER_LAST_NAME };
-  const [firstName, ...rest] = String(row.PLAYER).split(" ");
-  return { firstName, lastName: rest.join(" ") };
+  return splitName(row.PLAYER);
 }
 
 /**

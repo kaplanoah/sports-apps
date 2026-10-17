@@ -2,7 +2,7 @@ import { addDays, readEasternDay } from "#shared/days.js";
 import { readClubId, readGameState, readMlbTeamId } from "../../page/js/snapshot.js";
 import { DATE_RULE, fetchMlbJson, readDateParam } from "./mlb.js";
 import { listGameLogRequest, listStarts } from "./pitchers.js";
-import { noteLeagueRead } from "../../../../shared/worker/store-reads.js";
+import { noteLeagueRead, readKeptDocs } from "../../../../shared/worker/store-reads.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 
 // A club that hasn't named a game's starter: who started its last games, how each of those starts
@@ -249,22 +249,17 @@ export function createRotationServer({
    * whether `date` is in the store's current season, each null when it can't be read.
    * @param {string} club
    * @param {string} date
-   * @param {(key: string) => Promise<any>} readDoc
+   * @param {((key: string) => Promise<any>) | undefined} readDoc
    */
   async function readSavedStarts(club, date, readDoc) {
-    try {
-      const [saved, current] = await Promise.all([
-        readDoc(nameRotationKey(Number(date.slice(0, 4)), club)),
-        readDoc("live/current"),
-      ]);
-      return {
-        clubStarts: saved && coversDay(saved, date, readEasternDay(now()).date) ? saved : null,
-        isCurrentSeason: Number(date.slice(0, 4)) === current?.season,
-      };
-    } catch (error) {
-      console.error(`Reading ${club}'s starts from the store failed: ${describeError(error)}`);
-      return { clubStarts: null, isCurrentSeason: false };
-    }
+    const season = Number(date.slice(0, 4));
+    const kept = await readKeptDocs(readDoc, [nameRotationKey(season, club), "live/current"]);
+    if (!kept) return { clubStarts: null, isCurrentSeason: false };
+    const [saved, current] = kept;
+    return {
+      clubStarts: saved && coversDay(saved, date, readEasternDay(now()).date) ? saved : null,
+      isCurrentSeason: season === current?.season,
+    };
   }
 
   /**
@@ -281,10 +276,10 @@ export function createRotationServer({
     const date = readDateParam(url.searchParams);
     if (date == null) return respondError(400, "invalid_argument", DATE_RULE);
     try {
-      const saved = readDoc ? await readSavedStarts(club, date, readDoc) : null;
-      const hasStoreGap = Boolean(saved?.isCurrentSeason && !saved.clubStarts);
+      const saved = await readSavedStarts(club, date, readDoc);
+      const hasStoreGap = saved.isCurrentSeason && !saved.clubStarts;
       const [clubStarts] = await Promise.all([
-        saved?.clubStarts ?? fetchClubStarts(club, date),
+        saved.clubStarts ?? fetchClubStarts(club, date),
         hasStoreGap && countLeagueRead && noteLeagueRead(`${club}'s starts`, countLeagueRead),
       ]);
       return respondJson(describeRotation(clubStarts, date));

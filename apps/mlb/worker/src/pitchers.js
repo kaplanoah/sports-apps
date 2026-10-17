@@ -2,7 +2,7 @@ import { readEasternDay } from "#shared/days.js";
 import { readClubId } from "../../page/js/snapshot.js";
 import { fetchMlbJson, SEASON_PARAM } from "./mlb.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
-import { noteLeagueRead } from "../../../../shared/worker/store-reads.js";
+import { noteLeagueRead, readKeptDocs } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
 // One pitcher's side of the matchup sheet: who he is, his season, what he throws, his last starts,
@@ -401,20 +401,17 @@ export function createPitcherServer({
    * What the store keeps of the sheet, each part null when it doesn't keep it, or can't be read.
    * @param {number} id
    * @param {number} season
-   * @param {ReadDoc} readDoc
+   * @param {ReadDoc | undefined} readDoc
    */
   async function readSaved(id, season, readDoc) {
-    try {
-      const [pitcher, qualified, current] = await Promise.all([
-        readDoc(namePitcherKey(season, id)),
-        readDoc(nameStartersKey(season)),
-        readDoc("live/current"),
-      ]);
-      return { pitcher, qualified, current: current?.season ?? null };
-    } catch (error) {
-      console.error(`Reading pitcher ${id} from the store failed: ${describeError(error)}`);
-      return NOTHING_SAVED;
-    }
+    const kept = await readKeptDocs(readDoc, [
+      namePitcherKey(season, id),
+      nameStartersKey(season),
+      "live/current",
+    ]);
+    if (!kept) return NOTHING_SAVED;
+    const [pitcher, qualified, current] = kept;
+    return { pitcher, qualified, current: current?.season ?? null };
   }
 
   /**
@@ -429,7 +426,7 @@ export function createPitcherServer({
     const season = SEASON_PARAM.readSeason(url.searchParams, now());
     if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     try {
-      const saved = readDoc ? await readSaved(id, season, readDoc) : NOTHING_SAVED;
+      const saved = await readSaved(id, season, readDoc);
       const hasStoreGap = season === saved.current && (!saved.pitcher || !saved.qualified);
       const [pitcher, qualified] = await Promise.all([
         saved.pitcher ?? fetchPitcher(id, season),

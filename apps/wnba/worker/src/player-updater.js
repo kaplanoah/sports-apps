@@ -146,8 +146,6 @@ function createStoreUpdate() {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
   let keeper = null;
   const savedDocs = createSavedDocs();
-  /** @type {Set<number>} */
-  const oldTotalsForgotten = new Set();
 
   /**
    * @param {RunContext} context
@@ -191,17 +189,13 @@ function createStoreUpdate() {
       })
       .catch(() => NO_TEAM_OUT);
 
-  // Each season's totals without each player's team sit under a key no run reads, so each is
-  // deleted once.
+  // Each season's totals without each player's team sit under a key no run reads.
   /** @param {number} season */
-  async function forgetOldTotals(season) {
-    if (oldTotalsForgotten.has(season)) return;
-    oldTotalsForgotten.add(season);
-    await /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).forgetFeed(
+  const forgetOldTotals = (season) =>
+    /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).forgetFeed(
       "totals",
       `${nameTotalsRequest(season)} ${TOTALS_COLUMNS.join(" ")}`,
     );
-  }
 
   /**
    * @param {RunContext} context

@@ -5,6 +5,7 @@ import { reloadWhenSignedOut } from "./access.js";
 import { isIos, isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
 import { registerServiceWorker } from "./service-worker.js";
+import { readWorkerError } from "./worker-error.js";
 
 const NOTES = {
   blockedOnIos:
@@ -75,13 +76,13 @@ function encodeBase64Url(buffer) {
 }
 
 /**
- * The Worker's error, with the code it names, as in `{ error: { code, message } }`.
+ * The Worker's error, with the code it names.
  * @param {Response} response
  */
 async function readPushFailure(response) {
   const body = await response.json().catch(() => null);
-  const message = body?.error?.message ?? `The Worker answered ${response.status}`;
-  return Object.assign(new Error(message), { code: body?.error?.code });
+  const { code, message } = readWorkerError(body, response.status);
+  return Object.assign(new Error(message), { code });
 }
 
 async function requestPush(path, init = {}) {

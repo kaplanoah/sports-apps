@@ -81,6 +81,8 @@ export const nameFeedKey = (name, key) => digestKey(`${name} ${key}`);
 export function createFeedKeeper({ feeds, leagueName, now, storage = createMemoryStorage() }) {
   /** @type {Map<string, any>} */
   const records = new Map();
+  /** @type {Set<string>} */
+  const forgotten = new Set();
 
   /** @param {string} storageKey */
   async function readRecord(storageKey) {
@@ -150,12 +152,14 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
     },
 
     /**
-     * Forgets the answer kept for a request no longer read.
+     * Forgets the answer kept for a request no longer read, once while the keeper is in memory.
      * @param {string} name the feed's
      * @param {string} key the request
      */
     async forgetFeed(name, key) {
       const storageKey = await nameFeedKey(name, key);
+      if (forgotten.has(storageKey)) return;
+      forgotten.add(storageKey);
       records.delete(storageKey);
       await storage.delete(storageKey);
     },

@@ -1,7 +1,8 @@
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
-import { noteLeagueRead } from "../../../../shared/worker/store-reads.js";
+import { noteLeagueRead, readKeptDocs } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { nameRosterKey, readTeam } from "./roster.js";
+import { averageTotals, readPerGame, readShare, splitName } from "./season-averages.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";
 
 // What a player's sheet shows for a season: her facts from her team's roster that season, her last
@@ -37,21 +38,6 @@ const LEADER_GAMES = 31;
  * @property {boolean} [isShare] whether the rule counts only what she counts, not her games
  * @property {boolean} [isFewestFirst] whether the fewest ranks first, as turnovers do
  */
-
-/**
- * @param {string} total
- * @returns {(row: Record<string, number>) => number | null}
- */
-const readPerGame = (total) => (row) =>
-  row.GP > 0 && row[total] != null ? row[total] / row.GP : null;
-
-/**
- * @param {string} made
- * @param {string} attempted
- * @returns {(row: Record<string, number>) => number | null}
- */
-const readShare = (made, attempted) => (row) =>
-  row[attempted] > 0 ? row[made] / row[attempted] : null;
 
 /** @type {RankedStat[]} */
 const RANKED_STATS = [
@@ -205,13 +191,6 @@ export const nameNumbersKey = (season, id) => `players/${season}-${id}`;
  */
 export const nameRanksKey = (season) => `ranks/${season}`;
 
-// The feeds write a player's name whole; everything after the first space is her last name.
-/** @param {string} name */
-function splitName(name) {
-  const [firstName, ...rest] = String(name).split(" ");
-  return { firstName, lastName: rest.join(" ") };
-}
-
 /**
  * The most games any team has played, which the rule's share of a season counts from.
  * @param {Record<string, any>[]} teamGames
@@ -350,12 +329,7 @@ export function describeRegularSeason(her, ranks) {
   return {
     games: her.GP,
     gamesNeeded: prorate(ranks.seasonGames, LEADER_GAMES),
-    averages: {
-      points: her.PTS / her.GP,
-      rebounds: her.REB / her.GP,
-      assists: her.AST / her.GP,
-      minutes: her.MIN / her.GP,
-    },
+    averages: averageTotals(her),
     stats: RANKED_STATS.filter((stat) => hasStat(her, stat)).map((stat) =>
       rankStat(her, ranks, stat),
     ),
@@ -615,21 +589,18 @@ export function createPlayerServer({
    * @param {ReadDoc} readDoc
    */
   async function readPlayerFromStore({ id, team, season }, readDoc) {
-    try {
-      const [ranks, numbers, roster, current] = await Promise.all([
-        readDoc(nameRanksKey(season)),
-        readDoc(nameNumbersKey(season, id)),
-        readDoc(nameRosterKey(season, team)),
-        readDoc("live/current"),
-      ]);
-      return {
-        player: ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined,
-        isCurrentSeason: season === current?.season,
-      };
-    } catch (error) {
-      console.error(`Reading player ${id} from the store failed: ${describeError(error)}`);
-      return { player: undefined, isCurrentSeason: false };
-    }
+    const kept = await readKeptDocs(readDoc, [
+      nameRanksKey(season),
+      nameNumbersKey(season, id),
+      nameRosterKey(season, team),
+      "live/current",
+    ]);
+    if (!kept) return { player: undefined, isCurrentSeason: false };
+    const [ranks, numbers, roster, current] = kept;
+    return {
+      player: ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined,
+      isCurrentSeason: season === current?.season,
+    };
   }
 
   /**

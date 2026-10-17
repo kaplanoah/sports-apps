@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { describeRanks, describeRegularSeason } from "../worker/src/player.js";
 import { describeAverages, listLeaders } from "../worker/src/season-averages.js";
+import { readTable } from "../worker/src/wnba.js";
 
 // Every player's totals as the league answered the morning after the Liberty's last game.
 const PLAYERS = JSON.parse(
@@ -71,6 +73,23 @@ test("each team's five leading scorers are those with the most points a game who
   const withoutMitchell = listLeaders(describeAverages(fewGames));
   assert.ok(!withoutMitchell.some((leader) => leader.lastName === "Mitchell"));
   assert.equal(withoutMitchell.filter((leader) => leader.team === "IND").length, 5);
+});
+
+test("every player's averages on her team's Roster are the ones her sheet shows, from the same totals", () => {
+  const ranks = describeRanks(TOTALS, PLAYERS.teamGames["2026:Regular Season"]);
+  const averages = describeAverages(TOTALS);
+
+  for (const row of readTable(TOTALS, "LeagueDashPlayerStats")) {
+    const kept = averages.find(
+      (player) =>
+        player.id === row.PLAYER_ID && `${player.firstName} ${player.lastName}` === row.PLAYER_NAME,
+    );
+    const sheet = /** @type {any} */ (describeRegularSeason(row, ranks));
+    const { minutes, points, rebounds, assists } = /** @type {any} */ (kept);
+    assert.deepEqual({ minutes, points, rebounds, assists }, sheet.averages);
+    const shooting = sheet.stats.find((/** @type {any} */ stat) => stat.key === "fieldGoalShare");
+    assert.equal(kept?.fieldGoalShare, shooting.value);
+  }
 });
 
 test("a feed with no totals has no averages and no leaders", () => {
