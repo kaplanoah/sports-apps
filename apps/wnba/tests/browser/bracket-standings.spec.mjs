@@ -86,12 +86,13 @@ test("a tap on the pill switches between the bracket and the standings, leaving 
   await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
-test("a tap on the tab while it shows slides back to the part it's named for: the bracket in the playoffs, and the standings before", async ({
+test("a tap on the tab while it shows at the page's top slides back to the part it's named for: the bracket in the playoffs, and the standings before", async ({
   page,
 }) => {
   const app = await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
 
   await findSeasonTab(page).click();
 
@@ -103,6 +104,7 @@ test("a tap on the tab while it shows slides back to the part it's named for: th
   await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
   await openSeasonPart(page, "Bracket");
   await expect(page.locator("#bracketWrap")).toBeVisible();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
 
   await findSeasonTab(page).click();
 

@@ -141,12 +141,9 @@ export function showSeasonPhase(isFieldSet) {
   panels?.jumpTo(0);
 }
 
-// A tap on the tab while it shows takes it back to the part it's named for, and from there, as any
-// tab's does, to the page's top.
+// A tap on the tab while it shows, with the page at its top, slides back to the part it's named for.
 function returnToFirstPart() {
-  if (!panels || panels.readShown() === 0) return false;
-  panels.slideTo(0);
-  return true;
+  if (panels && panels.readShown() !== 0) panels.slideTo(0);
 }
 
 // The pill and the tab's two faces, its name and icon for each part, are drawn whole, as they last

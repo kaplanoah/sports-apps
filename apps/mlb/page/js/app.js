@@ -113,12 +113,6 @@ function showChoicesFromOtherTabs() {
   if (!session.isReordering) redrawEased(renderAll);
 }
 
-// As on iPhone, choosing the Games tab while it shows goes back to where it starts: today.
-function returnGamesToToday() {
-  showStartDay();
-  return true;
-}
-
 const readSearchPages = () =>
   listSearchPages({
     index: session.playerIndex,
@@ -186,7 +180,7 @@ const listSearchDays = (found, now) =>
 function wireControls() {
   startPageTabs();
   startBracketStandings();
-  setTabStart("games", returnGamesToToday);
+  setTabStart("games", showStartDay);
   startDayStrip(/** @type {HTMLElement} */ (document.getElementById("seasonGames")));
   startGameSearch(/** @type {HTMLElement} */ (document.getElementById("gameSearch")), {
     readSeason: readSearchSeason,

@@ -42,26 +42,27 @@ export const readTabBefore = () => tabBefore ?? readTabBeforeLast();
  */
 export const openPageTab = (tab) => switchTab(tab);
 
-// What choosing a tab that's already showing does instead of scrolling to the top, for a tab whose
-// start isn't its top, like a Games view's today.
-/** @type {Map<string, () => boolean>} */
+// What choosing a tab that's already showing does once the page is at its top, for a tab whose start
+// is more than its top, like a Games view's today or the part a bracket and standings tab is named
+// for.
+/** @type {Map<string, () => void>} */
 const startReturns = new Map();
 
 /**
- * Has choosing `tab` while it's showing call `returnToStart`, which says whether it moved the tab,
- * as when the tab wasn't already at its start.
+ * Has choosing `tab` while it's showing, with the page at its top, call `returnToStart`.
  * @param {string} tab
- * @param {() => boolean} returnToStart
+ * @param {() => void} returnToStart
  */
 export function setTabStart(tab, returnToStart) {
   startReturns.set(tab, returnToStart);
 }
 
-// As on iPhone, choosing the tab that's already showing takes it back to where it starts, and then
-// to the top.
+// Choosing the tab that's already showing scrolls the page to its top, and once it's there, takes
+// the tab back to where it starts.
 /** @param {string} tab */
 function returnToStart(tab) {
-  if (!startReturns.get(tab)?.()) scrollToTop();
+  if (scrollY > 0) scrollToTop();
+  else startReturns.get(tab)?.();
 }
 
 // What choosing a tab does as it opens, from the tap, like bringing up the keyboard in a search.
