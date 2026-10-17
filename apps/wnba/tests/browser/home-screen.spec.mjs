@@ -241,6 +241,45 @@ test.describe("on an iPhone, in the browser", () => {
     await expect.poll(readTheme).toBe("dark");
   });
 
+  test("in Safari, a pick in Settings loads the page again at its address, with Settings back open", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => false });
+    });
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page);
+    await expect(page.locator("#stamp")).toBeVisible();
+    await openSettings(page);
+    await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
+    await page.locator("#settingsDialog").getByRole("radio", { name: "Walnut" }).check();
+    await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("dark");
+    await expect.poll(() => page.evaluate(() => "isBeforePick" in window)).toBe(false);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(
+      page.locator("#settingsDialog").getByRole("radio", { name: "Walnut" }),
+    ).toBeChecked();
+  });
+
+  test("in Safari, a pick in another tab loads this tab again at the address that names it", async ({
+    page,
+    context,
+  }) => {
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => false });
+    });
+    await openApp(page);
+    await expect(page.locator("#stamp")).toBeVisible();
+    await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
+    const otherTab = await context.newPage();
+    await openApp(otherTab);
+    await openSettings(otherTab);
+    await otherTab.locator("#settingsDialog").getByRole("radio", { name: "Walnut" }).check();
+    await expect.poll(() => new URL(page.url()).searchParams.get("theme")).toBe("dark");
+    await expect.poll(() => page.evaluate(() => "isBeforePick" in window)).toBe(false);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+
   test("going on in the browser closes the welcome for good on this device, and Settings keeps the steps", async ({
     page,
   }) => {

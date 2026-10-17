@@ -96,21 +96,34 @@ function addModulePreloads(files) {
   return { ...files, "index.html": { ...files["index.html"], text } };
 }
 
-const HOME_SCREEN_ICONS = {
+// Each app's page/js/looks.js names the same files, which tests/page-files.test.js checks.
+export const HOME_SCREEN_ICONS = {
   light: "icon-light-180.png",
   dark: "icon-180.png",
   system: "icon-system-180.png",
 };
+
+// Only an app whose System icon would show a seam where the two looks' halves meet draws its own.
+const isIconKept = (files, look) => look !== "system" || Boolean(files[HOME_SCREEN_ICONS.system]);
+
+/**
+ * @param {Record<string, { base64?: string }>} files
+ * @param {string} path
+ */
+function readIconData(files, path) {
+  if (!files[path]?.base64) throw new Error(`The page has no ${path} to give the Home Screen.`);
+  return files[path].base64;
+}
 
 // The icons each look gives the Home Screen, as a stylesheet's properties, which the page has
 // before it first draws, so the icons it shows never arrive after the page around them, as on the
 // reload a pick of a theme makes.
 function addHomeScreenIcons(files) {
   const properties = Object.entries(HOME_SCREEN_ICONS)
-    .filter(([, path]) => files[path])
+    .filter(([look]) => isIconKept(files, look))
     .map(
       ([look, path]) =>
-        `  --home-screen-icon-${look}: url("data:image/png;base64,${files[path].base64}");\n`,
+        `  --home-screen-icon-${look}: url("data:image/png;base64,${readIconData(files, path)}");\n`,
     )
     .join("");
   const text = `:root {\n${properties}}\n`;
