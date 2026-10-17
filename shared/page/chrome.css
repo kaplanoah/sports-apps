@@ -594,6 +594,15 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .control-note:empty {
   display: none;
 }
+.control-note a {
+  color: var(--accent);
+  text-decoration: none;
+}
+@media (hover: hover) {
+  .control-note a:hover {
+    color: var(--ink-hover);
+  }
+}
 .select-field {
   font: inherit;
   font-family: var(--select-face);

@@ -3,10 +3,12 @@
 // sets the theme before the first paint; this keeps it, and the icons and bar color that go with
 // it, current. Each app hands it its looks' icons and bar colors.
 
-/* global openThemeAddress -- from pick-theme.js, which every page that loads this runs first */
+// Every page that loads this runs pick-theme.js first.
+/* global buildSafariAddress, openThemeAddress -- from pick-theme.js */
 
-import { isOnHomeScreen } from "./device.js";
+import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
+import { html, setHtml } from "./html.js";
 
 /**
  * @typedef {{ barColor: string, tabIcon: string, homeScreenIcon: string }} Look
@@ -14,11 +16,6 @@ import { createViewerChoice } from "./device-storage.js";
  */
 
 const CHOICES = ["auto", "light", "dark"];
-
-// A home-screen page keeps its settings apart from the browser's, so matching the icon takes
-// choosing again in the browser.
-const HOME_SCREEN_NOTE =
-  "Apple sets a home-screen icon only when the page is added. To match this look, choose it in your browser and add the page again.";
 
 const darkScheme = matchMedia("(prefers-color-scheme: dark)");
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -77,6 +74,17 @@ function checkSavedChoice(choices) {
   for (const choice of choices) choice.checked = choice.value === saved;
 }
 
+// An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
+// changes its icon only once the site is added again, from Safari, which opens on the same theme.
+/** @param {string} choice */
+function drawReAddNote(choice) {
+  setHtml(
+    findElement("appearanceNote"),
+    html`Apple only sets icons when you add a site to your home screen. To update yours,
+      <a href="${buildSafariAddress(choice)}">re-add the site</a>.`,
+  );
+}
+
 /**
  * Wires the settings' Appearance choices, and the welcome's copy of them
  * (draw-home-screen-asks.js), to the look they pick.
@@ -94,8 +102,7 @@ export function startAppearance(looks) {
       openThemeAddress(choice.value);
       checkSavedChoice(choices);
       showChosenTheme();
-      if (choice.name === "appearance" && isOnHomeScreen())
-        findElement("appearanceNote").textContent = HOME_SCREEN_NOTE;
+      if (choice.name === "appearance" && isOnHomeScreen() && isIos()) drawReAddNote(choice.value);
     });
   }
   appearance.watch(() => {

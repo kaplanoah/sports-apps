@@ -402,6 +402,19 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator('input[name="appearance"][value="auto"]')).toBeChecked();
   });
 
+  test("the Home Screen app's link to re-add the site opens the browser on the app's theme, kept as its own, and on the welcome, even once closed", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page);
+    await page.goto("/?app-theme=dark");
+    await expect(page.locator(WELCOME)).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(new URL(page.url()).search).toBe("?theme=dark");
+    await expect(page.locator(WELCOME).getByRole("radio", { name: "Walnut" })).toBeChecked();
+    expect(await page.evaluate(() => localStorage.getItem("appearance"))).toBe('"dark"');
+  });
+
   test("opened from the Home Screen, the page asks for nothing", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "standalone", { get: () => true });

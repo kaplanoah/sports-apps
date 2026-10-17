@@ -6,7 +6,8 @@
 // settings, before anything is painted, and it answers the welcome's own taps from then on, so they
 // work while the modules still load. home-screen.js runs Chrome's Install in both.
 
-/* global isOnHomeScreen, keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
+/* global isOnHomeScreen, isOpenedFromHomeScreenApp -- from pick-theme.js */
+/* global keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
 /* global readStored -- from open-last-tab.js */
 
 const WELCOME_CLOSED_KEY = "homeScreenWelcomeClosed";
@@ -150,5 +151,5 @@ function drawHomeScreenAsks() {
   drawTip(isOnIos);
   const welcome = drawWelcome(isOnIos);
   wireWelcome(welcome);
-  if (readStored(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
+  if (isOpenedFromHomeScreenApp || readStored(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
 }

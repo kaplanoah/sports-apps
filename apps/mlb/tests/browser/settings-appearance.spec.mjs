@@ -1,5 +1,6 @@
 import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { IPHONE_AGENT, checkReAddNote } from "../../../../tests/browser/re-add-note.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -83,27 +84,17 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Night Game" })).toBeChecked();
 });
 
-test("changing the appearance on the Home Screen says how to match its icon, which the browser leaves out", async ({
-  page,
-  context,
-}) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "standalone", { get: () => true });
-  });
-  await openApp(page);
-  await openSettings(page);
-  const note = page.locator("#appearanceNote");
-  await expect(note).toBeHidden();
-  await page.getByRole("radio", { name: "Night Game" }).check();
-  await expect(note).toBeVisible();
-  await expect(note).toHaveText(/Apple sets a home-screen icon only when the page is added/);
+test.describe("in an iPhone's Home Screen app", () => {
+  test.use({ userAgent: IPHONE_AGENT });
 
-  const browserTab = await context.newPage();
-  await openApp(browserTab);
-  await openSettings(browserTab);
-  await browserTab.getByRole("radio", { name: "Ball" }).check();
-  await expect(browserTab.locator("html")).toHaveAttribute("data-theme", "light");
-  await expect(browserTab.locator("#appearanceNote")).toBeHidden();
+  test("changing the appearance says how to update the icon, under the icons, linking to Safari on the theme picked, which the browser and Android leave out", async ({
+    page,
+    context,
+    browser,
+  }) => {
+    const looks = { light: "Ball", dark: "Night Game" };
+    await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+  });
 });
 
 test("Appearance sits under Notifications, above the News switches, each choice showing the icon it offers", async ({

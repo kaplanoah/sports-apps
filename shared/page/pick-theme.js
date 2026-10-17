@@ -58,6 +58,34 @@ function openThemeAddress(choice) {
   else nameThemeInAddress(choice);
 }
 
+// The Home Screen app's link to add the site again names its theme under this key, which the
+// browser keeps as its own pick, unlike a theme a shared link names.
+const APP_THEME_KEY = "app-theme";
+
+// Safari opens an address the app hands it under this scheme, which the app would otherwise open
+// itself.
+/** @param {string} choice */
+function buildSafariAddress(choice) {
+  const address = new URL(location.href);
+  address.searchParams.set(APP_THEME_KEY, choice);
+  return `x-safari-${address.href}`;
+}
+
+// The browser keeps the theme the app's link names, and drops it from the address at once.
+function takeThemeFromApp() {
+  const address = new URL(location.href);
+  const fromApp = address.searchParams.get(APP_THEME_KEY);
+  if (fromApp === null) return false;
+  address.searchParams.delete(APP_THEME_KEY);
+  history.replaceState(history.state, "", address);
+  try {
+    localStorage.setItem("appearance", JSON.stringify(fromApp));
+  } catch {
+    /* without storage, the browser follows the phone, as appearance.js will */
+  }
+  return true;
+}
+
 // Only the app takes a theme from its address, on its first open, and drops it at once.
 function keepThemeFromAddress() {
   const address = new URL(location.href);
@@ -90,6 +118,10 @@ function keepPickedAppearance(choice) {
   showTheme(choice);
   openThemeAddress(choice);
 }
+
+// The welcome opens on a page the app's link opened, even where it was closed before, to show
+// the steps that add the site again.
+const isOpenedFromHomeScreenApp = !isOnHomeScreen() && takeThemeFromApp();
 
 try {
   if (isOnHomeScreen()) keepThemeFromAddress();
