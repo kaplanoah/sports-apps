@@ -3,6 +3,7 @@ import { renderBracket, watchBracketSpace } from "./bracket-view.js";
 import { listRankedOrder, renderTeamDot } from "./clubs.js";
 import { startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
+import { startChannelTag } from "#shared/channel-tag.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
@@ -200,6 +201,7 @@ function wireControls() {
   startRosterSection({ showChange: refreshTeamSheet });
   startPlayerSheet();
   startSettings();
+  startChannelTag();
   startAppearance(LOOKS);
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);
   startHomeScreen();

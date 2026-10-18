@@ -188,7 +188,12 @@ test("MLB failing is reported", async () => {
   await assert.rejects(loadSnapshot(), /MLB Stats API answered 503/);
 });
 
-const RELEASE = { version: "2.13.0", commit: "abc1234", builtAt: "2026-09-28T00:10:41.000Z" };
+const RELEASE = {
+  version: "2.13.0",
+  commit: "abc1234",
+  builtAt: "2026-09-28T00:10:41.000Z",
+  label: null,
+};
 
 // A build bundles the whole Worker and its page, so the tests of the bundle share one.
 /** @type {Promise<any> | undefined} */
@@ -226,6 +231,7 @@ test("the release names the version, the commit, and when it was built", async (
     version: "2.32.2",
     commit: "b102733",
     builtAt: "2026-09-28T00:10:41.000Z",
+    label: null,
   });
 });
 
