@@ -8,7 +8,7 @@ const answerNothing = () => new Response(null, { status: 500 });
 /**
  * The page's files as a deploy of this release serves them, from an address without the key.
  * @param {string} app
- * @param {{ version: string, commit: string, builtAt: string, label: string | null }} release
+ * @param {Parameters<typeof listBundledFiles>[1]} release
  * @returns {(url: URL) => Promise<Response>}
  */
 export function buildReleaseServer(app, release) {
