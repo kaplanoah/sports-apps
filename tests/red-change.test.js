@@ -246,7 +246,8 @@ test("a shared script's hunk that only removes lines, as a diff without context 
     );
 });
 
-test("a shared script that's gone, or that a change's hunks don't fit, is red", () => {
+test("a shared script that's gone, that a change's hunks don't fit, or that doesn't parse, is red", () => {
+  assert.deepEqual(findScriptChangeReasons(["+// a note", " function ("]), SCRIPT_REASON);
   const comment = ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP];
   assert.deepEqual(findScriptChangeReasons(comment, ""), SCRIPT_REASON);
   assert.deepEqual(findScriptChangeReasons(comment, "export const x = 1;\n"), SCRIPT_REASON);
