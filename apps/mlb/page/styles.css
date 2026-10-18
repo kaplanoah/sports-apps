@@ -1415,13 +1415,6 @@ body.kbd .rank-item .grip:focus {
 .home-screen-steps {
   color: var(--credit-ink);
 }
-/* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
-.home-screen-title {
-  font-weight: calc(var(--type-detail-weight) + 100);
-}
-.home-screen-steps b {
-  font-weight: calc(var(--type-caption-weight) + 75);
-}
 /* The Home Screen steps' Share icon, raised to sit with Libre Franklin's words, as set by eye. */
 .welcome-step .share-glyph {
   position: relative;
@@ -1429,6 +1422,13 @@ body.kbd .rank-item .grip:focus {
 }
 .home-screen-steps .share-glyph {
   vertical-align: -1px;
+}
+/* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
+.home-screen-title {
+  font-weight: calc(var(--type-detail-weight) + 100);
+}
+.home-screen-steps b {
+  font-weight: calc(var(--type-caption-weight) + 75);
 }
 .home-screen-install {
   font-weight: calc(var(--type-label-weight) - 50);
