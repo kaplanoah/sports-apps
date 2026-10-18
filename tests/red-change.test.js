@@ -204,7 +204,7 @@ test("a shared script's change to its code is red, even one that comments code o
 });
 
 test("a shared script's change in hunks far apart is red only where one changes code", () => {
-  const after = (/** @type {string} */ secondReturn) => [
+  const buildScript = (/** @type {string} */ secondReturn) => [
     "// The parts' top, just under the pill.",
     "function a() {",
     "  return 1;",
@@ -218,7 +218,7 @@ test("a shared script's change in hunks far apart is red only where one changes 
     header: "@@ -1,2 +1,2 @@",
     lines: ["-// The parts' top.", "+// The parts' top, just under the pill.", " function a() {"],
   };
-  const secondHunk = (/** @type {string} */ secondReturn) => ({
+  const buildSecondHunk = (/** @type {string} */ secondReturn) => ({
     header: "@@ -6,3 +6,3 @@",
     lines: [
       " function b() {",
@@ -228,11 +228,11 @@ test("a shared script's change in hunks far apart is red only where one changes 
     ],
   });
   assert.deepEqual(
-    findHunkChangeReasons([firstHunk, secondHunk("return 2;")], after("return 2;")),
+    findHunkChangeReasons([firstHunk, buildSecondHunk("return 2;")], buildScript("return 2;")),
     [],
   );
   assert.deepEqual(
-    findHunkChangeReasons([firstHunk, secondHunk("return 3;")], after("return 3;")),
+    findHunkChangeReasons([firstHunk, buildSecondHunk("return 3;")], buildScript("return 3;")),
     SCRIPT_REASON,
   );
 });
