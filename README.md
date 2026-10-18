@@ -331,7 +331,10 @@ sends. Every 15 minutes, the **Watch apps** workflow opens each app's page the
 same way and keeps one open issue for each app that isn't opening, which closes
 itself once the app opens again. An app without its page's secrets isn't
 opened, and the deploy log and the workflow say so. A page that asks for no code
-while its environment holds one opens without it, and they say that too.
+while its environment holds one opens without it, and they say that too. The
+workflow also keeps one open issue for each live app that opens without asking
+for its code, which closes itself once the app asks again or no code is held
+for it.
 
 Each deploy records its commit on the Worker's version. A merge skips an app's
 deploy when nothing but docs, tests, tooling, and other apps' folders changed
@@ -359,8 +362,10 @@ the real one. To use a pull request's change on the phone before it merges:
    at once, with the same checks and rollback as `main`'s deploy.
 3. Open the beta app from the Home Screen and use the change.
 
-Before the first beta deploy, create the `beta` environment as "Deploying on
-merge" says. After the first one, give each beta Worker its key with
+Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`,
+in Cloudflare's dashboard, since the `beta` token can change only the Workers it
+names, then create the `beta` environment as "Deploying on merge" says, with its
+token limited to them. After the first one, give each beta Worker its key with
 `npm run set-app-key -- <app> --channel beta`, which prints its address, and,
 if the real page asks for a code, set one with
 `npm run set-access-code -- <app> <code> --channel beta`. Add both to the `beta`
