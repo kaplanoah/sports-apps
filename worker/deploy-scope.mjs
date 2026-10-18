@@ -1,6 +1,9 @@
 // Decides whether main needs a deploy. Only when nothing but the docs, tests, and tooling listed
 // here changed since the live version does it skip one, so a new kind of file deploys until it
 // is listed. An app's own folder deploys only that app; anything outside apps/ deploys them all.
+// What the deploy runs, .github/workflows/deploy.yml and each script it runs and each module
+// those import, like worker/check-page.mjs, isn't listed: only a deploy shows that a change to
+// how the apps deploy still works.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -21,16 +24,16 @@ const SKIPPED_FILES = new Set([
   "playwright.config.mjs",
   "tsconfig.json",
   "types/globals.d.ts",
-  "worker/check-page.mjs",
   "worker/check-pr-title.mjs",
-  "worker/find-passed-ci.mjs",
   "worker/flag-conflicts.mjs",
-  "worker/github-api.mjs",
   "worker/judge-burn-in.mjs",
   "worker/judge-review.mjs",
   "worker/plan-review.mjs",
+  "worker/post-review.mjs",
   "worker/red-change.mjs",
   "worker/report-flaky-tests.mjs",
+  "worker/review-context.mjs",
+  "worker/review-state.mjs",
   "worker/rollback.mjs",
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
@@ -38,12 +41,15 @@ const SKIPPED_FILES = new Set([
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);
-const SKIPPED_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
+const TEST_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
 
-const isSkipped = (path) =>
-  path.endsWith(".md") ||
-  SKIPPED_FILES.has(path) ||
-  SKIPPED_FOLDERS.some((folder) => folder.test(path));
+/**
+ * Whether a path is in the root's tests or an app's.
+ * @param {string} path
+ */
+export const isTestPath = (path) => TEST_FOLDERS.some((folder) => folder.test(path));
+
+const isSkipped = (path) => path.endsWith(".md") || SKIPPED_FILES.has(path) || isTestPath(path);
 
 const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
 
