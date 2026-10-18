@@ -17,6 +17,7 @@ import {
 } from "../worker/src/roster.js";
 import { readTable } from "../worker/src/wnba.js";
 import { addTurnovers } from "./player-fixtures.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 // Every player's totals, every team's games, and the game logs of a few players, as the league
 // answered the morning after the Liberty's last game, beside the rosters recorded that morning.
@@ -275,14 +276,20 @@ test("a player asked for with no id, team, or real season, or one the league doe
       },
     },
   });
-  assert.equal((await askForPlayer(answers, `id=${STEWART}&team=XYZ`)).status, 400);
-  assert.equal((await askForPlayer(answers, `id=${STEWART}&team=NYL&season=1990`)).status, 400);
+  for (const query of [`id=${STEWART}&team=XYZ`, `id=${STEWART}&team=NYL&season=1990`])
+    await assertErrorAnswer(await askForPlayer(answers, query), 400, "invalid_argument");
   const unknown = { ...answers };
   for (const seasonType of ["Regular Season", "Playoffs"])
     unknown[nameGameLogRequest(2026, seasonType, "1")] =
       PLAYERS.gameLogs[`${BALOGUN}:2026:Playoffs`];
-  assert.equal((await askForPlayer(unknown, "id=1&team=NYL&season=2026")).status, 404);
+  await assertErrorAnswer(
+    await askForPlayer(unknown, "id=1&team=NYL&season=2026"),
+    404,
+    "not_found",
+  );
   const failed = await askForPlayer({}, `id=${STEWART}&team=NYL&season=2026`);
-  assert.equal(failed.status, 502);
-  assert.match(failed.body.error.message, /^Couldn't read the WNBA: The WNBA answered 404/);
+  assert.match(
+    await assertErrorAnswer(failed, 502, "upstream_error"),
+    /^Couldn't read the WNBA: The WNBA answered 404/,
+  );
 });

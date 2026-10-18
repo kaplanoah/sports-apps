@@ -9,6 +9,7 @@ import {
 } from "../worker/src/highlights.js";
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // Fever at Aces, Game 3 of the first round, which the Aces won 94-83, as ESPN had it the next week.
@@ -98,7 +99,22 @@ test("the route reads ESPN for a game the store doesn't keep, and says when ESPN
   assert.equal(found.espn.requests.length, 2);
 
   const missing = askForHighlights({ ...GAME, away: "ATL" }, async () => null);
-  assert.equal((await missing.response).status, 404);
+  await assertErrorAnswer(await missing.response, 404, "not_found");
+});
+
+test("the route turns away an ask that names no game, and says when ESPN doesn't answer", async () => {
+  const { espn, response } = askForHighlights({ ...GAME, id: "../x" });
+  await assertErrorAnswer(await response, 400, "invalid_argument");
+  assert.deepEqual(espn.requests, []);
+
+  const server = createHighlightsServer({
+    fetchImpl: async () => new Response("Unavailable", { status: 503 }),
+  });
+  const refused = await server.serveHighlights(
+    new URL(`https://wnba.test/highlights?${new URLSearchParams(GAME)}`),
+    async () => null,
+  );
+  assert.match(await assertErrorAnswer(refused, 502, "upstream_error"), /^Couldn't read ESPN: /);
 });
 
 test("the store's job reads each of the season's finals in ESPN's scoreboard and summary, and saves its highlights", async () => {

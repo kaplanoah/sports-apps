@@ -7,7 +7,7 @@ import {
 } from "../../page/js/snapshot.js";
 import { DATE_RULE, fetchMlbJson, readDateParam } from "./mlb.js";
 import { listGameLogRequest, listStarts } from "./pitchers.js";
-import { noteLeagueRead, readKeptDocs } from "../../../../shared/worker/store-reads.js";
+import { noteLeagueRead, readSeasonDocs } from "../../../../shared/worker/store-reads.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 
 // A club that hasn't named a game's starter: who started its last games, how each of those starts
@@ -248,20 +248,22 @@ export function createRotationServer({
   }
 
   /**
-   * The club's starts the store keeps, null when they don't reach the two weeks before `date`, and
-   * whether `date` is in the store's current season, each null when it can't be read.
+   * The club's starts the store keeps, null when they don't reach the two weeks before `date` or
+   * the store can't be read, and whether `date` is in the store's current season, false when the
+   * store can't be read.
    * @param {string} club
    * @param {string} date
    * @param {((key: string) => Promise<any>) | undefined} readDoc
    */
   async function readSavedStarts(club, date, readDoc) {
     const season = Number(date.slice(0, 4));
-    const kept = await readKeptDocs(readDoc, [nameRotationKey(season, club), "live/current"]);
-    if (!kept) return { clubStarts: null, isCurrentSeason: false };
-    const [saved, current] = kept;
+    const { docs, isCurrentSeason } = await readSeasonDocs(readDoc, season, [
+      nameRotationKey(season, club),
+    ]);
+    const saved = docs?.[0] ?? null;
     return {
       clubStarts: saved && coversDay(saved, date, readEasternDay(now()).date) ? saved : null,
-      isCurrentSeason: season === current?.season,
+      isCurrentSeason,
     };
   }
 

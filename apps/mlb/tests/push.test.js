@@ -146,39 +146,120 @@ test("a test goes to that device, and a gone device is forgotten", async () => {
   assert.equal(unknown.status, 404);
 });
 
-test("a test message to a push service that doesn't answer fails, and keeps the device", async () => {
-  const { env, context, harness } = createPushStore();
-  await subscribe(env);
-  harness.isPushServiceAnswering = false;
-  const sent = await requestApp(env, "/push/test", {
-    method: "POST",
-    body: { endpoint: ENDPOINT },
-  });
-  assert.equal(sent.status, 502);
-  assert.equal(listSubscriptions(context).length, 1);
-});
-
-test("the store keeps a hundred devices at most, but a device already kept can subscribe again", async () => {
-  const { env, context } = createPushStore();
-  await subscribe(env);
-  for (let index = 1; index < 100; index += 1)
-    context.stored.set(`push:subscription:${index}`, { endpoint: `${ENDPOINT}-${index}` });
-
-  const another = await subscribe(env, `${ENDPOINT}-new`);
-  assert.equal(another.response.status, 429);
-  assert.equal((await another.response.json()).error.code, "too_many_devices");
-  assert.equal((await subscribe(env)).response.status, 204);
-  assert.equal(listSubscriptions(context).length, 100);
-});
-
 /** @param {object} env */
 const sendTest = (env) =>
   requestApp(env, "/push/test", { method: "POST", body: { endpoint: ENDPOINT } });
 
+const MINUTE_MS = 60 * 1000;
+const DAY_MS = 24 * 60 * MINUTE_MS;
+
+test("a test message to a push service that doesn't answer fails, and keeps the device", async () => {
+  const { env, context, harness } = createPushStore();
+  await subscribe(env);
+  harness.isPushServiceAnswering = false;
+  const sent = await sendTest(env);
+  assert.equal(sent.status, 502);
+  assert.equal(listSubscriptions(context).length, 1);
+});
+
+test("a device whose push service doesn't answer for a week is forgotten", async () => {
+  const { env, context, harness, clock } = createPushStore();
+  await subscribe(env);
+  harness.isPushServiceAnswering = false;
+
+  await sendTest(env);
+  clock.now += 8 * DAY_MS;
+  await sendTest(env);
+
+  assert.deepEqual(listSubscriptions(context), []);
+});
+
+/**
+ * Stands in a device for each key, each saved at the given time.
+ * @param {ReturnType<typeof createDurableObjectContext>} context
+ * @param {number} count
+ * @param {number} savedAt
+ */
+function storeDevices(context, count, savedAt) {
+  for (let index = 0; index < count; index += 1)
+    context.stored.set(`push:subscription:${index}`, { endpoint: `${ENDPOINT}-${index}`, savedAt });
+}
+
+/**
+ * Changes what the store keeps for one of the devices `storeDevices` stood in.
+ * @param {ReturnType<typeof createDurableObjectContext>} context
+ * @param {number} index
+ * @param {object} fields
+ */
+function changeDevice(context, index, fields) {
+  const key = `push:subscription:${index}`;
+  context.stored.set(key, { ...context.stored.get(key), ...fields });
+}
+
+/** @param {{ response: Response }} subscribed */
+const readTurnedAwayCode = async ({ response }) => {
+  assert.equal(response.status, 429);
+  return (await response.json()).error.code;
+};
+
+test("a full store of devices in use turns a new one away, but a device already kept can subscribe again", async () => {
+  const { env, context } = createPushStore();
+  storeDevices(context, 99, NOW);
+  await subscribe(env);
+
+  assert.equal(
+    await readTurnedAwayCode(await subscribe(env, `${ENDPOINT}-new`)),
+    "too_many_devices",
+  );
+  assert.equal((await subscribe(env)).response.status, 204);
+  assert.equal(listSubscriptions(context).length, 100);
+});
+
+test("a full store makes room for a new device by forgetting the one saved longest ago, once that's a month ago", async () => {
+  const { env, context } = createPushStore();
+  storeDevices(context, 100, NOW);
+  changeDevice(context, 50, { savedAt: NOW - 29 * DAY_MS, failingSince: NOW - 2 * DAY_MS });
+  changeDevice(context, 60, { savedAt: NOW - 31 * DAY_MS });
+  changeDevice(context, 70, { savedAt: NOW - 40 * DAY_MS });
+
+  assert.equal((await subscribe(env, `${ENDPOINT}-a`)).response.status, 204);
+  assert.ok(!context.stored.has("push:subscription:70"));
+  assert.equal((await subscribe(env, `${ENDPOINT}-b`)).response.status, 204);
+  assert.ok(!context.stored.has("push:subscription:60"));
+  assert.equal(
+    await readTurnedAwayCode(await subscribe(env, `${ENDPOINT}-c`)),
+    "too_many_devices",
+    "a device saved within the month keeps its slot, failing or not",
+  );
+  assert.ok(context.stored.has("push:subscription:50"));
+  assert.equal(listSubscriptions(context).length, 100);
+});
+
+test("a device kept without the time it was saved counts as not saved for a month", async () => {
+  const { env, context } = createPushStore();
+  storeDevices(context, 100, NOW);
+  context.stored.set("push:subscription:5", { endpoint: `${ENDPOINT}-5` });
+
+  assert.equal((await subscribe(env)).response.status, 204);
+  assert.ok(!context.stored.has("push:subscription:5"));
+});
+
+test("a device saved again on a later visit keeps its slot in a full store", async () => {
+  const { env, context, clock } = createPushStore();
+  await subscribe(env);
+  clock.now += 40 * DAY_MS;
+  storeDevices(context, 99, clock.now);
+  await subscribe(env);
+
+  assert.equal(
+    await readTurnedAwayCode(await subscribe(env, `${ENDPOINT}-new`)),
+    "too_many_devices",
+  );
+});
+
 test("a device whose push service turns every message away for a week is forgotten, and one that gets a message through starts over", async () => {
   const { env, context, harness, clock } = createPushStore({ pushStatus: 403 });
   await subscribe(env);
-  const DAY_MS = 24 * 60 * 60 * 1000;
 
   await sendTest(env);
   clock.now += 6 * DAY_MS;
@@ -210,7 +291,7 @@ test("a device that gets a message through after a week of failures is kept, tho
     endpoint: ENDPOINT,
     keys: { p256dh: keys.p256dh, auth: keys.auth },
     subject: ORIGIN,
-    failingSince: NOW - 8 * 24 * 60 * 60 * 1000,
+    failingSince: NOW - 8 * DAY_MS,
   });
 
   await push.sendToAll([
@@ -230,6 +311,82 @@ test("unsubscribing removes the device", async () => {
   });
   assert.equal(response.status, 204);
   assert.deepEqual(listSubscriptions(context), []);
+});
+
+/**
+ * A push service whose every message fails once the given step, taken while the message is out,
+ * is done.
+ * @param {(push: ReturnType<typeof createPushService>, clock: { now: number }) => unknown} whileSending
+ */
+function createPushServiceWith(whileSending) {
+  const context = createDurableObjectContext();
+  const clock = { now: NOW };
+  const failAfterStep = async () => {
+    await whileSending(push, clock);
+    return new Response(null, { status: 500 });
+  };
+  const push = createPushService({
+    storage: context.ctx.storage,
+    now: () => clock.now,
+    fetchImpl: /** @type {any} */ (failAfterStep),
+  });
+  return { context, push };
+}
+
+/**
+ * @param {ReturnType<typeof createPushService>} push
+ * @param {string} method
+ * @param {object} body
+ */
+const requestSubscription = (push, method, body) =>
+  push.serveRequest(
+    new Request(`${ORIGIN}/push/subscription`, { method, body: JSON.stringify(body) }),
+    "/push/subscription",
+  );
+
+/** @param {{ p256dh: string, auth: string }} keys */
+const describeDevice = ({ p256dh, auth }) => ({ endpoint: ENDPOINT, keys: { p256dh, auth } });
+
+const FINAL_MESSAGE = { title: "Final", body: "", tag: "final" };
+
+test("a device removed while its message is out stays removed", async () => {
+  const { context, push } = createPushServiceWith((service) =>
+    requestSubscription(service, "DELETE", { endpoint: ENDPOINT }),
+  );
+  await requestSubscription(push, "PUT", describeDevice(await createBrowserKeys()));
+
+  await push.sendToAll([FINAL_MESSAGE]);
+
+  assert.deepEqual(listSubscriptions(context), []);
+});
+
+test("a device subscribed again while its old subscription's message is out keeps the new one", async () => {
+  const newKeys = await createBrowserKeys();
+  const { context, push } = createPushServiceWith((service) =>
+    requestSubscription(service, "PUT", describeDevice(newKeys)),
+  );
+  await requestSubscription(push, "PUT", describeDevice(await createBrowserKeys()));
+
+  await push.sendToAll([FINAL_MESSAGE]);
+
+  const [key] = listSubscriptions(context);
+  assert.equal(context.stored.get(key).keys.auth, newKeys.auth);
+  assert.equal(context.stored.get(key).failingSince, undefined);
+});
+
+test("a device saved again by a visit while its message is out keeps the visit's save, and the failure", async () => {
+  const keys = await createBrowserKeys();
+  const { context, push } = createPushServiceWith((service, clock) => {
+    clock.now += MINUTE_MS;
+    return requestSubscription(service, "PUT", describeDevice(keys));
+  });
+  await requestSubscription(push, "PUT", describeDevice(keys));
+
+  await push.sendToAll([FINAL_MESSAGE]);
+
+  const [key] = listSubscriptions(context);
+  assert.equal(context.stored.get(key).savedAt, NOW + MINUTE_MS);
+  assert.equal(context.stored.get(key).failingSince, NOW + MINUTE_MS);
 });
 
 function moveMetsIntoField(snapshot) {

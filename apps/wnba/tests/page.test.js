@@ -13,7 +13,7 @@ import {
 import { renderScoreboard } from "../page/js/scoreboard.js";
 import { describeSeriesStanding, isFieldSet, isPlayoffsOver } from "../page/js/series.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
-import { readSeasonAverages } from "./player-fixtures.js";
+import { buildSeasonWithLeaders } from "./player-fixtures.js";
 import { describeStampProblem, renderStampLines } from "../page/js/stamp.js";
 import { renderStandings, renderStandingsLists } from "../page/js/standings-view.js";
 import { renderTeamSheet } from "../page/js/team-view.js";
@@ -31,10 +31,7 @@ const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
 // The afternoon, with the leading scorers the store works out from the season's totals.
-const SEASON = {
-  ...buildSnapshot(AFTERNOON.responses, { season: 2026, now: NOW }),
-  leaders: readSeasonAverages().leaders,
-};
+const SEASON = buildSeasonWithLeaders(AFTERNOON.responses, { season: 2026, now: NOW });
 
 // Each tag reads as a space, and the page's separator as a bar.
 const readText = (markup) =>
@@ -678,13 +675,10 @@ function readTeam(season, code) {
 }
 
 // The afternoon, with the whole season's schedule from the next day, its regular season and all.
-const WHOLE_SEASON = {
-  ...buildSnapshot(
-    { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
-    { season: 2026, now: NOW },
-  ),
-  leaders: readSeasonAverages().leaders,
-};
+const WHOLE_SEASON = buildSeasonWithLeaders(
+  { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
+  { season: 2026, now: NOW },
+);
 const SEATTLES_LAST = WHOLE_SEASON.nearestGames.find((game) => game.id === "1022600325");
 
 /**

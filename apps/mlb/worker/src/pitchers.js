@@ -2,7 +2,7 @@ import { readEasternDay } from "#shared/days.js";
 import { readClubId } from "../../page/js/snapshot.js";
 import { fetchMlbJson, SEASON_PARAM } from "./mlb.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
-import { noteLeagueRead, readKeptDocs } from "../../../../shared/worker/store-reads.js";
+import { noteLeagueRead, readSeasonDocs } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
 // One pitcher's side of the matchup sheet: who he is, his season, what he throws, his last starts,
@@ -357,8 +357,6 @@ function readPersonId(searchParams) {
 
 /** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
-const NOTHING_SAVED = { pitcher: null, qualified: null, current: null };
-
 /**
  * @param {object} [options]
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]
@@ -404,14 +402,12 @@ export function createPitcherServer({
    * @param {ReadDoc | undefined} readDoc
    */
   async function readSaved(id, season, readDoc) {
-    const kept = await readKeptDocs(readDoc, [
+    const { docs, isCurrentSeason } = await readSeasonDocs(readDoc, season, [
       namePitcherKey(season, id),
       nameStartersKey(season),
-      "live/current",
     ]);
-    if (!kept) return NOTHING_SAVED;
-    const [pitcher, qualified, current] = kept;
-    return { pitcher, qualified, current: current?.season ?? null };
+    const [pitcher = null, qualified = null] = docs ?? [];
+    return { pitcher, qualified, isCurrentSeason };
   }
 
   /**
@@ -427,7 +423,7 @@ export function createPitcherServer({
     if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     try {
       const saved = await readSaved(id, season, readDoc);
-      const hasStoreGap = season === saved.current && (!saved.pitcher || !saved.qualified);
+      const hasStoreGap = saved.isCurrentSeason && (!saved.pitcher || !saved.qualified);
       const [pitcher, qualified] = await Promise.all([
         saved.pitcher ?? fetchPitcher(id, season),
         saved.qualified ?? loadQualified(season),
