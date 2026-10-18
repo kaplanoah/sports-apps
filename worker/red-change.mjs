@@ -8,9 +8,10 @@
 // the label, so the gate reads who last added it and lets the change through only from the
 // repository's owner, and only when the label came after the pull request's head commit reached
 // GitHub, which the owner hasn't used on the phone otherwise.
-// Usage: git diff --no-renames <base> <head> | node worker/red-change.mjs '<labels as JSON>'
+// Usage: git diff --no-renames <base> | node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
-// the last two.
+// the last two. The diff ends at the files on disk, as CI's `<base> HEAD` in a clean checkout
+// does, since a shared script's code before the change is rebuilt from the file and the hunks.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { transformSync } from "esbuild";
