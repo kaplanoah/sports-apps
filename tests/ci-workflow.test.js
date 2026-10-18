@@ -120,6 +120,17 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
     );
 });
 
+// A Node test's failure is read from the end of the job's log, which a session reaches only so
+// far back into.
+test("each Node test step prints its failures at the end of the run", () => {
+  const steps = [...readJob("checks").matchAll(/^ {6}- name: Test.*\n(?:(?: {8}.*)?\n)*/gm)].map(
+    ([step]) => step,
+  );
+  assert.equal(steps.length, 2);
+  for (const step of steps)
+    assert.match(step, /NODE_OPTIONS: --test-reporter=dot|env: \*test-reporter/);
+});
+
 test("the browser job's traces leave out the page at each step, which burn-in's keep", () => {
   assert.match(readJob("browser"), /TRACE_SNAPSHOTS: "off"/);
   assert.doesNotMatch(readJob("burn-in"), /TRACE_SNAPSHOTS/);
