@@ -113,12 +113,17 @@ jobs:
       - name: Find dead code
         if: ${{ !cancelled() }}
         run: npm run deadcode
+      # The dot reporter prints each failure in full at the end of the run, where a reader of the
+      # log's last lines finds it, while TAP's five lines a test put it thousands of lines back.
       - name: Test
         if: ${{ !cancelled() }}
+        env: &test-reporter
+          NODE_OPTIONS: --test-reporter=dot
         run: npm test
       # The runner is on UTC, ahead of MLB's Eastern day; this zone is behind it.
       - name: Test in another time zone
         if: ${{ !cancelled() }}
+        env: *test-reporter
         run: TZ=Pacific/Honolulu npm test
       # A pull request's title sets the next version once it's squash merged (worker/release.mjs).
       # The title comes from GitHub rather than the event, so a re-run checks an edited title. The
