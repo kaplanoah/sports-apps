@@ -325,6 +325,26 @@ test.describe("in full motion", () => {
     await release();
   });
 
+  test("the round dots stay just above the tab bar when the bracket grows taller while a finger holds it part way to the standings", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const restingLift = await readRoundDotsLift(page);
+    const tree = page.locator("#bracketWrap .bracket");
+    const readHeight = () => tree.evaluate((element) => element.getBoundingClientRect().height);
+    const restingHeight = await readHeight();
+
+    const release = await drag(page, { x: 330, y: 400 }, { x: -150 }, { durationMs: 1000 });
+    await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-sliding", "finger");
+    await tree.evaluate((element) => element.style.setProperty("--card-gap", "80px"));
+    expect(await readHeight()).toBeGreaterThan(restingHeight);
+
+    expect(await readRoundDotsLift(page)).toBe(restingLift);
+    await release();
+  });
+
   test("the round dots hold their height over the tab bar on every frame of a tap that brings the bracket in from far down the standings", async ({
     page,
   }) => {
