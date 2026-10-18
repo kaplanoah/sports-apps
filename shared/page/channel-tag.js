@@ -36,7 +36,7 @@ export function listChannelFacts({ label, commit, builtAt }, now) {
 
 /**
  * The tag's facts as of now, from the release `readRelease` reads. A release that can't be read,
- * as offline, leaves no tag, since a stale one would say the wrong age.
+ * as offline, leaves the tag hidden rather than failing the page.
  * @param {() => Promise<import("./release.js").Release | null>} readRelease
  */
 export async function readChannelFacts(readRelease) {
