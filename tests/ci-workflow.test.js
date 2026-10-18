@@ -105,6 +105,21 @@ test("the check job needs every other job but caches", () => {
   assert.deepEqual(readNeeds("check").toSorted(), others.toSorted());
 });
 
+// The config leaves out the WebKit projects wherever WebKit isn't installed, so a job that stopped
+// installing it would skip the at-rest specs in WebKit and still pass.
+test("each job that runs the at-rest specs in WebKit installs WebKit with its system libraries", () => {
+  for (const [job, workflow] of [
+    ["burn-in", "ci.yml"],
+    ["webkit", "ci.yml"],
+    ["browser", "flaky.yml"],
+  ])
+    assert.match(
+      readJob(job, workflow),
+      /run: npx playwright install --with-deps .*\bwebkit\b/,
+      `${workflow}: ${job}`,
+    );
+});
+
 test("the browser job's traces leave out the page at each step, which burn-in's keep", () => {
   assert.match(readJob("browser"), /TRACE_SNAPSHOTS: "off"/);
   assert.doesNotMatch(readJob("burn-in"), /TRACE_SNAPSHOTS/);

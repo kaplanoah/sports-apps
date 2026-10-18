@@ -227,7 +227,7 @@ jobs:
       - *setup-node
       - *restore-modules
       - *install-modules
-      - run: npx playwright install --with-deps chromium-headless-shell webkit
+      - run: npx playwright install --with-deps --only-shell chromium webkit
       # Every test runs all ten times, however many fail, and the next step decides which
       # failures fail the pull request, so a failed test doesn't fail this one.
       - name: Repeat each browser spec this pull request changes
