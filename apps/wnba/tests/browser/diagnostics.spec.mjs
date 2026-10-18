@@ -1,5 +1,5 @@
 import { test, expect, findGameButton, openApp, matchPath, NOW } from "./harness.mjs";
-import { setHidden } from "../../../../tests/browser/visibility.mjs";
+import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -190,8 +190,7 @@ test("a return to the page is recorded with how long it was away", async ({ page
   await openApp(page);
   await turnOnDiagnostics(page);
   await setHidden(page, true);
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.setSystemTime(now + 5 * 60 * 1000);
+  await passTime(page, 5 * 60 * 1000);
 
   await setHidden(page, false);
   await page.clock.runFor(RECORD_MS + 1000);
