@@ -90,21 +90,22 @@ test.describe("on a phone, the bracket", () => {
     page,
   }) => {
     // A screen tall enough for the cards to spread under the box, which leaves the view its least
-    // height, most of the screen.
-    await page.setViewportSize({ width: PHONE.width, height: 1400 });
+    // height, most of the screen, but not so tall that they reach their widest gaps.
+    await page.setViewportSize({ width: PHONE.width, height: 1230 });
     await holdHeaderStill(page);
     await openApp(page);
     const updates = page.locator("#updates");
     await updates.evaluate((box) => {
       box.removeAttribute("hidden");
-      Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "500px" });
+      Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "400px" });
     });
     await expectReachingDots(page);
+    expect((await readCardGaps(page)).between[0]).toBeGreaterThan(TIGHTEST_CARD_GAP);
     const view = page.locator("#view-bracket-standings");
     const readViewHeight = () => view.evaluate((element) => element.getBoundingClientRect().height);
     const viewHeight = await readViewHeight();
 
-    await updates.evaluate((box) => (box.style.height = "520px"));
+    await updates.evaluate((box) => (box.style.height = "420px"));
 
     await expectReachingDots(page);
     expect(await readViewHeight()).toBe(viewHeight);

@@ -234,21 +234,20 @@ test("on a phone, a touch on the header lands on the part under it, so a drag th
   expect(found).toEqual({ onHeader: "standings", onSettings: "settingsBtn" });
 });
 
-test("on a wide screen, where the tabs ride with the header, a touch beside them lands on the part under them, while each tab still takes its tap", async ({
+test("on a wide screen, where the tabs ride with the header, a touch on their track between the tabs lands on the part under it, while each tab still takes its tap", async ({
   page,
 }) => {
   await page.setViewportSize(WIDE_SCREEN);
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  const bar = await page.locator("#tabBar").boundingBox();
-  const tabs = await page.getByRole("tablist", { name: "Views" }).boundingBox();
+  const track = await page.locator("nav.tabs").boundingBox();
 
   const found = await findTouchTargets(page, {
-    besideTabs: { x: tabs.x + tabs.width + 40, y: bar.y + bar.height / 2 },
+    onTrack: { x: track.x + 1, y: track.y + track.height / 2 },
     onTab: findCenter(await page.getByRole("tab", { name: "Games" }).boundingBox()),
   });
 
-  expect(found).toEqual({ besideTabs: "standings", onTab: "tab-games" });
+  expect(found).toEqual({ onTrack: "standings", onTab: "tab-games" });
 });
 
 test("on a phone where the browser has no scroll-driven animations, the header stays put and the parts scroll under the pill", async ({
