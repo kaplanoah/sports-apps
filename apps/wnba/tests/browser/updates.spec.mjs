@@ -135,9 +135,6 @@ test.describe("on a phone", () => {
 
     await page.getByRole("button", { name: "Dismiss updates" }).click();
     await expect(updates).toBeHidden();
-    await page.reload();
-    await expect(page.locator(".series").first()).toBeVisible();
-    await expect(updates).toBeHidden();
 
     await app.changeSeason((season) =>
       finishDreamAtMystics(

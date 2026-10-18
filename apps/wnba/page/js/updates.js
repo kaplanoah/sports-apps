@@ -97,10 +97,11 @@ function dismissUpdates() {
 }
 
 /**
- * Calls `onChange` whenever another tab dismisses the box.
+ * Calls `onChange` whenever another tab changes when the box counts from or dismisses its release
+ * notes.
  * @param {() => void} onChange
  */
-export function watchDismissals(onChange) {
+export function watchUpdatesSeen(onChange) {
   seenAt.watch(onChange);
   watchNoteDismissals(onChange);
 }
