@@ -152,8 +152,8 @@ const readOpacity = (element) => getComputedStyle(element).opacity;
 
 // A part an opening was still fading in when the redraw stopped it fades the rest of the way.
 /**
- * @typedef {{ height: number, opacity: string }} Size
- * @param {{ element: Element, from: Size, to: Size }} resize
+ * @typedef {{ height: number, opacity: string }} Frame
+ * @param {{ element: Element, from: Frame, to: Frame }} resize
  */
 function easeHeight({ element, from, to }) {
   if (Math.abs(to.height - from.height) < 1) return;
@@ -163,13 +163,13 @@ function easeHeight({ element, from, to }) {
   }
   const clip = isScroller(element) ? {} : { overflow: "clip" };
   const isFading = from.opacity !== to.opacity;
-  /** @param {Size} size */
-  const buildFrame = ({ height, opacity }) => ({
+  /** @param {Frame} frame */
+  const buildKeyframe = ({ height, opacity }) => ({
     height: `${height}px`,
     ...(isFading ? { opacity } : {}),
     ...clip,
   });
-  const resize = element.animate([buildFrame(from), buildFrame(to)], {
+  const resize = element.animate([buildKeyframe(from), buildKeyframe(to)], {
     duration: EASE_MS,
     easing: EASING,
   });
