@@ -1,23 +1,14 @@
 import { test as base } from "@playwright/test";
 import { checkPage } from "../../../../worker/check-page.mjs";
+import {
+  BROKEN_CHECK_TIMEOUT_MS,
+  serveUnreachableStore,
+} from "../../../../tests/browser/page-check.mjs";
 import { test, expect, matchPath, serveLockedApp, LOCKED_PAGE_PATH } from "./harness.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const ACCESS_CODE = "FASTBREAK";
-// A broken page draws nothing, so a check of one waits only this long rather than a deploy's.
-const BROKEN_TIMEOUT_MS = 3000;
-
-/** @param {import("@playwright/test").Page} page */
-async function serveUnreachableStore(page) {
-  await page.route(matchPath(`${LOCKED_PAGE_PATH}store/`), (route) =>
-    route.fulfill({ status: 503 }),
-  );
-  await page.routeWebSocket(
-    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
-    (socket) => socket.close(),
-  );
-}
 
 /** @param {string | undefined} baseURL */
 const findPageUrl = (baseURL) => new URL(LOCKED_PAGE_PATH, baseURL).href;
@@ -64,7 +55,7 @@ test("a page that asks for no code and draws nothing is broken", async ({ page, 
   const check = await checkPage(page, {
     pageUrl: findPageUrl(baseURL),
     accessCode: ACCESS_CODE,
-    timeoutMs: BROKEN_TIMEOUT_MS,
+    timeoutMs: BROKEN_CHECK_TIMEOUT_MS,
   });
 
   expect(check).toEqual({
@@ -80,7 +71,7 @@ test("a page whose store doesn't answer is broken", async ({ page, baseURL }) =>
   const check = await checkPage(page, {
     pageUrl: findPageUrl(baseURL),
     accessCode: ACCESS_CODE,
-    timeoutMs: BROKEN_TIMEOUT_MS,
+    timeoutMs: BROKEN_CHECK_TIMEOUT_MS,
   });
 
   expect(check).toEqual({
@@ -102,7 +93,7 @@ base("a page whose code throws is broken, and says what it threw", async ({ page
   const check = await checkPage(page, {
     pageUrl: findPageUrl(baseURL),
     accessCode: ACCESS_CODE,
-    timeoutMs: BROKEN_TIMEOUT_MS,
+    timeoutMs: BROKEN_CHECK_TIMEOUT_MS,
   });
 
   expect(check).toEqual({ status: "broken", reason: "the page threw: The release is broken" });
