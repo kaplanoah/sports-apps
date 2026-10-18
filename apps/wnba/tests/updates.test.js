@@ -112,23 +112,53 @@ test("a team down in a longer series trails it after a win, and games still to f
   ]);
 });
 
-test("a device's first look lists none of the finals already out", (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.parse(AFTERNOON.now) });
+const THROUGH_SUNDAY = {
+  ...SEASON,
+  games: SEASON.games.filter((game) => Date.parse(game.start) < Date.parse("2026-09-29")),
+};
+
+test("a device's first look lists none of the finals already out", () => {
   useSavedStorage(new Map());
 
   assert.deepEqual(readFreshWins(SEASON), []);
 });
 
-test("a device keeps its first look's start, so every final after it shows until it's dismissed", (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-09-28T12:00:00Z") });
+test("a device keeps its first look's start, so every final after it shows until it's dismissed", () => {
   useSavedStorage(new Map());
-  const throughSunday = {
+
+  assert.deepEqual(readFreshWins(THROUGH_SUNDAY), []);
+  assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
+});
+
+test("a game live at a device's first look shows once it's final, though its last play came before that look", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-02T12:00:00Z") });
+  useSavedStorage(new Map());
+  const isLibertyGame2 = (game) =>
+    game.away.team === "MIN" && game.home.team === "NYL" && game.number === 2;
+  const libertyLive = {
     ...SEASON,
-    games: SEASON.games.filter((game) => Date.parse(game.start) < Date.parse("2026-09-29")),
+    games: SEASON.games.map((game) =>
+      isLibertyGame2(game) ? { ...game, state: "live", end: undefined } : game,
+    ),
   };
 
-  assert.deepEqual(readFreshWins(throughSunday), []);
-  assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
+  assert.deepEqual(readFreshWins(libertyLive), []);
+  assert.deepEqual(readFreshWins(SEASON), [TUESDAY_WINS[0]]);
+});
+
+test("a device's first look before any playoff final lists every final after it", () => {
+  useSavedStorage(new Map());
+
+  assert.deepEqual(readFreshWins({ ...SEASON, games: [] }), []);
+  assert.deepEqual(readFreshWins(THROUGH_SUNDAY).length, 4);
+});
+
+test("a device's first look before the page has read the season keeps no start", () => {
+  const saved = new Map();
+  useSavedStorage(saved);
+
+  assert.deepEqual(readFreshWins(null), []);
+  assert.equal(saved.has("updatesSeenAt"), false);
 });
 
 test("after a dismissal the box lists only the finals since", () => {
@@ -137,15 +167,10 @@ test("after a dismissal the box lists only the finals since", () => {
   assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
 });
 
-test("a device whose storage refuses access keeps its first look's start while the page is open", (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-09-28T12:00:00Z") });
+test("a device whose storage refuses access keeps its first look's start while the page is open", () => {
   useStorage({ getItem: refuseAccess, setItem: refuseAccess });
-  const throughSunday = {
-    ...SEASON,
-    games: SEASON.games.filter((game) => Date.parse(game.start) < Date.parse("2026-09-29")),
-  };
 
-  assert.deepEqual(readFreshWins(throughSunday), []);
+  assert.deepEqual(readFreshWins(THROUGH_SUNDAY), []);
   assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
 });
 

@@ -739,8 +739,9 @@ Delete it once the app's first PR merges.
   which its Updates box shows under New in the app, the newest three and how many more,
   until it's dismissed or two weeks after the device first showed it,
   so a viewer back from time away still sees what they missed,
-  but on a device's first look, two weeks from each note's `at`,
-  with a note out by the box's last dismissal dismissed (`listNotesToShow` in `shared/page/updates.js`).
+  but a device's first look counts every note already out as shown,
+  and starts its games' updates after every one already out,
+  so a new phone opens with no box (`listNotesToShow` and `readOrStartSeenAt` in `shared/page/updates.js`).
   Add a note only when the user asks for one, whatever the PR's type, in the words they approve, with an `at` just before the PR merges.
   A word that should stand out, like a button's name, goes in `<b>`,
   in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.

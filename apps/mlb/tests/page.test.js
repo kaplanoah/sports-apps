@@ -142,8 +142,8 @@ const FIRST_TWO_CLINCHES = [
   clinchDivision("MIL", "NL Central", "2026-09-26T22:00:00Z"),
 ];
 
-test("Updates box: a new device's first look lists none of the updates already out, and each one after it", (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-09-27T23:30:00Z") });
+test("Updates box: a new device's first look lists none of the updates already out, and each one after it, whatever its clock says", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-09-29T00:00:00Z") });
   useDeviceStorage(t, []);
   session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
   assert.deepEqual(listFreshTeams(), []);
@@ -153,6 +153,15 @@ test("Updates box: a new device's first look lists none of the updates already o
     log: [clinchDivision("LAD", "NL West", "2026-09-28T01:00:00Z"), ...FIRST_TWO_CLINCHES],
   };
   assert.deepEqual(listFreshTeams(), ["LAD"]);
+});
+
+test("Updates box: a new device's first look before any update lists every update after it", (t) => {
+  useDeviceStorage(t, []);
+  session.state = { teams: {}, log: [] };
+  assert.deepEqual(listFreshTeams(), []);
+
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), ["TB", "MIL"]);
 });
 
 test("Updates box: a device that dismissed an earlier season's box lists every update of this one", (t) => {

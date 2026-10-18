@@ -221,29 +221,25 @@ test("a device's first look shows no note already out, and keeps that, so each n
   assert.deepEqual(listNotesToShow(later, back + DAY), []);
 });
 
-test("a device's first look starts the box after every update out, by the Worker's times or its own clock, whichever is later, and keeps that start", () => {
+test("a device's first look starts the box after the newest update out, and keeps that start", () => {
   /** @type {number[]} */
   const kept = [];
   const keepStart = (/** @type {number} */ start) => kept.push(start);
-  const updates = [at("2026-10-01T22:30:00Z"), at("2026-10-01T22:00:00Z")];
+  const updates = [at("2026-10-01T22:00:00Z"), at("2026-10-01T22:30:00Z")];
+
+  assert.equal(readOrStartSeenAt(null, updates, keepStart), at("2026-10-01T22:30:00Z"));
+  assert.deepEqual(kept, [at("2026-10-01T22:30:00Z")]);
+});
+
+test("a device's first look before any update is out counts every update after it", () => {
+  /** @type {number[]} */
+  const kept = [];
 
   assert.equal(
-    readOrStartSeenAt(null, updates, keepStart, at("2026-10-01T23:00:00Z")),
-    at("2026-10-01T23:00:00Z"),
+    readOrStartSeenAt(null, [], (start) => kept.push(start)),
+    0,
   );
-  assert.equal(
-    readOrStartSeenAt(null, updates, keepStart, at("2026-10-01T22:10:00Z")),
-    at("2026-10-01T22:30:00Z"),
-  );
-  assert.equal(
-    readOrStartSeenAt(null, [], keepStart, at("2026-10-01T21:00:00Z")),
-    at("2026-10-01T21:00:00Z"),
-  );
-  assert.deepEqual(kept, [
-    at("2026-10-01T23:00:00Z"),
-    at("2026-10-01T22:30:00Z"),
-    at("2026-10-01T21:00:00Z"),
-  ]);
+  assert.deepEqual(kept, [0]);
 });
 
 test("a device that has dismissed the box counts from its dismissal, or a season it hasn't from the season's start, and keeps nothing", () => {
@@ -251,10 +247,10 @@ test("a device that has dismissed the box counts from its dismissal, or a season
   const updates = [at("2026-10-01T22:30:00Z")];
 
   assert.equal(
-    readOrStartSeenAt(at("2026-10-01T20:00:00Z"), updates, keepStart, NOW.getTime()),
+    readOrStartSeenAt(at("2026-10-01T20:00:00Z"), updates, keepStart),
     at("2026-10-01T20:00:00Z"),
   );
-  assert.equal(readOrStartSeenAt(0, updates, keepStart, NOW.getTime()), 0);
+  assert.equal(readOrStartSeenAt(0, updates, keepStart), 0);
 });
 
 test("the box lists the newest three release notes and how many more", () => {

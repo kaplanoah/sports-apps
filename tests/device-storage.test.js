@@ -109,3 +109,13 @@ test("a device whose storage refuses access keeps a choice until the page reload
 
   assert.deepEqual(choice.read(), { "https://example.com/story": 1 });
 });
+
+test("a device whose storage is full reads the choice it couldn't keep, not the older one stored", () => {
+  const saved = new Map([["full", "1"]]);
+  useStorage({ getItem: (key) => saved.get(key) ?? null, setItem: refuseAccess });
+  const choice = createViewerChoice("full", readAsIs);
+
+  choice.keep(2);
+
+  assert.equal(choice.read(), 2);
+});

@@ -32,13 +32,16 @@ function parseKept(text) {
   }
 }
 
+// A choice storage refused to keep, as when it's full, lives in memory, ahead of the older value
+// storage still holds.
 /** @param {string} key */
 function readStored(key) {
+  if (keptInMemory.has(key)) return keptInMemory.get(key);
   let text;
   try {
     text = localStorage.getItem(key);
   } catch {
-    return keptInMemory.get(key) ?? null;
+    return null;
   }
   return text === null ? null : parseKept(text);
 }

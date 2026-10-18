@@ -25,7 +25,7 @@ import { describeWin, isPlayoffFinal } from "./win-text.js";
 
 // Null until this device's first look, which keeps its start.
 const seenAt = createViewerChoice("updatesSeenAt", (stored) =>
-  typeof stored === "number" && stored > 0 ? stored : null,
+  typeof stored === "number" && stored >= 0 ? stored : null,
 );
 
 // The feeds give no time a game ended but the Worker's first sight of it final, so a game found
@@ -67,6 +67,7 @@ const findPanel = () => /** @type {HTMLElement} */ (document.getElementById("upd
 
 /** The playoff games finished since this device last dismissed the box, newest first. */
 export function listFreshUpdates() {
+  if (!session.season) return [];
   const wins = listPlayoffWins(session.season);
   const freshAfter = readOrStartSeenAt(
     seenAt.read(),
