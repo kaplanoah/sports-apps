@@ -4,7 +4,7 @@ import { describeEntry, describeUpdate } from "./entry-text.js";
 import { readCalendarDate } from "#shared/days.js";
 import { isTouchDevice } from "#shared/device.js";
 import { html } from "#shared/html.js";
-import { dismissNotes, listNotesToShow, showUpdates } from "#shared/updates.js";
+import { dismissNotes, listNotesToShow, readOrStartSeenAt, showUpdates } from "#shared/updates.js";
 import { keepSeenAt, readSeenAt } from "./kept-on-device.js";
 import { RELEASE_NOTES } from "./release-notes.js";
 import { session, readSeasonYear } from "./session.js";
@@ -35,24 +35,14 @@ const findHappenedAt = (group) => Math.max(...group.map(readHappenedAt));
 
 const readNoticedAt = (entry) => Date.parse(entry.at);
 
-const FIRST_VISIT_SPAN_MS = 24 * 60 * 60 * 1000;
-
-const readActiveSeenAt = () => readSeenAt(session.activeYear);
-
 const isCurrentSeason = () => session.activeYear === readSeasonYear();
 
-// Until its first dismissal, the box lists the day of updates up to the newest, not the whole
-// season, which a new store notices all at once.
-function listFirstVisitEntries(entries) {
-  const newest = Math.max(...entries.map(readHappenedAt));
-  return entries.filter((entry) => newest - readHappenedAt(entry) < FIRST_VISIT_SPAN_MS);
-}
-
 function listUnseenEntries(entries) {
-  const seen = readActiveSeenAt();
-  return seen
-    ? entries.filter((entry) => readNoticedAt(entry) > seen)
-    : listFirstVisitEntries(entries);
+  const year = session.activeYear;
+  const seen = readOrStartSeenAt(readSeenAt(year), entries.map(readNoticedAt), (start) =>
+    keepSeenAt(year, start),
+  );
+  return entries.filter((entry) => readNoticedAt(entry) > seen);
 }
 
 export function listFreshUpdates() {
@@ -128,7 +118,7 @@ export function renderUpdates() {
   const updates = isShown ? listUpdates() : [];
   showUpdates(/** @type {HTMLElement} */ (document.getElementById("updates")), updates, {
     dismiss: dismissUpdates,
-    notes: isShown ? listNotesToShow(RELEASE_NOTES, readActiveSeenAt()) : [],
+    notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
     today: readCalendarDate(readMlbDay(Date.now())),
   });
 }

@@ -45,3 +45,9 @@ test("a device keeps when it last dismissed each season's updates", () => {
   assert.equal(readSeenAt(2026), 1790000000000);
   assert.equal(readSeenAt(2024), 0);
 });
+
+test("a device that has dismissed no season's updates is new to the app", () => {
+  useSavedStorage(new Map());
+
+  assert.equal(readSeenAt(2026), null);
+});

@@ -6,8 +6,8 @@ import {
   endNoteClocks,
   listFreshNotes,
   listNotesToShow,
+  readOrStartSeenAt,
   renderUpdates,
-  startFirstLookClocks,
   startNoteClocks,
 } from "../shared/page/updates.js";
 import { normalizeSpaces } from "./text.js";
@@ -175,32 +175,6 @@ const DAY = 24 * 60 * 60 * 1000;
 const listNoteTexts = (notes, clocks, now) =>
   listFreshNotes(notes, clocks, now).map((note) => note.text);
 
-test("a device's first look shows each note out for less than two weeks", () => {
-  const notes = [
-    { at: "2026-10-01T17:00:00Z", text: "Channels" },
-    { at: "2026-09-10T17:00:00Z", text: "News" },
-  ];
-  const firstLook = at("2026-10-02T17:00:00Z");
-  const clocks = startFirstLookClocks(notes, 0, firstLook);
-
-  assert.deepEqual(listNoteTexts(notes, clocks, firstLook), ["Channels"]);
-  assert.deepEqual(listNoteTexts(notes, clocks, at("2026-10-01T17:00:00Z") + 14 * DAY - 1), [
-    "Channels",
-  ]);
-  assert.deepEqual(listNoteTexts(notes, clocks, at("2026-10-01T17:00:00Z") + 14 * DAY), []);
-});
-
-test("a device's first look counts a note out by the box's last dismissal as dismissed", () => {
-  const notes = [
-    { at: "2026-10-03T17:00:00Z", text: "Search" },
-    { at: "2026-10-01T17:00:00Z", text: "Channels" },
-  ];
-  const firstLook = at("2026-10-04T17:00:00Z");
-  const clocks = startFirstLookClocks(notes, at("2026-10-01T17:00:00Z"), firstLook);
-
-  assert.deepEqual(listNoteTexts(notes, clocks, firstLook), ["Search"]);
-});
-
 test("a note out while the device was away shows for two weeks from when it first shows", () => {
   const notes = [{ at: "2026-10-01T17:00:00Z", text: "Channels" }];
   const back = at("2026-12-01T17:00:00Z");
@@ -231,23 +205,56 @@ test("a note shows from its time, and a dismissal ends every note out by then", 
   );
 });
 
-test("the device keeps when each note it shows stops showing, and its dismissal", () => {
+test("a device's first look shows no note already out, and keeps that, so each note after shows until it's dismissed", () => {
   const notes = [{ at: "2026-10-01T17:00:00Z", text: "Channels" }];
   const firstLook = at("2026-10-02T17:00:00Z");
 
+  assert.deepEqual(listNotesToShow(notes, firstLook), []);
+  const later = [{ at: "2026-10-03T17:00:00Z", text: "Search" }, ...notes];
+  const back = at("2026-10-04T17:00:00Z");
   assert.deepEqual(
-    listNotesToShow(notes, 0, firstLook).map((note) => note.text),
-    ["Channels"],
-  );
-  const awayNotes = [{ at: "2026-11-01T17:00:00Z", text: "Search" }, ...notes];
-  const back = at("2026-12-01T17:00:00Z");
-  assert.deepEqual(
-    listNotesToShow(awayNotes, 0, back).map((note) => note.text),
+    listNotesToShow(later, back).map((note) => note.text),
     ["Search"],
   );
 
-  dismissNotes(awayNotes, back + DAY);
-  assert.deepEqual(listNotesToShow(awayNotes, 0, back + DAY), []);
+  dismissNotes(later, back + DAY);
+  assert.deepEqual(listNotesToShow(later, back + DAY), []);
+});
+
+test("a device's first look starts the box after every update out, by the Worker's times or its own clock, whichever is later, and keeps that start", () => {
+  /** @type {number[]} */
+  const kept = [];
+  const keepStart = (/** @type {number} */ start) => kept.push(start);
+  const updates = [at("2026-10-01T22:30:00Z"), at("2026-10-01T22:00:00Z")];
+
+  assert.equal(
+    readOrStartSeenAt(null, updates, keepStart, at("2026-10-01T23:00:00Z")),
+    at("2026-10-01T23:00:00Z"),
+  );
+  assert.equal(
+    readOrStartSeenAt(null, updates, keepStart, at("2026-10-01T22:10:00Z")),
+    at("2026-10-01T22:30:00Z"),
+  );
+  assert.equal(
+    readOrStartSeenAt(null, [], keepStart, at("2026-10-01T21:00:00Z")),
+    at("2026-10-01T21:00:00Z"),
+  );
+  assert.deepEqual(kept, [
+    at("2026-10-01T23:00:00Z"),
+    at("2026-10-01T22:30:00Z"),
+    at("2026-10-01T21:00:00Z"),
+  ]);
+});
+
+test("a device that has dismissed the box counts from its dismissal, or a season it hasn't from the season's start, and keeps nothing", () => {
+  const keepStart = () => assert.fail("kept a start");
+  const updates = [at("2026-10-01T22:30:00Z")];
+
+  assert.equal(
+    readOrStartSeenAt(at("2026-10-01T20:00:00Z"), updates, keepStart, NOW.getTime()),
+    at("2026-10-01T20:00:00Z"),
+  );
+  assert.equal(readOrStartSeenAt(0, updates, keepStart, NOW.getTime()), 0);
 });
 
 test("the box lists the newest three release notes and how many more", () => {

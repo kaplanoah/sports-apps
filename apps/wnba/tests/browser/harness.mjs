@@ -229,11 +229,24 @@ async function createAfternoonStore(league = {}) {
 }
 
 /**
+ * A phone that has used the app before, last dismissing the Updates box before the afternoon's
+ * latest day of finals, and keeping its release notes' times, so each note out shows.
+ * @param {import("@playwright/test").Page} page
+ */
+const keepUpdatesFromEarlierVisit = (page) =>
+  page.addInitScript(() => {
+    if (localStorage.getItem("updatesSeenAt") === null)
+      localStorage.setItem("updatesSeenAt", String(Date.parse("2026-09-28T01:00:00Z")));
+    if (localStorage.getItem("releaseNotesShownUntil") === null)
+      localStorage.setItem("releaseNotesShownUntil", "{}");
+  });
+
+/**
  * The page as the Worker serves it, with the Worker's store behind it, already updated once from
  * the afternoon's feeds, and the game and team sheets' routes reading the store, and the recorded
- * answers for what it doesn't keep, unless the league is down by the time the page opens. On a
- * phone, the afternoon's finals would fill the Updates box above every view, so it starts
- * dismissed unless a test is about it, as the welcome a phone's browser opens on starts closed.
+ * answers for what it doesn't keep, unless the league is down by the time the page opens. A phone
+ * opens it for the first time, with no Updates box, unless a test is about the box, which opens it
+ * as a phone that last dismissed the box before the afternoon's latest day of finals.
  * @param {import("@playwright/test").Page} page
  * A past season's record is built from the afternoon's by its change in `pastSeasons`, by year.
  * The store keeps the afternoon's list of the season's games, its playoffs', or every game of the
@@ -251,8 +264,7 @@ export async function openApp(
     isWholeSeason = false,
   } = {},
 ) {
-  if (!isShowingUpdates)
-    await page.addInitScript(() => localStorage.setItem("updatesSeenAt", String(Date.now() * 2)));
+  if (isShowingUpdates) await keepUpdatesFromEarlierVisit(page);
   const testStore = await createAfternoonStore(league);
   const { context, store } = testStore;
   const readSeason = async () => structuredClone(await context.ctx.storage.get("seasons/2026"));

@@ -120,17 +120,45 @@ const clinchDivision = (team, div, at, ended) => ({
 const listFreshTeams = () =>
   listFreshUpdates().flatMap((group) => group.map((entry) => entry.team));
 
-test("Updates box: before its first dismissal, only the 24 hours up to the newest update", () => {
+/**
+ * A device's own storage, holding what it kept, for the test.
+ * @param {import("node:test").TestContext} t
+ * @param {[string, unknown][]} kept
+ */
+function useDeviceStorage(t, kept) {
+  const saved = new Map(kept.map(([key, value]) => [key, JSON.stringify(value)]));
+  Object.defineProperty(globalThis, "localStorage", {
+    value: {
+      getItem: (key) => saved.get(key) ?? null,
+      setItem: (key, value) => saved.set(key, value),
+    },
+    configurable: true,
+  });
+  t.after(() => delete (/** @type {any} */ (globalThis).localStorage));
+}
+
+const FIRST_TWO_CLINCHES = [
+  clinchDivision("TB", "AL East", "2026-09-27T23:00:00Z"),
+  clinchDivision("MIL", "NL Central", "2026-09-26T22:00:00Z"),
+];
+
+test("Updates box: a new device's first look lists none of the updates already out, and each one after it", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-09-27T23:30:00Z") });
+  useDeviceStorage(t, []);
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), []);
+
   session.state = {
     teams: {},
-    log: [
-      clinchDivision("TB", "AL East", "2026-09-27T23:00:00Z"),
-      clinchDivision("LAD", "NL West", "2026-09-27T01:00:00Z"),
-      clinchDivision("MIL", "NL Central", "2026-09-26T22:00:00Z"),
-      clinchDivision("CWS", "AL Central", "2026-09-27T23:00:00Z", "2026-09-20T02:00:00Z"),
-    ],
+    log: [clinchDivision("LAD", "NL West", "2026-09-28T01:00:00Z"), ...FIRST_TWO_CLINCHES],
   };
-  assert.deepEqual(listFreshTeams(), ["TB", "LAD"]);
+  assert.deepEqual(listFreshTeams(), ["LAD"]);
+});
+
+test("Updates box: a device that dismissed an earlier season's box lists every update of this one", (t) => {
+  useDeviceStorage(t, [["updatesSeenAt", { [session.activeYear - 1]: Date.parse("2025-09-28") }]]);
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), ["TB", "MIL"]);
 });
 
 test("Updates box: after a dismissal, everything noticed since, however long ago it happened", (t) => {
@@ -1895,10 +1923,8 @@ test("Chivo Mono draws a little smaller than its size, so its numbers look as bi
   assert.deepEqual(readAdjusts("Libre Franklin"), ["100%", "100%"]);
 });
 
-test("Updates box: each update shows when it happened, not when the page noticed it", (t) => {
-  keepSeenAt(session.activeYear, Date.parse("2026-09-24T20:00:00Z"));
-  t.after(() => keepSeenAt(session.activeYear, 0));
-  const { count, whens } = readUpdateBox(TWO_UPDATES);
+test("Updates box: each update shows when it happened, not when the page noticed it", () => {
+  const { count, whens } = readUpdateBox(TWO_UPDATES, Date.parse("2026-09-24T20:00:00Z"));
   assert.equal(count, "2 updates since yesterday");
   assert.deepEqual(whens, ["8:30 PM", "Yesterday"]);
 });

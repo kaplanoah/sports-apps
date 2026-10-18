@@ -3,12 +3,13 @@
 // Nobody signs in, and people share the page's address, so each device keeps its own dismissal,
 // and only phones and tablets show the box, only for the current season.
 
-import { countDaysBetween, readEasternDay } from "#shared/days.js";
+import { countDaysBetween } from "#shared/days.js";
 import { isTouchDevice } from "#shared/device.js";
 import { createViewerChoice } from "#shared/device-storage.js";
 import {
   dismissNotes,
   listNotesToShow,
+  readOrStartSeenAt,
   showUpdates,
   watchNoteDismissals,
 } from "#shared/updates.js";
@@ -20,9 +21,9 @@ import { isPastSeason, session } from "./session.js";
 import { describeWin, isPlayoffFinal } from "./win-text.js";
 
 /** @typedef {import("./games-view.js").Game} Game */
-/** @typedef {{ at: number, leagueDay: string, day: Date | null, endedNextDay: boolean, text: import("#shared/html.js").Markup, action: import("#shared/html.js").Markup | false }} PlayoffWin */
+/** @typedef {{ at: number, day: Date | null, endedNextDay: boolean, text: import("#shared/html.js").Markup, action: import("#shared/html.js").Markup | false }} PlayoffWin */
 
-// Null when this device has never dismissed the box.
+// Null until this device's first look, which keeps its start.
 const seenAt = createViewerChoice("updatesSeenAt", (stored) =>
   typeof stored === "number" && stored > 0 ? stored : null,
 );
@@ -31,16 +32,6 @@ const seenAt = createViewerChoice("updatesSeenAt", (stored) =>
 // final without being seen live goes by its start.
 /** @param {Game} game */
 const readFinishedAt = (game) => Date.parse(game.end ?? game.start ?? "");
-
-// A game that ends after midnight still counts on the league's day it started.
-/**
- * @param {Game} game
- * @param {number} finishedAt
- */
-function readLeagueDay(game, finishedAt) {
-  const startedAt = Date.parse(game.start ?? "");
-  return readEasternDay(Number.isFinite(startedAt) ? startedAt : finishedAt).date;
-}
 
 /**
  * @param {Game} game
@@ -52,7 +43,6 @@ function describePlayoffWin(game, games) {
   const day = readGameDay(game);
   return {
     at,
-    leagueDay: readLeagueDay(game, at),
     day,
     endedNextDay: !!day && countDaysBetween(day, new Date(at)) > 0,
     text: describeWin(game, games, renderTeamName),
@@ -73,32 +63,16 @@ export function listPlayoffWins(season) {
     .sort((first, second) => second.at - first.at);
 }
 
-/**
- * Just before the first of the latest day's finals.
- * @param {PlayoffWin[]} wins newest first
- */
-function findLatestDayStart(wins) {
-  const latestDay = wins.filter((win) => win.leagueDay === wins[0].leagueDay);
-  return Math.min(...latestDay.map((win) => win.at)) - 1;
-}
-
-// A device that has never dismissed the box starts it at the latest day's finals, not the whole
-// postseason, and keeps that start, so nothing that finishes later is skipped.
-/** @param {PlayoffWin[]} wins newest first */
-function readOrStartSeenAt(wins) {
-  const kept = seenAt.read();
-  if (kept != null || !wins.length) return kept ?? 0;
-  const start = findLatestDayStart(wins);
-  seenAt.keep(start);
-  return start;
-}
-
 const findPanel = () => /** @type {HTMLElement} */ (document.getElementById("updates"));
 
 /** The playoff games finished since this device last dismissed the box, newest first. */
 export function listFreshUpdates() {
   const wins = listPlayoffWins(session.season);
-  const freshAfter = readOrStartSeenAt(wins);
+  const freshAfter = readOrStartSeenAt(
+    seenAt.read(),
+    wins.map((win) => win.at),
+    seenAt.keep,
+  );
   return wins.filter((win) => win.at > freshAfter);
 }
 
@@ -121,10 +95,8 @@ export function watchDismissals(onChange) {
 
 export function drawUpdates() {
   const isShown = isTouchDevice() && !isPastSeason();
-  // Read before listing the finals, which keep a new device's start, so the start hides no notes.
-  const dismissedAt = seenAt.read() ?? 0;
   showUpdates(findPanel(), isShown ? listFreshUpdates() : [], {
     dismiss: dismissUpdates,
-    notes: isShown ? listNotesToShow(RELEASE_NOTES, dismissedAt) : [],
+    notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
   });
 }

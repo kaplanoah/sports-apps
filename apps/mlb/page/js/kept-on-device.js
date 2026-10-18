@@ -32,12 +32,16 @@ export function readRanking(year) {
 export const keepRanking = (year, order) => rankings.keep({ ...rankings.read(), [year]: order });
 
 /**
- * When this device last dismissed a season's Updates box, or 0 before its first dismissal.
+ * When this device last dismissed a season's Updates box, 0 for a season it hasn't dismissed,
+ * whose updates are all new to it, or null on a device that has kept none, which is new to the app.
  * @param {number} year
+ * @returns {number | null}
  */
 export function readSeenAt(year) {
-  const seenAt = seenAtBySeason.read()[year];
-  return typeof seenAt === "number" && seenAt > 0 ? seenAt : 0;
+  const seasons = seenAtBySeason.read();
+  const seenAt = seasons[year];
+  if (typeof seenAt === "number" && seenAt > 0) return seenAt;
+  return Object.keys(seasons).length ? 0 : null;
 }
 
 /**

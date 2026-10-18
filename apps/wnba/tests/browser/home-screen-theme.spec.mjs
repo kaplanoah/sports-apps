@@ -143,8 +143,8 @@ test.describe("on an iPhone, in the browser", () => {
       );
     });
     await page.emulateMedia({ colorScheme: "dark" });
-    // The harness would keep the welcome and the Updates box closed in the storage this test takes away.
-    await openApp(page, { isShowingWelcome: true, isShowingUpdates: true });
+    // The harness would keep the welcome closed in the storage this test takes away.
+    await openApp(page, { isShowingWelcome: true });
     await page.goto("/?theme=dark");
     await expect(page.locator("#stamp")).toBeVisible();
     expect(new URL(page.url()).search).toBe("");

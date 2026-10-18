@@ -63,7 +63,28 @@ test.describe("on a phone", () => {
     );
   });
 
-  test("the Updates box opens on the latest day's playoff finals, newest first, until it's dismissed, and then lists only what's new", async ({
+  test("a new phone shows no Updates box for the finals and notes already out, and opens it for the next final", async ({
+    page,
+  }) => {
+    await serveReleaseNote(page);
+    const app = await openApp(page);
+    const updates = page.locator("#updates");
+    await expect(page.locator(".series").first()).toBeVisible();
+    await expect(updates).toBeHidden();
+
+    await page.reload();
+    await expect(page.locator(".series").first()).toBeVisible();
+    await expect(updates).toBeHidden();
+
+    await app.changeSeason(finishDreamAtMystics);
+
+    await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
+    await expect(updates.locator(".what")).toHaveText([
+      "Dream beat the Mystics 88-80 to win the First Round 2-0",
+    ]);
+  });
+
+  test("the Updates box lists the playoff finals since its last dismissal, newest first, until it's dismissed again, and then lists only what's new", async ({
     page,
   }) => {
     const app = await openApp(page, { isShowingUpdates: true });
@@ -290,15 +311,12 @@ test.describe("on a phone, with a release note out", () => {
     await expect(updates).toBeHidden();
   });
 
-  test("a new phone lists the notes from the last two weeks, from before the latest finals too, the newest three and how many more under them", async ({
-    page,
-  }) => {
+  test("the box lists the newest three notes and how many more under them", async ({ page }) => {
     await serveReleaseNote(page, [
       CHANNELS_NOTE,
       { at: "2026-09-28T15:00:00Z", text: "Rosters" },
       { at: "2026-09-27T15:00:00Z", text: "News" },
       { at: "2026-09-20T15:00:00Z", text: "Scores" },
-      { at: "2026-09-10T15:00:00Z", text: "Brackets" },
     ]);
     await openApp(page, { isShowingUpdates: true });
     const notes = page.locator("#updates .updates-notes");
@@ -316,20 +334,6 @@ test.describe("on a phone, with a release note out", () => {
     };
     const noteLeft = await notes.locator(".what").first().evaluate(readTextLeft);
     expect(await notes.locator(".more").evaluate(readTextLeft)).toBe(noteLeft);
-  });
-
-  test("a phone that dismissed the box before it kept its notes' times still hides the notes out by then", async ({
-    page,
-  }) => {
-    await serveReleaseNote(page, [CHANNELS_NOTE, { at: "2026-09-28T15:00:00Z", text: "Rosters" }]);
-    await page.addInitScript(() =>
-      localStorage.setItem("updatesSeenAt", String(Date.parse("2026-09-29T00:00:00Z"))),
-    );
-    await openApp(page, { isShowingUpdates: true });
-
-    await expect(page.locator("#updates .updates-notes .what")).toHaveText([
-      "Tap a game, then Channels.",
-    ]);
   });
 
   test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {
