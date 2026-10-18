@@ -12,10 +12,12 @@ import { readSelectedTab, wireTabList } from "./tabs.js";
 // Standings and opens on them; from then on, through the offseason, it's named Bracket and opens
 // on the bracket. The one it opens on comes first in the pill. Both parts share the page's scroll,
 // so the one not shown holds itself down by as far as the page has scrolled the shown one up under
-// the pill, and a swipe brings it in from its top. As the parts set off, the page's scroll goes to
-// the part coming in, at its top, and the part leaving holds itself up by as much instead, so the
-// scroll holds still as they come to rest and the part leaving gives up its height: an iPhone that
-// scrolls the page in the same frame as it shrinks flashes everything that scrolls.
+// the pill, and a swipe brings it in from its top. The page scrolls only on a frame its height
+// holds, since an iPhone that scrolls the page in the same frame as it shrinks flashes everything
+// that scrolls: from far down a part taller than the other, the scroll goes to the part coming in
+// as the parts set off, and the part leaving holds itself up instead, so the scroll holds still as
+// they rest and the part leaving gives up its height; from far down a shorter part, the scroll
+// stays with it until the parts rest, as the page grows when they set off.
 
 /** @typedef {"standings" | "bracket"} SeasonPart */
 
@@ -120,24 +122,31 @@ function scrollUpToPartsTop() {
   if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
 }
 
-// As the parts set off, the page's scroll goes to the part not shown, which starts at its top just
-// under the pill, while both parts still take their room: the page scrolls up to the parts' top,
-// and the part leaving holds its place on screen by as much.
+/**
+ * @param {string} part
+ * @param {string} other
+ */
+const isTaller = (part, other) => findPart(part).offsetHeight > findPart(other).offsetHeight;
+
+// As the parts set off from far down a part taller than the one not shown, the page's scroll goes
+// to that one, which starts at its top just under the pill, while both parts still take their room:
+// the page scrolls up to the parts' top, and the part leaving holds its place on screen by as much.
 function handOverScroll() {
   const offset = Math.max(0, scrollY - measurePartsTopScroll());
-  if (offset > 0) {
+  const coming = readOrder().find((part) => part !== scrollPart) ?? scrollPart;
+  if (offset > 0 && isTaller(scrollPart, coming)) {
     holdRoomUnderPill();
     leavingPart = scrollPart;
     heldUp = offset;
+    scrollPart = coming;
     scrollTo({ top: scrollY - offset, behavior: "instant" });
   }
-  scrollPart = readOrder().find((part) => part !== scrollPart) ?? scrollPart;
   followPageScroll();
 }
 
 // Parts that come to rest on the part that left, as a swipe that falls short does, give it back the
-// page's scroll where it was. A part shown at once, with no slide to hand it the scroll, starts at
-// its top just under the pill.
+// page's scroll where it was. A part newly at rest that the scroll wasn't handed to, as from far
+// down a shorter part or shown at once, starts at its top just under the pill.
 /** @param {number} index */
 function restOn(index) {
   const part = readOrder()[index];

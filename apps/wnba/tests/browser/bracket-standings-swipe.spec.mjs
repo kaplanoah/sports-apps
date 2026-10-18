@@ -8,6 +8,7 @@ import {
   trackRoundDots,
 } from "../../../../tests/browser/round-dots.mjs";
 import {
+  expectNoScrollAsHeightChanges,
   expectScrollHeldAsPartsRest,
   hideResizesFromPage,
   isSeasonPillHeld,
@@ -426,6 +427,48 @@ test.describe("in full motion", () => {
 
     await expectPartShown(page, "standings");
     expect(await readPlace()).toEqual(before);
+  });
+
+  /**
+   * Opens the bracket on a phone small enough for the page to scroll down it, at its last round,
+   * and scrolls the page to the bracket's end.
+   * @param {import("@playwright/test").Page} page
+   */
+  async function openFarDownBracketOnSmallPhone(page) {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+  }
+
+  test("on a small phone, a swipe that brings the standings in from far down the bracket scrolls the page only as the parts rest, never as the page grows when they set off", async ({
+    page,
+  }) => {
+    await openFarDownBracketOnSmallPhone(page);
+
+    const readFrames = await trackSeasonScroll(page, { coming: "standings", leaving: "bracket" });
+    const release = await drag(page, { x: 300, y: 400 }, { x: -250 }, { durationMs: 1000 });
+    await release();
+    await expectPartShown(page, "standings");
+
+    expectScrollHeldAsPartsRest(await readFrames());
+  });
+
+  test("on a small phone, a short swipe far down the bracket springs back to it where it was, never scrolling the page as its height changes", async ({
+    page,
+  }) => {
+    await openFarDownBracketOnSmallPhone(page);
+    const before = await page.evaluate(() => Math.round(scrollY));
+
+    const readFrames = await trackSeasonScroll(page, { coming: "standings", leaving: "bracket" });
+    const release = await drag(page, { x: 300, y: 400 }, { x: -46 }, { durationMs: 1000 });
+    await release();
+    await expectPartShown(page, "bracket");
+
+    expectNoScrollAsHeightChanges(await readFrames());
+    expect(await page.evaluate(() => Math.round(scrollY))).toBe(before);
   });
 
   test("a swipe that brings the bracket in from far down the standings leaves the pill held at the top on a screen that grew taller without a resize, as a Home Screen app does as it opens", async ({

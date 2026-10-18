@@ -61,13 +61,11 @@ export async function trackSeasonScroll(page, { coming, leaving }) {
 }
 
 /**
- * Checks that the frames caught the slide, that the page never scrolled on a frame its height
- * changed, and that from the first frame of the slide the pill stayed held at the top of the
- * screen, filled while the parts moved, with the part coming in just under it, and the part leaving
- * held still while it moved.
+ * Checks that the frames caught the slide from a frame at rest, and that the page never scrolled
+ * on a frame its height changed. Returns where the slide starts in the frames.
  * @param {ScrollFrame[]} frames
  */
-export function expectScrollHeldAsPartsRest(frames) {
+export function expectNoScrollAsHeightChanges(frames) {
   const start = frames.findIndex((frame) => frame.isSliding);
   expect(start).toBeGreaterThan(0);
   const scrolledAsHeightChanged = frames.filter(
@@ -77,6 +75,17 @@ export function expectScrollHeldAsPartsRest(frames) {
       frame.height !== frames[index - 1].height,
   );
   expect(scrolledAsHeightChanged).toEqual([]);
+  return start;
+}
+
+/**
+ * Checks that the page never scrolled on a frame its height changed, and that from the first frame
+ * of the slide the pill stayed held at the top of the screen, filled while the parts moved, with
+ * the part coming in just under it, and the part leaving held still while it moved.
+ * @param {ScrollFrame[]} frames
+ */
+export function expectScrollHeldAsPartsRest(frames) {
+  const start = expectNoScrollAsHeightChanges(frames);
   const fromStart = frames.slice(start);
   expect(fromStart.filter((frame) => !frame.isPillHeld)).toEqual([]);
   expect(fromStart.filter((frame) => Math.abs(frame.comingTop - frame.pillBottom) > 1)).toEqual([]);
