@@ -215,37 +215,24 @@ test("a full store of devices in use turns a new one away, but a device already 
   assert.equal(listSubscriptions(context).length, 100);
 });
 
-test("a full store makes room for a new device by forgetting one that has failed for a day", async () => {
+test("a full store makes room for a new device by forgetting the one saved longest ago, once that's a month ago", async () => {
   const { env, context } = createPushStore();
   storeDevices(context, 100, NOW);
-  changeDevice(context, 40, { failingSince: NOW - 60 * MINUTE_MS });
-
-  assert.equal(
-    await readTurnedAwayCode(await subscribe(env, `${ENDPOINT}-a`)),
-    "too_many_devices",
-    "a device that has failed only lately keeps its slot",
-  );
-
-  changeDevice(context, 50, { failingSince: NOW - DAY_MS });
-  assert.equal((await subscribe(env, `${ENDPOINT}-a`)).response.status, 204);
-  assert.ok(!context.stored.has("push:subscription:50"));
-  assert.ok(context.stored.has("push:subscription:40"));
-  assert.equal(listSubscriptions(context).length, 100);
-});
-
-test("of the devices a full store could forget, failing or not saved for a month, it forgets the one saved longest ago", async () => {
-  const { env, context } = createPushStore();
-  storeDevices(context, 100, NOW);
-  changeDevice(context, 50, { savedAt: NOW - DAY_MS, failingSince: NOW - 2 * DAY_MS });
+  changeDevice(context, 50, { savedAt: NOW - 29 * DAY_MS, failingSince: NOW - 2 * DAY_MS });
   changeDevice(context, 60, { savedAt: NOW - 31 * DAY_MS });
   changeDevice(context, 70, { savedAt: NOW - 40 * DAY_MS });
 
-  await subscribe(env, `${ENDPOINT}-a`);
+  assert.equal((await subscribe(env, `${ENDPOINT}-a`)).response.status, 204);
   assert.ok(!context.stored.has("push:subscription:70"));
-  await subscribe(env, `${ENDPOINT}-b`);
+  assert.equal((await subscribe(env, `${ENDPOINT}-b`)).response.status, 204);
   assert.ok(!context.stored.has("push:subscription:60"));
-  await subscribe(env, `${ENDPOINT}-c`);
-  assert.ok(!context.stored.has("push:subscription:50"));
+  assert.equal(
+    await readTurnedAwayCode(await subscribe(env, `${ENDPOINT}-c`)),
+    "too_many_devices",
+    "a device saved within the month keeps its slot, failing or not",
+  );
+  assert.ok(context.stored.has("push:subscription:50"));
+  assert.equal(listSubscriptions(context).length, 100);
 });
 
 test("a device kept without the time it was saved counts as not saved for a month", async () => {
