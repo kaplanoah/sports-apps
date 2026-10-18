@@ -105,8 +105,7 @@ function isDue(end, read, { now, version }) {
 const stampVersion = (read, version) => (version ? { ...read, version } : read);
 
 /**
- * A read with its version under the field's earlier name, `edition`, renamed, so the reads the
- * store kept before the rename aren't due again.
+ * A read that keeps its version as `edition` takes it as `version`, so it isn't due again.
  * @param {HighlightsRead & { edition?: number }} read
  * @returns {HighlightsRead}
  */
