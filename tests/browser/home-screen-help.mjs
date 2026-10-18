@@ -6,7 +6,7 @@ import { expect } from "@playwright/test";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
-import { drag } from "./touch.mjs";
+import { drag, openFromHomeScreen } from "./touch.mjs";
 
 const WELCOME = "#homeScreenWelcome";
 const SETTINGS = "#settingsDialog";
@@ -310,9 +310,7 @@ export async function checkUnsupportedNote({ page, openApp, openSettings }) {
  */
 export async function checkUnsupportedOnHomeScreen({ page, openApp, openSettings }) {
   await takeAwayPush(page);
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "standalone", { get: () => true });
-  });
+  await openFromHomeScreen(page);
   await openApp(page);
   await openSettings(page);
   await expect(page.locator("#notifyNote")).toHaveText(UNSUPPORTED_ON_HOME_SCREEN_NOTE);
