@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { readWorkerError } from "../shared/page/worker-error.js";
 
 test("the Worker's error is the code and message it names", () => {
-  const body = { error: { code: "too_many_devices", message: "Too many devices." } };
+  const body = { error: { code: "push_failed", message: "The push service didn't answer." } };
 
-  assert.deepEqual(readWorkerError(body, 429), {
-    code: "too_many_devices",
-    message: "Too many devices.",
+  assert.deepEqual(readWorkerError(body, 502), {
+    code: "push_failed",
+    message: "The push service didn't answer.",
   });
 });
 

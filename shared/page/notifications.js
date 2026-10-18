@@ -4,7 +4,7 @@ import { reloadWhenSignedOut } from "./access.js";
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
-import { chooseFailedSyncStatus, isTurnedAway, TOO_MANY_DEVICES } from "./notification-status.js";
+import { chooseFailedSyncStatus } from "./notification-status.js";
 import { registerServiceWorker } from "./service-worker.js";
 import { readWorkerError } from "./worker-error.js";
 
@@ -17,7 +17,6 @@ const NOTES = {
     "To get notifications on an iPhone, add this page to your Home Screen and open it from there",
   unsupported: "This browser can't show notifications",
   failed: "Couldn't change notifications. Try again in a moment.",
-  tooManyDevices: TOO_MANY_DEVICES,
 };
 
 const SWITCHABLE = new Set(["off", "on", "failed"]);
@@ -76,14 +75,10 @@ function encodeBase64Url(buffer) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/**
- * The Worker's error, with the code it names.
- * @param {Response} response
- */
+/** @param {Response} response */
 async function readPushFailure(response) {
   const body = await response.json().catch(() => null);
-  const { code, message } = readWorkerError(body, response.status);
-  return Object.assign(new Error(message), { code });
+  return new Error(readWorkerError(body, response.status).message);
 }
 
 async function requestPush(path, init = {}) {
@@ -112,31 +107,16 @@ async function saveSubscription(current) {
   });
 }
 
-// A device the Worker turns away never gets a message, so the browser doesn't keep it either, and
-// the switch shows it off, now and on the next visit. A save that fails any other way keeps the
-// subscription, which the next visit saves again.
-async function saveOrForget(current) {
-  try {
-    await saveSubscription(current);
-  } catch (error) {
-    if (isTurnedAway(error)) {
-      await current.unsubscribe().catch(() => {});
-      subscription = null;
-    }
-    throw error;
-  }
-}
-
 async function subscribe(publicKey) {
   subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: decodeBase64Url(publicKey),
   });
-  await saveOrForget(subscription);
+  await saveSubscription(subscription);
 }
 
-// Saving again on every visit restores a subscription the Worker lost, and a new signing key
-// needs a new subscription.
+// Saving again on every visit restores a subscription the Worker lost, and keeps the device from
+// being the one a full Worker forgets first. A new signing key needs a new subscription.
 async function syncSubscription() {
   const publicKey = await fetchPublicKey();
   const subscribedKey = subscription.options.applicationServerKey;
@@ -146,13 +126,12 @@ async function syncSubscription() {
     await subscribe(publicKey);
     return;
   }
-  await saveOrForget(subscription);
+  await saveSubscription(subscription);
 }
 
-/** @param {unknown} error */
-function showFailedSync(error) {
-  const shown = chooseFailedSyncStatus(error, !!subscription);
-  if (shown) setStatus(shown.status, shown.note);
+function showFailedSync() {
+  const shown = chooseFailedSyncStatus(!!subscription);
+  if (shown) setStatus(shown);
 }
 
 async function showBusyDuring(task) {
@@ -176,9 +155,8 @@ async function turnOn() {
   try {
     await subscribe(await fetchPublicKey());
     setStatus("on");
-  } catch (error) {
-    if (isTurnedAway(error)) setStatus("off", NOTES.tooManyDevices);
-    else setStatus("failed");
+  } catch {
+    setStatus("failed");
   }
 }
 

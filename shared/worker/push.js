@@ -3,9 +3,10 @@ import { respondError, respondJson } from "./responses.js";
 
 // Push subscriptions and the key that signs messages for them. Both are kept under keys the
 // store's own paths can't name, so the page's store never hands them out. The store keeps a hundred
-// devices at most, since anyone with the page's address can subscribe one, and forgets a device
-// its push service says is gone, or that has failed every message for a week, long enough for a
-// fault of the store's own to be fixed first.
+// devices at most, since anyone with the page's address can subscribe one, and makes room for a new
+// one by forgetting the one saved longest ago, since each visit saves its device again. It also
+// forgets a device its push service says is gone, or that has failed every message for a week, long
+// enough for a fault of the store's own to be fixed first.
 
 const SIGNING_KEY = "push:signing-key";
 const SUBSCRIPTION_PREFIX = "push:subscription:";
@@ -51,6 +52,9 @@ function hasKeyLength(text, length) {
   }
 }
 
+const isSameSubscription = (stored, sent) =>
+  stored.keys.p256dh === sent.keys.p256dh && stored.keys.auth === sent.keys.auth;
+
 const isSubscription = (value) =>
   !!value &&
   isPushServiceUrl(value.endpoint) &&
@@ -65,6 +69,15 @@ async function readBody(request) {
   } catch {
     return null;
   }
+}
+
+// A device saved before saves were timed counts as saved longest ago.
+/** @param {Map<string, { savedAt?: number }>} stored */
+function findSavedLongestAgo(stored) {
+  const [[oldestKey]] = [...stored].sort(
+    ([, first], [, second]) => (first.savedAt ?? 0) - (second.savedAt ?? 0),
+  );
+  return oldestKey;
 }
 
 async function findSubscriptionKey(endpoint) {
@@ -101,13 +114,16 @@ export function createPushService({ storage, now, fetchImpl }) {
 
   /**
    * Keeps when the device's messages started failing, and forgets it once they have failed long
-   * enough. A message that goes through clears it. Answers the device as it's now kept, or null
-   * once it's forgotten.
+   * enough. A message that goes through clears it. A device removed or subscribed again while the
+   * message was out keeps what that did. Answers the device as it's now kept, or null once it's
+   * forgotten.
    * @param {string} key
-   * @param {any} subscription
+   * @param {any} sent the device as the message went out to it
    * @param {boolean} wentThrough
    */
-  async function noteDelivery(key, subscription, wentThrough) {
+  async function noteDelivery(key, sent, wentThrough) {
+    const subscription = await storage.get(key);
+    if (!subscription || !isSameSubscription(subscription, sent)) return subscription ?? null;
     const { failingSince, ...kept } = subscription;
     if (wentThrough) {
       if (failingSince !== undefined) await storage.put(key, kept);
@@ -163,11 +179,16 @@ export function createPushService({ storage, now, fetchImpl }) {
       return respondError(400, "invalid_argument", "That isn't a push subscription.");
     const { endpoint, keys } = body;
     const key = await findSubscriptionKey(endpoint);
-    if (!(await storage.get(key)) && (await countSubscriptions()) >= MAX_SUBSCRIPTIONS)
-      return respondError(429, "too_many_devices", "Too many devices get notifications already.");
+    await makeRoomFor(key);
     const subject = new URL(request.url).origin;
-    await storage.put(key, { endpoint, keys, subject });
+    await storage.put(key, { endpoint, keys, subject, savedAt: now() });
     return new Response(null, { status: 204 });
+  }
+
+  async function makeRoomFor(key) {
+    if (await storage.get(key)) return;
+    const stored = await listSubscriptions();
+    if (stored.size >= MAX_SUBSCRIPTIONS) await storage.delete(findSavedLongestAgo(stored));
   }
 
   async function readSubscriptionFor(request) {
@@ -217,8 +238,6 @@ export function createPushService({ storage, now, fetchImpl }) {
   }
 
   const listSubscriptions = () => storage.list({ prefix: SUBSCRIPTION_PREFIX });
-
-  const countSubscriptions = async () => (await listSubscriptions()).size;
 
   async function sendToAll(messages) {
     const stored = await listSubscriptions();
