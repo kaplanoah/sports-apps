@@ -43,8 +43,12 @@ const readShownPart = () => readSelectedTab(findPillTabs());
 
 /** @type {ReturnType<typeof createSlidePanels> | null} */
 let panels = null;
-// The part the page's scroll belongs to, which a slide leaves only once it comes to rest.
-let restingPart = "";
+// The part the page's scroll belongs to, which a slide hands to the part coming in as it sets off.
+let scrollPart = "";
+// The part that gave up the page's scroll as the parts set off, held up by as far as the page had
+// scrolled it under the pill, until they rest.
+let leavingPart = "";
+let heldUp = 0;
 
 // How far down the screen the pill holds, which is under anything else held to the top.
 const readPillTop = () => parseFloat(getComputedStyle(findPill()).top) || 0;
@@ -63,9 +67,10 @@ const holdBracketDots = () => holdRoundDots(findPart("bracket"));
 function followPageScroll() {
   if (!findPill().offsetHeight) return;
   const offset = Math.max(0, scrollY - measurePartsTopScroll());
-  findPill().classList.toggle("stuck", offset > 0);
+  findPill().classList.toggle("stuck", offset > 0 || heldUp > 0);
   for (const part of readOrder()) {
-    findPart(part).style.translate = offset > 0 && part !== restingPart ? `0 ${offset}px` : "";
+    const shift = part === scrollPart ? 0 : offset - (part === leavingPart ? heldUp : 0);
+    findPart(part).style.translate = shift ? `0 ${shift}px` : "";
   }
   if (scrollY < 1) delete findParts().dataset.holdingRoom;
   if (findParts().hasAttribute("data-sliding")) holdBracketDots();
@@ -93,7 +98,7 @@ function fitPartsToRoomUnderPill() {
  */
 function showOn(index, isSliding) {
   const part = readOrder()[index];
-  if (part !== restingPart && scrollY > measurePartsTopScroll())
+  if (part !== scrollPart && scrollY > measurePartsTopScroll())
     findParts().dataset.holdingRoom = "";
   showPillName(findTabList(), part, { isHandoff: isSliding });
 }
@@ -104,15 +109,34 @@ function scrollUpToPartsTop() {
   if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
 }
 
-// A part newly at rest keeps its place on screen: the page scrolls back by as much as it held the
-// part down.
+// As the parts set off, the page's scroll goes to the part not showing, which starts at its top just
+// under the pill, while both parts still take their room: the page scrolls up to the parts' top,
+// and the part leaving holds its place on screen by as much.
+function handOverScroll() {
+  const offset = Math.max(0, scrollY - measurePartsTopScroll());
+  const coming = readOrder().find((part) => part !== scrollPart);
+  if (!coming) return;
+  if (offset > 0) {
+    findParts().dataset.holdingRoom = "";
+    leavingPart = scrollPart;
+    heldUp = offset;
+    scrollTo({ top: scrollY - offset, behavior: "instant" });
+  }
+  scrollPart = coming;
+  followPageScroll();
+  holdBracketDots();
+}
+
+// Parts that come to rest on the part that left, as a swipe that falls short does, give it back the
+// page's scroll where it was.
 /** @param {number} index */
 function restOn(index) {
   const part = readOrder()[index];
-  if (part !== restingPart) {
-    restingPart = part;
-    scrollUpToPartsTop();
-  }
+  if (part === leavingPart) scrollTo({ top: scrollY + heldUp, behavior: "instant" });
+  else if (part !== scrollPart) scrollUpToPartsTop();
+  scrollPart = part;
+  leavingPart = "";
+  heldUp = 0;
   followPageScroll();
 }
 
@@ -176,7 +200,7 @@ export function startBracketStandings() {
     listPanels: () => readOrder().map(findPart),
     place: (index, position) => index - position,
     canGo: (direction) => Boolean(readOrder()[slidePanels.readShown() + direction]),
-    onSetOff: holdBracketDots,
+    onSetOff: handOverScroll,
     onShow: showOn,
     onSettle: restOn,
   });
