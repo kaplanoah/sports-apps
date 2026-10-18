@@ -175,18 +175,25 @@ test("a device whose push service doesn't answer for a week is forgotten", async
 });
 
 /**
- * Stands in a device for each key, the first saved at the given time and each after it a minute
- * earlier, so the last key is the one saved longest ago.
+ * Stands in a device for each key, each saved at the given time.
  * @param {ReturnType<typeof createDurableObjectContext>} context
  * @param {number} count
- * @param {number} newestSavedAt
+ * @param {number} savedAt
  */
-function storeDevices(context, count, newestSavedAt) {
+function storeDevices(context, count, savedAt) {
   for (let index = 0; index < count; index += 1)
-    context.stored.set(`push:subscription:${index}`, {
-      endpoint: `${ENDPOINT}-${index}`,
-      savedAt: newestSavedAt - index * MINUTE_MS,
-    });
+    context.stored.set(`push:subscription:${index}`, { endpoint: `${ENDPOINT}-${index}`, savedAt });
+}
+
+/**
+ * Changes what the store keeps for one of the devices `storeDevices` stood in.
+ * @param {ReturnType<typeof createDurableObjectContext>} context
+ * @param {number} index
+ * @param {object} fields
+ */
+function changeDevice(context, index, fields) {
+  const key = `push:subscription:${index}`;
+  context.stored.set(key, { ...context.stored.get(key), ...fields });
 }
 
 /** @param {{ response: Response }} subscribed */
@@ -208,23 +215,37 @@ test("a full store of devices in use turns a new one away, but a device already 
   assert.equal(listSubscriptions(context).length, 100);
 });
 
-test("a full store makes room for a new device by forgetting a failing one, or the one saved longest ago of those not saved for a month", async () => {
+test("a full store makes room for a new device by forgetting one that has failed for a day", async () => {
   const { env, context } = createPushStore();
   storeDevices(context, 100, NOW);
-  context.stored.set("push:subscription:50", {
-    ...context.stored.get("push:subscription:50"),
-    failingSince: NOW - DAY_MS,
-  });
+  changeDevice(context, 40, { failingSince: NOW - 60 * MINUTE_MS });
 
+  assert.equal(
+    await readTurnedAwayCode(await subscribe(env, `${ENDPOINT}-a`)),
+    "too_many_devices",
+    "a device that has failed only lately keeps its slot",
+  );
+
+  changeDevice(context, 50, { failingSince: NOW - DAY_MS });
   assert.equal((await subscribe(env, `${ENDPOINT}-a`)).response.status, 204);
   assert.ok(!context.stored.has("push:subscription:50"));
-
-  context.stored.get("push:subscription:60").savedAt = NOW - 31 * DAY_MS;
-  context.stored.get("push:subscription:70").savedAt = NOW - 40 * DAY_MS;
-  assert.equal((await subscribe(env, `${ENDPOINT}-b`)).response.status, 204);
-  assert.ok(!context.stored.has("push:subscription:70"));
-  assert.ok(context.stored.has("push:subscription:60"));
+  assert.ok(context.stored.has("push:subscription:40"));
   assert.equal(listSubscriptions(context).length, 100);
+});
+
+test("of the devices a full store could forget, failing or not saved for a month, it forgets the one saved longest ago", async () => {
+  const { env, context } = createPushStore();
+  storeDevices(context, 100, NOW);
+  changeDevice(context, 50, { savedAt: NOW - DAY_MS, failingSince: NOW - 2 * DAY_MS });
+  changeDevice(context, 60, { savedAt: NOW - 31 * DAY_MS });
+  changeDevice(context, 70, { savedAt: NOW - 40 * DAY_MS });
+
+  await subscribe(env, `${ENDPOINT}-a`);
+  assert.ok(!context.stored.has("push:subscription:70"));
+  await subscribe(env, `${ENDPOINT}-b`);
+  assert.ok(!context.stored.has("push:subscription:60"));
+  await subscribe(env, `${ENDPOINT}-c`);
+  assert.ok(!context.stored.has("push:subscription:50"));
 });
 
 test("a device kept without the time it was saved counts as not saved for a month", async () => {
