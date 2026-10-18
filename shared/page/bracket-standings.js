@@ -12,7 +12,10 @@ import { readSelectedTab, wireTabList } from "./tabs.js";
 // Standings and opens on them; from then on, through the offseason, it's named Bracket and opens
 // on the bracket. The one it opens on comes first in the pill. Both parts share the page's scroll,
 // so the one not shown holds itself down by as far as the page has scrolled the shown one up under
-// the pill, and a swipe brings it in from its top.
+// the pill, and a swipe brings it in from its top. As the parts set off, the page's scroll goes to
+// the part coming in, at its top, and the part leaving holds itself up by as much instead, so the
+// scroll holds still as they come to rest and the part leaving gives up its height: an iPhone that
+// scrolls the page in the same frame as it shrinks flashes everything that scrolls.
 
 /** @typedef {"standings" | "bracket"} SeasonPart */
 
@@ -60,10 +63,11 @@ const measurePartsTopScroll = () =>
 // The bracket's round dots stay over the tab bar while the parts slide (round-dots.js).
 const holdBracketDots = () => holdRoundDots(findPart("bracket"));
 
-// The pill fills with the page's color once the parts scroll under it, and the part not shown
-// moves down by as much as the page has scrolled the shown one up under it. Back at the page's
-// top, the parts let go of the room they held, which moves nothing there. Parts that slide while
-// the page scrolls or the screen resizes hold the bracket's dots again where they now are.
+// The pill fills with the page's color once the parts scroll under it, or while a part leaving
+// holds itself up under it, and the part not shown moves down by as much as the page has scrolled
+// the shown one up under it. Back at the page's top, the parts let go of the room they held, which
+// moves nothing there. Parts that slide while the page scrolls or the screen resizes hold the
+// bracket's dots again where they now are.
 function followPageScroll() {
   if (!findPill().offsetHeight) return;
   const offset = Math.max(0, scrollY - measurePartsTopScroll());
@@ -80,7 +84,9 @@ function followPageScroll() {
 // hold the room under it until the page is back at its top, even when the part is shorter, rather
 // than let the page jump to its end. The page's height and scroll are whole pixels, so the room
 // takes a pixel more, or parts that start a fraction of a pixel down the page would stop just short
-// of the pill. A hidden pill has no height to measure, so the room waits until the parts show.
+// of the pill. A hidden pill has no height to measure, so the room waits until the parts show. The
+// room is measured again as the parts start to hold it, since a Home Screen app can grow as it
+// opens without a resize to say so.
 function fitPartsToRoomUnderPill() {
   if (!findPill().offsetHeight) return;
   const bottomPadding = parseFloat(getComputedStyle(document.body).paddingBottom);
@@ -88,6 +94,11 @@ function fitPartsToRoomUnderPill() {
   const value = `${room}px`;
   if (findParts().style.getPropertyValue("--room-under-pill") !== value)
     findParts().style.setProperty("--room-under-pill", value);
+}
+
+function holdRoomUnderPill() {
+  fitPartsToRoomUnderPill();
+  findParts().dataset.holdingRoom = "";
 }
 
 // The parts set off for a part, and hold the room under the pill for it once it comes in from far
@@ -98,8 +109,7 @@ function fitPartsToRoomUnderPill() {
  */
 function showOn(index, isSliding) {
   const part = readOrder()[index];
-  if (part !== scrollPart && scrollY > measurePartsTopScroll())
-    findParts().dataset.holdingRoom = "";
+  if (part !== scrollPart && scrollY > measurePartsTopScroll()) holdRoomUnderPill();
   showPillName(findTabList(), part, { isHandoff: isSliding });
 }
 
@@ -109,26 +119,24 @@ function scrollUpToPartsTop() {
   if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
 }
 
-// As the parts set off, the page's scroll goes to the part not showing, which starts at its top just
+// As the parts set off, the page's scroll goes to the part not shown, which starts at its top just
 // under the pill, while both parts still take their room: the page scrolls up to the parts' top,
 // and the part leaving holds its place on screen by as much.
 function handOverScroll() {
   const offset = Math.max(0, scrollY - measurePartsTopScroll());
-  const coming = readOrder().find((part) => part !== scrollPart);
-  if (!coming) return;
   if (offset > 0) {
-    findParts().dataset.holdingRoom = "";
+    holdRoomUnderPill();
     leavingPart = scrollPart;
     heldUp = offset;
     scrollTo({ top: scrollY - offset, behavior: "instant" });
   }
-  scrollPart = coming;
+  scrollPart = readOrder().find((part) => part !== scrollPart) ?? scrollPart;
   followPageScroll();
-  holdBracketDots();
 }
 
 // Parts that come to rest on the part that left, as a swipe that falls short does, give it back the
-// page's scroll where it was.
+// page's scroll where it was. A part shown at once, with no slide to hand it the scroll, starts at
+// its top just under the pill.
 /** @param {number} index */
 function restOn(index) {
   const part = readOrder()[index];

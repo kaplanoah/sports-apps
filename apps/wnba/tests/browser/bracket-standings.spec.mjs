@@ -132,6 +132,33 @@ test("a part chosen while the page is scrolled down opens at its top, just under
   expect(partsTop).toBeGreaterThanOrEqual(pillBottom - 1);
 });
 
+test("a part chosen far down the standings opens just under the pill, held at the top of the screen, on a screen that grew taller without a resize, as a Home Screen app does as it opens", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    addEventListener("resize", (event) => event.stopImmediatePropagation(), { capture: true }),
+  );
+  await page.setViewportSize({ width: 390, height: 783 });
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+  await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+
+  await findSeasonPill(page).getByRole("tab", { name: "Bracket" }).click();
+
+  await expect(page.locator("#bracketWrap .round-name").first()).toBeInViewport();
+  const { pillTop, heldTop } = await page.evaluate(() => {
+    const pill = document.getElementById("bracketStandingsPill");
+    return {
+      pillTop: pill.getBoundingClientRect().top,
+      heldTop: parseFloat(getComputedStyle(pill).top),
+    };
+  });
+  expect(pillTop).toBe(heldTop);
+});
+
 test("search's Bracket row, with the bracket left scrolled down, opens it at its top, just under the pill", async ({
   page,
 }) => {

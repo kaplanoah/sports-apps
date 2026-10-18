@@ -7,6 +7,10 @@ import {
   readRoundDotsTop,
   trackRoundDots,
 } from "../../../../tests/browser/round-dots.mjs";
+import {
+  expectScrollHeldAsPartsRest,
+  trackSeasonScroll,
+} from "../../../../tests/browser/season-scroll.mjs";
 
 const PHONE = { width: 390, height: 844 };
 
@@ -362,5 +366,39 @@ test.describe("in full motion", () => {
     await expectPartShown(page, "bracket");
 
     expectDotsHeldWithBracket(await readFrames(), restingTop);
+  });
+
+  test("a tap that brings the bracket in from far down the standings scrolls the page only as the parts set off, never on the frame they rest and the page grows shorter, with the bracket just under the pill and the standings holding still", async ({
+    page,
+  }) => {
+    await openApp(page);
+    const pill = findSeasonPill(page);
+    await pill.getByRole("tab", { name: "Standings" }).click();
+    await expectPartShown(page, "standings");
+    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+
+    const readFrames = await trackSeasonScroll(page, { coming: "bracket", leaving: "standings" });
+    await pill.getByRole("tab", { name: "Bracket" }).click();
+    await expectPartShown(page, "bracket");
+
+    expectScrollHeldAsPartsRest(await readFrames());
+  });
+
+  test("a swipe that brings the bracket in from far down the standings scrolls the page only as the parts set off, never on the frame they rest and the page grows shorter", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await expectPartShown(page, "standings");
+    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+
+    const readFrames = await trackSeasonScroll(page, { coming: "bracket", leaving: "standings" });
+    const release = await drag(page, { x: 60, y: 400 }, { x: 250 }, { durationMs: 1000 });
+    await release();
+    await expectPartShown(page, "bracket");
+
+    expectScrollHeldAsPartsRest(await readFrames());
   });
 });
