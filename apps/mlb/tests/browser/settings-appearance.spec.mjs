@@ -136,7 +136,7 @@ test("Appearance sits under Notifications, above the News switches, each choice 
     expect(await icon.boundingBox()).toMatchObject({ width: 60, height: 60 });
 });
 
-test("a line ends the settings above News, and none sits under its label, between its switches, or under them", async ({
+test("a line ends the settings above News, and none sits under its label, between its switches, or under them, each switch's row right under the one before", async ({
   page,
 }) => {
   await openApp(page);
@@ -145,11 +145,20 @@ test("a line ends the settings above News, and none sits under its label, betwee
   expect(
     await settingsAbove.evaluate((controls) => getComputedStyle(controls).borderBottomStyle),
   ).toBe("solid");
-  const newsLines = await page.getByRole("group", { name: "News" }).evaluate((group) =>
+  const news = page.getByRole("group", { name: "News" });
+  const newsLines = await news.evaluate((group) =>
     [group, ...group.children, ...group.querySelectorAll(".control-row")].flatMap((part) => {
       const style = getComputedStyle(part);
       return [style.borderTopStyle, style.borderBottomStyle].filter((line) => line !== "none");
     }),
   );
   expect(newsLines).toEqual([]);
+  const rowEdges = await news.locator(".control-row").evaluateAll((rows) =>
+    rows.map((row) => {
+      const box = row.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom };
+    }),
+  );
+  const gaps = rowEdges.slice(1).map((row, index) => row.top - rowEdges[index].bottom);
+  expect(gaps).toEqual([0, 0]);
 });
