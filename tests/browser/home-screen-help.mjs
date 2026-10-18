@@ -1,5 +1,6 @@
-// The ? that ends settings' Notifications note where notifications come only from the Home Screen,
-// and the welcome it opens over settings, which rises and closes as a sheet does.
+// The ? that ends, on a touch screen, settings' Notifications note where notifications come only
+// from the Home Screen, and the welcome it opens over settings, which rises and closes as a sheet
+// does.
 
 import { expect } from "@playwright/test";
 import { matchPath } from "./harness.mjs";

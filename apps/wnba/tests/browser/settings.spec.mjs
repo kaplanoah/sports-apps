@@ -240,7 +240,7 @@ test.describe("on a phone, settings", () => {
     expect([sheet.top, sheet.height]).toEqual([0, 844]);
   });
 
-  // A phone's browser shows the Home Screen box at the top of settings, over the first setting.
+  // A phone's browser, unlike the Home Screen app, draws the Home Screen box.
   test("set their title level with their close button and 32px over the Home Screen box, then the first setting, and end 17px over the bottom", async ({
     page,
   }) => {
