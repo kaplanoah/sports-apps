@@ -28,13 +28,11 @@ permissions:
   contents: read
 
 jobs:
-  # Playwright's own image holds Chromium and WebKit and the system libraries they need, so one
-  # machine runs every project. Its tag is the Playwright version package.json pins.
+  # The installed Playwright installs the Chromium and WebKit it runs, with the system libraries
+  # they need, so one machine runs every project.
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    container:
-      image: mcr.microsoft.com/playwright:v1.64.0-noble
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -51,6 +49,7 @@ jobs:
           key: node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
       - if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
+      - run: npx playwright install --with-deps chromium-headless-shell webkit
       # Every test runs to the end, however many fail, so the issue names each flaky one.
       - name: Run the browser tests over and over
         shell: bash

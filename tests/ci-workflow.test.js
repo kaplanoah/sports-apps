@@ -30,26 +30,16 @@ test("every workflow's actions are pinned to a commit", () => {
   }
 });
 
-const readInstalledPlaywright = () =>
-  JSON.parse(readRepoFile("package-lock.json")).packages["node_modules/playwright"].version;
-
-/** @param {string} workflow */
-const listPlaywrightImageVersions = (workflow) =>
-  [
-    ...readRepoFile(`.github/workflows/${workflow}`).matchAll(
-      /mcr\.microsoft\.com\/playwright:v([\d.]+)-/g,
-    ),
-  ].map(([, version]) => version);
-
-// The image holds only the browsers its own Playwright version runs, so a job in it would find no
-// browser once Dependabot moves Playwright on without it.
-for (const workflow of ["ci.yml", "flaky.yml"]) {
-  test(`${workflow}'s Playwright images are the Playwright version the lockfile installs`, () => {
-    const versions = listPlaywrightImageVersions(workflow);
-    assert.ok(versions.length > 0);
-    for (const version of versions) assert.equal(version, readInstalledPlaywright());
-  });
-}
+// An image holds only the browsers its own Playwright version runs, and Dependabot moves the
+// lockfile's Playwright without it, so each job installs its browsers from the installed one.
+test("no workflow runs its browsers from an image that pins Playwright's version", () => {
+  for (const workflow of WORKFLOWS)
+    assert.doesNotMatch(
+      readRepoFile(`.github/workflows/${workflow}`),
+      /mcr\.microsoft\.com\/playwright/,
+      workflow,
+    );
+});
 
 // The config stops CI's runs after a few failures, but the nightly run names every test that
 // failed in the issue Flaky browser tests.
