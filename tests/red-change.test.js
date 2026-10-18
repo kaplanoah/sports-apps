@@ -42,6 +42,7 @@ const findReasons = (path, addedLines = []) =>
         path,
         addedLines: addedLines.map((text, index) => ({ number: index + 1, text })),
         hunks: [],
+        hunkStarts: [],
       },
     ],
     readPlainScript,
@@ -67,6 +68,7 @@ test("a diff lists each file with its added lines, numbered as the new file has 
           { kind: "removed", text: "removed" },
         ],
       ],
+      hunkStarts: [9],
     },
   ]);
 });
@@ -104,6 +106,164 @@ test("any change to the shared code that moves, layers, or draws the page is red
     assert.equal(findReasons(`shared/page/${file}`).length, 1, file);
   assert.deepEqual(findReasons("shared/page/stamp.js", ["export const x = 1;"]), []);
   assert.deepEqual(findReasons("apps/mlb/page/js/sheet.js", ["export const x = 1;"]), []);
+});
+
+const SHARED_SCRIPT = "shared/page/bracket-standings.js";
+const SCRIPT_REASON = [`${SHARED_SCRIPT} is shared code that moves, layers, or draws the page`];
+
+/**
+ * Why a change to a shared script is red, from its hunks, each a header and its lines as a diff
+ * shows them, with the script as the change leaves it.
+ * @param {{ header: string, lines: string[] }[]} hunks
+ * @param {string[]} after
+ */
+const findHunkChangeReasons = (hunks, after) =>
+  findRedReasons(
+    readDiff(
+      [
+        `diff --git a/${SHARED_SCRIPT} b/${SHARED_SCRIPT}`,
+        `--- a/${SHARED_SCRIPT}`,
+        `+++ b/${SHARED_SCRIPT}`,
+        ...hunks.flatMap(({ header, lines }) => [header, ...lines]),
+      ].join("\n"),
+    ),
+    () => after.join("\n"),
+  );
+
+/**
+ * Why a change to a shared script is red, from its lines as a diff shows them, each kept line
+ * after a space, each added one after a +, and each removed one after a -, in one hunk from the
+ * script's first line, with the script as the change leaves it.
+ * @param {string[]} lines
+ * @param {string} [after] the script as the change leaves it, when it isn't the hunk's new side
+ */
+function findScriptChangeReasons(lines, after) {
+  const newSide = lines.filter((line) => !line.startsWith("-")).map((line) => line.slice(1));
+  return findHunkChangeReasons([{ header: "@@ -1 +1 @@", lines }], after?.split("\n") ?? newSide);
+}
+
+const SCROLL_UP = [
+  " function scrollUpToPartsTop() {",
+  "   const partsTopScroll = measurePartsTopScroll();",
+  '   if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });',
+  " }",
+];
+
+test("a shared script's comments, blank lines, and formatting aren't red, wherever a hunk starts", () => {
+  for (const lines of [
+    ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP],
+    [
+      "-/*! The parts start under the pill. */",
+      "+/*! The parts start just under the pill. */",
+      ...SCROLL_UP,
+    ],
+    ["-/**", "- * Brings the page up.", "- */", ...SCROLL_UP],
+    [
+      " /**",
+      " * Slides to one of the tab's parts,",
+      "- * as a search does.",
+      "+ * as a search's row does.",
+      " */",
+      ...SCROLL_UP,
+    ],
+    [...SCROLL_UP.slice(0, 3), "+", ...SCROLL_UP.slice(3)],
+    [
+      "-let restingPart = ''; // the part at rest",
+      "+let restingPart = ''; // the part the page's scroll belongs to",
+      ...SCROLL_UP,
+    ],
+    [
+      ...SCROLL_UP.slice(0, 2),
+      '-  if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });',
+      "+  if (scrollY > partsTopScroll)",
+      '+    scrollTo({ top: partsTopScroll, behavior: "instant" });',
+      ...SCROLL_UP.slice(3),
+    ],
+  ])
+    assert.deepEqual(findScriptChangeReasons(lines), [], lines.join("\n"));
+});
+
+test("a shared script's change to its code is red, even one that comments code out or back in, or hides in what looks like a comment", () => {
+  for (const lines of [
+    [...SCROLL_UP.slice(0, 2), "+/*", SCROLL_UP[2], "+*/", SCROLL_UP[3]],
+    [...SCROLL_UP.slice(0, 2), "-/*", SCROLL_UP[2], "-*/", SCROLL_UP[3]],
+    [
+      ...SCROLL_UP.slice(0, 3),
+      "+  // Matches shared/*",
+      '+  sheet.style.transform = "translateX(0)";',
+      SCROLL_UP[3],
+    ],
+    [
+      "-let restingPart = ''; // the part at rest",
+      "+let restingPart = 'bracket'; // the part at rest",
+      ...SCROLL_UP,
+    ],
+    ["+/* the page's top */ scrollTo({ top: 0 });", ...SCROLL_UP],
+  ])
+    assert.deepEqual(findScriptChangeReasons(lines), SCRIPT_REASON, lines.join("\n"));
+});
+
+test("a shared script's change in hunks far apart is red only where one changes code", () => {
+  const buildScript = (/** @type {string} */ secondReturn) => [
+    "// The parts' top, just under the pill.",
+    "function a() {",
+    "  return 1;",
+    "}",
+    "",
+    "function b() {",
+    `  ${secondReturn} // the part at rest`,
+    "}",
+  ];
+  const firstHunk = {
+    header: "@@ -1,2 +1,2 @@",
+    lines: ["-// The parts' top.", "+// The parts' top, just under the pill.", " function a() {"],
+  };
+  const buildSecondHunk = (/** @type {string} */ secondReturn) => ({
+    header: "@@ -6,3 +6,3 @@",
+    lines: [
+      " function b() {",
+      "-  return 2; // the part",
+      `+  ${secondReturn} // the part at rest`,
+      " }",
+    ],
+  });
+  assert.deepEqual(
+    findHunkChangeReasons([firstHunk, buildSecondHunk("return 2;")], buildScript("return 2;")),
+    [],
+  );
+  assert.deepEqual(
+    findHunkChangeReasons([firstHunk, buildSecondHunk("return 3;")], buildScript("return 3;")),
+    SCRIPT_REASON,
+  );
+});
+
+test("a shared script's hunk that only removes lines, as a diff without context gives, is red only for code", () => {
+  // A line put back a line too early would land inside the template string, and change it.
+  const after = ["const words = `", "hi", "`;", "show(words);"];
+  for (const [removed, reasons] of /** @type {[string, string[]][]} */ ([
+    ["// the words to show", []],
+    ["log(words);", SCRIPT_REASON],
+  ]))
+    assert.deepEqual(
+      findHunkChangeReasons([{ header: "@@ -4 +3,0 @@", lines: [`-${removed}`] }], after),
+      reasons,
+      removed,
+    );
+});
+
+test("a shared script that's gone, that a change's hunks don't fit, or that doesn't parse, is red", () => {
+  assert.deepEqual(findScriptChangeReasons(["+// a note", " function ("]), SCRIPT_REASON);
+  const comment = ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP];
+  assert.deepEqual(findScriptChangeReasons(comment, ""), SCRIPT_REASON);
+  assert.deepEqual(findScriptChangeReasons(comment, "export const x = 1;\n"), SCRIPT_REASON);
+  // A change to code, read against the file as it was before it, would show no change at all.
+  assert.deepEqual(
+    findScriptChangeReasons(
+      [" function a() {", "-  return 1;", "+  return 2;", " }"],
+      "function a() {\n  return 1;\n}",
+    ),
+    SCRIPT_REASON,
+  );
 });
 
 const SHARED_STYLESHEETS = [
@@ -292,6 +452,7 @@ test("a key of the object Object.assign hands a part's style sets that style, a 
           path,
           addedLines: [{ number, text: STYLE_SCRIPT.split("\n")[number - 1] }],
           hunks: [],
+          hunkStarts: [],
         },
       ],
       (read) => (read === path ? STYLE_SCRIPT : ""),
@@ -339,6 +500,7 @@ test("a key of the keyframes a part's animate takes sets that style, a number to
           path,
           addedLines: [{ number, text: KEYFRAMES_SCRIPT.split("\n")[number - 1] }],
           hunks: [],
+          hunkStarts: [],
         },
       ],
       (read) => (read === path ? KEYFRAMES_SCRIPT : ""),
