@@ -589,7 +589,12 @@ test("the Worker bundles with its page, and exports its store", async () => {
 
 test("the page serves both themes' icons and System's", async () => {
   const { listBundledFiles } = await import("../../../worker/build.mjs");
-  const release = { version: "1.0.0", commit: "abc1234", builtAt: "2026-10-01T00:00:00Z" };
+  const release = {
+    version: "1.0.0",
+    commit: "abc1234",
+    builtAt: "2026-10-01T00:00:00Z",
+    label: null,
+  };
   const served = Object.keys(listBundledFiles("wnba", release));
   for (const icon of [
     "icon-180.png",

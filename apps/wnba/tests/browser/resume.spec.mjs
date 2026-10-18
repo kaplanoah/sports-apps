@@ -8,8 +8,18 @@ import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
-const LAST_RELEASE = { version: "1.4.0", commit: "abc1234", builtAt: "2026-10-01T22:00:00Z" };
-const NEW_RELEASE = { version: "1.4.1", commit: "def5678", builtAt: "2026-10-01T23:00:00Z" };
+const LAST_RELEASE = {
+  version: "1.4.0",
+  commit: "abc1234",
+  builtAt: "2026-10-01T22:00:00Z",
+  label: null,
+};
+const NEW_RELEASE = {
+  version: "1.4.1",
+  commit: "def5678",
+  builtAt: "2026-10-01T23:00:00Z",
+  label: null,
+};
 
 // A reload clears whatever the test left on the window.
 /** @param {import("@playwright/test").Page} page */

@@ -103,7 +103,7 @@ test("a device names an iPhone's Safari version and WebKit build, and the iOS ve
 
 const PAGE_FACTS = {
   appName: "WNBA",
-  release: { version: "2.27.13", commit: "abc1234", builtAt: "2026-10-06T12:00:00Z" },
+  release: { version: "2.27.13", commit: "abc1234", builtAt: "2026-10-06T12:00:00Z", label: null },
   userAgent: IPHONE_HOME_SCREEN,
   isOnHomeScreen: true,
   width: 390,

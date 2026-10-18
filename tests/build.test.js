@@ -4,7 +4,12 @@ import { listApps } from "../worker/apps.mjs";
 import { labelChannelFiles, listBundledFiles, readRelease } from "../worker/build.mjs";
 
 const BUILT_AT = new Date("2026-10-07T12:00:00Z");
-const RELEASE = { version: "2.32.2-beta", commit: "b102733", builtAt: BUILT_AT.toISOString() };
+const RELEASE = {
+  version: "2.32.2-beta",
+  commit: "b102733",
+  builtAt: BUILT_AT.toISOString(),
+  label: "beta",
+};
 
 const readManifest = (files) => JSON.parse(files["manifest.webmanifest"].text);
 const readHomeScreenTitle = (files, path) =>
@@ -58,6 +63,22 @@ test("a beta release counts main's version where its branch left it, and says be
     version: "2.33.0-beta",
     commit: "b102733",
     builtAt: BUILT_AT.toISOString(),
+    label: "beta",
+  });
+});
+
+test("a production release has no label, so its page shows no channel tag", () => {
+  const git = createGit({
+    "log -1 --format=%h": "b102733\n",
+    "merge-base --is-ancestor 3cf716ccf7c056c3e598a7e4ce82c0c591ac210c HEAD": "",
+    "log --first-parent --reverse --format=\x1e%s --name-only --diff-merges=first-parent --no-renames 3cf716ccf7c056c3e598a7e4ce82c0c591ac210c..HEAD":
+      "\x1efeat: something new\napps/mlb/page/js/app.js\n",
+  });
+  assert.deepEqual(readRelease("mlb", git, BUILT_AT), {
+    version: "2.33.0",
+    commit: "b102733",
+    builtAt: BUILT_AT.toISOString(),
+    label: null,
   });
 });
 
