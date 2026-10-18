@@ -24,6 +24,13 @@ export const useSavedStorage = (saved) =>
   });
 
 /**
+ * Storage holding each choice a device kept, as the page keeps them.
+ * @param {[string, unknown][]} kept each choice's key and value
+ */
+export const useKeptChoices = (kept) =>
+  useSavedStorage(new Map(kept.map(([key, value]) => [key, JSON.stringify(value)])));
+
+/**
  * Storage that's full: it reads what's saved but refuses to save more.
  * @param {Map<string, string>} saved
  */

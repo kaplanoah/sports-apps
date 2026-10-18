@@ -25,7 +25,7 @@ import {
 import { normalizeSpaces, stripTags } from "../../../tests/text.js";
 import { readFontFaces } from "../../../tests/css-rules.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "../../../tests/time-zone.js";
-import { dropSavedStorage, useSavedStorage } from "../../../tests/saved-storage.js";
+import { dropSavedStorage, useKeptChoices } from "../../../tests/saved-storage.js";
 import { TWO_UPDATES, readUpdateBox } from "./update-box.js";
 
 // The expected times below are what a viewer in Eastern time sees.
@@ -127,7 +127,7 @@ const listFreshTeams = () =>
  * @param {[string, unknown][]} kept
  */
 function useDeviceStorage(t, kept) {
-  useSavedStorage(new Map(kept.map(([key, value]) => [key, JSON.stringify(value)])));
+  useKeptChoices(kept);
   t.after(dropSavedStorage);
 }
 
