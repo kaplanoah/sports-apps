@@ -4,7 +4,12 @@ import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { session } from "../page/js/session.js";
 import { listFreshUpdates, listPlayoffWins } from "../page/js/updates.js";
-import { refuseAccess, useSavedStorage, useStorage } from "../../../tests/saved-storage.js";
+import {
+  refuseAccess,
+  useKeptChoices,
+  useSavedStorage,
+  useStorage,
+} from "../../../tests/saved-storage.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
 
 const AFTERNOON = JSON.parse(
@@ -170,7 +175,7 @@ test("a device's first look before the page has read the season keeps no start",
 });
 
 test("after a dismissal the box lists only the finals since", () => {
-  useSavedStorage(new Map([["updatesSeenAt", String(Date.parse("2026-09-28T01:00:00Z"))]]));
+  useKeptChoices([["updatesSeenAt", Date.parse("2026-09-28T01:00:00Z")]]);
 
   assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
 });
