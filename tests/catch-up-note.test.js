@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { renderCatchUpLines, startCatchUpNote } from "../shared/page/catch-up-note.js";
+import { dropSavedStorage, useSavedStorage } from "./saved-storage.js";
 import { readStampText } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
@@ -30,10 +31,7 @@ beforeEach(() => {
     hidden: false,
     addEventListener: (type, listener) => (documentListeners[type] = listener),
   });
-  globalThis.localStorage = /** @type {any} */ ({
-    getItem: (key) => saved.get(key) ?? null,
-    setItem: (key, value) => saved.set(key, value),
-  });
+  useSavedStorage(saved);
   setOnline(true);
 });
 
@@ -41,7 +39,7 @@ afterEach(() => {
   mock.timers.reset();
   delete (/** @type {any} */ (globalThis).addEventListener);
   delete (/** @type {any} */ (globalThis).document);
-  delete (/** @type {any} */ (globalThis).localStorage);
+  dropSavedStorage();
   if (realNavigator) Object.defineProperty(globalThis, "navigator", realNavigator);
 });
 

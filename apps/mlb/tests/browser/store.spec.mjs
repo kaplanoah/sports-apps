@@ -3,6 +3,7 @@ import {
   expect,
   EVENING_FIXTURE,
   ON_A_PHONE,
+  keepUpdatesFromEarlierVisit,
   openApp,
   openSettings,
   readKept,
@@ -49,6 +50,7 @@ test("a store answer the page can't read says the page's server can't be reached
 
 test.describe("on a phone", () => {
   test.use(ON_A_PHONE);
+  test.beforeEach(({ page }) => keepUpdatesFromEarlierVisit(page));
 
   test("each device keeps its own ranking and Updates dismissal, and the store keeps neither", async ({
     page,

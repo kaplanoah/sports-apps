@@ -7,6 +7,7 @@ import {
   nameFeedRequest,
   nameGameDetailsKey,
 } from "../worker/src/box-score.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 // MLB's live feed for each of the Division Series' games on the evening of Oct 7, trimmed to what
 // the box score reads: two finals, two being played, and three still to start, two of them with
@@ -366,8 +367,7 @@ test("a game the store has no final for is read from MLB", async () => {
 });
 
 test("a request that names no game is refused, and MLB not answering says so", async () => {
-  assert.equal((await askForBoxScore("not-a-game")).status, 400);
+  await assertErrorAnswer(await askForBoxScore("not-a-game"), 400, "invalid_argument");
   const answer = await askForBoxScore(RAYS_AT_YANKEES, { isDown: true });
-  assert.equal(answer.status, 502);
-  assert.match(answer.body.error.message, /MLB/);
+  assert.match(await assertErrorAnswer(answer, 502, "upstream_error"), /^Couldn't read MLB: /);
 });
