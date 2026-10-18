@@ -16,36 +16,39 @@ import { expect } from "@playwright/test";
 
 /**
  * Notes the page's scroll and height, and where the parts sit down the screen, on each frame,
- * until the returned function stops and reads the notes.
+ * until the returned function stops and reads the notes. It returns once it has noted a frame, so
+ * the frames start before whatever the test does next.
  * @param {import("@playwright/test").Page} page
  * @param {{ coming: "standings" | "bracket", leaving: "standings" | "bracket" }} parts
  * @returns {Promise<() => Promise<ScrollFrame[]>>}
  */
 export async function trackSeasonScroll(page, { coming, leaving }) {
   await page.evaluate(
-    ([comingKey, leavingKey]) => {
-      const row = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsParts"));
-      const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
-      /** @param {string} key */
-      const findPart = (key) =>
-        /** @type {HTMLElement} */ (row.querySelector(`:scope > [data-part="${key}"]`));
-      const noted = /** @type {ScrollFrame[]} */ ([]);
-      const note = () => {
-        const pillBox = pill.getBoundingClientRect();
-        noted.push({
-          scroll: Math.round(scrollY),
-          height: document.documentElement.scrollHeight,
-          comingTop: Math.round(findPart(comingKey).getBoundingClientRect().top),
-          leavingTop: Math.round(findPart(leavingKey).getBoundingClientRect().top),
-          pillBottom: Math.round(pillBox.bottom),
-          isPillHeld: pillBox.top === parseFloat(getComputedStyle(pill).top),
-          isSliding: row.hasAttribute("data-sliding"),
-        });
-        if (!(/** @type {any} */ (window).isTrackingScrollDone)) requestAnimationFrame(note);
-      };
-      requestAnimationFrame(note);
-      Object.assign(window, { scrollFrames: noted, isTrackingScrollDone: false });
-    },
+    ([comingKey, leavingKey]) =>
+      new Promise((resolve) => {
+        const row = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsParts"));
+        const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
+        /** @param {string} key */
+        const findPart = (key) =>
+          /** @type {HTMLElement} */ (row.querySelector(`:scope > [data-part="${key}"]`));
+        const noted = /** @type {ScrollFrame[]} */ ([]);
+        const note = () => {
+          const pillBox = pill.getBoundingClientRect();
+          noted.push({
+            scroll: Math.round(scrollY),
+            height: document.documentElement.scrollHeight,
+            comingTop: Math.round(findPart(comingKey).getBoundingClientRect().top),
+            leavingTop: Math.round(findPart(leavingKey).getBoundingClientRect().top),
+            pillBottom: Math.round(pillBox.bottom),
+            isPillHeld: pillBox.top === parseFloat(getComputedStyle(pill).top),
+            isSliding: row.hasAttribute("data-sliding"),
+          });
+          resolve(undefined);
+          if (!(/** @type {any} */ (window).isTrackingScrollDone)) requestAnimationFrame(note);
+        };
+        requestAnimationFrame(note);
+        Object.assign(window, { scrollFrames: noted, isTrackingScrollDone: false });
+      }),
     [coming, leaving],
   );
   return () =>
