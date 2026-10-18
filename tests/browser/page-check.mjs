@@ -1,4 +1,4 @@
-import { matchPath, LOCKED_PAGE_PATH } from "./harness.mjs";
+import { isLockedWatchSocket, matchPath, LOCKED_PAGE_PATH } from "./harness.mjs";
 
 // A broken page draws nothing, so a check of one waits only this long rather than a deploy's.
 export const BROKEN_CHECK_TIMEOUT_MS = 3000;
@@ -11,8 +11,5 @@ export async function serveUnreachableStore(page) {
   await page.route(matchPath(`${LOCKED_PAGE_PATH}store/`), (route) =>
     route.fulfill({ status: 503 }),
   );
-  await page.routeWebSocket(
-    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
-    (socket) => socket.close(),
-  );
+  await page.routeWebSocket(isLockedWatchSocket, (socket) => socket.close());
 }
