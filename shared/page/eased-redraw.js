@@ -1,4 +1,4 @@
-import { logPatches } from "./html.js";
+import { logPatches, noteHeight } from "./html.js";
 
 // New data that changes what the page shows eases in: a part that grows or shrinks moves to its
 // new height, so what's under it slides instead of jumping, and what's new fades in. The page
@@ -62,7 +62,7 @@ function easeOpen(element) {
  * Stops whatever easing a part is under way, leaving it as its markup and styles have it.
  * @param {Element} element
  */
-export function stopEasing(element) {
+function stopEasing(element) {
   resizes.get(element)?.cancel();
 }
 
@@ -91,6 +91,23 @@ export function easeClosed(element, hide) {
     },
     () => {},
   );
+}
+
+/**
+ * Eases a part that's shrinking away back open from wherever its close has reached, once `redraw`
+ * draws what it shows, rather than snapping it back to full first. An eased redraw around it notes
+ * the part's height where the close has reached, and finds it there still as the reopening starts,
+ * so it leaves the reopening to run.
+ * @param {Element} element
+ * @param {() => void} redraw
+ */
+export function easeBackOpen(element, redraw) {
+  noteHeight(element);
+  const reached = readOpenFrame(element);
+  stopEasing(element);
+  redraw();
+  if (canEase())
+    element.animate([reached, readOpenFrame(element)], { duration: EASE_MS, easing: EASING });
 }
 
 // A part that scrolls already keeps what overflows it inside, and clipping it would drop where it

@@ -8,12 +8,6 @@ const isOnHomeScreen = () =>
   matchMedia("(display-mode: standalone)").matches ||
   /** @type {{ standalone?: boolean }} */ (navigator).standalone === true;
 
-// System, the app's light look, or its dark one. Anything else reads as System.
-/** @param {unknown} value */
-function isAppearanceChoice(value) {
-  return value === "auto" || value === "light" || value === "dark";
-}
-
 // The app's light look or its dark one, as against System.
 /**
  * @param {unknown} value
@@ -21,6 +15,12 @@ function isAppearanceChoice(value) {
  */
 function isLook(value) {
   return value === "light" || value === "dark";
+}
+
+// System, the app's light look, or its dark one. Anything else reads as System.
+/** @param {unknown} value */
+function isAppearanceChoice(value) {
+  return value === "auto" || isLook(value);
 }
 
 /** @returns {"light" | "dark"} the look the phone's dark or light setting shows */

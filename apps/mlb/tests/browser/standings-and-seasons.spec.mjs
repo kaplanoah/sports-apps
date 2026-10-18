@@ -190,7 +190,7 @@ test("a warning MLB's feed brings eases the header to its new height", async ({ 
   await app.updateFromWorker();
 
   await expect(page.locator("#stamp")).toContainText("MLB stopped sending wildCardRank");
-  const growth = (await readAnimations()).find(({ element }) => element === "stamp");
+  const growth = (await readAnimations()).find(({ classes }) => classes.includes("stamp"));
   expect(parseFloat(String(growth.last.height))).toBeGreaterThan(
     parseFloat(String(growth.first.height)),
   );

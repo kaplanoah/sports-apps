@@ -216,7 +216,8 @@ export async function checkSystemInstallIcon({ page, openApp, openSettings, look
 /**
  * With motion on, the note grows in as a pick sets the icon off, and shrinks away as one brings it
  * back, its opening played backward, and only then empties, never starting over for another pick
- * that keeps it away while it shrinks.
+ * that keeps it away while it shrinks, growing back from wherever its close has reached for one
+ * that wants it again, and shrinking from wherever its opening has reached.
  * @param {App} app
  */
 export async function checkReAddNoteEases({ page, openApp, openSettings, looks }) {
@@ -224,34 +225,64 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   const readAnimations = await listAnimations(page);
   await openHomeScreenApp(page, openApp, "dark");
   await openSettings(page);
+  const note = findNote(page);
   const readEasings = async () =>
-    (await readAnimations())
-      .filter(({ element }) => element.split(" ").includes("re-add-note"))
-      .map(({ first, last, direction }) => ({
-        from: { height: first.height, opacity: first.opacity },
-        to: { opacity: last.opacity },
-        direction,
-      }));
-  const opening = {
-    from: { height: "0px", opacity: 0 },
-    to: { opacity: "1" },
-    direction: "normal",
-  };
+    (await readAnimations()).filter(({ classes }) => classes.includes("re-add-note"));
+  const readLastEasing = async () => (await readEasings()).at(-1);
+  // Each easing of the note holds still halfway, where the test reads what it shows.
+  const holdHalfway = () =>
+    note.evaluate((element) => {
+      for (const animation of element.getAnimations()) {
+        animation.pause();
+        animation.currentTime = 125;
+      }
+      const { height, opacity } = getComputedStyle(element);
+      return { height, opacity, isFilled: element.childElementCount > 0 };
+    });
+  const finishEasings = () =>
+    page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
 
   await pick(page, looks.light);
-  await expect(findNote(page)).toBeVisible();
-  expect(await readEasings()).toEqual([opening]);
-  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await expect(note).toBeVisible();
+  const opening = await readLastEasing();
+  expect(opening).toMatchObject({ first: { height: "0px", opacity: 0 }, last: { opacity: "1" } });
+  expect(opening.direction).toBe("normal");
+  await finishEasings();
+  const full = await note.evaluate((element) => getComputedStyle(element).height);
 
   await pick(page, looks.dark);
-  const closing = { ...opening, direction: "reverse" };
-  expect(await readEasings()).toEqual([opening, closing]);
-  await page.evaluate(() => document.getAnimations().forEach((animation) => animation.pause()));
+  expect(await readLastEasing()).toEqual({ ...opening, direction: "reverse" });
+  const halfClosed = await holdHalfway();
+  expect(halfClosed.isFilled).toBe(true);
+  expect(parseFloat(halfClosed.height)).toBeLessThan(parseFloat(full));
   await pick(page, "System");
-  expect(await readEasings()).toEqual([opening, closing]);
-  await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
-  await expect(findNote(page)).toBeHidden();
-  await expect(findNote(page)).toBeEmpty();
+  expect(await readEasings()).toHaveLength(2);
+
+  await pick(page, looks.light);
+  const reopening = await readLastEasing();
+  expect(reopening.direction).toBe("normal");
+  expect(reopening.first).toMatchObject({
+    height: halfClosed.height,
+    opacity: halfClosed.opacity,
+  });
+  expect(reopening.last).toMatchObject({ height: full, opacity: "1" });
+  await finishEasings();
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(NOTE_WORDS);
+
+  await pick(page, looks.dark);
+  await finishEasings();
+  await expect(note).toBeEmpty();
+  await pick(page, looks.light);
+  const halfOpen = await holdHalfway();
+  await pick(page, looks.dark);
+  const closing = await readLastEasing();
+  expect(closing.direction).toBe("reverse");
+  expect(closing.last.height).toBe(halfOpen.height);
+  expect(parseFloat(halfOpen.height)).toBeLessThan(parseFloat(full));
+  await finishEasings();
+  await expect(note).toBeHidden();
+  await expect(note).toBeEmpty();
 }
 
 /**
@@ -420,13 +451,24 @@ export async function checkHandoffRenewal(app) {
   await leaveFor(page, 110 * 1000);
   expect(await readAsked()).toBe(8);
 
-  await pick(page, looks.light);
-  await pick(page, looks.dark);
+  // A look kept in another tab shows or hides the note, and its handoff follows.
+  await keepInOtherTab(page, "appearance", "light");
+  await expect(findNote(page)).toBeHidden();
+  await keepInOtherTab(page, "appearance", "dark");
   await expect.poll(readRead).toBe(7);
-  await findNote(page).getByRole("button", { name: "Dismiss icon note" }).click();
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  expect(await readAsked()).toBe(9);
+  await keepInOtherTab(page, "appearance", "light");
   await expect(findNote(page)).toBeHidden();
   await page.clock.runFor(15 * 60 * 1000);
   expect(await readAsked()).toBe(9);
+
+  await pick(page, looks.dark);
+  await expect.poll(readRead).toBe(8);
+  await findNote(page).getByRole("button", { name: "Dismiss icon note" }).click();
+  await expect(findNote(page)).toBeHidden();
+  await page.clock.runFor(15 * 60 * 1000);
+  expect(await readAsked()).toBe(10);
 }
 
 /**

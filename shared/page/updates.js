@@ -11,7 +11,7 @@ import {
 } from "./days.js";
 import { createViewerChoice } from "./device-storage.js";
 import { renderDismissButton } from "./dismiss-button.js";
-import { easeClosed, stopEasing } from "./eased-redraw.js";
+import { easeBackOpen, easeClosed } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
@@ -291,10 +291,16 @@ const closingPanels = new WeakSet();
  * @param {Markup} markup
  */
 function openBox(panel, markup) {
-  if (closingPanels.delete(panel)) stopEasing(panel);
+  const fillBox = () => {
+    panel.hidden = false;
+    setHtml(panel, markup);
+  };
+  if (closingPanels.delete(panel)) {
+    easeBackOpen(panel, fillBox);
+    return;
+  }
   if (panel.hidden) noteHeight(panel);
-  panel.hidden = false;
-  setHtml(panel, markup);
+  fillBox();
 }
 
 /** @param {HTMLElement} panel */

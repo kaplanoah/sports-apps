@@ -65,13 +65,13 @@ test("a game that starts eases its score to its new height and fades in its new 
 
   await expect(page.locator(`[data-game="${GAME_ID}"] .game-status`)).toHaveText("Q2 5:10");
   const animations = await readAnimations();
-  const growth = animations.find(({ element }) => element === "score");
+  const growth = animations.find(({ classes }) => classes.includes("score"));
   expect(parseFloat(String(growth.last.height))).toBeGreaterThan(
     parseFloat(String(growth.first.height)),
   );
   expect(growth.first.overflow).toBe("clip");
   expect(animations).toContainEqual({
-    element: "game-status",
+    classes: ["game-status"],
     first: { opacity: 0 },
     last: { opacity: 1 },
     direction: "normal",

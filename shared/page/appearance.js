@@ -10,7 +10,7 @@
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
 import { renderDismissButton } from "./dismiss-button.js";
-import { easeClosed, redrawEased, stopEasing } from "./eased-redraw.js";
+import { easeBackOpen, easeClosed, redrawEased } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
 import { chooseReAddNote, isReAddNoteDismissed, keepReAddNoteDismissed } from "./re-add-note.js";
 import { watchTimeAway } from "./resume.js";
@@ -122,8 +122,11 @@ let isNoteClosing = false;
 
 function showNote() {
   const note = findNote();
-  if (isNoteClosing) stopEasing(note);
-  isNoteClosing = false;
+  if (isNoteClosing) {
+    isNoteClosing = false;
+    easeBackOpen(note, drawNote);
+    return;
+  }
   redrawEased(() => {
     noteHeight(note);
     drawNote();
@@ -218,12 +221,6 @@ function renewIfDue() {
   if (Date.now() >= renewDueAt) renewHandoff();
 }
 
-// Settings closing lets go of the handoff, so the link waits for a fresh one as it opens again.
-function forgetHandoff() {
-  followHandoff();
-  drawNote();
-}
-
 function dismissNote() {
   keepReAddNoteDismissed();
   updateNote();
@@ -232,12 +229,14 @@ function dismissNote() {
 function wireNote() {
   const settings = findSettings();
   drawNote();
+  // Settings opening asks for a handoff, and closing lets go of it, before the dialog's close
+  // event, which then draws the link waiting for a fresh one.
   new MutationObserver(followHandoff).observe(settings, {
     attributes: true,
     attributeFilter: ["open"],
   });
   followHandoff();
-  settings.addEventListener("close", forgetHandoff);
+  settings.addEventListener("close", drawNote);
   findNote().addEventListener("click", (event) => {
     if (/** @type {Element} */ (event.target).closest("#dismissReAddNote")) dismissNote();
   });

@@ -1,7 +1,7 @@
 /**
- * An animation the page started: the class of the element it moves, its first and last frames,
+ * An animation the page started: the classes of the element it moves, its first and last frames,
  * and the way it plays them.
- * @typedef {{ element: string, first: Keyframe, last: Keyframe, direction: string }} Animation
+ * @typedef {{ classes: string[], first: Keyframe, last: Keyframe, direction: string }} Animation
  */
 
 /**
@@ -18,7 +18,7 @@ export async function listAnimations(page) {
     Element.prototype.animate = function (frames, options) {
       const [first, last] = /** @type {Keyframe[]} */ (frames);
       const direction = (typeof options === "object" ? options.direction : undefined) ?? "normal";
-      animations.push({ element: this.getAttribute("class") ?? "", first, last, direction });
+      animations.push({ classes: [...this.classList], first, last, direction });
       return animate.call(this, frames, options);
     };
   });

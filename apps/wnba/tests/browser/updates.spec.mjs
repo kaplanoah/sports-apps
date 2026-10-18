@@ -267,8 +267,8 @@ test.describe("on a phone, in full motion", () => {
 
   /** @typedef {import("../../../../tests/browser/animations.mjs").Animation} Animation */
   /** @param {Animation} animation */
-  const isGrowing = ({ element, first, last }) =>
-    element.split(" ").includes("updates") &&
+  const isGrowing = ({ classes, first, last }) =>
+    classes.includes("updates") &&
     first.height === "0px" &&
     first.marginBottom === "0px" &&
     parseFloat(String(last.height)) > 0;
@@ -299,15 +299,30 @@ test.describe("on a phone, in full motion", () => {
     expect((await readAnimations()).filter(isOpening)).toHaveLength(1);
   });
 
-  test("an Updates box that fills again as it shrinks away stays open", async ({ page }) => {
+  test("an Updates box that fills again as it shrinks away grows back open from where it had shrunk to, and stays open", async ({
+    page,
+  }) => {
+    const readAnimations = await listAnimations(page);
     const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
     await page.getByRole("button", { name: "Dismiss updates" }).click();
-    await page.evaluate(() => document.getAnimations().forEach((animation) => animation.pause()));
+    const halfClosed = await updates.evaluate((box) => {
+      for (const animation of document.getAnimations()) {
+        animation.pause();
+        animation.currentTime = 125;
+      }
+      const { height, opacity } = getComputedStyle(box);
+      return { height, opacity };
+    });
 
     await app.changeSeason(finishDreamAtMystics);
     await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
+    const lastOfBox = (await readAnimations())
+      .filter(({ classes }) => classes.includes("updates"))
+      .at(-1);
+    expect(lastOfBox.direction).toBe("normal");
+    expect(lastOfBox.first).toMatchObject(halfClosed);
     await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
 
     await expect(updates).toBeVisible();
