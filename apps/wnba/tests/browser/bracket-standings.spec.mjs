@@ -146,6 +146,32 @@ test("a tap on the tab while the standings show scrolled down takes them back to
   await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
+test("where the header stays put, a tap on the tab with the page scrolled under a tall Updates box takes the page back to its top, and only the next tap slides back to the bracket", async ({
+  page,
+}) => {
+  await holdHeaderStill(page);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-league")).toBeVisible();
+  await page.locator("#updates").evaluate((box) => {
+    box.removeAttribute("hidden");
+    Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "600px" });
+  });
+  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+
+  await findSeasonTab(page).click();
+
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect(page.locator("#standings-league")).toBeVisible();
+  await expect(page.locator("#bracketWrap")).toBeHidden();
+
+  await findSeasonTab(page).click();
+
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeHidden();
+});
+
 test("a tap on the tab with the standings left a fraction of a pixel down, as a phone can leave them, slides back to the bracket", async ({
   page,
 }) => {

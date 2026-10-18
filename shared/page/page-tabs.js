@@ -53,15 +53,16 @@ export const openPageTab = (tab) => switchTab(tab);
 // What choosing a tab that's already showing does besides scrolling the page to its top, for a view
 // that scrolls in itself, like a Games view going back to today or the bracket and standings
 // going back to their top and then to the part the tab is named for.
-/** @type {Map<string, () => void>} */
+/** @typedef {(tap: { isPageScrolled: boolean }) => void} StartReturn */
+/** @type {Map<string, StartReturn>} */
 const startReturns = new Map();
 
 /**
  * Has choosing `tab` while it's showing call `returnToStart`, in the same tap that scrolls the
- * page to its top, since a view that scrolls in itself can still leave the page a pixel or two from
- * it.
+ * page to its top, with whether the page was scrolled, since a view that scrolls in itself can
+ * still leave the page a pixel or two from it.
  * @param {string} tab
- * @param {() => void} returnToStart
+ * @param {StartReturn} returnToStart
  */
 export function setTabStart(tab, returnToStart) {
   startReturns.set(tab, returnToStart);
@@ -69,8 +70,9 @@ export function setTabStart(tab, returnToStart) {
 
 /** @param {string} tab */
 function returnToStart(tab) {
-  if (scrollY > 0) scrollToTop();
-  startReturns.get(tab)?.();
+  const isPageScrolled = scrollY > 0;
+  if (isPageScrolled) scrollToTop();
+  startReturns.get(tab)?.({ isPageScrolled });
 }
 
 // What choosing a tab does as it opens, from the tap, like bringing up the keyboard in a search.

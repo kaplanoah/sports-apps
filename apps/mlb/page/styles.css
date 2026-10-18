@@ -2625,7 +2625,7 @@ body.kbd .player-open:focus {
   }
 
   /* The bracket's part's bottom padding (pager.css) already holds the round dots, so a bracket that
-     fills the screen leaves the part nothing to scroll. */
+     fills the screen ends where its part's room does. */
   .tree-scroll.stacked {
     padding-bottom: 0;
   }

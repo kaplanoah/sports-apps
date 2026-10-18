@@ -267,7 +267,7 @@ async function boot() {
   trackKeyboardFocus();
   watchPresses([".team-line .team-open"]);
   startPageTabs();
-  setTabStart("games", showStartDay);
+  setTabStart("games", () => showStartDay());
   startDayStrip(findElement("seasonGames"));
   startGameSearch(findElement("gameSearch"), {
     readSeason: readSearchSeason,
