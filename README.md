@@ -245,6 +245,14 @@ reviewers, checkers, check across areas, or posting step didn't finish, blocks
 the merge. Its findings don't fail the check; answer all of a review's findings
 in one push, by fixing each or replying.
 
+A change that only an iPhone can test, like one to how the page's parts slide or
+layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone` status
+on its head commit, which stays pending until the owner has used it on the beta
+app and labeled the pull request `phone-ok`. The repo's ruleset for `main`
+(**Settings > Rules > Rulesets**) requires the `check` and `phone` statuses and
+every review thread resolved. Without `phone` in it, `check` holds a red change
+itself.
+
 A pull request from a fork runs without the repo's secrets, so Claude can't review
 it, and it runs the fork's own copy of the workflows, which its author can change
 to pass. The repo's **Settings > Actions > General**, under **Approval for

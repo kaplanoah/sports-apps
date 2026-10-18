@@ -60,7 +60,10 @@
   the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
   and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
+  CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config,
+  so a change to the docs or the tooling alone runs none (`worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
+  but for one that passed burn-in on an earlier push and hasn't changed since, with the helpers and config every spec runs with unchanged too (`worker/burn-in-specs.mjs`),
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
@@ -778,8 +781,9 @@ Delete it once the app's first PR merges.
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`).
   Tests are never red.
-  The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label,
-  added by the owner after the PR's last push.
+  The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
+  added by the owner after the PR's last push,
+  which main's rules require for a merge, so `check` passes on the PR's tests and review alone (`worker/phone-status.mjs`).
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     When you ask the owner to add `phone-ok`, link the PR in the same message.
@@ -788,7 +792,7 @@ Delete it once the app's first PR merges.
     A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
     so deploy it to beta and ask.
     Merge `main` into the branch just before each deploy to beta, so the commit the owner labels is the one that merges, since a PR merges while behind `main` as long as it has no conflicts.
-    Merge a red PR once `check` passes with `phone-ok` on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again.
+    Merge a red PR once `check` and `phone` pass with `phone-ok` on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again.
     An OK in chat never stands in for the label.
     Merge it yourself: the owner doesn't.
   - One red change goes live per deploy.
@@ -895,7 +899,7 @@ When a step says to go back to an earlier step, continue in order from there.
 8. Squash-merge the PR once all of these are true:
    `check` passed on the latest commit, the PR has no merge conflicts, every review finding is answered, and its base is `main`.
    If GitHub refuses the merge, go back to step 4.
-   - Merge a red PR only once `check` passed with the `phone-ok` label on it, which is the owner's go-ahead to merge: until then, tell the user it's ready and wait.
+   - Merge a red PR only once `check` and `phone` passed with the `phone-ok` label on it, which is the owner's go-ahead to merge: until then, tell the user it's ready and wait.
      An OK in chat never stands in for the label.
      One red change goes live per deploy.
 9. Don't deploy.
