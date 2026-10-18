@@ -1,3 +1,4 @@
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { drag, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
@@ -149,8 +150,23 @@ test("a swipe down in an open sheet is the sheet's, not a pull", async ({ page }
   const release = await drag(page, { x: box.x + 40, y: box.y + 20 }, { y: 120 });
 
   await expect(page.locator(".pull-refresh")).toBeHidden();
-  await expect(page.locator("header.top")).toHaveCSS("top", "auto");
+  expect(await page.locator("header.top").evaluate((header) => header.style.top)).toBe("");
   await release();
+});
+
+test("on the season tab, a pull holds the standings down with the header", async ({ page }) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const standings = page.locator("#standingsWrap");
+  await expect(standings.locator("table").first()).toBeVisible();
+  const before = await standings.boundingBox();
+  await app.holdStore();
+
+  await pullDown(page, 200);
+
+  await expect(page.locator("header.top")).toHaveCSS("top", "56px");
+  await expect.poll(async () => (await standings.boundingBox()).y).toBe(before.y + 56);
 });
 
 test("on a phone, the tab bar stays put while the page is held down", async ({ page }) => {
