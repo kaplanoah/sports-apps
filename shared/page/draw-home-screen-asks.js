@@ -15,6 +15,7 @@ const BENEFIT = "It opens full screen, without the browser's bars";
 
 // The browser's own Share and menu buttons, copied so people find them.
 const SHARE_GLYPH = `<svg
+  class="share-glyph"
   viewBox="0 0 24 24"
   fill="none"
   stroke="currentColor"

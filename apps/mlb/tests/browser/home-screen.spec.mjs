@@ -1,12 +1,12 @@
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
-import { test, expect, openApp, openSettings } from "./harness.mjs";
+import { test, expect, openApp, openSettings, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
-import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.mjs";
+import { listThemeLayoutChanges, showTheme } from "../../../../tests/browser/theme-layout.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
@@ -126,6 +126,35 @@ test.describe("on an iPhone, in the browser", () => {
     const { belowSettings, aboveRanking } = await measureTip(page);
     expect(belowSettings).toBeGreaterThan(0);
     expect(aboveRanking).toBeGreaterThan(0);
+  });
+
+  test("the settings' box sets its steps in the credits' ink, its own in Ball and the dim ink in Night Game, around its buttons' names in the full ink", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSettings(page);
+    const steps = page.locator('#homeScreenTip .home-screen-steps[data-ask="browser"]');
+    const looks = [];
+    for (const theme of /** @type {const} */ (["light", "dark"])) {
+      await showTheme(page, theme);
+      looks.push({
+        steps: await steps.evaluate((element) => getComputedStyle(element).color),
+        name: await steps
+          .locator("b")
+          .first()
+          .evaluate((element) => getComputedStyle(element).color),
+        credit: await readColor(page, "--credit-ink"),
+        dim: await readColor(page, "--ink-dim"),
+        ink: await readColor(page, "--ink"),
+      });
+    }
+    const [ball, nightGame] = looks;
+    for (const look of looks) {
+      expect(look.steps).toBe(look.credit);
+      expect(look.name).toBe(look.ink);
+    }
+    expect(ball.credit).not.toBe(ball.dim);
+    expect(nightGame.credit).toBe(nightGame.dim);
   });
 
   test("the settings' box shows the icon the Home Screen takes in the theme on screen, and each theme choice its own, from the page's stylesheet", async ({

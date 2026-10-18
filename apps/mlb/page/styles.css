@@ -145,8 +145,11 @@
   --all-star-light: rgba(255, 255, 255, 0.4);
   --all-star-shift: -3px;
   --out: #6b645c;
-  /* A source's credit under what it said, as pale as WCAG's AA level lets text be on a card. */
-  --credit-ink: color-mix(in srgb, var(--ink-dim) 84%, var(--card));
+  /* Text that steps back from the words beside it, like a source's credit under what it said or
+     the Home Screen box's steps around its buttons' names. Ball's dim ink alone sets it apart
+     less than in Night Game, so it's paler, still at WCAG's AA level on the Home Screen box, half
+     card and half page. */
+  --credit-ink: color-mix(in srgb, var(--ink-dim) 86.4%, var(--card));
   /* Runs set the plays that changed the score apart from the runners who got on before them. */
   --runs-setup-ink: var(--credit-ink);
   /* A final's losing score, a step lighter in Ball, where its dim ink alone sets it apart from the
@@ -1413,8 +1416,19 @@ body.kbd .rank-item .grip:focus {
 .home-screen-title {
   font-weight: calc(var(--type-detail-weight) + 100);
 }
+.home-screen-steps {
+  color: var(--credit-ink);
+}
 .home-screen-steps b {
-  font-weight: calc(var(--type-caption-weight) + 100);
+  font-weight: calc(var(--type-caption-weight) + 75);
+}
+/* The Home Screen steps' Share icon, raised to sit with Libre Franklin's words, as set by eye. */
+.welcome-step .share-glyph {
+  position: relative;
+  top: -1.5px;
+}
+.home-screen-steps .share-glyph {
+  vertical-align: -1px;
 }
 .home-screen-install {
   font-weight: calc(var(--type-label-weight) - 50);

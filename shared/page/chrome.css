@@ -708,7 +708,7 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   color: var(--ink-dim);
 }
 .home-screen-steps b {
-  font-weight: calc(var(--type-caption-weight) + 200);
+  font-weight: calc(var(--type-caption-weight) + 100);
   color: var(--ink);
 }
 .home-screen-steps svg {
