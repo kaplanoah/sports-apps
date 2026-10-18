@@ -18,12 +18,13 @@ export const NEXT_RELEASE = {
 };
 
 /**
- * Serves version.json, and lets a test deploy a newer release, fail the next few reads, or leave
- * reads unanswered.
+ * Serves version.json, starting with `release`, and lets a test deploy a newer release, fail the
+ * next few reads, or leave reads unanswered.
  * @param {import("@playwright/test").Page} page
+ * @param {Release} [release]
  */
-export async function serveReleases(page) {
-  const served = { release: RELEASE, requests: 0, failures: 0, isHanging: false };
+export async function serveReleases(page, release = RELEASE) {
+  const served = { release, requests: 0, failures: 0, isHanging: false };
   await page.route(matchPath("/version.json"), (route) => {
     served.requests++;
     if (served.isHanging) return undefined;

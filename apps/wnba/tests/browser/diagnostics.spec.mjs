@@ -1,4 +1,5 @@
-import { test, expect, findGameButton, openApp, matchPath, NOW } from "./harness.mjs";
+import { test, expect, findGameButton, openApp, NOW } from "./harness.mjs";
+import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({
@@ -52,16 +53,12 @@ test("Diagnostics sit past the end of settings, off, with nothing recorded, with
 test("Diagnostics, once on, start with the app, the release, and its commit, set apart by dots", async ({
   page,
 }) => {
-  await page.route(matchPath("/version.json"), (route) =>
-    route.fulfill({
-      json: {
-        version: "3.6.0-beta",
-        commit: "abc1234",
-        builtAt: "2026-10-08T03:14:57Z",
-        label: "beta",
-      },
-    }),
-  );
+  await serveReleases(page, {
+    version: "3.6.0-beta",
+    commit: "abc1234",
+    builtAt: "2026-10-08T03:14:57Z",
+    label: "beta",
+  });
   await openApp(page);
 
   await turnOnDiagnostics(page);

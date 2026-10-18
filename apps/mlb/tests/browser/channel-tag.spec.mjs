@@ -18,19 +18,10 @@ const BETA = {
   label: "beta",
 };
 
-/**
- * @param {import("@playwright/test").Page} page
- * @param {import("../../../../shared/page/release.js").Release} release
- */
-async function serveRelease(page, release) {
-  const served = await serveReleases(page);
-  served.release = release;
-}
-
 test("beta names its channel, its commit, and how long ago it went live beside the name, counting each minute", async ({
   page,
 }) => {
-  await serveRelease(page, BETA);
+  await serveReleases(page, BETA);
   await openApp(page);
   const tag = page.locator("header.top .title-row #channelTag");
   await expect(tag).toHaveText("beta•3f2a91c•4 min ago");
@@ -43,7 +34,7 @@ test("beta names its channel, its commit, and how long ago it went live beside t
 test("coming back after an hour away, the tag says how long ago the release went live as it shows", async ({
   page,
 }) => {
-  await serveRelease(page, BETA);
+  await serveReleases(page, BETA);
   await openApp(page);
   const tag = page.locator("#channelTag");
   await expect(tag).toHaveText("beta•3f2a91c•4 min ago");
@@ -58,7 +49,7 @@ test("coming back after an hour away, the tag says how long ago the release went
 test("a reload shows no tag until it has read its release, rather than the age it last showed", async ({
   page,
 }) => {
-  await serveRelease(page, BETA);
+  await serveReleases(page, BETA);
   await openApp(page);
   const tag = page.locator("#channelTag");
   await expect(tag).toHaveText("beta•3f2a91c•4 min ago");
@@ -73,7 +64,7 @@ test("a reload shows no tag until it has read its release, rather than the age i
 });
 
 test("production has no tag", async ({ page }) => {
-  await serveRelease(page, { ...BETA, version: "2.33.0", label: null });
+  await serveReleases(page, { ...BETA, version: "2.33.0", label: null });
   await openApp(page);
   await expect(page.locator("#versionNote")).not.toHaveAttribute("hidden");
 
@@ -82,7 +73,7 @@ test("production has no tag", async ({ page }) => {
 
 // Each machine places text on its own subpixel grid, so the tag holds to a quarter pixel.
 test("the tag sits half a pixel above the middle of the name's capitals", async ({ page }) => {
-  await serveRelease(page, BETA);
+  await serveReleases(page, BETA);
   await openApp(page);
   await expect(page.locator("#channelTag")).toBeVisible();
 
@@ -90,7 +81,7 @@ test("the tag sits half a pixel above the middle of the name's capitals", async 
 });
 
 test("the tag reads at its type role and clears contrast in both themes", async ({ page }) => {
-  await serveRelease(page, BETA);
+  await serveReleases(page, BETA);
   await openApp(page);
   await expect(page.locator("#channelTag")).toBeVisible();
 

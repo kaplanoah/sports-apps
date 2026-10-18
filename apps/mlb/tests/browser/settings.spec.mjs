@@ -16,20 +16,10 @@ import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
+import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { readYearGap, readYearTracking } from "../../../../tests/browser/title-row.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
-
-const RELEASE = {
-  version: "2.13.0",
-  commit: "abc1234",
-  builtAt: "2026-09-28T00:10:41Z",
-  label: null,
-};
-
-/** @param {import("@playwright/test").Page} page */
-const serveRelease = (page, release) =>
-  page.route(matchPath("/version.json"), (route) => route.fulfill({ json: release }));
 
 test("settings leave the page behind them as it is, as every sheet does", async ({ page }) => {
   await openApp(page);
@@ -231,6 +221,18 @@ test("the year is the title's font and size, lighter, dimmer, and its digits 0.0
   expect(await readYearGap(page)).toBeCloseTo(9, 0);
 });
 
+test("the year's gap from the name grows with the title when the browser's text is larger", async ({
+  page,
+}) => {
+  await openApp(page, WITH_A_PAST_SEASON);
+  await chooseSeason(page, "2025");
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "20px";
+  });
+
+  expect(await readYearGap(page)).toBeCloseTo(9 * (20 / 16), 0);
+});
+
 test("once the World Series is won, the current season's year is in the title too", async ({
   page,
 }) => {
@@ -243,7 +245,7 @@ test("once the World Series is won, the current season's year is in the title to
 test("at their foot, settings name the release and when it came out, in the viewer's time, over the copyright", async ({
   page,
 }) => {
-  await serveRelease(page, RELEASE);
+  await serveReleases(page);
   await openApp(page);
   await openSettings(page);
 
@@ -261,7 +263,7 @@ test("on a wide screen, settings end at the bottom left, level with the ranking'
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await serveRelease(page, RELEASE);
+  await serveReleases(page);
   await openApp(page);
   await openSettings(page);
 
@@ -297,7 +299,7 @@ test("on a phone, a scroll just past the end of settings rests at their end, wit
   page,
 }) => {
   await page.setViewportSize(PHONE);
-  await serveRelease(page, RELEASE);
+  await serveReleases(page);
   await openApp(page);
   await openSettings(page);
   await expect(page.locator("#versionNote")).toBeVisible();
