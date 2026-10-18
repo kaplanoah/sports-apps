@@ -3,6 +3,7 @@ import { drag } from "../../../../tests/browser/touch.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import {
   expectDotsHeldWithBracket,
+  readRoundDotsLift,
   readRoundDotsTop,
   trackRoundDots,
 } from "../../../../tests/browser/round-dots.mjs";
@@ -285,6 +286,42 @@ test.describe("in full motion", () => {
     await page.evaluate(() => dispatchEvent(new Event("resize")));
 
     expect(await readCardGap()).toBe(spreadGap);
+    await release();
+  });
+
+  test("the round dots hold their height over the tab bar when the bracket redraws for new results while a finger holds it part way to the standings", async ({
+    page,
+  }) => {
+    const app = await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const restingTop = await readRoundDotsTop(page);
+
+    const release = await drag(page, { x: 330, y: 400 }, { x: -150 }, { durationMs: 1000 });
+    await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-sliding", "finger");
+    await app.changeSeason((season) => {
+      season.series.find((series) => series.id === "1-1").bottom.wins = 1;
+      return season;
+    });
+    await expect(page.locator('[data-series="1-1"] .team-line').nth(1)).toContainText("1");
+
+    expect(await readRoundDotsTop(page)).toBe(restingTop);
+    await release();
+  });
+
+  test("the round dots stay just above the tab bar when the screen resizes while a finger holds the bracket part way to the standings", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const restingLift = await readRoundDotsLift(page);
+
+    const release = await drag(page, { x: 330, y: 400 }, { x: -150 }, { durationMs: 1000 });
+    await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-sliding", "finger");
+    await page.setViewportSize({ width: PHONE.width, height: PHONE.height - 100 });
+
+    await expect.poll(() => readRoundDotsLift(page)).toBe(restingLift);
     await release();
   });
 

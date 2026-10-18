@@ -21,6 +21,17 @@ export const readRoundDotsTop = (page) =>
     .evaluate((dots) => Math.round(dots.getBoundingClientRect().top));
 
 /**
+ * How far the dots sit above the tab bar.
+ * @param {import("@playwright/test").Page} page
+ */
+export const readRoundDotsLift = (page) =>
+  page.evaluate(() => {
+    const dots = /** @type {HTMLElement} */ (document.querySelector("#bracketWrap .round-dots"));
+    const tabBar = /** @type {HTMLElement} */ (document.getElementById("tabBar"));
+    return Math.round(tabBar.getBoundingClientRect().top - dots.getBoundingClientRect().bottom);
+  });
+
+/**
  * Notes where the dots and the bracket's part sit on each frame, until the returned function stops
  * and reads the notes.
  * @param {import("@playwright/test").Page} page
