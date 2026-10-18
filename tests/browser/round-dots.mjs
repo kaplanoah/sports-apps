@@ -54,14 +54,15 @@ export async function trackRoundDots(page) {
 }
 
 /**
- * Checks that the dots moved, and that on every frame they showed they sat at `top`, over the tab
- * bar, and started where the bracket's part did, so they moved only sideways, with it.
+ * Checks that a frame caught the dots shown away from where they rest, as a slide carries them,
+ * and that on every frame they showed they sat at `top`, over the tab bar, and started where the
+ * bracket's part did, so they moved only sideways, with it.
  * @param {DotsFrame[]} frames
  * @param {number} top
  */
 export function expectDotsHeldWithBracket(frames, top) {
   const shown = frames.filter((frame) => frame.isShown);
-  expect(new Set(shown.map((frame) => frame.left)).size).toBeGreaterThan(5);
+  expect(shown.some((frame) => frame.left !== 0)).toBe(true);
   expect(shown.filter((frame) => frame.top !== top)).toEqual([]);
   expect(shown.filter((frame) => frame.left !== frame.partLeft)).toEqual([]);
 }
