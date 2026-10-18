@@ -141,10 +141,29 @@ async function leaveFor(page, ms) {
 }
 
 /**
+ * Holds the next handoff's answer until the returned function lets it through.
+ * @param {import("@playwright/test").Page} page
+ */
+async function holdNextHandoff(page) {
+  /** @type {(value?: unknown) => void} */
+  let release = () => {};
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const holdAnswer = async (route) => {
+    await held;
+    await route.fallback();
+  };
+  await page.route(HANDOFF_ROUTE, holdAnswer, { times: 1 });
+  return release;
+}
+
+/**
  * Picks the light look and then the dark one before the light one's handoff answers, and checks
  * the link stays on the dark one, then that the note renews its handoff halfway through, tries
  * again soon after a renewal fails, renews as it comes back from short trips away once that's
- * due, leaves with settings, renewing no more, and renews no more once the Worker makes none.
+ * due but not while a renewal's answer is still out, leaves with settings, renewing no more, and
+ * renews no more once the Worker makes none.
  * @param {LockedApp} app
  */
 export async function checkHandoffRenewal(app) {
@@ -155,16 +174,7 @@ export async function checkHandoffRenewal(app) {
   const readAnswered = async () => (await readHandoffs(page)).answered;
   const readRead = async () => (await readHandoffs(page)).read;
 
-  /** @type {(value?: unknown) => void} */
-  let releaseFirst = () => {};
-  const firstHeld = new Promise((resolve) => {
-    releaseFirst = resolve;
-  });
-  const holdFirstAnswer = async (route) => {
-    await firstHeld;
-    await route.fallback();
-  };
-  await page.route(HANDOFF_ROUTE, holdFirstAnswer, { times: 1 });
+  const releaseFirst = await holdNextHandoff(page);
   await page.getByRole("radio", { name: looks.light }).check();
   await page.getByRole("radio", { name: looks.dark }).check();
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
@@ -190,21 +200,30 @@ export async function checkHandoffRenewal(app) {
   await expect.poll(readRead).toBe(4);
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
 
+  // A return while a renewal's answer is still out, past when it was due, asks no second time.
+  const releaseRenewal = await holdNextHandoff(page);
+  await page.clock.runFor(5 * 60 * 1000);
+  expect(await readAsked()).toBe(6);
+  await leaveFor(page, 110 * 1000);
+  expect(await readAsked()).toBe(6);
+  releaseRenewal();
+  await expect.poll(readRead).toBe(5);
+
   await page.locator("#settingsCloseBtn").click();
   await expect(page.locator("#appearanceNote")).toBeEmpty();
   await page.clock.runFor(15 * 60 * 1000);
-  expect(await readAsked()).toBe(5);
+  expect(await readAsked()).toBe(6);
 
   await openSettings(page);
   await page.getByRole("radio", { name: looks.light }).check();
-  await expect.poll(readRead).toBe(5);
+  await expect.poll(readRead).toBe(6);
   await page.route(HANDOFF_ROUTE, (route) => route.fulfill({ status: 404 }), { times: 1 });
   await page.clock.runFor(5 * 60 * 1000);
-  expect(await readAsked()).toBe(7);
-  await expect.poll(readAnswered).toBe(7);
+  expect(await readAsked()).toBe(8);
+  await expect.poll(readAnswered).toBe(8);
   await page.clock.runFor(10 * 60 * 1000);
   await leaveFor(page, 110 * 1000);
-  expect(await readAsked()).toBe(7);
+  expect(await readAsked()).toBe(8);
 }
 
 /**

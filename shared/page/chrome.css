@@ -1071,15 +1071,27 @@ body.kbd .welcome-continue:focus {
       transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
     }
   }
-  /* The round dots stay just above the tab bar, wherever the bracket ends, over the scroll edge. */
+  /* At rest, the round dots stay just above the tab bar, wherever the bracket ends, over the scroll
+     edge. */
   .round-dots {
+    --above-tab-bar: 6px;
     position: fixed;
     z-index: 20;
     left: 0;
     right: 0;
-    bottom: calc(var(--tab-bar-bottom) + var(--tab-bar-height) + 6px);
+    bottom: calc(var(--tab-bar-bottom) + var(--tab-bar-height) + var(--above-tab-bar));
     margin: 0;
     pointer-events: none;
+  }
+  /* A part that slides is where what's fixed inside it is placed from, so while the standings and
+     bracket slide, the dots are placed from the bracket's top at the tab bar's top, as round-dots.js
+     found it, and lifted by their own height and --above-tab-bar. They leave with the bracket
+     sideways at the same height, passing under the scroll edge with the rest of it. */
+  .season-parts[data-sliding] .round-dots {
+    position: absolute;
+    top: var(--tab-bar-top-in-part);
+    bottom: auto;
+    translate: 0 calc(-100% - var(--above-tab-bar));
   }
 
   /* The bottom scroll edge: content dims under the bar but stays readable. */
