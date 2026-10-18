@@ -965,6 +965,7 @@ test("a push to beta deploys the beta channel, and main still waits for its CI",
     workflow,
     /environment: \$\{\{ github\.ref_name == 'beta' && 'beta' \|\| 'production' \}\}/,
   );
+  assert.match(workflow, /No CLOUDFLARE_API_TOKEN in the \$CHANNEL environment/);
   assert.match(workflow, /if: github\.event_name == 'push' && env\.CHANNEL == 'production'\n/);
 });
 

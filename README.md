@@ -307,8 +307,8 @@ environment named `production`, limit its deployment branches to `main`, and
 add:
 
 - a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare account token with the
-  **Workers Scripts** permission at **Edit**, limited to the live Workers
-  (`mlb-app` and `wnba-app`), with no IP filtering and a long expiry;
+  **Workers Scripts** permission at **Edit**, limited to each app's live
+  Worker, `<app>-app`, with no IP filtering and a long expiry;
 - a secret `CLOUDFLARE_ACCOUNT_ID`, so it stays out of the public deploy logs;
 - a secret `CLOUDFLARE_WORKERS_SUBDOMAIN`: the account's workers.dev
   subdomain, the part before `.workers.dev`, which a token limited to its
@@ -319,8 +319,8 @@ add:
 
 The beta channel (see "Trying a change on the phone" below) deploys from an
 environment of its own, named `beta`, limited to the `beta` branch, with the
-same secrets: a token limited to the beta Workers (`mlb-app-beta` and
-`wnba-app-beta`), the account ID and subdomain, and each page's address and code with
+same secrets: a token limited to each app's beta Worker,
+`<app>-app-beta`, the account ID and subdomain, and each page's address and code with
 `_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
 change only its own channel's Workers, a branch pushed to `beta` can never
 reach the live apps.
