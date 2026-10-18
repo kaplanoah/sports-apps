@@ -1,5 +1,6 @@
 import { test, expect, expectDayAtTop } from "./harness.mjs";
 import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
+import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 import { findCell, findDay, findList, openSeasonGames } from "./season-games.mjs";
 
 // A tap on Today, or on Games while it shows, brings the Games list back to today.
@@ -40,6 +41,27 @@ test.describe("with reduced motion", () => {
     await findCell(page, "2026-09-20").click();
     await expectDayAtTop(page, "2026-09-20");
     expect(await leavePagePixelDown(page)).toBe(1);
+
+    await page.getByRole("tab", { name: "Games" }).click();
+
+    await expectDayAtTop(page, "2026-09-30");
+  });
+
+  test("a tap on Games with the page scrolled under a tall Updates box takes the page back to its top, and only the next tap brings today back", async ({
+    page,
+  }) => {
+    await openSeasonGames(page);
+    await expectDayAtTop(page, "2026-09-30");
+    await findCell(page, "2026-09-20").click();
+    await expectDayAtTop(page, "2026-09-20");
+    await showTallUpdatesBox(page, 600);
+    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+    expect(await page.evaluate(() => scrollY)).toBeGreaterThan(1);
+
+    await page.getByRole("tab", { name: "Games" }).click();
+
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+    await expectDayAtTop(page, "2026-09-20");
 
     await page.getByRole("tab", { name: "Games" }).click();
 

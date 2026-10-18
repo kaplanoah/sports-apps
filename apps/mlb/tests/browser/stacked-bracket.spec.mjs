@@ -27,6 +27,7 @@ import {
   scrollSeasonPartToEnd,
   trackSeasonFrames,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -513,11 +514,7 @@ test("on a phone where the header stays put, the bracket fills the height again 
   await holdHeaderStill(page);
   await openBracket(page);
   await expect(page.locator(".bracket-stage")).toBeVisible();
-  const updates = page.locator("#updates");
-  await updates.evaluate((box) => {
-    box.removeAttribute("hidden");
-    Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "500px" });
-  });
+  const updates = await showTallUpdatesBox(page, 500);
   await expectBracketToFillHeight(page);
   const view = page.locator("#view-bracket-standings");
   const readViewHeight = () => view.evaluate((element) => element.getBoundingClientRect().height);
@@ -527,6 +524,8 @@ test("on a phone where the header stays put, the bracket fills the height again 
 
   await expectBracketToFillHeight(page);
   expect(await readViewHeight()).toBe(viewHeight);
+  await expect(updates).toBeVisible();
+  expect((await updates.boundingBox()).height).toBe(520);
 });
 
 test("on a phone, the bracket keeps its spaces when it redraws however far its part is scrolled", async ({

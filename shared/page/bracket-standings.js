@@ -188,12 +188,9 @@ export function showSeasonPhase(isFieldSet) {
 // A tap on the tab while it shows scrolls the part shown back to its top, as a tab bar's tap does
 // a list, and once it's there, takes the tab back to where it opens: the part it's named for, and a
 // bracket on its round in progress, as Games goes back to today. A bracket out of sight moves at
-// once, before it slides in. Where the header stays put (season-header.js), the page scrolls the
-// view too, so a tap while the page is scrolled only takes the page back to its top.
-/** @param {{ isPageScrolled: boolean }} tap */
-function returnToStart({ isPageScrolled }) {
+// once, before it slides in.
+function returnToStart() {
   if (!panels) return;
-  if (isPageScrolled && !findView().hasAttribute("data-follows")) return;
   const shownPart = findPart(readShownPart());
   if (isAwayFrom(shownPart, 0)) {
     scrollWithSpring(shownPart, 0);

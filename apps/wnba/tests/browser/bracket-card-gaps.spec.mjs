@@ -4,6 +4,7 @@ import {
   readSeasonPartScroll,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 // How the bracket's first-round cards spread on a phone to reach the round dots pinned above the
 // tab bar.
@@ -94,12 +95,7 @@ test.describe("on a phone, the bracket", () => {
     await page.setViewportSize({ width: PHONE.width, height: 1230 });
     await holdHeaderStill(page);
     await openApp(page);
-    await expect(page.locator('[data-series="1-2"] .card-note')).toBeVisible();
-    const updates = page.locator("#updates");
-    await updates.evaluate((box) => {
-      box.removeAttribute("hidden");
-      Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "400px" });
-    });
+    const updates = await showTallUpdatesBox(page, 400);
     await expectReachingDots(page);
     expect((await readCardGaps(page)).between[0]).toBeGreaterThan(TIGHTEST_CARD_GAP);
     const view = page.locator("#view-bracket-standings");

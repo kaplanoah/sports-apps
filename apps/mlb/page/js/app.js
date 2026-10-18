@@ -182,7 +182,7 @@ const listSearchDays = (found, now) =>
 function wireControls() {
   startPageTabs();
   startBracketStandings();
-  setTabStart("games", () => showStartDay());
+  setTabStart("games", showStartDay);
   startDayStrip(/** @type {HTMLElement} */ (document.getElementById("seasonGames")));
   startGameSearch(/** @type {HTMLElement} */ (document.getElementById("gameSearch")), {
     readSeason: readSearchSeason,

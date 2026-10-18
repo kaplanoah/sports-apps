@@ -23,6 +23,8 @@ import {
   scrollSeasonPartToEnd,
   wheelPastSeasonPartEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
+import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
 import { findRows, sendSearch, tapSearch } from "./search-page.mjs";
 
 test.use({
@@ -153,10 +155,7 @@ test("where the header stays put, a tap on the tab with the page scrolled under 
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
-  await page.locator("#updates").evaluate((box) => {
-    box.removeAttribute("hidden");
-    Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "600px" });
-  });
+  await showTallUpdatesBox(page, 600);
   await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
   expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
 
@@ -165,6 +164,20 @@ test("where the header stays put, a tap on the tab with the page scrolled under 
   await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
   await expect(page.locator("#standings-league")).toBeVisible();
   await expect(page.locator("#bracketWrap")).toBeHidden();
+
+  await findSeasonTab(page).click();
+
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeHidden();
+});
+
+test("where the header rides, a tap on the tab with the page a pixel down from its top, as a phone can leave it, still slides back to the bracket", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-league")).toBeVisible();
+  expect(await leavePagePixelDown(page)).toBe(1);
 
   await findSeasonTab(page).click();
 
@@ -308,10 +321,7 @@ test("the pill gives up its line once what's above it grows past where the stand
   await scrollSeasonPart(page, "standings", (await readHeaderReach(page)) + 20);
   await expect(pill).toHaveClass(/\bstuck\b/);
 
-  await page.locator("#updates").evaluate((box) => {
-    box.removeAttribute("hidden");
-    Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "100px" });
-  });
+  await showTallUpdatesBox(page, 100);
 
   await expect(pill).not.toHaveClass(/\bstuck\b/);
 });
