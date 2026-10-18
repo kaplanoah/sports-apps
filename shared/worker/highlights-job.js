@@ -10,7 +10,7 @@ import { noteFailure, runWithStatus } from "./job-status.js";
 // is read again at the next run, until it's finished, and one that saved what it has with some of
 // it unanswered is tried again later, as a read that failed is, each try in a row waiting twice as
 // long, so a game that keeps failing never holds back the rest. A league that changes how it reads
-// a game's highlights raises its edition, and each final it kept is read once more the same way.
+// a game's highlights raises its version, and each final it kept is read once more the same way.
 // Each run saves how it went in `highlights/status`.
 
 const MINUTE_MS = 60 * 1000;
@@ -28,7 +28,7 @@ const STATUS_KEY = "highlights/status";
  * @typedef {object} HighlightsRead
  * @property {number | null} readAt when the game was last read whole
  * @property {number} triedAt when it was last read, whole or not
- * @property {number} [edition]
+ * @property {number} [version]
  * @property {boolean} [isUnfinished] whether the last read saved what it had with more to read
  * @property {number} [tries] how many reads in a row have failed or had misses
  */
@@ -53,7 +53,7 @@ const STATUS_KEY = "highlights/status";
  * @property {(context: JobContext, season: number) => Promise<void>} [forgetOtherSeasons] forgets
  *   what the league keeps for its reads of any season but the current one, each run
  * @property {(id: string) => string} nameKey where the store keeps a game's highlights
- * @property {number} [edition] how the league reads a game's highlights, raised when that changes
+ * @property {number} [version] how the league reads a game's highlights, raised when that changes
  */
 
 /** @param {number} season */
@@ -86,23 +86,32 @@ const chooseRetryWait = (read) => Math.min(RETRY_MS * 2 ** ((read.tries ?? 1) - 
  * @param {HighlightsRead | undefined} read
  * @param {object} options
  * @param {number} options.now
- * @param {number} options.edition
+ * @param {number} options.version
  */
-function isDue(end, read, { now, edition }) {
+function isDue(end, read, { now, version }) {
   if (!read || read.isUnfinished) return true;
   if (now - read.triedAt < chooseRetryWait(read)) return false;
-  if ((read.edition ?? 0) !== edition) return true;
+  if ((read.version ?? 0) !== version) return true;
   const next = findNextRead(end, read.readAt);
   return next !== null && now >= next;
 }
 
 /**
- * A league that never raised its edition keeps none in its reads.
+ * A league that never raised its version keeps none in its reads.
  * @param {HighlightsRead} read
- * @param {number | undefined} edition
+ * @param {number | undefined} version
  * @returns {HighlightsRead}
  */
-const stampEdition = (read, edition) => (edition ? { ...read, edition } : read);
+const stampVersion = (read, version) => (version ? { ...read, version } : read);
+
+/**
+ * A read with its version under the field's earlier name, `edition`, renamed, so the reads the
+ * store kept before the rename aren't due again.
+ * @param {HighlightsRead & { edition?: number }} read
+ * @returns {HighlightsRead}
+ */
+const renameEdition = ({ edition, ...read }) =>
+  edition === undefined ? read : { ...read, version: edition };
 
 /**
  * Reads a game's highlights and saves them when they changed. A read that fails keeps what was
@@ -116,9 +125,9 @@ const stampEdition = (read, edition) => (edition ? { ...read, edition } : read);
  */
 async function keepGame(context, league, { game, season }, read) {
   const now = context.now();
-  const tried = stampEdition(
+  const tried = stampVersion(
     { readAt: read?.readAt ?? null, triedAt: now, tries: (read?.tries ?? 0) + 1 },
-    read?.edition,
+    read?.version,
   );
   const brought = await league.readHighlights(context, game, season).catch((error) => {
     noteFailure(context.failures, `Reading game ${game.id}'s highlights`, error);
@@ -130,11 +139,11 @@ async function keepGame(context, league, { game, season }, read) {
     await context.docs.write(key, brought.highlights);
   if (brought.isFinished && brought.hasMisses) return tried;
   if (!brought.isFinished)
-    return stampEdition(
+    return stampVersion(
       { readAt: read?.readAt ?? null, triedAt: now, isUnfinished: true },
-      read?.edition,
+      read?.version,
     );
-  return stampEdition({ readAt: now, triedAt: now }, league.edition);
+  return stampVersion({ readAt: now, triedAt: now }, league.version);
 }
 
 /** @param {HighlightsLeague} league */
@@ -148,9 +157,11 @@ export function createHighlightsJob(league) {
     /** @type {Record<string, HighlightsRead>} */
     const stored = (await context.storage.get(readsKey)) ?? {};
     const reads = Object.fromEntries(
-      finals.games.filter((game) => stored[game.id]).map((game) => [game.id, stored[game.id]]),
+      finals.games
+        .filter((game) => stored[game.id])
+        .map((game) => [game.id, renameEdition(stored[game.id])]),
     );
-    const when = { now: context.now(), edition: league.edition ?? 0 };
+    const when = { now: context.now(), version: league.version ?? 0 };
     const due = finals.games
       .filter((game) => isDue(findEnd(game, league.gameLengthMs), reads[game.id], when))
       .slice(0, GAMES_PER_RUN);
