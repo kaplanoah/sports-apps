@@ -5,7 +5,7 @@ import {
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
-import { setHidden } from "../../../../tests/browser/visibility.mjs";
+import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
 const LAST_RELEASE = { version: "1.4.0", commit: "abc1234", builtAt: "2026-10-01T22:00:00Z" };
@@ -40,8 +40,7 @@ const waitForTick = (page) => page.clock.runFor(15 * 1000);
  * @param {number} minutes
  */
 async function sleepUnannounced(page, minutes) {
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.setSystemTime(now + minutes * MINUTE_MS);
+  await passTime(page, minutes * MINUTE_MS);
   await page.clock.runFor(15 * 1000);
 }
 
