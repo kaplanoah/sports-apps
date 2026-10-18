@@ -3,6 +3,7 @@ import {
   checkCaretBeforeCode,
   checkHelpOpensWelcome,
   checkMenuDots,
+  checkPickKeepsWelcome,
   checkUnsupportedNote,
   checkWelcomeRises,
   checkWelcomeSwipesDown,
@@ -31,6 +32,12 @@ test.describe("on an iPhone, in the browser", () => {
     page,
   }) => {
     await checkWelcomeSwipesDown({ page, openApp, openSettings });
+  });
+
+  test("in Safari, a theme picked on the welcome from the ? loads the page again still on the welcome, which stays closed once it closes", async ({
+    page,
+  }) => {
+    await checkPickKeepsWelcome({ page, openApp, openSettings, darkLook: "Walnut" });
   });
 
   test("before the page's code arrives, the welcome's caret closes it for good", async ({

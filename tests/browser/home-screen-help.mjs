@@ -98,7 +98,7 @@ export async function checkHelpOpensWelcome(app) {
 
 /**
  * On a phone, the welcome a first visit opens on is there from the first paint, while the one the
- * ? opens rises as settings does, and the caret slides it down.
+ * ? opens rises over settings as a sheet does, leaving them in sight, and the caret slides it down.
  * @param {App} app
  */
 export async function checkWelcomeRises({ page, openApp, openSettings }) {
@@ -112,6 +112,9 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
   await openSettings(page);
   await findHelp(page).click();
   await expect(welcome).toHaveCSS("animation-name", "sheet-rise");
+  expect(
+    await welcome.evaluate((dialog) => getComputedStyle(dialog, "::backdrop").backgroundColor),
+  ).toBe("rgba(0, 0, 0, 0)");
   const isSliding = await welcome.evaluate((dialog) => {
     /** @type {HTMLButtonElement} */ (dialog.querySelector(".welcome-close")).click();
     return dialog.hasAttribute("open") && dialog.style.transform === "translateY(100%)";
@@ -122,8 +125,46 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
 }
 
 /**
- * On a phone, a swipe down too short to close springs the welcome back to the top, and a flick
- * down closes it to settings.
+ * Notes, on each frame until the returned function stops and reads them, how far down the welcome
+ * sits while it's open, and where settings are.
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<() => Promise<{ welcomeTop: number | null, settings: string }[]>>}
+ */
+async function trackWelcomeFrames(page) {
+  await page.evaluate(() => {
+    const welcome = /** @type {HTMLDialogElement} */ (document.getElementById("homeScreenWelcome"));
+    const settings = /** @type {HTMLElement} */ (document.getElementById("settingsDialog"));
+    const frames = /** @type {object[]} */ ([]);
+    const note = () => {
+      const box = settings.getBoundingClientRect();
+      frames.push({
+        welcomeTop: welcome.open ? welcome.getBoundingClientRect().top : null,
+        settings: [box.left, box.top, box.width, box.height].join(" "),
+      });
+      if (!(/** @type {any} */ (window).isTrackingDone)) requestAnimationFrame(note);
+    };
+    Object.assign(window, { trackedFrames: frames, isTrackingDone: false });
+    requestAnimationFrame(note);
+  });
+  return () =>
+    page.evaluate(() => {
+      Object.assign(window, { isTrackingDone: true });
+      return /** @type {any} */ (window).trackedFrames;
+    });
+}
+
+/**
+ * Whether each number is at least the one before it, or, going `up`, at most.
+ * @param {number[]} tops
+ * @param {{ up?: boolean }} [options]
+ */
+const isOneWay = (tops, { up = false } = {}) =>
+  tops.every((top, index) => index === 0 || (up ? top <= tops[index - 1] : top >= tops[index - 1]));
+
+/**
+ * On a phone, a slow swipe down too short to close moves the welcome down with the finger and
+ * springs it back to the top, and a flick down slides it away to settings, the welcome never
+ * stepping back on any frame and settings never moving.
  * @param {App} app
  */
 export async function checkWelcomeSwipesDown(app) {
@@ -132,17 +173,74 @@ export async function checkWelcomeSwipesDown(app) {
   await openWelcomeFromHelp(app);
   const welcome = page.locator(WELCOME);
   await expect.poll(async () => (await welcome.boundingBox())?.y).toBe(0);
+  const settingsAtRest = await page.locator(SETTINGS).evaluate((settings) => {
+    const box = settings.getBoundingClientRect();
+    return [box.left, box.top, box.width, box.height].join(" ");
+  });
 
+  let readFrames = await trackWelcomeFrames(page);
   const lift = await drag(page, { x: 300, y: 300 }, { y: 40 }, { durationMs: 1000 });
   await expect.poll(async () => (await welcome.boundingBox())?.y).toBeGreaterThan(0);
+  const dragged = await readFrames();
+  readFrames = await trackWelcomeFrames(page);
   await lift();
   await expect.poll(async () => (await welcome.boundingBox())?.y).toBe(0);
+  const sprungBack = await readFrames();
+  expect(isOneWay(dragged.map((frame) => frame.welcomeTop))).toBe(true);
+  expect(sprungBack.at(0)?.welcomeTop).toBeGreaterThan(0);
+  expect(
+    isOneWay(
+      sprungBack.map((frame) => frame.welcomeTop),
+      { up: true },
+    ),
+  ).toBe(true);
   await expect(welcome).toBeVisible();
 
+  readFrames = await trackWelcomeFrames(page);
   const liftFlick = await drag(page, { x: 300, y: 300 }, { y: 300 });
   await liftFlick();
   await expect(welcome).toBeHidden();
+  const flicked = await readFrames();
+  const slid = flicked.filter((frame) => frame.welcomeTop !== null);
+  expect(isOneWay(slid.map((frame) => frame.welcomeTop))).toBe(true);
+  expect(slid.filter((frame) => frame.welcomeTop > 0).length).toBeGreaterThan(1);
+  expect(flicked.at(-1)?.welcomeTop).toBe(null);
+
+  const settingsPlaces = [...dragged, ...sprungBack, ...flicked].map((frame) => frame.settings);
+  expect(new Set(settingsPlaces)).toEqual(new Set([settingsAtRest]));
   await expect(page.locator(SETTINGS)).toBeVisible();
+}
+
+/**
+ * In Safari, a theme picked on the welcome the ? opened loads the page again, still on the welcome,
+ * which stays closed through the next load once it closes.
+ * @param {App & { darkLook: string }} app
+ */
+export async function checkPickKeepsWelcome(app) {
+  const { page, darkLook } = app;
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", { get: () => false });
+  });
+  await page.emulateMedia({ colorScheme: "light" });
+  await takeAwayPush(page);
+  // A load that marks the welcome closed would hide what the page keeps through its reload.
+  await app.openApp(page, { isShowingWelcome: true });
+  const welcome = page.locator(WELCOME);
+  await welcome.getByRole("button", { name: "Continue in browser" }).click();
+  await app.openSettings(page);
+  await findHelp(page).click();
+  await expect(welcome).toBeVisible();
+  await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
+  await welcome.getByRole("radio", { name: darkLook }).click();
+  await expect.poll(() => page.evaluate(() => "isBeforePick" in window)).toBe(false);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(welcome).toBeVisible();
+  await expect(welcome.getByRole("radio", { name: darkLook })).toBeChecked();
+
+  await welcome.getByRole("button", { name: "Close" }).click();
+  await expect(welcome).toBeHidden();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(welcome).toBeHidden();
 }
 
 /**

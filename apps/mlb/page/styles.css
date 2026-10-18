@@ -1512,6 +1512,7 @@ body.kbd .rank-item .grip:focus {
     scroll-snap-type: none;
   }
   .settings-body {
+    --ranking-heading-top: 20px;
     height: 100%;
     display: grid;
     grid-template-columns: 330px minmax(0, 1fr);
@@ -1540,7 +1541,7 @@ body.kbd .rank-item .grip:focus {
   }
   /* The box at the settings' top starts level with the ranking's heading. */
   .settings-main > .home-screen-tip {
-    margin-top: 20px;
+    margin-top: var(--ranking-heading-top);
   }
   .settings-ranking {
     display: contents;
@@ -1548,7 +1549,7 @@ body.kbd .rank-item .grip:focus {
   .ranking-heading {
     grid-column: 2;
     grid-row: 2;
-    padding: 20px 0 8px 24px;
+    padding: var(--ranking-heading-top) 0 8px 24px;
   }
   .rank-frame {
     grid-column: 2;
