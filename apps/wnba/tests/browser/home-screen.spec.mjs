@@ -8,7 +8,7 @@ import { listNeverShownWords } from "../../../../tests/browser/never-shown-words
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.mjs";
-import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -201,6 +201,18 @@ test.describe("on an iPhone, in the browser", () => {
       "Use this site like an app Tap Share, then Add to Home Screen. It opens full screen, without the browser's bars.",
       { useInnerText: true },
     );
+  });
+
+  test("the settings' box sets its buttons' names a step over its caption's weight", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSettings(page);
+    const caption = await readRole(page, "caption");
+    const names = page.locator("#homeScreenTip .home-screen-steps b");
+    await expect(names).toHaveText(["Share", "Add to Home Screen"]);
+    for (const name of await names.all())
+      await expect(name).toHaveCSS("font-weight", String(caption.weight + 100));
   });
 
   test("the settings' box shows the icon the Home Screen takes in the theme on screen, and each theme choice its own, from the page's stylesheet", async ({

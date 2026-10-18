@@ -1412,12 +1412,12 @@ body.kbd .rank-item .grip:focus {
   background: var(--accent);
   color: var(--accent-ink);
 }
+.home-screen-steps {
+  color: var(--credit-ink);
+}
 /* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
 .home-screen-title {
   font-weight: calc(var(--type-detail-weight) + 100);
-}
-.home-screen-steps {
-  color: var(--credit-ink);
 }
 .home-screen-steps b {
   font-weight: calc(var(--type-caption-weight) + 75);
