@@ -2,6 +2,8 @@
 // the season tab's header riding up with its part or a sheet's as its row moves, moves only as its
 // scroller does, so it lasts as long as what it moves and never counts here.
 
+import { expect } from "@playwright/test";
+
 /**
  * Each animation on the page that plays over time, by what it animates and the element it moves,
  * so a page that never comes to rest names what kept moving.
@@ -27,10 +29,11 @@ export const describeTimedAnimations = (page) =>
   );
 
 /**
- * How many animations on the page play over time.
+ * Waits until every animation on the page that plays over time has ended.
  * @param {import("@playwright/test").Page} page
  */
-export const countTimedAnimations = async (page) => (await describeTimedAnimations(page)).length;
+export const waitForTimedAnimations = (page) =>
+  expect.poll(async () => (await describeTimedAnimations(page)).length).toBe(0);
 
 /**
  * Keeps a list of each animation the page plays over time from then on, by the class of the

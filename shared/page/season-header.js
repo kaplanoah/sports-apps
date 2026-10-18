@@ -52,12 +52,14 @@ let riders = null;
  * What rides above the pill: the page's own parts in its flow above the tab's view, not what stays
  * put on the screen. Each is marked `data-rides`, which pager.css draws over the parts. They change
  * only as the page's parts come and go or the screen changes size, as a phone's tab bar floats.
+ * Each is measured unmarked, since the mark sets its own position.
  */
 function findRiders() {
   if (riders) return riders;
   const above = listAboveSeasonView();
+  for (const element of above) element.removeAttribute("data-rides");
   const found = above.filter((element) => isInFlow(element) && !holdsFixedPart(element));
-  for (const element of above) element.toggleAttribute("data-rides", found.includes(element));
+  for (const element of found) element.setAttribute("data-rides", "");
   riders = found;
   return found;
 }

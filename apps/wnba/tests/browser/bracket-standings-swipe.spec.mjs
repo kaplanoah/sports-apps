@@ -31,7 +31,7 @@ test.use({
 /**
  * Where a part sits across the screen.
  * @param {import("@playwright/test").Page} page
- * @param {"standings" | "bracket"} part
+ * @param {import("#shared/bracket-standings.js").SeasonPart} part
  */
 const readPartLeft = (page, part) =>
   findSeasonPart(page, part).evaluate((element) => Math.round(element.getBoundingClientRect().x));
@@ -39,7 +39,7 @@ const readPartLeft = (page, part) =>
 /**
  * Waits until a part rests on the screen, chosen in the pill, with the parts no longer moving.
  * @param {import("@playwright/test").Page} page
- * @param {"standings" | "bracket"} part
+ * @param {import("#shared/bracket-standings.js").SeasonPart} part
  */
 async function expectPartShown(page, part) {
   const element = findSeasonPart(page, part);
@@ -149,7 +149,7 @@ test.describe("in full motion", () => {
    * Notes where a part is across the screen on each frame, until the returned function stops and
    * reads the notes.
    * @param {import("@playwright/test").Page} page
-   * @param {"standings" | "bracket"} part
+   * @param {import("#shared/bracket-standings.js").SeasonPart} part
    */
   async function trackPart(page, part) {
     await findSeasonPart(page, part).evaluate((element) => {

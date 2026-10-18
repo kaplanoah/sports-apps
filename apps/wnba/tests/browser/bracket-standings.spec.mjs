@@ -11,7 +11,9 @@ import {
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
 import {
+  findCenter,
   findSeasonPart,
+  findTouchTargets,
   holdHeaderStill,
   readHeaderReach,
   readPillHoldTop,
@@ -313,20 +315,11 @@ test("a touch on the header lands on the part under it, so a drag there scrolls 
   await openApp(page);
   await openSeasonPart(page, "Standings");
   const header = await page.locator("header.top").boundingBox();
-  const settings = await page.locator("#settingsBtn").boundingBox();
 
-  const found = await page.evaluate(
-    ({ header: box, settings: button }) => ({
-      onHeader: document
-        .elementFromPoint(box.x + 40, box.y + box.height / 2)
-        ?.closest(".season-part")
-        ?.getAttribute("data-part"),
-      onSettings: document
-        .elementFromPoint(button.x + button.width / 2, button.y + button.height / 2)
-        ?.closest("button")?.id,
-    }),
-    { header, settings },
-  );
+  const found = await findTouchTargets(page, {
+    onHeader: { x: header.x + 40, y: header.y + header.height / 2 },
+    onSettings: findCenter(await page.locator("#settingsBtn").boundingBox()),
+  });
 
   expect(found).toEqual({ onHeader: "standings", onSettings: "settingsBtn" });
 });
@@ -338,23 +331,14 @@ test("a touch on the pill's bar beside its names lands on the part under it, whi
   await openSeasonPart(page, "Standings");
   const bar = await page.locator("#bracketStandingsPill").boundingBox();
   const names = await findSeasonPill(page).boundingBox();
-  const bracketName = await findPillNames(page).filter({ hasText: "Bracket" }).boundingBox();
+  const bracketName = findPillNames(page).filter({ hasText: "Bracket" });
 
-  const found = await page.evaluate(
-    ({ bar: barBox, names: namesBox, bracketName: nameBox }) => ({
-      besideNames: document
-        .elementFromPoint(namesBox.x + namesBox.width + 8, barBox.y + barBox.height / 2)
-        ?.closest(".season-part")
-        ?.getAttribute("data-part"),
-      onName: document
-        .elementFromPoint(nameBox.x + nameBox.width / 2, nameBox.y + nameBox.height / 2)
-        ?.closest("button")
-        ?.getAttribute("data-tab"),
-    }),
-    { bar, names, bracketName },
-  );
+  const found = await findTouchTargets(page, {
+    besideNames: { x: names.x + names.width + 8, y: bar.y + bar.height / 2 },
+    onName: findCenter(await bracketName.boundingBox()),
+  });
 
-  expect(found).toEqual({ besideNames: "standings", onName: "bracket" });
+  expect(found).toEqual({ besideNames: "standings", onName: "bracketStandingsTab-bracket" });
 });
 
 test("where the browser has no scroll-driven animations, the header stays put and the parts scroll under the pill", async ({

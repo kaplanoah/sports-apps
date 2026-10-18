@@ -94,6 +94,7 @@ test.describe("on a phone, the bracket", () => {
     await page.setViewportSize({ width: PHONE.width, height: 1230 });
     await holdHeaderStill(page);
     await openApp(page);
+    await expect(page.locator('[data-series="1-2"] .card-note')).toBeVisible();
     const updates = page.locator("#updates");
     await updates.evaluate((box) => {
       box.removeAttribute("hidden");
@@ -109,6 +110,8 @@ test.describe("on a phone, the bracket", () => {
 
     await expectReachingDots(page);
     expect(await readViewHeight()).toBe(viewHeight);
+    await expect(updates).toBeVisible();
+    expect((await updates.boundingBox()).height).toBe(420);
   });
 
   test("spreads its cards no more than 1.45 times their tightest gap on a taller screen", async ({

@@ -4,7 +4,7 @@
 
 import { expect } from "@playwright/test";
 
-/** @typedef {"standings" | "bracket"} SeasonPartName */
+/** @typedef {import("#shared/bracket-standings.js").SeasonPart} SeasonPart */
 
 /**
  * @typedef {object} SeasonPlace
@@ -23,16 +23,41 @@ import { expect } from "@playwright/test";
  */
 
 /**
- * @typedef {SeasonPlace & SeasonScrolls & { isSliding: boolean, shownPart: SeasonPartName }} SeasonFrame
+ * @typedef {SeasonPlace & SeasonScrolls & { isSliding: boolean, shownPart: SeasonPart }} SeasonFrame
  */
 
 /**
  * One of the season tab's parts.
  * @param {import("@playwright/test").Page} page
- * @param {SeasonPartName} part
+ * @param {SeasonPart} part
  */
 export const findSeasonPart = (page, part) =>
   page.locator(`#bracketStandingsParts > [data-part="${part}"]`);
+
+/**
+ * What a touch at each point lands on: the season's part under it, by name, or else the button, by
+ * its id.
+ * @param {import("@playwright/test").Page} page
+ * @param {Record<string, { x: number, y: number }>} points
+ */
+export const findTouchTargets = (page, points) =>
+  page.evaluate(
+    (spots) =>
+      Object.fromEntries(
+        Object.entries(spots).map(([name, { x, y }]) => {
+          const target = document.elementFromPoint(x, y);
+          const part = target?.closest(".season-part")?.getAttribute("data-part");
+          return [name, part ?? target?.closest("button")?.id];
+        }),
+      ),
+    points,
+  );
+
+/**
+ * The middle of a box, where a thumb taps it.
+ * @param {{ x: number, y: number, width: number, height: number }} box
+ */
+export const findCenter = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
 
 /**
  * Notes where the page, the header, the pill, and the parts are on each frame, and which part the
@@ -65,7 +90,7 @@ export async function trackSeasonFrames(page) {
             standingsScroll: Math.round(findPart("standings").scrollTop),
             bracketScroll: Math.round(findPart("bracket").scrollTop),
             isSliding: row.hasAttribute("data-sliding"),
-            shownPart: /** @type {SeasonPartName} */ (
+            shownPart: /** @type {SeasonPart} */ (
               /** @type {HTMLElement} */ (pill.querySelector("[aria-selected=true]")).dataset.tab
             ),
           });
@@ -119,7 +144,7 @@ export function expectPageHeldStill(frames) {
  * Jumps a part of the season tab to its end, and waits for the pill to end in its line, which the
  * part's scroll event draws, so nothing the scroll changes lands later.
  * @param {import("@playwright/test").Page} page
- * @param {SeasonPartName} part
+ * @param {SeasonPart} part
  */
 export async function scrollSeasonPartToEnd(page, part) {
   await findSeasonPart(page, part).evaluate((element) =>
@@ -133,7 +158,7 @@ export async function scrollSeasonPartToEnd(page, part) {
  * how far the page scrolled meanwhile, once the wheel was handled: a turn back up comes after it,
  * so the part following that one means the browser had already handled the first.
  * @param {import("@playwright/test").Page} page
- * @param {SeasonPartName} part
+ * @param {SeasonPart} part
  */
 export async function wheelPastSeasonPartEnd(page, part) {
   await page.evaluate(() => {
@@ -158,7 +183,7 @@ export async function wheelPastSeasonPartEnd(page, part) {
  * Scrolls a part of the season tab to `top` at once, and waits for the frame after its scroll
  * event, so what the page draws from the scroll has landed.
  * @param {import("@playwright/test").Page} page
- * @param {SeasonPartName} part
+ * @param {SeasonPart} part
  * @param {number} top
  */
 export const scrollSeasonPart = (page, part, top) =>
@@ -220,7 +245,7 @@ export const readHeaderReach = (page) =>
 /**
  * How far a part of the season tab is scrolled.
  * @param {import("@playwright/test").Page} page
- * @param {SeasonPartName} part
+ * @param {SeasonPart} part
  */
 export const readSeasonPartScroll = (page, part) =>
   findSeasonPart(page, part).evaluate((element) => Math.round(element.scrollTop));

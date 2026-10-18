@@ -31,7 +31,9 @@ import {
   scrollTabsIntoView,
 } from "../../../../tests/browser/season-tab.mjs";
 import {
+  findCenter,
   findSeasonPart,
+  findTouchTargets,
   holdHeaderStill,
   readPillHoldTop,
   readSeasonPartScroll,
@@ -197,27 +199,6 @@ test("on a phone, once the header is gone, the pill holds at the top and ends in
   await expect(pill).toHaveCSS("background-image", "none");
 });
 
-/**
- * What a touch at each point lands on: the season's part under it, or else the button.
- * @param {import("@playwright/test").Page} page
- * @param {Record<string, { x: number, y: number }>} points
- */
-const findTouchTargets = (page, points) =>
-  page.evaluate(
-    (spots) =>
-      Object.fromEntries(
-        Object.entries(spots).map(([name, { x, y }]) => {
-          const target = document.elementFromPoint(x, y);
-          const part = target?.closest(".season-part")?.getAttribute("data-part");
-          return [name, part ?? target?.closest("button")?.id];
-        }),
-      ),
-    points,
-  );
-
-/** @param {{ x: number, y: number, width: number, height: number }} box */
-const findCenter = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
-
 test("on a phone, a touch on the header lands on the part under it, so a drag there scrolls it, while the header's button still takes its tap", async ({
   page,
 }) => {
@@ -248,6 +229,34 @@ test("on a wide screen, where the tabs ride with the header, a touch on their tr
   });
 
   expect(found).toEqual({ onTrack: "standings", onTab: "tab-games" });
+});
+
+test("a screen that narrows to a phone's on the season tab keeps the bottom fade fixed to the screen rather than riding with the header", async ({
+  page,
+}) => {
+  await page.setViewportSize(WIDE_SCREEN);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const fade = page.locator(".edge-fade");
+
+  await page.setViewportSize(PHONE);
+
+  await expect(page.locator("nav.tabs")).not.toHaveAttribute("data-rides");
+  await expect(fade).not.toHaveAttribute("data-rides");
+  await expect(fade).toHaveCSS("position", "fixed");
+});
+
+test("a screen that widens from a phone's on the season tab has the tabs ride with the header", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("nav.tabs")).not.toHaveAttribute("data-rides");
+
+  await page.setViewportSize(WIDE_SCREEN);
+
+  await expect(page.locator("nav.tabs")).toHaveAttribute("data-rides");
 });
 
 test("on a phone where the browser has no scroll-driven animations, the header stays put and the parts scroll under the pill", async ({

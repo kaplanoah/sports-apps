@@ -163,7 +163,10 @@ export function showSeasonPart(part, { isInstant = false } = {}) {
     if (index !== panels.readShown()) panels.slideTo(index);
     return;
   }
-  findPart(part).scrollTo({ top: 0, behavior: "instant" });
+  // The top asked for wins over a place a reload put back for a part not shown since.
+  const element = findPart(part);
+  delete element.dataset.putBackTop;
+  element.scrollTo({ top: 0, behavior: "instant" });
   panels.jumpTo(index);
 }
 

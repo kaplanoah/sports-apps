@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { countTimedAnimations } from "./animations.mjs";
+import { waitForTimedAnimations } from "./animations.mjs";
 import { waitForPressesToEnd } from "./tap-states.mjs";
 
 // The parts a theme may lift a pixel or two, where its colors look off center otherwise.
@@ -61,7 +61,7 @@ export async function showTheme(page, theme) {
   await page.emulateMedia({ colorScheme: theme });
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
   // A link that eases its color on hover eases it into the new theme's too.
-  await expect.poll(() => countTimedAnimations(page)).toBe(0);
+  await waitForTimedAnimations(page);
 }
 
 /**
