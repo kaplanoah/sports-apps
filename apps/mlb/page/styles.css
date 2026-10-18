@@ -1508,9 +1508,8 @@ body.kbd .rank-item .grip:focus {
   }
 }
 /* Wide screens show everything at once: the settings on the left, the ranking filling the right.
-   The ranking's heading gets its own grid row so the list can fill the rest; the settings start
-   level with that heading, under the header's line. Only Diagnostics, past the sheet's end, need
-   a scroll. */
+   The ranking's heading gets its own grid row so the list can fill the rest. Only Diagnostics,
+   past the sheet's end, need a scroll. */
 @media (min-width: 900px) {
   .settings-panel {
     width: min(920px, calc(100% - 48px));

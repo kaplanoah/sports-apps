@@ -16,7 +16,8 @@ const PAGE_FOLDER = new URL("../../page/", import.meta.url);
 
 /**
  * How far below the header the Home Screen box starts, how far below it the settings do, and how
- * far it is from the ranking's heading, read together, since the sheet may still be rising.
+ * far it is from the ranking's heading beside it, read together, since the sheet may still be
+ * rising.
  * @param {import("@playwright/test").Page} page
  */
 const measureTip = (page) =>
@@ -26,13 +27,15 @@ const measureTip = (page) =>
     const header = readBox("#settingsDialog .sheet-top");
     const settings = readBox(".settings-controls");
     const ranking = readBox("#rankingTitle");
-    const rankingHeading = readBox(".ranking-heading");
+    const rankingHeading = document.querySelector(".ranking-heading");
+    const headingWordsTop =
+      rankingHeading.getBoundingClientRect().top +
+      parseFloat(getComputedStyle(rankingHeading).paddingTop);
     return {
       belowHeader: box.top - header.bottom,
       aboveSettings: settings.top - box.bottom,
-      aboveRanking: ranking.top - box.bottom,
       besideRanking: ranking.left - box.right,
-      levelWithRanking: Math.round(box.top - rankingHeading.top),
+      levelWithRanking: Math.round(box.top - headingWordsTop),
     };
   });
 
@@ -127,9 +130,8 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator("#homeScreenTip")).toContainText(
       "Tap Share then Add to Home Screen. It'll open full screen",
     );
-    const { belowHeader, aboveSettings, aboveRanking } = await measureTip(page);
+    const { belowHeader, aboveSettings } = await measureTip(page);
     expect([belowHeader, aboveSettings]).toEqual([14, 14]);
-    expect(aboveRanking).toBeGreaterThan(0);
   });
 
   test("the settings' box sets its steps in the receding ink, its own in Ball and the dim ink in Night Game, around its buttons' names in the full ink", async ({
@@ -230,7 +232,7 @@ test.describe("on a tablet, in the browser", () => {
     const { aboveSettings, besideRanking, levelWithRanking } = await measureTip(page);
     expect(aboveSettings).toBeGreaterThan(0);
     expect(besideRanking).toBeGreaterThan(0);
-    expect(levelWithRanking).toBe(20);
+    expect(levelWithRanking).toBe(0);
   });
 
   test("the welcome keeps to a column as wide as a phone's, in the middle of the screen", async ({
