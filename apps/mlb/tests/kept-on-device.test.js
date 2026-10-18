@@ -1,20 +1,9 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { keepRanking, keepSeenAt, readRanking, readSeenAt } from "../page/js/kept-on-device.js";
+import { dropSavedStorage, useSavedStorage } from "./saved-storage.js";
 
-/** @param {Map<string, string>} saved */
-const useSavedStorage = (saved) =>
-  Object.defineProperty(globalThis, "localStorage", {
-    value: {
-      getItem: (key) => saved.get(key) ?? null,
-      setItem: (key, value) => saved.set(key, value),
-    },
-    configurable: true,
-  });
-
-afterEach(() => {
-  delete (/** @type {any} */ (globalThis).localStorage);
-});
+afterEach(dropSavedStorage);
 
 test("a device keeps its own ranking for each season", () => {
   const saved = new Map();

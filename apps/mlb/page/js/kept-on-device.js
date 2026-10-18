@@ -1,4 +1,4 @@
-// What this device keeps for each season: its ranking, and when it last dismissed the Updates box.
+// What this device keeps for each season: its ranking, and when its Updates box counts from.
 
 import { createViewerChoice } from "#shared/device-storage.js";
 import { watchNoteDismissals } from "#shared/updates.js";
@@ -32,8 +32,9 @@ export function readRanking(year) {
 export const keepRanking = (year, order) => rankings.keep({ ...rankings.read(), [year]: order });
 
 /**
- * When this device last dismissed a season's Updates box, 0 for a season it hasn't dismissed,
- * whose updates are all new to it, or null on a device that has kept none, which is new to the app.
+ * When a season's Updates box counts from on this device, its last dismissal or its first look:
+ * 0 for a season it has kept none for, whose updates are all new to it, or null on a device that
+ * has kept none for any season, which is new to the app.
  * @param {number} year
  * @returns {number | null}
  */

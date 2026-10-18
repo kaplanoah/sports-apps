@@ -25,6 +25,7 @@ import {
 import { normalizeSpaces, stripTags } from "../../../tests/text.js";
 import { readFontFaces } from "../../../tests/css-rules.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "../../../tests/time-zone.js";
+import { dropSavedStorage, useSavedStorage } from "./saved-storage.js";
 import { TWO_UPDATES, readUpdateBox } from "./update-box.js";
 
 // The expected times below are what a viewer in Eastern time sees.
@@ -126,15 +127,8 @@ const listFreshTeams = () =>
  * @param {[string, unknown][]} kept
  */
 function useDeviceStorage(t, kept) {
-  const saved = new Map(kept.map(([key, value]) => [key, JSON.stringify(value)]));
-  Object.defineProperty(globalThis, "localStorage", {
-    value: {
-      getItem: (key) => saved.get(key) ?? null,
-      setItem: (key, value) => saved.set(key, value),
-    },
-    configurable: true,
-  });
-  t.after(() => delete (/** @type {any} */ (globalThis).localStorage));
+  useSavedStorage(new Map(kept.map(([key, value]) => [key, JSON.stringify(value)])));
+  t.after(dropSavedStorage);
 }
 
 const FIRST_TWO_CLINCHES = [
@@ -185,6 +179,7 @@ test("Updates box: after a dismissal, everything noticed since, however long ago
 });
 
 test("Updates box: a game that ends past midnight names the night it was played", () => {
+  keepSeenAt(session.activeYear, 0);
   const brewersWin = (game, ended) => ({
     at: ended,
     kind: "game",

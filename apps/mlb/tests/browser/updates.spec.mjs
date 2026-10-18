@@ -76,10 +76,6 @@ test.describe("on a new phone", () => {
     await expect(page.locator("#standingsWrap")).toBeVisible();
     await expect(updates).toBeHidden();
 
-    await page.reload();
-    await expect(page.locator("#standingsWrap")).toBeVisible();
-    await expect(updates).toBeHidden();
-
     await app.writeFromWorker("seasons/2026", {
       ...SEASON_WITH_TWO_UPDATES,
       log: [

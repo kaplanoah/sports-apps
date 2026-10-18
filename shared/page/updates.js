@@ -190,15 +190,15 @@ export const dismissNotes = (notes, now = Date.now()) =>
 // the updates' own times, never the device's clock, so an update the page learns of after the first
 // look counts even when it's timed before it, as a final is by its last play.
 /**
- * When the box's updates count from: this device's last dismissal, or, on its first look, the
- * newest update already out, or the start of time when none is.
- * @param {number | null} dismissedAt when this device last dismissed the box, or null on its
- *   first look
+ * When the box's updates count from: what this device kept, or, on its first look, the newest
+ * update already out, or the start of time when none is.
+ * @param {number | null} seenAt when the box counts from as this device kept it, from its last
+ *   dismissal or its first look, or null on its first look
  * @param {number[]} times when each update in the season the page has read happened
  * @param {(start: number) => void} keepStart
  */
-export function readOrStartSeenAt(dismissedAt, times, keepStart) {
-  if (dismissedAt !== null) return dismissedAt;
+export function readOrStartSeenAt(seenAt, times, keepStart) {
+  if (seenAt !== null) return seenAt;
   const start = times.length ? Math.max(...times) : 0;
   keepStart(start);
   return start;

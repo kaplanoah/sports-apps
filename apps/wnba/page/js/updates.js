@@ -1,5 +1,6 @@
-// The Updates box: each playoff game finished since this device last dismissed it, with where its
-// series stood after it, each opening the game's sheet, and the release notes it still shows.
+// The Updates box: each playoff game finished since this device first opened the app or last
+// dismissed the box, with where its series stood after it, each opening the game's sheet, and the
+// release notes it still shows.
 // Nobody signs in, and people share the page's address, so each device keeps its own dismissal,
 // and only phones and tablets show the box, only for the current season.
 
@@ -65,7 +66,10 @@ export function listPlayoffWins(season) {
 
 const findPanel = () => /** @type {HTMLElement} */ (document.getElementById("updates"));
 
-/** The playoff games finished since this device last dismissed the box, newest first. */
+/**
+ * The playoff games finished since this device first opened the app or last dismissed the box,
+ * newest first.
+ */
 export function listFreshUpdates() {
   if (!session.season) return [];
   const wins = listPlayoffWins(session.season);
