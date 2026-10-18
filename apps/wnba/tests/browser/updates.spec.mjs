@@ -17,6 +17,23 @@ function finishDreamAtMystics(season) {
   return season;
 }
 
+/**
+ * Valkyries at Wings, Game 2, final, as the Worker found it some time after its last play.
+ * @param {any} season
+ */
+function finishValkyriesAtWings(season) {
+  const game = season.games.find((each) => each.id === "1042600112");
+  Object.assign(game, {
+    state: "final",
+    status: "Final",
+    end: "2026-10-01T03:05:00Z",
+    finalAt: "2026-10-01T03:20:00Z",
+  });
+  Object.assign(game.away, { score: 90 });
+  Object.assign(game.home, { score: 84 });
+  return season;
+}
+
 const CHANNELS_NOTE = { at: "2026-09-30T20:55:00Z", text: "Tap a game, then <b>Channels</b>." };
 
 /**
@@ -101,6 +118,36 @@ test.describe("on a phone", () => {
     await app.changeSeason(finishDreamAtMystics);
 
     await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
+    await expect(updates.locator(".what")).toHaveText([
+      "Dream beat the Mystics 88-80 to win the First Round 2-0",
+    ]);
+  });
+
+  test("a dismissed final the Worker found after its last play stays dismissed, and the next one found shows", async ({
+    page,
+  }) => {
+    const app = await openApp(page, { isShowingUpdates: true });
+    const updates = page.locator("#updates");
+    await app.changeSeason(finishValkyriesAtWings);
+    await expect(updates.locator(".what").first()).toHaveText(
+      "Valkyries beat the Wings 90-84 to win the First Round 2-0",
+    );
+
+    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await expect(updates).toBeHidden();
+    await page.reload();
+    await expect(page.locator(".series").first()).toBeVisible();
+    await expect(updates).toBeHidden();
+
+    await app.changeSeason((season) =>
+      finishDreamAtMystics(
+        Object.assign(season, {
+          games: season.games.map((game) =>
+            game.id === "1042600132" ? { ...game, finalAt: "2026-10-01T03:30:00Z" } : game,
+          ),
+        }),
+      ),
+    );
     await expect(updates.locator(".what")).toHaveText([
       "Dream beat the Mystics 88-80 to win the First Round 2-0",
     ]);

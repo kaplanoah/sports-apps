@@ -1,8 +1,8 @@
-// The Updates box: each playoff game finished since this device first opened the app or last
-// dismissed the box, with where its series stood after it, each opening the game's sheet, and the
-// release notes it still shows.
-// Nobody signs in, and people share the page's address, so each device keeps its own dismissal,
-// and only phones and tablets show the box, only for the current season.
+// The Updates box: each playoff game the Worker found final since this device first opened the app
+// or last dismissed the box, with where its series stood after it, each opening the game's sheet,
+// and the release notes it still shows.
+// Nobody signs in, and people share the page's address, so each device keeps when its box counts
+// from, and only phones and tablets show the box, only for the current season.
 
 import { countDaysBetween } from "#shared/days.js";
 import { isTouchDevice } from "#shared/device.js";
@@ -29,8 +29,8 @@ const seenAt = createViewerChoice("updatesSeenAt", (stored) =>
   typeof stored === "number" && stored >= 0 ? stored : null,
 );
 
-// The feeds give no time a game ended but the Worker's first sight of it final, so a game found
-// final without being seen live goes by its start.
+// A game's end is ESPN's last play, or when the Worker saw it end live, and a game with no end goes
+// by its start.
 /** @param {Game} game */
 const readFinishedAt = (game) => Date.parse(game.end ?? game.start ?? "");
 
@@ -74,8 +74,8 @@ export function listPlayoffWins(season) {
 const findPanel = () => /** @type {HTMLElement} */ (document.getElementById("updates"));
 
 /**
- * The playoff games finished since this device first opened the app or last dismissed the box,
- * newest first.
+ * The playoff games the Worker found final since this device first opened the app or last
+ * dismissed the box, newest first.
  */
 export function listFreshUpdates() {
   if (!session.season) return [];
