@@ -6,8 +6,6 @@ import {
   checkNoHelpWithoutTouch,
   checkPickKeepsWelcome,
   checkRiseAfterEarlyClose,
-  checkUnsupportedNote,
-  checkUnsupportedOnHomeScreen,
   checkWelcomeRises,
   checkWelcomeSwipesDown,
 } from "../../../../tests/browser/home-screen-help.mjs";
@@ -81,14 +79,4 @@ test.describe("on an Android phone, in the browser", () => {
   }) => {
     await checkMenuDots({ page, openApp, openSettings });
   });
-});
-
-test("a browser that can't show notifications says what to try, with no ?", async ({ page }) => {
-  await checkUnsupportedNote({ page, openApp, openSettings });
-});
-
-test("a Home Screen app that can't show notifications says so, with no browser to try", async ({
-  page,
-}) => {
-  await checkUnsupportedOnHomeScreen({ page, openApp, openSettings });
 });

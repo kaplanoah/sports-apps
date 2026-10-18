@@ -3,6 +3,7 @@ import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import {
   checkHandoffRenewal,
   checkReAddHandoff,
@@ -252,6 +253,16 @@ test.describe("on a phone, settings", () => {
     expect(Math.round(tip.top - title.bottom)).toBe(32);
     expect(Math.round(controls.top - tip.bottom)).toBe(14);
     expect(Math.round(sheet.bottom - footer.bottom)).toBe(17);
+  });
+
+  test("in the Home Screen app, which has no Home Screen box, set the first setting 32px under their title", async ({
+    page,
+  }) => {
+    await openFromHomeScreen(page);
+    await openSettingsWithRelease(page);
+    await expect(page.locator("#homeScreenTip")).toBeHidden();
+    const { title, controls } = await readSettingsBoxes(page);
+    expect(Math.round(controls.top - title.bottom)).toBe(32);
   });
 });
 

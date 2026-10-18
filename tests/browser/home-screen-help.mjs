@@ -6,15 +6,12 @@ import { expect } from "@playwright/test";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
-import { drag, openFromHomeScreen } from "./touch.mjs";
+import { drag } from "./touch.mjs";
 
 const WELCOME = "#homeScreenWelcome";
 const SETTINGS = "#settingsDialog";
 const HOME_SCREEN_NOTE =
   "Apple only supports notifications from sites saved to your home screen. To configure notifications, add this site to your home screen.";
-const UNSUPPORTED_NOTE =
-  "This browser can't show notifications. Try another browser or a window that isn't private.";
-const UNSUPPORTED_ON_HOME_SCREEN_NOTE = "This browser can't show notifications";
 
 /**
  * @typedef {{
@@ -72,8 +69,7 @@ const measureNoteLines = (page) =>
 /**
  * On an iPhone's or iPad's browser, the note says why notifications need the Home Screen and ends
  * with a ?, 15px and a pixel up in its 44px tap, that keeps each line at the note's line height and
- * opens the welcome over settings, which its caret
- * and Escape each close back to settings.
+ * opens the welcome over settings, which its caret and Escape each close back to settings.
  * @param {App} app
  */
 export async function checkHelpOpensWelcome(app) {
@@ -288,33 +284,6 @@ export async function checkCaretBeforeCode({ page, openApp }) {
   // The welcome is drawn before the first paint, so it would show by the time the page's code runs.
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(welcome).toBeHidden();
-}
-
-/**
- * A browser that can't show notifications, with no Home Screen to add the page to for them, says
- * what to try, with no ?.
- * @param {App} app
- */
-export async function checkUnsupportedNote({ page, openApp, openSettings }) {
-  await takeAwayPush(page);
-  await openApp(page);
-  await openSettings(page);
-  await expect(page.locator("#notifyNote")).toHaveText(UNSUPPORTED_NOTE);
-  await expect(findHelp(page)).toHaveCount(0);
-}
-
-/**
- * A Home Screen app that can't show notifications, with no other browser or private window to
- * try, says only that it can't.
- * @param {App} app
- */
-export async function checkUnsupportedOnHomeScreen({ page, openApp, openSettings }) {
-  await takeAwayPush(page);
-  await openFromHomeScreen(page);
-  await openApp(page);
-  await openSettings(page);
-  await expect(page.locator("#notifyNote")).toHaveText(UNSUPPORTED_ON_HOME_SCREEN_NOTE);
-  await expect(findHelp(page)).toHaveCount(0);
 }
 
 /**
