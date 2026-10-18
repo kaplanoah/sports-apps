@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
-import { readDeclarations, readRule } from "./css-rules.js";
-
-const SHARED = new URL("../shared/page/", import.meta.url);
-const APPS = new URL("../apps/", import.meta.url);
+import {
+  listAppStylesheets,
+  listSharedStylesheets,
+  readDeclarations,
+  readRule,
+} from "./css-rules.js";
 
 // Each layer a phone keeps for a backdrop filter or a promised motion takes its memory, so nothing
 // filters what's behind it, and only what a finger is dragging asks for a layer ahead.
@@ -12,12 +13,7 @@ const APPS = new URL("../apps/", import.meta.url);
 const isDragged = (rule) =>
   rule.split(",").every((selector) => selector.includes("[data-dragged]"));
 
-const listStylesheets = () => [
-  ...readdirSync(SHARED)
-    .filter((name) => name.endsWith(".css"))
-    .map((name) => new URL(name, SHARED).pathname),
-  ...readdirSync(APPS).map((app) => new URL(`${app}/page/styles.css`, APPS).pathname),
-];
+const listStylesheets = () => [...listSharedStylesheets(), ...listAppStylesheets()];
 
 /**
  * @param {string} path

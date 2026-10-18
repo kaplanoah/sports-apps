@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { listApps } from "../worker/apps.mjs";
 
 const SHARED = new URL("../shared/page/", import.meta.url);
 const APPS = new URL("../apps/", import.meta.url);
@@ -11,7 +12,7 @@ export const listSharedStylesheets = () =>
 
 /** The path of each app's own stylesheet. */
 export const listAppStylesheets = () =>
-  readdirSync(APPS).map((app) => new URL(`${app}/page/styles.css`, APPS).pathname);
+  listApps().map((app) => new URL(`${app}/page/styles.css`, APPS).pathname);
 
 /** @typedef {{ selectors: string[], property: string, value: string }} Declaration */
 
