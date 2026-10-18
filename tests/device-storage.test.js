@@ -1,7 +1,13 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createViewerChoice, listViewerChoices } from "../shared/page/device-storage.js";
-import { dropSavedStorage, refuseAccess, useSavedStorage, useStorage } from "./saved-storage.js";
+import {
+  dropSavedStorage,
+  refuseAccess,
+  useFullStorage,
+  useSavedStorage,
+  useStorage,
+} from "./saved-storage.js";
 
 const otherTabs = new EventTarget();
 Object.assign(globalThis, { addEventListener: otherTabs.addEventListener.bind(otherTabs) });
@@ -96,7 +102,7 @@ test("a device whose storage refuses access keeps a choice until the page reload
 
 test("a device whose storage is full reads the choice it couldn't keep, not the older one stored", () => {
   const saved = new Map([["full", "1"]]);
-  useStorage({ getItem: (key) => saved.get(key) ?? null, setItem: refuseAccess });
+  useFullStorage(saved);
   const choice = createViewerChoice("full", readAsIs);
 
   choice.keep(2);
@@ -106,7 +112,7 @@ test("a device whose storage is full reads the choice it couldn't keep, not the 
 
 test("a choice storage couldn't keep gives way to another tab's newer one", () => {
   const saved = new Map([["fullThenSaved", "1"]]);
-  useStorage({ getItem: (key) => saved.get(key) ?? null, setItem: refuseAccess });
+  useFullStorage(saved);
   const choice = createViewerChoice("fullThenSaved", readAsIs);
   /** @type {unknown[]} */
   const reads = [];
@@ -121,7 +127,7 @@ test("a choice storage couldn't keep gives way to another tab's newer one", () =
 
 test("a choice storage couldn't keep gives way to another tab clearing storage", () => {
   const saved = new Map([["fullThenCleared", "1"]]);
-  useStorage({ getItem: (key) => saved.get(key) ?? null, setItem: refuseAccess });
+  useFullStorage(saved);
   const choice = createViewerChoice("fullThenCleared", readAsIs);
   /** @type {unknown[]} */
   const reads = [];
