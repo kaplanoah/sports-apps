@@ -158,6 +158,22 @@ test("Updates box: a new device's first look before any update lists every updat
   assert.deepEqual(listFreshTeams(), ["TB", "MIL"]);
 });
 
+test("Updates box: a new device whose first read of the season failed starts once a read succeeds", (t) => {
+  useDeviceStorage(t, []);
+  t.after(() => Object.assign(session, { problem: "" }));
+  Object.assign(session, { problem: "unreachable", state: { teams: {}, log: [] } });
+  assert.deepEqual(listFreshTeams(), []);
+
+  Object.assign(session, { problem: "", state: { teams: {}, log: FIRST_TWO_CLINCHES } });
+  assert.deepEqual(listFreshTeams(), []);
+
+  session.state = {
+    teams: {},
+    log: [clinchDivision("LAD", "NL West", "2026-09-28T01:00:00Z"), ...FIRST_TWO_CLINCHES],
+  };
+  assert.deepEqual(listFreshTeams(), ["LAD"]);
+});
+
 test("Updates box: a device that dismissed an earlier season's box lists every update of this one", (t) => {
   useDeviceStorage(t, [["updatesSeenAt", { [session.activeYear - 1]: Date.parse("2025-09-28") }]]);
   session.state = { teams: {}, log: FIRST_TWO_CLINCHES };

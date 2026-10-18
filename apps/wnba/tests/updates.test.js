@@ -29,6 +29,14 @@ const TUESDAY_WINS = [
   "Fever beat the Aces 99-89 in Game 2, tie the First Round 1-1",
 ];
 
+/** @param {any} game */
+const isLibertyGame2 = (game) =>
+  game.away.team === "MIN" && game.home.team === "NYL" && game.number === 2;
+
+/** @param {any} game */
+const isFeverGame2 = (game) =>
+  game.number === 2 && [game.away.team, game.home.team].includes("IND");
+
 test("each finished playoff game is an update, newest first, with where its series stood after it", () => {
   assert.deepEqual(readWins(SEASON), [
     "Liberty beat the Lynx 87-71 to win the First Round 2-0",
@@ -40,7 +48,7 @@ test("each finished playoff game is an update, newest first, with where its seri
   ]);
 });
 
-test("a game goes by when the Worker found it final, or by its start when it wasn't seen live", () => {
+test("a game goes by its end, ESPN's last play or when the Worker saw it end live, or by its start when it has none", () => {
   const isFeverGame1 = (game) => game.home.team === "LVA" && game.away.team === "IND";
   const games = SEASON.games.map((game) =>
     isFeverGame1(game) && game.number === 1 ? { ...game, end: "2026-10-01T03:00:00Z" } : game,
@@ -68,9 +76,7 @@ test("each update's winner and loser open their teams' sheets", () => {
 
 test("each update opens its game's sheet, named for a screen reader", () => {
   const [newest] = listPlayoffWins(SEASON);
-  const game = SEASON.games.find(
-    (each) => each.away.team === "MIN" && each.home.team === "NYL" && each.number === 2,
-  );
+  const game = SEASON.games.find(isLibertyGame2);
 
   assert.equal(
     newest.action && newest.action.text,
@@ -119,8 +125,6 @@ test("a device keeps its first look's start, so every final after it shows until
 test("a game live at a device's first look shows once it's final, though its last play came before that look", (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-02T12:00:00Z") });
   useSavedStorage(new Map());
-  const isLibertyGame2 = (game) =>
-    game.away.team === "MIN" && game.home.team === "NYL" && game.number === 2;
   const libertyLive = {
     ...SEASON,
     games: SEASON.games.map((game) =>
@@ -134,10 +138,6 @@ test("a game live at a device's first look shows once it's final, though its las
 
 test("a game live at a device's first look shows once the Worker finds it final, though it ended before a final already out", () => {
   useSavedStorage(new Map());
-  const isLibertyGame2 = (game) =>
-    game.away.team === "MIN" && game.home.team === "NYL" && game.number === 2;
-  const isFeverGame2 = (game) =>
-    game.number === 2 && [game.away.team, game.home.team].includes("IND");
   const feverFinal = { end: "2026-09-30T02:10:00Z", finalAt: "2026-09-30T02:12:00Z" };
   const withTimes = (libertyGame2) => ({
     ...SEASON,
@@ -184,8 +184,6 @@ test("a device whose storage refuses access keeps its first look's start while t
 
 test("a final names the viewer's day it started on, and says when it ended past midnight", () =>
   checkInTimeZone(EASTERN, () => {
-    const isFeverGame2 = (game) =>
-      game.number === 2 && [game.away.team, game.home.team].includes("IND");
     const feverGame2 = SEASON.games.find(isFeverGame2);
     const startDay = new Date(feverGame2.start).toDateString();
     const games = SEASON.games.map((game) =>

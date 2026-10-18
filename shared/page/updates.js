@@ -186,19 +186,21 @@ export const dismissNotes = (notes, now = Date.now()) =>
   noteClocks.keep(endNoteClocks(notes, noteClocks.read() ?? {}, now));
 
 // A viewer new to the app has nothing to catch up on, so a device's first look starts the box after
-// every update already out, and keeps that start, so nothing that comes later is skipped. It goes by
-// the updates' own times, never the device's clock, so an update the page learns of after the first
-// look counts even when it's timed before it, as a final is by its last play.
+// every update already out, and keeps that start, so nothing that comes later is skipped. A page
+// that hasn't read its season yet can't tell what's out, so it keeps nothing and lists nothing.
 /**
  * When the box's updates count from: what this device kept, or, on its first look, the newest
  * update already out, or the start of time when none is.
  * @param {number | null} seenAt when the box counts from as this device kept it, from its last
  *   dismissal or its first look, or null on its first look
- * @param {number[]} times when each update in the season the page has read happened
+ * @param {number[] | null} times when the Worker first noticed each update in the season the page
+ *   has read, a time that only moves forward, never the device's clock, or null before the page
+ *   has read its season
  * @param {(start: number) => void} keepStart
  */
 export function readOrStartSeenAt(seenAt, times, keepStart) {
   if (seenAt !== null) return seenAt;
+  if (times === null) return Infinity;
   const start = times.length ? Math.max(...times) : 0;
   keepStart(start);
   return start;

@@ -37,11 +37,14 @@ const readNoticedAt = (entry) => Date.parse(entry.at);
 
 const isCurrentSeason = () => session.activeYear === readSeasonYear();
 
+// A page that couldn't read its season shows an empty one in its place, which says nothing of
+// what's out.
+const hasReadSeason = () => !session.problem;
+
 function listUnseenEntries(entries) {
   const year = session.activeYear;
-  const seen = readOrStartSeenAt(readSeenAt(year), entries.map(readNoticedAt), (start) =>
-    keepSeenAt(year, start),
-  );
+  const times = hasReadSeason() ? entries.map(readNoticedAt) : null;
+  const seen = readOrStartSeenAt(readSeenAt(year), times, (start) => keepSeenAt(year, start));
   return entries.filter((entry) => readNoticedAt(entry) > seen);
 }
 
@@ -111,8 +114,8 @@ function describeUpdateGroup(group) {
 /** What the box lists, newest first. */
 export const listUpdates = () => listFreshUpdates().map(describeUpdateGroup);
 
-// Each device keeps its own dismissal, so the box shows only on phones and tablets, not again on
-// each computer.
+// Each device keeps when its box counts from, so the box shows only on phones and tablets, not
+// again on each computer.
 export function renderUpdates() {
   const isShown = isTouchDevice() && isCurrentSeason();
   const updates = isShown ? listUpdates() : [];

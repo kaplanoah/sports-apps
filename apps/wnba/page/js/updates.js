@@ -78,11 +78,10 @@ const findPanel = () => /** @type {HTMLElement} */ (document.getElementById("upd
  * dismissed the box, newest first.
  */
 export function listFreshUpdates() {
-  if (!session.season) return [];
   const wins = listPlayoffWins(session.season);
   const freshAfter = readOrStartSeenAt(
     seenAt.read(),
-    wins.map((win) => win.foundAt),
+    session.season ? wins.map((win) => win.foundAt) : null,
     seenAt.keep,
   );
   return wins.filter((win) => win.foundAt > freshAfter);

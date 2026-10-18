@@ -231,6 +231,12 @@ test("a device's first look starts the box after the newest update out, and keep
   assert.deepEqual(kept, [at("2026-10-01T22:30:00Z")]);
 });
 
+test("a device's first look before the page has read its season keeps no start and lists nothing", () => {
+  const keepStart = () => assert.fail("kept a start");
+
+  assert.equal(readOrStartSeenAt(null, null, keepStart), Infinity);
+});
+
 test("a device's first look before any update is out counts every update after it", () => {
   /** @type {number[]} */
   const kept = [];

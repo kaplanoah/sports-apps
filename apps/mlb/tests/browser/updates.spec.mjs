@@ -17,7 +17,7 @@ import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-test("a computer shows no Updates box, since each device keeps its own dismissal", async ({
+test("a computer shows no Updates box, since each device keeps when its box counts from", async ({
   page,
 }) => {
   await openBracket(page, {

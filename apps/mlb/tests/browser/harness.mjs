@@ -508,7 +508,8 @@ const keepFromEarlierVisit = (page, key, value) =>
 
 /**
  * A phone that has used the app before, last dismissing the Updates box the afternoon before the
- * evening's updates, and keeping its release notes' times, so each note out shows.
+ * evening's updates, and having kept none of its release notes' times yet, so each note out starts
+ * showing.
  * @param {import("@playwright/test").Page} page
  */
 export async function keepUpdatesFromEarlierVisit(page) {

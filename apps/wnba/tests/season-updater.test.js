@@ -183,6 +183,21 @@ test("a game the Worker saved before it was final keeps when it was found final,
   assert.equal(earlier.finalAt, undefined);
 });
 
+test("a game's nearest-games copy keeps its end but not when it was found final, which only the Updates box reads", async () => {
+  const docs = createDocs();
+  const withTonightNearest = (snapshot) => ({
+    ...snapshot,
+    nearestGames: snapshot.games.filter((game) => game.id === "1042600132"),
+  });
+  await saveSnapshot(docs, withTonightNearest(setTonightsState(SNAPSHOT, "live")));
+  const ending = { ...finishTonight(SNAPSHOT, [80, 70]), asOf: "2026-10-01T01:12:00Z" };
+  await saveSnapshot(docs, withTonightNearest(ending));
+  const saved = await readUpdates(docs, 2026);
+  const nearest = saved.nearestGames.find((game) => game.id === "1042600132");
+  assert.equal(nearest.end, "2026-10-01T01:12:00Z");
+  assert.equal(nearest.finalAt, undefined);
+});
+
 // The afternoon's feeds with the whole season's schedule, and tonight's first game on the
 // scoreboard as it stands: under way at the half, or over.
 function buildTonight(gameStatus, [awayScore, homeScore] = [0, 0]) {

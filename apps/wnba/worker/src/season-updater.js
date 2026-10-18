@@ -76,16 +76,40 @@ const readEnd = (game, saved, asOf) =>
 const readFinalAt = (saved, asOf) =>
   saved?.finalAt ?? (saved && saved.state !== "final" ? asOf : null);
 
-function addFinalTimes(savedGames, games, asOf) {
+/**
+ * Each final with what `readTimes` adds to it from its saved copy.
+ * @param {any[] | undefined} savedGames
+ * @param {any[]} games
+ * @param {(game: any, saved: any) => object} readTimes
+ */
+function addToFinals(savedGames, games, readTimes) {
   const savedById = new Map((savedGames ?? []).map((game) => [game.id, game]));
-  return games.map((game) => {
-    if (game.state !== "final") return game;
-    const saved = savedById.get(game.id);
-    const end = readEnd(game, saved, asOf);
-    const finalAt = readFinalAt(saved, asOf);
-    return { ...game, ...(end && { end }), ...(finalAt && { finalAt }) };
-  });
+  return games.map((game) =>
+    game.state === "final" ? { ...game, ...readTimes(game, savedById.get(game.id)) } : game,
+  );
 }
+
+/**
+ * @param {any[] | undefined} savedGames
+ * @param {any[]} games
+ * @param {string} asOf
+ */
+const addEndTimes = (savedGames, games, asOf) =>
+  addToFinals(savedGames, games, (game, saved) => {
+    const end = readEnd(game, saved, asOf);
+    return end ? { end } : {};
+  });
+
+/**
+ * @param {any[] | undefined} savedGames
+ * @param {any[]} games
+ * @param {string} asOf
+ */
+const addFinalTimes = (savedGames, games, asOf) =>
+  addToFinals(savedGames, games, (_game, saved) => {
+    const finalAt = readFinalAt(saved, asOf);
+    return finalAt ? { finalAt } : {};
+  });
 
 /**
  * A list of games as the season saves it, from the list saved before and the snapshot's.
@@ -94,8 +118,17 @@ function addFinalTimes(savedGames, games, asOf) {
  * @param {{ isStandIn: boolean, asOf: string }} update
  */
 function prepareGames(savedGames, games, { isStandIn, asOf }) {
-  return addFinalTimes(savedGames, keepFurtherGames(savedGames, games, isStandIn), asOf);
+  return addEndTimes(savedGames, keepFurtherGames(savedGames, games, isStandIn), asOf);
 }
+
+// Only the season's games keep when each was found final, for the Updates box, which reads them.
+/**
+ * @param {any[] | undefined} savedGames
+ * @param {any[]} games
+ * @param {{ isStandIn: boolean, asOf: string }} update
+ */
+const prepareSeasonGames = (savedGames, games, update) =>
+  addFinalTimes(savedGames, prepareGames(savedGames, games, update), update.asOf);
 
 // A feed that didn't answer leaves what it feeds as it was.
 export async function saveSnapshot(docs, snapshot) {
@@ -158,7 +191,7 @@ function describeSavedSeason(saved, snapshot) {
   const update = { isStandIn, asOf: snapshot.asOf };
   const saving = {
     ...snapshot,
-    games: prepareGames(doc.games, snapshot.games, update),
+    games: prepareSeasonGames(doc.games, snapshot.games, update),
     nearestGames: prepareGames(doc.nearestGames, snapshot.nearestGames, update),
   };
   const answered = {

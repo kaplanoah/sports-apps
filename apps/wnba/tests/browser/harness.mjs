@@ -230,7 +230,8 @@ async function createAfternoonStore(league = {}) {
 
 /**
  * A phone that has used the app before, last dismissing the Updates box before the afternoon's
- * latest day of finals, and keeping its release notes' times, so each note out shows.
+ * latest day of finals, and having kept none of its release notes' times yet, so each note out
+ * starts showing.
  * @param {import("@playwright/test").Page} page
  */
 const keepUpdatesFromEarlierVisit = (page) =>
