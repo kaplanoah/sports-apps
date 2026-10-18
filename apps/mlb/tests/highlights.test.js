@@ -12,6 +12,7 @@ import {
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
 import { STILLS_PER_READ } from "../worker/src/headline-stills.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // MLB's content and plays for two Division Series games of Oct 7, as it had them the next day.
@@ -261,12 +262,19 @@ test("the route reads MLB for a game the store doesn't keep, in two requests", a
   assert.equal(mlb.requests.length, 2);
 });
 
-test("the route turns away an id that isn't MLB's", async () => {
-  const server = createHighlightsServer({ fetchImpl: createMlbFetch().fetchImpl });
+test("the route turns away an id that isn't MLB's, and says when MLB doesn't answer", async () => {
+  const mlb = createMlbFetch();
+  const server = createHighlightsServer({ fetchImpl: mlb.fetchImpl });
 
   const response = await server.serveHighlights(new URL("https://app.test/highlights?id=x"));
+  await assertErrorAnswer(response, 400, "invalid_argument");
+  assert.deepEqual(mlb.requests, []);
 
-  assert.equal(response.status, 400);
+  const unknown = await server.serveHighlights(
+    new URL("https://app.test/highlights?id=1"),
+    async () => null,
+  );
+  assert.match(await assertErrorAnswer(unknown, 502, "upstream_error"), /^Couldn't read MLB: /);
 });
 
 /**

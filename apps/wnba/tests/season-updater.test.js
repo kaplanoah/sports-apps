@@ -244,15 +244,49 @@ test("the season's games stay as they were unless both the scoreboard and the sc
   assert.deepEqual(await readSchedule(docs, 2026), saved);
 });
 
+const PLAYOFF_GAME_ID = /^104/;
+
+/**
+ * The recorded schedule as the league lists the next season's before it starts: its preseason and
+ * regular season a year later, numbered for that season, none of them played, and no playoffs.
+ * @param {any} schedule
+ */
+function moveScheduleToNextSeason(schedule) {
+  const nextSeason = Number(schedule.leagueSchedule.seasonYear) + 1;
+  /** @param {any} team */
+  const clearScore = (team) => ({ ...team, score: 0 });
+  /** @param {any} game */
+  const moveGame = (game) => {
+    const start = new Date(game.gameDateTimeUTC);
+    start.setUTCFullYear(nextSeason);
+    return {
+      ...game,
+      gameId: `${game.gameId.slice(0, 3)}${nextSeason % 100}${game.gameId.slice(5)}`,
+      gameStatus: 1,
+      gameDateTimeUTC: start.toISOString().replace(".000Z", "Z"),
+      awayTeam: clearScore(game.awayTeam),
+      homeTeam: clearScore(game.homeTeam),
+    };
+  };
+  const gameDates = schedule.leagueSchedule.gameDates
+    .map((/** @type {any} */ day) => ({
+      ...day,
+      games: day.games
+        .filter((/** @type {any} */ game) => !PLAYOFF_GAME_ID.test(game.gameId))
+        .map(moveGame),
+    }))
+    .filter((/** @type {any} */ day) => day.games.length);
+  return { leagueSchedule: { seasonYear: String(nextSeason), gameDates } };
+}
+
 test("a season keeps its games once the league's schedule lists only the next season's", async () => {
   const docs = createDocs();
   await saveSnapshot(docs, WHOLE_SEASON);
   const savedSchedule = await readSchedule(docs, 2026);
   const savedSeason = await readUpdates(docs, 2026);
 
-  const nextSeasonsOnly = {
-    leagueSchedule: { ...GAMES.preview.schedule.leagueSchedule, gameDates: [] },
-  };
+  const nextSeasonsOnly = moveScheduleToNextSeason(GAMES.preview.schedule);
+  assert.equal(nextSeasonsOnly.leagueSchedule.gameDates[0].games[0].gameId, "1012700001");
   await saveSnapshot(
     docs,
     buildSnapshot({ ...RESPONSES, schedule: nextSeasonsOnly }, { season: 2026, now: NOW }),
