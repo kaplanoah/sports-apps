@@ -307,7 +307,7 @@
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pill, and `--radius-sheet` for a sheet on a wide screen,
-  with `--held-bar-fade` and `--held-bar-line` under a bar held at the top.
+  with `--held-bar-line` under a bar held at the top once something scrolls under it.
   A dot is round, a switch is round like the phone's own, an app icon keeps its own shape,
   and the floating tab bar, tinted in the app's own color, stays a capsule like the phone's own;
   any other corner typed as a number fails the root's `tests/shape-tokens.test.js`.

@@ -19,8 +19,10 @@ import {
   trackRoundDots,
 } from "../../../../tests/browser/round-dots.mjs";
 import {
-  expectScrollHeldAsPartsRest,
-  trackSeasonScroll,
+  expectPageHeldStill,
+  readSeasonPartScroll,
+  scrollSeasonPartToEnd,
+  trackSeasonFrames,
 } from "../../../../tests/browser/season-scroll.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -72,7 +74,7 @@ test.describe("in full motion", () => {
     expectDotsHeldWithBracket(await readFramesBack(), restingTop);
   });
 
-  test("on a phone, a tap that brings the bracket in from far down the standings scrolls the page only as the parts set off, never on the frame they rest and the page grows shorter, with the bracket just under the pill and the standings holding still", async ({
+  test("on a phone, a tap that brings the bracket in from far down the standings moves only the parts, sideways, on every frame, and a tap back slides the standings in where they were", async ({
     page,
   }) => {
     await page.setViewportSize(PHONE);
@@ -81,15 +83,21 @@ test.describe("in full motion", () => {
     const pill = findSeasonPill(page);
     await pill.getByRole("tab", { name: "Standings" }).click();
     await expect(parts).not.toHaveAttribute("data-sliding");
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+    await scrollSeasonPartToEnd(page, "standings");
+    const standingsScroll = await readSeasonPartScroll(page, "standings");
 
-    const readFrames = await trackSeasonScroll(page, { coming: "bracket", leaving: "standings" });
+    const readFramesOut = await trackSeasonFrames(page);
     await pill.getByRole("tab", { name: "Bracket" }).click();
     await expect(parts).not.toHaveAttribute("data-sliding");
     await expect(parts.locator('> [data-part="bracket"]')).toBeVisible();
+    expectPageHeldStill(await readFramesOut());
 
-    expectScrollHeldAsPartsRest(await readFrames());
+    const readFramesBack = await trackSeasonFrames(page);
+    await pill.getByRole("tab", { name: "Standings" }).click();
+    await expect(parts).not.toHaveAttribute("data-sliding");
+    await expect(parts.locator('> [data-part="standings"]')).toBeVisible();
+    expectPageHeldStill(await readFramesBack());
+    expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
   });
 });
 
@@ -359,17 +367,21 @@ test("narrowing the window until the whole bracket can't show switches to the st
   expect((await al.boundingBox()).y).toBeLessThan((await nl.boundingBox()).y);
 });
 
-test("on a laptop too narrow for the whole bracket, the stacked bracket fills down to the page's bottom space", async ({
+test("on a laptop too narrow for the whole bracket, the stacked bracket fills down to its part's bottom space", async ({
   page,
 }) => {
   await page.setViewportSize(LAPTOP);
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head")).toHaveCount(2);
 
-  const { stageBottom, spaceBottom } = await page.evaluate(() => ({
-    stageBottom: document.querySelector(".bracket-stage").getBoundingClientRect().bottom + scrollY,
-    spaceBottom: innerHeight - parseFloat(getComputedStyle(document.body).paddingBottom),
-  }));
+  const { stageBottom, spaceBottom } = await page.evaluate(() => {
+    const part = document.querySelector('#bracketStandingsParts > [data-part="bracket"]');
+    return {
+      stageBottom: document.querySelector(".bracket-stage").getBoundingClientRect().bottom,
+      spaceBottom:
+        part.getBoundingClientRect().bottom - parseFloat(getComputedStyle(part).paddingBottom),
+    };
+  });
   expect(spaceBottom - stageBottom).toBeGreaterThanOrEqual(0);
   expect(spaceBottom - stageBottom).toBeLessThan(8);
   expect(await readCardTops(page, "Wild Card")).toEqual(
@@ -430,7 +442,9 @@ test("on a phone a little short of room, the bracket's spaces shrink so it fits 
   expect(belowLine).toBeLessThan(11);
   expect(betweenRows).toBeLessThan(13);
   expect(
-    await page.evaluate(() => document.scrollingElement.scrollHeight - innerHeight),
+    await page
+      .locator('#bracketStandingsParts > [data-part="bracket"]')
+      .evaluate((part) => part.scrollHeight - part.clientHeight),
   ).toBeLessThanOrEqual(1);
 });
 

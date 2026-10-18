@@ -183,8 +183,7 @@
   --tabs-chosen: var(--card);
   --tabs-chosen-edge: var(--card-border);
   --tabs-chosen-ink: var(--ink);
-  --held-bar-fade: 18px;
-  --held-bar-line: transparent;
+  --held-bar-line: var(--divider);
   --pager-label: var(--ink-dim);
   --updates-head: var(--highlight);
   --sheet-part-head: var(--highlight);
@@ -2608,8 +2607,8 @@ body.kbd .player-open:focus {
   body {
     padding-bottom: var(--tab-bar-clearance);
   }
-  /* The body's bottom padding already holds the round dots, so a bracket that fills the screen
-     leaves the page nothing to scroll. */
+  /* The bracket's part's bottom padding (pager.css) already holds the round dots, so a bracket that
+     fills the screen leaves the part nothing to scroll. */
   .tree-scroll.stacked {
     padding-bottom: 0;
   }

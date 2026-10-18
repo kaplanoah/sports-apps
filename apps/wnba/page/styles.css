@@ -260,7 +260,6 @@
   --strip-edge-inset: 2px;
   --day-gap: 8px;
   --date-one-shift: 0.065em;
-  --held-bar-fade: 0px;
   --held-bar-line: var(--divider);
   --updates-head: var(--structure);
   --sheet-part-head: var(--structure);
@@ -1912,10 +1911,8 @@ th[aria-sort="ascending"] .roster-caret {
   font-weight: calc(var(--type-body-weight) + 200);
 }
 
-/* The pill sits a little closer under the header than a view's first card, as the control it is,
-   with the bar's reach up under the status bar kept inside it. */
+/* The pill sits a little closer under the header than a view's first card, as the control it is. */
 section.bracket-standings.active {
-  display: flow-root;
   margin-top: calc(10px - var(--header-gap));
 }
 .pager-bar {

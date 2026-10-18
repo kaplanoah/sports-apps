@@ -8,70 +8,64 @@
  *                          screen's edges
  *   --pager-label          the names not chosen
  *   --pager-chosen-edge    the outline inside the chosen name's fill, or transparent for none
- *   --held-bar-fade        how far the page's color fades out under the pill's bar while it's held
- *                          at the top, or 0px for a bar that ends sharply
- *   --held-bar-line        the line under the held bar, or transparent for none
+ *   --held-bar-line        the line under the pill once what it shows has scrolled under it
  * and chrome.css's --radius-control for each name's corners, and --control-height and
  * --control-room for its size. An app's styles.css sets the names' words as its other buttons'.
  */
 
-/* A season's standings and bracket under one pill, as wide as the view. Its bar reaches past the
-   body's gutter to the screen's edges, and on the left past the 1px chrome.css pads each view with
-   too. */
+/* A season's standings and bracket under one pill, as wide as the view. While they show, the page
+   holds still (chrome.css) and the pill stays put under the header, as a season's days' strip
+   does (day-strip.css). The pill's bar and the parts reach past the body's gutter to the screen's
+   edges, and on the left past the 1px chrome.css pads each view with too. */
 .bracket-standings {
   --reach-left: calc(var(--page-gutter) + 1px);
   --reach-right: var(--page-gutter);
+  flex-direction: column;
 }
-/* The parts sit side by side in one row, as slide-panels.js moves them, which reaches the screen's
-   edges, so a part slides off the screen rather than the gutter. While bracket-standings.js holds
-   the room under the pill for a part a swipe brought in, the row is never shorter than it. Each
-   part keeps its own height, so the bracket, which spreads its cards over the room it has, never
-   stretches to the standings' beside it. */
+/* The parts sit side by side in the room under the pill, as slide-panels.js moves them, so a part
+   slides off the screen rather than the gutter. Each scrolls on its own, past the tab bar at its
+   end, as a sheet's sections do (sheet.css), so it keeps its place while the other shows and a
+   slide never scrolls the page. */
 .season-parts {
-  display: grid;
-  align-items: start;
-  margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
-  overflow-x: clip;
-}
-.season-parts[data-holding-room] {
-  min-height: var(--room-under-pill, 0px);
-}
-/* Each part is where what's placed inside it is placed from, so the bracket's round dots ride with
-   it while the parts slide (chrome.css), even on a frame the bracket itself holds still. */
-.season-part {
   position: relative;
-  grid-area: 1 / 1;
-  min-width: 0;
-  padding-inline: var(--reach-left) var(--reach-right);
+  flex: 1 1 0;
+  min-height: 0;
+  margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
+  overflow: hidden;
 }
-/* At rest, the part whose name isn't chosen takes no room and doesn't show, so the pill a reload
-   puts back (show-last-drawn.js) shows the part it names before the first paint. While the parts
-   slide, both show. */
+.season-part {
+  position: absolute;
+  inset: 0;
+  padding: 0 var(--reach-right) 48px var(--reach-left);
+  overflow: hidden auto;
+  overscroll-behavior-y: contain;
+}
+@media (max-width: 779px) {
+  .season-part {
+    padding-bottom: var(--tab-bar-clearance);
+  }
+}
+/* At rest, the part whose name isn't chosen doesn't show, so the pill a reload puts back
+   (show-last-drawn.js) shows the part it names before the first paint. While the parts slide,
+   both show. */
 .bracket-standings:has([data-tab="standings"][aria-selected="false"])
   .season-parts:not([data-sliding])
   > [data-part="standings"],
 .bracket-standings:has([data-tab="bracket"][aria-selected="false"])
   .season-parts:not([data-sliding])
   > [data-part="bracket"] {
-  height: 0;
-  overflow: hidden;
   visibility: hidden;
 }
 
-/* The pill stays at the top of the screen while what it shows scrolls under it, under the Home
-   Screen bar while chrome.css shows one. Its bar reaches up under the status bar and fills with the
-   page's color once the pill is held in place, and lets touches through to whatever it overlaps. */
+/* The pill's bar ends in a line once the part shown has scrolled under it, drawn over the parts'
+   top. */
 .pager-bar {
-  --bar-top: calc(env(safe-area-inset-top) + 10px);
-  position: sticky;
+  position: relative;
   z-index: 5;
-  top: 0;
-  margin: calc(-1 * var(--bar-top)) calc(-1 * var(--reach-right)) 0 calc(-1 * var(--reach-left));
-  padding: var(--bar-top) var(--reach-right) 18px var(--reach-left);
-  pointer-events: none;
+  margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
+  padding: 0 var(--reach-right) 18px var(--reach-left);
 }
 .pager-bar.stuck {
-  background: linear-gradient(to bottom, var(--bg) calc(100% - var(--held-bar-fade)), transparent);
   box-shadow: 0 1px 0 var(--held-bar-line);
 }
 /*
@@ -84,7 +78,6 @@
 .pager-tabs {
   display: flex;
   gap: 4px;
-  pointer-events: auto;
 }
 /* A sheet hides the pills it doesn't offer, like a game's Highlights before it ends. */
 .pager-tabs[hidden],

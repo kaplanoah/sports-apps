@@ -16,33 +16,8 @@
  *   --date-one-shift       how far right of its box's middle a 1's stem sits in the dates' font
  */
 
-/* The page and the view fill the screen, and the list takes what's left under the bar. A phone on
-   the Home Screen lays the page out short of the screen by the top safe area unless the page is
-   taller than it (chrome.css), so there the page stays that much taller. Safari doesn't lay the
-   page out again when a tab changes only the root's height, so the root keeps it on every tab,
-   where what's taller than it still scrolls the page. */
-:root {
-  height: 100%;
-}
-:root:has(.view.active > .day-view) body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding-bottom: 0;
-}
-@media (max-width: 779px) {
-  :root {
-    height: calc(100% + env(safe-area-inset-top) + 1px);
-  }
-}
-/* The view and its list grow from nothing into the room left, rather than shrink from the whole
-   season's height, which rounds to a slightly different height as the list's days draw and would
-   resize the list for no change on the screen. */
-.view.active:has(> .day-view) {
-  display: flex;
-  flex: 1 1 0;
-  min-height: 0;
-}
+/* The view fills the room under the header (chrome.css), and the list takes what's left under the
+   bar, growing from nothing into it, as the view does. */
 .day-view {
   --reach-left: calc(var(--page-gutter) + 1px);
   --reach-right: var(--page-gutter);

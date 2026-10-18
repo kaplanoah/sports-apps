@@ -187,6 +187,34 @@ section.view {
 section.view.active {
   display: block;
 }
+/* A view that scrolls in itself, like a season's days (day-strip.css) or its standings and bracket
+   (pager.css), holds the page still: the page and the view fill the screen, and the view takes
+   what's left under the header. A phone on the Home Screen lays the page out short of the screen
+   by the top safe area unless the page is taller than it, so there the page stays that much
+   taller. Safari doesn't lay the page out again when a tab changes only the root's height, so the
+   root keeps it on every tab, where what's taller than it still scrolls the page. */
+:root {
+  height: 100%;
+}
+:root:has(.view.active > :is(.day-view, .season-parts)) body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-bottom: 0;
+}
+@media (max-width: 779px) {
+  :root {
+    height: calc(100% + env(safe-area-inset-top) + 1px);
+  }
+}
+/* The view grows from nothing into the room left, rather than shrink from all it holds, which
+   rounds to a slightly different height as it draws and would resize it for no change on the
+   screen. */
+section.view.active:has(> :is(.day-view, .season-parts)) {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+}
 
 .load-note {
   margin: 8px 0 18px;
@@ -1084,9 +1112,10 @@ body.kbd .welcome-continue:focus {
     pointer-events: none;
   }
   /* A part that slides is where what's fixed inside it is placed from, so while the standings and
-     bracket slide, the dots are placed from the bracket's top at the tab bar's top, as round-dots.js
-     found it, and lifted by their own height and --above-tab-bar. They leave with the bracket
-     sideways at the same height, passing under the scroll edge with the rest of it. */
+     bracket slide, the dots are placed from the top of what the bracket's part scrolls at the tab
+     bar's top, as round-dots.js found it, and lifted by their own height and --above-tab-bar. They
+     leave with the bracket sideways at the same height, passing under the scroll edge with the rest
+     of it. */
   .season-parts[data-sliding] .round-dots {
     position: absolute;
     top: var(--tab-bar-top-in-part);

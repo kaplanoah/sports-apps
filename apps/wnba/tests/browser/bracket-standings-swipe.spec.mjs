@@ -8,11 +8,10 @@ import {
   trackRoundDots,
 } from "../../../../tests/browser/round-dots.mjs";
 import {
-  expectNoScrollAsHeightChanges,
-  expectScrollHeldAsPartsRest,
-  hideResizesFromPage,
-  isSeasonPillHeld,
-  trackSeasonScroll,
+  expectPageHeldStill,
+  readSeasonPartScroll,
+  scrollSeasonPartToEnd,
+  trackSeasonFrames,
 } from "../../../../tests/browser/season-scroll.mjs";
 
 const PHONE = { width: 390, height: 844 };
@@ -123,34 +122,24 @@ test("a swipe right on the bracket, before its first part, leaves it where it is
   await expectPartShown(page, "bracket");
 });
 
-test("a swipe that brings the bracket in from far down the standings shows it just under the pill, which stays held, and the page lets go of the room it held back at its top", async ({
+test("a swipe that brings the bracket in from far down the standings shows it where it was, under a pill without its line, and leaves the standings where they were", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+  await scrollSeasonPartToEnd(page, "standings");
+  const standingsScroll = await readSeasonPartScroll(page, "standings");
   const pill = page.locator("#bracketStandingsPill");
-  await expect(pill).toHaveClass(/stuck/);
 
   await (
     await drag(page, { x: 60, y: 400 }, { x: 250 })
   )();
 
   await expectPartShown(page, "bracket");
-  await expect(pill).toHaveClass(/stuck/);
-  const { partsTop, pillBottom, pageWidth } = await page.evaluate(() => ({
-    partsTop: document.getElementById("bracketStandingsParts").getBoundingClientRect().top,
-    pillBottom: document.getElementById("bracketStandingsPill").getBoundingClientRect().bottom,
-    pageWidth: document.documentElement.scrollWidth,
-  }));
-  expect(Math.abs(partsTop - pillBottom)).toBeLessThanOrEqual(1);
-  expect(pageWidth).toBe(PHONE.width);
-  await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-holding-room");
-
-  await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
-
-  await expect(page.locator("#bracketStandingsParts")).not.toHaveAttribute("data-holding-room");
-  await expect(pill).not.toHaveClass(/stuck/);
+  await expect(pill).not.toHaveClass(/\bstuck\b/);
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(0);
+  expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(PHONE.width);
 });
 
 test.describe("in full motion", () => {
@@ -361,8 +350,7 @@ test.describe("in full motion", () => {
     const pill = findSeasonPill(page);
     await pill.getByRole("tab", { name: "Standings" }).click();
     await expectPartShown(page, "standings");
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+    await scrollSeasonPartToEnd(page, "standings");
 
     const readFrames = await trackRoundDots(page);
     await pill.getByRole("tab", { name: "Bracket" }).click();
@@ -371,122 +359,76 @@ test.describe("in full motion", () => {
     expectDotsHeldWithBracket(await readFrames(), restingTop);
   });
 
-  test("a tap that brings the bracket in from far down the standings scrolls the page only as the parts set off, never on the frame they rest and the page grows shorter, with the bracket just under the pill and the standings holding still", async ({
-    page,
-  }) => {
-    await openApp(page);
-    const pill = findSeasonPill(page);
-    await pill.getByRole("tab", { name: "Standings" }).click();
-    await expectPartShown(page, "standings");
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
-
-    const readFrames = await trackSeasonScroll(page, { coming: "bracket", leaving: "standings" });
-    await pill.getByRole("tab", { name: "Bracket" }).click();
-    await expectPartShown(page, "bracket");
-
-    expectScrollHeldAsPartsRest(await readFrames());
-  });
-
-  test("a swipe that brings the bracket in from far down the standings scrolls the page only as the parts set off, never on the frame they rest and the page grows shorter", async ({
+  test("a tap that brings the bracket in from far down the standings moves only the parts, sideways, on every frame, and a tap back slides the standings in where they were", async ({
     page,
   }) => {
     await openApp(page);
     await openSeasonPart(page, "Standings");
     await expectPartShown(page, "standings");
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+    await scrollSeasonPartToEnd(page, "standings");
+    const standingsScroll = await readSeasonPartScroll(page, "standings");
+    const pill = findSeasonPill(page);
 
-    const readFrames = await trackSeasonScroll(page, { coming: "bracket", leaving: "standings" });
+    const readFramesOut = await trackSeasonFrames(page);
+    await pill.getByRole("tab", { name: "Bracket" }).click();
+    await expectPartShown(page, "bracket");
+    expectPageHeldStill(await readFramesOut());
+
+    const readFramesBack = await trackSeasonFrames(page);
+    await pill.getByRole("tab", { name: "Standings" }).click();
+    await expectPartShown(page, "standings");
+    expectPageHeldStill(await readFramesBack());
+    expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
+  });
+
+  test("a swipe that brings the bracket in from far down the standings moves only the parts, sideways, on every frame", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await expectPartShown(page, "standings");
+    await scrollSeasonPartToEnd(page, "standings");
+
+    const readFrames = await trackSeasonFrames(page);
     const release = await drag(page, { x: 60, y: 400 }, { x: 250 }, { durationMs: 1000 });
     await release();
     await expectPartShown(page, "bracket");
 
-    expectScrollHeldAsPartsRest(await readFrames());
+    expectPageHeldStill(await readFrames());
   });
 
-  test("a short swipe far down the standings springs back to them where they were, with the page scrolled as far as before", async ({
+  test("a short swipe far down the standings springs back to them where they were, moving only the parts, sideways, on every frame", async ({
     page,
   }) => {
     await openApp(page);
     await openSeasonPart(page, "Standings");
     await expectPartShown(page, "standings");
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
-    const readPlace = async () => ({
-      scroll: await page.evaluate(() => Math.round(scrollY)),
-      top: await findPart(page, "standings").evaluate((part) =>
-        Math.round(part.getBoundingClientRect().top),
-      ),
-    });
-    const before = await readPlace();
+    await scrollSeasonPartToEnd(page, "standings");
+    const standingsScroll = await readSeasonPartScroll(page, "standings");
 
+    const readFrames = await trackSeasonFrames(page);
     const release = await drag(page, { x: 60, y: 400 }, { x: 46 }, { durationMs: 1000 });
-    expect(await page.evaluate(() => Math.round(scrollY))).toBeLessThan(before.scroll);
     await release();
-
     await expectPartShown(page, "standings");
-    expect(await readPlace()).toEqual(before);
+
+    expectPageHeldStill(await readFrames());
+    expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
   });
 
-  /**
-   * Opens the bracket on a phone small enough for the page to scroll down it, at its last round,
-   * and scrolls the page to the bracket's end.
-   * @param {import("@playwright/test").Page} page
-   */
-  async function openFarDownBracketOnSmallPhone(page) {
+  test("on a small phone, a swipe that brings the standings in from far down the bracket moves only the parts, sideways, on every frame", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 320, height: 568 });
     await openApp(page);
     await expectPartShown(page, "bracket");
     await scrollBracketToEnd(page);
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
-  }
+    await scrollSeasonPartToEnd(page, "bracket");
 
-  test("on a small phone, a swipe that brings the standings in from far down the bracket scrolls the page only as the parts rest, never as the page grows when they set off", async ({
-    page,
-  }) => {
-    await openFarDownBracketOnSmallPhone(page);
-
-    const readFrames = await trackSeasonScroll(page, { coming: "standings", leaving: "bracket" });
+    const readFrames = await trackSeasonFrames(page);
     const release = await drag(page, { x: 300, y: 400 }, { x: -250 }, { durationMs: 1000 });
     await release();
     await expectPartShown(page, "standings");
 
-    expectScrollHeldAsPartsRest(await readFrames());
-  });
-
-  test("on a small phone, a short swipe far down the bracket springs back to it where it was, never scrolling the page as its height changes", async ({
-    page,
-  }) => {
-    await openFarDownBracketOnSmallPhone(page);
-    const before = await page.evaluate(() => Math.round(scrollY));
-
-    const readFrames = await trackSeasonScroll(page, { coming: "standings", leaving: "bracket" });
-    const release = await drag(page, { x: 300, y: 400 }, { x: -46 }, { durationMs: 1000 });
-    await release();
-    await expectPartShown(page, "bracket");
-
-    expectNoScrollAsHeightChanges(await readFrames());
-    expect(await page.evaluate(() => Math.round(scrollY))).toBe(before);
-  });
-
-  test("a swipe that brings the bracket in from far down the standings leaves the pill held at the top on a screen that grew taller without a resize, as a Home Screen app does as it opens", async ({
-    page,
-  }) => {
-    await hideResizesFromPage(page);
-    await page.setViewportSize({ width: PHONE.width, height: PHONE.height - 61 });
-    await openApp(page);
-    await openSeasonPart(page, "Standings");
-    await expectPartShown(page, "standings");
-    await page.setViewportSize(PHONE);
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
-
-    const release = await drag(page, { x: 60, y: 400 }, { x: 250 }, { durationMs: 1000 });
-    await release();
-
-    await expectPartShown(page, "bracket");
-    expect(await isSeasonPillHeld(page)).toBe(true);
+    expectPageHeldStill(await readFrames());
   });
 });

@@ -1,116 +1,114 @@
-// Where the page's scroll and the season tab's parts are on each frame, as a slide from far down
-// one part brings the other in at its top.
+// The season tab's parts, each scrolling on its own under the pill: where they, the page, and the
+// pill are on each frame as the parts slide, how to scroll a part and read how far it is, and the
+// color of the line under the pill.
 
 import { expect } from "@playwright/test";
 
 /**
- * @typedef {object} ScrollFrame
- * @property {number} scroll how far the page is scrolled
- * @property {number} height how tall the page is
- * @property {number} comingTop where the part coming in starts down the screen
- * @property {number} leavingTop where the part leaving starts down the screen
- * @property {number} pillBottom where the pill ends down the screen
- * @property {boolean} isPillHeld whether the pill is held at the top of the screen
- * @property {boolean} isPillFilled whether the pill is filled with the page's color
- * @property {boolean} isSliding whether the parts are moving
+ * @typedef {object} SeasonPlace
+ * @property {number} pageScroll how far the page is scrolled
+ * @property {number} pageHeight how tall the page is
+ * @property {number} pillTop where the pill starts down the screen
+ * @property {number} standingsTop where the standings start down the screen
+ * @property {number} bracketTop where the bracket starts down the screen
+ * @property {number} standingsScroll how far the standings are scrolled
+ * @property {number} bracketScroll how far the bracket is scrolled
  */
 
+/** @typedef {SeasonPlace & { isSliding: boolean }} SeasonFrame */
+
 /**
- * Notes the page's scroll and height, and where the parts sit down the screen, on each frame,
- * until the returned function stops and reads the notes. It returns once it has noted a frame, so
- * the frames start before whatever the test does next.
+ * Notes where the page, the pill, and the parts are on each frame, until the returned function
+ * stops and reads the notes. It returns once it has noted a frame, so the frames start before
+ * whatever the test does next.
  * @param {import("@playwright/test").Page} page
- * @param {{ coming: "standings" | "bracket", leaving: "standings" | "bracket" }} parts
- * @returns {Promise<() => Promise<ScrollFrame[]>>}
+ * @returns {Promise<() => Promise<SeasonFrame[]>>}
  */
-export async function trackSeasonScroll(page, { coming, leaving }) {
+export async function trackSeasonFrames(page) {
   await page.evaluate(
-    ([comingKey, leavingKey]) =>
+    () =>
       new Promise((resolve) => {
         const row = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsParts"));
         const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
         /** @param {string} key */
         const findPart = (key) =>
           /** @type {HTMLElement} */ (row.querySelector(`:scope > [data-part="${key}"]`));
-        const noted = /** @type {ScrollFrame[]} */ ([]);
+        /** @param {Element} element */
+        const readTop = (element) => Math.round(element.getBoundingClientRect().top);
+        const noted = /** @type {SeasonFrame[]} */ ([]);
         const note = () => {
-          const pillBox = pill.getBoundingClientRect();
           noted.push({
-            scroll: Math.round(scrollY),
-            height: document.documentElement.scrollHeight,
-            comingTop: Math.round(findPart(comingKey).getBoundingClientRect().top),
-            leavingTop: Math.round(findPart(leavingKey).getBoundingClientRect().top),
-            pillBottom: Math.round(pillBox.bottom),
-            isPillHeld: pillBox.top === parseFloat(getComputedStyle(pill).top),
-            isPillFilled: pill.classList.contains("stuck"),
+            pageScroll: Math.round(scrollY),
+            pageHeight: document.documentElement.scrollHeight,
+            pillTop: readTop(pill),
+            standingsTop: readTop(findPart("standings")),
+            bracketTop: readTop(findPart("bracket")),
+            standingsScroll: Math.round(findPart("standings").scrollTop),
+            bracketScroll: Math.round(findPart("bracket").scrollTop),
             isSliding: row.hasAttribute("data-sliding"),
           });
           resolve(undefined);
-          if (!(/** @type {any} */ (window).isTrackingScrollDone)) requestAnimationFrame(note);
+          if (!(/** @type {any} */ (window).isTrackingSeasonDone)) requestAnimationFrame(note);
         };
         requestAnimationFrame(note);
-        Object.assign(window, { scrollFrames: noted, isTrackingScrollDone: false });
+        Object.assign(window, { seasonFrames: noted, isTrackingSeasonDone: false });
       }),
-    [coming, leaving],
   );
   return () =>
     page.evaluate(() => {
-      Object.assign(window, { isTrackingScrollDone: true });
-      return /** @type {ScrollFrame[]} */ (/** @type {any} */ (window).scrollFrames);
+      Object.assign(window, { isTrackingSeasonDone: true });
+      return /** @type {SeasonFrame[]} */ (/** @type {any} */ (window).seasonFrames);
     });
 }
 
+/** @param {SeasonFrame} frame */
+const readPlace = ({ isSliding: _isSliding, ...place }) => place;
+
 /**
- * Checks that the frames caught the slide from a frame at rest, and that the page never scrolled
- * on a frame its height changed. Returns where the slide starts in the frames.
- * @param {ScrollFrame[]} frames
+ * Checks that the frames caught the parts sliding from a frame at rest, and that on every frame the
+ * page held still: it never scrolled or changed height, the pill and both parts stayed at their
+ * height on the screen, and each part stayed scrolled as far as it was.
+ * @param {SeasonFrame[]} frames
  */
-export function expectNoScrollAsHeightChanges(frames) {
-  const start = frames.findIndex((frame) => frame.isSliding);
-  expect(start).toBeGreaterThan(0);
-  const scrolledAsHeightChanged = frames.filter(
-    (frame, index) =>
-      index > 0 &&
-      frame.scroll !== frames[index - 1].scroll &&
-      frame.height !== frames[index - 1].height,
-  );
-  expect(scrolledAsHeightChanged).toEqual([]);
-  return start;
+export function expectPageHeldStill(frames) {
+  expect(frames.findIndex((frame) => frame.isSliding)).toBeGreaterThan(0);
+  const atRest = readPlace(frames[0]);
+  expect(frames.map(readPlace)).toEqual(frames.map(() => atRest));
 }
 
 /**
- * Checks that the page never scrolled on a frame its height changed, and that from the first frame
- * of the slide the pill stayed held at the top of the screen, filled while the parts moved, with
- * the part coming in just under it, and the part leaving held still while it moved.
- * @param {ScrollFrame[]} frames
+ * Scrolls a part of the season tab to its end, as a finger does, and waits for the pill to end in
+ * its line, which the part's scroll event draws, so nothing the scroll changes lands later.
+ * @param {import("@playwright/test").Page} page
+ * @param {"standings" | "bracket"} part
  */
-export function expectScrollHeldAsPartsRest(frames) {
-  const start = expectNoScrollAsHeightChanges(frames);
-  const fromStart = frames.slice(start);
-  expect(fromStart.filter((frame) => !frame.isPillHeld)).toEqual([]);
-  expect(fromStart.filter((frame) => Math.abs(frame.comingTop - frame.pillBottom) > 1)).toEqual([]);
-  const sliding = fromStart.filter((frame) => frame.isSliding);
-  expect(sliding.filter((frame) => !frame.isPillFilled)).toEqual([]);
-  expect(sliding.filter((frame) => frame.leavingTop !== frames[start - 1].leavingTop)).toEqual([]);
+export async function scrollSeasonPartToEnd(page, part) {
+  await page
+    .locator(`#bracketStandingsParts > [data-part="${part}"]`)
+    .evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: "instant" }));
+  await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
 }
 
 /**
- * Keeps the page from hearing that the screen resized, as a Home Screen app that grows as it opens
- * never tells it. Call it before the page loads.
+ * The app's line color, --divider, as the browser draws it.
  * @param {import("@playwright/test").Page} page
  */
-export const hideResizesFromPage = (page) =>
-  page.addInitScript(() =>
-    addEventListener("resize", (event) => event.stopImmediatePropagation(), { capture: true }),
-  );
+export const readDividerColor = (page) =>
+  page.evaluate(() => {
+    const probe = document.createElement("i");
+    probe.style.color = "var(--divider)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
 
 /**
- * Whether the pill over the season tab's parts is held at the top of the screen, as a frame
- * `trackSeasonScroll` notes says.
+ * How far a part of the season tab is scrolled.
  * @param {import("@playwright/test").Page} page
+ * @param {"standings" | "bracket"} part
  */
-export async function isSeasonPillHeld(page) {
-  const readFrames = await trackSeasonScroll(page, { coming: "bracket", leaving: "standings" });
-  const frames = await readFrames();
-  return /** @type {ScrollFrame} */ (frames.at(-1)).isPillHeld;
-}
+export const readSeasonPartScroll = (page, part) =>
+  page
+    .locator(`#bracketStandingsParts > [data-part="${part}"]`)
+    .evaluate((element) => Math.round(element.scrollTop));

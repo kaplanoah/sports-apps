@@ -29,6 +29,11 @@ import {
   findSeasonTab,
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
+import {
+  readDividerColor,
+  readSeasonPartScroll,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -98,27 +103,29 @@ test("on a phone, even a page shorter than the screen can scroll", async ({ page
   expect(scrollHeight).toBeGreaterThan(clientHeight);
 });
 
-test("on a phone, tapping the tab that's showing scrolls back to the top, and then takes it back to the part it's named for", async ({
+test("on a phone, tapping the tab that's showing scrolls its part back to the top, and then takes it back to the part it's named for", async ({
   page,
 }) => {
-  await page.setViewportSize(PHONE);
+  // A screen short enough for the bracket to scroll.
+  await page.setViewportSize({ width: PHONE.width, height: 500 });
   await openApp(page);
   await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
   await openSeasonPart(page, "Bracket");
   await expect(page.locator("#bracketWrap")).toBeVisible();
+  await page.mouse.move(PHONE.width / 2, 300);
   await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBeGreaterThan(0);
 
   await findSeasonTab(page).click();
 
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBe(0);
   await expect(page.locator("#bracketWrap")).toBeVisible();
 
   await findSeasonTab(page).click();
 
   await expect(page.locator("#standingsWrap")).toBeVisible();
   await expect(page.locator("#bracketWrap")).toBeHidden();
-  expect(await page.evaluate(() => scrollY)).toBe(0);
+  expect(await readSeasonPartScroll(page, "standings")).toBe(0);
 });
 
 test("on a phone, each tab comes back where it was left, and a tab not shown yet opens at its top", async ({
@@ -128,19 +135,41 @@ test("on a phone, each tab comes back where it was left, and a tab not shown yet
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
-  const left = await page.evaluate(() => {
-    scrollTo({ top: 400, behavior: "instant" });
-    return scrollY;
-  });
-  expect(left).toBe(400);
+  await scrollSeasonPartToEnd(page, "standings");
+  const left = await readSeasonPartScroll(page, "standings");
+  expect(left).toBeGreaterThan(0);
 
   await page.getByRole("tab", { name: "News" }).click();
   expect(await page.evaluate(() => scrollY)).toBe(0);
   await page.getByRole("tab", { name: "Games" }).click();
   await findSeasonTab(page).click();
 
-  expect(await page.evaluate(() => scrollY)).toBe(left);
   await expect(page.locator("#standingsWrap")).toBeVisible();
+  expect(await readSeasonPartScroll(page, "standings")).toBe(left);
+});
+
+test("on a phone, the header and the pill hold still while the standings scroll under the pill, which ends in a line once they're under it", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  const pill = page.locator("#bracketStandingsPill");
+  const readTops = () =>
+    page.evaluate(() => ({
+      header: Math.round(document.querySelector("header").getBoundingClientRect().top),
+      pill: Math.round(document.getElementById("bracketStandingsPill").getBoundingClientRect().top),
+      page: Math.round(scrollY),
+    }));
+  const before = await readTops();
+  await expect(pill).toHaveCSS("box-shadow", "none");
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  expect(await readTops()).toEqual(before);
+  await expect(pill).toHaveCSS("box-shadow", `${await readDividerColor(page)} 0px 1px 0px 0px`);
+  await expect(pill).toHaveCSS("background-image", "none");
 });
 
 test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing animates", async ({
@@ -175,16 +204,18 @@ test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing a
   expect(pillBox.height).toBeCloseTo(tabBox.height, 0);
 });
 
-test("clicking the tab that's showing scrolls back to the top", async ({ page }) => {
+test("clicking the tab that's showing scrolls its part back to the top", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 500 });
   await openApp(page);
   await expect(page.locator("#bracketWrap")).toContainText("Dodgers");
+  await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
+  await page.mouse.move(640, 400);
   await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBeGreaterThan(0);
 
   await findSeasonTab(page).dispatchEvent("click");
 
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(0);
 });
 
 test("the page reopens on the tab it was last on, showing the part of it last chosen", async ({

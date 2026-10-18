@@ -3,6 +3,7 @@ import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
 import { holdRoundDots } from "./round-dots.js";
 import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
+import { scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
@@ -10,14 +11,9 @@ import { readSelectedTab, wireTabList } from "./tabs.js";
 // shown part with the other beside it, though a swipe on the bracket scrolls it until it reaches
 // its end, as a team's Roster does on its sheet. Until the playoff field is set the tab is named
 // Standings and opens on them; from then on, through the offseason, it's named Bracket and opens
-// on the bracket. The one it opens on comes first in the pill. Both parts share the page's scroll,
-// so the one not shown holds itself down by as far as the page has scrolled the shown one up under
-// the pill, and a swipe brings it in from its top. The page scrolls only on a frame its height
-// holds, since an iPhone that scrolls the page in the same frame as it shrinks flashes everything
-// that scrolls: from far down a part taller than the other, the scroll goes to the part coming in
-// as the parts set off, and the part leaving holds itself up instead, so the scroll holds still as
-// they rest and the part leaving gives up its height; from far down a shorter part, the scroll
-// stays with it until the parts rest, as the page grows when they set off.
+// on the bracket. The one it opens on comes first in the pill. While the tab shows, the page holds
+// still and each part scrolls on its own under the pill (pager.css), as a sheet's sections do, so
+// each keeps its place while the other shows and a slide never scrolls the page.
 
 /** @typedef {"standings" | "bracket"} SeasonPart */
 
@@ -48,114 +44,25 @@ const readShownPart = () => readSelectedTab(findPillTabs());
 
 /** @type {ReturnType<typeof createSlidePanels> | null} */
 let panels = null;
-// The part the page's scroll belongs to, which a slide from far down the taller part hands to the
-// part coming in as it sets off, and any other slide as it rests.
-let scrollPart = "";
-// The part that gave up the page's scroll as the parts set off, held up by as far as the page had
-// scrolled it under the pill, until they rest.
-let leavingPart = "";
-let heldUp = 0;
 
-// How far down the screen the pill holds, which is under anything else held to the top.
-const readPillTop = () => parseFloat(getComputedStyle(findPill()).top) || 0;
-
-// The page's scroll position that puts the top of the parts just under the pill.
-const measurePartsTopScroll = () =>
-  findParts().getBoundingClientRect().top + scrollY - readPillTop() - findPill().offsetHeight;
-
-// The bracket's round dots stay over the tab bar while the parts slide (round-dots.js).
+// The bracket's round dots stay over the tab bar while the parts slide (round-dots.js), even when
+// the screen resizes as they do.
 const holdBracketDots = () => holdRoundDots(findPart("bracket"));
-
-// The pill fills with the page's color once the parts scroll under it, or while a part leaving
-// holds itself up under it. The part not shown moves down by as much as the page has scrolled the
-// shown one up under it, but while the parts slide, the part leaving holds itself up instead, by as
-// far as the page had scrolled it under the pill. Back at the page's top, the parts let go of the
-// room they held, which moves nothing there. Parts that slide while the page scrolls or the screen
-// resizes hold the bracket's dots again where they now are.
-function followPageScroll() {
-  if (!findPill().offsetHeight) return;
-  const offset = Math.max(0, scrollY - measurePartsTopScroll());
-  findPill().classList.toggle("stuck", offset > 0 || heldUp > 0);
-  for (const part of readOrder()) {
-    const shift = part === scrollPart ? 0 : offset - (part === leavingPart ? heldUp : 0);
-    findPart(part).style.translate = shift ? `0 ${shift}px` : "";
-  }
-  if (scrollY < 1) delete findParts().dataset.holdingRoom;
+const holdBracketDotsWhileSliding = () => {
   if (findParts().hasAttribute("data-sliding")) holdBracketDots();
-}
+};
 
-// A part a swipe brings in from far down a longer one starts just under the pill, so the parts
-// hold the room under it until the page is back at its top, even when the part is shorter, rather
-// than let the page jump to its end. The page's height and scroll are whole pixels, so the room
-// takes a pixel more, or parts that start a fraction of a pixel down the page would stop just short
-// of the pill. A hidden pill has no height to measure, so the room waits until the parts show. The
-// room is measured again as the parts start to hold it, since a Home Screen app can grow as it
-// opens without a resize to say so.
-function fitPartsToRoomUnderPill() {
-  if (!findPill().offsetHeight) return;
-  const bottomPadding = parseFloat(getComputedStyle(document.body).paddingBottom);
-  const room = Math.ceil(innerHeight - bottomPadding - readPillTop() - findPill().offsetHeight) + 1;
-  const value = `${room}px`;
-  if (findParts().style.getPropertyValue("--room-under-pill") !== value)
-    findParts().style.setProperty("--room-under-pill", value);
-}
+// The pill ends in a line once the part it names has scrolled under it.
+const markStuck = () =>
+  findPill().classList.toggle("stuck", findPart(readShownPart()).scrollTop > 0);
 
-function holdRoomUnderPill() {
-  fitPartsToRoomUnderPill();
-  findParts().dataset.holdingRoom = "";
-}
-
-// The parts set off for a part, and hold the room under the pill for it once it comes in from far
-// down the other, before the other gives up its height.
 /**
  * @param {number} index
  * @param {boolean} isSliding
  */
 function showOn(index, isSliding) {
-  const part = readOrder()[index];
-  if (part !== scrollPart && scrollY > measurePartsTopScroll()) holdRoomUnderPill();
-  showPillName(findTabList(), part, { isHandoff: isSliding });
-}
-
-function scrollUpToPartsTop() {
-  const partsTopScroll = measurePartsTopScroll();
-  if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
-}
-
-/**
- * @param {string} part
- * @param {string} other
- */
-const isTaller = (part, other) => findPart(part).offsetHeight > findPart(other).offsetHeight;
-
-// As the parts set off from far down a part taller than the one not shown, the page's scroll goes
-// to that one, which starts at its top just under the pill, while both parts still take their room:
-// the page scrolls up to the parts' top, and the part leaving holds its place on screen by as much.
-function handOverScroll() {
-  const offset = Math.max(0, scrollY - measurePartsTopScroll());
-  const coming = readOrder().find((part) => part !== scrollPart) ?? scrollPart;
-  if (offset > 0 && isTaller(scrollPart, coming)) {
-    holdRoomUnderPill();
-    leavingPart = scrollPart;
-    heldUp = offset;
-    scrollPart = coming;
-    scrollTo({ top: scrollY - offset, behavior: "instant" });
-  }
-  followPageScroll();
-}
-
-// Parts that come to rest on the part that left, as a swipe that falls short does, give it back the
-// page's scroll where it was. A part newly at rest that the scroll wasn't handed to, as from far
-// down a shorter part or shown at once, starts at its top just under the pill.
-/** @param {number} index */
-function restOn(index) {
-  const part = readOrder()[index];
-  if (part === leavingPart) scrollTo({ top: scrollY + heldUp, behavior: "instant" });
-  else if (part !== scrollPart) scrollUpToPartsTop();
-  scrollPart = part;
-  leavingPart = "";
-  heldUp = 0;
-  followPageScroll();
+  showPillName(findTabList(), readOrder()[index], { isHandoff: isSliding });
+  markStuck();
 }
 
 /**
@@ -163,14 +70,15 @@ function restOn(index) {
  * @param {Element} element
  */
 export function scrollUnderPill(element) {
-  const top = element.getBoundingClientRect().top + scrollY;
-  scrollTo({ top: top - readPillTop() - findPill().offsetHeight, behavior: "instant" });
+  const part = /** @type {HTMLElement} */ (element.closest(".season-part"));
+  const top =
+    element.getBoundingClientRect().top - part.getBoundingClientRect().top + part.scrollTop;
+  part.scrollTo({ top, behavior: "instant" });
 }
 
 /**
- * Slides to one of the tab's parts, as a tap on its name does, or shows it at once, as a search's
- * row does. A part newly shown starts at its top, just under the pill, and so does one a search's
- * row shows, even when it was showing further down.
+ * Slides to one of the tab's parts, as a tap on its name does, showing it where it was left, or
+ * shows it at once from its top, as a search's row does.
  * @param {SeasonPart} part
  * @param {{ isInstant?: boolean }} [options]
  */
@@ -181,8 +89,8 @@ export function showSeasonPart(part, { isInstant = false } = {}) {
     if (index !== panels.readShown()) panels.slideTo(index);
     return;
   }
+  findPart(part).scrollTo({ top: 0, behavior: "instant" });
   panels.jumpTo(index);
-  scrollUpToPartsTop();
 }
 
 /**
@@ -200,11 +108,17 @@ export function showSeasonPhase(isFieldSet) {
   panels?.jumpTo(0);
 }
 
-// A tap on the tab while it shows, with the page at its top, takes it back to where it opens: the
-// part it's named for, and a bracket on its round in progress, as Games goes back to today. A
-// bracket out of sight moves at once, before it slides in.
+// A tap on the tab while it shows scrolls the part shown back to its top, as a tab bar's tap does
+// a list, and once it's there, takes the tab back to where it opens: the part it's named for, and a
+// bracket on its round in progress, as Games goes back to today. A bracket out of sight moves at
+// once, before it slides in.
 function returnToStart() {
   if (!panels) return;
+  const shownPart = findPart(readShownPart());
+  if (shownPart.scrollTop > 0) {
+    scrollWithSpring(shownPart, 0);
+    return;
+  }
   const isBracketShown = readOrder()[panels.readShown()] === "bracket";
   if (readOrder()[0] === "bracket")
     showOpeningRound(isBracketShown && !prefersReducedMotion() ? "smooth" : "instant");
@@ -218,22 +132,14 @@ export function startBracketStandings() {
     listPanels: () => readOrder().map(findPart),
     place: (index, position) => index - position,
     canGo: (direction) => Boolean(readOrder()[slidePanels.readShown() + direction]),
-    onSetOff: handOverScroll,
+    onSetOff: holdBracketDots,
     onShow: showOn,
-    onSettle: restOn,
   });
   panels = slidePanels;
   slidePanels.jumpTo(readOrder().indexOf(readShownPart()));
   wireTabList(findPill(), (part) => showSeasonPart(/** @type {SeasonPart} */ (part)));
-  setTabStart("bracket-standings", returnToStart, { isAfterTop: true });
-  addEventListener("scroll", followPageScroll, { passive: true });
-  addEventListener("resize", () => {
-    fitPartsToRoomUnderPill();
-    followPageScroll();
-  });
-  // The pill takes its size as its tab shows, where the page may be scrolled elsewhere than when
-  // it left. Following the scroll then moves only what takes no room, so the observer can't loop.
-  new ResizeObserver(followPageScroll).observe(findPill());
-  // Unlike a ResizeObserver's, an IntersectionObserver's callback may resize the page.
-  new IntersectionObserver(fitPartsToRoomUnderPill).observe(findPill());
+  setTabStart("bracket-standings", returnToStart);
+  for (const part of readOrder().map(findPart))
+    part.addEventListener("scroll", markStuck, { passive: true });
+  addEventListener("resize", holdBracketDotsWhileSliding);
 }
