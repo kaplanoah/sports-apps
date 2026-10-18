@@ -232,11 +232,12 @@ export function redrawEased(redraw) {
     from: { height, opacity: readOpacity(element) },
   }));
   reached.forEach(({ element }) => stopEasing(element));
-  const sizes = reached.map(({ element, from }) => ({
-    element,
-    from,
-    to: { height: readHeight(element), opacity: readOpacity(element) },
-  }));
-  sizes.forEach(easeHeight);
+  reached
+    .map(({ element, from }) => ({
+      element,
+      from,
+      to: { height: readHeight(element), opacity: readOpacity(element) },
+    }))
+    .forEach(easeHeight);
   added.forEach(fadeIn);
 }
