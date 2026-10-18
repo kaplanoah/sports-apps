@@ -64,10 +64,11 @@ const measurePartsTopScroll = () =>
 const holdBracketDots = () => holdRoundDots(findPart("bracket"));
 
 // The pill fills with the page's color once the parts scroll under it, or while a part leaving
-// holds itself up under it, and the part not shown moves down by as much as the page has scrolled
-// the shown one up under it. Back at the page's top, the parts let go of the room they held, which
-// moves nothing there. Parts that slide while the page scrolls or the screen resizes hold the
-// bracket's dots again where they now are.
+// holds itself up under it. The part not shown moves down by as much as the page has scrolled the
+// shown one up under it, but while the parts slide, the part leaving holds itself up instead, by as
+// far as the page had scrolled it under the pill. Back at the page's top, the parts let go of the
+// room they held, which moves nothing there. Parts that slide while the page scrolls or the screen
+// resizes hold the bracket's dots again where they now are.
 function followPageScroll() {
   if (!findPill().offsetHeight) return;
   const offset = Math.max(0, scrollY - measurePartsTopScroll());

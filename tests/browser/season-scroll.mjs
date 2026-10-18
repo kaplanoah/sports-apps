@@ -11,6 +11,7 @@ import { expect } from "@playwright/test";
  * @property {number} leavingTop where the part leaving starts down the screen
  * @property {number} pillBottom where the pill ends down the screen
  * @property {boolean} isPillHeld whether the pill is held at the top of the screen
+ * @property {boolean} isPillFilled whether the pill is filled with the page's color
  * @property {boolean} isSliding whether the parts are moving
  */
 
@@ -41,6 +42,7 @@ export async function trackSeasonScroll(page, { coming, leaving }) {
             leavingTop: Math.round(findPart(leavingKey).getBoundingClientRect().top),
             pillBottom: Math.round(pillBox.bottom),
             isPillHeld: pillBox.top === parseFloat(getComputedStyle(pill).top),
+            isPillFilled: pill.classList.contains("stuck"),
             isSliding: row.hasAttribute("data-sliding"),
           });
           resolve(undefined);
@@ -61,13 +63,13 @@ export async function trackSeasonScroll(page, { coming, leaving }) {
 /**
  * Checks that the frames caught the slide, that the page never scrolled on a frame its height
  * changed, and that from the first frame of the slide the pill stayed held at the top of the
- * screen, the part coming in sat just under it, and the part leaving held still while it moved.
+ * screen, filled while the parts moved, with the part coming in just under it, and the part leaving
+ * held still while it moved.
  * @param {ScrollFrame[]} frames
  */
 export function expectScrollHeldAsPartsRest(frames) {
   const start = frames.findIndex((frame) => frame.isSliding);
   expect(start).toBeGreaterThan(0);
-  expect(frames.slice(start).filter((frame) => !frame.isPillHeld)).toEqual([]);
   const scrolledAsHeightChanged = frames.filter(
     (frame, index) =>
       index > 0 &&
@@ -76,7 +78,29 @@ export function expectScrollHeldAsPartsRest(frames) {
   );
   expect(scrolledAsHeightChanged).toEqual([]);
   const fromStart = frames.slice(start);
+  expect(fromStart.filter((frame) => !frame.isPillHeld)).toEqual([]);
   expect(fromStart.filter((frame) => Math.abs(frame.comingTop - frame.pillBottom) > 1)).toEqual([]);
   const sliding = fromStart.filter((frame) => frame.isSliding);
+  expect(sliding.filter((frame) => !frame.isPillFilled)).toEqual([]);
   expect(sliding.filter((frame) => frame.leavingTop !== frames[start - 1].leavingTop)).toEqual([]);
 }
+
+/**
+ * Keeps the page from hearing that the screen resized, as a Home Screen app that grows as it opens
+ * never tells it. Call it before the page loads.
+ * @param {import("@playwright/test").Page} page
+ */
+export const hideResizesFromPage = (page) =>
+  page.addInitScript(() =>
+    addEventListener("resize", (event) => event.stopImmediatePropagation(), { capture: true }),
+  );
+
+/**
+ * Whether the pill over the season tab's parts is held at the top of the screen.
+ * @param {import("@playwright/test").Page} page
+ */
+export const isSeasonPillHeld = (page) =>
+  page.evaluate(() => {
+    const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
+    return pill.getBoundingClientRect().top === parseFloat(getComputedStyle(pill).top);
+  });

@@ -10,6 +10,7 @@ import {
   findSeasonTab,
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
+import { hideResizesFromPage, isSeasonPillHeld } from "../../../../tests/browser/season-scroll.mjs";
 import { findRows, sendSearch, tapSearch } from "./search-page.mjs";
 
 test.use({
@@ -135,9 +136,7 @@ test("a part chosen while the page is scrolled down opens at its top, just under
 test("a part chosen far down the standings opens just under the pill, held at the top of the screen, on a screen that grew taller without a resize, as a Home Screen app does as it opens", async ({
   page,
 }) => {
-  await page.addInitScript(() =>
-    addEventListener("resize", (event) => event.stopImmediatePropagation(), { capture: true }),
-  );
+  await hideResizesFromPage(page);
   await page.setViewportSize({ width: 390, height: 783 });
   await openApp(page);
   await openSeasonPart(page, "Standings");
@@ -149,14 +148,7 @@ test("a part chosen far down the standings opens just under the pill, held at th
   await findSeasonPill(page).getByRole("tab", { name: "Bracket" }).click();
 
   await expect(page.locator("#bracketWrap .round-name").first()).toBeInViewport();
-  const { pillTop, heldTop } = await page.evaluate(() => {
-    const pill = document.getElementById("bracketStandingsPill");
-    return {
-      pillTop: pill.getBoundingClientRect().top,
-      heldTop: parseFloat(getComputedStyle(pill).top),
-    };
-  });
-  expect(pillTop).toBe(heldTop);
+  expect(await isSeasonPillHeld(page)).toBe(true);
 });
 
 test("search's Bracket row, with the bracket left scrolled down, opens it at its top, just under the pill", async ({

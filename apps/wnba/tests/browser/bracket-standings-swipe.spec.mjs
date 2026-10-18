@@ -9,6 +9,8 @@ import {
 } from "../../../../tests/browser/round-dots.mjs";
 import {
   expectScrollHeldAsPartsRest,
+  hideResizesFromPage,
+  isSeasonPillHeld,
   trackSeasonScroll,
 } from "../../../../tests/browser/season-scroll.mjs";
 
@@ -400,5 +402,48 @@ test.describe("in full motion", () => {
     await expectPartShown(page, "bracket");
 
     expectScrollHeldAsPartsRest(await readFrames());
+  });
+
+  test("a short swipe far down the standings springs back to them where they were, with the page scrolled as far as before", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await expectPartShown(page, "standings");
+    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+    const readPlace = async () => ({
+      scroll: await page.evaluate(() => Math.round(scrollY)),
+      top: await findPart(page, "standings").evaluate((part) =>
+        Math.round(part.getBoundingClientRect().top),
+      ),
+    });
+    const before = await readPlace();
+
+    const release = await drag(page, { x: 60, y: 400 }, { x: 46 }, { durationMs: 1000 });
+    expect(await page.evaluate(() => Math.round(scrollY))).toBeLessThan(before.scroll);
+    await release();
+
+    await expectPartShown(page, "standings");
+    expect(await readPlace()).toEqual(before);
+  });
+
+  test("a swipe that brings the bracket in from far down the standings leaves the pill held at the top on a screen that grew taller without a resize, as a Home Screen app does as it opens", async ({
+    page,
+  }) => {
+    await hideResizesFromPage(page);
+    await page.setViewportSize({ width: PHONE.width, height: PHONE.height - 61 });
+    await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await expectPartShown(page, "standings");
+    await page.setViewportSize(PHONE);
+    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+
+    const release = await drag(page, { x: 60, y: 400 }, { x: 250 }, { durationMs: 1000 });
+    await release();
+
+    await expectPartShown(page, "bracket");
+    expect(await isSeasonPillHeld(page)).toBe(true);
   });
 });
