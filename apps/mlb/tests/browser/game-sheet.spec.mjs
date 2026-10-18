@@ -518,7 +518,7 @@ test("a game's Runs set the runners who got on in a lighter ink than the play th
           playWidth: /** @type {Element} */ (
             element.querySelector(".runs-play")
           ).getBoundingClientRect().width,
-          credit: readColor("var(--credit-ink)"),
+          receding: readColor("var(--receding-ink)"),
           dim: readColor("var(--ink-dim)"),
         };
       }),
@@ -526,7 +526,7 @@ test("a game's Runs set the runners who got on in a lighter ink than the play th
   }
   const [ball, nightGame] = looks;
   const detail = String((await readRole(page, "detail")).weight);
-  expect(ball.setup).toBe(ball.credit);
+  expect(ball.setup).toBe(ball.receding);
   expect(nightGame.setup).toBe(nightGame.dim);
   for (const look of looks) expect([look.setupWeight, look.playWeight]).toEqual([detail, detail]);
   expect(ball.playWidth).toBeCloseTo(nightGame.playWidth, 1);

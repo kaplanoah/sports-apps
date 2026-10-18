@@ -145,10 +145,13 @@
   --all-star-light: rgba(255, 255, 255, 0.4);
   --all-star-shift: -3px;
   --out: #6b645c;
-  /* A source's credit under what it said, as pale as WCAG's AA level lets text be on a card. */
-  --credit-ink: color-mix(in srgb, var(--ink-dim) 84%, var(--card));
+  /* Text that steps back from the words beside it, like a source's credit under what it said or
+     the Home Screen box's steps around its buttons' names. Ball's dim ink alone sets it apart
+     less than in Night Game, so it's paler, still at WCAG's AA level on the Home Screen box, half
+     card and half page. */
+  --receding-ink: color-mix(in srgb, var(--ink-dim) 86.4%, var(--card));
   /* Runs set the plays that changed the score apart from the runners who got on before them. */
-  --runs-setup-ink: var(--credit-ink);
+  --runs-setup-ink: var(--receding-ink);
   /* A final's losing score, a step lighter in Ball, where its dim ink alone sets it apart from the
      winner less than in Night Game. Chivo Mono draws every weight at the same width, so both
      themes still lay out the same. */
@@ -258,7 +261,7 @@
   --all-star-shadow: rgba(0, 0, 0, 0.138);
   --all-star-light: rgba(241, 234, 212, 0.13);
   --out: #998b7d;
-  --credit-ink: var(--ink-dim);
+  --receding-ink: var(--ink-dim);
   --lost-score-weight: var(--type-stat-large-weight);
   --score-chip: var(--divider);
   --score-chip-shade: var(--won-chip-shade);
@@ -1408,12 +1411,23 @@ body.kbd .rank-item .grip:focus {
   background: var(--accent);
   color: var(--accent-ink);
 }
+.home-screen-steps {
+  color: var(--receding-ink);
+}
+/* The Home Screen steps' Share icon, raised to sit with Libre Franklin's words, as set by eye. */
+.welcome-step .share-glyph {
+  position: relative;
+  top: -1.5px;
+}
+.home-screen-steps .share-glyph {
+  vertical-align: -1px;
+}
 /* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
 .home-screen-title {
   font-weight: calc(var(--type-detail-weight) + 100);
 }
 .home-screen-steps b {
-  font-weight: calc(var(--type-caption-weight) + 100);
+  font-weight: calc(var(--type-caption-weight) + 75);
 }
 .home-screen-install {
   font-weight: calc(var(--type-label-weight) - 50);
@@ -2036,7 +2050,7 @@ body.kbd .player-open:focus {
   margin: 4.5px 0 0;
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
-  color: var(--credit-ink);
+  color: var(--receding-ink);
 }
 .player-ranks {
   display: grid;

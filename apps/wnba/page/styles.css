@@ -2412,6 +2412,10 @@ table.standings tr.playoff-line + tr td {
 .settings-footer .sep {
   opacity: 0.9;
 }
+/* The Home Screen box's Share icon, raised to sit with Barlow's words, as set by eye. */
+.home-screen-steps .share-glyph {
+  vertical-align: -0.5px;
+}
 /* Settings stay the floor's own color, without a band. */
 .settings-panel {
   --sheet: var(--bg);
