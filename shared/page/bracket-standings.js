@@ -48,7 +48,8 @@ const readShownPart = () => readSelectedTab(findPillTabs());
 
 /** @type {ReturnType<typeof createSlidePanels> | null} */
 let panels = null;
-// The part the page's scroll belongs to, which a slide hands to the part coming in as it sets off.
+// The part the page's scroll belongs to, which a slide from far down the taller part hands to the
+// part coming in as it sets off, and any other slide as it rests.
 let scrollPart = "";
 // The part that gave up the page's scroll as the parts set off, held up by as far as the page had
 // scrolled it under the pill, until they rest.
