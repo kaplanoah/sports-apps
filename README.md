@@ -330,7 +330,8 @@ code, and puts the version before back when the page doesn't draw what its store
 sends. Every 15 minutes, the **Watch apps** workflow opens each app's page the
 same way and keeps one open issue for each app that isn't opening, which closes
 itself once the app opens again. An app without its page's secrets isn't
-opened, and the deploy log and the workflow say so.
+opened, and the deploy log and the workflow say so. A page that asks for no code
+while its environment holds one opens without it, and they say that too.
 
 Each deploy records its commit on the Worker's version. A merge skips an app's
 deploy when nothing but docs, tests, tooling, and other apps' folders changed

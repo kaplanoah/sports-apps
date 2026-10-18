@@ -739,6 +739,10 @@ test("a new version passes once its Worker answers and its page draws, or has no
   for (const [check, line] of [
     [{ status: "drawn" }, "page check: ok"],
     [
+      { status: "drawn", note: "the page asks for no code" },
+      "::notice::page check: ok, but the page asks for no code",
+    ],
+    [
       { status: "unchecked", reason: "no MLB_PAGE_URL secret" },
       "::notice::page check: skipped, no MLB_PAGE_URL secret",
     ],

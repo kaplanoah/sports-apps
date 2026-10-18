@@ -32,7 +32,8 @@ export async function reportCheck({ app, check, openIssues, github, runUrl }) {
   const title = nameOutageIssue(app);
   const open = openIssues.find((issue) => issue.title === title && !issue.pull_request);
   if (check.status === "unchecked") return `::warning::${app}: not checked, ${check.reason}`;
-  if (check.status === "drawn" && !open) return `${app}: opens`;
+  if (check.status === "drawn" && !open)
+    return check.note ? `::warning::${app}: opens, but ${check.note}` : `${app}: opens`;
   if (check.status === "drawn") {
     await github(`/issues/${open.number}/comments`, {
       method: "POST",

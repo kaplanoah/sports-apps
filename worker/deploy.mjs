@@ -386,7 +386,8 @@ export async function deploy({
       status: /** @type {const} */ ("broken"),
       reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
     }));
-    if (check.status === "drawn") log("page check: ok");
+    if (check.status === "drawn")
+      log(check.note ? `::notice::page check: ok, but ${check.note}` : "page check: ok");
     if (check.status === "unchecked") log(`::notice::page check: skipped, ${check.reason}`);
     if (check.status === "broken")
       await restoreAfter(

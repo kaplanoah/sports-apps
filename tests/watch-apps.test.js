@@ -102,6 +102,15 @@ test("an app that can't be checked warns in the run and touches no issue", async
   assert.deepEqual(lines, ["::warning::mlb: not checked, the Worker refused the access code"]);
 });
 
+test("an app that opens without the code it was given warns in the run and opens no issue", async () => {
+  const note = "the page asks for no code, so its access code secret isn't needed";
+
+  const { lines, writes } = await watch({ mlb: { status: "drawn", note } }, []);
+
+  assert.deepEqual(writes, []);
+  assert.deepEqual(lines, [`::warning::mlb: opens, but ${note}`]);
+});
+
 test("a check that can't open a browser fails the watch's run, rather than passing it unchecked", async () => {
   const github = createFakeGitHub([]);
   await assert.rejects(
