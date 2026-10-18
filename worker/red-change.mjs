@@ -11,8 +11,9 @@
 // Usage: git diff --no-renames <base> | node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
 // the last two. The diff ends at the files on disk, as CI's `<base> HEAD` in a clean checkout
-// does, since a shared script's code before the change is rebuilt from the file and the hunks.
-import { readFileSync } from "node:fs";
+// does, since a shared script's code before the change is rebuilt from the file and the hunks. It
+// writes whether the change is held to $GITHUB_OUTPUT as held=true or held=false.
+import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { transformSync } from "esbuild";
 import { createGitHub, readAllPages } from "./github-api.mjs";
@@ -571,6 +572,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const labeling = await readPhoneOkLabeling(labels, process.env);
   const owner = process.env.GITHUB_REPOSITORY_OWNER ?? "";
   const { isHeld, message } = decideGate(readFileSync(0, "utf8"), { labels, labeling, owner });
-  console.log(isHeld ? `::error::${message.split("\n")[0]}\n${message}` : message);
-  if (isHeld) process.exit(1);
+  console.log(isHeld ? `::notice::${message.split("\n")[0]}\n${message}` : message);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `held=${isHeld}\n`);
 }
