@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
-import { readDeclarations, readRule } from "./css-rules.js";
+import { listAppStylesheets, readDeclarations, readRule } from "./css-rules.js";
 import {
   drawSpread,
   isNearlyRanked,
@@ -67,9 +66,7 @@ test("a curve's lines are borders, which Safari keeps a whole number of screen p
 });
 
 test("no app sizes or fills a curve's lines itself, only their color through --rank-mark", () => {
-  const apps = new URL("../apps/", import.meta.url);
-  for (const app of readdirSync(apps)) {
-    const path = new URL(`${app}/page/styles.css`, apps).pathname;
+  for (const path of listAppStylesheets()) {
     assert.deepEqual(
       findLineRules(readDeclarations(path))
         .map(({ property }) => property)
