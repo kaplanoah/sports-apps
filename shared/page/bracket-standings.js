@@ -1,7 +1,8 @@
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
-import { createSlidePanels } from "./slide-panels.js";
+import { holdRoundDots } from "./round-dots.js";
+import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
@@ -52,9 +53,13 @@ const readPillTop = () => parseFloat(getComputedStyle(findPill()).top) || 0;
 const measurePartsTopScroll = () =>
   findParts().getBoundingClientRect().top + scrollY - readPillTop() - findPill().offsetHeight;
 
+// The bracket's round dots stay over the tab bar while the parts slide (round-dots.js).
+const holdBracketDots = () => holdRoundDots(findPart("bracket"));
+
 // The pill fills with the page's color once the parts scroll under it, and the part not shown
 // moves down by as much as the page has scrolled the shown one up under it. Back at the page's
-// top, the parts let go of the room they held, which moves nothing there.
+// top, the parts let go of the room they held, which moves nothing there. Parts that slide while
+// the page scrolls or the screen resizes hold the bracket's dots again where they now are.
 function followPageScroll() {
   if (!findPill().offsetHeight) return;
   const offset = Math.max(0, scrollY - measurePartsTopScroll());
@@ -63,6 +68,7 @@ function followPageScroll() {
     findPart(part).style.translate = offset > 0 && part !== restingPart ? `0 ${offset}px` : "";
   }
   if (scrollY < 1) delete findParts().dataset.holdingRoom;
+  if (findParts().hasAttribute("data-sliding")) holdBracketDots();
 }
 
 // A part a swipe brings in from far down a longer one starts just under the pill, so the parts
@@ -92,15 +98,20 @@ function showOn(index, isSliding) {
   showPillName(findTabList(), part, { isHandoff: isSliding });
 }
 
+// Brings the page up so the parts start just under the pill, when it's further down.
+function scrollUpToPartsTop() {
+  const partsTopScroll = measurePartsTopScroll();
+  if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
+}
+
 // A part newly at rest keeps its place on screen: the page scrolls back by as much as it held the
 // part down.
 /** @param {number} index */
 function restOn(index) {
   const part = readOrder()[index];
   if (part !== restingPart) {
-    const partsTopScroll = measurePartsTopScroll();
     restingPart = part;
-    if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });
+    scrollUpToPartsTop();
   }
   followPageScroll();
 }
@@ -116,15 +127,20 @@ export function scrollUnderPill(element) {
 
 /**
  * Slides to one of the tab's parts, as a tap on its name does, or shows it at once, as a search's
- * row does. A part newly shown starts at its top, just under the pill.
+ * row does. A part newly shown starts at its top, just under the pill, and so does one a search's
+ * row shows, even when it was showing further down.
  * @param {SeasonPart} part
  * @param {{ isInstant?: boolean }} [options]
  */
 export function showSeasonPart(part, { isInstant = false } = {}) {
   const index = readOrder().indexOf(part);
   if (!panels) return;
-  if (isInstant) panels.jumpTo(index);
-  else if (index !== panels.readShown()) panels.slideTo(index);
+  if (!isInstant) {
+    if (index !== panels.readShown()) panels.slideTo(index);
+    return;
+  }
+  panels.jumpTo(index);
+  scrollUpToPartsTop();
 }
 
 /**
@@ -142,8 +158,6 @@ export function showSeasonPhase(isFieldSet) {
   panels?.jumpTo(0);
 }
 
-const isReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 // A tap on the tab while it shows, with the page at its top, takes it back to where it opens: the
 // part it's named for, and a bracket on its round in progress, as Games goes back to today. A
 // bracket out of sight moves at once, before it slides in.
@@ -151,7 +165,7 @@ function returnToStart() {
   if (!panels) return;
   const isBracketShown = readOrder()[panels.readShown()] === "bracket";
   if (readOrder()[0] === "bracket")
-    showOpeningRound(isBracketShown && !isReducedMotion() ? "smooth" : "instant");
+    showOpeningRound(isBracketShown && !prefersReducedMotion() ? "smooth" : "instant");
   if (panels.readShown() !== 0) panels.slideTo(0);
 }
 
@@ -162,6 +176,7 @@ export function startBracketStandings() {
     listPanels: () => readOrder().map(findPart),
     place: (index, position) => index - position,
     canGo: (direction) => Boolean(readOrder()[slidePanels.readShown() + direction]),
+    onSetOff: holdBracketDots,
     onShow: showOn,
     onSettle: restOn,
   });

@@ -1,4 +1,5 @@
 import { test, expect, findGameButton, openApp, matchPath, NOW } from "./harness.mjs";
+import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -33,16 +34,6 @@ async function reloadAndRecord(page) {
   await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
   await page.clock.runFor(RECORD_MS + 1000);
 }
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} isHidden
- */
-const setHidden = (page, isHidden) =>
-  page.evaluate((hidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, isHidden);
 
 test("Diagnostics sit past the end of settings, off, with nothing recorded, with no note under their name", async ({
   page,
@@ -199,8 +190,7 @@ test("a return to the page is recorded with how long it was away", async ({ page
   await openApp(page);
   await turnOnDiagnostics(page);
   await setHidden(page, true);
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.setSystemTime(now + 5 * 60 * 1000);
+  await passTime(page, 5 * 60 * 1000);
 
   await setHidden(page, false);
   await page.clock.runFor(RECORD_MS + 1000);

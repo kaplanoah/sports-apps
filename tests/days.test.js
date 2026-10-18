@@ -16,6 +16,7 @@ import {
   formatWeekdayAndDate,
   formatWeekdayOrDate,
   isSameMonth,
+  isStillToComeToday,
   nameDay,
   readCalendarDate,
   readCalendarYear,
@@ -52,6 +53,23 @@ test("days between stay whole across a daylight saving change", () =>
     assert.equal(countDaysBetween(new Date(2026, 9, 31, 12), new Date(2026, 10, 2, 12)), 2);
     assert.equal(countDaysBetween(new Date(2026, 2, 7, 12), new Date(2026, 2, 9, 12)), 2);
   }));
+
+test("a game is still to come today only before it starts, on the viewer's own day, in any zone", () => {
+  for (const zone of ZONES)
+    checkInTimeZone(zone, () => {
+      const now = new Date(2026, 9, 1, 15);
+      const today = new Date(2026, 9, 1);
+      assert.equal(isStillToComeToday({ state: "pre", day: today }, now), true, zone);
+      assert.equal(isStillToComeToday({ state: "live", day: today }, now), false, zone);
+      assert.equal(isStillToComeToday({ state: "final", day: today }, now), false, zone);
+      assert.equal(
+        isStillToComeToday({ state: "pre", day: new Date(2026, 9, 2) }, now),
+        false,
+        zone,
+      );
+      assert.equal(isStillToComeToday({ state: "pre", day: null }, now), false, zone);
+    });
+});
 
 test("a league's date is midnight of that date on the viewer's calendar, in any zone", () => {
   for (const zone of ["America/Los_Angeles", EASTERN, "Asia/Tokyo"])

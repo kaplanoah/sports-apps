@@ -21,11 +21,19 @@ function showTab(tab) {
 /** @type {string | null} */
 let tabBefore = null;
 
+// As on iPhone, each tab keeps the page where it was left, and a tab not shown yet opens at its top.
+/** @type {Map<string, number>} */
+const tabScrolls = new Map();
+
 /** @param {string} tab */
 function switchTab(tab) {
   const before = readSelectedTab(findTabButtons());
-  if (before && before !== tab) tabBefore = before;
+  if (before && before !== tab) {
+    tabBefore = before;
+    tabScrolls.set(before, scrollY);
+  }
   showTab(tab);
+  if (before !== tab) scrollTo({ top: tabScrolls.get(tab) ?? 0, behavior: "instant" });
   moveTabSelection(tab);
   saveLastTab(tab, before);
 }

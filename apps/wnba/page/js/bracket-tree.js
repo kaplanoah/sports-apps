@@ -58,13 +58,27 @@ function buildBracket(upper, lower, next) {
 }
 
 /**
- * @param {SVGSVGElement} svg
+ * Sizes the line layers to the bracket, measured without them: layers left at a larger size from
+ * before the bracket shrank would let it scroll past its cards, down or sideways.
  * @param {HTMLElement} tree
+ * @param {SVGSVGElement[]} layers
+ */
+function sizeLayers(tree, layers) {
+  const setSize = (/** @type {number} */ width, /** @type {number} */ height) => {
+    for (const layer of layers) {
+      layer.setAttribute("width", String(width));
+      layer.setAttribute("height", String(height));
+    }
+  };
+  setSize(0, 0);
+  setSize(tree.scrollWidth, tree.scrollHeight);
+}
+
+/**
+ * @param {SVGSVGElement} svg
  * @param {{ next: string, shape: string }[]} paths
  */
-function drawPaths(svg, tree, paths) {
-  svg.setAttribute("width", String(tree.scrollWidth));
-  svg.setAttribute("height", String(tree.scrollHeight));
+function drawPaths(svg, paths) {
   setHtml(
     svg,
     html`${paths.map(({ next, shape }) => html`<path data-next="${next}" d="${shape}"/>`)}`,
@@ -85,14 +99,15 @@ function drawLines(tree) {
   }));
   const findSvg = (/** @type {string} */ selector) =>
     /** @type {SVGSVGElement} */ (tree.querySelector(selector));
+  const linesLayer = findSvg(".bracket-lines");
+  const turnsLayer = findSvg(".bracket-turns");
+  sizeLayers(tree, [linesLayer, turnsLayer]);
   drawPaths(
-    findSvg(".bracket-lines"),
-    tree,
+    linesLayer,
     brackets.map(({ next, lines }) => ({ next, shape: lines })),
   );
   drawPaths(
-    findSvg(".bracket-turns"),
-    tree,
+    turnsLayer,
     brackets.map(({ next, turn }) => ({ next, shape: turn })),
   );
 }
@@ -111,7 +126,7 @@ const markScrollLeft = (tree) => tree.style.setProperty("--scroll-left", `${tree
  */
 function sizeCardGaps(tree) {
   const dots = /** @type {HTMLElement} */ (findWrap().querySelector(".round-dots"));
-  if (!isShown(dots) || getComputedStyle(dots).position !== "fixed") {
+  if (!isShown(dots) || getComputedStyle(dots).position === "static") {
     tree.style.removeProperty("--card-gap");
     return;
   }

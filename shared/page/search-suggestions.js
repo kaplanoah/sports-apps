@@ -14,6 +14,7 @@ import { nameMonth } from "./search-dates.js";
 import {
   describeCount,
   findSearchGames,
+  isAskingNothing,
   isGameInPlace,
   isTownMeaning,
   listPlaceTeams,
@@ -370,22 +371,12 @@ function findOpponent(context, code) {
  */
 function findOnlyTeam(text, context) {
   const search = readSearch(text, context);
-  const asksMore = [
-    search.skipped,
-    search.starters,
-    search.places,
-    search.ranges,
-    search.times,
-    search.kinds,
-    search.states,
-  ].some((list) => list.length);
   const [team] = search.teams;
   const isOnlyTeam =
     search.teams.length === 1 &&
     team.codes.length === 1 &&
-    !asksMore &&
-    !search.pick &&
-    !search.side;
+    !search.skipped.length &&
+    isAskingNothing({ ...search, teams: [] });
   return isOnlyTeam ? team.codes[0] : null;
 }
 

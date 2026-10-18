@@ -14,6 +14,7 @@ import { listTextOffRoles, measureFieldFace } from "../../../../tests/browser/ty
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 // Search, the round button beside the tab bar, over MLB's whole 2026 season and its players, on a
 // phone. Today is Thursday, September 24, the last week of the regular season.
@@ -108,16 +109,6 @@ const readTopDay = (page) =>
         ?.getAttribute("data-day") ?? null
     );
   });
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} hidden
- */
-const setHidden = (page, hidden) =>
-  page.evaluate((isHidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, hidden);
 
 /** @param {import("@playwright/test").Page} page */
 async function leaveForTwoMinutes(page) {

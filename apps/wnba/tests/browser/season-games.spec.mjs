@@ -3,6 +3,7 @@ import { readStripEdges, scrollStripBy } from "../../../../tests/browser/day-str
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { findCell, findDay, findList, openSeasonGames, openWholeSeason } from "./season-games.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 // The Games view as one season: a strip of its days over every game day, opening on today.
 
@@ -248,21 +249,15 @@ test.describe("with reduced motion", () => {
     await openSeasonGames(page);
     await findCell(page, "2026-09-20").click();
     await expectDayAtTop(page, "2026-09-20");
-    const setHidden = (/** @type {boolean} */ hidden) =>
-      page.evaluate((isHidden) => {
-        Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-        document.dispatchEvent(new Event("visibilitychange"));
-      }, hidden);
-
-    await setHidden(true);
+    await setHidden(page, true);
     await page.clock.runFor(60 * 1000);
-    await setHidden(false);
+    await setHidden(page, false);
     await page.clock.runFor(100);
     await expectDayAtTop(page, "2026-09-20");
 
-    await setHidden(true);
+    await setHidden(page, true);
     await page.clock.runFor(2 * 60 * 1000);
-    await setHidden(false);
+    await setHidden(page, false);
     await page.clock.runFor(100);
     await expectDayAtTop(page, "2026-09-30");
   });
@@ -278,20 +273,14 @@ test.describe("with reduced motion", () => {
     });
     await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
     await expectDayAtTop(page, "2026-09-30");
-    const setHidden = (/** @type {boolean} */ hidden) =>
-      page.evaluate((isHidden) => {
-        Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-        document.dispatchEvent(new Event("visibilitychange"));
-      }, hidden);
-
-    await setHidden(true);
+    await setHidden(page, true);
     await page.clock.fastForward("12:00:00");
     await app.changeSeasonWhileAway((season) => {
       const game = season.games.find((each) => each.id === "1042600132");
       Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
       return season;
     });
-    await setHidden(false);
+    await setHidden(page, false);
     await page.clock.runFor(100);
 
     await expect(page.locator('[data-game="1042600132"] .game-status')).toContainText("Final");
@@ -309,12 +298,7 @@ test.describe("with reduced motion", () => {
     });
     await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
     await expectDayAtTop(page, "2026-09-30");
-    const setHidden = (/** @type {boolean} */ hidden) =>
-      page.evaluate((isHidden) => {
-        Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-        document.dispatchEvent(new Event("visibilitychange"));
-      }, hidden);
-    await setHidden(true);
+    await setHidden(page, true);
     await page.clock.fastForward("12:00:00");
     await app.changeSeasonWhileAway((season) => {
       const game = season.games.find((each) => each.id === "1042600132");
@@ -322,7 +306,7 @@ test.describe("with reduced motion", () => {
       return season;
     });
     const release = await app.holdStore();
-    await setHidden(false);
+    await setHidden(page, false);
     await page.clock.runFor(100);
     await expectDayAtTop(page, "2026-09-30");
 
@@ -346,15 +330,9 @@ test.describe("with reduced motion", () => {
     await openSeasonPart(page, "Standings");
     await expect(page.locator("#standings-league")).toBeInViewport();
 
-    await page.evaluate(() => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    await setHidden(page, true);
     await page.clock.runFor(2 * 60 * 1000);
-    await page.evaluate(() => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    await setHidden(page, false);
     await page.clock.runFor(100);
     await page.getByRole("tab", { name: "Games" }).click();
 

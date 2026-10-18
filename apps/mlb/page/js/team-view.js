@@ -2,7 +2,6 @@
 // games, then once the field is set how far it has gone in the postseason, its race this season,
 // and every World Series it won.
 
-import { formatShortDate, readCalendarDate } from "#shared/days.js";
 import { renderGameCards } from "#shared/game-cards.js";
 import { isPlayedBy } from "#shared/game-clubs.js";
 import { html, joinWithSeparator } from "#shared/html.js";
@@ -28,6 +27,7 @@ import {
   renderStatusChip,
   renderTeamDot,
 } from "./clubs.js";
+import { readSlateGameDay } from "./dates.js";
 import { describeGameLabel, describeInning, describeStart } from "./games-view.js";
 import { renderLeaders } from "./leaders-view.js";
 import {
@@ -282,15 +282,12 @@ function describeScore(game, isHome) {
 function describeGameCard(game, id) {
   const isHome = game.home === id;
   const other = isHome ? game.away : game.home;
-  const day = formatShortDate(readCalendarDate(game.date));
   return {
     id: nameGameKey(game),
     label: describeGameLabel(game),
     state: game.state,
-    when:
-      game.state === "live"
-        ? html`<span class="game-card-clock">${describeInning(game)}</span>`
-        : day,
+    day: readSlateGameDay(game),
+    clock: game.state === "live" ? describeInning(game) : "",
     score: describeScore(game, isHome),
     time: describeStart(game),
     isHome,
@@ -301,11 +298,17 @@ function describeGameCard(game, id) {
   };
 }
 
-/** @param {string} id */
-function renderNearestGames(id) {
-  const { last, now, next } = findClubNearestGames(id);
-  const games = [last, now, next].filter((game) => game !== null);
-  return renderGameCards(games.map((game) => describeGameCard(game, id)));
+/**
+ * @param {string} id
+ * @param {number} now
+ */
+function renderNearestGames(id, now) {
+  const nearest = findClubNearestGames(id);
+  const games = [nearest.last, nearest.now, nearest.next].filter((game) => game !== null);
+  return renderGameCards(
+    games.map((game) => describeGameCard(game, id)),
+    new Date(now),
+  );
 }
 
 /** @param {string} id @param {ReturnType<typeof findDivision>} division */
@@ -335,13 +338,14 @@ function renderClubLeaders(id) {
  * winning percentage, then the cards of its nearest games, once the field is set its postseason,
  * then its season, its leaders, and its titles.
  * @param {string} id
+ * @param {{ now?: number }} [options]
  */
-export function renderTeamSheet(id) {
+export function renderTeamSheet(id, { now = Date.now() } = {}) {
   const division = findDivision(id);
   return {
     heading: html`${renderTeamDot(id)}<span>${nameClubFully(id)}</span>`,
     note: joinWithSeparator(listFacts(id, division)),
-    body: html`${renderNearestGames(id)}${isInSetField(id) && renderPlayoffs(id)}
+    body: html`${renderNearestGames(id, now)}${isInSetField(id) && renderPlayoffs(id)}
       ${renderSeason(division)}${renderClubLeaders(id)}
       ${renderTitles(listTitles(id), html`<span class="tabular">${describeDrought(id)}</span>`)}`,
   };

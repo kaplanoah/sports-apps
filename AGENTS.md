@@ -451,7 +451,8 @@
   whose chosen day is the one at the list's top, its box holding still while the list's scroll slides the dates behind it on a spring (`strip-slide.js`),
   today's named Today, which a tap on a day or on Today brings to the top,
   a day's gap under the bar, a tap on a date without games bringing in its No games row until it's out of sight,
-  and a tap on Today already there pulsing the date, whose month follows the strip as a finger moves it,
+  and a tap on Today with the list already there bringing the date back to the strip's middle after a finger moved the strip,
+  or, with the strip there too, pulsing the date, whose month follows the strip as a finger moves it,
   going back to today after two minutes away (`long-away.js`),
   and, for a league of many games a day, drawing whole only the days within a few screens of what shows and the rest as stand-ins as tall as their games,
   which days those are in `near-days.js`, as the search's list of games draws them too,
@@ -471,7 +472,8 @@
   which each app's `tests/search-typing.test.js` types a key at a time, as fans do, and with a letter wrong each way a thumb gets one wrong,
   with the root's `tests/search-sweep.js`,
   and reading the same words into the pages they name, a team's,
-  its section's, a player's, even with a letter wrong, or by a team's name and the number a player wears, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
+  its section's, a player's, even with a letter wrong, or by a team's name and the number a player wears,
+  or while it's typed each number it starts, over the suggestions, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
   from the list of a season's players the store keeps for it, in `page-search.js`,
   each game day under a label, the WNBA's date beside its games as a wall calendar shows it and MLB's heading over them,
   with a No games row for today between game days, in `season-days.js`,
@@ -874,7 +876,10 @@ When a step says to go back to an earlier step, continue in order from there.
    It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each.
    If the summary names something it couldn't judge, tell the user.
    Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its comment saying why not.
-   A Nit never gets a push of its own.
+   A Nit you fix rides a push the PR needs anyway,
+   or, when none is left, one last push just before the merge,
+   which on a red change comes before its last deploy to beta,
+   and never waits for a later PR or the next change to its file.
    After three reviews in a row with an Important finding, or when a finding you declined comes back, stop and ask the user.
    - If `review` fails, read its summary and the log of the failed `review-find`, `review-check`, `review-across`, or `review-post` job, or its `review-final-` twin, which shows each try's turns and tool calls.
      If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.

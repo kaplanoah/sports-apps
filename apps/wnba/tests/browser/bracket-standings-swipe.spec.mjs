@@ -1,6 +1,12 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import {
+  expectDotsHeldWithBracket,
+  readRoundDotsLift,
+  readRoundDotsTop,
+  trackRoundDots,
+} from "../../../../tests/browser/round-dots.mjs";
 
 const PHONE = { width: 390, height: 844 };
 
@@ -226,5 +232,135 @@ test.describe("in full motion", () => {
 
     await expectPartShown(page, "bracket");
     await expect(findPart(page, "standings")).toBeHidden();
+  });
+
+  test("the round dots hold their height over the tab bar on every frame of a tap's slide to the standings and back, moving only sideways, with the bracket", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    const restingTop = await readRoundDotsTop(page);
+    const pill = findSeasonPill(page);
+
+    const readFramesOut = await trackRoundDots(page);
+    await pill.getByRole("tab", { name: "Standings" }).click();
+    await expectPartShown(page, "standings");
+    expectDotsHeldWithBracket(await readFramesOut(), restingTop);
+
+    const readFramesBack = await trackRoundDots(page);
+    await pill.getByRole("tab", { name: "Bracket" }).click();
+    await expectPartShown(page, "bracket");
+    expectDotsHeldWithBracket(await readFramesBack(), restingTop);
+  });
+
+  test("the round dots hold their height over the tab bar on every frame of a swipe from the bracket's last round to the standings", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const restingTop = await readRoundDotsTop(page);
+
+    const readFrames = await trackRoundDots(page);
+    const release = await drag(page, { x: 330, y: 400 }, { x: -250 }, { durationMs: 1000 });
+    await release();
+    await expectPartShown(page, "standings");
+
+    expectDotsHeldWithBracket(await readFrames(), restingTop);
+  });
+
+  test("a bracket laid out again while a finger holds it part way to the standings keeps its cards spread", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const tree = page.locator("#bracketWrap .bracket");
+    const readCardGap = () =>
+      tree.evaluate((element) => element.style.getPropertyValue("--card-gap"));
+    const spreadGap = await readCardGap();
+    expect(parseFloat(spreadGap)).toBeGreaterThan(32);
+
+    const release = await drag(page, { x: 330, y: 400 }, { x: -150 }, { durationMs: 1000 });
+    await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-sliding", "finger");
+    await page.evaluate(() => dispatchEvent(new Event("resize")));
+
+    expect(await readCardGap()).toBe(spreadGap);
+    await release();
+  });
+
+  test("the round dots hold their height over the tab bar when the bracket redraws for new results while a finger holds it part way to the standings", async ({
+    page,
+  }) => {
+    const app = await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const restingTop = await readRoundDotsTop(page);
+
+    const release = await drag(page, { x: 330, y: 400 }, { x: -150 }, { durationMs: 1000 });
+    await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-sliding", "finger");
+    await app.changeSeason((season) => {
+      season.series.find((series) => series.id === "1-1").bottom.wins = 1;
+      return season;
+    });
+    await expect(page.locator('[data-series="1-1"] .team-line').nth(1)).toContainText("1");
+
+    expect(await readRoundDotsTop(page)).toBe(restingTop);
+    await release();
+  });
+
+  test("the round dots stay just above the tab bar when the screen resizes while a finger holds the bracket part way to the standings", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const restingLift = await readRoundDotsLift(page);
+
+    const release = await drag(page, { x: 330, y: 400 }, { x: -150 }, { durationMs: 1000 });
+    await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-sliding", "finger");
+    await page.setViewportSize({ width: PHONE.width, height: PHONE.height - 100 });
+
+    await expect.poll(() => readRoundDotsLift(page)).toBe(restingLift);
+    await release();
+  });
+
+  test("the round dots stay just above the tab bar when the bracket grows taller while a finger holds it part way to the standings", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const restingLift = await readRoundDotsLift(page);
+    const tree = page.locator("#bracketWrap .bracket");
+    const readHeight = () => tree.evaluate((element) => element.getBoundingClientRect().height);
+    const restingHeight = await readHeight();
+
+    const release = await drag(page, { x: 330, y: 400 }, { x: -150 }, { durationMs: 1000 });
+    await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-sliding", "finger");
+    await tree.evaluate((element) => element.style.setProperty("--card-gap", "80px"));
+    expect(await readHeight()).toBeGreaterThan(restingHeight);
+
+    expect(await readRoundDotsLift(page)).toBe(restingLift);
+    await release();
+  });
+
+  test("the round dots hold their height over the tab bar on every frame of a tap that brings the bracket in from far down the standings", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    const restingTop = await readRoundDotsTop(page);
+    const pill = findSeasonPill(page);
+    await pill.getByRole("tab", { name: "Standings" }).click();
+    await expectPartShown(page, "standings");
+    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+    await expect(page.locator("#bracketStandingsPill")).toHaveClass(/stuck/);
+
+    const readFrames = await trackRoundDots(page);
+    await pill.getByRole("tab", { name: "Bracket" }).click();
+    await expectPartShown(page, "bracket");
+
+    expectDotsHeldWithBracket(await readFrames(), restingTop);
   });
 });

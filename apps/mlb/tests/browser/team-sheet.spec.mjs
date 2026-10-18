@@ -26,6 +26,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -242,6 +243,18 @@ test("a club's row in the standings opens its sheet, with its nearest games, rac
 
   await sheet.getByRole("button", { name: "Close" }).click();
   await expect(sheet).toBeHidden();
+});
+
+test("a club's card of a game being played draws its inning in the color of what's happening now", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await page.locator('.div-grid tr[data-team="TB"] .team-open').click();
+
+  const inning = page.locator("#teamSheet .game-card-now");
+  await expect(inning).toHaveText("Top 6th");
+  await expect(inning).toHaveCSS("color", await readColor(page, "--now"));
 });
 
 test("a club in the bracket opens its sheet", async ({ page }) => {
@@ -545,12 +558,8 @@ test("a roster that didn't load says so over Try again, and reads again as the p
   expect(await listStrayPeriods(page)).toEqual([]);
 
   await answer();
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-    document.dispatchEvent(new Event("visibilitychange"));
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
+  await setHidden(page, true);
+  await setHidden(page, false);
   await expect(sheet.locator("#rosterBody .box-name").first()).toHaveText("Jo Adell");
 });
 

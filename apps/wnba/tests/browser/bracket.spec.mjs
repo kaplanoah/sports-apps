@@ -1,6 +1,10 @@
 import { TEAMS } from "../../page/js/teams.js";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
-import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import {
+  findSeasonPill,
+  findSeasonTab,
+  openSeasonPart,
+} from "../../../../tests/browser/season-tab.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -118,7 +122,7 @@ test.describe("on a phone, the bracket", () => {
     }
 
     await page.locator(".bracket").evaluate((tree) => (tree.scrollLeft = 0));
-    await openSeasonPart(page, "Standings");
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
     await expect(page.locator("#standings-league")).toBeVisible();
 
     await findSeasonTab(page).click();
@@ -230,6 +234,33 @@ test.describe("on a phone, the bracket", () => {
     await openApp(page);
     const gaps = await readCardGaps(page);
     for (const gap of gaps.between) expect(gap).toBeCloseTo(TIGHTEST_CARD_GAP, 0);
+  });
+
+  test("never scrolls down, nor further sideways, once the screen shrinks after it spread its cards", async ({
+    page,
+  }) => {
+    const shortScreen = { width: 375, height: 667 };
+    await page.setViewportSize(shortScreen);
+    await openApp(page);
+    const tree = page.locator(".bracket");
+    const readScrollRoom = () =>
+      tree.evaluate((element) => ({
+        down: element.scrollHeight - element.clientHeight,
+        sideways: element.scrollWidth - element.clientWidth,
+      }));
+    expect((await readCardGaps(page)).between[0]).toBeCloseTo(TIGHTEST_CARD_GAP, 0);
+    const roomOnOpen = await readScrollRoom();
+    expect(roomOnOpen.down).toBe(0);
+
+    await page.setViewportSize({ width: 430, height: 932 });
+    await expect
+      .poll(async () => (await readCardGaps(page)).between[0])
+      .toBeGreaterThan(TIGHTEST_CARD_GAP);
+    await page.setViewportSize(shortScreen);
+    await expect
+      .poll(async () => (await readCardGaps(page)).between[0])
+      .toBeCloseTo(TIGHTEST_CARD_GAP, 0);
+    expect(await readScrollRoom()).toEqual(roomOnOpen);
   });
 
   test("on the Semifinals, the first round's lines run off the screen's edge without turning at it", async ({

@@ -194,7 +194,7 @@
   --logos-for-light: inline;
   --logos-for-dark: none;
   --game-card-edge: var(--card-border);
-  --game-card-live: var(--now);
+  --game-card-now: var(--now);
   --game-card-won: var(--highlight);
   --game-card-team-font: inherit;
   --game-row-height: 82.5px;
