@@ -1,7 +1,7 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { keepRanking, keepSeenAt, readRanking, readSeenAt } from "../page/js/kept-on-device.js";
-import { dropSavedStorage, useSavedStorage } from "./saved-storage.js";
+import { dropSavedStorage, useSavedStorage } from "../../../tests/saved-storage.js";
 
 afterEach(dropSavedStorage);
 

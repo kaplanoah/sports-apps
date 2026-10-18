@@ -65,11 +65,21 @@ function tellWatchers(key) {
   for (const each of keys) for (const onChange of watchersByKey.get(each) ?? []) onChange();
 }
 
-// Another tab's change to storage comes as an event, with no key when it cleared it all.
+/** @param {string | null} key */
+function forgetKeptInMemory(key) {
+  if (key === null) keptInMemory.clear();
+  else keptInMemory.delete(key);
+}
+
+// Another tab's change to storage comes as an event, with no key when it cleared it all. What it
+// saved is newer than a choice this tab could only keep in memory.
 function watchOtherTabs() {
   if (isWatchingOtherTabs || typeof addEventListener !== "function") return;
   isWatchingOtherTabs = true;
-  addEventListener("storage", (event) => tellWatchers(event.key));
+  addEventListener("storage", (event) => {
+    forgetKeptInMemory(event.key);
+    tellWatchers(event.key);
+  });
 }
 
 /**

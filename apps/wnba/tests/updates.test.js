@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { session } from "../page/js/session.js";
 import { listFreshUpdates, listPlayoffWins } from "../page/js/updates.js";
+import { refuseAccess, useSavedStorage, useStorage } from "../../../tests/saved-storage.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
 
 const AFTERNOON = JSON.parse(
@@ -22,21 +23,6 @@ function readFreshWins(season) {
   session.season = season;
   return listFreshUpdates().map(readText);
 }
-
-/** @param {Partial<Storage>} storage */
-const useStorage = (storage) =>
-  Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
-
-/** @param {Map<string, string>} saved */
-const useSavedStorage = (saved) =>
-  useStorage({
-    getItem: (key) => saved.get(key) ?? null,
-    setItem: (key, value) => saved.set(key, value),
-  });
-
-const refuseAccess = () => {
-  throw new Error("Access denied");
-};
 
 const TUESDAY_WINS = [
   "Liberty beat the Lynx 87-71 to win the First Round 2-0",

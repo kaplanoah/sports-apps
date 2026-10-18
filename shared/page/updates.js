@@ -1,6 +1,6 @@
-// The box under the tabs that lists what's new since the viewer last dismissed it, newest first,
-// each beside when it happened, and under them, what's new in the app. An app says what its
-// updates and release notes are and where the dismissal is kept.
+// The box under the tabs that lists what's new since the viewer first opened the app or last
+// dismissed the box, newest first, each beside when it happened, and under them, what's new in the
+// app. An app says what its updates and release notes are and where the box's start is kept.
 
 import {
   countDaysBetween,
