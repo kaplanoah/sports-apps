@@ -1,22 +1,34 @@
 // Where the title row's parts sit around the app's name, measured from the fonts it draws in.
 
 /**
+ * The text of the app's name in the title, the last of the title's words before the year, once
+ * its fonts have loaded.
+ * @param {import("@playwright/test").Page} page
+ */
+async function findName(page) {
+  await page.evaluate(() => document.fonts.ready);
+  return page.evaluateHandle(
+    () =>
+      /** @type {Text} */ (
+        [...(document.querySelector("header.top h1")?.childNodes ?? [])].findLast(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+        )
+      ),
+  );
+}
+
+/**
  * How far the channel tag's middle sits below the middle of the name's capitals, in pixels, or
  * above it when negative.
  * @param {import("@playwright/test").Page} page
  */
 export async function readTagOffset(page) {
-  await page.evaluate(() => document.fonts.ready);
-  return page.evaluate(() => {
-    const h1 = /** @type {HTMLElement} */ (document.querySelector("header.top h1"));
-    const name = /** @type {Text} */ (
-      [...h1.childNodes].findLast(
-        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
-      )
-    );
+  const name = await findName(page);
+  return name.evaluate((text) => {
+    const h1 = /** @type {HTMLElement} */ (text.parentElement);
     const probe = document.createElement("span");
     probe.style.cssText = "display: inline-block; width: 0; height: 0; vertical-align: baseline";
-    name.after(probe);
+    text.after(probe);
     const baseline = probe.getBoundingClientRect().bottom;
     probe.remove();
     const style = getComputedStyle(h1);
@@ -37,19 +49,13 @@ export async function readTagOffset(page) {
  * @param {import("@playwright/test").Page} page
  */
 export async function readYearGap(page) {
-  await page.evaluate(() => document.fonts.ready);
-  return page.evaluate(() => {
-    const h1 = /** @type {HTMLElement} */ (document.querySelector("header.top h1"));
-    const name = /** @type {Text} */ (
-      [...h1.childNodes].findLast(
-        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
-      )
-    );
-    const letters = name.textContent?.trim() ?? "";
+  const name = await findName(page);
+  return name.evaluate((text) => {
+    const letters = text.textContent?.trim() ?? "";
+    const start = (text.textContent ?? "").indexOf(letters);
     const range = document.createRange();
-    const start = (name.textContent ?? "").indexOf(letters);
-    range.setStart(name, start);
-    range.setEnd(name, start + letters.length);
+    range.setStart(text, start);
+    range.setEnd(text, start + letters.length);
     const year = /** @type {HTMLElement} */ (document.getElementById("titleYear"));
     return year.getBoundingClientRect().left - range.getBoundingClientRect().right;
   });
