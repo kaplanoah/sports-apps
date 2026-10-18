@@ -3,10 +3,11 @@ import { respondError, respondJson } from "./responses.js";
 
 // Push subscriptions and the key that signs messages for them. Both are kept under keys the
 // store's own paths can't name, so the page's store never hands them out. The store keeps a hundred
-// devices at most, since anyone with the page's address can subscribe one, and makes room for a new
-// one by forgetting the one saved longest ago, since each visit saves its device again. It also
-// forgets a device its push service says is gone, or that has failed every message for a week, long
-// enough for a fault of the store's own to be fixed first.
+// devices at most, since anyone with the page's address can subscribe one. Once full, it makes room
+// for a new one only by forgetting one that's failing or hasn't been saved for a month, since each
+// visit saves its device again, and turns the new one away otherwise, so a flood of subscriptions
+// never pushes out a phone in use. It also forgets a device its push service says is gone, or that
+// has failed every message for a week, long enough for a fault of the store's own to be fixed first.
 
 const SIGNING_KEY = "push:signing-key";
 const SUBSCRIPTION_PREFIX = "push:subscription:";
@@ -14,6 +15,7 @@ const MAX_BODY_BYTES = 4 * 1024;
 const GONE_STATUSES = new Set([404, 410]);
 const MAX_SUBSCRIPTIONS = 100;
 const FAILING_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+const UNSAVED_FOR_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Only real push services, so a stored address can't point the Worker anywhere else.
 const PUSH_SERVICE_HOSTS = [
@@ -71,13 +73,20 @@ async function readBody(request) {
   }
 }
 
-// A device kept without the time it was saved counts as saved longest ago.
-/** @param {Map<string, { savedAt?: number }>} stored */
-function findSavedLongestAgo(stored) {
-  const [[oldestKey]] = [...stored].sort(
-    ([, first], [, second]) => (first.savedAt ?? 0) - (second.savedAt ?? 0),
-  );
-  return oldestKey;
+/**
+ * The device a full store forgets to make room for another, the one saved longest ago of those
+ * failing or not saved for a month, or undefined when there's none. A device kept without the time
+ * it was saved counts as saved longest ago.
+ * @param {Map<string, { savedAt?: number, failingSince?: number }>} stored
+ * @param {number} now
+ */
+function findForgettable(stored, now) {
+  const isForgettable = (/** @type {{ savedAt?: number, failingSince?: number }} */ device) =>
+    device.failingSince !== undefined || now - (device.savedAt ?? 0) >= UNSAVED_FOR_MS;
+  const [oldest] = [...stored]
+    .filter(([, device]) => isForgettable(device))
+    .sort(([, first], [, second]) => (first.savedAt ?? 0) - (second.savedAt ?? 0));
+  return oldest?.[0];
 }
 
 async function findSubscriptionKey(endpoint) {
@@ -179,16 +188,26 @@ export function createPushService({ storage, now, fetchImpl }) {
       return respondError(400, "invalid_argument", "That isn't a push subscription.");
     const { endpoint, keys } = body;
     const key = await findSubscriptionKey(endpoint);
-    await makeRoomFor(key);
+    if (!(await makeRoomFor(key)))
+      return respondError(429, "too_many_devices", "Too many devices get notifications already.");
     const subject = new URL(request.url).origin;
     await storage.put(key, { endpoint, keys, subject, savedAt: now() });
     return new Response(null, { status: 204 });
   }
 
+  /**
+   * Makes room for the device when the store is full and holds one it can forget, and answers
+   * whether the device has room.
+   * @param {string} key
+   */
   async function makeRoomFor(key) {
-    if (await storage.get(key)) return;
+    if (await storage.get(key)) return true;
     const stored = await listSubscriptions();
-    if (stored.size >= MAX_SUBSCRIPTIONS) await storage.delete(findSavedLongestAgo(stored));
+    if (stored.size < MAX_SUBSCRIPTIONS) return true;
+    const forgettable = findForgettable(stored, now());
+    if (forgettable === undefined) return false;
+    await storage.delete(forgettable);
+    return true;
   }
 
   async function readSubscriptionFor(request) {

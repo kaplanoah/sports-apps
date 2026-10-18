@@ -248,8 +248,9 @@ export function createRotationServer({
   }
 
   /**
-   * The club's starts the store keeps, null when they don't reach the two weeks before `date`, and
-   * whether `date` is in the store's current season, each null when it can't be read.
+   * The club's starts the store keeps, null when they don't reach the two weeks before `date` or
+   * the store can't be read, and whether `date` is in the store's current season, false when the
+   * store can't be read.
    * @param {string} club
    * @param {string} date
    * @param {((key: string) => Promise<any>) | undefined} readDoc

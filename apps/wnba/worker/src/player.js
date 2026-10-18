@@ -589,15 +589,15 @@ export function createPlayerServer({
    * @param {ReadDoc} readDoc
    */
   async function readPlayerFromStore({ id, team, season }, readDoc) {
-    const { docs, isCurrentSeason } = await readSeasonDocs(readDoc, season, [
+    const kept = await readSeasonDocs(readDoc, season, [
       nameRanksKey(season),
       nameNumbersKey(season, id),
       nameRosterKey(season, team),
     ]);
-    const [ranks, numbers, roster] = docs ?? [];
+    const [ranks, numbers, roster] = kept.docs ?? [];
     return {
       player: ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined,
-      isCurrentSeason,
+      isCurrentSeason: kept.isCurrentSeason,
     };
   }
 

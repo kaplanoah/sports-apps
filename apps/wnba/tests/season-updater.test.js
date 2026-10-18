@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot, readPlayoffGameId } from "../page/js/snapshot.js";
 import { listUpcomingMeetings } from "../worker/src/preview.js";
 import {
   listNotifications,
@@ -244,8 +244,6 @@ test("the season's games stay as they were unless both the scoreboard and the sc
   assert.deepEqual(await readSchedule(docs, 2026), saved);
 });
 
-const PLAYOFF_GAME_ID = /^104/;
-
 /**
  * The recorded schedule as the league lists the next season's before it starts: its preseason and
  * regular season a year later, numbered for that season, none of them played, and no playoffs.
@@ -272,7 +270,7 @@ function moveScheduleToNextSeason(schedule) {
     .map((/** @type {any} */ day) => ({
       ...day,
       games: day.games
-        .filter((/** @type {any} */ game) => !PLAYOFF_GAME_ID.test(game.gameId))
+        .filter((/** @type {any} */ game) => !readPlayoffGameId(game.gameId))
         .map(moveGame),
     }))
     .filter((/** @type {any} */ day) => day.games.length);

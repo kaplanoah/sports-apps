@@ -75,6 +75,74 @@ test("notifications can be turned on and off, with no note while the switch work
   expect(app.countSubscriptions()).toBe(0);
 });
 
+test("a device the Worker has no room for is left off, and is still off after a reload", async ({
+  page,
+}) => {
+  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await openApp(page);
+  await page.route(matchPath("/push/subscription"), (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 429,
+          json: { error: { code: "too_many_devices", message: "Too many devices." } },
+        })
+      : route.fallback(),
+  );
+  await openSettings(page);
+  const toggle = page.getByRole("switch", { name: "Notifications" });
+
+  await toggle.click();
+  await expect(page.locator("#notifyNote")).toHaveText(
+    "Too many devices get notifications already",
+  );
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        return registration.pushManager.getSubscription();
+      }),
+    )
+    .toBeNull();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+});
+
+test("a device the Worker no longer has room for on a later visit is turned off", async ({
+  page,
+}) => {
+  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await openApp(page);
+  await openSettings(page);
+  const toggle = page.getByRole("switch", { name: "Notifications" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await page.route(matchPath("/push/subscription"), (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 429,
+          json: { error: { code: "too_many_devices", message: "Too many devices." } },
+        })
+      : route.fallback(),
+  );
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  await expect(page.locator("#notifyNote")).toHaveText(
+    "Too many devices get notifications already",
+  );
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        return registration.pushManager.getSubscription();
+      }),
+    )
+    .toBeNull();
+});
+
 test("a new signing key whose save fails for a moment keeps the subscription, which the next visit saves", async ({
   page,
 }) => {
