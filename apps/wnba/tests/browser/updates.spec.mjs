@@ -377,6 +377,37 @@ test.describe("on a phone, with a release note out", () => {
     expect(await notes.locator(".more").evaluate(readTextLeft)).toBe(noteLeft);
   });
 
+  test("on a small phone, a full Updates box leaves the bracket and the Games list most of the screen, and the page scrolls the rest of each into view", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await serveReleaseNote(page, [
+      CHANNELS_NOTE,
+      { at: "2026-09-28T15:00:00Z", text: "Rosters, with each player's stats" },
+      { at: "2026-09-27T15:00:00Z", text: "News from each team's outlets" },
+    ]);
+    await openApp(page, { updatesBox: "shown" });
+    await expect(page.locator("#updates .updates-notes .what")).toHaveCount(3);
+    /** @param {string} selector */
+    const expectMostOfScreen = async (selector) => {
+      const view = page.locator(selector);
+      expect(await view.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(
+        Math.floor(568 * 0.6),
+      );
+      await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+      expect(
+        await view.evaluate((element) => Math.round(element.getBoundingClientRect().bottom)),
+      ).toBeLessThanOrEqual(568);
+    };
+
+    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await expectMostOfScreen("#view-bracket-standings");
+
+    await page.getByRole("tab", { name: "Games" }).click();
+    await expect(page.locator("#view-games .day-list")).toBeVisible();
+    await expectMostOfScreen("#view-games");
+  });
+
   test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {
     await serveReleaseNote(page);
     await openApp(page, { updatesBox: "shown" });

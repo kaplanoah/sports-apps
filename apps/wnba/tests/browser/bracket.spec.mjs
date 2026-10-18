@@ -5,6 +5,10 @@ import {
   findSeasonTab,
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
+import {
+  readSeasonPartScroll,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -234,6 +238,24 @@ test.describe("on a phone, the bracket", () => {
     await openApp(page);
     const gaps = await readCardGaps(page);
     for (const gap of gaps.between) expect(gap).toBeCloseTo(TIGHTEST_CARD_GAP, 0);
+  });
+
+  test("keeps its gaps when it lays out again however far its part is scrolled", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: PHONE.width, height: 600 });
+    await openApp(page);
+    const atTop = await readCardGaps(page);
+    await page.locator("#bracketWrap").evaluate((wrap) => {
+      const room = Object.assign(document.createElement("div"), { style: "height: 2000px" });
+      wrap.after(room);
+    });
+    await scrollSeasonPartToEnd(page, "bracket");
+    expect(await readSeasonPartScroll(page, "bracket")).toBeGreaterThan(0);
+
+    await page.evaluate(() => dispatchEvent(new Event("resize")));
+
+    expect((await readCardGaps(page)).between).toEqual(atTop.between);
   });
 
   test("never scrolls down, nor further sideways, once the screen shrinks after it spread its cards", async ({

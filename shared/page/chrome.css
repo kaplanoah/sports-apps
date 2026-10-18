@@ -209,11 +209,12 @@ section.view.active {
 }
 /* The view grows from nothing into the room left, rather than shrink from all it holds, which
    rounds to a slightly different height as it draws and would resize it for no change on the
-   screen. */
+   screen. It keeps most of the screen, though, so a tall Updates box over it (updates.js) never
+   leaves it a sliver: the page then scrolls the rest of it into view. */
 section.view.active:has(> :is(.day-view, .season-parts)) {
   display: flex;
   flex: 1 1 0;
-  min-height: 0;
+  min-height: 60svh;
 }
 
 .load-note {
