@@ -132,6 +132,28 @@ test("a game live at a device's first look shows once it's final, though its las
   assert.deepEqual(readFreshWins(SEASON), [TUESDAY_WINS[0]]);
 });
 
+test("a game live at a device's first look shows once the Worker finds it final, though it ended before a final already out", () => {
+  useSavedStorage(new Map());
+  const isLibertyGame2 = (game) =>
+    game.away.team === "MIN" && game.home.team === "NYL" && game.number === 2;
+  const isFeverGame2 = (game) =>
+    game.number === 2 && [game.away.team, game.home.team].includes("IND");
+  const feverFinal = { end: "2026-09-30T02:10:00Z", finalAt: "2026-09-30T02:12:00Z" };
+  const withTimes = (libertyGame2) => ({
+    ...SEASON,
+    games: SEASON.games.map((game) => {
+      if (isFeverGame2(game)) return { ...game, ...feverFinal };
+      return isLibertyGame2(game) ? { ...game, ...libertyGame2 } : game;
+    }),
+  });
+
+  assert.deepEqual(readFreshWins(withTimes({ state: "live" })), []);
+  const libertyFinal = { end: "2026-09-30T02:05:00Z", finalAt: "2026-09-30T02:20:00Z" };
+  assert.deepEqual(readFreshWins(withTimes(libertyFinal)), [
+    "Liberty beat the Lynx 87-71 to win the First Round 2-0",
+  ]);
+});
+
 test("a device's first look before any playoff final lists every final after it", () => {
   useSavedStorage(new Map());
 

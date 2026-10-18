@@ -53,7 +53,8 @@ export const keepSeenAt = (year, at) =>
   seenAtBySeason.keep({ ...seenAtBySeason.read(), [year]: at });
 
 /**
- * Calls `onChange` whenever this device's ranking or dismissal changes, in this tab or another.
+ * Calls `onChange` whenever this device's ranking, when its Updates box counts from, or its release
+ * notes' dismissal changes, in this tab or another.
  * @param {() => void} onChange
  */
 export function watchKeptChoices(onChange) {

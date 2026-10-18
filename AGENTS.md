@@ -188,7 +188,7 @@
   the standings' playoff fields and each league's divisions, and settings and each setting (`page/js/search-pages.js`),
   apart from the slate the header, the Updates box, and the store follow (`page/js/slate.js`),
   whose ranking each device keeps for itself, in name order until its first drag,
-  with its dismissal of the Updates box (`page/js/kept-on-device.js`),
+  with when its Updates box counts from, its first look or last dismissal (`page/js/kept-on-device.js`),
   which only phones and tablets show (`page/js/updates.js`), and which also serves each starting pitcher's matchup numbers,
   ranked among MLB's qualified starters (`worker/src/pitchers.js`),
   and, for a club yet to name one, its last starters and their rest (`worker/src/rotations.js`),
@@ -268,7 +268,8 @@
   the latest final's Highlights, the bracket and the News tab, the standings' lists,
   and settings and each setting (`page/js/search-pages.js`), whose settings pick any season the store keeps once it keeps more than one,
   whose page saves nothing to the store, lists each playoff final in an Updates box only on phones and tablets,
-  and only for the current season, each keeping its own dismissal (`page/js/updates.js`),
+  and only for the current season, each keeping when its box counts from, its first look or last dismissal,
+  by when the Worker first found each final (`page/js/updates.js`),
   and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings or the Home Screen welcome (the shared `appearance.js`, kept per device,
   and `pick-theme.js`, which the browser's address names it in for the Home Screen app), in its own self-hosted fonts.
   Paths below are inside an app's folder, except `shared/` and the ones named as the root's.

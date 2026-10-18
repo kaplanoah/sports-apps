@@ -22,7 +22,7 @@ import { isPastSeason, session } from "./session.js";
 import { describeWin, isPlayoffFinal } from "./win-text.js";
 
 /** @typedef {import("./games-view.js").Game} Game */
-/** @typedef {{ at: number, day: Date | null, endedNextDay: boolean, text: import("#shared/html.js").Markup, action: import("#shared/html.js").Markup | false }} PlayoffWin */
+/** @typedef {{ at: number, foundAt: number, day: Date | null, endedNextDay: boolean, text: import("#shared/html.js").Markup, action: import("#shared/html.js").Markup | false }} PlayoffWin */
 
 // Null until this device's first look, which keeps its start.
 const seenAt = createViewerChoice("updatesSeenAt", (stored) =>
@@ -34,6 +34,12 @@ const seenAt = createViewerChoice("updatesSeenAt", (stored) =>
 /** @param {Game} game */
 const readFinishedAt = (game) => Date.parse(game.end ?? game.start ?? "");
 
+// Freshness goes by when the Worker first found a game final, which only moves forward, where a
+// game's end can come before that of a final already listed. A final saved before the Worker kept
+// that goes by when it finished.
+/** @param {Game} game */
+const readFoundAt = (game) => (game.finalAt ? Date.parse(game.finalAt) : readFinishedAt(game));
+
 /**
  * @param {Game} game
  * @param {Game[]} games the season's games
@@ -44,6 +50,7 @@ function describePlayoffWin(game, games) {
   const day = readGameDay(game);
   return {
     at,
+    foundAt: readFoundAt(game),
     day,
     endedNextDay: !!day && countDaysBetween(day, new Date(at)) > 0,
     text: describeWin(game, games, renderTeamName),
@@ -75,15 +82,15 @@ export function listFreshUpdates() {
   const wins = listPlayoffWins(session.season);
   const freshAfter = readOrStartSeenAt(
     seenAt.read(),
-    wins.map((win) => win.at),
+    wins.map((win) => win.foundAt),
     seenAt.keep,
   );
-  return wins.filter((win) => win.at > freshAfter);
+  return wins.filter((win) => win.foundAt > freshAfter);
 }
 
 // The newest update's time is the Worker's, so the dismissal doesn't depend on this device's clock.
 function dismissUpdates() {
-  const times = listFreshUpdates().map((win) => win.at);
+  const times = listFreshUpdates().map((win) => win.foundAt);
   if (times.length) seenAt.keep(Math.max(...times));
   dismissNotes(RELEASE_NOTES);
   drawUpdates();
