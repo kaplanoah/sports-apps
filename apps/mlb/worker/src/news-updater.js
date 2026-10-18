@@ -6,8 +6,8 @@ import { LABEL_PROMPT } from "./news-prompts.js";
 
 // MLB's news, which the shared news job keeps from its outlets, judged by its prompt. Its outlets
 // post a few things every league's rules don't know aren't news: Baseball Prospectus's fantasy
-// pages and its Spanish copies of what it posts in English, the daily link roundups, chats, and
-// podcast episodes.
+// pages and its Spanish copies of what it posts in English, the daily link roundups, chats,
+// podcast episodes, and MLB Trade Rumors' reader polls.
 
 const URL_DROPS = /** @type {[RegExp, string][]} */ ([
   [/\/fantasy\//, "fantasy"],
@@ -18,6 +18,7 @@ const TITLE_DROPS = /** @type {[RegExp, string][]} */ ([
   [/^Mets Morning News\b|^The Opener:/i, "roundup"],
   [/\bsubscriber chat\b|\bopen thread\b/i, "chat"],
   [/^PosCasting\b/i, "podcast"],
+  [/^Poll:/i, "poll"],
   [/^Latest .*injuries & transactions$/i, "reference"],
 ]);
 
