@@ -10,6 +10,9 @@ declare function readPickedAppearance(): string;
 declare function keepPickedAppearance(choice: string): void;
 declare function openThemeAddress(choice: string): void;
 declare function buildSafariAddress(choice: string, address: string): string;
+declare function isLook(value: unknown): value is "light" | "dark";
+declare function readPhoneLook(): "light" | "dark";
+declare function readHomeScreenIcon(): string | null;
 declare const WELCOME_CLOSED_KEY: string;
 declare function readStored(key: string): string | null;
 

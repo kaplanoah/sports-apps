@@ -1,13 +1,17 @@
 /**
- * Keeps a list of each animation the page starts from then on, by the class of the element it
- * moves, with its first and last frames and the way it plays them, and returns a way to read the
- * list.
+ * An animation the page started: the class of the element it moves, its first and last frames,
+ * and the way it plays them.
+ * @typedef {{ element: string, first: Keyframe, last: Keyframe, direction: string }} Animation
+ */
+
+/**
+ * Keeps a list of each animation the page starts from then on, and returns a way to read the list.
  * @param {import("@playwright/test").Page} page
- * @returns {Promise<() => Promise<{ element: string, first: Keyframe, last: Keyframe, direction: string }[]>>}
+ * @returns {Promise<() => Promise<Animation[]>>}
  */
 export async function listAnimations(page) {
   await page.addInitScript(() => {
-    /** @type {{ element: string, first: Keyframe, last: Keyframe, direction: string }[]} */
+    /** @type {Animation[]} */
     const animations = [];
     Object.assign(window, { animations });
     const animate = Element.prototype.animate;

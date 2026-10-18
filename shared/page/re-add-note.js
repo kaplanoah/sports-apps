@@ -5,11 +5,11 @@
 // icon. Storage can refuse access, as in a private window, and then a dismissal lasts until the
 // page reloads.
 
-const HOME_SCREEN_ICON_KEY = "homeScreenIcon";
 const DISMISSED_KEY = "reAddNoteDismissed";
 
 let isDismissedInMemory = false;
 
+// pick-theme.js tests a look the same way, but this runs in Node's tests too, where it isn't.
 /**
  * @param {unknown} look
  * @returns {look is "light" | "dark"}
@@ -26,15 +26,6 @@ const isLook = (look) => look === "light" || look === "dark";
 export function chooseReAddNote({ isIosApp, picked, icon, isDismissed }) {
   if (!isIosApp || isDismissed || !isLook(icon) || !isLook(picked) || picked === icon) return null;
   return { icon, picked };
-}
-
-/** The look of the icon this Home Screen app was added with, or null where storage doesn't say. */
-export function readHomeScreenIcon() {
-  try {
-    return localStorage.getItem(HOME_SCREEN_ICON_KEY);
-  } catch {
-    return null;
-  }
 }
 
 export function isReAddNoteDismissed() {

@@ -4,19 +4,15 @@
 // it, current. Each app hands it its looks' icons and bar colors.
 
 // Every page that loads this runs pick-theme.js first.
-/* global buildSafariAddress, isAppearanceChoice, openThemeAddress -- from pick-theme.js */
+/* global buildSafariAddress, isAppearanceChoice, isLook, openThemeAddress, readHomeScreenIcon,
+   readPhoneLook -- from pick-theme.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
 import { renderDismissButton } from "./dismiss-button.js";
 import { easeClosed, redrawEased, stopEasing } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
-import {
-  chooseReAddNote,
-  isReAddNoteDismissed,
-  keepReAddNoteDismissed,
-  readHomeScreenIcon,
-} from "./re-add-note.js";
+import { chooseReAddNote, isReAddNoteDismissed, keepReAddNoteDismissed } from "./re-add-note.js";
 import { watchTimeAway } from "./resume.js";
 
 /**
@@ -35,10 +31,7 @@ const appearance = createViewerChoice("appearance", (stored) =>
  * @param {string} choice
  * @returns {"light" | "dark"}
  */
-const resolveTheme = (choice) => {
-  if (choice === "light" || choice === "dark") return choice;
-  return darkScheme.matches ? "dark" : "light";
-};
+const resolveTheme = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
 // A phone keeps the icon a page offers at the moment it's added to the home screen, so the page
 // offers the one that matches the theme showing.
@@ -125,17 +118,35 @@ function drawNote() {
   setHtml(findNote(), note ? renderNote(note) : html``);
 }
 
-// The note eases in as a pick sets the icon off and out as one brings it back or the X dismisses
-// it.
-function updateNote() {
+let isNoteClosing = false;
+
+function showNote() {
   const note = findNote();
-  stopEasing(note);
-  if (readNote())
-    redrawEased(() => {
-      noteHeight(note);
-      drawNote();
-    });
-  else if (note.childElementCount > 0) easeClosed(note, () => setHtml(note, html``));
+  if (isNoteClosing) stopEasing(note);
+  isNoteClosing = false;
+  redrawEased(() => {
+    noteHeight(note);
+    drawNote();
+  });
+}
+
+// A note already shrinking away keeps on, so a second tap on its X never starts it over.
+function hideNote() {
+  const note = findNote();
+  if (isNoteClosing || note.childElementCount === 0) return;
+  isNoteClosing = true;
+  easeClosed(note, () => {
+    isNoteClosing = false;
+    setHtml(note, html``);
+  });
+}
+
+// The note eases in as a pick sets the icon off and out as one brings it back or the X dismisses
+// it, and its link's handoff follows.
+function updateNote() {
+  if (readNote()) showNote();
+  else hideNote();
+  followHandoff();
 }
 
 const HANDOFF_RETRY_MS = 30 * 1000;
@@ -181,19 +192,24 @@ async function renewHandoff() {
   isAskingForHandoff = true;
   const answer = await requestHandoff();
   isAskingForHandoff = false;
-  if (!isHandoffWanted() || answer === "none") return;
+  if (!isHandoffWanted()) return;
   if (answer === "failed") {
     scheduleRenewal(HANDOFF_RETRY_MS);
     return;
   }
-  handoffAddress = answer.address;
+  handoffAddress = answer === "none" ? null : answer.address;
   drawNote();
-  scheduleRenewal(answer.expiresInMs / 2);
+  if (answer !== "none") scheduleRenewal(answer.expiresInMs / 2);
 }
 
+// A handoff kept while the note is away would be stale by the time it shows again.
 function followHandoff() {
-  if (!isHandoffWanted()) stopRenewals();
-  else if (renewDueAt === Infinity && !isAskingForHandoff) renewHandoff();
+  if (isHandoffWanted()) {
+    if (renewDueAt === Infinity && !isAskingForHandoff) renewHandoff();
+    return;
+  }
+  stopRenewals();
+  handoffAddress = null;
 }
 
 // A phone freezes the page's timers while it's away, and short trips away leave settings open, so
@@ -202,17 +218,15 @@ function renewIfDue() {
   if (Date.now() >= renewDueAt) renewHandoff();
 }
 
-// A handoff kept past settings closing would be stale by the next time it opens.
+// Settings closing lets go of the handoff, so the link waits for a fresh one as it opens again.
 function forgetHandoff() {
-  stopRenewals();
-  handoffAddress = null;
+  followHandoff();
   drawNote();
 }
 
 function dismissNote() {
   keepReAddNoteDismissed();
   updateNote();
-  followHandoff();
 }
 
 function wireNote() {
@@ -249,7 +263,6 @@ export function startAppearance(looks) {
       checkSavedChoice(choices);
       showChosenTheme();
       updateNote();
-      followHandoff();
     });
   }
   appearance.watch(() => {

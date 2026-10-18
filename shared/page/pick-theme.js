@@ -14,6 +14,20 @@ function isAppearanceChoice(value) {
   return value === "auto" || value === "light" || value === "dark";
 }
 
+// The app's light look or its dark one, as against System.
+/**
+ * @param {unknown} value
+ * @returns {value is "light" | "dark"}
+ */
+function isLook(value) {
+  return value === "light" || value === "dark";
+}
+
+/** @returns {"light" | "dark"} the look the phone's dark or light setting shows */
+function readPhoneLook() {
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 // A device keeps the choice as JSON, or, if it kept one earlier, as its name. Storage can refuse
 // access, as in a private window, so the page never depends on it.
 function readPickedAppearance() {
@@ -38,7 +52,7 @@ const isAppleBrowser = () => "standalone" in navigator;
 /** @param {string} choice */
 function buildThemeAddress(choice) {
   const address = new URL(location.href);
-  if (choice === "light" || choice === "dark") address.searchParams.set("theme", choice);
+  if (isLook(choice)) address.searchParams.set("theme", choice);
   else address.searchParams.delete("theme");
   return address;
 }
@@ -102,20 +116,28 @@ function takeThemeFromApp() {
   }
 }
 
-// A Home Screen app keeps the icon the page offered as it was added, which re-add-note.js reads:
-// the look its address names, which it opens at each time, or, added on System, the look the
-// phone's dark or light setting showed then, which its first open is the nearest to.
+// A Home Screen app keeps the icon the page offered as it was added: the look its address names,
+// which it opens at each time, or, added on System, the look the phone's dark or light setting
+// showed then, which its first open is the nearest to.
 const HOME_SCREEN_ICON_KEY = "homeScreenIcon";
 
 function keepHomeScreenIcon() {
   const named = new URL(location.href).searchParams.get("theme");
-  const phoneLook = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   try {
-    if (named === "light" || named === "dark") localStorage.setItem(HOME_SCREEN_ICON_KEY, named);
+    if (isLook(named)) localStorage.setItem(HOME_SCREEN_ICON_KEY, named);
     else if (localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
-      localStorage.setItem(HOME_SCREEN_ICON_KEY, phoneLook);
+      localStorage.setItem(HOME_SCREEN_ICON_KEY, readPhoneLook());
   } catch {
     /* without storage, settings can't tell the icon, and says nothing of it */
+  }
+}
+
+/** The look of the icon this Home Screen app was added with, or null where storage doesn't say. */
+function readHomeScreenIcon() {
+  try {
+    return localStorage.getItem(HOME_SCREEN_ICON_KEY);
+  } catch {
+    return null;
   }
 }
 
@@ -137,9 +159,7 @@ function keepThemeFromAddress() {
 
 /** @param {string} choice */
 function showTheme(choice) {
-  const prefersDark = matchMedia("(prefers-color-scheme: dark)").matches;
-  const isDark = choice === "dark" || (choice !== "light" && prefersDark);
-  document.documentElement.dataset.theme = isDark ? "dark" : "light";
+  document.documentElement.dataset.theme = isLook(choice) ? choice : readPhoneLook();
 }
 
 /** @param {string} choice */

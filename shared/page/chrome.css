@@ -595,17 +595,51 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .control-note:empty {
   display: none;
 }
+/* A card with an X in its corner (dismiss-button.js), like the Updates box and the note on
+   bringing a Home Screen app's icon up to date. Its end leaves the X room, which the X reaches
+   into to sit 6px from the corner. */
+.dismissible-box {
+  --box-pad-start: 13px;
+  --box-pad-end: 22px;
+  --box-pad-block: 10px;
+  padding: var(--box-pad-block) var(--box-pad-end) var(--box-pad-block) var(--box-pad-start);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+}
+.dismiss-button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: -4px calc(6px - var(--box-pad-end)) -2px 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: color-mix(in srgb, var(--ink-dim) 62%, transparent);
+  cursor: pointer;
+}
+/* Phosphor draws inside a wide margin, so the X reads at about 10px. */
+.dismiss-button svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+@media (hover: hover) {
+  .dismiss-button:hover {
+    color: var(--ink-hover);
+  }
+}
 /* The note under the Appearance choices on bringing a Home Screen app's icon up to date
-   (appearance.js), a card like the Updates box, with the icon the app has, an arrow, and the one
-   adding it again gives it, a step further from the words than the X is. */
+   (appearance.js), with the icon the app has, an arrow, and the one adding it again gives it, a
+   step further from the words than the X is. */
 .re-add-note {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 22px 10px 13px;
-  background: var(--card);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-card);
 }
 .re-add-note:empty {
   display: none;
@@ -627,33 +661,6 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 }
 .re-add-note .dismiss-button {
   align-self: flex-start;
-  margin: -4px -16px -2px 0;
-}
-/* The X in a box's corner, like the Updates box's (dismiss-button.js). */
-.dismiss-button {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-control);
-  color: color-mix(in srgb, var(--ink-dim) 62%, transparent);
-  cursor: pointer;
-}
-/* Phosphor draws inside a wide margin, so the X reads at about 10px. */
-.dismiss-button svg {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
-@media (hover: hover) {
-  .dismiss-button:hover {
-    color: var(--ink-hover);
-  }
 }
 .control-note a {
   color: var(--accent);

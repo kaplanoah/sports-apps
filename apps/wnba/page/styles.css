@@ -1894,8 +1894,9 @@ th[aria-sort="ascending"] .roster-caret {
   }
 }
 
-/* The Updates box is a card like any other, raised off the floor inside an edge. */
-.updates {
+/* The Updates box and settings' icon note are cards like any other, raised off the floor inside an
+   edge. */
+.dismissible-box {
   border-color: var(--edge);
   background: var(--raised);
 }

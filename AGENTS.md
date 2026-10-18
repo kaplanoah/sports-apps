@@ -366,7 +366,7 @@
   The Home Screen app's link to add the site again, whose browser keeps its cookies apart from the app's,
   signs the browser in with a handoff the Worker makes for a phone signed in,
   good for ten minutes under the code it was made under,
-  which the app asks for again halfway through while settings stays open,
+  which the app asks for as settings shows the note on updating the icon, and again halfway through while it does,
   or as it comes back once that's past, since a phone freezes its timers while it's away (`shared/page/appearance.js`),
   and opens the page at its own address without it (`serveHandoff` in `shared/worker/access-gate.js`).
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,
@@ -444,6 +444,10 @@
   and which the Home Screen app keeps on its first open,
   and an iPhone's app, which keeps the icon it was added with, hands Safari with a link to add the site again,
   opening Safari's page on that theme and the welcome, in `pick-theme.js`,
+  which keeps each install's icon, from the address it opens at or, added on System, the phone's setting as it first opened,
+  and settings' note on updating the icon, while the look picked isn't the icon's,
+  with both icons and an X that dismisses it for that install, in `re-add-note.js`,
+  the X in the corner of a box like it or the Updates box in `dismiss-button.js`,
   telling a phone or tablet from a computer, and the Home Screen from the browser,
   in `device.js`, one tab for a season's standings and its bracket,
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
@@ -548,6 +552,7 @@
   in `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through `package.json`'s imports.
   Its `type.css` lists the type roles, `chrome.css` styles the tab bar,
   settings sheet and its Diagnostics, round dots, Home Screen welcome and box,
+  a card with an X in its corner and settings' note on updating the icon,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,
   `pager.css` a pill's names and the standings and bracket under one, `day-strip.css` a season's list of days and its strip,
   `game-search.css` the search's view, `game-row.css` lays out a game row and colors an All-Star team's star,

@@ -265,10 +265,10 @@ test.describe("on a phone, in full motion", () => {
     contextOptions: { reducedMotion: "no-preference" },
   });
 
-  /** @typedef {{ element: string, first: Keyframe, last: Keyframe, direction: string }} Animation */
+  /** @typedef {import("../../../../tests/browser/animations.mjs").Animation} Animation */
   /** @param {Animation} animation */
   const isGrowing = ({ element, first, last }) =>
-    element === "updates" &&
+    element.split(" ").includes("updates") &&
     first.height === "0px" &&
     first.marginBottom === "0px" &&
     parseFloat(String(last.height)) > 0;

@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chooseReAddNote } from "../shared/page/re-add-note.js";
+import {
+  chooseReAddNote,
+  isReAddNoteDismissed,
+  keepReAddNoteDismissed,
+} from "../shared/page/re-add-note.js";
+import { dropSavedStorage, useDeniedStorage } from "./saved-storage.js";
 
 const DUE = { isIosApp: true, picked: "light", icon: "dark", isDismissed: false };
 
@@ -29,4 +34,12 @@ test("the note shows only in an iPhone's or iPad's Home Screen app, and only onc
   assert.equal(chooseReAddNote({ ...DUE, isIosApp: false }), null);
   assert.equal(chooseReAddNote({ ...DUE, icon: null }), null);
   assert.equal(chooseReAddNote({ ...DUE, icon: "sepia" }), null);
+});
+
+test("a dismissal lasts until the page reloads on a device whose storage refuses access", (t) => {
+  useDeniedStorage();
+  t.after(dropSavedStorage);
+  assert.equal(isReAddNoteDismissed(), false);
+  keepReAddNoteDismissed();
+  assert.equal(isReAddNoteDismissed(), true);
 });
