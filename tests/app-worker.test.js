@@ -20,7 +20,12 @@ const requestRobots = (pageFiles) =>
   createPageWorker(pageFiles).fetch(new Request("https://worker.example/robots.txt"), {});
 
 test("robots.txt names the commit the Worker was built from, and none when the build named none", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
+  const release = {
+    version: "1.2.3",
+    commit: "abc1234",
+    builtAt: "2026-10-01T20:00:00Z",
+    label: null,
+  };
   const built = await requestRobots({
     "version.json": { contentType: "application/json", text: JSON.stringify(release) },
   });
@@ -32,7 +37,12 @@ test("robots.txt names the commit the Worker was built from, and none when the b
 });
 
 test("health answers without the key, saying whether the store answers and which release this is", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
+  const release = {
+    version: "1.2.3",
+    commit: "abc1234",
+    builtAt: "2026-10-01T20:00:00Z",
+    label: null,
+  };
   const pageFiles = {
     "version.json": { contentType: "application/json", text: JSON.stringify(release) },
   };
@@ -63,7 +73,12 @@ const requestPageFile = (worker, path) =>
   worker.fetch(new Request(`https://worker.example/key/${path}`), { APP_KEY: "key" });
 
 test("a release's own folder serves its files for good, and another release's folder serves nothing", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
+  const release = {
+    version: "1.2.3",
+    commit: "abc1234",
+    builtAt: "2026-10-01T20:00:00Z",
+    label: null,
+  };
   const worker = createPageWorker({
     "version.json": { contentType: "application/json", text: JSON.stringify(release) },
     "styles.css": { contentType: "text/css; charset=utf-8", text: "body {}" },
@@ -84,7 +99,12 @@ test("a release's own folder serves its files for good, and another release's fo
 });
 
 test("another release's version file names that release, so a page still running it reloads", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
+  const release = {
+    version: "1.2.3",
+    commit: "abc1234",
+    builtAt: "2026-10-01T20:00:00Z",
+    label: null,
+  };
   const worker = createPageWorker({
     "version.json": { contentType: "application/json", text: JSON.stringify(release) },
   });
@@ -207,7 +227,12 @@ test("until the code is sent, the page's address shows the gate and its data sta
 });
 
 test("the page's address in its release's folder shows the gate too, until the code is sent", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
+  const release = {
+    version: "1.2.3",
+    commit: "abc1234",
+    builtAt: "2026-10-01T20:00:00Z",
+    label: null,
+  };
   const worker = createAppWorker({
     pageFiles: {
       ...PAGE_FILES,
