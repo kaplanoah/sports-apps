@@ -1,6 +1,6 @@
-// The box under the tabs that lists what's new since the viewer last dismissed it, newest first,
-// each beside when it happened, and under them, what's new in the app. An app says what its
-// updates and release notes are and where the dismissal is kept.
+// The box under the tabs that lists what's new since the viewer first opened the app or last
+// dismissed the box, newest first, each beside when it happened, and under them, what's new in the
+// app. An app says what its updates and release notes are and where the box's start is kept.
 
 import {
   countDaysBetween,
@@ -112,20 +112,6 @@ const mapOutNotes = (notes, now, readUntil) =>
     notes.filter((note) => isOut(note, now)).map((note) => [note.at, readUntil(note)]),
   );
 
-// A device's first look counts the notes already out from when they went out, as a viewer new to
-// the app has nothing to catch up on, and a note out by the box's last dismissal as dismissed.
-/**
- * @param {ReleaseNote[]} notes
- * @param {number} dismissedAt when this device last dismissed the box, or 0
- * @param {number} now
- */
-export function startFirstLookClocks(notes, dismissedAt, now) {
-  return mapOutNotes(notes, now, (note) => {
-    const outAt = Date.parse(note.at);
-    return outAt <= dismissedAt ? outAt : outAt + NOTE_SHOWN_MS;
-  });
-}
-
 /**
  * When each note out by now stops showing, starting the two weeks of any this device hasn't shown.
  * @param {ReleaseNote[]} notes
@@ -177,16 +163,17 @@ const noteClocks = createViewerChoice("releaseNotesShownUntil", readNoteClocks);
 const hasUnstartedNote = (notes, clocks, now) =>
   notes.some((note) => isOut(note, now) && !(note.at in clocks));
 
+// A viewer new to the app has nothing to catch up on, so a device's first look counts every note
+// already out as shown.
 /**
  * The release notes this device still shows, starting the two weeks of any it shows for the first
  * time.
  * @param {ReleaseNote[]} notes newest first
- * @param {number} dismissedAt when this device last dismissed the box, or 0
  * @param {number} [now]
  */
-export function listNotesToShow(notes, dismissedAt, now = Date.now()) {
+export function listNotesToShow(notes, now = Date.now()) {
   const kept = noteClocks.read();
-  const clocks = startNoteClocks(notes, kept ?? startFirstLookClocks(notes, dismissedAt, now), now);
+  const clocks = startNoteClocks(notes, kept ?? endNoteClocks(notes, {}, now), now);
   if (!kept || hasUnstartedNote(notes, kept, now)) noteClocks.keep(clocks);
   return listFreshNotes(notes, clocks, now);
 }
@@ -197,6 +184,27 @@ export function listNotesToShow(notes, dismissedAt, now = Date.now()) {
  */
 export const dismissNotes = (notes, now = Date.now()) =>
   noteClocks.keep(endNoteClocks(notes, noteClocks.read() ?? {}, now));
+
+// A viewer new to the app has nothing to catch up on, so a device's first look starts the box after
+// every update already out, and keeps that start, so nothing that comes later is skipped. A page
+// that hasn't read its season yet can't tell what's out, so it keeps nothing and lists nothing.
+/**
+ * When the box's updates count from: what this device kept, or, on its first look, the newest
+ * update already out, or the start of time when none is.
+ * @param {number | null} seenAt when the box counts from as this device kept it, from its last
+ *   dismissal or its first look, or null on its first look
+ * @param {number[] | null} times when the Worker first noticed each update in the season the page
+ *   has read, a time that only moves forward, never the device's clock, or null before the page
+ *   has read its season
+ * @param {(start: number) => void} keepStart
+ */
+export function readOrStartSeenAt(seenAt, times, keepStart) {
+  if (seenAt !== null) return seenAt;
+  if (times === null) return Infinity;
+  const start = times.length ? Math.max(...times) : 0;
+  keepStart(start);
+  return start;
+}
 
 /**
  * Calls `onChange` whenever another tab dismisses the release notes.

@@ -6,7 +6,7 @@ import { renderDivisionBlock, renderFieldBlock, renderNextCell } from "../page/j
 import { describeTeamStatus, findSeries, nameSeries } from "../page/js/bracket.js";
 import { renderCardNote, renderMatchupRow } from "../page/js/bracket-view.js";
 import { describeDrought, listRankedOrder, listTitles } from "../page/js/clubs.js";
-import { keepRanking, keepSeenAt } from "../page/js/kept-on-device.js";
+import { keepRanking } from "../page/js/kept-on-device.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
 import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
 import { listSlateGames } from "../page/js/slate.js";
@@ -25,6 +25,7 @@ import {
 import { normalizeSpaces, stripTags } from "../../../tests/text.js";
 import { readFontFaces } from "../../../tests/css-rules.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "../../../tests/time-zone.js";
+import { dropSavedStorage, useKeptChoices } from "../../../tests/saved-storage.js";
 import { TWO_UPDATES, readUpdateBox } from "./update-box.js";
 
 // The expected times below are what a viewer in Eastern time sees.
@@ -120,22 +121,69 @@ const clinchDivision = (team, div, at, ended) => ({
 const listFreshTeams = () =>
   listFreshUpdates().flatMap((group) => group.map((entry) => entry.team));
 
-test("Updates box: before its first dismissal, only the 24 hours up to the newest update", () => {
+/**
+ * A device's own storage, holding what it kept, for the test.
+ * @param {import("node:test").TestContext} t
+ * @param {[string, unknown][]} kept
+ */
+function useDeviceStorage(t, kept) {
+  useKeptChoices(kept);
+  t.after(dropSavedStorage);
+}
+
+const FIRST_TWO_CLINCHES = [
+  clinchDivision("TB", "AL East", "2026-09-27T23:00:00Z"),
+  clinchDivision("MIL", "NL Central", "2026-09-26T22:00:00Z"),
+];
+
+test("Updates box: a new device's first look lists none of the updates already out, and each one after it, whatever its clock says", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-09-29T00:00:00Z") });
+  useDeviceStorage(t, []);
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), []);
+
   session.state = {
     teams: {},
-    log: [
-      clinchDivision("TB", "AL East", "2026-09-27T23:00:00Z"),
-      clinchDivision("LAD", "NL West", "2026-09-27T01:00:00Z"),
-      clinchDivision("MIL", "NL Central", "2026-09-26T22:00:00Z"),
-      clinchDivision("CWS", "AL Central", "2026-09-27T23:00:00Z", "2026-09-20T02:00:00Z"),
-    ],
+    log: [clinchDivision("LAD", "NL West", "2026-09-28T01:00:00Z"), ...FIRST_TWO_CLINCHES],
   };
-  assert.deepEqual(listFreshTeams(), ["TB", "LAD"]);
+  assert.deepEqual(listFreshTeams(), ["LAD"]);
+});
+
+test("Updates box: a new device's first look before any update lists every update after it", (t) => {
+  useDeviceStorage(t, []);
+  session.state = { teams: {}, log: [] };
+  assert.deepEqual(listFreshTeams(), []);
+
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), ["TB", "MIL"]);
+});
+
+test("Updates box: a new device whose first read of the season failed starts once a read succeeds", (t) => {
+  useDeviceStorage(t, []);
+  t.after(() => Object.assign(session, { problem: "" }));
+  Object.assign(session, { problem: "unreachable", state: { teams: {}, log: [] } });
+  assert.deepEqual(listFreshTeams(), []);
+
+  Object.assign(session, { problem: "", state: { teams: {}, log: FIRST_TWO_CLINCHES } });
+  assert.deepEqual(listFreshTeams(), []);
+
+  session.state = {
+    teams: {},
+    log: [clinchDivision("LAD", "NL West", "2026-09-28T01:00:00Z"), ...FIRST_TWO_CLINCHES],
+  };
+  assert.deepEqual(listFreshTeams(), ["LAD"]);
+});
+
+test("Updates box: a device that dismissed an earlier season's box lists every update of this one", (t) => {
+  useDeviceStorage(t, [["updatesSeenAt", { [session.activeYear - 1]: Date.parse("2025-09-28") }]]);
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), ["TB", "MIL"]);
 });
 
 test("Updates box: after a dismissal, everything noticed since, however long ago it happened", (t) => {
-  keepSeenAt(session.activeYear, Date.parse("2026-09-27T00:00:00Z"));
-  t.after(() => keepSeenAt(session.activeYear, 0));
+  useDeviceStorage(t, [
+    ["updatesSeenAt", { [session.activeYear]: Date.parse("2026-09-27T00:00:00Z") }],
+  ]);
   session.state = {
     teams: {},
     log: [
@@ -147,7 +195,8 @@ test("Updates box: after a dismissal, everything noticed since, however long ago
   assert.deepEqual(listFreshTeams(), ["TB", "CWS"]);
 });
 
-test("Updates box: a game that ends past midnight names the night it was played", () => {
+test("Updates box: a game that ends past midnight names the night it was played", (t) => {
+  useDeviceStorage(t, [["updatesSeenAt", { [session.activeYear]: 0 }]]);
   const brewersWin = (game, ended) => ({
     at: ended,
     kind: "game",
@@ -1895,10 +1944,8 @@ test("Chivo Mono draws a little smaller than its size, so its numbers look as bi
   assert.deepEqual(readAdjusts("Libre Franklin"), ["100%", "100%"]);
 });
 
-test("Updates box: each update shows when it happened, not when the page noticed it", (t) => {
-  keepSeenAt(session.activeYear, Date.parse("2026-09-24T20:00:00Z"));
-  t.after(() => keepSeenAt(session.activeYear, 0));
-  const { count, whens } = readUpdateBox(TWO_UPDATES);
+test("Updates box: each update shows when it happened, not when the page noticed it", () => {
+  const { count, whens } = readUpdateBox(TWO_UPDATES, Date.parse("2026-09-24T20:00:00Z"));
   assert.equal(count, "2 updates since yesterday");
   assert.deepEqual(whens, ["8:30 PM", "Yesterday"]);
 });

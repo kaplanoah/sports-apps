@@ -59,7 +59,7 @@ import { listSearchPages } from "./search-pages.js";
 import { createSearchTerms, readSearchGame } from "./search-terms.js";
 import { renderTeamSheet } from "./team-view.js";
 import { TEAMS } from "./teams.js";
-import { drawUpdates, watchDismissals } from "./updates.js";
+import { drawUpdates, watchUpdatesSeen } from "./updates.js";
 
 const CLOCK_REFRESH_MS = 60 * 1000;
 
@@ -315,7 +315,7 @@ async function boot() {
     redrawEased(drawNews);
     refreshGameSearch();
   });
-  watchDismissals(() => redrawEased(drawUpdates));
+  watchUpdatesSeen(() => redrawEased(drawUpdates));
   refreshClockEveryMinute();
   startServiceWorker();
   startNotifications({ about: "Final scores" });
