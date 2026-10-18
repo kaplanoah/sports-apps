@@ -280,8 +280,8 @@ function readScriptBefore(after, { hunks, hunkStarts }) {
 }
 
 /**
- * A script's code with its comments, blank lines, and formatting taken out, as esbuild parses it, or null when it
- * doesn't parse.
+ * A script's code with its comments, blank lines, and formatting taken out, as esbuild parses it,
+ * or null when it doesn't parse.
  * @param {string} script
  */
 function readScriptCode(script) {
@@ -294,8 +294,9 @@ function readScriptCode(script) {
 }
 
 /**
- * Whether a change to a script changes its code, rather than only its comments, blank lines, or formatting, which
- * draw nothing. A script that's gone, or that the change's hunks don't fit, counts as changed.
+ * Whether a change to a script changes its code, rather than only its comments, blank lines, or
+ * formatting, which draw nothing. A script that's gone, or that the change's hunks don't fit,
+ * counts as changed.
  * @param {ChangedFile} file
  * @param {(path: string) => string} readScript
  */

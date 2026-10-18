@@ -112,6 +112,25 @@ const SHARED_SCRIPT = "shared/page/bracket-standings.js";
 const SCRIPT_REASON = [`${SHARED_SCRIPT} is shared code that moves, layers, or draws the page`];
 
 /**
+ * Why a change to a shared script is red, from its hunks, each a header and its lines as a diff
+ * shows them, with the script as the change leaves it.
+ * @param {{ header: string, lines: string[] }[]} hunks
+ * @param {string[]} after
+ */
+const findHunkChangeReasons = (hunks, after) =>
+  findRedReasons(
+    readDiff(
+      [
+        `diff --git a/${SHARED_SCRIPT} b/${SHARED_SCRIPT}`,
+        `--- a/${SHARED_SCRIPT}`,
+        `+++ b/${SHARED_SCRIPT}`,
+        ...hunks.flatMap(({ header, lines }) => [header, ...lines]),
+      ].join("\n"),
+    ),
+    () => after.join("\n"),
+  );
+
+/**
  * Why a change to a shared script is red, from its lines as a diff shows them, each kept line
  * after a space, each added one after a +, and each removed one after a -, in one hunk from the
  * script's first line, with the script as the change leaves it.
@@ -119,18 +138,8 @@ const SCRIPT_REASON = [`${SHARED_SCRIPT} is shared code that moves, layers, or d
  * @param {string} [after] the script as the change leaves it, when it isn't the hunk's new side
  */
 function findScriptChangeReasons(lines, after) {
-  const diff = [
-    `diff --git a/${SHARED_SCRIPT} b/${SHARED_SCRIPT}`,
-    `--- a/${SHARED_SCRIPT}`,
-    `+++ b/${SHARED_SCRIPT}`,
-    "@@ -1 +1 @@",
-    ...lines,
-  ].join("\n");
-  const newSide = lines
-    .filter((line) => !line.startsWith("-"))
-    .map((line) => line.slice(1))
-    .join("\n");
-  return findRedReasons(readDiff(diff), () => after ?? newSide);
+  const newSide = lines.filter((line) => !line.startsWith("-")).map((line) => line.slice(1));
+  return findHunkChangeReasons([{ header: "@@ -1 +1 @@", lines }], after?.split("\n") ?? newSide);
 }
 
 const SCROLL_UP = [
@@ -188,25 +197,6 @@ test("a shared script's change to its code is red, even one that comments code o
   ])
     assert.deepEqual(findScriptChangeReasons(lines), SCRIPT_REASON, lines.join("\n"));
 });
-
-/**
- * Why a change to a shared script is red, from its hunks, each a header and its lines as a diff
- * shows them, with the script as the change leaves it.
- * @param {{ header: string, lines: string[] }[]} hunks
- * @param {string[]} after
- */
-const findHunkChangeReasons = (hunks, after) =>
-  findRedReasons(
-    readDiff(
-      [
-        `diff --git a/${SHARED_SCRIPT} b/${SHARED_SCRIPT}`,
-        `--- a/${SHARED_SCRIPT}`,
-        `+++ b/${SHARED_SCRIPT}`,
-        ...hunks.flatMap(({ header, lines }) => [header, ...lines]),
-      ].join("\n"),
-    ),
-    () => after.join("\n"),
-  );
 
 test("a shared script's change in hunks far apart is red only where one changes code", () => {
   const after = (/** @type {string} */ secondReturn) => [
