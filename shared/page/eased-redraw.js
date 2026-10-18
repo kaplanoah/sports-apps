@@ -180,8 +180,6 @@ function fadeIn(element) {
     element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: EASE_MS, easing: EASING });
 }
 
-// An easing the redraw itself starts, like a box growing back open, runs on, where one from
-// before gives way to the part's new height.
 /**
  * @param {() => void} redraw
  */
@@ -204,7 +202,8 @@ function isEasingStartedIn(started, element) {
 
 /**
  * Redraws the page, easing each part whose height the redraw changes from the height it had,
- * and fading in what it adds. A part still easing starts again from wherever it is.
+ * and fading in what it adds. A part still easing from before starts again from wherever it is,
+ * and one the redraw itself starts, like a box growing back open, runs on.
  * @param {() => void} redraw
  */
 export function redrawEased(redraw) {
