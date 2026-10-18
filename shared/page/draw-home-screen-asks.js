@@ -18,14 +18,13 @@ const SHARE_GLYPH = `<svg
   viewBox="0 0 24 24"
   fill="none"
   stroke="currentColor"
-  stroke-width="2"
+  stroke-width="1.5"
   stroke-linecap="round"
   stroke-linejoin="round"
   aria-hidden="true"
 >
-  <path d="M8 9H6a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10a1 1 0 0 0-1-1h-2" />
-  <path d="M12 15V3" />
-  <path d="M8.5 6.5 12 3l3.5 3.5" />
+  <path d="M8.75 9.25H7.25a3 3 0 0 0-3 3v7a3 3 0 0 0 3 3h9.5a3 3 0 0 0 3-3v-7a3 3 0 0 0-3-3h-1.5" />
+  <path d="M12 15.25V2.5M8.5 6 12 2.5 15.5 6" />
 </svg>`;
 const MENU_GLYPH = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
   <circle cx="12" cy="5" r="2" />
