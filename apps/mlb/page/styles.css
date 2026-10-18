@@ -347,8 +347,8 @@ header.top h1 {
   text-transform: uppercase;
   letter-spacing: var(--title-tracking);
   /* A space in Chivo Mono is as wide as a digit, so the season's year would sit 14.5px from the
-     name; it sits 9px from it. */
-  word-spacing: -5.5px;
+     name at the title's 22.5px; it sits 9px from it. */
+  word-spacing: -0.2444em;
 }
 /* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
    spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */

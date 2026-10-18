@@ -54,7 +54,12 @@ test("Diagnostics, once on, start with the app, the release, and its commit, set
 }) => {
   await page.route(matchPath("/version.json"), (route) =>
     route.fulfill({
-      json: { version: "3.6.0-beta", commit: "abc1234", builtAt: "2026-10-08T03:14:57Z" },
+      json: {
+        version: "3.6.0-beta",
+        commit: "abc1234",
+        builtAt: "2026-10-08T03:14:57Z",
+        label: "beta",
+      },
     }),
   );
   await openApp(page);

@@ -20,7 +20,12 @@ import { readYearGap, readYearTracking } from "../../../../tests/browser/title-r
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-const RELEASE = { version: "2.13.0", commit: "abc1234", builtAt: "2026-09-28T00:10:41Z" };
+const RELEASE = {
+  version: "2.13.0",
+  commit: "abc1234",
+  builtAt: "2026-09-28T00:10:41Z",
+  label: null,
+};
 
 /** @param {import("@playwright/test").Page} page */
 const serveRelease = (page, release) =>

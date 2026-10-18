@@ -1,10 +1,20 @@
 import { matchPath } from "./harness.mjs";
 
-const RELEASE = { version: "2.13.0", commit: "abc1234", builtAt: "2026-09-28T00:10:41Z" };
+/** @typedef {import("../../shared/page/release.js").Release} Release */
+
+/** @type {Release} */
+const RELEASE = {
+  version: "2.13.0",
+  commit: "abc1234",
+  builtAt: "2026-09-28T00:10:41Z",
+  label: null,
+};
+/** @type {Release} */
 export const NEXT_RELEASE = {
   version: "2.13.1",
   commit: "def5678",
   builtAt: "2026-09-28T02:00:00Z",
+  label: null,
 };
 
 /**

@@ -2,6 +2,7 @@ import { test, expect, matchPath, openApp, NOW } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { showTheme } from "../../../../tests/browser/theme-layout.mjs";
+import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { readTagOffset } from "../../../../tests/browser/title-row.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -19,10 +20,12 @@ const BETA = {
 
 /**
  * @param {import("@playwright/test").Page} page
- * @param {object} release
+ * @param {import("../../../../shared/page/release.js").Release} release
  */
-const serveRelease = (page, release) =>
-  page.route(matchPath("/version.json"), (route) => route.fulfill({ json: release }));
+async function serveRelease(page, release) {
+  const served = await serveReleases(page);
+  served.release = release;
+}
 
 test("beta names its channel, its commit, and how long ago it went live beside the name, counting each minute", async ({
   page,
