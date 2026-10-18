@@ -9,6 +9,20 @@ export const renderRoundDots = (rounds) =>
     ${rounds.map((round) => html`<span data-round="${round}"></span>`)}
   </div>`;
 
+/**
+ * Notes how far the part the dots are in reaches past the tab bar's top, as it sets off sideways.
+ * A part that moves is where what's fixed inside it is placed from, so chrome.css places the dots
+ * from the part's end while it slides, which keeps them over the tab bar.
+ * @param {HTMLElement} part
+ */
+export function holdRoundDots(part) {
+  const dots = /** @type {HTMLElement | null} */ (part.querySelector(".round-dots"));
+  if (!dots) return;
+  const tabBar = /** @type {HTMLElement} */ (document.getElementById("tabBar"));
+  const reach = part.getBoundingClientRect().bottom - tabBar.getBoundingClientRect().top;
+  dots.style.setProperty("--part-past-tab-bar", `${reach}px`);
+}
+
 /** @param {HTMLElement} scroller */
 const isScrolledToEnd = (scroller) =>
   scroller.scrollLeft >= scroller.scrollWidth - scroller.clientWidth - 1;

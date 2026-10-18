@@ -8,7 +8,16 @@ import {
   SEASON_2025,
 } from "./harness.mjs";
 import { LAPTOP, PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
-import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import {
+  findSeasonPill,
+  findSeasonTab,
+  openSeasonPart,
+} from "../../../../tests/browser/season-tab.mjs";
+import {
+  expectDotsHeldWithBracket,
+  readRoundDotsTop,
+  trackRoundDots,
+} from "../../../../tests/browser/round-dots.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -30,6 +39,34 @@ test("on a phone, the bracket's round dots sit just above the tab bar and follow
   await expect(dots.locator('[data-round="WC"]')).toHaveClass("on");
   await scroller.evaluate((tree) => tree.scrollTo({ left: tree.scrollWidth, behavior: "instant" }));
   await expect(dots.locator('[data-round="WS"]')).toHaveClass("on");
+});
+
+test.describe("in full motion", () => {
+  test.use({ contextOptions: { reducedMotion: "no-preference" } });
+
+  test("on a phone, the round dots hold their height over the tab bar on every frame of a tap's slide to the standings and back, moving only sideways, with the bracket", async ({
+    page,
+  }) => {
+    await page.setViewportSize(PHONE);
+    await openBracket(page);
+    const parts = page.locator("#bracketStandingsParts");
+    await expect(parts).not.toHaveAttribute("data-sliding");
+    await expect(page.locator("#bracketWrap .round-dots .on")).toHaveCount(1);
+    const restingTop = await readRoundDotsTop(page);
+    const pill = findSeasonPill(page);
+
+    const readFramesOut = await trackRoundDots(page);
+    await pill.getByRole("tab", { name: "Standings" }).click();
+    await expect(parts).not.toHaveAttribute("data-sliding");
+    await expect(parts.locator('> [data-part="standings"]')).toBeVisible();
+    expectDotsHeldWithBracket(await readFramesOut(), restingTop);
+
+    const readFramesBack = await trackRoundDots(page);
+    await pill.getByRole("tab", { name: "Bracket" }).click();
+    await expect(parts).not.toHaveAttribute("data-sliding");
+    await expect(parts.locator('> [data-part="bracket"]')).toBeVisible();
+    expectDotsHeldWithBracket(await readFramesBack(), restingTop);
+  });
 });
 
 test("a stacked bracket that fits the screen's width has no round dots and nothing to scroll", async ({

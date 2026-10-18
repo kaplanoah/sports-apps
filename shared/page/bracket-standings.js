@@ -1,6 +1,7 @@
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
+import { holdRoundDots } from "./round-dots.js";
 import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
@@ -170,6 +171,7 @@ export function startBracketStandings() {
     listPanels: () => readOrder().map(findPart),
     place: (index, position) => index - position,
     canGo: (direction) => Boolean(readOrder()[slidePanels.readShown() + direction]),
+    onSetOff: () => holdRoundDots(findPart("bracket")),
     onShow: showOn,
     onSettle: restOn,
   });

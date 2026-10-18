@@ -36,7 +36,10 @@
 .season-parts[data-holding-room] {
   min-height: var(--room-under-pill, 0px);
 }
+/* Each part is where what's placed inside it is placed from, so the bracket's round dots ride with
+   it while the parts slide (chrome.css), even on a frame the bracket itself holds still. */
 .season-part {
+  position: relative;
   grid-area: 1 / 1;
   min-width: 0;
   padding-inline: var(--reach-left) var(--reach-right);
