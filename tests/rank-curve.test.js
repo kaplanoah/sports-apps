@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { listAppStylesheets, readDeclarations, readRule } from "./css-rules.js";
 import {
   drawSpread,
@@ -44,7 +45,7 @@ test("a mark for a number past either end of the curve stops at that end, on the
   );
 });
 
-const CURVE_STYLES = new URL("../shared/page/rank-curve.css", import.meta.url).pathname;
+const CURVE_STYLES = fileURLToPath(new URL("../shared/page/rank-curve.css", import.meta.url));
 
 /** @param {import("./css-rules.js").Declaration[]} declarations */
 const findLineRules = (declarations) =>

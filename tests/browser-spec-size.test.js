@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 // CI's burn-in runs every test in each browser spec a pull request changes ten times over, so a
 // spec stays small enough that a one-line change to it repeats only a few tests.
@@ -11,9 +12,9 @@ const MOST_TESTS_PER_SPEC = 30;
  * @returns {Map<string, number>} keyed by project and spec
  */
 const countTestsPerSpec = () => {
-  const playwright = new URL("../node_modules/.bin/playwright", import.meta.url).pathname;
+  const playwright = fileURLToPath(new URL("../node_modules/.bin/playwright", import.meta.url));
   const output = execFileSync(playwright, ["test", "--list", "--reporter=json"], {
-    cwd: new URL("..", import.meta.url).pathname,
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
