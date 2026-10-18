@@ -158,6 +158,20 @@ test.describe("on an iPhone, in the browser", () => {
     expect(nightGame.credit).toBe(nightGame.dim);
   });
 
+  test("the Share icon sits as set by eye for Libre Franklin, 1.5px up in the welcome and 1px up in the settings' box", async ({
+    page,
+  }) => {
+    await openApp(page, { isShowingWelcome: true });
+    const welcome = page.locator("#homeScreenWelcome");
+    await expect(welcome.locator(".welcome-step svg")).toHaveCSS("top", "-1.5px");
+    await welcome.getByRole("button", { name: "Continue in browser" }).click();
+    await openSettings(page);
+    await expect(page.locator("#homeScreenTip .home-screen-steps svg")).toHaveCSS(
+      "vertical-align",
+      "-1px",
+    );
+  });
+
   test("the settings' box sets its buttons' names three quarters of a step over its caption's weight", async ({
     page,
   }) => {

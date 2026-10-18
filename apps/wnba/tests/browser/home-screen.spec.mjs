@@ -203,6 +203,17 @@ test.describe("on an iPhone, in the browser", () => {
     );
   });
 
+  test("the settings' box's Share icon sits as set by eye for Barlow, 1.5px over the other icons' place", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSettings(page);
+    await expect(page.locator("#homeScreenTip .home-screen-steps svg")).toHaveCSS(
+      "vertical-align",
+      "-0.5px",
+    );
+  });
+
   test("the settings' box sets its buttons' names a step over its caption's weight", async ({
     page,
   }) => {
