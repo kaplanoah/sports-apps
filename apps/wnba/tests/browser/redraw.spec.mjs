@@ -74,6 +74,7 @@ test("a game that starts eases its score to its new height and fades in its new 
     element: "game-status",
     first: { opacity: 0 },
     last: { opacity: 1 },
+    direction: "normal",
   });
 });
 

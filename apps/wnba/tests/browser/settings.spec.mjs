@@ -7,6 +7,9 @@ import {
   checkHandoffRenewal,
   checkReAddHandoff,
   checkReAddNote,
+  checkReAddNoteDismissal,
+  checkReAddNoteEases,
+  checkSystemInstallIcon,
 } from "../../../../tests/browser/re-add-note.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { chooseAppearance } from "./theme.mjs";
@@ -164,12 +167,28 @@ test.describe("in an iPhone's Home Screen app", () => {
   const openSettings = (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click();
   const looks = { light: "Maple", dark: "Walnut" };
 
-  test("changing the appearance says how to update the icon, under the icons, linking to Safari on the theme picked, which the browser and Android leave out", async ({
+  test("while the look picked isn't the icon's, settings shows both icons and how to update it, linking to Safari on the look picked, which System, the browser, and Android leave out", async ({
     page,
     context,
     browser,
   }) => {
     await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+  });
+
+  test("the icon note's X takes it away for good in that install", async ({ page }) => {
+    await checkReAddNoteDismissal({ page, openApp, openSettings, looks });
+  });
+
+  test("an app added on System has the icon the phone's setting showed as it first opened", async ({
+    page,
+  }) => {
+    await checkSystemInstallIcon({ page, openApp, openSettings, looks });
+  });
+
+  test("the icon note grows in as a pick sets the icon off and shrinks away as its opening played backward", async ({
+    page,
+  }) => {
+    await checkReAddNoteEases({ page, openApp, openSettings, looks });
   });
 
   test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
@@ -179,7 +198,7 @@ test.describe("in an iPhone's Home Screen app", () => {
     await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
   });
 
-  test("the link's handoff follows the last pick, renews halfway through and on coming back once that's due, tries again after a failure, and stops once settings closes", async ({
+  test("the link's handoff renews halfway through and on coming back once that's due, tries again after a failure, stops once settings closes or the icon's look is picked, and starts again as settings opens on the note", async ({
     page,
   }) => {
     await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });

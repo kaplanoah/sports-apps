@@ -10,15 +10,9 @@ import {
   nameDay,
 } from "./days.js";
 import { createViewerChoice } from "./device-storage.js";
+import { renderDismissButton } from "./dismiss-button.js";
 import { easeClosed, stopEasing } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
-
-// Phosphor's x, at its Light weight, like the page's other close buttons.
-const DISMISS_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
-  <path
-    d="M204.24,195.76a6,6,0,1,1-8.48,8.48L128,136.49,60.24,204.24a6,6,0,0,1-8.48-8.48L119.51,128,51.76,60.24a6,6,0,0,1,8.48-8.48L128,119.51l67.76-67.75a6,6,0,0,1,8.48,8.48L136.49,128Z"
-  />
-</svg>`;
 
 /** @typedef {import("./html.js").Markup} Markup */
 /**
@@ -212,7 +206,7 @@ export const watchNoteDismissals = (onChange) => noteClocks.watch(onChange);
 const renderHead = (title, isFirst) =>
   html`<div class="updates-head">
     <span class="updates-count">${title}</span>
-    ${isFirst && html`<button type="button" class="updates-x" id="dismissUpdates" aria-label="Dismiss updates" title="Dismiss">${DISMISS_ICON}</button>`}
+    ${isFirst && renderDismissButton({ id: "dismissUpdates", label: "Dismiss updates" })}
   </div>`;
 
 /** @param {number} extra */

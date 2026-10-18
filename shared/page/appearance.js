@@ -8,7 +8,15 @@
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
-import { html, setHtml } from "./html.js";
+import { renderDismissButton } from "./dismiss-button.js";
+import { easeClosed, redrawEased, stopEasing } from "./eased-redraw.js";
+import { html, noteHeight, setHtml } from "./html.js";
+import {
+  chooseReAddNote,
+  isReAddNoteDismissed,
+  keepReAddNoteDismissed,
+  readHomeScreenIcon,
+} from "./re-add-note.js";
 import { watchTimeAway } from "./resume.js";
 
 /**
@@ -73,16 +81,61 @@ function checkSavedChoice(choices) {
   for (const choice of choices) choice.checked = choice.value === saved;
 }
 
-/**
- * @param {string} choice
- * @param {string} address
- */
-function drawReAddNote(choice, address) {
-  setHtml(
-    findElement("appearanceNote"),
-    html`Apple only sets icons when you add a site to your home screen. To update your icon,
-      <a href="${buildSafariAddress(choice, address)}">re-add the site</a>`,
-  );
+const findSettings = () => findElement("settingsDialog");
+const findNote = () => findElement("appearanceNote");
+
+const readNote = () =>
+  chooseReAddNote({
+    isIosApp: isOnHomeScreen() && isIos(),
+    picked: appearance.read(),
+    icon: readHomeScreenIcon(),
+    isDismissed: isReAddNoteDismissed(),
+  });
+
+// Phosphor's arrow-right, at its Regular weight, as in a line of text.
+const ARROW = html`<svg class="re-add-arrow" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+  <path
+    d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"
+  />
+</svg>`;
+
+/** @type {string | null} */
+let handoffAddress = null;
+
+// An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
+// changes its icon only once the site is added again, from Safari, which opens on the same theme.
+// Safari keeps its cookies apart from the app's, so the link signs it in with a handoff from the
+// Worker (access-gate.js), and until one arrives, or where none does, Safari asks for the code.
+/** @param {{ icon: "light" | "dark", picked: "light" | "dark" }} note */
+const renderNote = ({ icon, picked }) => {
+  const reAddAddress = buildSafariAddress(picked, handoffAddress ?? location.href);
+  return html`<span class="re-add-icons" aria-hidden="true"
+      ><span class="home-screen-icon" data-look="${icon}"></span>${ARROW}<span
+        class="home-screen-icon"
+        data-look="${picked}"
+      ></span></span
+    ><span class="control-note"
+      >Apple only sets icons when you add a site to your home screen. To update your icon,
+      <a href="${reAddAddress}">re-add the site</a></span
+    >${renderDismissButton({ id: "dismissReAddNote", label: "Dismiss icon note" })}`;
+};
+
+function drawNote() {
+  const note = readNote();
+  setHtml(findNote(), note ? renderNote(note) : html``);
+}
+
+// The note eases in as a pick sets the icon off and out as one brings it back or the X dismisses
+// it.
+function updateNote() {
+  const note = findNote();
+  stopEasing(note);
+  if (readNote())
+    redrawEased(() => {
+      noteHeight(note);
+      drawNote();
+    });
+  else if (note.childElementCount > 0) easeClosed(note, () => setHtml(note, html``));
 }
 
 const HANDOFF_RETRY_MS = 30 * 1000;
@@ -100,11 +153,10 @@ async function requestHandoff() {
   }
 }
 
-/** @type {string | null} */
-let reAddChoice = null;
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let renewTimer;
 let renewDueAt = Infinity;
+let isAskingForHandoff = false;
 
 /** @param {number} delayMs */
 function scheduleRenewal(delayMs) {
@@ -118,49 +170,70 @@ function stopRenewals() {
   renewDueAt = Infinity;
 }
 
+// The note's link needs a handoff only while settings shows it.
+const isHandoffWanted = () =>
+  /** @type {HTMLDialogElement} */ (findSettings()).open && readNote() !== null;
+
 // A handoff lasts minutes and settings can stay open longer, so the note asks for a new one
-// halfway through each. Two picks in a row ask at once, so the last answer alone sets the next.
+// halfway through each.
 async function renewHandoff() {
-  const choice = reAddChoice;
-  if (choice === null) return;
   stopRenewals();
+  isAskingForHandoff = true;
   const answer = await requestHandoff();
-  if (choice !== reAddChoice || answer === "none") return;
+  isAskingForHandoff = false;
+  if (!isHandoffWanted() || answer === "none") return;
   if (answer === "failed") {
     scheduleRenewal(HANDOFF_RETRY_MS);
     return;
   }
-  drawReAddNote(choice, answer.address);
+  handoffAddress = answer.address;
+  drawNote();
   scheduleRenewal(answer.expiresInMs / 2);
+}
+
+function followHandoff() {
+  if (!isHandoffWanted()) stopRenewals();
+  else if (renewDueAt === Infinity && !isAskingForHandoff) renewHandoff();
 }
 
 // A phone freezes the page's timers while it's away, and short trips away leave settings open, so
 // a renewal they held back goes out as the page comes back.
 function renewIfDue() {
-  if (reAddChoice !== null && Date.now() >= renewDueAt) renewHandoff();
+  if (Date.now() >= renewDueAt) renewHandoff();
 }
 
-// The note answers a pick, so it leaves as settings closes, and its handoff stops renewing.
-function forgetReAdd() {
-  reAddChoice = null;
+// A handoff kept past settings closing would be stale by the next time it opens.
+function forgetHandoff() {
   stopRenewals();
-  setHtml(findElement("appearanceNote"), html``);
+  handoffAddress = null;
+  drawNote();
 }
 
-// An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
-// changes its icon only once the site is added again, from Safari, which opens on the same theme.
-// Safari keeps its cookies apart from the app's, so the link signs it in with a handoff from the
-// Worker (access-gate.js), and until one arrives, or where none does, Safari asks for the code.
-/** @param {string} choice */
-function offerReAdd(choice) {
-  reAddChoice = choice;
-  drawReAddNote(choice, location.href);
-  renewHandoff();
+function dismissNote() {
+  keepReAddNoteDismissed();
+  updateNote();
+  followHandoff();
+}
+
+function wireNote() {
+  const settings = findSettings();
+  drawNote();
+  new MutationObserver(followHandoff).observe(settings, {
+    attributes: true,
+    attributeFilter: ["open"],
+  });
+  followHandoff();
+  settings.addEventListener("close", forgetHandoff);
+  findNote().addEventListener("click", (event) => {
+    if (/** @type {Element} */ (event.target).closest("#dismissReAddNote")) dismissNote();
+  });
+  watchTimeAway(renewIfDue);
 }
 
 /**
  * Wires the settings' Appearance choices, and the welcome's copy of them
- * (draw-home-screen-asks.js), to the look they pick.
+ * (draw-home-screen-asks.js), to the look they pick, and the note on bringing a Home Screen app's
+ * icon up to date.
  * @param {Looks} looks
  */
 export function startAppearance(looks) {
@@ -175,14 +248,15 @@ export function startAppearance(looks) {
       openThemeAddress(choice.value);
       checkSavedChoice(choices);
       showChosenTheme();
-      if (choice.name === "appearance" && isOnHomeScreen() && isIos()) offerReAdd(choice.value);
+      updateNote();
+      followHandoff();
     });
   }
   appearance.watch(() => {
     openThemeAddress(appearance.read());
     checkSavedChoice(choices);
     showChosenTheme();
+    updateNote();
   });
-  findElement("settingsDialog").addEventListener("close", forgetReAdd);
-  watchTimeAway(renewIfDue);
+  wireNote();
 }

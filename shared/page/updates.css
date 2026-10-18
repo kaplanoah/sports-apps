@@ -3,8 +3,8 @@
  * updates.js draws it. Apps link it after chrome.css, before their own styles.css, which may
  * refine these rules.
  *
- * Beside chrome.css's --card, --card-border, --ink, --ink-dim, --ink-hover, --radius-card, and
- * --radius-control, an app's :root defines this token:
+ * Beside chrome.css's --card, --card-border, --ink, --ink-dim, --ink-hover, and --radius-card,
+ * an app's :root defines this token:
  *   --updates-head         the count across the top of the box
  */
 
@@ -40,31 +40,8 @@
   letter-spacing: var(--type-label-tracking);
   color: var(--updates-head);
 }
-.updates-x {
-  flex: none;
-  width: 22px;
-  height: 22px;
+.updates-head .dismiss-button {
   margin: -4px -16px -2px 0;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-control);
-  color: color-mix(in srgb, var(--ink-dim) 62%, transparent);
-  cursor: pointer;
-}
-/* Phosphor draws inside a wide margin, so the X reads at about 10px. */
-.updates-x svg {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
-@media (hover: hover) {
-  .updates-x:hover {
-    color: var(--ink-hover);
-  }
 }
 .updates-list {
   list-style: none;

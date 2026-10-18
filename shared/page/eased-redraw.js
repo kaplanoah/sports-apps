@@ -67,8 +67,8 @@ export function stopEasing(element) {
 }
 
 /**
- * Shrinks a part to nothing and then calls `hide`, or calls it at once when motion is off. A part
- * whose easing stops meanwhile isn't hidden.
+ * Shrinks a part to nothing, as its opening played backward, and then calls `hide`, or calls it
+ * at once when motion is off. A part whose easing stops meanwhile isn't hidden.
  * @param {Element} element
  * @param {() => void} hide
  */
@@ -77,9 +77,10 @@ export function easeClosed(element, hide) {
     hide();
     return;
   }
-  const closing = element.animate([readOpenFrame(element), COLLAPSED], {
+  const closing = element.animate([COLLAPSED, readOpenFrame(element)], {
     duration: EASE_MS,
     easing: EASING,
+    direction: "reverse",
     fill: "forwards",
   });
   resizes.set(element, closing);

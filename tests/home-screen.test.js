@@ -17,6 +17,17 @@ test("the tests close the welcome under the key the page keeps it closed by", ()
   );
 });
 
+// The plain script that runs first on each load keeps the icon a Home Screen app was added with,
+// which settings' note reads from its module.
+test("the page keeps the Home Screen app's icon under the key settings' note reads it by", () => {
+  const kept = readNamed("shared/page/pick-theme.js", /const HOME_SCREEN_ICON_KEY = "([^"]+)";/);
+  assert.ok(kept);
+  assert.equal(
+    readNamed("shared/page/re-add-note.js", /const HOME_SCREEN_ICON_KEY = "([^"]+)";/),
+    kept,
+  );
+});
+
 // The plain scripts that draw the welcome before the first paint can't import a module, so they
 // make device.js's tests of the device themselves.
 test("the welcome tells a phone, its Home Screen, and an iPhone or iPad as device.js does", () => {

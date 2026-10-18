@@ -63,7 +63,7 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await listLowContrastText(page)).toEqual([]);
   });
 
-  test("the theme icons sit evenly apart from the start of their row, on the welcome and in Settings, however long their names", async ({
+  test("the theme icons sit evenly apart from the start of their row, as far apart on the welcome as in Settings, however long their names", async ({
     page,
   }) => {
     /** The first icon's distance from the start of its row, and each next icon's from the one before. */
@@ -81,7 +81,7 @@ test.describe("on an iPhone, in the browser", () => {
       .getByRole("button", { name: "Continue in browser" })
       .click();
     await openSettings(page);
-    expect(await listIconSteps("#settingsDialog")).toEqual([0, 78, 78]);
+    expect(await listIconSteps("#settingsDialog")).toEqual([0, 82, 82]);
   });
 
   test("each step's number sits in the middle of its circle", async ({ page }) => {

@@ -203,15 +203,18 @@ test.describe("on a phone, in full motion", () => {
     contextOptions: { reducedMotion: "no-preference" },
   });
 
-  /** @param {{ element: string, first: Keyframe, last: Keyframe }} animation */
-  const isOpening = ({ element, first, last }) =>
+  /** @typedef {{ element: string, first: Keyframe, last: Keyframe, direction: string }} Animation */
+  /** @param {Animation} animation */
+  const isGrowing = ({ element, first, last }) =>
     element === "updates" &&
     first.height === "0px" &&
     first.marginBottom === "0px" &&
     parseFloat(String(last.height)) > 0;
-  /** @param {{ element: string, first: Keyframe, last: Keyframe }} animation */
-  const isClosing = ({ element, first, last }) =>
-    element === "updates" && parseFloat(String(first.height)) > 0 && last.height === "0px";
+  /** @param {Animation} animation */
+  const isOpening = (animation) => isGrowing(animation) && animation.direction === "normal";
+  // The box shrinks away as its opening played backward.
+  /** @param {Animation} animation */
+  const isClosing = (animation) => isGrowing(animation) && animation.direction === "reverse";
 
   test("the Updates box shrinks away when it's dismissed, and grows open for a new final", async ({
     page,

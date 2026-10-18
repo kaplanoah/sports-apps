@@ -102,6 +102,23 @@ function takeThemeFromApp() {
   }
 }
 
+// A Home Screen app keeps the icon the page offered as it was added, which re-add-note.js reads:
+// the look its address names, which it opens at each time, or, added on System, the look the
+// phone's dark or light setting showed then, which its first open is the nearest to.
+const HOME_SCREEN_ICON_KEY = "homeScreenIcon";
+
+function keepHomeScreenIcon() {
+  const named = new URL(location.href).searchParams.get("theme");
+  const phoneLook = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  try {
+    if (named === "light" || named === "dark") localStorage.setItem(HOME_SCREEN_ICON_KEY, named);
+    else if (localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
+      localStorage.setItem(HOME_SCREEN_ICON_KEY, phoneLook);
+  } catch {
+    /* without storage, settings can't tell the icon, and says nothing of it */
+  }
+}
+
 // Only the app takes a theme from its address, on its first open, and drops it at once.
 function keepThemeFromAddress() {
   const address = new URL(location.href);
@@ -139,8 +156,10 @@ function keepPickedAppearance(choice) {
 if (!isOnHomeScreen()) takeThemeFromApp();
 
 try {
-  if (isOnHomeScreen()) keepThemeFromAddress();
-  else nameThemeInAddress(readPickedAppearance());
+  if (isOnHomeScreen()) {
+    keepHomeScreenIcon();
+    keepThemeFromAddress();
+  } else nameThemeInAddress(readPickedAppearance());
   showTheme(readPickedAppearance());
 } catch {
   document.documentElement.dataset.theme = "light";
