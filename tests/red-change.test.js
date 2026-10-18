@@ -189,6 +189,70 @@ test("a shared script's change to its code is red, even one that comments code o
     assert.deepEqual(changeScript(lines), SCRIPT_REASON, lines.join("\n"));
 });
 
+/**
+ * Why a change to a shared script is red, from its hunks, each a header and its lines as a diff
+ * shows them, with the script as the change leaves it.
+ * @param {{ header: string, lines: string[] }[]} hunks
+ * @param {string[]} after
+ */
+const changeScriptHunks = (hunks, after) =>
+  findRedReasons(
+    readDiff(
+      [
+        `diff --git a/${SHARED_SCRIPT} b/${SHARED_SCRIPT}`,
+        `--- a/${SHARED_SCRIPT}`,
+        `+++ b/${SHARED_SCRIPT}`,
+        ...hunks.flatMap(({ header, lines }) => [header, ...lines]),
+      ].join("\n"),
+    ),
+    () => after.join("\n"),
+  );
+
+test("a shared script's change in hunks far apart is red only where one changes code", () => {
+  const after = (/** @type {string} */ secondReturn) => [
+    "// The parts' top, just under the pill.",
+    "function a() {",
+    "  return 1;",
+    "}",
+    "",
+    "function b() {",
+    `  ${secondReturn} // the part at rest`,
+    "}",
+  ];
+  const firstHunk = {
+    header: "@@ -1,2 +1,2 @@",
+    lines: ["-// The parts' top.", "+// The parts' top, just under the pill.", " function a() {"],
+  };
+  const secondHunk = (/** @type {string} */ secondReturn) => ({
+    header: "@@ -6,3 +6,3 @@",
+    lines: [
+      " function b() {",
+      "-  return 2; // the part",
+      `+  ${secondReturn} // the part at rest`,
+      " }",
+    ],
+  });
+  assert.deepEqual(changeScriptHunks([firstHunk, secondHunk("return 2;")], after("return 2;")), []);
+  assert.deepEqual(
+    changeScriptHunks([firstHunk, secondHunk("return 3;")], after("return 3;")),
+    SCRIPT_REASON,
+  );
+});
+
+test("a shared script's hunk that only removes lines, as a diff without context gives, is red only for code", () => {
+  // A line put back a line too early would land inside the template string, and change it.
+  const after = ["const words = `", "hi", "`;", "show(words);"];
+  for (const [removed, reasons] of /** @type {[string, string[]][]} */ ([
+    ["// the words to show", []],
+    ["log(words);", SCRIPT_REASON],
+  ]))
+    assert.deepEqual(
+      changeScriptHunks([{ header: "@@ -4 +3,0 @@", lines: [`-${removed}`] }], after),
+      reasons,
+      removed,
+    );
+});
+
 test("a shared script that's gone, or that a change's hunks don't fit, is red", () => {
   const comment = ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP];
   assert.deepEqual(changeScript(comment, ""), SCRIPT_REASON);
