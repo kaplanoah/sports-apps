@@ -6,7 +6,7 @@ import { renderDivisionBlock, renderFieldBlock, renderNextCell } from "../page/j
 import { describeTeamStatus, findSeries, nameSeries } from "../page/js/bracket.js";
 import { renderCardNote, renderMatchupRow } from "../page/js/bracket-view.js";
 import { describeDrought, listRankedOrder, listTitles } from "../page/js/clubs.js";
-import { keepRanking, keepSeenAt } from "../page/js/kept-on-device.js";
+import { keepRanking } from "../page/js/kept-on-device.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
 import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
 import { listSlateGames } from "../page/js/slate.js";
@@ -181,8 +181,9 @@ test("Updates box: a device that dismissed an earlier season's box lists every u
 });
 
 test("Updates box: after a dismissal, everything noticed since, however long ago it happened", (t) => {
-  keepSeenAt(session.activeYear, Date.parse("2026-09-27T00:00:00Z"));
-  t.after(() => keepSeenAt(session.activeYear, 0));
+  useDeviceStorage(t, [
+    ["updatesSeenAt", { [session.activeYear]: Date.parse("2026-09-27T00:00:00Z") }],
+  ]);
   session.state = {
     teams: {},
     log: [
@@ -194,8 +195,8 @@ test("Updates box: after a dismissal, everything noticed since, however long ago
   assert.deepEqual(listFreshTeams(), ["TB", "CWS"]);
 });
 
-test("Updates box: a game that ends past midnight names the night it was played", () => {
-  keepSeenAt(session.activeYear, 0);
+test("Updates box: a game that ends past midnight names the night it was played", (t) => {
+  useDeviceStorage(t, [["updatesSeenAt", { [session.activeYear]: 0 }]]);
   const brewersWin = (game, ended) => ({
     at: ended,
     kind: "game",
