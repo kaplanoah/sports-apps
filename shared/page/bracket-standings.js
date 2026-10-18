@@ -7,7 +7,7 @@ import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
 import { isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
-/* global followSeasonPart -- from season-header.js */
+/* global followSeasonPart, listAboveSeasonView -- from season-header.js */
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
 // time, as slide-panels.js moves them: a tap on a name slides to its part, and a swipe drags the
@@ -29,6 +29,8 @@ import { readSelectedTab, wireTabList } from "./tabs.js";
 export const orderSeasonParts = (isFieldSet) =>
   isFieldSet ? ["bracket", "standings"] : ["standings", "bracket"];
 
+const findView = () =>
+  /** @type {HTMLElement} */ (document.getElementById("view-bracket-standings"));
 const findPill = () => /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
 const findTabFaces = () =>
   /** @type {HTMLElement[]} */ ([...document.querySelectorAll("#tab-bracket-standings .tab-face")]);
@@ -60,8 +62,7 @@ const holdBracketDotsWhileSliding = () => {
  * How far a part scrolls before the pill holds at the top, as season-header.js measures it, or 0
  * where the header stays put.
  */
-const readHeaderReach = () =>
-  parseFloat(findParts().parentElement?.style.getPropertyValue("--header-reach") ?? "") || 0;
+const readHeaderReach = () => parseFloat(findView().style.getPropertyValue("--header-reach")) || 0;
 
 const markStuck = () => markBarStuck(findPill(), findPart(readShownPart()), readHeaderReach());
 
@@ -96,14 +97,15 @@ function placePartsBeside() {
 
 // The header rides with the part the parts set off for from the start of a slide, which a switch
 // placed to hold it where it was, so it holds still while the parts slide, whatever the part
-// leaving still scrolls.
+// leaving still scrolls. A slide that turns back before it rests finds the part it brings back
+// already on screen, where it stays as it is.
 /**
  * @param {number} index
  * @param {boolean} isSliding
  */
 function showOn(index, isSliding) {
   const part = findPart(readOrder()[index]);
-  if (isSliding) placeComingPart(part);
+  if (isSliding && !findParts().hasAttribute("data-sliding")) placeComingPart(part);
   followSeasonPart(part);
   showPillName(findTabList(), readOrder()[index], { isHandoff: isSliding });
   markStuck();
@@ -144,13 +146,8 @@ export const measureTopAtRest = (element) =>
  * @param {Element} element
  */
 export function observeRoomForPart(observer, element) {
-  const part = findPartHolding(element);
-  observer.observe(part);
-  const view = part.closest("section.view");
-  for (const above of document.body.children) {
-    if (above === view) break;
-    observer.observe(above);
-  }
+  observer.observe(findPartHolding(element));
+  for (const above of listAboveSeasonView()) observer.observe(above);
 }
 
 /**
@@ -218,6 +215,7 @@ export function startBracketStandings() {
   setTabStart("bracket-standings", returnToStart);
   for (const part of readOrder().map(findPart))
     part.addEventListener("scroll", markStuck, { passive: true });
+  findView().addEventListener("headerride", markStuck);
   findPart("bracket").addEventListener("scroll", holdBracketDotsWhileSliding, { passive: true });
   addEventListener("resize", holdBracketDotsWhileSliding);
 }

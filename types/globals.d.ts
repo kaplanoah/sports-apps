@@ -13,6 +13,7 @@ declare function buildSafariAddress(choice: string, address: string): string;
 declare const WELCOME_CLOSED_KEY: string;
 declare function readStored(key: string): string | null;
 declare function followSeasonPart(part?: HTMLElement): void;
+declare function listAboveSeasonView(): HTMLElement[];
 
 // Cloudflare Workers runtime: a Durable Object answers a WebSocket upgrade with one end of a pair.
 declare class WebSocketPair {

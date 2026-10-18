@@ -258,6 +258,23 @@ test("each part keeps its own place: the bracket chosen far down the standings s
   await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
 });
 
+test("the pill gives up its line once what's above it grows past where the standings sit still", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const pill = page.locator("#bracketStandingsPill");
+  await scrollSeasonPart(page, "standings", (await readHeaderReach(page)) + 20);
+  await expect(pill).toHaveClass(/\bstuck\b/);
+
+  await page.locator("#updates").evaluate((box) => {
+    box.removeAttribute("hidden");
+    Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "100px" });
+  });
+
+  await expect(pill).not.toHaveClass(/\bstuck\b/);
+});
+
 test("with the header still partly showing, the bracket chosen shows scrolled as far as the standings, so the header stays where it is", async ({
   page,
 }) => {
@@ -370,6 +387,28 @@ test.describe("in full motion", () => {
       .poll(async () => listFillFades(await readFades()))
       .toEqual(["Bracket 0.18s 0s ease-in-out", "Standings 0.18s 0s ease-in-out"]);
     await expect.poll(() => readFilledNames(tabList)).toEqual(["Standings"]);
+  });
+
+  test("a tap that turns a slide back before it rests leaves the part it brings back where it is", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await expect(page.locator("#standings-league")).toBeVisible();
+    await scrollSeasonPart(page, "standings", 40);
+
+    await page.evaluate(() => {
+      const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
+      const standings = /** @type {HTMLElement} */ (
+        document.querySelector('#bracketStandingsParts > [data-part="standings"]')
+      );
+      /** @type {HTMLElement} */ (pill.querySelector('[data-tab="bracket"]')).click();
+      standings.scrollTop = 60;
+      /** @type {HTMLElement} */ (pill.querySelector('[data-tab="standings"]')).click();
+    });
+
+    await expect(page.locator("#bracketStandingsParts")).not.toHaveAttribute("data-sliding");
+    expect(await readSeasonPartScroll(page, "standings")).toBe(60);
   });
 
   test("the tab's name and the pill's order change at once when the playoff field is set, rather than easing in", async ({

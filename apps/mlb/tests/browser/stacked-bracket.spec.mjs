@@ -389,6 +389,15 @@ const readSpaceLeft = (page) =>
     return spaceBottom - document.querySelector(".bracket-stage").getBoundingClientRect().bottom;
   });
 
+/**
+ * Whether the stacked bracket fills down to its part's bottom space, ending less than 8px short.
+ * @param {import("@playwright/test").Page} page
+ */
+const isFilling = async (page) => {
+  const spaceLeft = await readSpaceLeft(page);
+  return spaceLeft >= 0 && spaceLeft < 8;
+};
+
 test("on a laptop too narrow for the whole bracket, the stacked bracket fills down to its part's bottom space", async ({
   page,
 }) => {
@@ -396,9 +405,7 @@ test("on a laptop too narrow for the whole bracket, the stacked bracket fills do
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head")).toHaveCount(2);
 
-  const spaceLeft = await readSpaceLeft(page);
-  expect(spaceLeft).toBeGreaterThanOrEqual(0);
-  expect(spaceLeft).toBeLessThan(8);
+  expect(await isFilling(page)).toBe(true);
   expect(await readCardTops(page, "Wild Card")).toEqual(
     await readCardTops(page, "Division Series"),
   );
@@ -418,17 +425,13 @@ test("on a laptop where the header stays put, the stacked bracket keeps filling 
     });
     header.after(box);
   });
-  const isFilling = async () => {
-    const spaceLeft = await readSpaceLeft(page);
-    return spaceLeft >= 0 && spaceLeft < 8;
-  };
-  await expect.poll(isFilling).toBe(true);
+  await expect.poll(() => isFilling(page)).toBe(true);
   await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
   expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
 
   await page.evaluate(() => dispatchEvent(new Event("resize")));
 
-  expect(await isFilling()).toBe(true);
+  expect(await isFilling(page)).toBe(true);
 });
 
 const readBracketFit = (page) =>

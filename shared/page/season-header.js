@@ -35,21 +35,25 @@ const isInFlow = (element) => ["static", "relative"].includes(getComputedStyle(e
 const holdsFixedPart = (element) =>
   [...element.querySelectorAll("*")].some((part) => getComputedStyle(part).position === "fixed");
 
+/** What stands above the season tab's view on the page, but for its dialogs and scripts. */
+function listAboveSeasonView() {
+  const above = [];
+  for (const element of document.body.children) {
+    if (element === findSeasonView()) break;
+    if (!["DIALOG", "SCRIPT"].includes(element.tagName))
+      above.push(/** @type {HTMLElement} */ (element));
+  }
+  return above;
+}
+
 /**
  * What rides with the part: the page's own parts in its flow above the tab's view, not what stays
  * put on the screen, and the pill.
- * @param {HTMLElement} view
  */
-function listRiders(view) {
-  const riders = [];
-  for (const element of document.body.children) {
-    if (element === view) break;
-    if (["DIALOG", "SCRIPT"].includes(element.tagName)) continue;
-    if (isInFlow(element) && !holdsFixedPart(element))
-      riders.push(/** @type {HTMLElement} */ (element));
-  }
-  return [...riders, findSeasonPill()];
-}
+const listRiders = () => [
+  ...listAboveSeasonView().filter((element) => isInFlow(element) && !holdsFixedPart(element)),
+  findSeasonPill(),
+];
 
 /**
  * Where the parts start and how far the header rides, from the page laid out with nothing ridden:
@@ -124,14 +128,10 @@ function putBackScrolls() {
 
 // The ride changes whenever the tab shows, the page changes size, or what's above the parts or in a
 // part comes, goes, or changes size.
-/** @param {HTMLElement} view */
-function watchRoom(view) {
+function watchRoom() {
   const watcher = new ResizeObserver(() => followSeasonPart());
   const watchEach = () => {
-    for (const element of document.body.children) {
-      if (element === view) break;
-      watcher.observe(element);
-    }
+    for (const element of listAboveSeasonView()) watcher.observe(element);
     for (const part of findSeasonParts()) for (const child of part.children) watcher.observe(child);
   };
   watcher.observe(document.body);
@@ -149,7 +149,9 @@ function watchRoom(view) {
 
 /**
  * Has the header ride with `part`, or the part it last rode with, or else the part the pill names,
- * whenever the tab shows, and holds it still on every other tab.
+ * whenever the tab shows, and holds it still on every other tab. Each new measure of the ride tells
+ * the view, as a `headerride` event, so what the page draws from it, like the pill's line, draws
+ * again.
  * @param {HTMLElement} [part]
  */
 function followSeasonPart(part) {
@@ -158,10 +160,11 @@ function followSeasonPart(part) {
   if (typeof ScrollTimeline !== "function") return putBackScrolls();
   view.dataset.follows = "";
   followedPart = part ?? followedPart ?? findPartNamed();
-  roomWatcher ??= watchRoom(view);
+  roomWatcher ??= watchRoom();
   if (!view.classList.contains("active")) return endRides();
   const ride = measureRide(view);
   placeParts(view, ride);
   putBackScrolls();
-  rideWith(followedPart, listRiders(view), ride.reach);
+  rideWith(followedPart, listRiders(), ride.reach);
+  view.dispatchEvent(new Event("headerride"));
 }
