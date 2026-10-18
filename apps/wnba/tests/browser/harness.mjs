@@ -243,16 +243,36 @@ const keepUpdatesFromEarlierVisit = (page) =>
   });
 
 /**
+ * A phone that dismissed the Updates box after every final a test could add, so the box stays
+ * closed over the views a test is about.
+ * @param {import("@playwright/test").Page} page
+ */
+const keepUpdatesDismissed = (page) =>
+  page.addInitScript(() => localStorage.setItem("updatesSeenAt", String(Date.now() * 2)));
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {{ isShowingUpdates: boolean, isNewPhone: boolean }} options
+ */
+async function prepareUpdatesBox(page, { isShowingUpdates, isNewPhone }) {
+  if (isNewPhone) return;
+  if (isShowingUpdates) await keepUpdatesFromEarlierVisit(page);
+  else await keepUpdatesDismissed(page);
+}
+
+/**
  * The page as the Worker serves it, with the Worker's store behind it, already updated once from
  * the afternoon's feeds, and the game and team sheets' routes reading the store, and the recorded
- * answers for what it doesn't keep, unless the league is down by the time the page opens. A phone
- * opens it for the first time, with no Updates box, unless a test is about the box, which opens it
- * as a phone that last dismissed the box before the afternoon's latest day of finals.
+ * answers for what it doesn't keep, unless the league is down by the time the page opens. On a
+ * phone, a final a test adds would open the Updates box above every view, so it stays dismissed
+ * unless a test is about it, as the welcome a phone's browser opens on starts closed: one about
+ * the box opens as a phone that last dismissed it before the afternoon's latest day of finals,
+ * or, with `isNewPhone`, as one that has kept nothing, new to the app.
  * @param {import("@playwright/test").Page} page
  * A past season's record is built from the afternoon's by its change in `pastSeasons`, by year.
  * The store keeps the afternoon's list of the season's games, its playoffs', or every game of the
  * season, regular season and all, for `isWholeSeason`.
- * @param {{ league?: Parameters<typeof listLeagueAnswers>[0], isLeagueDownForPage?: boolean, isShowingUpdates?: boolean, isShowingWelcome?: boolean, pastSeasons?: Record<number, (season: any) => any>, isWholeSeason?: boolean }} [options]
+ * @param {{ league?: Parameters<typeof listLeagueAnswers>[0], isLeagueDownForPage?: boolean, isShowingUpdates?: boolean, isNewPhone?: boolean, isShowingWelcome?: boolean, pastSeasons?: Record<number, (season: any) => any>, isWholeSeason?: boolean }} [options]
  */
 export async function openApp(
   page,
@@ -260,12 +280,13 @@ export async function openApp(
     league = {},
     isLeagueDownForPage = false,
     isShowingUpdates = false,
+    isNewPhone = false,
     isShowingWelcome = false,
     pastSeasons = {},
     isWholeSeason = false,
   } = {},
 ) {
-  if (isShowingUpdates) await keepUpdatesFromEarlierVisit(page);
+  await prepareUpdatesBox(page, { isShowingUpdates, isNewPhone });
   const testStore = await createAfternoonStore(league);
   const { context, store } = testStore;
   const readSeason = async () => structuredClone(await context.ctx.storage.get("seasons/2026"));

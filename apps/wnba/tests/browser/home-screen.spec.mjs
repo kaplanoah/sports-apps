@@ -139,7 +139,8 @@ test.describe("on an iPhone, in the browser", () => {
       });
     });
     await page.emulateMedia({ colorScheme: "light" });
-    await openApp(page, { isShowingWelcome: true });
+    // The harness would keep the Updates box dismissed in the storage this test takes away.
+    await openApp(page, { isShowingWelcome: true, isNewPhone: true });
     await expect(page.locator("#stamp")).toBeVisible();
     await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
     await page.locator(WELCOME).getByRole("radio", { name: "Walnut" }).check();

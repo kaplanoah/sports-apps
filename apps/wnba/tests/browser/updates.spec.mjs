@@ -84,7 +84,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await serveReleaseNote(page);
-    const app = await openApp(page);
+    const app = await openApp(page, { isNewPhone: true });
     const updates = page.locator("#updates");
     await expect(page.locator(".series").first()).toBeVisible();
     await expect(updates).toBeHidden();
