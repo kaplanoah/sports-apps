@@ -128,7 +128,7 @@ test.describe("on an iPhone, in the browser", () => {
     expect(aboveRanking).toBeGreaterThan(0);
   });
 
-  test("the settings' box sets its steps in the credits' ink, its own in Ball and the dim ink in Night Game, around its buttons' names in the full ink", async ({
+  test("the settings' box sets its steps in the receding ink, its own in Ball and the dim ink in Night Game, around its buttons' names in the full ink", async ({
     page,
   }) => {
     await openApp(page);
@@ -144,18 +144,18 @@ test.describe("on an iPhone, in the browser", () => {
           .locator("b")
           .first()
           .evaluate((element) => getComputedStyle(element).color),
-        credit: await readColor(page, "--credit-ink"),
+        receding: await readColor(page, "--receding-ink"),
         dim: await readColor(page, "--ink-dim"),
         ink: await readColor(page, "--ink"),
       });
     }
     const [ball, nightGame] = looks;
     for (const look of looks) {
-      expect(look.steps).toBe(look.credit);
+      expect(look.steps).toBe(look.receding);
       expect(look.name).toBe(look.ink);
     }
-    expect(ball.credit).not.toBe(ball.dim);
-    expect(nightGame.credit).toBe(nightGame.dim);
+    expect(ball.receding).not.toBe(ball.dim);
+    expect(nightGame.receding).toBe(nightGame.dim);
   });
 
   test("the Share icon sits as set by eye for Libre Franklin, 1.5px up in the welcome and 1px up in the settings' box", async ({
