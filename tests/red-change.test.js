@@ -256,6 +256,14 @@ test("a shared script that's gone, that a change's hunks don't fit, or that does
   const comment = ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP];
   assert.deepEqual(findScriptChangeReasons(comment, ""), SCRIPT_REASON);
   assert.deepEqual(findScriptChangeReasons(comment, "export const x = 1;\n"), SCRIPT_REASON);
+  // A change to code, read against the file as it was before it, would show no change at all.
+  assert.deepEqual(
+    findScriptChangeReasons(
+      [" function a() {", "-  return 1;", "+  return 2;", " }"],
+      "function a() {\n  return 1;\n}",
+    ),
+    SCRIPT_REASON,
+  );
 });
 
 const SHARED_STYLESHEETS = [

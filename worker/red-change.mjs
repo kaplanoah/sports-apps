@@ -178,12 +178,13 @@ export function readDiff(diff) {
         files.push({ path: oldPath, addedLines: [], hunks: [], hunkStarts: [] });
       continue;
     }
-    const hunkHeader = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    const hunkHeader = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
     if (hunkHeader && current) {
       lineNumber = Number(hunkHeader[1]);
       hunk = [];
       current.hunks.push(hunk);
-      current.hunkStarts.push(lineNumber);
+      // A hunk that leaves no line in the new file names the line before it.
+      current.hunkStarts.push(hunkHeader[2] === "0" ? lineNumber + 1 : lineNumber);
       continue;
     }
     if (!current || !hunk || line.startsWith("\\")) continue;
@@ -265,9 +266,7 @@ function readScriptBefore(after, { hunks, hunkStarts }) {
   const before = [];
   let next = 0;
   for (const [index, hunk] of hunks.entries()) {
-    // A hunk that leaves no line in the new file starts after the line its header names.
-    const hasNewLines = hunk.some(({ kind }) => kind !== "removed");
-    const start = hasNewLines ? hunkStarts[index] - 1 : hunkStarts[index];
+    const start = hunkStarts[index] - 1;
     before.push(...afterLines.slice(next, start));
     next = start;
     for (const { kind, text } of hunk) {
