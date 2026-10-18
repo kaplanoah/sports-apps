@@ -1,5 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import {
+  holdHeaderStill,
   readSeasonPartScroll,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
@@ -33,6 +34,18 @@ async function readCardGaps(page) {
   });
 }
 
+/**
+ * Waits for the last card's note to end 12 to 16px above the round dots.
+ * @param {import("@playwright/test").Page} page
+ */
+const expectReachingDots = (page) =>
+  expect
+    .poll(async () => {
+      const { lastNoteToDots } = await readCardGaps(page);
+      return lastNoteToDots >= 12 && lastNoteToDots < 12 + 4;
+    })
+    .toBe(true);
+
 test.describe("on a phone, the bracket", () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
@@ -55,13 +68,6 @@ test.describe("on a phone, the bracket", () => {
     await page.setViewportSize({ width: PHONE.width, height: 816 });
     await openApp(page);
     const spread = await readCardGaps(page);
-    const expectReachingDots = () =>
-      expect
-        .poll(async () => {
-          const { lastNoteToDots } = await readCardGaps(page);
-          return lastNoteToDots >= 12 && lastNoteToDots < 12 + 4;
-        })
-        .toBe(true);
 
     await page.locator("header").evaluate((header) => {
       const above = Object.assign(document.createElement("div"), {
@@ -71,13 +77,37 @@ test.describe("on a phone, the bracket", () => {
       header.after(above);
     });
 
-    await expectReachingDots();
+    await expectReachingDots(page);
     expect((await readCardGaps(page)).between[0]).toBeLessThan(spread.between[0]);
 
     await page.locator("#roomAbove").evaluate((above) => above.remove());
 
-    await expectReachingDots();
+    await expectReachingDots(page);
     expect((await readCardGaps(page)).between).toEqual(spread.between);
+  });
+
+  test("where the header stays put, spreads its cards again to reach the round dots when a tall Updates box over it grows, holding the view at its least height", async ({
+    page,
+  }) => {
+    // A screen tall enough for the cards to spread under the box, which leaves the view its least
+    // height, most of the screen.
+    await page.setViewportSize({ width: PHONE.width, height: 1400 });
+    await holdHeaderStill(page);
+    await openApp(page);
+    const updates = page.locator("#updates");
+    await updates.evaluate((box) => {
+      box.removeAttribute("hidden");
+      Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "500px" });
+    });
+    await expectReachingDots(page);
+    const view = page.locator("#view-bracket-standings");
+    const readViewHeight = () => view.evaluate((element) => element.getBoundingClientRect().height);
+    const viewHeight = await readViewHeight();
+
+    await updates.evaluate((box) => (box.style.height = "520px"));
+
+    await expectReachingDots(page);
+    expect(await readViewHeight()).toBe(viewHeight);
   });
 
   test("spreads its cards no more than 1.45 times their tightest gap on a taller screen", async ({
@@ -122,7 +152,7 @@ test.describe("on a phone, the bracket", () => {
     // A screen tall enough for the box to scroll the page while the cards spread between their
     // tightest and widest gaps.
     await page.setViewportSize({ width: PHONE.width, height: 1400 });
-    await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+    await holdHeaderStill(page);
     await openApp(page);
     await page.locator("header").evaluate((header) => {
       const box = Object.assign(document.createElement("div"), {

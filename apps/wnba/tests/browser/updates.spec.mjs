@@ -1,7 +1,12 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { readSeasonRide, scrollSeasonPartToEnd } from "../../../../tests/browser/season-scroll.mjs";
+import {
+  holdHeaderStill,
+  readPillHoldTop,
+  readSeasonRide,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -415,15 +420,20 @@ test.describe("on a phone, with a release note out", () => {
 
       await scrollSeasonPartToEnd(page, "bracket");
 
-      await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: 10, pageScroll: 0 });
+      await expect
+        .poll(() => readSeasonRide(page))
+        .toMatchObject({ pillTop: await readPillHoldTop(page), pageScroll: 0 });
       const box = await page.locator("#updates").boundingBox();
-      expect(box.y + box.height).toBeLessThanOrEqual(10);
+      expect(box.y + box.height).toBeLessThanOrEqual(await readPillHoldTop(page));
+      expect(
+        await page.evaluate(() => document.documentElement.scrollHeight - innerHeight),
+      ).toBeLessThanOrEqual(1);
     });
 
     test("where the header stays put, the box leaves the bracket most of the screen, and the page scrolls the rest of it into view", async ({
       page,
     }) => {
-      await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+      await holdHeaderStill(page);
       await openApp(page, { updatesBox: "shown" });
       await expect(page.locator("#updates .updates-notes .what")).toHaveCount(3);
       await expect(page.locator("#bracketWrap .bracket")).toBeVisible();

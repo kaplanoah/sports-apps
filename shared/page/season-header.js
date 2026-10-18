@@ -4,9 +4,8 @@
 // the pill (pager.css), so the browser moves what rides with a scroll-driven animation in step
 // with the scroll, and a switch never scrolls the page: bracket-standings.js places the part a
 // switch brings in before it shows. A browser without scroll-driven animations keeps the header
-// still and each part under the pill. This plain script loads in the head, and the page calls
-// followSeasonPart() right after showLastDrawn(), before anything is painted, so a part put back
-// scrolled shows the header where it was; bracket-standings.js calls it for each part it shows.
+// still and each part under the pill. This plain script loads in the head and runs before the
+// first paint, so a part put back scrolled shows the header where it was.
 
 const findSeasonView = () =>
   /** @type {HTMLElement | null} */ (document.getElementById("view-bracket-standings"));
@@ -46,14 +45,22 @@ function listAboveSeasonView() {
   return above;
 }
 
+/** @type {HTMLElement[] | null} */
+let riders = null;
+
 /**
- * What rides with the part: the page's own parts in its flow above the tab's view, not what stays
- * put on the screen, and the pill.
+ * What rides above the pill: the page's own parts in its flow above the tab's view, not what stays
+ * put on the screen. Each is marked `data-rides`, which pager.css draws over the parts. They change
+ * only as the page's parts come and go or the screen changes size, as a phone's tab bar floats.
  */
-const listRiders = () => [
-  ...listAboveSeasonView().filter((element) => isInFlow(element) && !holdsFixedPart(element)),
-  findSeasonPill(),
-];
+function findRiders() {
+  if (riders) return riders;
+  const above = listAboveSeasonView();
+  const found = above.filter((element) => isInFlow(element) && !holdsFixedPart(element));
+  for (const element of above) element.toggleAttribute("data-rides", found.includes(element));
+  riders = found;
+  return found;
+}
 
 /**
  * Where the parts start and how far the header rides, from the page laid out with nothing ridden:
@@ -73,8 +80,12 @@ function measureRide(view) {
   };
 }
 
+/** @typedef {{ part: HTMLElement, movers: HTMLElement[], reach: number, range: number }} Ride */
+
 /** @type {Animation[]} */
 let rides = [];
+/** @type {Ride | null} */
+let ridden = null;
 /** @type {HTMLElement | null} */
 let followedPart = null;
 /** @type {ResizeObserver | null} */
@@ -83,26 +94,46 @@ let roomWatcher = null;
 function endRides() {
   for (const ride of rides) ride.cancel();
   rides = [];
+  ridden = null;
 }
 
 /**
- * Has `riders` ride `reach` pixels up over the first `reach` pixels `part` scrolls, then hold.
+ * @param {Ride | null} before
+ * @param {Ride} after
+ */
+const isSameRide = (before, after) =>
+  !!before &&
+  before.part === after.part &&
+  before.reach === after.reach &&
+  before.range === after.range &&
+  before.movers.length === after.movers.length &&
+  before.movers.every((mover, index) => mover === after.movers[index]);
+
+/**
+ * Has what rides, and the pill, ride `reach` pixels up over the first `reach` pixels `part`
+ * scrolls, then hold, keeping the animations as they are while nothing they take has changed.
  * @param {HTMLElement} part
- * @param {HTMLElement[]} riders
  * @param {number} reach
  */
-function rideWith(part, riders, reach) {
+function rideWith(part, reach) {
+  const ride = {
+    part,
+    movers: [...findRiders(), findSeasonPill()],
+    reach,
+    range: part.scrollHeight - part.clientHeight,
+  };
+  if (isSameRide(ridden, ride)) return;
   endRides();
-  const range = part.scrollHeight - part.clientHeight;
-  if (reach <= 0 || range <= 0) return;
+  ridden = ride;
+  if (reach <= 0 || ride.range <= 0) return;
   const held = { transform: `translateY(${-reach}px)` };
   const timeline = new ScrollTimeline({ source: part, axis: "block" });
   const keyframes = [
     { transform: "none", offset: 0 },
-    { ...held, offset: Math.min(1, reach / range) },
+    { ...held, offset: Math.min(1, reach / ride.range) },
     { ...held, offset: 1 },
   ];
-  rides = riders.map((rider) => rider.animate(keyframes, { timeline, fill: "both" }));
+  rides = ride.movers.map((mover) => mover.animate(keyframes, { timeline, fill: "both" }));
 }
 
 /**
@@ -127,9 +158,13 @@ function putBackScrolls() {
 }
 
 // The ride changes whenever the tab shows, the page changes size, or what's above the parts or in a
-// part comes, goes, or changes size.
+// part comes, goes, or changes size. A browser hands a ResizeObserver every change of a frame at
+// once, before it paints.
 function watchRoom() {
-  const watcher = new ResizeObserver(() => followSeasonPart());
+  const watcher = new ResizeObserver((changes) => {
+    if (changes.some(({ target }) => target === document.body)) riders = null;
+    followSeasonPart();
+  });
   const watchEach = () => {
     for (const element of listAboveSeasonView()) watcher.observe(element);
     for (const part of findSeasonParts()) for (const child of part.children) watcher.observe(child);
@@ -139,6 +174,7 @@ function watchRoom() {
   for (const part of findSeasonParts()) watcher.observe(part);
   watchEach();
   const comings = new MutationObserver(() => {
+    riders = null;
     watchEach();
     followSeasonPart();
   });
@@ -165,6 +201,6 @@ function followSeasonPart(part) {
   const ride = measureRide(view);
   placeParts(view, ride);
   putBackScrolls();
-  rideWith(followedPart, listRiders(), ride.reach);
+  rideWith(followedPart, ride.reach);
   view.dispatchEvent(new Event("headerride"));
 }

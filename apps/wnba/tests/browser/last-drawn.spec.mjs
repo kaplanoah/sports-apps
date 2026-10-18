@@ -4,6 +4,7 @@ import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/
 import { findSeasonPill, findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import {
+  readPillHoldTop,
   readSeasonPartScroll,
   readSeasonRide,
   scrollSeasonPartToEnd,
@@ -241,12 +242,14 @@ test.describe("on a phone", () => {
 
     await expect(page.locator("#standingsWrap table").first()).toBeVisible();
     await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(left);
-    await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: 10 });
+    await expect
+      .poll(() => readSeasonRide(page))
+      .toMatchObject({ pillTop: await readPillHoldTop(page) });
     await expect(pill).toHaveClass(/\bstuck\b/);
     release();
     await waitForLoadToSettle(page);
     expect(await readSeasonPartScroll(page, "standings")).toBe(left);
-    expect(await readSeasonRide(page)).toMatchObject({ pillTop: 10 });
+    expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
     await expect(pill).toHaveClass(/\bstuck\b/);
   });
 

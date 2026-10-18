@@ -1,3 +1,6 @@
+import { expect } from "@playwright/test";
+import { countTimedAnimations } from "./animations.mjs";
+
 /**
  * Notes each motion the page gives a sheet, for the returned function to read and forget: each
  * script animation by its element's id, the part it moves (the sheet or its ::backdrop), and where
@@ -33,11 +36,7 @@ export async function recordSheetMotions(page) {
 }
 
 /**
- * Waits until every motion on the page that runs for a time has ended. A motion tied to a scroll,
- * like a sheet's as its row moves, lasts as long as the sheet, so it doesn't count.
+ * Waits until every motion on the page that runs for a time has ended.
  * @param {import("@playwright/test").Page} page
  */
-export const waitForTimedMotions = (page) =>
-  page.waitForFunction(() =>
-    document.getAnimations().every((motion) => motion.timeline !== document.timeline),
-  );
+export const waitForTimedMotions = (page) => expect.poll(() => countTimedAnimations(page)).toBe(0);

@@ -20,6 +20,8 @@ import {
 } from "../../../../tests/browser/round-dots.mjs";
 import {
   expectPageHeldStill,
+  findSeasonPart,
+  holdHeaderStill,
   readHeaderReach,
   readSeasonPartScroll,
   scrollSeasonPartToEnd,
@@ -65,13 +67,13 @@ test.describe("in full motion", () => {
     const readFramesOut = await trackRoundDots(page);
     await pill.getByRole("tab", { name: "Standings" }).click();
     await expect(parts).not.toHaveAttribute("data-sliding");
-    await expect(parts.locator('> [data-part="standings"]')).toBeVisible();
+    await expect(findSeasonPart(page, "standings")).toBeVisible();
     expectDotsHeldWithBracket(await readFramesOut(), restingTop);
 
     const readFramesBack = await trackRoundDots(page);
     await pill.getByRole("tab", { name: "Bracket" }).click();
     await expect(parts).not.toHaveAttribute("data-sliding");
-    await expect(parts.locator('> [data-part="bracket"]')).toBeVisible();
+    await expect(findSeasonPart(page, "bracket")).toBeVisible();
     expectDotsHeldWithBracket(await readFramesBack(), restingTop);
   });
 
@@ -90,13 +92,13 @@ test.describe("in full motion", () => {
     const readFramesOut = await trackSeasonFrames(page);
     await pill.getByRole("tab", { name: "Bracket" }).click();
     await expect(parts).not.toHaveAttribute("data-sliding");
-    await expect(parts.locator('> [data-part="bracket"]')).toBeVisible();
+    await expect(findSeasonPart(page, "bracket")).toBeVisible();
     expectPageHeldStill(await readFramesOut());
 
     const readFramesBack = await trackSeasonFrames(page);
     await pill.getByRole("tab", { name: "Standings" }).click();
     await expect(parts).not.toHaveAttribute("data-sliding");
-    await expect(parts.locator('> [data-part="standings"]')).toBeVisible();
+    await expect(findSeasonPart(page, "standings")).toBeVisible();
     expectPageHeldStill(await readFramesBack());
     expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
   });
@@ -382,8 +384,7 @@ test("narrowing the window until the whole bracket can't show switches to the st
  * @param {import("@playwright/test").Page} page
  */
 const readSpaceLeft = (page) =>
-  page.evaluate(() => {
-    const part = document.querySelector('#bracketStandingsParts > [data-part="bracket"]');
+  findSeasonPart(page, "bracket").evaluate((part) => {
     const spaceBottom =
       part.getBoundingClientRect().bottom - parseFloat(getComputedStyle(part).paddingBottom);
     return spaceBottom - document.querySelector(".bracket-stage").getBoundingClientRect().bottom;
@@ -416,7 +417,7 @@ test("on a laptop where the header stays put, the stacked bracket keeps filling 
 }) => {
   // A screen tall enough for the bracket to fit under the box, which scrolls the page.
   await page.setViewportSize({ width: LAPTOP.width, height: 1200 });
-  await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+  await holdHeaderStill(page);
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head")).toHaveCount(2);
   await page.locator("header").evaluate((header) => {
@@ -509,7 +510,7 @@ test("on a phone where the header stays put, the bracket fills the height again 
   // A screen tall enough for the bracket to fit under the box, which leaves the view its least
   // height, most of the screen.
   await page.setViewportSize({ width: 390, height: 1450 });
-  await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+  await holdHeaderStill(page);
   await openBracket(page);
   await expect(page.locator(".bracket-stage")).toBeVisible();
   const updates = page.locator("#updates");
@@ -550,7 +551,7 @@ test("on a phone where the header stays put, the bracket keeps its spaces when i
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 1400 });
-  await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+  await holdHeaderStill(page);
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head.al")).toBeVisible();
   await page.locator("header").evaluate((header) => {
@@ -582,9 +583,7 @@ test("on a phone a little short of room, the bracket's spaces shrink so it fits 
   expect(belowLine).toBeLessThan(11);
   expect(betweenRows).toBeLessThan(13);
   expect(
-    await page
-      .locator('#bracketStandingsParts > [data-part="bracket"]')
-      .evaluate((part) => part.scrollHeight - part.clientHeight),
+    await findSeasonPart(page, "bracket").evaluate((part) => part.scrollHeight - part.clientHeight),
   ).toBeLessThanOrEqual((await readHeaderReach(page)) + 1);
 });
 

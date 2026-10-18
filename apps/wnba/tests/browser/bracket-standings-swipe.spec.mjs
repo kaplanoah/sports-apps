@@ -9,7 +9,9 @@ import {
 } from "../../../../tests/browser/round-dots.mjs";
 import {
   expectPageHeldStill,
+  findSeasonPart,
   readHeaderReach,
+  readPillHoldTop,
   readSeasonPartScroll,
   readSeasonRide,
   scrollSeasonPart,
@@ -27,18 +29,12 @@ test.use({
 });
 
 /**
- * @param {import("@playwright/test").Page} page
- * @param {"standings" | "bracket"} part
- */
-const findPart = (page, part) => page.locator(`#bracketStandingsParts > [data-part="${part}"]`);
-
-/**
  * Where a part sits across the screen.
  * @param {import("@playwright/test").Page} page
  * @param {"standings" | "bracket"} part
  */
 const readPartLeft = (page, part) =>
-  findPart(page, part).evaluate((element) => Math.round(element.getBoundingClientRect().x));
+  findSeasonPart(page, part).evaluate((element) => Math.round(element.getBoundingClientRect().x));
 
 /**
  * Waits until a part rests on the screen, chosen in the pill, with the parts no longer moving.
@@ -46,7 +42,7 @@ const readPartLeft = (page, part) =>
  * @param {"standings" | "bracket"} part
  */
 async function expectPartShown(page, part) {
-  const element = findPart(page, part);
+  const element = findSeasonPart(page, part);
   await expect(element).toBeVisible();
   await expect(element).not.toHaveAttribute("inert");
   await expect.poll(() => readPartLeft(page, part)).toBe(0);
@@ -86,14 +82,14 @@ test("a swipe left on the bracket at its last round brings in the standings, and
   )();
 
   await expectPartShown(page, "standings");
-  await expect(findPart(page, "bracket")).toBeHidden();
+  await expect(findSeasonPart(page, "bracket")).toBeHidden();
 
   await (
     await drag(page, { x: 60, y: 400 }, { x: 250 })
   )();
 
   await expectPartShown(page, "bracket");
-  await expect(findPart(page, "standings")).toBeHidden();
+  await expect(findSeasonPart(page, "standings")).toBeHidden();
 });
 
 test("a swipe left on the bracket short of its last round scrolls the bracket, and leaves the standings where they are", async ({
@@ -141,7 +137,7 @@ test("a swipe that brings the bracket in from far down the standings shows it fr
   await expectPartShown(page, "bracket");
   await expect(pill).not.toHaveClass(/\bstuck\b/);
   expect(await readSeasonPartScroll(page, "bracket")).toBe(await readHeaderReach(page));
-  expect(await readSeasonRide(page)).toMatchObject({ pillTop: 10 });
+  expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
   expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(PHONE.width);
 });
@@ -156,10 +152,7 @@ test.describe("in full motion", () => {
    * @param {"standings" | "bracket"} part
    */
   async function trackPart(page, part) {
-    await page.evaluate((key) => {
-      const element = /** @type {HTMLElement} */ (
-        document.querySelector(`#bracketStandingsParts > [data-part="${key}"]`)
-      );
+    await findSeasonPart(page, part).evaluate((element) => {
       const noted = /** @type {number[]} */ ([]);
       const note = () => {
         noted.push(Math.round(element.getBoundingClientRect().x));
@@ -167,7 +160,7 @@ test.describe("in full motion", () => {
       };
       requestAnimationFrame(note);
       Object.assign(window, { partLefts: noted, isTrackingDone: false });
-    }, part);
+    });
     return () =>
       page.evaluate(() => {
         Object.assign(window, { isTrackingDone: true });
@@ -231,7 +224,7 @@ test.describe("in full motion", () => {
     await release();
 
     await expectPartShown(page, "bracket");
-    await expect(findPart(page, "standings")).toBeHidden();
+    await expect(findSeasonPart(page, "standings")).toBeHidden();
   });
 
   test("the round dots hold their height over the tab bar on every frame of a tap's slide to the standings and back, moving only sideways, with the bracket", async ({

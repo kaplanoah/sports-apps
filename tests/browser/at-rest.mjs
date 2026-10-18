@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { describeTimedAnimations } from "./animations.mjs";
 
 /**
  * Keeps each "ResizeObserver loop" error the page reports from then on, which a browser raises
@@ -220,32 +221,7 @@ export async function waitForLoadToSettle(page) {
  * @param {import("@playwright/test").Page} page
  */
 export async function expectAtRest(page) {
-  await waitForNone(() => listAnimations(page), "animating");
+  await waitForNone(() => describeTimedAnimations(page), "animating");
   expect(await listFrameRequestsAcross(page, 1000)).toEqual([]);
-  expect(await listAnimations(page)).toEqual([]);
+  expect(await describeTimedAnimations(page)).toEqual([]);
 }
-
-/**
- * Each animation on the page that plays over time, by what it animates and the element it moves,
- * so a page that never comes to rest names what kept moving, leaving out one a scroll drives, as
- * countTimedAnimations in animations.mjs does.
- * @param {import("@playwright/test").Page} page
- */
-const listAnimations = (page) =>
-  page.evaluate(() =>
-    document
-      .getAnimations()
-      .filter((animation) => !(animation.timeline instanceof ScrollTimeline))
-      .map((animation) => {
-        const effect = /** @type {KeyframeEffect | null} */ (animation.effect);
-        const target = effect?.target;
-        const element = target ? [target.localName, ...target.classList].join(".") : "nothing";
-        const name =
-          Reflect.get(animation, "animationName") ||
-          Reflect.get(animation, "transitionProperty") ||
-          [...new Set(effect?.getKeyframes().flatMap((frame) => Object.keys(frame)))]
-            .filter((key) => !["offset", "easing", "composite", "computedOffset"].includes(key))
-            .join(" ");
-        return `${name} on ${element}${target?.id ? `#${target.id}` : ""}`;
-      }),
-  );

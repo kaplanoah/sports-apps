@@ -4,6 +4,8 @@
 
 import { expect } from "@playwright/test";
 
+/** @typedef {"standings" | "bracket"} SeasonPartName */
+
 /**
  * @typedef {object} SeasonPlace
  * @property {number} pageScroll how far the page is scrolled
@@ -20,12 +22,22 @@ import { expect } from "@playwright/test";
  * @property {number} bracketScroll how far the bracket is scrolled
  */
 
-/** @typedef {SeasonPlace & SeasonScrolls & { isSliding: boolean }} SeasonFrame */
+/**
+ * @typedef {SeasonPlace & SeasonScrolls & { isSliding: boolean, shownPart: SeasonPartName }} SeasonFrame
+ */
 
 /**
- * Notes where the page, the header, the pill, and the parts are on each frame, until the returned
- * function stops and reads the notes. It returns once it has noted a frame, so the frames start
- * before whatever the test does next.
+ * One of the season tab's parts.
+ * @param {import("@playwright/test").Page} page
+ * @param {SeasonPartName} part
+ */
+export const findSeasonPart = (page, part) =>
+  page.locator(`#bracketStandingsParts > [data-part="${part}"]`);
+
+/**
+ * Notes where the page, the header, the pill, and the parts are on each frame, and which part the
+ * pill names, until the returned function stops and reads the notes. It returns once it has noted
+ * a frame, so the frames start before whatever the test does next.
  * @param {import("@playwright/test").Page} page
  * @returns {Promise<() => Promise<SeasonFrame[]>>}
  */
@@ -53,6 +65,9 @@ export async function trackSeasonFrames(page) {
             standingsScroll: Math.round(findPart("standings").scrollTop),
             bracketScroll: Math.round(findPart("bracket").scrollTop),
             isSliding: row.hasAttribute("data-sliding"),
+            shownPart: /** @type {SeasonPartName} */ (
+              /** @type {HTMLElement} */ (pill.querySelector("[aria-selected=true]")).dataset.tab
+            ),
           });
           resolve(undefined);
           if (!(/** @type {any} */ (window).isTrackingSeasonDone)) requestAnimationFrame(note);
@@ -71,19 +86,17 @@ export async function trackSeasonFrames(page) {
 /** @param {SeasonFrame} frame */
 const readPlace = ({
   isSliding: _isSliding,
+  shownPart: _shownPart,
   standingsScroll: _standingsScroll,
   bracketScroll: _bracketScroll,
   ...place
 }) => place;
 
-/** @param {SeasonFrame} frame */
-const readScrolls = ({ standingsScroll, bracketScroll }) => ({ standingsScroll, bracketScroll });
-
 /**
  * Checks that the frames caught the parts sliding from a frame at rest, and that on every frame the
  * page held still: it never scrolled or changed height, the header, the pill, and both parts
- * stayed at their height on the screen, and from the slide's first frame each part stayed scrolled
- * as far as it was, the part coming in placed before it showed.
+ * stayed at their height on the screen, the part shown at rest stayed scrolled as far as it was,
+ * and the part coming in, placed before it showed, stayed where it was placed.
  * @param {SeasonFrame[]} frames
  */
 export function expectPageHeldStill(frames) {
@@ -91,20 +104,27 @@ export function expectPageHeldStill(frames) {
   expect(setOff).toBeGreaterThan(0);
   const atRest = readPlace(frames[0]);
   expect(frames.map(readPlace)).toEqual(frames.map(() => atRest));
-  const placed = readScrolls(frames[setOff]);
-  expect(frames.slice(setOff).map(readScrolls)).toEqual(frames.slice(setOff).map(() => placed));
+  const shownScroll = /** @type {const} */ (`${frames[0].shownPart}Scroll`);
+  const comingScroll = shownScroll === "standingsScroll" ? "bracketScroll" : "standingsScroll";
+  expect(frames.map((frame) => frame[shownScroll])).toEqual(
+    frames.map(() => frames[0][shownScroll]),
+  );
+  const sliding = frames.slice(setOff);
+  expect(sliding.map((frame) => frame[comingScroll])).toEqual(
+    sliding.map(() => frames[setOff][comingScroll]),
+  );
 }
 
 /**
  * Jumps a part of the season tab to its end, and waits for the pill to end in its line, which the
  * part's scroll event draws, so nothing the scroll changes lands later.
  * @param {import("@playwright/test").Page} page
- * @param {"standings" | "bracket"} part
+ * @param {SeasonPartName} part
  */
 export async function scrollSeasonPartToEnd(page, part) {
-  await page
-    .locator(`#bracketStandingsParts > [data-part="${part}"]`)
-    .evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: "instant" }));
+  await findSeasonPart(page, part).evaluate((element) =>
+    element.scrollTo({ top: element.scrollHeight, behavior: "instant" }),
+  );
   await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
 }
 
@@ -113,7 +133,7 @@ export async function scrollSeasonPartToEnd(page, part) {
  * how far the page scrolled meanwhile, once the wheel was handled: a turn back up comes after it,
  * so the part following that one means the browser had already handled the first.
  * @param {import("@playwright/test").Page} page
- * @param {"standings" | "bracket"} part
+ * @param {SeasonPartName} part
  */
 export async function wheelPastSeasonPartEnd(page, part) {
   await page.evaluate(() => {
@@ -135,15 +155,23 @@ export async function wheelPastSeasonPartEnd(page, part) {
 }
 
 /**
- * Scrolls a part of the season tab to `top` at once.
+ * Scrolls a part of the season tab to `top` at once, and waits for the frame after its scroll
+ * event, so what the page draws from the scroll has landed.
  * @param {import("@playwright/test").Page} page
- * @param {"standings" | "bracket"} part
+ * @param {SeasonPartName} part
  * @param {number} top
  */
 export const scrollSeasonPart = (page, part, top) =>
-  page
-    .locator(`#bracketStandingsParts > [data-part="${part}"]`)
-    .evaluate((element, to) => element.scrollTo({ top: to, behavior: "instant" }), top);
+  findSeasonPart(page, part).evaluate(
+    (element, to) =>
+      new Promise((resolve) => {
+        const from = element.scrollTop;
+        element.addEventListener("scroll", () => requestAnimationFrame(resolve), { once: true });
+        element.scrollTo({ top: to, behavior: "instant" });
+        if (element.scrollTop === from) resolve(undefined);
+      }),
+    top,
+  );
 
 /**
  * Where the header and the pill start down the page, and how far the page is scrolled, which a
@@ -162,6 +190,20 @@ export const readSeasonRide = (page) =>
   });
 
 /**
+ * How far down the page the pill holds once the header is gone: as far as its band above it
+ * reaches, under the status bar.
+ * @param {import("@playwright/test").Page} page
+ */
+export const readPillHoldTop = (page) =>
+  page.evaluate(() =>
+    Math.round(
+      parseFloat(
+        getComputedStyle(document.getElementById("bracketStandingsPill"), "::before").height,
+      ),
+    ),
+  );
+
+/**
  * How far a part of the season tab scrolls before the pill holds at the top, rounded as a part's
  * scroll reads.
  * @param {import("@playwright/test").Page} page
@@ -178,9 +220,15 @@ export const readHeaderReach = (page) =>
 /**
  * How far a part of the season tab is scrolled.
  * @param {import("@playwright/test").Page} page
- * @param {"standings" | "bracket"} part
+ * @param {SeasonPartName} part
  */
 export const readSeasonPartScroll = (page, part) =>
-  page
-    .locator(`#bracketStandingsParts > [data-part="${part}"]`)
-    .evaluate((element) => Math.round(element.scrollTop));
+  findSeasonPart(page, part).evaluate((element) => Math.round(element.scrollTop));
+
+/**
+ * Has the page open as in a browser without scroll-driven animations, where the header stays put.
+ * Call it before the page loads.
+ * @param {import("@playwright/test").Page} page
+ */
+export const holdHeaderStill = (page) =>
+  page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));

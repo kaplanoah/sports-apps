@@ -23,7 +23,7 @@ import {
   listTapsOffButtons,
   listTouchHoverRules,
 } from "../../../../tests/browser/tap-states.mjs";
-import { PHONE } from "./screen-sizes.mjs";
+import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 import {
   findSeasonPill,
   findSeasonTab,
@@ -31,6 +31,9 @@ import {
   scrollTabsIntoView,
 } from "../../../../tests/browser/season-tab.mjs";
 import {
+  findSeasonPart,
+  holdHeaderStill,
+  readPillHoldTop,
   readSeasonPartScroll,
   readSeasonRide,
   scrollSeasonPart,
@@ -181,14 +184,91 @@ test("on a phone, once the header is gone, the pill holds at the top and ends in
   await page.mouse.move(PHONE.width / 2, 500);
 
   expect(await wheelPastSeasonPartEnd(page, "standings")).toBe(0);
-  expect(await readSeasonRide(page)).toMatchObject({ pillTop: 10, pageScroll: 0 });
+  expect(await readSeasonRide(page)).toMatchObject({
+    pillTop: await readPillHoldTop(page),
+    pageScroll: 0,
+  });
   const header = await page.locator("header.top").boundingBox();
-  expect(header.y + header.height).toBeLessThanOrEqual(10);
+  expect(header.y + header.height).toBeLessThanOrEqual(await readPillHoldTop(page));
   await expect(pill).toHaveCSS(
     "box-shadow",
     `${await readColor(page, "--divider")} 0px 1px 0px 0px`,
   );
   await expect(pill).toHaveCSS("background-image", "none");
+});
+
+/**
+ * What a touch at each point lands on: the season's part under it, or else the button.
+ * @param {import("@playwright/test").Page} page
+ * @param {Record<string, { x: number, y: number }>} points
+ */
+const findTouchTargets = (page, points) =>
+  page.evaluate(
+    (spots) =>
+      Object.fromEntries(
+        Object.entries(spots).map(([name, { x, y }]) => {
+          const target = document.elementFromPoint(x, y);
+          const part = target?.closest(".season-part")?.getAttribute("data-part");
+          return [name, part ?? target?.closest("button")?.id];
+        }),
+      ),
+    points,
+  );
+
+/** @param {{ x: number, y: number, width: number, height: number }} box */
+const findCenter = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+
+test("on a phone, a touch on the header lands on the part under it, so a drag there scrolls it, while the header's button still takes its tap", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const header = await page.locator("header.top").boundingBox();
+
+  const found = await findTouchTargets(page, {
+    onHeader: { x: header.x + 40, y: header.y + header.height / 2 },
+    onSettings: findCenter(await page.locator("#settingsBtn").boundingBox()),
+  });
+
+  expect(found).toEqual({ onHeader: "standings", onSettings: "settingsBtn" });
+});
+
+test("on a wide screen, where the tabs ride with the header, a touch beside them lands on the part under them, while each tab still takes its tap", async ({
+  page,
+}) => {
+  await page.setViewportSize(WIDE_SCREEN);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const bar = await page.locator("#tabBar").boundingBox();
+  const tabs = await page.getByRole("tablist", { name: "Views" }).boundingBox();
+
+  const found = await findTouchTargets(page, {
+    besideTabs: { x: tabs.x + tabs.width + 40, y: bar.y + bar.height / 2 },
+    onTab: findCenter(await page.getByRole("tab", { name: "Games" }).boundingBox()),
+  });
+
+  expect(found).toEqual({ besideTabs: "standings", onTab: "tab-games" });
+});
+
+test("on a phone where the browser has no scroll-driven animations, the header stays put and the parts scroll under the pill", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await holdHeaderStill(page);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  const before = await readSeasonRide(page);
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  expect(await readSeasonRide(page)).toEqual(before);
+  const pill = await page.locator("#bracketStandingsPill").boundingBox();
+  const partTop = await findSeasonPart(page, "standings").evaluate(
+    (part) => part.getBoundingClientRect().top,
+  );
+  expect(partTop).toBeCloseTo(pill.y + pill.height, 0);
 });
 
 test("on a phone, the standings' last row ends above the tab bar once they're scrolled to their end", async ({

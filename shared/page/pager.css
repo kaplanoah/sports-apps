@@ -88,26 +88,18 @@
   height: calc(100% + var(--header-reach));
   visibility: hidden;
 }
-/* What rides above the pill draws over all the parts hold, just under the pill, since a browser
-   takes whatever draws over a moving part as overlapping it and gives it a layer: the header, the
-   Updates box, the load note, and on a wide screen the tabs' row, whose phone bar floats instead.
-   All but the Updates box, which is all rows a tap opens, let a finger that drags anywhere but on
-   a button scroll the part under them, as the page does on every other tab. */
-:root:has(.bracket-standings.active[data-follows]) body > :is(header.top, .updates, .load-note) {
+/* What rides above the pill (season-header.js marks it) draws over all the parts hold, just under
+   the pill, since a browser takes whatever draws over a moving part as overlapping it and gives it
+   a layer. All of it but the Updates box, which is all rows a tap opens, lets a finger that drags
+   anywhere but on a button scroll the part under it, as the page does on every other tab. */
+:root:has(.bracket-standings.active[data-follows]) [data-rides] {
   position: relative;
   z-index: 4;
 }
-@media (min-width: 780px) {
-  :root:has(.bracket-standings.active[data-follows]) body > nav.tabs {
-    position: relative;
-    z-index: 4;
-    pointer-events: none;
-  }
-}
-:root:has(.bracket-standings.active[data-follows]) body > :is(header.top, .load-note) {
+:root:has(.bracket-standings.active[data-follows]) [data-rides]:not(.updates) {
   pointer-events: none;
 }
-:root:has(.bracket-standings.active[data-follows]) :is(header.top, nav.tabs, .pager-bar) button {
+:root:has(.bracket-standings.active[data-follows]) :is([data-rides], .pager-bar) button {
   pointer-events: auto;
 }
 /* The pill holds with its bar at the top of the screen and a band above it under the status bar,

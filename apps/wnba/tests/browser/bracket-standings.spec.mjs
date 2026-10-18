@@ -11,7 +11,10 @@ import {
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
 import {
+  findSeasonPart,
+  holdHeaderStill,
   readHeaderReach,
+  readPillHoldTop,
   readSeasonPartScroll,
   readSeasonRide,
   scrollSeasonPart,
@@ -148,7 +151,7 @@ test("a tap on the tab with the standings left a fraction of a pixel down, as a 
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
   // Chromium keeps a scroll at whole pixels, so the standings report the fraction a phone's leaves.
-  await page.locator('#bracketStandingsParts > [data-part="standings"]').evaluate((part) => {
+  await findSeasonPart(page, "standings").evaluate((part) => {
     const scrollTop = /** @type {PropertyDescriptor} */ (
       Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")
     );
@@ -195,10 +198,16 @@ test("once the header is gone, the pill holds at the top and ends in its line as
   await page.mouse.move(195, 500);
 
   expect(await wheelPastSeasonPartEnd(page, "standings")).toBe(0);
-  expect(await readSeasonRide(page)).toMatchObject({ pillTop: 10, pageScroll: 0 });
+  expect(await readSeasonRide(page)).toMatchObject({
+    pillTop: await readPillHoldTop(page),
+    pageScroll: 0,
+  });
   const headerBox = await header.boundingBox();
-  expect(headerBox.y + headerBox.height).toBeLessThanOrEqual(10);
+  expect(headerBox.y + headerBox.height).toBeLessThanOrEqual(await readPillHoldTop(page));
   await expect(pill).toHaveClass(/\bstuck\b/);
+  expect(await pill.evaluate((bar) => getComputedStyle(bar, "::before").visibility)).toBe(
+    "visible",
+  );
 });
 
 test("with the header just gone, the pill ends in its line only once a row scrolls under it", async ({
@@ -211,7 +220,9 @@ test("with the header just gone, the pill ends in its line only once a row scrol
 
   await scrollSeasonPart(page, "standings", reach);
 
-  await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: 10 });
+  await expect
+    .poll(() => readSeasonRide(page))
+    .toMatchObject({ pillTop: await readPillHoldTop(page) });
   await expect(pill).not.toHaveClass(/\bstuck\b/);
 
   await scrollSeasonPart(page, "standings", reach + 1);
@@ -248,7 +259,9 @@ test("each part keeps its own place: the bracket chosen far down the standings s
 
   await expect(page.locator("#bracketWrap .round-name").first()).toBeInViewport();
   expect(await readSeasonPartScroll(page, "bracket")).toBe(reach);
-  await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: 10 });
+  await expect
+    .poll(() => readSeasonRide(page))
+    .toMatchObject({ pillTop: await readPillHoldTop(page) });
   await expect(page.locator("#bracketStandingsPill")).not.toHaveClass(/\bstuck\b/);
 
   await pill.getByRole("tab", { name: "Standings" }).click();
@@ -318,10 +331,36 @@ test("a touch on the header lands on the part under it, so a drag there scrolls 
   expect(found).toEqual({ onHeader: "standings", onSettings: "settingsBtn" });
 });
 
+test("a touch on the pill's bar beside its names lands on the part under it, while each name still takes its tap", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const bar = await page.locator("#bracketStandingsPill").boundingBox();
+  const names = await findSeasonPill(page).boundingBox();
+  const bracketName = await findPillNames(page).filter({ hasText: "Bracket" }).boundingBox();
+
+  const found = await page.evaluate(
+    ({ bar: barBox, names: namesBox, bracketName: nameBox }) => ({
+      besideNames: document
+        .elementFromPoint(namesBox.x + namesBox.width + 8, barBox.y + barBox.height / 2)
+        ?.closest(".season-part")
+        ?.getAttribute("data-part"),
+      onName: document
+        .elementFromPoint(nameBox.x + nameBox.width / 2, nameBox.y + nameBox.height / 2)
+        ?.closest("button")
+        ?.getAttribute("data-tab"),
+    }),
+    { bar, names, bracketName },
+  );
+
+  expect(found).toEqual({ besideNames: "standings", onName: "bracket" });
+});
+
 test("where the browser has no scroll-driven animations, the header stays put and the parts scroll under the pill", async ({
   page,
 }) => {
-  await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+  await holdHeaderStill(page);
   await openApp(page);
   await openSeasonPart(page, "Standings");
   const before = await readSeasonRide(page);
@@ -332,9 +371,9 @@ test("where the browser has no scroll-driven animations, the header stays put an
   const pillBottom = await page.evaluate(
     () => document.getElementById("bracketStandingsPill").getBoundingClientRect().bottom,
   );
-  const partTop = await page
-    .locator('#bracketStandingsParts > [data-part="standings"]')
-    .evaluate((part) => part.getBoundingClientRect().top);
+  const partTop = await findSeasonPart(page, "standings").evaluate(
+    (part) => part.getBoundingClientRect().top,
+  );
   expect(partTop).toBeCloseTo(pillBottom, 0);
 });
 
@@ -397,11 +436,8 @@ test.describe("in full motion", () => {
     await expect(page.locator("#standings-league")).toBeVisible();
     await scrollSeasonPart(page, "standings", 40);
 
-    await page.evaluate(() => {
+    await findSeasonPart(page, "standings").evaluate((standings) => {
       const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
-      const standings = /** @type {HTMLElement} */ (
-        document.querySelector('#bracketStandingsParts > [data-part="standings"]')
-      );
       /** @type {HTMLElement} */ (pill.querySelector('[data-tab="bracket"]')).click();
       standings.scrollTop = 60;
       /** @type {HTMLElement} */ (pill.querySelector('[data-tab="standings"]')).click();

@@ -140,8 +140,8 @@ export const measureTopAtRest = (element) =>
 
 /**
  * Has `observer` watch what sets the room for `element`'s part: the part itself, and what stands
- * above the tab's view, which moves the part's top once a tall Updates box holds the view at its
- * least height (chrome.css).
+ * above the tab's view, which moves the part's top where a tall Updates box holds the view at its
+ * least height (chrome.css), or its padding where the header rides (season-header.js).
  * @param {ResizeObserver} observer
  * @param {Element} element
  */
