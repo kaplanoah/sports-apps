@@ -71,7 +71,7 @@ async function readBody(request) {
   }
 }
 
-// A device saved before saves were timed counts as saved longest ago.
+// A device kept without the time it was saved counts as saved longest ago.
 /** @param {Map<string, { savedAt?: number }>} stored */
 function findSavedLongestAgo(stored) {
   const [[oldestKey]] = [...stored].sort(

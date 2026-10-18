@@ -16,7 +16,7 @@ import { describeError } from "./responses.js";
  * @param {string[]} keys
  * @returns {Promise<any[] | null>}
  */
-export async function readKeptDocs(readDoc, keys) {
+async function readKeptDocs(readDoc, keys) {
   if (!readDoc) return null;
   try {
     return await Promise.all(keys.map((key) => readDoc(key)));

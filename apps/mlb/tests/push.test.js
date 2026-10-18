@@ -205,7 +205,7 @@ test("a full store makes room for a new device by forgetting the one saved longe
   assert.equal(listSubscriptions(context).length, 100, "a device already kept takes no one's slot");
 });
 
-test("a device saved before saves were timed is the first a full store forgets", async () => {
+test("a device kept without the time it was saved is the first a full store forgets", async () => {
   const { env, context } = createPushStore();
   storeDevices(context, 100, NOW);
   context.stored.set("push:subscription:5", { endpoint: `${ENDPOINT}-5` });
