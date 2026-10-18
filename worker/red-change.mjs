@@ -1,9 +1,9 @@
 // Says whether a pull request is a red change: one whose bugs no CI browser would show, since none
 // touches, scrolls, layers, and draws as an iPhone does, or that touches what iOS has drawn wrong
-// before. That's any change to the code, not the comments, of the shared JavaScript that moves
-// and draws the page, a change to its shared stylesheets in what decides how parts layer, stack,
-// scroll, and show, and an added line anywhere in a page that makes the browser draw a part on a
-// layer of its own. A red change merges only once the owner has used it on the beta app and
+// before. That's any change to the code, not the comments or layout, of the shared JavaScript that
+// moves and draws the page, a change to its shared stylesheets in what decides how parts layer,
+// stack, scroll, and show, and an added line anywhere in a page that makes the browser draw a part
+// on a layer of its own. A red change merges only once the owner has used it on the beta app and
 // labeled it phone-ok. Anyone who can label a pull request could add the label, so the gate reads
 // who last added it and lets the change through only from the repository's owner, and only when
 // the label came after the pull request's head commit reached GitHub, which the owner hasn't used
@@ -13,6 +13,7 @@
 // the last two.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { transformSync } from "esbuild";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
 export const PHONE_OK_LABEL = "phone-ok";
@@ -142,11 +143,18 @@ const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
 
 /** @typedef {{ number: number, text: string }} AddedLine */
 /** @typedef {{ kind: "kept" | "added" | "removed", text: string }} HunkLine */
-/** @typedef {{ path: string, addedLines: AddedLine[], hunks: HunkLine[][] }} ChangedFile */
+/**
+ * @typedef {object} ChangedFile
+ * @property {string} path
+ * @property {AddedLine[]} addedLines
+ * @property {HunkLine[][]} hunks
+ * @property {number[]} hunkStarts the line, from 1, each hunk starts at in the new file
+ */
 
 /**
  * The files a unified diff changes, each with the lines it adds, numbered as the new file has
- * them, and each of its hunks. A file moved or deleted is listed under each path it had.
+ * them, and each of its hunks, with where it starts. A file moved or deleted is listed under each
+ * path it had.
  * @param {string} diff
  * @returns {ChangedFile[]}
  */
@@ -162,10 +170,11 @@ export function readDiff(diff) {
     const header = line.match(/^diff --git a\/(.+) b\/(.+)$/);
     if (header) {
       const [, oldPath, newPath] = header;
-      current = { path: newPath, addedLines: [], hunks: [] };
+      current = { path: newPath, addedLines: [], hunks: [], hunkStarts: [] };
       hunk = null;
       files.push(current);
-      if (oldPath !== newPath) files.push({ path: oldPath, addedLines: [], hunks: [] });
+      if (oldPath !== newPath)
+        files.push({ path: oldPath, addedLines: [], hunks: [], hunkStarts: [] });
       continue;
     }
     const hunkHeader = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
@@ -173,6 +182,7 @@ export function readDiff(diff) {
       lineNumber = Number(hunkHeader[1]);
       hunk = [];
       current.hunks.push(hunk);
+      current.hunkStarts.push(lineNumber);
       continue;
     }
     if (!current || !hunk || line.startsWith("\\")) continue;
@@ -242,21 +252,73 @@ function findLayerSetting(text) {
   return null;
 }
 
-/** @param {string} code a changed line with its block comments taken out */
-const isScriptCode = (code) => code.trim() !== "" && !/^\s*\/\//.test(code);
+/**
+ * A script as it was before a change, from the script as the change leaves it and the change's
+ * hunks, or null when the hunks don't fit the script.
+ * @param {string} after
+ * @param {ChangedFile} file
+ */
+function readScriptBefore(after, { hunks, hunkStarts }) {
+  const afterLines = after.split("\n");
+  /** @type {string[]} */
+  const before = [];
+  let next = 0;
+  for (const [index, hunk] of hunks.entries()) {
+    // A hunk that leaves no line in the new file starts after the line its header names.
+    const hasNewLines = hunk.some(({ kind }) => kind !== "removed");
+    const start = hasNewLines ? hunkStarts[index] - 1 : hunkStarts[index];
+    before.push(...afterLines.slice(next, start));
+    next = start;
+    for (const { kind, text } of hunk) {
+      if (kind !== "added") before.push(text);
+      if (kind === "removed") continue;
+      if (afterLines[next] !== text) return null;
+      next += 1;
+    }
+  }
+  return [...before, ...afterLines.slice(next)].join("\n");
+}
+
+/**
+ * A script's code with its comments and layout taken out, as esbuild parses it, or null when it
+ * doesn't parse.
+ * @param {string} script
+ */
+function readScriptCode(script) {
+  try {
+    return transformSync(script, { loader: "js", legalComments: "none", minifyWhitespace: true })
+      .code;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a change to a script changes its code, rather than only its comments and layout, which
+ * draw nothing. A script that's gone, or that the change's hunks don't fit, counts as changed.
+ * @param {ChangedFile} file
+ * @param {(path: string) => string} readScript
+ */
+function changesScriptCode(file, readScript) {
+  const after = readScript(file.path);
+  const before = after ? readScriptBefore(after, file) : null;
+  if (before === null) return true;
+  const code = readScriptCode(after);
+  return code === null || code !== readScriptCode(before);
+}
 
 /**
  * Why a change to the shared code that moves and draws the page is red: any change to its
  * JavaScript's code, and a change to its stylesheets in what decides how parts layer, stack,
- * scroll, or show. Comments draw nothing. A file moved or deleted is red whatever it held.
+ * scroll, or show. A file moved or deleted is red whatever it held.
  * @param {ChangedFile} file
+ * @param {(path: string) => string} readScript
  * @returns {string[]}
  */
-function findSharedReasons(file) {
+function findSharedReasons(file, readScript) {
   const reason = `${file.path} is shared code that moves, layers, or draws the page`;
   if (!file.hunks.length) return [reason];
-  if (!file.path.endsWith(".css"))
-    return file.hunks.flatMap(listChangedCode).some(isScriptCode) ? [reason] : [];
+  if (!file.path.endsWith(".css")) return changesScriptCode(file, readScript) ? [reason] : [];
   return findStackLines(file).map(
     (code) => `${file.path} changes how parts layer, stack, scroll, or show: ${code.trim()}`,
   );
@@ -354,7 +416,7 @@ function readChangedScript(path) {
  */
 function findFileReasons(file, readScript) {
   const { path, addedLines } = file;
-  if (RED_FILES.has(path)) return findSharedReasons(file);
+  if (RED_FILES.has(path)) return findSharedReasons(file, readScript);
   if (!isPageCode(path)) return [];
   const styleLines = path.endsWith(".js") ? findStyleObjectLines(readScript(path)) : new Set();
   return addedLines.flatMap((line) => {

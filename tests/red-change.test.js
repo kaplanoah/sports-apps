@@ -42,6 +42,7 @@ const findReasons = (path, addedLines = []) =>
         path,
         addedLines: addedLines.map((text, index) => ({ number: index + 1, text })),
         hunks: [],
+        hunkStarts: [],
       },
     ],
     readPlainScript,
@@ -67,6 +68,7 @@ test("a diff lists each file with its added lines, numbered as the new file has 
           { kind: "removed", text: "removed" },
         ],
       ],
+      hunkStarts: [9],
     },
   ]);
 });
@@ -106,32 +108,91 @@ test("any change to the shared code that moves, layers, or draws the page is red
   assert.deepEqual(findReasons("apps/mlb/page/js/sheet.js", ["export const x = 1;"]), []);
 });
 
-test("a shared script's comments and blank lines aren't red, even a hunk that starts inside one, but any change to its code is", () => {
-  const path = "shared/page/bracket-standings.js";
-  const comment = ["// Brings the page up so the parts start just under the pill.", ""];
-  const docComment = ["/**", " * Slides to one of the tab's parts,", " */"];
-  for (const lines of [comment, docComment]) {
-    assert.deepEqual(findDiffReasons(createDiff(path, lines, { removed: [] })), []);
-    assert.deepEqual(findDiffReasons(createDiff(path, [], { removed: lines })), []);
-  }
-  assert.deepEqual(
-    findDiffReasons(
-      createDiff(path, [" * as a search's row does.", " */"], {
-        kept: [" * Slides to one of the tab's parts,"],
-        removed: [],
-      }),
-    ),
-    [],
-  );
-  const reason = [`${path} is shared code that moves, layers, or draws the page`];
+const SHARED_SCRIPT = "shared/page/bracket-standings.js";
+const SCRIPT_REASON = [`${SHARED_SCRIPT} is shared code that moves, layers, or draws the page`];
+
+/**
+ * Why a change to a shared script is red, from its lines as a diff shows them, each kept line
+ * after a space, each added one after a +, and each removed one after a -, in one hunk from the
+ * script's first line, with the script as the change leaves it.
+ * @param {string[]} lines
+ * @param {string} [after] the script as the change leaves it, when it isn't the hunk's new side
+ */
+function changeScript(lines, after) {
+  const diff = [
+    `diff --git a/${SHARED_SCRIPT} b/${SHARED_SCRIPT}`,
+    `--- a/${SHARED_SCRIPT}`,
+    `+++ b/${SHARED_SCRIPT}`,
+    "@@ -1 +1 @@",
+    ...lines,
+  ].join("\n");
+  const newSide = lines
+    .filter((line) => !line.startsWith("-"))
+    .map((line) => line.slice(1))
+    .join("\n");
+  return findRedReasons(readDiff(diff), () => after ?? newSide);
+}
+
+const SCROLL_UP = [
+  " function scrollUpToPartsTop() {",
+  "   const partsTopScroll = measurePartsTopScroll();",
+  '   if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });',
+  " }",
+];
+
+test("a shared script's comments, blank lines, and layout aren't red, wherever a hunk starts", () => {
   for (const lines of [
-    ["function scrollUpToPartsTop() {"],
-    ["  restingPart = part; // the part at rest"],
-    ["/* the page's top */ scrollTo({ top: 0 });"],
-  ]) {
-    assert.deepEqual(findDiffReasons(createDiff(path, lines, { removed: [] })), reason);
-    assert.deepEqual(findDiffReasons(createDiff(path, [], { removed: lines })), reason);
-  }
+    ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP],
+    ["-/**", "- * Brings the page up.", "- */", ...SCROLL_UP],
+    [
+      " /**",
+      " * Slides to one of the tab's parts,",
+      "- * as a search does.",
+      "+ * as a search's row does.",
+      " */",
+      ...SCROLL_UP,
+    ],
+    [...SCROLL_UP.slice(0, 3), "+", ...SCROLL_UP.slice(3)],
+    [
+      "-let restingPart = ''; // the part at rest",
+      "+let restingPart = ''; // the part the page's scroll belongs to",
+      ...SCROLL_UP,
+    ],
+    [
+      ...SCROLL_UP.slice(0, 2),
+      '-  if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });',
+      "+  if (scrollY > partsTopScroll)",
+      '+    scrollTo({ top: partsTopScroll, behavior: "instant" });',
+      ...SCROLL_UP.slice(3),
+    ],
+  ])
+    assert.deepEqual(changeScript(lines), [], lines.join("\n"));
+});
+
+test("a shared script's change to its code is red, even one that comments code out or back in, or hides in what looks like a comment", () => {
+  for (const lines of [
+    [...SCROLL_UP.slice(0, 2), "+/*", SCROLL_UP[2], "+*/", SCROLL_UP[3]],
+    [...SCROLL_UP.slice(0, 2), "-/*", SCROLL_UP[2], "-*/", SCROLL_UP[3]],
+    [
+      ...SCROLL_UP.slice(0, 3),
+      "+  // Matches shared/*",
+      '+  sheet.style.transform = "translateX(0)";',
+      SCROLL_UP[3],
+    ],
+    [
+      "-let restingPart = ''; // the part at rest",
+      "+let restingPart = 'bracket'; // the part at rest",
+      ...SCROLL_UP,
+    ],
+    ["+/* the page's top */ scrollTo({ top: 0 });", ...SCROLL_UP],
+  ])
+    assert.deepEqual(changeScript(lines), SCRIPT_REASON, lines.join("\n"));
+});
+
+test("a shared script that's gone, or that a change's hunks don't fit, is red", () => {
+  const comment = ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP];
+  assert.deepEqual(changeScript(comment, ""), SCRIPT_REASON);
+  assert.deepEqual(changeScript(comment, "export const x = 1;\n"), SCRIPT_REASON);
 });
 
 const SHARED_STYLESHEETS = [
@@ -320,6 +381,7 @@ test("a key of the object Object.assign hands a part's style sets that style, a 
           path,
           addedLines: [{ number, text: STYLE_SCRIPT.split("\n")[number - 1] }],
           hunks: [],
+          hunkStarts: [],
         },
       ],
       (read) => (read === path ? STYLE_SCRIPT : ""),
@@ -367,6 +429,7 @@ test("a key of the keyframes a part's animate takes sets that style, a number to
           path,
           addedLines: [{ number, text: KEYFRAMES_SCRIPT.split("\n")[number - 1] }],
           hunks: [],
+          hunkStarts: [],
         },
       ],
       (read) => (read === path ? KEYFRAMES_SCRIPT : ""),

@@ -66,6 +66,16 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - *setup-node
+      # The gate parses a shared script's change with esbuild, to tell its code from its comments.
+      - &restore-modules
+        id: modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules
+          key: &modules-key node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - &install-modules
+        if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
       - name: Hold a red change for the owner's phone
         shell: bash
         env:
@@ -91,15 +101,8 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - *setup-node
-      - &restore-modules
-        id: modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: node_modules
-          key: &modules-key node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
-      - &install-modules
-        if: steps.modules.outputs.cache-hit != 'true'
-        run: npm ci
+      - *restore-modules
+      - *install-modules
       # Each check runs even when one before it failed, so one run reports them all.
       - name: Lint
         if: ${{ !cancelled() }}
