@@ -336,7 +336,8 @@ are.
 
 Each app also has a beta Worker, `<app>-app-beta`, named in the `[env.beta]` of
 its `wrangler.toml`, with its own store, key, and address. Its page names itself
-"beta" on the Home Screen and in its settings' version line, so it can sit beside
+"beta" on the Home Screen, in its settings' version line, and in a tag beside its
+name with the commit it runs and how long ago that went live, so it can sit beside
 the real one. To use a pull request's change on the phone before it merges:
 
 1. Reset `beta` to the pull request's branch and push it:
