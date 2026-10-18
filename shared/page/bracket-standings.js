@@ -1,6 +1,7 @@
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
+import { holdRoundDots } from "./round-dots.js";
 import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
@@ -52,9 +53,13 @@ const readPillTop = () => parseFloat(getComputedStyle(findPill()).top) || 0;
 const measurePartsTopScroll = () =>
   findParts().getBoundingClientRect().top + scrollY - readPillTop() - findPill().offsetHeight;
 
+// The bracket's round dots stay over the tab bar while the parts slide (round-dots.js).
+const holdBracketDots = () => holdRoundDots(findPart("bracket"));
+
 // The pill fills with the page's color once the parts scroll under it, and the part not shown
 // moves down by as much as the page has scrolled the shown one up under it. Back at the page's
-// top, the parts let go of the room they held, which moves nothing there.
+// top, the parts let go of the room they held, which moves nothing there. Parts that slide while
+// the page scrolls or the screen resizes hold the bracket's dots again where they now are.
 function followPageScroll() {
   if (!findPill().offsetHeight) return;
   const offset = Math.max(0, scrollY - measurePartsTopScroll());
@@ -63,6 +68,7 @@ function followPageScroll() {
     findPart(part).style.translate = offset > 0 && part !== restingPart ? `0 ${offset}px` : "";
   }
   if (scrollY < 1) delete findParts().dataset.holdingRoom;
+  if (findParts().hasAttribute("data-sliding")) holdBracketDots();
 }
 
 // A part a swipe brings in from far down a longer one starts just under the pill, so the parts
@@ -170,6 +176,7 @@ export function startBracketStandings() {
     listPanels: () => readOrder().map(findPart),
     place: (index, position) => index - position,
     canGo: (direction) => Boolean(readOrder()[slidePanels.readShown() + direction]),
+    onSetOff: holdBracketDots,
     onShow: showOn,
     onSettle: restOn,
   });

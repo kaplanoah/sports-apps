@@ -126,7 +126,7 @@ const markScrollLeft = (tree) => tree.style.setProperty("--scroll-left", `${tree
  */
 function sizeCardGaps(tree) {
   const dots = /** @type {HTMLElement} */ (findWrap().querySelector(".round-dots"));
-  if (!isShown(dots) || getComputedStyle(dots).position !== "fixed") {
+  if (!isShown(dots) || getComputedStyle(dots).position === "static") {
     tree.style.removeProperty("--card-gap");
     return;
   }
