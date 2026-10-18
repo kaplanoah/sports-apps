@@ -94,9 +94,26 @@ test("MLB's prompt keeps the Mets' news, and another club's only when it matters
   assert.doesNotMatch(LABEL_PROMPT, /Examples of how the app's editor decided/);
 });
 
+test("MLB's prompt keeps the owner's calls on what's close to the line", () => {
+  assert.match(
+    LABEL_PROMPT,
+    /- near-mets: a story about a former Met, or one the Mets' broadcasters are in/,
+  );
+  assert.match(
+    LABEL_PROMPT,
+    /- novelty: an odd or viral angle with no baseball news, even about a Met/,
+  );
+  assert.match(LABEL_PROMPT, /to a look back at one Met's season/);
+  assert.match(LABEL_PROMPT, /but for one Met's season, which is Mets news/);
+  assert.match(LABEL_PROMPT, /coaching and top front-office changes, for any club/);
+  assert.match(LABEL_PROMPT, /podcast, quiz, poll, fantasy/);
+  assert.match(LABEL_PROMPT, /what's next for a team the postseason knocked out/);
+  assert.match(LABEL_PROMPT, /A team the postseason knocked out isn't another club here/);
+});
+
 // Claude judges every story again when its prompt changes, so the prompt changes only on purpose,
 // with this hash.
 test("MLB's prompt is the one its stories were last judged by", () => {
   const hash = createHash("sha256").update(LABEL_PROMPT).digest("hex").slice(0, 16);
-  assert.equal(hash, "4bb0f3c5091574ca");
+  assert.equal(hash, "5eb1c89f9535e4b1");
 });
