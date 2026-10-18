@@ -968,7 +968,7 @@ body.kbd .welcome-continue:focus {
       animation: sheet-rise var(--sheet-motion);
     }
     /* A sheet the page put back open as it loaded was already showing, so it doesn't rise again,
-       nor does the welcome a first visit opens on. */
+       nor does the welcome a load opens on, which is there from the first paint. */
     :is(.settings-panel, .welcome)[open][data-reopened] {
       animation: none;
     }

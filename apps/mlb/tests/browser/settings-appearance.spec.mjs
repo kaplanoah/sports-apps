@@ -1,6 +1,7 @@
 import { test, expect, openApp, openSettings, serveLockedApp, ON_A_PHONE } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import {
   checkHandoffRenewal,
   checkReAddHandoff,
@@ -142,9 +143,7 @@ test.describe("on an iPhone's Home Screen app, which has no Home Screen box", ()
   test("a line ends the settings above News and the News switches, over the ranking, and none sits under News's label or between its switches, each switch's row right under the one before", async ({
     page,
   }) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "standalone", { get: () => true });
-    });
+    await openFromHomeScreen(page);
     await openApp(page);
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeHidden();
