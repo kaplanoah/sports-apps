@@ -185,13 +185,19 @@ export async function checkWelcomeSwipesDown(app) {
   });
 
   let readFrames = await trackWelcomeFrames(page);
-  const lift = await drag(page, { x: 300, y: 300 }, { y: 40 }, { durationMs: 1000 });
+  const lift = await drag(
+    page,
+    { x: 300, y: 300 },
+    { y: 40 },
+    { durationMs: 1000, isFrameByFrame: true },
+  );
   await expect.poll(async () => (await welcome.boundingBox())?.y).toBeGreaterThan(0);
   const dragged = await readFrames();
   readFrames = await trackWelcomeFrames(page);
   await lift();
   await expect.poll(async () => (await welcome.boundingBox())?.y).toBe(0);
   const sprungBack = await readFrames();
+  expect(dragged.filter((frame) => frame.welcomeTop > 0).length).toBeGreaterThan(1);
   expect(isOneWay(dragged.map((frame) => frame.welcomeTop))).toBe(true);
   expect(sprungBack.at(0)?.welcomeTop).toBeGreaterThan(0);
   expect(
