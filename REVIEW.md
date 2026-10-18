@@ -5,7 +5,9 @@ AGENTS.md holds the rules the code keeps; this file says how to check a change a
 
 ## Read all of it
 
-- Read every changed file's diff in full.
+- Read in full every diff your review hands you:
+  the whole change in a first review and in the last read of it,
+  and what the pushes since the last finished review changed in a review of a later push.
   A recorded fixture (`tests/fixtures/`) or `package-lock.json` needs only its name and size,
   and whether a test reads it.
 - Read past the diff: each caller of a function the change touches,
@@ -46,12 +48,13 @@ In order of what has mattered here.
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
    A change to the review itself, its jobs in `.github/workflows/ci.yml`,
-   `worker/plan-review.mjs`, or `worker/judge-review.mjs`, or to a guard test,
+   `worker/plan-review.mjs`, `worker/judge-review.mjs`, `worker/post-review.mjs`,
+   `worker/review-context.mjs`, or `worker/review-state.mjs`, or to a guard test,
    that lets less through is Important, naming what it no longer catches,
    since the pull request's own copy of them runs its review.
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
-   like `translate`, `rotate`, `scale`, or `pointer-events`, that `worker/red-change.mjs` doesn't list yet.
+   like `offset-path` or `-webkit-touch-callout`, that `worker/red-change.mjs` doesn't list yet.
 7. **Tests.**
    AGENTS.md: "Every change to behavior comes with tests that fail without it, in the same PR."
    Flag a change to behavior whose tests would still pass with it reverted.
@@ -76,17 +79,32 @@ Don't run the tests: CI runs them all.
 
 ## How to report
 
-- Post each finding as an inline comment on the line it's about.
+In CI, each area's reviewers each look for one kind of problem
+(in the last read of the whole change, one reviewer an area looks for every kind)
+and list every case they find,
+a checker confirms each against the code before anything is posted,
+a check across areas, when there's more than one, names repeats and adds what spans them,
+and a step posts what they confirmed or left unsure.
+
+- List every case you find, not a sample, and each place it shows.
+  Include one you're unsure of, with your confidence, rather than leaving it out.
+- Before a finding is posted, check it by reading more of the code:
+  trace the path from a real caller or input to what goes wrong, and see what the base did.
+  If it would matter and still can't be settled, post it as **Unsure** with what would settle it.
+- Each finding goes on the line it's about.
   Say what is wrong, when it goes wrong (the input or state that shows it), and how to fix it, in a few sentences.
 - Start each with its weight:
-  **Important** for a bug, a security hole, or a broken AGENTS.md rule;
+  **Important** for a bug, meaning a wrong result someone can see, wrong data kept, or a failure,
+  for a security hole, or for a broken AGENTS.md rule;
   **Nit** for something worth fixing that doesn't block;
   **Pre-existing** for a problem in code the change didn't make worse.
-- Before posting, check the finding by reading more of the code.
-  If it would matter and you still can't settle it, post it as **Unsure** with what would settle it, rather than leaving it out.
-- Never post a finding already on the pull request, whether it was fixed, answered, or left open.
+- The numbered items above are never matters of taste:
+  a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it.
+- Read the pull request's threads first.
+  Never raise again what a thread already raised, whether it was fixed, answered, or left open,
+  unless its answer is wrong or a fix it claims didn't hold, and then say so.
 - No praise.
-- The review ends with one summary comment: the commit reviewed, the findings by weight,
-  how many of the changed files were read in full out of how many,
+- The review ends with one summary comment: the commit reviewed, what it read, the findings by weight,
+  how many cases the checkers turned down, how many of the changed files were read in full out of how many,
   each one that wasn't and why, and anything read but not judged.
   In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge.
