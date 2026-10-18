@@ -1,4 +1,4 @@
-// What this device keeps for each season: its ranking, and when it last dismissed the Updates box.
+// What this device keeps for each season: its ranking, and when its Updates box counts from.
 
 import { createViewerChoice } from "#shared/device-storage.js";
 import { watchNoteDismissals } from "#shared/updates.js";
@@ -32,12 +32,17 @@ export function readRanking(year) {
 export const keepRanking = (year, order) => rankings.keep({ ...rankings.read(), [year]: order });
 
 /**
- * When this device last dismissed a season's Updates box, or 0 before its first dismissal.
+ * When a season's Updates box counts from on this device, its last dismissal or its first look:
+ * 0 for a season it has kept none for, whose updates are all new to it, or null on a device that
+ * has kept none for any season, which is new to the app.
  * @param {number} year
+ * @returns {number | null}
  */
 export function readSeenAt(year) {
-  const seenAt = seenAtBySeason.read()[year];
-  return typeof seenAt === "number" && seenAt > 0 ? seenAt : 0;
+  const seasons = seenAtBySeason.read();
+  const seenAt = seasons[year];
+  if (typeof seenAt === "number" && seenAt > 0) return seenAt;
+  return Object.keys(seasons).length ? 0 : null;
 }
 
 /**
@@ -48,7 +53,8 @@ export const keepSeenAt = (year, at) =>
   seenAtBySeason.keep({ ...seenAtBySeason.read(), [year]: at });
 
 /**
- * Calls `onChange` whenever this device's ranking or dismissal changes, in this tab or another.
+ * Calls `onChange` whenever this device's ranking, when its Updates box counts from, or its release
+ * notes' dismissal changes, in this tab or another.
  * @param {() => void} onChange
  */
 export function watchKeptChoices(onChange) {

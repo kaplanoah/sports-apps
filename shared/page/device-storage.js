@@ -32,13 +32,16 @@ function parseKept(text) {
   }
 }
 
+// A choice storage refused to keep, as when it's full, lives in memory, ahead of the older value
+// storage still holds.
 /** @param {string} key */
 function readStored(key) {
+  if (keptInMemory.has(key)) return keptInMemory.get(key);
   let text;
   try {
     text = localStorage.getItem(key);
   } catch {
-    return keptInMemory.get(key) ?? null;
+    return null;
   }
   return text === null ? null : parseKept(text);
 }
@@ -62,11 +65,21 @@ function tellWatchers(key) {
   for (const each of keys) for (const onChange of watchersByKey.get(each) ?? []) onChange();
 }
 
-// Another tab's change to storage comes as an event, with no key when it cleared it all.
+/** @param {string | null} key */
+function forgetKeptInMemory(key) {
+  if (key === null) keptInMemory.clear();
+  else keptInMemory.delete(key);
+}
+
+// Another tab's change to storage comes as an event, with no key when it cleared it all. What it
+// saved is newer than a choice this tab could only keep in memory.
 function watchOtherTabs() {
   if (isWatchingOtherTabs || typeof addEventListener !== "function") return;
   isWatchingOtherTabs = true;
-  addEventListener("storage", (event) => tellWatchers(event.key));
+  addEventListener("storage", (event) => {
+    forgetKeptInMemory(event.key);
+    tellWatchers(event.key);
+  });
 }
 
 /**

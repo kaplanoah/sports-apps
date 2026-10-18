@@ -14,6 +14,7 @@ import {
   ROSTER_DOCS,
   SEASON_2025,
   chooseSeason,
+  keepUpdatesFromEarlierVisit,
   matchPath,
   readColor,
 } from "./harness.mjs";
@@ -92,6 +93,7 @@ function buildSnapshotWithClinch() {
 
 /** @param {import("@playwright/test").Page} page */
 async function showClinch(page) {
+  await keepUpdatesFromEarlierVisit(page);
   await openApp(page, { snapshots: { 2026: buildSnapshotWithClinch() } });
   const update = page.locator("#updates li").first();
   await expect(update.locator(".what")).toContainText("White Sox");

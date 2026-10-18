@@ -160,6 +160,44 @@ test("a game found final without being seen live has no end", async () => {
   assert.equal(earlier.end, undefined);
 });
 
+test("a game keeps when the Worker first found it final, after ESPN's earlier end replaces its own", async () => {
+  const docs = createDocs();
+  await saveSnapshot(docs, setTonightsState(SNAPSHOT, "live"));
+  const ending = { ...finishTonight(SNAPSHOT, [80, 70]), asOf: "2026-10-01T01:12:00Z" };
+  await saveSnapshot(docs, ending);
+  const games = ending.games.map((game) =>
+    game.id === "1042600132" ? { ...game, end: "2026-10-01T01:11:27Z" } : game,
+  );
+  await saveSnapshot(docs, { ...ending, games, asOf: "2026-10-01T01:14:00Z" });
+  const saved = await readUpdates(docs, 2026);
+  assert.equal(findTonight(saved).finalAt, "2026-10-01T01:12:00Z");
+});
+
+test("a game the Worker saved before it was final keeps when it was found final, and one final at its first save has no such time", async () => {
+  const docs = createDocs();
+  await saveSnapshot(docs, SNAPSHOT);
+  await saveSnapshot(docs, { ...finishTonight(SNAPSHOT, [80, 70]), asOf: "2026-10-01T04:00:00Z" });
+  const saved = await readUpdates(docs, 2026);
+  assert.equal(findTonight(saved).finalAt, "2026-10-01T04:00:00Z");
+  const earlier = saved.games.find((game) => game.id === "1042600102");
+  assert.equal(earlier.finalAt, undefined);
+});
+
+test("a game's nearest-games copy keeps its end but not when it was found final, which only the Updates box reads", async () => {
+  const docs = createDocs();
+  const withTonightNearest = (snapshot) => ({
+    ...snapshot,
+    nearestGames: snapshot.games.filter((game) => game.id === "1042600132"),
+  });
+  await saveSnapshot(docs, withTonightNearest(setTonightsState(SNAPSHOT, "live")));
+  const ending = { ...finishTonight(SNAPSHOT, [80, 70]), asOf: "2026-10-01T01:12:00Z" };
+  await saveSnapshot(docs, withTonightNearest(ending));
+  const saved = await readUpdates(docs, 2026);
+  const nearest = saved.nearestGames.find((game) => game.id === "1042600132");
+  assert.equal(nearest.end, "2026-10-01T01:12:00Z");
+  assert.equal(nearest.finalAt, undefined);
+});
+
 // The afternoon's feeds with the whole season's schedule, and tonight's first game on the
 // scoreboard as it stands: under way at the half, or over.
 function buildTonight(gameStatus, [awayScore, homeScore] = [0, 0]) {
@@ -404,7 +442,10 @@ test("the games are saved while ESPN stands in for the scoreboard", async () => 
 
   await saveSnapshot(docs, { ...finished, missing: ["scoreboard"], standIn: "espn" });
 
-  assert.deepEqual((await readUpdates(docs, 2026)).games, finished.games);
+  const foundFinal = finished.games.map((game) =>
+    game.id === "1042600132" ? { ...game, finalAt: finished.asOf } : game,
+  );
+  assert.deepEqual((await readUpdates(docs, 2026)).games, foundFinal);
 });
 
 test("while ESPN stands in, a game it lacks keeps what was saved", async () => {
