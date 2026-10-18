@@ -137,7 +137,7 @@ test("a tap on the tab while the standings show scrolled down takes them back to
   await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
-test("the header and the pill hold still while the standings scroll under the pill, which ends in its line once they're under it", async ({
+test("the header and the pill hold still while the standings scroll under the pill, which ends in its line once they're under it, even past their end", async ({
   page,
 }) => {
   await openApp(page);
@@ -153,8 +153,24 @@ test("the header and the pill hold still while the standings scroll under the pi
   await expect(pill).not.toHaveClass(/\bstuck\b/);
 
   await scrollSeasonPartToEnd(page, "standings");
+  await page.mouse.move(195, 500);
+  await page.mouse.wheel(0, 800);
 
   expect(await readTops()).toEqual(before);
+});
+
+test("the standings' last row ends above the tab bar once they're scrolled to their end", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-league")).toBeVisible();
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  const lastRow = await page.locator("#standingsWrap tbody tr").last().boundingBox();
+  const tabBar = await page.locator("#tabBar").boundingBox();
+  expect(lastRow.y + lastRow.height).toBeLessThanOrEqual(tabBar.y);
 });
 
 test("each part keeps its own place: the bracket chosen far down the standings shows from its top, and the standings chosen again show where they were", async ({

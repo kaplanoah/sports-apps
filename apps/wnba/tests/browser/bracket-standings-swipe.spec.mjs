@@ -415,7 +415,7 @@ test.describe("in full motion", () => {
     expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
   });
 
-  test("on a small phone, a swipe that brings the standings in from far down the bracket moves only the parts, sideways, on every frame", async ({
+  test("on a small phone, a swipe that brings the standings in from far down the bracket moves only the parts, sideways, on every frame, the round dots holding their height over the tab bar", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 320, height: 568 });
@@ -423,12 +423,34 @@ test.describe("in full motion", () => {
     await expectPartShown(page, "bracket");
     await scrollBracketToEnd(page);
     await scrollSeasonPartToEnd(page, "bracket");
+    const restingTop = await readRoundDotsTop(page);
 
     const readFrames = await trackSeasonFrames(page);
+    const readDotsFrames = await trackRoundDots(page);
     const release = await drag(page, { x: 300, y: 400 }, { x: -250 }, { durationMs: 1000 });
     await release();
     await expectPartShown(page, "standings");
 
     expectPageHeldStill(await readFrames());
+    expectDotsHeldWithBracket(await readDotsFrames(), restingTop);
   });
+});
+
+test("on a small phone, the bracket chosen again after the standings shows where it was left", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await openApp(page);
+  await expectPartShown(page, "bracket");
+  await scrollSeasonPartToEnd(page, "bracket");
+  const bracketScroll = await readSeasonPartScroll(page, "bracket");
+  expect(bracketScroll).toBeGreaterThan(0);
+  const pill = findSeasonPill(page);
+
+  await pill.getByRole("tab", { name: "Standings" }).click();
+  await expectPartShown(page, "standings");
+  await pill.getByRole("tab", { name: "Bracket" }).click();
+  await expectPartShown(page, "bracket");
+
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(bracketScroll);
 });

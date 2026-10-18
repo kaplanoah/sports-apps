@@ -214,15 +214,11 @@
   flex: 1 1 0;
   min-height: 0;
   margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
-  padding: var(--day-gap) var(--reach-right) max(48px, var(--end-room, 0px)) var(--reach-left);
+  padding: var(--day-gap) var(--reach-right) max(var(--view-end-room), var(--end-room, 0px))
+    var(--reach-left);
   overflow-y: auto;
   overflow-anchor: none;
   overscroll-behavior-y: contain;
-}
-@media (max-width: 779px) {
-  .day-list {
-    padding-bottom: max(var(--tab-bar-clearance), var(--end-room, 0px));
-  }
 }
 .listed-day + .listed-day {
   margin-top: var(--day-gap);

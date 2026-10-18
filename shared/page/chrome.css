@@ -42,10 +42,14 @@
  *                                              passes once the page catches up, like 0.75
  *   --step-number-lift                         how far a Home Screen step's number rises in its
  *                                              circle, so the app's digits sit in its middle
- * and on phones this sets:
+ * and this sets:
+ *   --view-end-room                            the room at the end of the page, or of a view that
+ *                                              scrolls in itself, past the tab bar on a phone
+ * and on phones:
  *   --tab-bar-bottom                           how far the tab bar floats above the screen's bottom
  *   --tab-bar-height                           the tab bar's height
- *   --tab-bar-clearance                        the space an app's body leaves at its bottom for the bar
+ *   --tab-bar-clearance                        the room the tab bar takes at the page's end, which
+ *                                              --view-end-room leaves there
  *
  * The icons each look gives the Home Screen come from the stylesheet worker/page-files.mjs builds
  * from an app's icon PNGs, home-screen-icons.css, as --home-screen-icon-light, -dark, and, for an
@@ -194,6 +198,7 @@ section.view.active {
    taller. Safari doesn't lay the page out again when a tab changes only the root's height, so the
    root keeps it on every tab, where what's taller than it still scrolls the page. */
 :root {
+  --view-end-room: max(48px, env(safe-area-inset-bottom));
   height: 100%;
 }
 :root:has(.view.active > :is(.day-view, .season-parts)) body {
@@ -916,6 +921,7 @@ body.kbd .welcome-continue:focus {
     --tab-bar-bottom: max(calc(env(safe-area-inset-bottom) - 12px), 16px);
     --tab-bar-height: 62px;
     --tab-bar-clearance: calc(var(--tab-bar-bottom) + 86px);
+    --view-end-room: var(--tab-bar-clearance);
   }
   /* The tab bar floats over the page, so the tabs' row leaves no space under the header. */
   nav.tabs {

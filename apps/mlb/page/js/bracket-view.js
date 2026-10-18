@@ -62,7 +62,7 @@ const STACKED = {
   lineHeight: 19,
   // Room above the tab bar for the round dots, which chrome.css pins there, and a gap above them.
   // It matches what --tab-bar-clearance in chrome.css adds to the bar, so a bracket that fills the
-  // screen leaves the page nothing to scroll.
+  // screen leaves its part nothing to scroll.
   tabBarClearance: 24,
   minGrowth: 0.5,
   maxGrowth: 3,
@@ -462,9 +462,10 @@ export function watchBracketSpace() {
   addEventListener("resize", redrawIfResized);
   wrap.addEventListener("scroll", markRoundScrolledTo, { capture: true, passive: true });
   new ResizeObserver(markRoundScrolledTo).observe(wrap);
-  // A redraw resizes the body, so it waits a frame rather than loop the observer, and only while
-  // the bracket shows.
+  // The bracket's part takes the room left under what's above it (pager.css), so it resizes as
+  // that content does. It waits a frame, as a redraw can change the part's own layout, and only
+  // while the bracket shows.
   new ResizeObserver(() => {
     if (isShown(wrap)) requestAnimationFrame(redrawIfResized);
-  }).observe(document.body);
+  }).observe(/** @type {HTMLElement} */ (wrap.closest(".season-part")));
 }

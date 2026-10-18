@@ -85,9 +85,9 @@ const keepCustomProperties = (style) =>
 
 /**
  * @param {string} id
- * @param {{ markup: string, hidden: boolean, classes?: unknown, style?: unknown, scrolls?: unknown, savedAt?: unknown }} part
+ * @param {{ markup: string, hidden: boolean, classes?: unknown, style?: unknown, scrolls?: unknown, holderTop?: unknown, savedAt?: unknown }} part
  */
-function showPart(id, { markup, hidden, classes, style, scrolls, savedAt }) {
+function showPart(id, { markup, hidden, classes, style, scrolls, holderTop, savedAt }) {
   const element = /** @type {HTMLElement} */ (document.getElementById(id));
   element.innerHTML = markup;
   const isBackToStart = element.hasAttribute("data-start-hidden") && isLongAwayFrom(savedAt);
@@ -95,6 +95,10 @@ function showPart(id, { markup, hidden, classes, style, scrolls, savedAt }) {
   if (typeof classes === "string") element.classList.add(...classes.split(" ").filter(Boolean));
   if (typeof style === "string") element.setAttribute("style", keepCustomProperties(style));
   restoreScrolls(element, scrolls, savedAt);
+  // A part that scrolls in a holder of its own, like the standings in theirs, goes back to where
+  // the holder was scrolled.
+  if (Number(holderTop) > 0 && element.parentElement)
+    element.parentElement.scrollTop = Number(holderTop);
 }
 
 /** @param {any} saved */

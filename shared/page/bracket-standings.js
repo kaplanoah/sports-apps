@@ -1,9 +1,10 @@
+import { markBarStuck } from "./held-bar.js";
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
 import { holdRoundDots } from "./round-dots.js";
 import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
-import { scrollWithSpring } from "./spring-scroll.js";
+import { isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
@@ -46,15 +47,13 @@ const readShownPart = () => readSelectedTab(findPillTabs());
 let panels = null;
 
 // The bracket's round dots stay over the tab bar while the parts slide (round-dots.js), even when
-// the screen resizes as they do.
+// the screen resizes or the bracket's part scrolls as they do.
 const holdBracketDots = () => holdRoundDots(findPart("bracket"));
 const holdBracketDotsWhileSliding = () => {
   if (findParts().hasAttribute("data-sliding")) holdBracketDots();
 };
 
-// The pill ends in a line once the part it names has scrolled under it.
-const markStuck = () =>
-  findPill().classList.toggle("stuck", findPart(readShownPart()).scrollTop > 0);
+const markStuck = () => markBarStuck(findPill(), findPart(readShownPart()));
 
 /**
  * @param {number} index
@@ -115,7 +114,7 @@ export function showSeasonPhase(isFieldSet) {
 function returnToStart() {
   if (!panels) return;
   const shownPart = findPart(readShownPart());
-  if (shownPart.scrollTop > 0) {
+  if (isAwayFrom(shownPart, 0)) {
     scrollWithSpring(shownPart, 0);
     return;
   }
@@ -141,5 +140,6 @@ export function startBracketStandings() {
   setTabStart("bracket-standings", returnToStart);
   for (const part of readOrder().map(findPart))
     part.addEventListener("scroll", markStuck, { passive: true });
+  findPart("bracket").addEventListener("scroll", holdBracketDotsWhileSliding, { passive: true });
   addEventListener("resize", holdBracketDotsWhileSliding);
 }

@@ -431,6 +431,51 @@ test("on a phone, the bracket fills the height above the tab bar and swipes side
   expect(pageOverflow).toBe(0);
 });
 
+test("on a phone, the bracket fills the height above the tab bar again when what's above it grows or shrinks", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openBracket(page);
+  await expect(page.locator(".bracket-stage")).toBeVisible();
+  await expectBracketToFillHeight(page);
+
+  await page.locator("header").evaluate((header) => {
+    const above = Object.assign(document.createElement("div"), {
+      id: "roomAbove",
+      style: "flex: none; height: 40px",
+    });
+    header.after(above);
+  });
+
+  await expectBracketToFillHeight(page);
+
+  await page.locator("#roomAbove").evaluate((above) => above.remove());
+
+  await expectBracketToFillHeight(page);
+});
+
+test("on a phone, the bracket keeps its spaces when it redraws however far its part is scrolled", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await openBracket(page);
+  await expect(page.locator("#bracketWrap .league-head.al")).toBeVisible();
+  const readInnerSpaces = async () => {
+    const { belowLine, betweenRows } = await readStackedSpaces(page);
+    return { belowLine, betweenRows };
+  };
+  const atTop = await readInnerSpaces();
+  await page.locator("#bracketWrap").evaluate((wrap) => {
+    const room = Object.assign(document.createElement("div"), { style: "height: 2000px" });
+    wrap.after(room);
+  });
+  await scrollSeasonPartToEnd(page, "bracket");
+
+  await page.evaluate(() => dispatchEvent(new Event("resize")));
+
+  expect(await readInnerSpaces()).toEqual(atTop);
+});
+
 test("on a phone a little short of room, the bracket's spaces shrink so it fits above the round dots", async ({
   page,
 }) => {

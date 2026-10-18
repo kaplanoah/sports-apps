@@ -56,13 +56,22 @@ function stepScroll(scroller, time) {
 }
 
 /**
+ * Whether `scroller` is far enough from `top` for a scroll to take it there, rather than already
+ * there within a fraction of a pixel, as a phone can leave it.
+ * @param {Element} scroller
+ * @param {number} top
+ */
+export const isAwayFrom = (scroller, top) =>
+  Math.abs(scroller.scrollTop - top) >= ARRIVED_WITHIN_PX;
+
+/**
  * Scrolls `scroller` to `top` on the spring, or at once for someone who asks for less motion.
  * @param {Element} scroller
  * @param {number} top
  */
 export function scrollWithSpring(scroller, top) {
   stopSpring(scroller);
-  if (Math.abs(scroller.scrollTop - top) < ARRIVED_WITHIN_PX) return;
+  if (!isAwayFrom(scroller, top)) return;
   if (isReducedMotion()) {
     jumpTo(scroller, top);
     return;

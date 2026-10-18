@@ -21,6 +21,7 @@ import {
   readDayOfMonth,
 } from "./days.js";
 import { dayStripLog } from "./day-strip-log.js";
+import { markBarStuck } from "./held-bar.js";
 import { html, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
@@ -478,10 +479,7 @@ function keepHeldDay() {
   if (list && typeof top === "number") list.scrollTop = top;
 }
 
-// The bar ends in a line once a day has scrolled under it.
-function markStuck() {
-  findBar()?.classList.toggle("stuck", (findList()?.scrollTop ?? 0) > 0);
-}
+const markStuck = () => markBarStuck(findBar(), findList());
 
 let isFramePending = false;
 function followList() {

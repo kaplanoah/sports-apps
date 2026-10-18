@@ -1,6 +1,5 @@
 // The season tab's parts, each scrolling on its own under the pill: where they, the page, and the
-// pill are on each frame as the parts slide, how to scroll a part and read how far it is, and the
-// color of the line under the pill.
+// pill are on each frame as the parts slide, and how to scroll a part and read how far it is.
 
 import { expect } from "@playwright/test";
 
@@ -77,8 +76,8 @@ export function expectPageHeldStill(frames) {
 }
 
 /**
- * Scrolls a part of the season tab to its end, as a finger does, and waits for the pill to end in
- * its line, which the part's scroll event draws, so nothing the scroll changes lands later.
+ * Jumps a part of the season tab to its end, and waits for the pill to end in its line, which the
+ * part's scroll event draws, so nothing the scroll changes lands later.
  * @param {import("@playwright/test").Page} page
  * @param {"standings" | "bracket"} part
  */
@@ -88,20 +87,6 @@ export async function scrollSeasonPartToEnd(page, part) {
     .evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: "instant" }));
   await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
 }
-
-/**
- * The app's line color, --divider, as the browser draws it.
- * @param {import("@playwright/test").Page} page
- */
-export const readDividerColor = (page) =>
-  page.evaluate(() => {
-    const probe = document.createElement("i");
-    probe.style.color = "var(--divider)";
-    document.body.append(probe);
-    const color = getComputedStyle(probe).color;
-    probe.remove();
-    return color;
-  });
 
 /**
  * How far a part of the season tab is scrolled.

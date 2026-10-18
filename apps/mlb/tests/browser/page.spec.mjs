@@ -30,7 +30,6 @@ import {
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
 import {
-  readDividerColor,
   readSeasonPartScroll,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
@@ -148,7 +147,7 @@ test("on a phone, each tab comes back where it was left, and a tab not shown yet
   expect(await readSeasonPartScroll(page, "standings")).toBe(left);
 });
 
-test("on a phone, the header and the pill hold still while the standings scroll under the pill, which ends in a line once they're under it", async ({
+test("on a phone, the header and the pill hold still while the standings scroll under the pill, which ends in a line once they're under it, even past their end", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE);
@@ -166,10 +165,30 @@ test("on a phone, the header and the pill hold still while the standings scroll 
   await expect(pill).toHaveCSS("box-shadow", "none");
 
   await scrollSeasonPartToEnd(page, "standings");
+  await page.mouse.move(PHONE.width / 2, 500);
+  await page.mouse.wheel(0, 800);
 
   expect(await readTops()).toEqual(before);
-  await expect(pill).toHaveCSS("box-shadow", `${await readDividerColor(page)} 0px 1px 0px 0px`);
+  await expect(pill).toHaveCSS(
+    "box-shadow",
+    `${await readColor(page, "--divider")} 0px 1px 0px 0px`,
+  );
   await expect(pill).toHaveCSS("background-image", "none");
+});
+
+test("on a phone, the standings' last row ends above the tab bar once they're scrolled to their end", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  const lastRow = await page.locator("#standingsWrap tbody tr").last().boundingBox();
+  const tabBar = await page.locator("#tabBar").boundingBox();
+  expect(lastRow.y + lastRow.height).toBeLessThanOrEqual(tabBar.y);
 });
 
 test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing animates", async ({

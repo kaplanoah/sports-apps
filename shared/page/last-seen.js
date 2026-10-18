@@ -66,7 +66,8 @@ const readScrolls = (part) =>
     }));
 
 // A part's classes and colors can come from its code rather than its markup, like a pager's
-// classes and a game sheet's teams' colors.
+// classes and a game sheet's teams' colors. A part that scrolls in a holder of its own, like the
+// standings in theirs (pager.css), keeps the holder's place too.
 /**
  * @param {HTMLElement} part
  * @param {number} savedAt
@@ -77,6 +78,7 @@ const readDrawnPart = (part, savedAt) => ({
   classes: part.className,
   style: part.getAttribute("style"),
   scrolls: readScrolls(part),
+  holderTop: part.parentElement?.scrollTop ?? 0,
   savedAt,
 });
 

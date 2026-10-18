@@ -168,19 +168,18 @@ function layOutAndMarkRound() {
   markVisibleRound();
 }
 
-// The cards move when the screen resizes, the tab shows, the header above them changes, or a font
-// arrives and changes their rows.
+// The cards move when the screen resizes, the tab shows, the room for the bracket's part changes
+// with what's above it, or a font arrives and changes their rows.
 export function startBracket() {
   const wrap = findWrap();
   placeOpeningRound = watchOpeningRound(wrap);
   // Laying the bracket out resizes what this observes, so it waits a frame rather than loop the
-  // observer, and only while the bracket shows. The standings sliding in beside it change the
-  // page's height but not the bracket, so it holds still until they rest.
+  // observer, and only while the bracket shows.
   resizes = new ResizeObserver(() => {
-    if (isShown(wrap) && !wrap.closest("[data-sliding]")) requestAnimationFrame(layOutAndMarkRound);
+    if (isShown(wrap)) requestAnimationFrame(layOutAndMarkRound);
   });
   resizes.observe(wrap);
-  resizes.observe(document.body);
+  resizes.observe(/** @type {HTMLElement} */ (wrap.closest(".season-part")));
   addEventListener("resize", layOutBracket);
   wrap.addEventListener("scroll", markVisibleRound, { capture: true, passive: true });
   document.fonts.addEventListener("loadingdone", layOutBracket);

@@ -36,14 +36,9 @@
 .season-part {
   position: absolute;
   inset: 0;
-  padding: 0 var(--reach-right) 48px var(--reach-left);
+  padding: 0 var(--reach-right) var(--view-end-room) var(--reach-left);
   overflow: hidden auto;
   overscroll-behavior-y: contain;
-}
-@media (max-width: 779px) {
-  .season-part {
-    padding-bottom: var(--tab-bar-clearance);
-  }
 }
 /* At rest, the part whose name isn't chosen doesn't show, so the pill a reload puts back
    (show-last-drawn.js) shows the part it names before the first paint. While the parts slide,

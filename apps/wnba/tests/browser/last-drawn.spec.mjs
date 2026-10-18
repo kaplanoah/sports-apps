@@ -2,6 +2,10 @@ import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
 import { findSeasonPill, findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
+import {
+  readSeasonPartScroll,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -218,6 +222,29 @@ test.describe("on a phone", () => {
     await expect(page.locator("#bracketWrap")).toBeHidden();
     expect(await readGap()).toBeCloseTo(placedGap, 0);
     release();
+  });
+
+  test("the standings show as far down as they were left, under the pill's line, before the page's code arrives, and stay there once it runs", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await scrollSeasonPartToEnd(page, "standings");
+    const left = await readSeasonPartScroll(page, "standings");
+    const pill = page.locator("#bracketStandingsPill");
+    const release = await holdPageCode(page);
+
+    await page.reload({ waitUntil: "commit" });
+
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(left);
+    await expect(pill).toHaveClass(/\bstuck\b/);
+    release();
+    await page.waitForLoadState("load");
+    await expect(findSeasonTab(page)).toHaveAccessibleName("Bracket");
+    expect(await readSeasonPartScroll(page, "standings")).toBe(left);
+    await expect(pill).toHaveClass(/\bstuck\b/);
   });
 
   test("the tab bar's pill rests on the last tab before the page's code arrives, where the code keeps it", async ({
