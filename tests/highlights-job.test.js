@@ -33,7 +33,7 @@ const endGame = (id, hoursAgo) => ({
 /**
  * The job over `games`, newest first, whose league answers each read with `answer(id)`, finished
  * unless `isFinished(id)` says not, and whole unless `hasMisses(id)` says not, and reads them as of
- * its edition, which a test can raise between runs.
+ * its version, which a test can raise between runs.
  * @param {any[]} games
  * @param {{ answer?: (id: string) => any, isFinished?: (id: string) => boolean, hasMisses?: (id: string) => boolean }} [options]
  */
@@ -44,7 +44,7 @@ function createRun(
   const docs = createDocs();
   const storage = createJobStorage();
   const clock = { now: NOW };
-  const league = { edition: /** @type {number | undefined} */ (undefined) };
+  const league = { version: /** @type {number | undefined} */ (undefined) };
   /** @type {string[]} */
   const reads = [];
   const createJob = () =>
@@ -60,14 +60,15 @@ function createRun(
         };
       },
       nameKey: (id) => `highlights/${id}`,
-      edition: league.edition,
+      version: league.version,
     });
   const context = /** @type {any} */ ({ docs, storage, env: {}, now: () => clock.now });
   return {
     docs,
+    storage,
     runJob: () => createJob().updateStore(context),
-    raiseEdition: (/** @type {number} */ edition) => {
-      league.edition = edition;
+    raiseVersion: (/** @type {number} */ version) => {
+      league.version = version;
     },
     wait: (/** @type {number} */ minutes) => {
       clock.now += minutes * MINUTE_MS;
@@ -246,15 +247,15 @@ test("a game the league has no such game for saves nothing", async () => {
   assert.deepEqual(takeHighlightWrites(docs), []);
 });
 
-test("a league that raises its edition reads each final it kept once more, newest first, and then never", async () => {
+test("a league that raises its version reads each final it kept once more, newest first, and then never", async () => {
   const games = ["5", "4", "3", "2", "1"].map((id, index) => endGame(id, 20 + index));
-  const { runJob, wait, takeReads, raiseEdition } = createRun(games);
+  const { runJob, wait, takeReads, raiseVersion } = createRun(games);
   await runJob();
   wait(2);
   await runJob();
   takeReads();
 
-  raiseEdition(1);
+  raiseVersion(1);
   wait(60);
   await runJob();
   assert.deepEqual(takeReads(), ["5", "4", "3", "2"]);
@@ -266,9 +267,28 @@ test("a league that raises its edition reads each final it kept once more, newes
   assert.deepEqual(takeReads(), []);
 });
 
-test("a read as of a raised edition that fails is tried again ten minutes later", async () => {
+test("reads kept with their version named edition are renamed once and aren't read again", async () => {
+  const games = ["2", "1"].map((id, index) => endGame(id, 20 + index));
+  const { storage, runJob, takeReads, raiseVersion } = createRun(games);
+  raiseVersion(1);
+  const read = { readAt: NOW - HOUR_MS, triedAt: NOW - HOUR_MS };
+  storage.stored.set("highlight-reads:2026", {
+    2: { ...read, edition: 1 },
+    1: { ...read, edition: 1 },
+  });
+
+  await runJob();
+
+  assert.deepEqual(takeReads(), []);
+  assert.deepEqual(storage.stored.get("highlight-reads:2026"), {
+    2: { ...read, version: 1 },
+    1: { ...read, version: 1 },
+  });
+});
+
+test("a read as of a raised version that fails is tried again ten minutes later", async () => {
   const outage = { isDown: false };
-  const { runJob, wait, takeReads, raiseEdition } = createRun([endGame("1", 30)], {
+  const { runJob, wait, takeReads, raiseVersion } = createRun([endGame("1", 30)], {
     answer: (id) => {
       if (outage.isDown) throw new Error("MLB is down");
       return { id, plays: [] };
@@ -277,7 +297,7 @@ test("a read as of a raised edition that fails is tried again ten minutes later"
   await runJob();
   takeReads();
 
-  raiseEdition(1);
+  raiseVersion(1);
   outage.isDown = true;
   wait(60);
   await runJob();
