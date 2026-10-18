@@ -12,6 +12,7 @@ export const useSavedStorage = (saved) =>
   useStorage({
     getItem: (key) => saved.get(key) ?? null,
     setItem: (key, value) => saved.set(key, value),
+    removeItem: (key) => saved.delete(key),
   });
 
 export const dropSavedStorage = () => {

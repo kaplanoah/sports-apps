@@ -118,3 +118,18 @@ test("a choice storage couldn't keep gives way to another tab's newer one", () =
 
   assert.deepEqual(reads, [3]);
 });
+
+test("a choice storage couldn't keep gives way to another tab clearing storage", () => {
+  const saved = new Map([["fullThenCleared", "1"]]);
+  useStorage({ getItem: (key) => saved.get(key) ?? null, setItem: refuseAccess });
+  const choice = createViewerChoice("fullThenCleared", readAsIs);
+  /** @type {unknown[]} */
+  const reads = [];
+  choice.watch(() => reads.push(choice.read()));
+  choice.keep(2);
+
+  saved.clear();
+  changeInOtherTab(null);
+
+  assert.deepEqual(reads, [null]);
+});
