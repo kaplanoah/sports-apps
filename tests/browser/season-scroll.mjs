@@ -105,11 +105,12 @@ export const hideResizesFromPage = (page) =>
   );
 
 /**
- * Whether the pill over the season tab's parts is held at the top of the screen.
+ * Whether the pill over the season tab's parts is held at the top of the screen, as a frame
+ * `trackSeasonScroll` notes says.
  * @param {import("@playwright/test").Page} page
  */
-export const isSeasonPillHeld = (page) =>
-  page.evaluate(() => {
-    const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
-    return pill.getBoundingClientRect().top === parseFloat(getComputedStyle(pill).top);
-  });
+export async function isSeasonPillHeld(page) {
+  const readFrames = await trackSeasonScroll(page, { coming: "bracket", leaving: "standings" });
+  const frames = await readFrames();
+  return /** @type {ScrollFrame} */ (frames.at(-1)).isPillHeld;
+}
