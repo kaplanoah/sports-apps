@@ -56,7 +56,7 @@ test.describe("on a phone", () => {
 
   test("a release note's lines sit 1.3 apart", async ({ page }) => {
     await serveReleaseNote(page);
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const body = await readRole(page, "body");
     await expect(page.locator("#updates .updates-notes .what")).toHaveCSS(
       "line-height",
@@ -67,7 +67,7 @@ test.describe("on a phone", () => {
   test("a final's team names are set in their sentence's font, at 500, two steps over Body", async ({
     page,
   }) => {
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const what = page.locator("#updates .updates-list .what").first();
     const team = what.locator("b").first();
     await expect(team).toHaveCSS(
@@ -84,7 +84,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await serveReleaseNote(page);
-    const app = await openApp(page, { isNewPhone: true });
+    const app = await openApp(page, { updatesBox: "new" });
     const updates = page.locator("#updates");
     await expect(page.locator(".series").first()).toBeVisible();
     await expect(updates).toBeHidden();
@@ -100,7 +100,7 @@ test.describe("on a phone", () => {
   test("the Updates box lists the playoff finals since its last dismissal, newest first, until it's dismissed again, and then lists only what's new", async ({
     page,
   }) => {
-    const app = await openApp(page, { isShowingUpdates: true });
+    const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
 
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
@@ -126,7 +126,7 @@ test.describe("on a phone", () => {
   test("a dismissed final the Worker found after its last play stays dismissed, and the next one found shows", async ({
     page,
   }) => {
-    const app = await openApp(page, { isShowingUpdates: true });
+    const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await app.changeSeason(finishValkyriesAtWings);
     await expect(updates.locator(".what").first()).toHaveText(
@@ -153,7 +153,7 @@ test.describe("on a phone", () => {
   test("a pressed final tints across the box's whole width, halfway to what's above and below it", async ({
     page,
   }) => {
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const finals = page.locator("#updates .updates-list li");
     await expect(finals).toHaveCount(2);
 
@@ -210,7 +210,7 @@ test.describe("on a phone", () => {
   });
 
   test("dismissing the Updates box in another tab hides it in this one", async ({ page }) => {
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
 
@@ -240,7 +240,7 @@ test.describe("on a phone, tapping an update", () => {
   }
 
   test("opens that update's game's sheet, even on a team's name", async ({ page }) => {
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     await expect(page.locator("#updates .what")).toHaveCount(2);
     const sheet = page.locator("#gameSheet");
 
@@ -278,7 +278,7 @@ test.describe("on a phone, in full motion", () => {
     page,
   }) => {
     const readAnimations = await listAnimations(page);
-    const app = await openApp(page, { isShowingUpdates: true });
+    const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
 
@@ -296,7 +296,7 @@ test.describe("on a phone, in full motion", () => {
   });
 
   test("an Updates box that fills again as it shrinks away stays open", async ({ page }) => {
-    const app = await openApp(page, { isShowingUpdates: true });
+    const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
     await page.getByRole("button", { name: "Dismiss updates" }).click();
@@ -320,7 +320,7 @@ test.describe("on a phone, with a release note out", () => {
     page,
   }) => {
     await serveReleaseNote(page);
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
 
     await expect(updates.locator(".updates-count")).toHaveText([
@@ -358,7 +358,7 @@ test.describe("on a phone, with a release note out", () => {
       { at: "2026-09-27T15:00:00Z", text: "News" },
       { at: "2026-09-20T15:00:00Z", text: "Scores" },
     ]);
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const notes = page.locator("#updates .updates-notes");
 
     await expect(notes.locator(".what")).toHaveText([
@@ -378,7 +378,7 @@ test.describe("on a phone, with a release note out", () => {
 
   test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {
     await serveReleaseNote(page);
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const notes = page.locator("#updates .updates-notes");
     await expect(notes.locator(".what")).toHaveCount(1);
 
@@ -391,7 +391,7 @@ test.describe("on a phone, with a release note out", () => {
 });
 
 test("a computer shows no Updates box", async ({ page }) => {
-  await openApp(page, { isShowingUpdates: true });
+  await openApp(page, { updatesBox: "shown" });
   await expect(page.locator(".series").first()).toBeVisible();
 
   await expect(page.locator("#updates")).toBeHidden();
