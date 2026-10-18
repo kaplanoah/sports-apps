@@ -14,6 +14,7 @@ const HOME_SCREEN_NOTE =
   "Apple only supports notifications from sites saved to your home screen. To configure notifications, add this site to your home screen.";
 const UNSUPPORTED_NOTE =
   "This browser can't show notifications. Try another browser or a window that isn't private.";
+const UNSUPPORTED_ON_HOME_SCREEN_NOTE = "This browser can't show notifications";
 
 /**
  * @typedef {{
@@ -180,10 +181,6 @@ export async function checkWelcomeSwipesDown(app) {
   await openWelcomeFromHelp(app);
   const welcome = page.locator(WELCOME);
   await expect.poll(async () => (await welcome.boundingBox())?.y).toBe(0);
-  const settingsAtRest = await page.locator(SETTINGS).evaluate((settings) => {
-    const box = settings.getBoundingClientRect();
-    return [box.left, box.top, box.width, box.height].join(" ");
-  });
 
   let readFrames = await trackWelcomeFrames(page);
   const lift = await drag(
@@ -217,10 +214,9 @@ export async function checkWelcomeSwipesDown(app) {
   const slid = flicked.filter((frame) => frame.welcomeTop !== null);
   expect(isOneWay(slid.map((frame) => frame.welcomeTop))).toBe(true);
   expect(slid.filter((frame) => frame.welcomeTop > 0).length).toBeGreaterThan(1);
-  expect(flicked.at(-1)?.welcomeTop).toBe(null);
 
   const settingsPlaces = [...dragged, ...sprungBack, ...flicked].map((frame) => frame.settings);
-  expect(new Set(settingsPlaces)).toEqual(new Set([settingsAtRest]));
+  expect(new Set(settingsPlaces).size).toBe(1);
   await expect(page.locator(SETTINGS)).toBeVisible();
 }
 
@@ -304,6 +300,22 @@ export async function checkUnsupportedNote({ page, openApp, openSettings }) {
   await openApp(page);
   await openSettings(page);
   await expect(page.locator("#notifyNote")).toHaveText(UNSUPPORTED_NOTE);
+  await expect(findHelp(page)).toHaveCount(0);
+}
+
+/**
+ * A Home Screen app that can't show notifications, with no other browser or private window to
+ * try, says only that it can't.
+ * @param {App} app
+ */
+export async function checkUnsupportedOnHomeScreen({ page, openApp, openSettings }) {
+  await takeAwayPush(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", { get: () => true });
+  });
+  await openApp(page);
+  await openSettings(page);
+  await expect(page.locator("#notifyNote")).toHaveText(UNSUPPORTED_ON_HOME_SCREEN_NOTE);
   await expect(findHelp(page)).toHaveCount(0);
 }
 

@@ -18,8 +18,9 @@ const NOTES = {
     "Notifications are blocked for this page. Turn them on in the browser's site settings, from the icon beside the address.",
   homeScreen:
     "Apple only supports notifications from sites saved to your home screen. To configure notifications, add this site to your home screen.",
-  unsupported:
+  unsupportedInBrowser:
     "This browser can't show notifications. Try another browser or a window that isn't private.",
+  unsupportedOnHomeScreen: "This browser can't show notifications",
   failed: "Couldn't change notifications. Try again in a moment.",
   tooManyDevices: TOO_MANY_DEVICES,
 };
@@ -42,8 +43,11 @@ const canPush = () =>
   "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
 // iOS keeps a Home Screen page's permission in its Settings app; other browsers keep it per site.
+// A Home Screen app has no other browser or private window to try.
 function describeStatus() {
   if (status === "blocked") return isIos() ? NOTES.blockedOnIos : NOTES.blockedInBrowser;
+  if (status === "unsupported")
+    return isOnHomeScreen() ? NOTES.unsupportedOnHomeScreen : NOTES.unsupportedInBrowser;
   return NOTES[status] ?? about;
 }
 
