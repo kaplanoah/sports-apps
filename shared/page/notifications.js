@@ -135,8 +135,8 @@ async function subscribe(publicKey) {
   await saveOrForget(subscription);
 }
 
-// Saving again on every visit restores a subscription the Worker lost, and a new signing key
-// needs a new subscription.
+// Saving again on every visit restores a subscription the Worker lost, and keeps a full Worker
+// from making room by forgetting this device. A new signing key needs a new subscription.
 async function syncSubscription() {
   const publicKey = await fetchPublicKey();
   const subscribedKey = subscription.options.applicationServerKey;

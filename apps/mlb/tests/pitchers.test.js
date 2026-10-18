@@ -10,6 +10,7 @@ import {
   listQualifiedRequest,
   readSpeeds,
 } from "../worker/src/pitchers.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 const NOW = Date.parse("2026-09-30T16:00:00Z");
 
@@ -261,21 +262,23 @@ test("sheets opened the same day rank against one read of the qualified starters
 test("an id or season that isn't one is refused before anything is fetched", async () => {
   const { mlb, requestPitcher } = createTestServer();
   for (const query of ["", "?id=abc", "?id=-4", "?id=1.5", "?id=1&season=1800"]) {
-    assert.equal((await requestPitcher(query)).status, 400, query);
+    await assertErrorAnswer(await requestPitcher(query), 400, "invalid_argument");
   }
   assert.equal(mlb.calls.length, 0);
 });
 
 test("a pitcher MLB doesn't know is not found", async () => {
   const { requestPitcher } = createTestServer();
-  assert.equal((await requestPitcher("?id=9&season=2026")).status, 404);
+  await assertErrorAnswer(await requestPitcher("?id=9&season=2026"), 404, "not_found");
 });
 
 test("MLB failing is reported", async () => {
   const { requestPitcher } = createTestServer({ status: 503 });
   const response = await requestPitcher("?id=1&season=2026");
-  assert.equal(response.status, 502);
-  assert.match((await response.json()).error.message, /MLB Stats API answered 503/);
+  assert.match(
+    await assertErrorAnswer(response, 502, "upstream_error"),
+    /MLB Stats API answered 503/,
+  );
 });
 
 test("the speeds of the qualified starters come in batches of 30", async () => {

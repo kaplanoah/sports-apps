@@ -160,7 +160,9 @@
   each still showing the moment, never a headline: the recap's a frame from its video,
   and a play's MLB's own unless Claude Haiku finds a headline laid over it,
   as the store asks once for each still, a few a run,
-  since Cloudflare caps a run's requests, then a frame from the play's video or,
+  since Cloudflare caps a run's requests,
+  and asks again a few times about one Claude doesn't answer, which shows as MLB's own meanwhile and then counts as clean,
+  then a frame from the play's video or,
   for a clip without frames, MLB.com's photo of the game (`worker/src/headline-stills.js`),
   which the store keeps for every finished game of each season it keeps,
   the slate's first, then the rest of the current season's and each past season's,
@@ -186,7 +188,7 @@
   the standings' playoff fields and each league's divisions, and settings and each setting (`page/js/search-pages.js`),
   apart from the slate the header, the Updates box, and the store follow (`page/js/slate.js`),
   whose ranking each device keeps for itself, in name order until its first drag,
-  with its dismissal of the Updates box (`page/js/kept-on-device.js`),
+  with when its Updates box counts from, its first look or last dismissal (`page/js/kept-on-device.js`),
   which only phones and tablets show (`page/js/updates.js`), and which also serves each starting pitcher's matchup numbers,
   ranked among MLB's qualified starters (`worker/src/pitchers.js`),
   and, for a club yet to name one, its last starters and their rest (`worker/src/rotations.js`),
@@ -266,7 +268,8 @@
   the latest final's Highlights, the bracket and the News tab, the standings' lists,
   and settings and each setting (`page/js/search-pages.js`), whose settings pick any season the store keeps once it keeps more than one,
   whose page saves nothing to the store, lists each playoff final in an Updates box only on phones and tablets,
-  and only for the current season, each keeping its own dismissal (`page/js/updates.js`),
+  and only for the current season, each keeping when its box counts from, its first look or last dismissal,
+  by when the Worker first found each final (`page/js/updates.js`),
   and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings or the Home Screen welcome (the shared `appearance.js`, kept per device,
   and `pick-theme.js`, which the browser's address names it in for the Home Screen app), in its own self-hosted fonts.
   Paths below are inside an app's folder, except `shared/` and the ones named as the root's.
@@ -530,7 +533,7 @@
   the header's lines on the latest score and the next game, in words like "last night",
   in `stamp.js`, the release check and catching up on return in `resume.js`,
   the access code's gate in `gate.js`, what the page last showed,
-  drawn first on its next load, in `last-seen.js`, the box under the tabs that lists what's new since it was last dismissed,
+  drawn first on its next load, in `last-seen.js`, the box under the tabs that lists what's new since the device first opened the app or last dismissed it,
   with each app's release notes under New in the app, in `updates.js`,
   the settings' Season picker in `season-picker.js`, the year in the title,
   lighter, whenever the season shown isn't being played, an earlier one or the current one once its last game is final,
@@ -739,8 +742,9 @@ Delete it once the app's first PR merges.
   which its Updates box shows under New in the app, the newest three and how many more,
   until it's dismissed or two weeks after the device first showed it,
   so a viewer back from time away still sees what they missed,
-  but on a device's first look, two weeks from each note's `at`,
-  with a note out by the box's last dismissal dismissed (`listNotesToShow` in `shared/page/updates.js`).
+  but a device's first look counts every note already out as shown,
+  and starts its games' updates after every one already out,
+  so a new phone opens with no box (`listNotesToShow` and `readOrStartSeenAt` in `shared/page/updates.js`).
   Add a note only when the user asks for one, whatever the PR's type, in the words they approve, with an `at` just before the PR merges.
   A word that should stand out, like a button's name, goes in `<b>`,
   in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.

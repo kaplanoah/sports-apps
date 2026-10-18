@@ -498,13 +498,24 @@ export async function openBracket(page, options) {
  * @param {string} key
  * @param {unknown} value
  */
-export const keepFromEarlierVisit = (page, key, value) =>
+const keepFromEarlierVisit = (page, key, value) =>
   page.addInitScript(
     ([storedKey, text]) => {
       if (localStorage.getItem(storedKey) === null) localStorage.setItem(storedKey, text);
     },
     [key, JSON.stringify(value)],
   );
+
+/**
+ * A phone that has used the app before, last dismissing the Updates box the afternoon before the
+ * evening's updates, and having kept none of its release notes' times yet, so each note out starts
+ * showing.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function keepUpdatesFromEarlierVisit(page) {
+  await keepFromEarlierVisit(page, "updatesSeenAt", { 2026: Date.parse("2026-09-24T20:00:00Z") });
+  await keepFromEarlierVisit(page, "releaseNotesShownUntil", {});
+}
 
 /**
  * Reads the color a token of the page's theme names, as the page draws it.

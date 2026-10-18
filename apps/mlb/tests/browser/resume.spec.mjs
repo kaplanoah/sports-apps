@@ -10,6 +10,7 @@ import {
   openSettings,
   EVENING_FIXTURE,
   ON_A_PHONE,
+  keepUpdatesFromEarlierVisit,
   matchPath,
 } from "./harness.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -256,6 +257,7 @@ test("a page coming back to nothing new lets a faded band pass through the heade
 
 test.describe("on a phone", () => {
   test.use(ON_A_PHONE);
+  test.beforeEach(({ page }) => keepUpdatesFromEarlierVisit(page));
 
   test("a page asleep half an hour reads what it missed when it wakes, without reloading", async ({
     page,

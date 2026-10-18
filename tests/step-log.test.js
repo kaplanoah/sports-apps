@@ -1,16 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createStepLog, nameFile, writeStepsAsText } from "../shared/page/step-log.js";
+import { useSavedStorage } from "./saved-storage.js";
 import { normalizeSpaces } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
 /** @type {Map<string, string>} */
 const stored = new Map();
-globalThis.localStorage = /** @type {any} */ ({
-  getItem: (/** @type {string} */ key) => stored.get(key) ?? null,
-  setItem: (/** @type {string} */ key, /** @type {string} */ value) => stored.set(key, value),
-  removeItem: (/** @type {string} */ key) => stored.delete(key),
-});
+useSavedStorage(stored);
 /** @type {Map<string, (event: Event) => void>} */
 const listeners = new Map();
 globalThis.document = /** @type {any} */ ({

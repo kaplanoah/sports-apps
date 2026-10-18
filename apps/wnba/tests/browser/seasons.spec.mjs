@@ -192,7 +192,7 @@ test.describe("on a phone", () => {
         body: 'export const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: "Something new." }];',
       }),
     );
-    await openApp(page, { ...ONE_PAST_SEASON, isShowingUpdates: true });
+    await openApp(page, { ...ONE_PAST_SEASON, updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates).toContainText("Something new.");
 
