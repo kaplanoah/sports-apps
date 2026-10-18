@@ -559,6 +559,7 @@
   `news.css` the News view's layout, `retry.css` what a sheet shows where a read failed,
   `highlights.css` a final's Highlights, `rank-curve.css` a rank curve and each player's mark on it,
   `no-field-note.css` the bracket before the playoff field is set,
+  `channel-tag.css` the tag beside the app's name on beta,
   and `gate.css` the access code's gate, whose title and button the welcome takes too;
   pages link them before their own `styles.css` and theme them with the tokens their top comments list.
   The Worker serves all of it under `shared/`.

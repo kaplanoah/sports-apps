@@ -168,6 +168,8 @@
   --radius-control: 6px;
   --radius-tabs: 8px;
   --radius-sheet: 12px;
+  /* Puts the channel tag's middle half a pixel above the middle of the name's capitals. */
+  --channel-tag-lift: -0.85px;
   --control-height: 36px;
   --control-room: 14px;
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23625a52' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -372,28 +374,6 @@ header.top h1 .title-letter:nth-child(2) {
   font-weight: calc(var(--type-title-weight) - 50);
   letter-spacing: 0.02em;
   color: var(--ink-dim);
-}
-/* The channel tag sits with its middle on the middle of the name's capitals, lifted half a
-   pixel. */
-.channel-tag {
-  position: relative;
-  top: -0.85px;
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 8px;
-  border-radius: var(--radius-chip);
-  background: var(--raised);
-  color: var(--ink-mid);
-  font-size: var(--type-caption-size);
-  font-weight: var(--type-caption-weight);
-  line-height: var(--leading);
-  white-space: nowrap;
-}
-.channel-tag[hidden] {
-  display: none;
-}
-.channel-tag .sep {
-  margin: 0 4px;
 }
 .stamp {
   display: flex;
