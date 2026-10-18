@@ -6,6 +6,12 @@ import { ANDROID_AGENT, IPHONE_AGENT } from "./browser/devices.mjs";
 
 const answerNothing = () => new Response(null, { status: 500 });
 const storeAnswers = async () => true;
+const RELEASE = {
+  version: "1.2.3",
+  commit: "abc1234",
+  builtAt: "2026-10-01T20:00:00Z",
+  label: null,
+};
 
 /** @param {Record<string, { contentType: string, text?: string }>} pageFiles */
 const createPageWorker = (pageFiles) =>
@@ -20,14 +26,8 @@ const requestRobots = (pageFiles) =>
   createPageWorker(pageFiles).fetch(new Request("https://worker.example/robots.txt"), {});
 
 test("robots.txt names the commit the Worker was built from, and none when the build named none", async () => {
-  const release = {
-    version: "1.2.3",
-    commit: "abc1234",
-    builtAt: "2026-10-01T20:00:00Z",
-    label: null,
-  };
   const built = await requestRobots({
-    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
   });
   assert.equal(built.headers.get("x-release-commit"), "abc1234");
   assert.equal(await built.text(), "User-agent: *\nDisallow: /\n");
@@ -37,14 +37,8 @@ test("robots.txt names the commit the Worker was built from, and none when the b
 });
 
 test("health answers without the key, saying whether the store answers and which release this is", async () => {
-  const release = {
-    version: "1.2.3",
-    commit: "abc1234",
-    builtAt: "2026-10-01T20:00:00Z",
-    label: null,
-  };
   const pageFiles = {
-    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
   };
   const env = { APP_KEY: "key", STORE: "the store" };
 
@@ -73,14 +67,8 @@ const requestPageFile = (worker, path) =>
   worker.fetch(new Request(`https://worker.example/key/${path}`), { APP_KEY: "key" });
 
 test("a release's own folder serves its files for good, and another release's folder serves nothing", async () => {
-  const release = {
-    version: "1.2.3",
-    commit: "abc1234",
-    builtAt: "2026-10-01T20:00:00Z",
-    label: null,
-  };
   const worker = createPageWorker({
-    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
     "styles.css": { contentType: "text/css; charset=utf-8", text: "body {}" },
   });
 
@@ -99,14 +87,8 @@ test("a release's own folder serves its files for good, and another release's fo
 });
 
 test("another release's version file names that release, so a page still running it reloads", async () => {
-  const release = {
-    version: "1.2.3",
-    commit: "abc1234",
-    builtAt: "2026-10-01T20:00:00Z",
-    label: null,
-  };
   const worker = createPageWorker({
-    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
   });
 
   const replaced = await requestPageFile(worker, "release/def5678/version.json");
@@ -120,7 +102,7 @@ test("another release's version file names that release, so a page still running
   assert.equal(replaced.headers.get("cache-control"), "no-store");
 
   const own = await requestPageFile(worker, "release/abc1234/version.json");
-  assert.deepEqual(await own.json(), release);
+  assert.deepEqual(await own.json(), RELEASE);
 });
 
 test("a Worker built without a release has no release folder", async () => {
@@ -227,16 +209,10 @@ test("until the code is sent, the page's address shows the gate and its data sta
 });
 
 test("the page's address in its release's folder shows the gate too, until the code is sent", async () => {
-  const release = {
-    version: "1.2.3",
-    commit: "abc1234",
-    builtAt: "2026-10-01T20:00:00Z",
-    label: null,
-  };
   const worker = createAppWorker({
     pageFiles: {
       ...PAGE_FILES,
-      "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+      "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
     },
     forwardToStore: answerOk,
     isStoreAnswering: storeAnswers,
