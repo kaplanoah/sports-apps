@@ -11,8 +11,12 @@ import {
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
 import {
+  readHeaderReach,
   readSeasonPartScroll,
+  readSeasonRide,
+  scrollSeasonPart,
   scrollSeasonPartToEnd,
+  wheelPastSeasonPartEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 import { findRows, sendSearch, tapSearch } from "./search-page.mjs";
 
@@ -137,26 +141,82 @@ test("a tap on the tab while the standings show scrolled down takes them back to
   await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
-test("the header and the pill hold still while the standings scroll under the pill, which ends in its line once they're under it, even past their end", async ({
+test("a tap on the tab with the standings left a fraction of a pixel down, as a phone can leave them, slides back to the bracket", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-league")).toBeVisible();
+  // Chromium keeps a scroll at whole pixels, so the standings report the fraction a phone's leaves.
+  await page.locator('#bracketStandingsParts > [data-part="standings"]').evaluate((part) => {
+    const scrollTop = /** @type {PropertyDescriptor} */ (
+      Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")
+    );
+    Object.defineProperty(part, "scrollTop", {
+      configurable: true,
+      get: () => 1 / 3,
+      set(top) {
+        scrollTop.set?.call(part, top);
+      },
+    });
+  });
+
+  await findSeasonTab(page).click();
+
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeHidden();
+});
+
+test("the header and the pill ride up as far as the standings scroll, the page holding still", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
   const pill = page.locator("#bracketStandingsPill");
-  const readTops = () =>
-    page.evaluate(() => ({
-      header: Math.round(document.querySelector("header").getBoundingClientRect().top),
-      pill: Math.round(document.getElementById("bracketStandingsPill").getBoundingClientRect().top),
-      page: Math.round(scrollY),
-    }));
-  const before = await readTops();
+  const before = await readSeasonRide(page);
+
+  await scrollSeasonPart(page, "standings", 40);
+
+  await expect
+    .poll(() => readSeasonRide(page))
+    .toEqual({ ...before, headerTop: before.headerTop - 40, pillTop: before.pillTop - 40 });
   await expect(pill).not.toHaveClass(/\bstuck\b/);
+});
+
+test("once the header is gone, the pill holds at the top and ends in its line as the standings scroll under it, even past their end", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const header = page.locator("header.top");
+  const pill = page.locator("#bracketStandingsPill");
 
   await scrollSeasonPartToEnd(page, "standings");
   await page.mouse.move(195, 500);
-  await page.mouse.wheel(0, 800);
 
-  expect(await readTops()).toEqual(before);
+  expect(await wheelPastSeasonPartEnd(page, "standings")).toBe(0);
+  expect(await readSeasonRide(page)).toMatchObject({ pillTop: 10, pageScroll: 0 });
+  const headerBox = await header.boundingBox();
+  expect(headerBox.y + headerBox.height).toBeLessThanOrEqual(10);
+  await expect(pill).toHaveClass(/\bstuck\b/);
+});
+
+test("with the header just gone, the pill ends in its line only once a row scrolls under it", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const pill = page.locator("#bracketStandingsPill");
+  const reach = await readHeaderReach(page);
+
+  await scrollSeasonPart(page, "standings", reach);
+
+  await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: 10 });
+  await expect(pill).not.toHaveClass(/\bstuck\b/);
+
+  await scrollSeasonPart(page, "standings", reach + 1);
+
+  await expect(pill).toHaveClass(/\bstuck\b/);
 });
 
 test("the standings' last row ends above the tab bar once they're scrolled to their end", async ({
@@ -173,20 +233,22 @@ test("the standings' last row ends above the tab bar once they're scrolled to th
   expect(lastRow.y + lastRow.height).toBeLessThanOrEqual(tabBar.y);
 });
 
-test("each part keeps its own place: the bracket chosen far down the standings shows from its top, and the standings chosen again show where they were", async ({
+test("each part keeps its own place: the bracket chosen far down the standings shows from its top with the header still gone, and the standings chosen again show where they were", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await scrollSeasonPartToEnd(page, "standings");
   const standingsScroll = await readSeasonPartScroll(page, "standings");
-  expect(standingsScroll).toBeGreaterThan(0);
+  const reach = await readHeaderReach(page);
+  expect(standingsScroll).toBeGreaterThan(reach);
   const pill = findSeasonPill(page);
 
   await pill.getByRole("tab", { name: "Bracket" }).click();
 
   await expect(page.locator("#bracketWrap .round-name").first()).toBeInViewport();
-  expect(await readSeasonPartScroll(page, "bracket")).toBe(0);
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(reach);
+  await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: 10 });
   await expect(page.locator("#bracketStandingsPill")).not.toHaveClass(/\bstuck\b/);
 
   await pill.getByRole("tab", { name: "Standings" }).click();
@@ -194,6 +256,69 @@ test("each part keeps its own place: the bracket chosen far down the standings s
   await expect(page.locator("#standings-league")).toBeVisible();
   expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
   await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
+});
+
+test("with the header still partly showing, the bracket chosen shows scrolled as far as the standings, so the header stays where it is", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const before = await readSeasonRide(page);
+  await scrollSeasonPart(page, "standings", 40);
+  await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: before.pillTop - 40 });
+
+  await findSeasonPill(page).getByRole("tab", { name: "Bracket" }).click();
+
+  await expect(page.locator("#bracketWrap .round-name").first()).toBeInViewport();
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(40);
+  expect(await readSeasonRide(page)).toMatchObject({
+    headerTop: before.headerTop - 40,
+    pillTop: before.pillTop - 40,
+  });
+});
+
+test("a touch on the header lands on the part under it, so a drag there scrolls it, while the header's button still takes its tap", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const header = await page.locator("header.top").boundingBox();
+  const settings = await page.locator("#settingsBtn").boundingBox();
+
+  const found = await page.evaluate(
+    ({ header: box, settings: button }) => ({
+      onHeader: document
+        .elementFromPoint(box.x + 40, box.y + box.height / 2)
+        ?.closest(".season-part")
+        ?.getAttribute("data-part"),
+      onSettings: document
+        .elementFromPoint(button.x + button.width / 2, button.y + button.height / 2)
+        ?.closest("button")?.id,
+    }),
+    { header, settings },
+  );
+
+  expect(found).toEqual({ onHeader: "standings", onSettings: "settingsBtn" });
+});
+
+test("where the browser has no scroll-driven animations, the header stays put and the parts scroll under the pill", async ({
+  page,
+}) => {
+  await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const before = await readSeasonRide(page);
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  expect(await readSeasonRide(page)).toEqual(before);
+  const pillBottom = await page.evaluate(
+    () => document.getElementById("bracketStandingsPill").getBoundingClientRect().bottom,
+  );
+  const partTop = await page
+    .locator('#bracketStandingsParts > [data-part="standings"]')
+    .evaluate((part) => part.getBoundingClientRect().top);
+  expect(partTop).toBeCloseTo(pillBottom, 0);
 });
 
 test("search's Bracket row, with the bracket left scrolled down, opens it at its top, just under the pill", async ({

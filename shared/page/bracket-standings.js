@@ -7,14 +7,17 @@ import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
 import { isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
+/* global followSeasonPart -- from season-header.js */
+
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
 // time, as slide-panels.js moves them: a tap on a name slides to its part, and a swipe drags the
 // shown part with the other beside it, though a swipe on the bracket scrolls it until it reaches
 // its end, as a team's Roster does on its sheet. Until the playoff field is set the tab is named
 // Standings and opens on them; from then on, through the offseason, it's named Bracket and opens
 // on the bracket. The one it opens on comes first in the pill. While the tab shows, the page holds
-// still and each part scrolls on its own under the pill (pager.css), as a sheet's sections do, so
-// each keeps its place while the other shows and a slide never scrolls the page.
+// still and each part scrolls on its own (pager.css), as a sheet's sections do, with the header
+// riding up over it until the pill holds at the top (season-header.js), so each keeps its place
+// while the other shows and a slide never scrolls the page.
 
 /** @typedef {"standings" | "bracket"} SeasonPart */
 
@@ -53,26 +56,101 @@ const holdBracketDotsWhileSliding = () => {
   if (findParts().hasAttribute("data-sliding")) holdBracketDots();
 };
 
-const markStuck = () => markBarStuck(findPill(), findPart(readShownPart()));
+/**
+ * How far a part scrolls before the pill holds at the top, as season-header.js measures it, or 0
+ * where the header stays put.
+ */
+const readHeaderReach = () =>
+  parseFloat(findParts().parentElement?.style.getPropertyValue("--header-reach") ?? "") || 0;
 
+const markStuck = () => markBarStuck(findPill(), findPart(readShownPart()), readHeaderReach());
+
+/**
+ * Where a part a switch brings in starts, so the header rides over it as it does over the part
+ * shown: once the header has gone, the part stays where it was left, but never so high that the
+ * header comes back, and while the header still shows, the parts are scrolled alike.
+ * @param {number} shownTop how far the part shown is scrolled
+ * @param {number} comingTop how far the part coming in was left scrolled
+ * @param {number} reach how far a part scrolls before the pill holds at the top
+ */
+export const findTopToShow = (shownTop, comingTop, reach) =>
+  shownTop >= reach ? Math.max(comingTop, reach) : shownTop;
+
+/**
+ * Scrolls a part a switch brings in to where the header rides as it does over the part the pill
+ * still names, before it shows.
+ * @param {HTMLElement} part
+ */
+function placeComingPart(part) {
+  const shownPart = findPart(readShownPart());
+  if (part === shownPart) return;
+  part.scrollTop = findTopToShow(shownPart.scrollTop, part.scrollTop, readHeaderReach());
+}
+
+// A swipe brings in the part beside the one shown, which shows as soon as the finger moves it.
+function placePartsBeside() {
+  holdBracketDots();
+  if (findParts().dataset.sliding !== "finger") return;
+  for (const part of readOrder().map(findPart)) placeComingPart(part);
+}
+
+// The header rides with the part the parts set off for from the start of a slide, which a switch
+// placed to hold it where it was, so it holds still while the parts slide, whatever the part
+// leaving still scrolls.
 /**
  * @param {number} index
  * @param {boolean} isSliding
  */
 function showOn(index, isSliding) {
+  const part = findPart(readOrder()[index]);
+  if (isSliding) placeComingPart(part);
+  followSeasonPart(part);
   showPillName(findTabList(), readOrder()[index], { isHandoff: isSliding });
   markStuck();
 }
 
+/** @param {Element} element */
+const findPartHolding = (element) => /** @type {HTMLElement} */ (element.closest(".season-part"));
+
 /**
- * Brings `element` up just under the pill, as a search's row for a part of the standings asks.
+ * Brings `element` up just under the pill, held at the top with the header gone, as a search's row
+ * for a part of the standings asks.
  * @param {Element} element
  */
 export function scrollUnderPill(element) {
-  const part = /** @type {HTMLElement} */ (element.closest(".season-part"));
+  const part = findPartHolding(element);
   const top =
-    element.getBoundingClientRect().top - part.getBoundingClientRect().top + part.scrollTop;
+    element.getBoundingClientRect().top -
+    part.getBoundingClientRect().top +
+    part.scrollTop -
+    parseFloat(getComputedStyle(part).paddingTop) +
+    readHeaderReach();
   part.scrollTo({ top, behavior: "instant" });
+}
+
+/**
+ * Where `element`, in a part of the tab, starts down the screen with its part and the page at their
+ * tops, so what a bracket sizes from it holds however far either is scrolled.
+ * @param {Element} element
+ */
+export const measureTopAtRest = (element) =>
+  element.getBoundingClientRect().top + findPartHolding(element).scrollTop + scrollY;
+
+/**
+ * Has `observer` watch what sets the room for `element`'s part: the part itself, and what stands
+ * above the tab's view, which moves the part's top once a tall Updates box holds the view at its
+ * least height (chrome.css).
+ * @param {ResizeObserver} observer
+ * @param {Element} element
+ */
+export function observeRoomForPart(observer, element) {
+  const part = findPartHolding(element);
+  observer.observe(part);
+  const view = part.closest("section.view");
+  for (const above of document.body.children) {
+    if (above === view) break;
+    observer.observe(above);
+  }
 }
 
 /**
@@ -131,7 +209,7 @@ export function startBracketStandings() {
     listPanels: () => readOrder().map(findPart),
     place: (index, position) => index - position,
     canGo: (direction) => Boolean(readOrder()[slidePanels.readShown() + direction]),
-    onSetOff: holdBracketDots,
+    onSetOff: placePartsBeside,
     onShow: showOn,
   });
   panels = slidePanels;

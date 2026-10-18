@@ -7,6 +7,7 @@ import {
 } from "./bracket.js";
 import { listRankedOrder, renderRankTag, renderClub } from "./clubs.js";
 import { readGameDay } from "./dates.js";
+import { measureTopAtRest, observeRoomForPart } from "#shared/bracket-standings.js";
 import { formatClockTime, formatShortDate, formatShortWeekday, nameDay } from "#shared/days.js";
 import { describeInning, renderOutLights } from "./games-view.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
@@ -61,8 +62,8 @@ const STACKED = {
   noteHeight: 22,
   lineHeight: 19,
   // Room above the tab bar for the round dots, which chrome.css pins there, and a gap above them.
-  // It matches what --tab-bar-clearance in chrome.css adds to the bar, so a bracket that fills the
-  // screen leaves its part nothing to scroll.
+  // It matches what --view-end-room in chrome.css leaves past the bar on a phone, so a bracket that
+  // fills the screen ends where its part's room does.
   tabBarClearance: 24,
   minGrowth: 0.5,
   maxGrowth: 3,
@@ -300,9 +301,8 @@ const solveGrowth = (room) =>
 function measureGrowth(wrap) {
   if (!isShown(wrap)) return renderedGrowth || 1;
   const part = wrap.closest(".season-part");
-  const top = wrap.getBoundingClientRect().top + part.scrollTop + scrollY;
   const fixedHeight = 2 * STACKED.lineHeight + 4 * SERIES_HEIGHT;
-  const growth = solveGrowth(findSpaceBottom(part) - top - fixedHeight);
+  const growth = solveGrowth(findSpaceBottom(part) - measureTopAtRest(wrap) - fixedHeight);
   const bounded = Math.min(STACKED.maxGrowth, Math.max(STACKED.minGrowth, growth));
   return Math.floor(bounded * 100) / 100;
 }
@@ -467,10 +467,10 @@ export function watchBracketSpace() {
   addEventListener("resize", redrawIfResized);
   wrap.addEventListener("scroll", markRoundScrolledTo, { capture: true, passive: true });
   new ResizeObserver(markRoundScrolledTo).observe(wrap);
-  // The bracket's part takes the room left under what's above it (pager.css), so it resizes as
-  // that content does. It waits a frame, as a redraw can change the part's own layout, and only
-  // while the bracket shows.
-  new ResizeObserver(() => {
+  // It waits a frame, as a redraw can change the part's own layout, and only while the bracket
+  // shows.
+  const resizes = new ResizeObserver(() => {
     if (isShown(wrap)) requestAnimationFrame(redrawIfResized);
-  }).observe(/** @type {HTMLElement} */ (wrap.closest(".season-part")));
+  });
+  observeRoomForPart(resizes, wrap);
 }

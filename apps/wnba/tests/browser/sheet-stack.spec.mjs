@@ -1,4 +1,5 @@
 import { test, expect, openApp } from "./harness.mjs";
+import { countTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
 import { expectShown, readLeft } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
@@ -435,7 +436,7 @@ test("a team's sheet opened from a game's opened from another team's slides in f
   await gameSheet.getByRole("button", { name: "Back to Team", exact: true }).click();
   await expectShown(teamSheet);
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");
-  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await expect.poll(() => countTimedAnimations(page)).toBe(0);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   const acesLefts = await readAcesLefts();
   expect(hasStopOnTheWay(acesLefts)).toBe(true);

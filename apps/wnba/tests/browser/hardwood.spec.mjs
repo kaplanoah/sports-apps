@@ -118,8 +118,12 @@ test("a pill's names are buttons, in sentence case in a button's words and heigh
       /** @type {Element} */ (document.querySelector(selector)).getBoundingClientRect();
     const header = readBox("header.top");
     const pill = readBox("#bracketStandingsPill .pager-tabs");
-    const parts = readBox("#bracketStandingsParts");
-    return { above: pill.top - header.bottom, height: pill.height, below: parts.top - pill.bottom };
+    const standings = readBox("#standingsWrap");
+    return {
+      above: pill.top - header.bottom,
+      height: pill.height,
+      below: standings.top - pill.bottom,
+    };
   });
   expect(room).toEqual({ above: 10, height: 36, below: 9 });
 

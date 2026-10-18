@@ -1,9 +1,11 @@
+import { isPast } from "./spring-scroll.js";
+
 /**
- * Ends a bar held over a list in a line once the list has scrolled under it, as a season's strip
- * of days (day-strip.css), the search's field (game-search.css), and the pill over the standings
- * and bracket (pager.css) do.
+ * Ends a bar held over a list in a line once the list has scrolled under it, past `heldAt`, how far
+ * the list scrolls before the bar holds.
  * @param {Element | null | undefined} bar
  * @param {Element | null | undefined} list
+ * @param {number} [heldAt]
  */
-export const markBarStuck = (bar, list) =>
-  bar?.classList.toggle("stuck", (list?.scrollTop ?? 0) > 0);
+export const markBarStuck = (bar, list, heldAt = 0) =>
+  bar?.classList.toggle("stuck", Boolean(list && isPast(list, heldAt)));

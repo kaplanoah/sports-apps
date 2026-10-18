@@ -65,6 +65,13 @@ export const isAwayFrom = (scroller, top) =>
   Math.abs(scroller.scrollTop - top) >= ARRIVED_WITHIN_PX;
 
 /**
+ * Whether `scroller` has scrolled past `top`, by more than a fraction of a pixel.
+ * @param {Element} scroller
+ * @param {number} top
+ */
+export const isPast = (scroller, top) => scroller.scrollTop - top >= ARRIVED_WITHIN_PX;
+
+/**
  * Scrolls `scroller` to `top` on the spring, or at once for someone who asks for less motion.
  * @param {Element} scroller
  * @param {number} top

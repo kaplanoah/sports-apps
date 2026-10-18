@@ -28,10 +28,14 @@ import {
   findSeasonPill,
   findSeasonTab,
   openSeasonPart,
+  scrollTabsIntoView,
 } from "../../../../tests/browser/season-tab.mjs";
 import {
   readSeasonPartScroll,
+  readSeasonRide,
+  scrollSeasonPart,
   scrollSeasonPartToEnd,
+  wheelPastSeasonPartEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -147,7 +151,24 @@ test("on a phone, each tab comes back where it was left, and a tab not shown yet
   expect(await readSeasonPartScroll(page, "standings")).toBe(left);
 });
 
-test("on a phone, the header and the pill hold still while the standings scroll under the pill, which ends in a line once they're under it, even past their end", async ({
+test("on a phone, the header and the pill ride up as far as the standings scroll, the page holding still", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  const before = await readSeasonRide(page);
+
+  await scrollSeasonPart(page, "standings", 40);
+
+  await expect
+    .poll(() => readSeasonRide(page))
+    .toEqual({ ...before, headerTop: before.headerTop - 40, pillTop: before.pillTop - 40 });
+  await expect(page.locator("#bracketStandingsPill")).toHaveCSS("box-shadow", "none");
+});
+
+test("on a phone, once the header is gone, the pill holds at the top and ends in a line as the standings scroll under it, even past their end", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE);
@@ -155,20 +176,14 @@ test("on a phone, the header and the pill hold still while the standings scroll 
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
   const pill = page.locator("#bracketStandingsPill");
-  const readTops = () =>
-    page.evaluate(() => ({
-      header: Math.round(document.querySelector("header").getBoundingClientRect().top),
-      pill: Math.round(document.getElementById("bracketStandingsPill").getBoundingClientRect().top),
-      page: Math.round(scrollY),
-    }));
-  const before = await readTops();
-  await expect(pill).toHaveCSS("box-shadow", "none");
 
   await scrollSeasonPartToEnd(page, "standings");
   await page.mouse.move(PHONE.width / 2, 500);
-  await page.mouse.wheel(0, 800);
 
-  expect(await readTops()).toEqual(before);
+  expect(await wheelPastSeasonPartEnd(page, "standings")).toBe(0);
+  expect(await readSeasonRide(page)).toMatchObject({ pillTop: 10, pageScroll: 0 });
+  const header = await page.locator("header.top").boundingBox();
+  expect(header.y + header.height).toBeLessThanOrEqual(10);
   await expect(pill).toHaveCSS(
     "box-shadow",
     `${await readColor(page, "--divider")} 0px 1px 0px 0px`,
@@ -506,6 +521,7 @@ for (const { screen, viewport } of [
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator("#teamSheet")).toBeHidden();
+      await scrollTabsIntoView(page);
       await page.getByRole("tab", { name: "News" }).click();
       await expect(page.locator(".news-more-title")).toBeVisible();
       expect(await listTextOffRoles(page)).toEqual([]);
@@ -564,6 +580,7 @@ for (const { screen, viewport } of [
       expect(await listTapsOffButtons(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator("#teamSheet")).toBeHidden();
+      await scrollTabsIntoView(page);
       await page.getByRole("tab", { name: "News" }).click();
       await expect(page.locator(".news-more-title")).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);

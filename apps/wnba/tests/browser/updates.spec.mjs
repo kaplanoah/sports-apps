@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { readSeasonRide, scrollSeasonPartToEnd } from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -377,19 +378,23 @@ test.describe("on a phone, with a release note out", () => {
     expect(await notes.locator(".more").evaluate(readTextLeft)).toBe(noteLeft);
   });
 
-  test("on a small phone, a full Updates box leaves the bracket and the Games list most of the screen, and the page scrolls the rest of each into view", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 320, height: 568 });
-    await serveReleaseNote(page, [
-      CHANNELS_NOTE,
-      { at: "2026-09-28T15:00:00Z", text: "Rosters, with each player's stats" },
-      { at: "2026-09-27T15:00:00Z", text: "News from each team's outlets" },
-    ]);
-    await openApp(page, { updatesBox: "shown" });
-    await expect(page.locator("#updates .updates-notes .what")).toHaveCount(3);
-    /** @param {string} selector */
-    const expectMostOfScreen = async (selector) => {
+  test.describe("on a small phone, with a full Updates box", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.setViewportSize({ width: 320, height: 568 });
+      await serveReleaseNote(page, [
+        CHANNELS_NOTE,
+        { at: "2026-09-28T15:00:00Z", text: "Rosters, with each player's stats" },
+        { at: "2026-09-27T15:00:00Z", text: "News from each team's outlets" },
+      ]);
+    });
+
+    /**
+     * Opens the app with its box full, and checks a view keeps most of the screen and the page
+     * scrolls the rest of it into view.
+     * @param {import("@playwright/test").Page} page
+     * @param {string} selector
+     */
+    const expectMostOfScreen = async (page, selector) => {
       const view = page.locator(selector);
       await page.evaluate(() => document.fonts.ready);
       expect(await view.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(
@@ -401,12 +406,41 @@ test.describe("on a phone, with a release note out", () => {
       ).toBeLessThanOrEqual(568);
     };
 
-    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
-    await expectMostOfScreen("#view-bracket-standings");
+    test("the box rides away with the bracket as it scrolls, until the pill holds at the top", async ({
+      page,
+    }) => {
+      await openApp(page, { updatesBox: "shown" });
+      await expect(page.locator("#updates .updates-notes .what")).toHaveCount(3);
+      await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
 
-    await page.getByRole("tab", { name: "Games" }).click();
-    await expect(page.locator("#view-games .day-list")).toBeVisible();
-    await expectMostOfScreen("#view-games");
+      await scrollSeasonPartToEnd(page, "bracket");
+
+      await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: 10, pageScroll: 0 });
+      const box = await page.locator("#updates").boundingBox();
+      expect(box.y + box.height).toBeLessThanOrEqual(10);
+    });
+
+    test("where the header stays put, the box leaves the bracket most of the screen, and the page scrolls the rest of it into view", async ({
+      page,
+    }) => {
+      await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+      await openApp(page, { updatesBox: "shown" });
+      await expect(page.locator("#updates .updates-notes .what")).toHaveCount(3);
+      await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+
+      await expectMostOfScreen(page, "#view-bracket-standings");
+    });
+
+    test("the box leaves the Games list most of the screen, and the page scrolls the rest of it into view", async ({
+      page,
+    }) => {
+      await openApp(page, { updatesBox: "shown" });
+      await expect(page.locator("#updates .updates-notes .what")).toHaveCount(3);
+      await page.getByRole("tab", { name: "Games" }).click();
+      await expect(page.locator("#view-games .day-list")).toBeVisible();
+
+      await expectMostOfScreen(page, "#view-games");
+    });
   });
 
   test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {

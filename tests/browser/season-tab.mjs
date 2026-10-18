@@ -1,10 +1,31 @@
 /**
+ * Brings the page's tabs back into view as a person does, scrolling the season's part shown back
+ * to its top, since on a wide screen the tabs ride away with the header as it scrolls.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function scrollTabsIntoView(page) {
+  const isTabInView = await findSeasonTab(page).evaluate((tab) => {
+    const box = tab.getBoundingClientRect();
+    return box.bottom > 0 && box.top < innerHeight;
+  });
+  if (isTabInView) return;
+  await page
+    .locator("#bracketStandingsParts > .season-part")
+    .evaluateAll((parts) =>
+      parts
+        .find((part) => getComputedStyle(part).visibility === "visible")
+        ?.scrollTo({ top: 0, behavior: "instant" }),
+    );
+}
+
+/**
  * Opens the tab of a season's standings and bracket on one of them, as a tap on the tab and then
  * on the part's name in its pill does.
  * @param {import("@playwright/test").Page} page
  * @param {"Standings" | "Bracket"} name
  */
 export async function openSeasonPart(page, name) {
+  await scrollTabsIntoView(page);
   await findSeasonTab(page).click();
   await findSeasonPill(page).getByRole("tab", { name, exact: true }).click();
 }

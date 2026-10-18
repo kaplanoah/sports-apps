@@ -20,7 +20,9 @@
 // - Nothing asks for a layer ahead of time: the only will-change is on [data-dragged], which a
 //   dialog carries only while a finger drags it down.
 // - Nothing animates at rest: once a slide, a spring back, or a close ends,
-//   document.getAnimations() is empty and nothing asks for an animation frame.
+//   document.getAnimations() holds nothing that plays over time, only the season tab's header's
+//   ride, which moves only as its part scrolls (season-header.js), and nothing asks for an
+//   animation frame.
 // - Nothing filters what is behind it: no backdrop-filter anywhere.
 
 import { noteSheetStep } from "./sheet-log.js";

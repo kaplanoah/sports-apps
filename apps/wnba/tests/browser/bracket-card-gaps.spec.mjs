@@ -91,7 +91,7 @@ test.describe("on a phone, the bracket", () => {
     expect(gaps.lastNoteToDots).toBeGreaterThan(100);
   });
 
-  test("keeps its tightest gaps on a short screen, where the page scrolls", async ({ page }) => {
+  test("keeps its tightest gaps on a short screen, where its part scrolls", async ({ page }) => {
     await page.setViewportSize({ width: PHONE.width, height: 568 });
     await openApp(page);
     const gaps = await readCardGaps(page);
@@ -116,12 +116,13 @@ test.describe("on a phone, the bracket", () => {
     expect((await readCardGaps(page)).between).toEqual(atTop.between);
   });
 
-  test("keeps its gaps when it lays out again with the page scrolled under a tall box over the bracket, as a full Updates box leaves it", async ({
+  test("where the header stays put, keeps its gaps when it lays out again with the page scrolled under a tall box over the bracket, as a full Updates box leaves it", async ({
     page,
   }) => {
     // A screen tall enough for the box to scroll the page while the cards spread between their
     // tightest and widest gaps.
     await page.setViewportSize({ width: PHONE.width, height: 1400 });
+    await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
     await openApp(page);
     await page.locator("header").evaluate((header) => {
       const box = Object.assign(document.createElement("div"), {

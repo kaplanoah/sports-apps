@@ -2,8 +2,10 @@ import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
 import { findSeasonPill, findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import {
   readSeasonPartScroll,
+  readSeasonRide,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -224,7 +226,7 @@ test.describe("on a phone", () => {
     release();
   });
 
-  test("the standings show as far down as they were left, under the pill's line, before the page's code arrives, and stay there once it runs", async ({
+  test("the standings show as far down as they were left, with the header gone and the pill held at the top in its line, before the page's code arrives, and stay there once it runs", async ({
     page,
   }) => {
     await openApp(page);
@@ -239,11 +241,12 @@ test.describe("on a phone", () => {
 
     await expect(page.locator("#standingsWrap table").first()).toBeVisible();
     await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(left);
+    await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: 10 });
     await expect(pill).toHaveClass(/\bstuck\b/);
     release();
-    await page.waitForLoadState("load");
-    await expect(findSeasonTab(page)).toHaveAccessibleName("Bracket");
+    await waitForLoadToSettle(page);
     expect(await readSeasonPartScroll(page, "standings")).toBe(left);
+    expect(await readSeasonRide(page)).toMatchObject({ pillTop: 10 });
     await expect(pill).toHaveClass(/\bstuck\b/);
   });
 

@@ -20,6 +20,7 @@ import {
 } from "../../../../tests/browser/round-dots.mjs";
 import {
   expectPageHeldStill,
+  readHeaderReach,
   readSeasonPartScroll,
   scrollSeasonPartToEnd,
   trackSeasonFrames,
@@ -293,6 +294,15 @@ const readStackedSpaces = (page) =>
     };
   });
 
+/**
+ * The spaces inside the stacked bracket, which hold however far its part or the page is scrolled.
+ * @param {import("@playwright/test").Page} page
+ */
+const readInnerSpaces = async (page) => {
+  const { belowLine, betweenRows } = await readStackedSpaces(page);
+  return { belowLine, betweenRows };
+};
+
 test("on a phone too short for the bracket, its spaces are at their tightest", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 600 });
   await openBracket(page);
@@ -367,6 +377,18 @@ test("narrowing the window until the whole bracket can't show switches to the st
   expect((await al.boundingBox()).y).toBeLessThan((await nl.boundingBox()).y);
 });
 
+/**
+ * How far the stacked bracket ends above its part's bottom space, where the part's padding starts.
+ * @param {import("@playwright/test").Page} page
+ */
+const readSpaceLeft = (page) =>
+  page.evaluate(() => {
+    const part = document.querySelector('#bracketStandingsParts > [data-part="bracket"]');
+    const spaceBottom =
+      part.getBoundingClientRect().bottom - parseFloat(getComputedStyle(part).paddingBottom);
+    return spaceBottom - document.querySelector(".bracket-stage").getBoundingClientRect().bottom;
+  });
+
 test("on a laptop too narrow for the whole bracket, the stacked bracket fills down to its part's bottom space", async ({
   page,
 }) => {
@@ -374,19 +396,39 @@ test("on a laptop too narrow for the whole bracket, the stacked bracket fills do
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head")).toHaveCount(2);
 
-  const { stageBottom, spaceBottom } = await page.evaluate(() => {
-    const part = document.querySelector('#bracketStandingsParts > [data-part="bracket"]');
-    return {
-      stageBottom: document.querySelector(".bracket-stage").getBoundingClientRect().bottom,
-      spaceBottom:
-        part.getBoundingClientRect().bottom - parseFloat(getComputedStyle(part).paddingBottom),
-    };
-  });
-  expect(spaceBottom - stageBottom).toBeGreaterThanOrEqual(0);
-  expect(spaceBottom - stageBottom).toBeLessThan(8);
+  const spaceLeft = await readSpaceLeft(page);
+  expect(spaceLeft).toBeGreaterThanOrEqual(0);
+  expect(spaceLeft).toBeLessThan(8);
   expect(await readCardTops(page, "Wild Card")).toEqual(
     await readCardTops(page, "Division Series"),
   );
+});
+
+test("on a laptop where the header stays put, the stacked bracket keeps filling down to its part's bottom space when it redraws with the page scrolled under a tall box over it", async ({
+  page,
+}) => {
+  // A screen tall enough for the bracket to fit under the box, which scrolls the page.
+  await page.setViewportSize({ width: LAPTOP.width, height: 1200 });
+  await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+  await openBracket(page);
+  await expect(page.locator("#bracketWrap .league-head")).toHaveCount(2);
+  await page.locator("header").evaluate((header) => {
+    const box = Object.assign(document.createElement("div"), {
+      style: "flex: none; height: 400px",
+    });
+    header.after(box);
+  });
+  const isFilling = async () => {
+    const spaceLeft = await readSpaceLeft(page);
+    return spaceLeft >= 0 && spaceLeft < 8;
+  };
+  await expect.poll(isFilling).toBe(true);
+  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+
+  await page.evaluate(() => dispatchEvent(new Event("resize")));
+
+  expect(await isFilling()).toBe(true);
 });
 
 const readBracketFit = (page) =>
@@ -407,17 +449,21 @@ const readBracketFit = (page) =>
     };
   });
 
-const expectBracketToFillHeight = async (page) => {
-  await expect
+/**
+ * Waits for the bracket to fill the height down to just above the round dots, with its lowest note
+ * at its bottom, all from one redraw.
+ * @param {import("@playwright/test").Page} page
+ */
+const expectBracketToFillHeight = (page) =>
+  expect
     .poll(async () => {
-      const { stageBottom, dotsTop } = await readBracketFit(page);
-      return dotsTop - stageBottom;
+      const { stageBottom, lowestNoteBottom, dotsTop } = await readBracketFit(page);
+      return {
+        reachesDots: dotsTop - stageBottom >= 8 && dotsTop - stageBottom < 18,
+        endsAtNotes: stageBottom - lowestNoteBottom < 4,
+      };
     })
-    .toBeGreaterThanOrEqual(8);
-  const { stageBottom, lowestNoteBottom, dotsTop } = await readBracketFit(page);
-  expect(dotsTop - stageBottom).toBeLessThan(18);
-  expect(stageBottom - lowestNoteBottom).toBeLessThan(4);
-};
+    .toEqual({ reachesDots: true, endsAtNotes: true });
 
 test("on a phone, the bracket fills the height above the tab bar and swipes sideways", async ({
   page,
@@ -454,17 +500,38 @@ test("on a phone, the bracket fills the height above the tab bar again when what
   await expectBracketToFillHeight(page);
 });
 
+test("on a phone where the header stays put, the bracket fills the height again when a tall Updates box over it grows, holding the view at its least height", async ({
+  page,
+}) => {
+  // A screen tall enough for the bracket to fit under the box, which leaves the view its least
+  // height, most of the screen.
+  await page.setViewportSize({ width: 390, height: 1450 });
+  await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
+  await openBracket(page);
+  await expect(page.locator(".bracket-stage")).toBeVisible();
+  const updates = page.locator("#updates");
+  await updates.evaluate((box) => {
+    box.removeAttribute("hidden");
+    Object.assign(/** @type {HTMLElement} */ (box).style, { flex: "none", height: "500px" });
+  });
+  await expectBracketToFillHeight(page);
+  const view = page.locator("#view-bracket-standings");
+  const readViewHeight = () => view.evaluate((element) => element.getBoundingClientRect().height);
+  const viewHeight = await readViewHeight();
+
+  await updates.evaluate((box) => (box.style.height = "520px"));
+
+  await expectBracketToFillHeight(page);
+  expect(await readViewHeight()).toBe(viewHeight);
+});
+
 test("on a phone, the bracket keeps its spaces when it redraws however far its part is scrolled", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 600 });
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head.al")).toBeVisible();
-  const readInnerSpaces = async () => {
-    const { belowLine, betweenRows } = await readStackedSpaces(page);
-    return { belowLine, betweenRows };
-  };
-  const atTop = await readInnerSpaces();
+  const atTop = await readInnerSpaces(page);
   await page.locator("#bracketWrap").evaluate((wrap) => {
     const room = Object.assign(document.createElement("div"), { style: "height: 2000px" });
     wrap.after(room);
@@ -473,13 +540,14 @@ test("on a phone, the bracket keeps its spaces when it redraws however far its p
 
   await page.evaluate(() => dispatchEvent(new Event("resize")));
 
-  expect(await readInnerSpaces()).toEqual(atTop);
+  expect(await readInnerSpaces(page)).toEqual(atTop);
 });
 
-test("on a phone, the bracket keeps its spaces when it redraws with the page scrolled under a tall box over it, as a full Updates box leaves it", async ({
+test("on a phone where the header stays put, the bracket keeps its spaces when it redraws with the page scrolled under a tall box over it, as a full Updates box leaves it", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 1400 });
+  await page.addInitScript(() => Reflect.deleteProperty(window, "ScrollTimeline"));
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head.al")).toBeVisible();
   await page.locator("header").evaluate((header) => {
@@ -491,20 +559,16 @@ test("on a phone, the bracket keeps its spaces when it redraws with the page scr
   await expect
     .poll(async () => (await readBracketFit(page)).stageBottom)
     .toBeLessThan(await page.evaluate(() => innerHeight + scrollY));
-  const readInnerSpaces = async () => {
-    const { belowLine, betweenRows } = await readStackedSpaces(page);
-    return { belowLine, betweenRows };
-  };
-  const atTop = await readInnerSpaces();
+  const atTop = await readInnerSpaces(page);
   await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
   expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
 
   await page.evaluate(() => dispatchEvent(new Event("resize")));
 
-  expect(await readInnerSpaces()).toEqual(atTop);
+  expect(await readInnerSpaces(page)).toEqual(atTop);
 });
 
-test("on a phone a little short of room, the bracket's spaces shrink so it fits above the round dots", async ({
+test("on a phone a little short of room, the bracket's spaces shrink so it fits above the round dots, its part scrolling only as far as the header rides", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 830 });
@@ -518,7 +582,7 @@ test("on a phone a little short of room, the bracket's spaces shrink so it fits 
     await page
       .locator('#bracketStandingsParts > [data-part="bracket"]')
       .evaluate((part) => part.scrollHeight - part.clientHeight),
-  ).toBeLessThanOrEqual(1);
+  ).toBeLessThanOrEqual((await readHeaderReach(page)) + 1);
 });
 
 test("on a phone, the bracket redraws for a new screen height and keeps its sideways scroll", async ({

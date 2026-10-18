@@ -48,8 +48,6 @@
  * and on phones:
  *   --tab-bar-bottom                           how far the tab bar floats above the screen's bottom
  *   --tab-bar-height                           the tab bar's height
- *   --tab-bar-clearance                        the room the tab bar takes at the page's end, which
- *                                              --view-end-room leaves there
  *
  * The icons each look gives the Home Screen come from the stylesheet worker/page-files.mjs builds
  * from an app's icon PNGs, home-screen-icons.css, as --home-screen-icon-light, -dark, and, for an
@@ -215,8 +213,9 @@ section.view.active {
 /* The view grows from nothing into the room left, rather than shrink from all it holds, which
    rounds to a slightly different height as it draws and would resize it for no change on the
    screen. It keeps most of the screen, though, so a tall Updates box over it (updates.js) never
-   leaves it a sliver: the page then scrolls the rest of it into view. */
-section.view.active:has(> :is(.day-view, .season-parts)) {
+   leaves it a sliver: the page then scrolls the rest of it into view. A season's parts the header
+   rides up with (season-header.js) take the whole page instead. */
+section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   display: flex;
   flex: 1 1 0;
   min-height: 60svh;
@@ -920,8 +919,7 @@ body.kbd .welcome-continue:focus {
   :root {
     --tab-bar-bottom: max(calc(env(safe-area-inset-bottom) - 12px), 16px);
     --tab-bar-height: 62px;
-    --tab-bar-clearance: calc(var(--tab-bar-bottom) + 86px);
-    --view-end-room: var(--tab-bar-clearance);
+    --view-end-room: calc(var(--tab-bar-bottom) + 86px);
   }
   /* The tab bar floats over the page, so the tabs' row leaves no space under the header. */
   nav.tabs {

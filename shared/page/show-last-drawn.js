@@ -96,9 +96,12 @@ function showPart(id, { markup, hidden, classes, style, scrolls, holderTop, save
   if (typeof style === "string") element.setAttribute("style", keepCustomProperties(style));
   restoreScrolls(element, scrolls, savedAt);
   // A part that scrolls in a holder of its own, like the standings in theirs, goes back to where
-  // the holder was scrolled.
-  if (Number(holderTop) > 0 && element.parentElement)
-    element.parentElement.scrollTop = Number(holderTop);
+  // the holder was scrolled, which its code can take again once it knows the holder's room.
+  const holder = element.parentElement;
+  if (Number(holderTop) > 0 && holder) {
+    holder.scrollTop = Number(holderTop);
+    holder.dataset.putBackTop = String(holderTop);
+  }
 }
 
 /** @param {any} saved */

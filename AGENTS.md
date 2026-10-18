@@ -449,6 +449,8 @@
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
   with the one it opens on first in the pill over them, side by side, which a tap on a name or a swipe slides between,
   a swipe on the bracket scrolling it to its end first, as a team's Roster does, in `bracket-standings.js`,
+  each scrolling on its own with the header riding up over the one shown until the pill holds at the top,
+  as a profile's tabs do in a phone's apps, in `season-header.js`,
   the accent block under a pill's shown name, which never travels between names but hands off from one to the next once a tap or a finger's lift sets what's under it off,
   in `pill-thumb.js`, a season's games as one list of its game days under a strip of every day,
   whose chosen day is the one at the list's top, its box holding still while the list's scroll slides the dates behind it on a spring (`strip-slide.js`),
@@ -663,8 +665,9 @@ Delete it once the app's first PR merges.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
    around its own `styles.css`, which sets every token their top comments list,
-   and calls `openLastTab()`, `showLastDrawn()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
-   in that order, so a part on the shown tab can take back its sideways scroll, and the welcome opens over any sheet put back.
+   and calls `openLastTab()`, `showLastDrawn()`, `followSeasonPart()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
+   in that order, so a part on the shown tab can take back its sideways scroll, the header rides as far as the season's part put back,
+   and the welcome opens over any sheet put back.
    Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
    load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
    It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
@@ -761,7 +764,7 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
+  `show-last-drawn.js`, `season-header.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
   but not to its comments, blank lines, or formatting, which draw nothing;
   a change to its shared stylesheets (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),

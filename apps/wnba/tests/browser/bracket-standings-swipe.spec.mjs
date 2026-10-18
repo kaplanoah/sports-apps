@@ -9,7 +9,10 @@ import {
 } from "../../../../tests/browser/round-dots.mjs";
 import {
   expectPageHeldStill,
+  readHeaderReach,
   readSeasonPartScroll,
+  readSeasonRide,
+  scrollSeasonPart,
   scrollSeasonPartToEnd,
   trackSeasonFrames,
 } from "../../../../tests/browser/season-scroll.mjs";
@@ -122,7 +125,7 @@ test("a swipe right on the bracket, before its first part, leaves it where it is
   await expectPartShown(page, "bracket");
 });
 
-test("a swipe that brings the bracket in from far down the standings shows it where it was, under a pill without its line, and leaves the standings where they were", async ({
+test("a swipe that brings the bracket in from far down the standings shows it from its top with the header still gone, under a pill without its line, and leaves the standings where they were", async ({
   page,
 }) => {
   await openApp(page);
@@ -137,7 +140,8 @@ test("a swipe that brings the bracket in from far down the standings shows it wh
 
   await expectPartShown(page, "bracket");
   await expect(pill).not.toHaveClass(/\bstuck\b/);
-  expect(await readSeasonPartScroll(page, "bracket")).toBe(0);
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(await readHeaderReach(page));
+  expect(await readSeasonRide(page)).toMatchObject({ pillTop: 10 });
   expect(await readSeasonPartScroll(page, "standings")).toBe(standingsScroll);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(PHONE.width);
 });
@@ -303,6 +307,26 @@ test.describe("in full motion", () => {
 
     expect(await readRoundDotsTop(page)).toBe(restingTop);
     await release();
+  });
+
+  test("the round dots go back to their height over the tab bar when the bracket's part scrolls while a finger holds it part way to the standings, and hold it on every frame of the slide after", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expectPartShown(page, "bracket");
+    await scrollBracketToEnd(page);
+    const restingTop = await readRoundDotsTop(page);
+
+    const release = await drag(page, { x: 330, y: 400 }, { x: -150 }, { durationMs: 1000 });
+    await expect(page.locator("#bracketStandingsParts")).toHaveAttribute("data-sliding", "finger");
+    await scrollSeasonPart(page, "bracket", 40);
+    await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBe(40);
+    await expect.poll(() => readRoundDotsTop(page)).toBe(restingTop);
+    const readFrames = await trackRoundDots(page);
+    await release();
+    await expectPartShown(page, "standings");
+
+    expectDotsHeldWithBracket(await readFrames(), restingTop);
   });
 
   test("the round dots stay just above the tab bar when the screen resizes while a finger holds the bracket part way to the standings", async ({
