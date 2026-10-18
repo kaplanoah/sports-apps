@@ -24,6 +24,7 @@ import { dayStripLog } from "./day-strip-log.js";
 import { html, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 import { watchTimeAway } from "./resume.js";
 import { scrollWithSpring } from "./spring-scroll.js";
 import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
@@ -293,7 +294,7 @@ function followTopDay(day) {
   const cannotSlide = describeWhyNoSlide({
     hasCells: !!strip && !!from && !!to,
     isListInHand,
-    isReducedMotion: isReducedMotion(),
+    isReducedMotion: prefersReducedMotion(),
   });
   dayStripLog.noteStep(
     `top day ${day}, ${cannotSlide ? `chosen at once: ${cannotSlide}` : "slide"}`,
@@ -378,9 +379,8 @@ function findTopDay() {
   return listed[isPassed ? low + 1 : low].dataset.day ?? null;
 }
 
-const isReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 /** @returns {ScrollBehavior} */
-const chooseMotion = () => (isReducedMotion() ? "instant" : "smooth");
+const chooseMotion = () => (prefersReducedMotion() ? "instant" : "smooth");
 
 // The list keeps the gap between its days above its first, which is the gap a day brought to the
 // top keeps under the bar.
@@ -422,7 +422,7 @@ function showDay(day, motion) {
     motion,
     distance: top - list.scrollTop,
     screenHeight: list.clientHeight,
-    isReducedMotion: isReducedMotion(),
+    isReducedMotion: prefersReducedMotion(),
   });
   const isJump = trip === "jump";
   dayStripLog.noteStep(
@@ -883,9 +883,9 @@ function isOnStartDay() {
 function pulseStartDay() {
   const cell = shown && findCell(shown.startDay);
   dayStripLog.noteStep(
-    `already on ${shown?.startDay}, ${isReducedMotion() ? "less motion, no pulse" : "pulse"}`,
+    `already on ${shown?.startDay}, ${prefersReducedMotion() ? "less motion, no pulse" : "pulse"}`,
   );
-  if (!cell || isReducedMotion()) return;
+  if (!cell || prefersReducedMotion()) return;
   cell.animate(
     [
       { transform: "scale(1)" },

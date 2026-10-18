@@ -19,6 +19,7 @@ import {
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
 import { capitalize, html, joinWithSeparator, setHtml } from "./html.js";
 import { describeAnimations, describeShownDayLists } from "./list-log.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 import { loadRelease } from "./release.js";
 import { watchTimeAway } from "./resume.js";
 import { forgetServiceWorkerSteps, readServiceWorkerSteps } from "./service-worker.js";
@@ -444,7 +445,7 @@ const readPageFacts = () => ({
   width: innerWidth,
   height: innerHeight,
   pixelRatio: devicePixelRatio,
-  prefersReducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+  prefersReducedMotion: prefersReducedMotion(),
   theme: document.documentElement.dataset.theme,
   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   openedAt,

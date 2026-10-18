@@ -2,7 +2,8 @@ import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
 import { holdRoundDots } from "./round-dots.js";
-import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
+import { createSlidePanels } from "./slide-panels.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
