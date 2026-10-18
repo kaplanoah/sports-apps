@@ -301,6 +301,62 @@ test("a finding that names no line goes on its file without one, or off the pull
   );
 });
 
+test("a finding whose line is missing or isn't a whole number goes on its file without one, or off the pull request's files by its file alone", async () => {
+  const checks = [
+    {
+      area: 1,
+      items: [
+        {
+          verdict: "confirmed",
+          weight: "Important",
+          path: "shared/page/sheet.js",
+          body: "no line",
+        },
+      ],
+    },
+  ];
+  const across = readAcross(
+    JSON.stringify({
+      duplicates: [],
+      added: [finding({ path: "shared/page/tape.js", line: "3", body: "a line as text" })],
+      unjudged: [],
+    }),
+  );
+  const findings = listToPost(listCheckedFindings(checks), across);
+  for (const isFileTaken of [true, false]) {
+    const { calls, callGitHub } = fakeGitHub(
+      (body) => body.path === undefined || (isFileTaken && body.subject_type === "file"),
+    );
+    const result = await postFindings(callGitHub, {
+      pullNumber: "7",
+      sha: SHA,
+      findings,
+      posted: new Map(),
+    });
+    assert.deepEqual(result, { weights: ["Important", "Nit"], repeated: 0 });
+    assert.ok(calls.every(({ body }) => body.line === undefined));
+    const onFiles = calls.filter(({ body }) => body.subject_type === "file");
+    assert.deepEqual(
+      onFiles.map(({ path, body }) => [path, body.path]),
+      [
+        ["/pulls/7/comments", "shared/page/sheet.js"],
+        ["/pulls/7/comments", "shared/page/tape.js"],
+      ],
+    );
+    assert.match(onFiles[0].body.body, /^\*\*Important\*\* no line\n\n<!-- claude-finding/);
+    assert.match(onFiles[1].body.body, /^\*\*Nit\*\* a line as text\n\n<!-- claude-finding/);
+    if (isFileTaken) {
+      assert.equal(calls.length, 2);
+    } else {
+      assert.equal(calls.at(-1)?.path, "/issues/7/comments");
+      assert.match(
+        calls.at(-1)?.body.body,
+        /\n- `shared\/page\/sheet\.js`: \*\*Important\*\* no line\n[^]*\n- `shared\/page\/tape\.js`: \*\*Nit\*\* a line as text\n/,
+      );
+    }
+  }
+});
+
 test("a finding said twice word for word is posted once, at the heaviest weight a checker settled", () => {
   const posted = (
     /** @type {ReturnType<typeof finding>[]} */ checked,

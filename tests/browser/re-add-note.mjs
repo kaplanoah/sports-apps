@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
-import { LOCKED_PAGE_PATH } from "./harness.mjs";
+import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
+import { holdRequests } from "./hold-requests.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
 
 const markOnHomeScreen = () => {
@@ -72,7 +73,7 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
  */
 
 const HANDOFF_PATH = "access/handoff";
-const HANDOFF_ROUTE = `**/${HANDOFF_PATH}`;
+const HANDOFF_ROUTE = matchPath(`${LOCKED_PAGE_PATH}${HANDOFF_PATH}`);
 
 /** @param {string} look */
 const buildHandoffLink = (look) =>
@@ -141,24 +142,6 @@ async function leaveFor(page, ms) {
 }
 
 /**
- * Holds the next handoff's answer until the returned function lets it through.
- * @param {import("@playwright/test").Page} page
- */
-async function holdNextHandoff(page) {
-  /** @type {(value?: unknown) => void} */
-  let release = () => {};
-  const held = new Promise((resolve) => {
-    release = resolve;
-  });
-  const holdAnswer = async (route) => {
-    await held;
-    await route.fallback();
-  };
-  await page.route(HANDOFF_ROUTE, holdAnswer, { times: 1 });
-  return release;
-}
-
-/**
  * Picks the light look and then the dark one before the light one's handoff answers, and checks
  * the link stays on the dark one, then that the note renews its handoff halfway through, tries
  * again soon after a renewal fails, renews as it comes back from short trips away once that's
@@ -174,7 +157,7 @@ export async function checkHandoffRenewal(app) {
   const readAnswered = async () => (await readHandoffs(page)).answered;
   const readRead = async () => (await readHandoffs(page)).read;
 
-  const releaseFirst = await holdNextHandoff(page);
+  const releaseFirst = await holdRequests(page, HANDOFF_ROUTE, { times: 1 });
   await page.getByRole("radio", { name: looks.light }).check();
   await page.getByRole("radio", { name: looks.dark }).check();
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
@@ -201,7 +184,7 @@ export async function checkHandoffRenewal(app) {
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
 
   // A return while a renewal's answer is still out, past when it was due, asks no second time.
-  const releaseRenewal = await holdNextHandoff(page);
+  const releaseRenewal = await holdRequests(page, HANDOFF_ROUTE, { times: 1 });
   await page.clock.runFor(5 * 60 * 1000);
   expect(await readAsked()).toBe(6);
   await leaveFor(page, 110 * 1000);
