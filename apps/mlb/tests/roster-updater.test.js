@@ -452,6 +452,24 @@ test("each run saves its status: when it ran, how many requests it made, and wha
   assert.match(status.lastFailure.message, /^Reading every player's numbers failed: /);
 });
 
+test("a run that fails as a whole saves its status, naming the season's rosters", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const run = createRun();
+  const readStored = run.storage.get;
+  run.storage.get = async (/** @type {string} */ key) => {
+    if (key === `roster-reads:${SEASON}`) throw new Error("The store answered 500");
+    return readStored(key);
+  };
+  await run.runJob();
+
+  const status = run.docs.stored.get(STATUS_KEY);
+  assert.equal(status.ranAt, new Date(NOW).toISOString());
+  assert.equal(
+    status.lastFailure.message,
+    `Keeping ${SEASON}'s rosters failed: The store answered 500`,
+  );
+});
+
 test("each rostered player's last games are read as his club's roster arrives, a few batches a run, and once more as they settle", async () => {
   const run = createRun();
   /** @type {number[][]} */

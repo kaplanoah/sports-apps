@@ -8,6 +8,7 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../worker/src/roster.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 // The league's rosters of the Liberty, Dream, Aces, Fever, and Wings this season and the Liberty's
 // last, and its list of every player trimmed to theirs, as they were.
@@ -150,10 +151,16 @@ test("a roster asked for no team or no real season, or one the league doesn't an
     status: 400,
     body: { error: { code: "invalid_argument", message: "team must name a WNBA team" } },
   });
-  assert.equal((await askForRoster(listAnswers("NYL", 2026), "team=NYL&season=1990")).status, 400);
+  await assertErrorAnswer(
+    await askForRoster(listAnswers("NYL", 2026), "team=NYL&season=1990"),
+    400,
+    "invalid_argument",
+  );
   const failed = await askForRoster({}, "team=NYL&season=2026");
-  assert.equal(failed.status, 502);
-  assert.match(failed.body.error.message, /^Couldn't read the WNBA: The WNBA answered 404/);
+  assert.match(
+    await assertErrorAnswer(failed, 502, "upstream_error"),
+    /^Couldn't read the WNBA: The WNBA answered 404/,
+  );
 });
 
 test("a roster read again soon reuses the one just read", async () => {
