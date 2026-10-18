@@ -1,6 +1,7 @@
 // The settings panel's notifications switch: subscribes this device to the Worker's pushes. The
 // note under it says what the app's notifications tell, or why the switch can't do its job, and,
-// where they come only from the Home Screen, ends with a ? that opens the welcome's steps.
+// where they come only from the Home Screen, ends, on a touch screen, with a ? that opens the
+// welcome's steps.
 import { reloadWhenSignedOut } from "./access.js";
 
 import { isIos, isOnHomeScreen, isTouchDevice } from "./device.js";
