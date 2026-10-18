@@ -91,7 +91,12 @@ test("another release's version file names that release, so a page still running
 
   const replaced = await requestPageFile(worker, "release/def5678/version.json");
   assert.equal(replaced.status, 200);
-  assert.deepEqual(await replaced.json(), { version: null, commit: "def5678", builtAt: null });
+  assert.deepEqual(await replaced.json(), {
+    version: null,
+    commit: "def5678",
+    builtAt: null,
+    label: null,
+  });
   assert.equal(replaced.headers.get("cache-control"), "no-store");
 
   const own = await requestPageFile(worker, "release/abc1234/version.json");

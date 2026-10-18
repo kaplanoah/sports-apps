@@ -360,7 +360,29 @@ header.top {
 }
 .season-year {
   font-weight: calc(var(--type-title-weight) - 200);
+  letter-spacing: 0.04em;
   color: var(--ink-dim);
+}
+/* The channel tag sits with its middle on the middle of the name's capitals. */
+.channel-tag {
+  position: relative;
+  top: 0.25px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: var(--radius-chip);
+  background: var(--raised);
+  color: var(--ink-mid);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--leading);
+  white-space: nowrap;
+}
+.channel-tag[hidden] {
+  display: none;
+}
+.channel-tag .sep {
+  margin: 0 4px;
 }
 header.top h1 {
   --title-tracking: 0.06em;

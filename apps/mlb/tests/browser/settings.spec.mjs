@@ -16,6 +16,7 @@ import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
+import { readYearGap, readYearTracking } from "../../../../tests/browser/title-row.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -197,7 +198,9 @@ test("an earlier season puts its year in the title until the current one is back
   await expect(title).toHaveText("MLB");
 });
 
-test("the year is the title's font and size, lighter and dimmer", async ({ page }) => {
+test("the year is the title's font and size, lighter, dimmer, and its digits 0.02em apart, 9px from the name", async ({
+  page,
+}) => {
   await openApp(page, WITH_A_PAST_SEASON);
   await chooseSeason(page, "2025");
   const readLook = (selector) =>
@@ -210,9 +213,16 @@ test("the year is the title's font and size, lighter and dimmer", async ({ page 
   const title = await readLook("header.top h1");
   const year = await readLook("#titleYear");
 
-  expect({ ...year, fontWeight: title.fontWeight, color: title.color }).toEqual(title);
+  const sameLook = {
+    fontWeight: title.fontWeight,
+    color: title.color,
+    letterSpacing: title.letterSpacing,
+  };
+  expect({ ...year, ...sameLook }).toEqual(title);
   expect(Number(year.fontWeight)).toBeLessThan(Number(title.fontWeight));
   expect(year.color).not.toBe(title.color);
+  expect(await readYearTracking(page)).toBeCloseTo(0.02, 3);
+  expect(await readYearGap(page)).toBeCloseTo(9, 1);
 });
 
 test("once the World Series is won, the current season's year is in the title too", async ({

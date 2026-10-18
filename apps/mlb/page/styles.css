@@ -344,6 +344,9 @@ header.top h1 {
   color: var(--ink);
   text-transform: uppercase;
   letter-spacing: var(--title-tracking);
+  /* A space in Chivo Mono is as wide as a digit, so the season's year would sit 14.5px from the
+     name; it sits 9px from it. */
+  word-spacing: -5.5px;
 }
 /* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
    spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */
@@ -367,7 +370,30 @@ header.top h1 .title-letter:nth-child(2) {
 /* The season's year recedes a step beside the app's name. */
 .season-year {
   font-weight: calc(var(--type-title-weight) - 50);
+  letter-spacing: 0.02em;
   color: var(--ink-dim);
+}
+/* The channel tag sits with its middle on the middle of the name's capitals, lifted half a
+   pixel. */
+.channel-tag {
+  position: relative;
+  top: -0.85px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: var(--radius-chip);
+  background: var(--raised);
+  color: var(--ink-mid);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--leading);
+  white-space: nowrap;
+}
+.channel-tag[hidden] {
+  display: none;
+}
+.channel-tag .sep {
+  margin: 0 4px;
 }
 .stamp {
   display: flex;

@@ -5,7 +5,7 @@ import { chooseTickStep, hasBeenAway, isReplaced } from "../shared/page/resume.j
 const SECOND_MS = 1000;
 
 test("a deploy has replaced the page only when both releases are known and their commits differ", () => {
-  const loaded = { commit: "abc1234", version: "1.0.0", builtAt: "" };
+  const loaded = { commit: "abc1234", version: "1.0.0", builtAt: "", label: null };
   assert.equal(isReplaced(loaded, { ...loaded, commit: "def5678" }), true);
   assert.equal(isReplaced(loaded, loaded), false);
   assert.equal(isReplaced(null, loaded), false);

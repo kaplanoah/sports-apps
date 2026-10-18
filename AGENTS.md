@@ -750,7 +750,8 @@ Delete it once the app's first PR merges.
   in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.
 - Each app has a beta channel: a second Worker, `<app>-app-beta`,
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
-  key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`).
+  key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`),
+  and in a tag beside the app's name, with the commit it runs and how long ago that went live (`shared/page/channel-tag.js`).
   A push to the `beta` branch deploys it at once, with the same checks and rollback as `main`'s deploy.
   To use a PR's change on the owner's phone before it merges, reset `beta` to the PR's branch and push (`git push -f origin <branch>:beta`),
   wait for that push's Deploy run to say `worker check: ok` for each app, and tell the user to use the beta app on the Home Screen.
