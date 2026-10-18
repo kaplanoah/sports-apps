@@ -1454,7 +1454,7 @@ body.kbd .rank-item .grip:focus {
   flex-direction: column;
   gap: var(--section-gap);
 }
-/* The News switches end with a line, as the settings above them do, which sets the ranking apart. */
+/* The News switches end with a line, as the settings above them do. */
 .settings-group-rows {
   border-bottom: 1px solid var(--divider);
 }

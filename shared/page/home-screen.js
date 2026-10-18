@@ -6,7 +6,7 @@
 // as settings does, and closes as settings does, sliding down from its caret, Escape, Android's
 // back, or a swipe down.
 
-/* global WELCOME_CLOSED_KEY -- from pick-theme.js */
+/* global forgetWelcomeClosed -- from pick-theme.js */
 
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
 import { closeOnCancel, closeOnSwipeDown } from "./sheet-swipe.js";
@@ -72,17 +72,10 @@ function forgetAsks() {
   showAsks();
 }
 
-// Until it closes again, the welcome opens on each load, as a first visit's does, so it stays
-// open through the reload a theme picked on it brings in Safari.
-function forgetWelcomeClosed() {
-  try {
-    localStorage.removeItem(WELCOME_CLOSED_KEY);
-  } catch {
-    /* a reload leaves it closed */
-  }
-}
-
-/** Opens the welcome over the page, rising as a sheet does. */
+/**
+ * Opens the welcome over the page, rising as a sheet does, and keeps it open through the reload a
+ * theme picked on it brings in Safari.
+ */
 export function openWelcome() {
   forgetWelcomeClosed();
   findWelcome().showModal();
