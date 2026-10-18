@@ -44,6 +44,24 @@ test("reading the news asks each outlet once, and names the ones that didn't ans
   assert.ok(missing.includes("dailynews-mets"));
 });
 
+test("MLB's rules drop The Athletic's MLB newsletter and MLB Trade Rumors' reader polls", () => {
+  const windup = {
+    url: "https://www.nytimes.com/athletic/7683853/2026/10/12/jacob-misiorowski-tarik-skubal-brewers-dodgers-nlcs-game-1-the-windup/",
+    title: "How 'bout that pitching duel? NLCS Game 1 breakdown, plus ALCS preview",
+  };
+  const poll = {
+    url: "https://www.mlbtraderumors.com/2026/10/poll-will-bo-bichette-opt-out.html",
+    title: "Poll: Will Bo Bichette Opt Out?",
+  };
+  const story = {
+    url: "https://www.mlbtraderumors.com/2026/10/miguel-rojas-announces-retirement.html",
+    title: "Miguel Rojas Announces Retirement",
+  };
+  assert.equal(readMlbRuleDrop(windup), "newsletter");
+  assert.equal(readMlbRuleDrop(poll), "poll");
+  assert.equal(readMlbRuleDrop(story), null);
+});
+
 test("MLB's rules drop fantasy pages, Spanish copies, link roundups, chats, and podcasts, as well as what every league's drop", async () => {
   const { entries } = await readMlbNews(createFeedFetch());
   const dropped = entries

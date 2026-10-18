@@ -7,7 +7,7 @@ const ESPN_TYPE_DROPS = { Media: "video", Preview: "preview", Recap: "recap" };
 /** @type {[RegExp, string][]} */
 const URL_DROPS = [
   [/\/video\//, "video"],
-  [/-the-pulse\/?$|\/newsletter\//, "newsletter"],
+  [/-the-(pulse|windup)\/?$|\/newsletter\//, "newsletter"],
   [/trivia|quiz/, "quiz"],
 ];
 
