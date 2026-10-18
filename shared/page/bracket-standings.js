@@ -92,7 +92,6 @@ function showOn(index, isSliding) {
   showPillName(findTabList(), part, { isHandoff: isSliding });
 }
 
-// Brings the page up so the parts start just under the pill, when it's further down.
 function scrollUpToPartsTop() {
   const partsTopScroll = measurePartsTopScroll();
   if (scrollY > partsTopScroll) scrollTo({ top: partsTopScroll, behavior: "instant" });

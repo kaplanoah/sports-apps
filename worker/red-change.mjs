@@ -1,12 +1,13 @@
 // Says whether a pull request is a red change: one whose bugs no CI browser would show, since none
 // touches, scrolls, layers, and draws as an iPhone does, or that touches what iOS has drawn wrong
-// before. That's any change to the shared JavaScript that moves and draws the page, a change to
-// its shared stylesheets in what decides how parts layer, stack, scroll, and show, and an added
-// line anywhere in a page that makes the browser draw a part on a layer of its own. A red change
-// merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone who can
-// label a pull request could add the label, so the gate reads who last added it and lets the
-// change through only from the repository's owner, and only when the label came after the pull
-// request's head commit reached GitHub, which the owner hasn't used on the phone otherwise.
+// before. That's any change to the code, not the comments, of the shared JavaScript that moves
+// and draws the page, a change to its shared stylesheets in what decides how parts layer, stack,
+// scroll, and show, and an added line anywhere in a page that makes the browser draw a part on a
+// layer of its own. A red change merges only once the owner has used it on the beta app and
+// labeled it phone-ok. Anyone who can label a pull request could add the label, so the gate reads
+// who last added it and lets the change through only from the repository's owner, and only when
+// the label came after the pull request's head commit reached GitHub, which the owner hasn't used
+// on the phone otherwise.
 // Usage: git diff --no-renames <base> <head> | node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
 // the last two.
@@ -241,16 +242,21 @@ function findLayerSetting(text) {
   return null;
 }
 
+/** @param {string} code a changed line with its block comments taken out */
+const isScriptCode = (code) => code.trim() !== "" && !/^\s*\/\//.test(code);
+
 /**
  * Why a change to the shared code that moves and draws the page is red: any change to its
- * JavaScript, and a change to its stylesheets in what decides how parts layer, stack, scroll, or
- * show. A file moved or deleted is red whatever it held.
+ * JavaScript's code, and a change to its stylesheets in what decides how parts layer, stack,
+ * scroll, or show. Comments draw nothing. A file moved or deleted is red whatever it held.
  * @param {ChangedFile} file
  * @returns {string[]}
  */
 function findSharedReasons(file) {
-  if (!file.path.endsWith(".css") || !file.hunks.length)
-    return [`${file.path} is shared code that moves, layers, or draws the page`];
+  const reason = `${file.path} is shared code that moves, layers, or draws the page`;
+  if (!file.hunks.length) return [reason];
+  if (!file.path.endsWith(".css"))
+    return file.hunks.flatMap(listChangedCode).some(isScriptCode) ? [reason] : [];
   return findStackLines(file).map(
     (code) => `${file.path} changes how parts layer, stack, scroll, or show: ${code.trim()}`,
   );

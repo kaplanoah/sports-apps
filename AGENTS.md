@@ -757,7 +757,8 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`);
+  `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
+  but not to its comments, which draw nothing;
   a change to its shared stylesheets (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),
   added or removed, in a selector or at-rule, which says which parts a rule reaches,

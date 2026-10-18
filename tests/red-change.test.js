@@ -106,6 +106,34 @@ test("any change to the shared code that moves, layers, or draws the page is red
   assert.deepEqual(findReasons("apps/mlb/page/js/sheet.js", ["export const x = 1;"]), []);
 });
 
+test("a shared script's comments and blank lines aren't red, even a hunk that starts inside one, but any change to its code is", () => {
+  const path = "shared/page/bracket-standings.js";
+  const comment = ["// Brings the page up so the parts start just under the pill.", ""];
+  const docComment = ["/**", " * Slides to one of the tab's parts,", " */"];
+  for (const lines of [comment, docComment]) {
+    assert.deepEqual(findDiffReasons(createDiff(path, lines, { removed: [] })), []);
+    assert.deepEqual(findDiffReasons(createDiff(path, [], { removed: lines })), []);
+  }
+  assert.deepEqual(
+    findDiffReasons(
+      createDiff(path, [" * as a search's row does.", " */"], {
+        kept: [" * Slides to one of the tab's parts,"],
+        removed: [],
+      }),
+    ),
+    [],
+  );
+  const reason = [`${path} is shared code that moves, layers, or draws the page`];
+  for (const lines of [
+    ["function scrollUpToPartsTop() {"],
+    ["  restingPart = part; // the part at rest"],
+    ["/* the page's top */ scrollTo({ top: 0 });"],
+  ]) {
+    assert.deepEqual(findDiffReasons(createDiff(path, lines, { removed: [] })), reason);
+    assert.deepEqual(findDiffReasons(createDiff(path, [], { removed: lines })), reason);
+  }
+});
+
 const SHARED_STYLESHEETS = [
   "sheet.css",
   "pager.css",
