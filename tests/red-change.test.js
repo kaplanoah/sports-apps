@@ -118,7 +118,7 @@ const SCRIPT_REASON = [`${SHARED_SCRIPT} is shared code that moves, layers, or d
  * @param {string[]} lines
  * @param {string} [after] the script as the change leaves it, when it isn't the hunk's new side
  */
-function changeScript(lines, after) {
+function findScriptChangeReasons(lines, after) {
   const diff = [
     `diff --git a/${SHARED_SCRIPT} b/${SHARED_SCRIPT}`,
     `--- a/${SHARED_SCRIPT}`,
@@ -140,7 +140,7 @@ const SCROLL_UP = [
   " }",
 ];
 
-test("a shared script's comments, blank lines, and layout aren't red, wherever a hunk starts", () => {
+test("a shared script's comments, blank lines, and formatting aren't red, wherever a hunk starts", () => {
   for (const lines of [
     ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP],
     ["-/**", "- * Brings the page up.", "- */", ...SCROLL_UP],
@@ -166,7 +166,7 @@ test("a shared script's comments, blank lines, and layout aren't red, wherever a
       ...SCROLL_UP.slice(3),
     ],
   ])
-    assert.deepEqual(changeScript(lines), [], lines.join("\n"));
+    assert.deepEqual(findScriptChangeReasons(lines), [], lines.join("\n"));
 });
 
 test("a shared script's change to its code is red, even one that comments code out or back in, or hides in what looks like a comment", () => {
@@ -186,7 +186,7 @@ test("a shared script's change to its code is red, even one that comments code o
     ],
     ["+/* the page's top */ scrollTo({ top: 0 });", ...SCROLL_UP],
   ])
-    assert.deepEqual(changeScript(lines), SCRIPT_REASON, lines.join("\n"));
+    assert.deepEqual(findScriptChangeReasons(lines), SCRIPT_REASON, lines.join("\n"));
 });
 
 /**
@@ -195,7 +195,7 @@ test("a shared script's change to its code is red, even one that comments code o
  * @param {{ header: string, lines: string[] }[]} hunks
  * @param {string[]} after
  */
-const changeScriptHunks = (hunks, after) =>
+const findHunkChangeReasons = (hunks, after) =>
   findRedReasons(
     readDiff(
       [
@@ -232,9 +232,12 @@ test("a shared script's change in hunks far apart is red only where one changes 
       " }",
     ],
   });
-  assert.deepEqual(changeScriptHunks([firstHunk, secondHunk("return 2;")], after("return 2;")), []);
   assert.deepEqual(
-    changeScriptHunks([firstHunk, secondHunk("return 3;")], after("return 3;")),
+    findHunkChangeReasons([firstHunk, secondHunk("return 2;")], after("return 2;")),
+    [],
+  );
+  assert.deepEqual(
+    findHunkChangeReasons([firstHunk, secondHunk("return 3;")], after("return 3;")),
     SCRIPT_REASON,
   );
 });
@@ -247,7 +250,7 @@ test("a shared script's hunk that only removes lines, as a diff without context 
     ["log(words);", SCRIPT_REASON],
   ]))
     assert.deepEqual(
-      changeScriptHunks([{ header: "@@ -4 +3,0 @@", lines: [`-${removed}`] }], after),
+      findHunkChangeReasons([{ header: "@@ -4 +3,0 @@", lines: [`-${removed}`] }], after),
       reasons,
       removed,
     );
@@ -255,8 +258,8 @@ test("a shared script's hunk that only removes lines, as a diff without context 
 
 test("a shared script that's gone, or that a change's hunks don't fit, is red", () => {
   const comment = ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP];
-  assert.deepEqual(changeScript(comment, ""), SCRIPT_REASON);
-  assert.deepEqual(changeScript(comment, "export const x = 1;\n"), SCRIPT_REASON);
+  assert.deepEqual(findScriptChangeReasons(comment, ""), SCRIPT_REASON);
+  assert.deepEqual(findScriptChangeReasons(comment, "export const x = 1;\n"), SCRIPT_REASON);
 });
 
 const SHARED_STYLESHEETS = [

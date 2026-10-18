@@ -1,13 +1,13 @@
 // Says whether a pull request is a red change: one whose bugs no CI browser would show, since none
 // touches, scrolls, layers, and draws as an iPhone does, or that touches what iOS has drawn wrong
-// before. That's any change to the code, not the comments or layout, of the shared JavaScript that
-// moves and draws the page, a change to its shared stylesheets in what decides how parts layer,
-// stack, scroll, and show, and an added line anywhere in a page that makes the browser draw a part
-// on a layer of its own. A red change merges only once the owner has used it on the beta app and
-// labeled it phone-ok. Anyone who can label a pull request could add the label, so the gate reads
-// who last added it and lets the change through only from the repository's owner, and only when
-// the label came after the pull request's head commit reached GitHub, which the owner hasn't used
-// on the phone otherwise.
+// before. That's any change to the code, not the comments, blank lines, or formatting, of the
+// shared JavaScript that moves and draws the page, a change to its shared stylesheets in what
+// decides how parts layer, stack, scroll, and show, and an added line anywhere in a page that
+// makes the browser draw a part on a layer of its own. A red change merges only once the owner has
+// used it on the beta app and labeled it phone-ok. Anyone who can label a pull request could add
+// the label, so the gate reads who last added it and lets the change through only from the
+// repository's owner, and only when the label came after the pull request's head commit reached
+// GitHub, which the owner hasn't used on the phone otherwise.
 // Usage: git diff --no-renames <base> <head> | node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
 // the last two.
@@ -280,7 +280,7 @@ function readScriptBefore(after, { hunks, hunkStarts }) {
 }
 
 /**
- * A script's code with its comments and layout taken out, as esbuild parses it, or null when it
+ * A script's code with its comments, blank lines, and formatting taken out, as esbuild parses it, or null when it
  * doesn't parse.
  * @param {string} script
  */
@@ -294,7 +294,7 @@ function readScriptCode(script) {
 }
 
 /**
- * Whether a change to a script changes its code, rather than only its comments and layout, which
+ * Whether a change to a script changes its code, rather than only its comments, blank lines, or formatting, which
  * draw nothing. A script that's gone, or that the change's hunks don't fit, counts as changed.
  * @param {ChangedFile} file
  * @param {(path: string) => string} readScript
