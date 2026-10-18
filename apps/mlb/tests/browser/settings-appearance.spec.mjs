@@ -121,7 +121,7 @@ test("Appearance sits under Notifications, above the News switches, each choice 
   await openApp(page);
   await openSettings(page);
   const appearance = page.locator("#settingsDialog .appearance-row");
-  const news = page.locator("#settingsDialog .settings-news");
+  const news = page.getByRole("group", { name: "News" });
   const [appearanceBox, newsBox] = await Promise.all([
     appearance.boundingBox(),
     news.boundingBox(),
@@ -134,4 +134,22 @@ test("Appearance sits under Notifications, above the News switches, each choice 
   ]);
   for (const icon of await appearance.locator(".appearance-icon").all())
     expect(await icon.boundingBox()).toMatchObject({ width: 60, height: 60 });
+});
+
+test("a line ends the settings above News, and none sits under its label, between its switches, or under them", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSettings(page);
+  const settingsAbove = page.locator("#settingsDialog .settings-main > .settings-controls");
+  expect(
+    await settingsAbove.evaluate((controls) => getComputedStyle(controls).borderBottomStyle),
+  ).toBe("solid");
+  const newsLines = await page.getByRole("group", { name: "News" }).evaluate((group) =>
+    [group, ...group.children, ...group.querySelectorAll(".control-row")].flatMap((part) => {
+      const style = getComputedStyle(part);
+      return [style.borderTopStyle, style.borderBottomStyle].filter((line) => line !== "none");
+    }),
+  );
+  expect(newsLines).toEqual([]);
 });

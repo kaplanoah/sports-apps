@@ -2685,12 +2685,6 @@ body.kbd .player-open:focus {
   height: 14px;
   color: var(--highlight);
 }
-/* The News switches sit in a group under their own label, apart from the settings above them. */
-.settings-news {
-  display: grid;
-  gap: 6px;
-}
-
 /* Try again, outlined like Read, and filled gold where it stands alone in place of what didn't
    load. */
 .retry-button {
