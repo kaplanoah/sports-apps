@@ -10,7 +10,7 @@
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
 import { renderDismissButton } from "./dismiss-button.js";
-import { easeBackOpen, easeClosed, redrawEased } from "./eased-redraw.js";
+import { easeBackOpen, easeClosed, isEasingClosed, redrawEased } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
 import { chooseReAddNote, isReAddNoteDismissed, keepReAddNoteDismissed } from "./re-add-note.js";
 import { watchTimeAway } from "./resume.js";
@@ -118,12 +118,9 @@ function drawNote() {
   setHtml(findNote(), note ? renderNote(note) : html``);
 }
 
-let isNoteClosing = false;
-
 function showNote() {
   const note = findNote();
-  if (isNoteClosing) {
-    isNoteClosing = false;
+  if (isEasingClosed(note)) {
     easeBackOpen(note, drawNote);
     return;
   }
@@ -133,15 +130,9 @@ function showNote() {
   });
 }
 
-// A note already shrinking away keeps on, so a second tap on its X never starts it over.
 function hideNote() {
   const note = findNote();
-  if (isNoteClosing || note.childElementCount === 0) return;
-  isNoteClosing = true;
-  easeClosed(note, () => {
-    isNoteClosing = false;
-    setHtml(note, html``);
-  });
+  if (note.childElementCount > 0) easeClosed(note, () => setHtml(note, html``));
 }
 
 // The note eases in as a pick sets the icon off and out as one brings it back or the X dismisses

@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { listAnimations } from "./animations.mjs";
+import { EASE_HALFWAY_MS, listAnimations } from "./animations.mjs";
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
 import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
 import { listLowContrastText } from "./contrast.mjs";
@@ -217,7 +217,8 @@ export async function checkSystemInstallIcon({ page, openApp, openSettings, look
  * With motion on, the note grows in as a pick sets the icon off, and shrinks away as one brings it
  * back, its opening played backward, and only then empties, never starting over for another pick
  * that keeps it away while it shrinks, growing back from wherever its close has reached for one
- * that wants it again, and shrinking from wherever its opening has reached.
+ * that wants it again, and shrinking from wherever its opening has reached, then growing back to
+ * full for one that wants it again.
  * @param {App} app
  */
 export async function checkReAddNoteEases({ page, openApp, openSettings, looks }) {
@@ -233,17 +234,17 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   // finish between them, and reads what the note shows there.
   /** @param {"light" | "dark"} look */
   const pickHeldHalfway = (look) =>
-    note.evaluate((element, value) => {
+    note.evaluate((element, [value, halfway]) => {
       /** @type {HTMLInputElement} */ (
         document.querySelector(`#settingsDialog input[name="appearance"][value="${value}"]`)
       ).click();
       for (const animation of element.getAnimations()) {
         animation.pause();
-        animation.currentTime = 125;
+        animation.currentTime = halfway;
       }
       const { height, opacity } = getComputedStyle(element);
       return { height, opacity, isFilled: element.childElementCount > 0 };
-    }, look);
+    }, /** @type {const} */ ([look, EASE_HALFWAY_MS]));
   const finishEasings = () =>
     page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
 
@@ -283,6 +284,11 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   expect(closing.direction).toBe("reverse");
   expect(closing.last.height).toBe(halfOpen.height);
   expect(parseFloat(halfOpen.height)).toBeLessThan(parseFloat(full));
+  await pick(page, looks.light);
+  expect((await readLastEasing()).last).toMatchObject({ height: full, opacity: "1" });
+  await finishEasings();
+  await expect(note).toHaveCSS("height", full);
+  await pick(page, looks.dark);
   await finishEasings();
   await expect(note).toBeHidden();
   await expect(note).toBeEmpty();

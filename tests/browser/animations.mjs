@@ -1,3 +1,8 @@
+import { EASE_MS } from "../../shared/page/eased-redraw.js";
+
+/** Where a test holds the page's shared easing still, halfway through. */
+export const EASE_HALFWAY_MS = EASE_MS / 2;
+
 /**
  * An animation the page started: the classes of the element it moves, its first and last frames,
  * and the way it plays them.

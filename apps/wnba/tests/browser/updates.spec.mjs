@@ -1,5 +1,5 @@
 import { test, expect, openApp } from "./harness.mjs";
-import { listAnimations } from "../../../../tests/browser/animations.mjs";
+import { EASE_HALFWAY_MS, listAnimations } from "../../../../tests/browser/animations.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
@@ -299,37 +299,55 @@ test.describe("on a phone, in full motion", () => {
     expect((await readAnimations()).filter(isOpening)).toHaveLength(1);
   });
 
-  test("an Updates box that fills again as it shrinks away grows back open from where it had shrunk to, and stays open", async ({
+  test("an Updates box that fills again as it shrinks away grows back open from where it had shrunk to, and shrinks away again from where it has grown back to", async ({
     page,
   }) => {
+    await serveReleaseNote(page);
     const readAnimations = await listAnimations(page);
     const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
-    await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
-    // The X and the hold go in one step, so the box can't finish shrinking between them.
-    const halfClosed = await updates.evaluate((box) => {
-      /** @type {HTMLElement} */ (box.querySelector("#dismissUpdates")).click();
-      for (const animation of document.getAnimations()) {
+    await expect(updates.locator(".updates-count").first()).toHaveText("2 updates since yesterday");
+    // Each easing of the box starts held halfway, so none can finish before the next step.
+    await updates.evaluate((box, halfway) => {
+      const animate = box.animate.bind(box);
+      box.animate = (frames, options) => {
+        const animation = animate(frames, options);
         animation.pause();
-        animation.currentTime = 125;
-      }
-      const { height, opacity } = getComputedStyle(box);
-      return { height, opacity };
-    });
+        animation.currentTime = halfway;
+        return animation;
+      };
+    }, EASE_HALFWAY_MS);
+    const readLastOfBox = async () =>
+      (await readAnimations()).filter(({ classes }) => classes.includes("updates")).at(-1);
+    const readBox = () =>
+      updates.evaluate((box) => {
+        const { height, opacity } = getComputedStyle(box);
+        return { height, opacity, easings: box.getAnimations().length };
+      });
 
+    await updates.locator("#dismissUpdates").click();
+    const halfClosed = await readBox();
+
+    // The release note leaves with the finals it was dismissed with, so the box's own parts
+    // change as it grows back.
     await app.changeSeason(finishDreamAtMystics);
     await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
-    const lastOfBox = (await readAnimations())
-      .filter(({ classes }) => classes.includes("updates"))
-      .at(-1);
-    expect(lastOfBox.direction).toBe("normal");
-    expect(lastOfBox.first).toMatchObject(halfClosed);
-    await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
+    const reopening = await readLastOfBox();
+    expect(reopening.direction).toBe("normal");
+    expect(reopening.first).toMatchObject({
+      height: halfClosed.height,
+      opacity: halfClosed.opacity,
+    });
+    const halfReopened = await readBox();
+    expect(halfReopened.easings).toBe(1);
 
-    await expect(updates).toBeVisible();
-    await expect(updates.locator(".what")).toHaveText([
-      "Dream beat the Mystics 88-80 to win the First Round 2-0",
-    ]);
+    await updates.locator("#dismissUpdates").click();
+    const closing = await readLastOfBox();
+    expect(closing.direction).toBe("reverse");
+    expect(closing.last.height).toBe(halfReopened.height);
+    expect((await readBox()).easings).toBe(1);
+    await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
+    await expect(updates).toBeHidden();
   });
 });
 
