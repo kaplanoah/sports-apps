@@ -3,6 +3,7 @@
 
 import { expect } from "@playwright/test";
 import { matchPath } from "./harness.mjs";
+import { holdRequests } from "./hold-requests.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
 import { drag } from "./touch.mjs";
 
@@ -68,7 +69,8 @@ const measureNoteLines = (page) =>
 
 /**
  * On an iPhone's or iPad's browser, the note says why notifications need the Home Screen and ends
- * with a ? that keeps each line at the note's line height and opens the welcome over settings, which its caret
+ * with a ?, 15px and a pixel up in its 44px tap, that keeps each line at the note's line height and
+ * opens the welcome over settings, which its caret
  * and Escape each close back to settings.
  * @param {App} app
  */
@@ -79,6 +81,10 @@ export async function checkHelpOpensWelcome(app) {
   await app.openSettings(page);
   await expect(page.locator("#notifyNote")).toHaveText(HOME_SCREEN_NOTE);
   await expect(findHelp(page)).toBeVisible();
+  await expect(findHelp(page)).toHaveCSS("width", "44px");
+  await expect(findHelp(page)).toHaveCSS("height", "44px");
+  await expect(findHelp(page).locator("svg")).toHaveCSS("width", "15px");
+  await expect(findHelp(page).locator("svg")).toHaveCSS("top", "-1px");
   expect(await listTapsOffButtons(page)).toEqual([]);
   const { lineHeight, apart, perLine } = await measureNoteLines(page);
   expect({ apart, perLine }).toEqual({ apart: [lineHeight], perLine: lineHeight });
@@ -244,6 +250,27 @@ export async function checkPickKeepsWelcome(app) {
 }
 
 /**
+ * A welcome closed before the page's code arrived rises when the ? opens it again.
+ * @param {App} app
+ */
+export async function checkRiseAfterEarlyClose({ page, openApp, openSettings }) {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await takeAwayPush(page);
+  await openApp(page, { isShowingWelcome: true });
+  const release = await holdRequests(page, matchPath("/js/app.js"));
+  await page.reload({ waitUntil: "commit" });
+  const welcome = page.locator(WELCOME);
+  await welcome.getByRole("button", { name: "Continue in browser" }).click();
+  await expect(welcome).toBeHidden();
+  release();
+  await page.waitForLoadState("domcontentloaded");
+
+  await openSettings(page);
+  await findHelp(page).click();
+  await expect(welcome).toHaveCSS("animation-name", "sheet-rise");
+}
+
+/**
  * Before the page's code arrives, the caret closes a first visit's welcome at once, for good.
  * @param {App} app
  */
@@ -270,6 +297,19 @@ export async function checkUnsupportedNote({ page, openApp, openSettings }) {
   await openApp(page);
   await openSettings(page);
   await expect(page.locator("#notifyNote")).toHaveText(UNSUPPORTED_NOTE);
+  await expect(findHelp(page)).toHaveCount(0);
+}
+
+/**
+ * An iPad with a trackpad, where the welcome isn't drawn, says why notifications need the Home
+ * Screen with no ? to open it.
+ * @param {App} app
+ */
+export async function checkNoHelpWithoutTouch({ page, openApp, openSettings }) {
+  await takeAwayPush(page);
+  await openApp(page);
+  await openSettings(page);
+  await expect(page.locator("#notifyNote")).toHaveText(HOME_SCREEN_NOTE);
   await expect(findHelp(page)).toHaveCount(0);
 }
 

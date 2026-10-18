@@ -416,13 +416,11 @@ section.view.active {
   white-space: normal;
 }
 /* A sheet's close button, a caret down, or its back button, an arrow, in place of it on a sheet
-   opened from another: just the icon, in --accent, its words only for screen readers. It holds the
-   head's top 44px, whatever the title under it holds. */
+   opened from another, and the welcome's caret: just the icon, in --accent, its words only for
+   screen readers. */
 .sheet-close,
-.sheet-back {
-  position: absolute;
-  left: -12px;
-  top: 0;
+.sheet-back,
+.welcome-close {
   display: grid;
   place-items: center;
   width: 44px;
@@ -433,8 +431,16 @@ section.view.active {
   color: var(--accent);
   cursor: pointer;
 }
+/* A sheet's holds the head's top 44px, whatever the title under it holds. */
+.sheet-close,
+.sheet-back {
+  position: absolute;
+  left: -12px;
+  top: 0;
+}
 .sheet-close svg,
-.sheet-back svg {
+.sheet-back svg,
+.welcome-close svg {
   width: 26px;
   height: 26px;
 }
@@ -450,7 +456,7 @@ section.view.active {
   clip-path: inset(50%);
   white-space: nowrap;
 }
-body.kbd :is(.sheet-close, .sheet-back):focus {
+body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -805,28 +811,11 @@ body.kbd .notify-help:focus {
 .welcome::backdrop {
   background: none;
 }
-/* Its caret closes it from the spot every sheet's does. */
+/* Its caret, a sheet's own, closes it from the spot every sheet's does. */
 .welcome-close {
   flex: none;
   align-self: flex-start;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
   margin: -14px 0 14px -12px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  cursor: pointer;
-}
-.welcome-close svg {
-  width: 26px;
-  height: 26px;
-}
-body.kbd .welcome-close:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 .welcome .gate-title {
   margin: 0 0 22px;

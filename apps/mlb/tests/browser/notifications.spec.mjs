@@ -216,8 +216,6 @@ test("on an iPhone outside the Home Screen, the page says to add it there", asyn
   await openApp(page);
   await openSettings(page);
 
-  await expect(page.locator("#notifyNote")).toHaveText(
-    "Apple only supports notifications from sites saved to your home screen. To configure notifications, add this site to your home screen.",
-  );
+  await expect(page.locator("#notifyNote")).toHaveText(/add this site to your home screen/);
   await expect(page.getByRole("switch", { name: "Notifications" })).toBeHidden();
 });

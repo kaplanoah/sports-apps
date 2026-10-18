@@ -148,7 +148,7 @@ test("the report opens with the release, the device, and the page's state", () =
       [
         "WNBA v2.27.13 commit abc1234",
         "Device: iPhone, WebKit 605.1.15, reports iOS 18.6.2",
-        "Runs from the Home Screen",
+        "Runs from the home screen",
         "Viewport 390x844 at 3x",
         "Reduced motion off",
         "Theme dark",

@@ -92,7 +92,6 @@ function wireWelcomeClosing() {
   const welcome = findWelcome();
   closeOnCancel(welcome);
   closeOnSwipeDown(welcome, { isOwnGesture: () => false, findScroller: () => welcome });
-  welcome.addEventListener("close", () => welcome.removeAttribute("data-reopened"));
 }
 
 export function startHomeScreen() {

@@ -3,7 +3,7 @@
 // where they come only from the Home Screen, ends with a ? that opens the welcome's steps.
 import { reloadWhenSignedOut } from "./access.js";
 
-import { isIos, isOnHomeScreen } from "./device.js";
+import { isIos, isOnHomeScreen, isTouchDevice } from "./device.js";
 import { openWelcome } from "./home-screen.js";
 import { html, setHtml } from "./html.js";
 import { chooseFailedSyncStatus, isTurnedAway, TOO_MANY_DEVICES } from "./notification-status.js";
@@ -47,10 +47,11 @@ function describeStatus() {
 }
 
 // Where notifications come only from the Home Screen, the note ends with a ? that keeps to its
-// last word, so it never wraps onto a line of its own.
+// last word, so it never wraps onto a line of its own, on a touch screen, the only one the welcome
+// it opens is drawn on.
 function renderNote() {
   const text = note || describeStatus();
-  if (status !== "homeScreen") return text;
+  if (status !== "homeScreen" || !isTouchDevice()) return text;
   const lastWordAt = text.lastIndexOf(" ") + 1;
   return html`${text.slice(0, lastWordAt)}<span class="notify-help-end">${text.slice(lastWordAt)}${HELP_BUTTON}</span>`;
 }

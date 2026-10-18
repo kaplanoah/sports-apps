@@ -138,6 +138,8 @@ function wireWelcome(welcome) {
   });
   // Continue in browser, the caret, Escape, and Android's back all close it, and it stays closed.
   welcome.addEventListener("close", keepWelcomeClosed);
+  // Opened again from settings, it rises, even when it closed before the modules arrived.
+  welcome.addEventListener("close", () => welcome.removeAttribute("data-reopened"));
 }
 
 /** @param {boolean} isOnIos */

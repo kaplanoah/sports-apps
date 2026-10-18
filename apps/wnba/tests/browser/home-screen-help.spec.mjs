@@ -1,9 +1,11 @@
-import { ANDROID_AGENT, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { ANDROID_AGENT, IPAD, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import {
   checkCaretBeforeCode,
   checkHelpOpensWelcome,
   checkMenuDots,
+  checkNoHelpWithoutTouch,
   checkPickKeepsWelcome,
+  checkRiseAfterEarlyClose,
   checkUnsupportedNote,
   checkWelcomeRises,
   checkWelcomeSwipesDown,
@@ -40,6 +42,12 @@ test.describe("on an iPhone, in the browser", () => {
     await checkPickKeepsWelcome({ page, openApp, openSettings, darkLook: "Walnut" });
   });
 
+  test("a welcome closed before the page's code arrived rises when the ? opens it again", async ({
+    page,
+  }) => {
+    await checkRiseAfterEarlyClose({ page, openApp, openSettings });
+  });
+
   test("before the page's code arrives, the welcome's caret closes it for good", async ({
     page,
   }) => {
@@ -48,15 +56,20 @@ test.describe("on an iPhone, in the browser", () => {
 });
 
 test.describe("on an iPad, in the browser", () => {
-  test.use({
-    viewport: { width: 1180, height: 820 },
-    hasTouch: true,
-    isMobile: true,
-    userAgent: IPHONE_AGENT.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
-  });
+  test.use(IPAD);
 
   test("the Notifications note and its ? are the iPhone's", async ({ page }) => {
     await checkHelpOpensWelcome({ page, openApp, openSettings });
+  });
+});
+
+test.describe("on an iPad with a trackpad, in the browser", () => {
+  test.use({ userAgent: IPAD.userAgent });
+
+  test("the Notifications note says why to add the page to the home screen, with no ? where the welcome isn't drawn", async ({
+    page,
+  }) => {
+    await checkNoHelpWithoutTouch({ page, openApp, openSettings });
   });
 });
 

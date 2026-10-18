@@ -1,4 +1,4 @@
-import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { IPAD, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp, openSettings, readColor } from "./harness.mjs";
@@ -219,12 +219,7 @@ test.describe("on an iPhone, in the browser", () => {
 });
 
 test.describe("on a tablet, in the browser", () => {
-  test.use({
-    viewport: { width: 1180, height: 820 },
-    hasTouch: true,
-    isMobile: true,
-    userAgent: IPHONE_AGENT.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
-  });
+  test.use(IPAD);
 
   test("the Home Screen box sits at the top of the settings, level with the ranking's heading beside it", async ({
     page,
