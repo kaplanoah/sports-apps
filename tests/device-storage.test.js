@@ -3,10 +3,9 @@ import assert from "node:assert/strict";
 import { createViewerChoice, listViewerChoices } from "../shared/page/device-storage.js";
 import {
   dropSavedStorage,
-  refuseAccess,
+  useDeniedStorage,
   useFullStorage,
   useSavedStorage,
-  useStorage,
 } from "./saved-storage.js";
 
 const otherTabs = new EventTarget();
@@ -91,7 +90,7 @@ test("every choice the page makes is listed by its key", () => {
 });
 
 test("a device whose storage refuses access keeps a choice until the page reloads", () => {
-  useStorage({ getItem: refuseAccess, setItem: refuseAccess });
+  useDeniedStorage();
   const choice = createViewerChoice("refused", readAsIs);
 
   assert.equal(choice.read(), null);

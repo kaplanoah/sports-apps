@@ -128,6 +128,7 @@ test.describe("on a phone", () => {
   }) => {
     const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
+    await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
     await app.changeSeason(finishValkyriesAtWings);
     await expect(updates.locator(".what").first()).toHaveText(
       "Valkyries beat the Wings 90-84 to win the First Round 2-0",

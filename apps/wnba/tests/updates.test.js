@@ -4,12 +4,7 @@ import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { session } from "../page/js/session.js";
 import { listFreshUpdates, listPlayoffWins } from "../page/js/updates.js";
-import {
-  refuseAccess,
-  useKeptChoices,
-  useSavedStorage,
-  useStorage,
-} from "../../../tests/saved-storage.js";
+import { useDeniedStorage, useKeptChoices, useSavedStorage } from "../../../tests/saved-storage.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
 
 const AFTERNOON = JSON.parse(
@@ -181,7 +176,7 @@ test("after a dismissal the box lists only the finals since", () => {
 });
 
 test("a device whose storage refuses access keeps its first look's start while the page is open", () => {
-  useStorage({ getItem: refuseAccess, setItem: refuseAccess });
+  useDeniedStorage();
 
   assert.deepEqual(readFreshWins(THROUGH_SUNDAY), []);
   assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);

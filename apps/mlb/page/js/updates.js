@@ -38,7 +38,8 @@ const readNoticedAt = (entry) => Date.parse(entry.at);
 const isCurrentSeason = () => session.activeYear === readSeasonYear();
 
 // A page that couldn't read its season shows an empty one in its place, which says nothing of
-// what's out.
+// what's out. The copy a page draws first from its last visit does say what was out then, so a
+// phone with no start yet counts from that visit and lists what came after it.
 const hasReadSeason = () => !session.problem;
 
 function listUnseenEntries(entries) {

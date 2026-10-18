@@ -1,11 +1,11 @@
 // A device's own storage for a test, in place of the browser's localStorage.
 
 /** @param {Partial<Storage>} storage */
-export const useStorage = (storage) =>
+const useStorage = (storage) =>
   Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
 
 /** What storage does when it refuses access, as in a private window. */
-export const refuseAccess = () => {
+const refuseAccess = () => {
   throw new Error("Access denied");
 };
 
@@ -36,6 +36,9 @@ export const useKeptChoices = (kept) =>
  */
 export const useFullStorage = (saved) =>
   useStorage({ getItem: readSaved(saved), setItem: refuseAccess });
+
+/** Storage that refuses every read and write, as in a private window. */
+export const useDeniedStorage = () => useStorage({ getItem: refuseAccess, setItem: refuseAccess });
 
 export const dropSavedStorage = () => {
   delete (/** @type {any} */ (globalThis).localStorage);
