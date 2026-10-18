@@ -4,6 +4,7 @@ import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/
 import { findSeasonPill, findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import {
+  holdHeaderStill,
   readPillHoldTop,
   readSeasonPartScroll,
   readSeasonRide,
@@ -251,6 +252,41 @@ test.describe("on a phone", () => {
     expect(await readSeasonPartScroll(page, "standings")).toBe(left);
     expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
     await expect(pill).toHaveClass(/\bstuck\b/);
+  });
+
+  /**
+   * Leaves the standings far down, then the page from the Games tab, and checks the standings show
+   * there again once their tab shows after a reload.
+   * @param {import("@playwright/test").Page} page
+   */
+  async function expectStandingsBackAfterReloadFromGames(page) {
+    await openApp(page);
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await scrollSeasonPartToEnd(page, "standings");
+    const left = await readSeasonPartScroll(page, "standings");
+    await page.getByRole("tab", { name: "Games" }).click();
+    await expect(page.locator("#view-games")).toBeVisible();
+
+    await page.reload();
+    await expect(page.locator("#view-games")).toBeVisible();
+    await findSeasonTab(page).click();
+
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(left);
+  }
+
+  test("the standings left far down show there again after a reload the page left from another tab, once their tab shows", async ({
+    page,
+  }) => {
+    await expectStandingsBackAfterReloadFromGames(page);
+  });
+
+  test("where the header stays put, the standings left far down show there again after a reload the page left from another tab, once their tab shows", async ({
+    page,
+  }) => {
+    await holdHeaderStill(page);
+    await expectStandingsBackAfterReloadFromGames(page);
   });
 
   test("the tab bar's pill rests on the last tab before the page's code arrives, where the code keeps it", async ({

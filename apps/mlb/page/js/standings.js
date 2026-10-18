@@ -270,12 +270,10 @@ export function renderStandings() {
 }
 
 /**
- * Shows one of the standings' parts, as a search's row for it asks once the standings show from
- * their top, where the playoff fields lead them: a league's divisions, from its first, just under
- * the pill.
- * @param {string} key "playoffs", or the league, as "AL"
+ * Shows a league's divisions, from its first, just under the pill, as a search's row for them asks.
+ * @param {string} league as "AL"
  */
-export function showStandingsPart(key) {
-  const firstDivision = document.querySelector(`[data-standings="${CSS.escape(key)}"]`);
+export function showLeagueStandings(league) {
+  const firstDivision = document.querySelector(`[data-standings="${CSS.escape(league)}"]`);
   if (firstDivision) scrollUnderPill(firstDivision);
 }

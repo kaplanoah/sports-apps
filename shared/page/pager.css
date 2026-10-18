@@ -99,7 +99,9 @@
 :root:has(.bracket-standings.active[data-follows]) [data-rides]:not(.updates) {
   pointer-events: none;
 }
-:root:has(.bracket-standings.active[data-follows]) :is([data-rides]:not(.updates), .pager-bar) button {
+:root:has(.bracket-standings.active[data-follows])
+  :is([data-rides]:not(.updates), .pager-bar)
+  button {
   pointer-events: auto;
 }
 /* The pill holds with its bar at the top of the screen and a band above it under the status bar,

@@ -149,10 +149,12 @@ function placeParts(view, { viewTop, partsTop, reach, pageHeight }) {
   view.style.setProperty("--page-height", `${pageHeight}px`);
 }
 
-// A part put back scrolled before its room to scroll was known takes its place again.
+// A part put back scrolled before it showed, or before its room to scroll was known, takes its
+// place once it shows.
 function putBackScrolls() {
   for (const part of findSeasonParts()) {
-    if (part.dataset.putBackTop !== undefined) part.scrollTop = Number(part.dataset.putBackTop);
+    if (part.dataset.putBackTop === undefined || !part.getClientRects().length) continue;
+    part.scrollTop = Number(part.dataset.putBackTop);
     delete part.dataset.putBackTop;
   }
 }
@@ -193,10 +195,10 @@ function watchRoom() {
 function followSeasonPart(part) {
   const view = findSeasonView();
   if (!view) return;
+  roomWatcher ??= watchRoom();
   if (typeof ScrollTimeline !== "function") return putBackScrolls();
   view.dataset.follows = "";
   followedPart = part ?? followedPart ?? findPartNamed();
-  roomWatcher ??= watchRoom();
   if (!view.classList.contains("active")) return endRides();
   const ride = measureRide(view);
   placeParts(view, ride);
