@@ -137,6 +137,7 @@ test.describe("on an iPhone, in the browser", () => {
     const looks = [];
     for (const theme of /** @type {const} */ (["light", "dark"])) {
       await showTheme(page, theme);
+      expect(await listLowContrastText(page), theme).toEqual([]);
       looks.push({
         steps: await steps.evaluate((element) => getComputedStyle(element).color),
         name: await steps
