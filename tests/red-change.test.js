@@ -152,6 +152,11 @@ const SCROLL_UP = [
 test("a shared script's comments, blank lines, and formatting aren't red, wherever a hunk starts", () => {
   for (const lines of [
     ["+// Brings the page up so the parts start just under the pill.", ...SCROLL_UP],
+    [
+      "-/*! The parts start under the pill. */",
+      "+/*! The parts start just under the pill. */",
+      ...SCROLL_UP,
+    ],
     ["-/**", "- * Brings the page up.", "- */", ...SCROLL_UP],
     [
       " /**",
