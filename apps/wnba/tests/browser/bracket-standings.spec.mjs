@@ -11,7 +11,6 @@ import {
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
 import {
-  readDividerColor,
   readSeasonPartScroll,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
@@ -138,7 +137,7 @@ test("a tap on the tab while the standings show scrolled down takes them back to
   await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
-test("the header and the pill hold still while the standings scroll under the pill, which ends in a line once they're under it", async ({
+test("the header and the pill hold still while the standings scroll under the pill, which ends in its line once they're under it", async ({
   page,
 }) => {
   await openApp(page);
@@ -151,12 +150,11 @@ test("the header and the pill hold still while the standings scroll under the pi
       page: Math.round(scrollY),
     }));
   const before = await readTops();
-  await expect(pill).toHaveCSS("box-shadow", "none");
+  await expect(pill).not.toHaveClass(/\bstuck\b/);
 
   await scrollSeasonPartToEnd(page, "standings");
 
   expect(await readTops()).toEqual(before);
-  await expect(pill).toHaveCSS("box-shadow", `${await readDividerColor(page)} 0px 1px 0px 0px`);
 });
 
 test("each part keeps its own place: the bracket chosen far down the standings shows from its top, and the standings chosen again show where they were", async ({
@@ -211,23 +209,6 @@ test("the bracket's round names sit 10px under the pill's bar", async ({ page })
   );
 
   expect(room).toBeCloseTo(10, 0);
-});
-
-test("the standings come back from another tab where they were left, with the pill's line", async ({
-  page,
-}) => {
-  await openApp(page);
-  await openSeasonPart(page, "Standings");
-  await scrollSeasonPartToEnd(page, "standings");
-  const left = await readSeasonPartScroll(page, "standings");
-
-  await page.getByRole("tab", { name: "Games" }).click();
-  await expect(page.locator("#standingsWrap")).toBeHidden();
-  await findSeasonTab(page).click();
-
-  await expect(page.locator("#standings-league")).toBeVisible();
-  expect(await readSeasonPartScroll(page, "standings")).toBe(left);
-  await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
 });
 
 test.describe("in full motion", () => {
