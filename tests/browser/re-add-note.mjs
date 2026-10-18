@@ -229,16 +229,21 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   const readEasings = async () =>
     (await readAnimations()).filter(({ classes }) => classes.includes("re-add-note"));
   const readLastEasing = async () => (await readEasings()).at(-1);
-  // Each easing of the note holds still halfway, where the test reads what it shows.
-  const holdHalfway = () =>
-    note.evaluate((element) => {
+  // Picks the look and holds the note's easing still halfway, in one step, so the easing can't
+  // finish between them, and reads what the note shows there.
+  /** @param {"light" | "dark"} look */
+  const pickHeldHalfway = (look) =>
+    note.evaluate((element, value) => {
+      /** @type {HTMLInputElement} */ (
+        document.querySelector(`#settingsDialog input[name="appearance"][value="${value}"]`)
+      ).click();
       for (const animation of element.getAnimations()) {
         animation.pause();
         animation.currentTime = 125;
       }
       const { height, opacity } = getComputedStyle(element);
       return { height, opacity, isFilled: element.childElementCount > 0 };
-    });
+    }, look);
   const finishEasings = () =>
     page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
 
@@ -250,9 +255,8 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   await finishEasings();
   const full = await note.evaluate((element) => getComputedStyle(element).height);
 
-  await pick(page, looks.dark);
+  const halfClosed = await pickHeldHalfway("dark");
   expect(await readLastEasing()).toEqual({ ...opening, direction: "reverse" });
-  const halfClosed = await holdHalfway();
   expect(halfClosed.isFilled).toBe(true);
   expect(parseFloat(halfClosed.height)).toBeLessThan(parseFloat(full));
   await pick(page, "System");
@@ -273,8 +277,7 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   await pick(page, looks.dark);
   await finishEasings();
   await expect(note).toBeEmpty();
-  await pick(page, looks.light);
-  const halfOpen = await holdHalfway();
+  const halfOpen = await pickHeldHalfway("light");
   await pick(page, looks.dark);
   const closing = await readLastEasing();
   expect(closing.direction).toBe("reverse");

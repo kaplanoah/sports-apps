@@ -306,8 +306,9 @@ test.describe("on a phone, in full motion", () => {
     const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    // The X and the hold go in one step, so the box can't finish shrinking between them.
     const halfClosed = await updates.evaluate((box) => {
+      /** @type {HTMLElement} */ (box.querySelector("#dismissUpdates")).click();
       for (const animation of document.getAnimations()) {
         animation.pause();
         animation.currentTime = 125;
