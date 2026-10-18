@@ -532,7 +532,7 @@
   the header's lines on the latest score and the next game, in words like "last night",
   in `stamp.js`, the release check and catching up on return in `resume.js`,
   the access code's gate in `gate.js`, what the page last showed,
-  drawn first on its next load, in `last-seen.js`, the box under the tabs that lists what's new since it was last dismissed,
+  drawn first on its next load, in `last-seen.js`, the box under the tabs that lists what's new since the device first opened the app or last dismissed it,
   with each app's release notes under New in the app, in `updates.js`,
   the settings' Season picker in `season-picker.js`, the year in the title,
   lighter, whenever the season shown isn't being played, an earlier one or the current one once its last game is final,
