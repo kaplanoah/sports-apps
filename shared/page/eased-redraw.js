@@ -147,23 +147,32 @@ function isScroller(element) {
   return [overflowX, overflowY].some((overflow) => overflow === "auto" || overflow === "scroll");
 }
 
+/** @param {Element} element */
+const readOpacity = (element) => getComputedStyle(element).opacity;
+
+// A part an opening was still fading in when the redraw stopped it fades the rest of the way.
 /**
- * @param {{ element: Element, from: number, to: number }} size
+ * @typedef {{ height: number, opacity: string }} Size
+ * @param {{ element: Element, from: Size, to: Size }} resize
  */
 function easeHeight({ element, from, to }) {
-  if (Math.abs(to - from) < 1) return;
-  if (from === 0) {
+  if (Math.abs(to.height - from.height) < 1) return;
+  if (from.height === 0) {
     easeOpen(element);
     return;
   }
   const clip = isScroller(element) ? {} : { overflow: "clip" };
-  const resize = element.animate(
-    [
-      { height: `${from}px`, ...clip },
-      { height: `${to}px`, ...clip },
-    ],
-    { duration: EASE_MS, easing: EASING },
-  );
+  const isFading = from.opacity !== to.opacity;
+  /** @param {Size} size */
+  const buildFrame = ({ height, opacity }) => ({
+    height: `${height}px`,
+    ...(isFading ? { opacity } : {}),
+    ...clip,
+  });
+  const resize = element.animate([buildFrame(from), buildFrame(to)], {
+    duration: EASE_MS,
+    easing: EASING,
+  });
   keepEasing(element, resize);
 }
 
@@ -184,11 +193,14 @@ function fadeIn(element) {
  * @param {() => void} redraw
  */
 function logRedraw(redraw) {
-  startedInRedraw = new Set();
-  const { heights, added } = logPatches(redraw);
-  const started = startedInRedraw;
-  startedInRedraw = null;
-  return { heights, added, started };
+  /** @type {Set<Animation>} */
+  const started = new Set();
+  startedInRedraw = started;
+  try {
+    return { ...logPatches(redraw), started };
+  } finally {
+    startedInRedraw = null;
+  }
 }
 
 /**
@@ -215,8 +227,16 @@ export function redrawEased(redraw) {
   const changed = [...heights].filter(
     ([element]) => element.isConnected && !isEasingStartedIn(started, element),
   );
-  changed.forEach(([element]) => stopEasing(element));
-  const sizes = changed.map(([element, from]) => ({ element, from, to: readHeight(element) }));
+  const reached = changed.map(([element, height]) => ({
+    element,
+    from: { height, opacity: readOpacity(element) },
+  }));
+  reached.forEach(({ element }) => stopEasing(element));
+  const sizes = reached.map(({ element, from }) => ({
+    element,
+    from,
+    to: { height: readHeight(element), opacity: readOpacity(element) },
+  }));
   sizes.forEach(easeHeight);
   added.forEach(fadeIn);
 }
