@@ -586,7 +586,8 @@
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`),
   which each deploy does for its new version, putting the one before back when it doesn't,
   and which the `Watch apps` workflow does every 15 minutes,
-  keeping one open issue for each app that isn't opening, which closes once it opens again (`watch-apps.mjs`),
+  keeping one open issue for each app that isn't opening, which closes once it opens again,
+  and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`),
   both from each page's address and code in the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
   and a beta deploy from the `beta` environment's, with `_BETA` after the app's name.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
