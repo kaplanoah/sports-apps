@@ -1,5 +1,5 @@
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
-import { noteLeagueRead, readKeptDocs } from "../../../../shared/worker/store-reads.js";
+import { noteLeagueRead, readSeasonDocs } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { nameRosterKey, readTeam } from "./roster.js";
 import { averageTotals, readPerGame, readShare, splitName } from "./season-averages.js";
@@ -10,8 +10,8 @@ import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } fro
 // of every team's games, and, from every player's totals in the regular season, her averages and
 // where each ranks among the players who meet the WNBA's rule for its leaders. The store keeps each
 // season's numbers (player-updater.js), so a sheet reads the league itself only for a season the
-// store doesn't keep, and the store counts each time it does, which shows whether that read is
-// still needed.
+// store doesn't keep, and the store counts each time it does for the current season, which shows
+// whether that read is still needed.
 
 const WNBA_STATS = "https://stats.wnba.com/stats";
 export const REGULAR_SEASON = "Regular Season";
@@ -168,7 +168,7 @@ export const nameTotalsRequest = (season) =>
     Rank: "N",
     Season: String(season),
     SeasonSegment: "",
-    SeasonType: "Regular Season",
+    SeasonType: REGULAR_SEASON,
     ShotClockRange: "",
     StarterBench: "",
     TeamID: "0",
@@ -589,17 +589,15 @@ export function createPlayerServer({
    * @param {ReadDoc} readDoc
    */
   async function readPlayerFromStore({ id, team, season }, readDoc) {
-    const kept = await readKeptDocs(readDoc, [
+    const { docs, isCurrentSeason } = await readSeasonDocs(readDoc, season, [
       nameRanksKey(season),
       nameNumbersKey(season, id),
       nameRosterKey(season, team),
-      "live/current",
     ]);
-    if (!kept) return { player: undefined, isCurrentSeason: false };
-    const [ranks, numbers, roster, current] = kept;
+    const [ranks, numbers, roster] = docs ?? [];
     return {
       player: ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined,
-      isCurrentSeason: season === current?.season,
+      isCurrentSeason,
     };
   }
 
