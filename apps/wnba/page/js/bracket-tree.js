@@ -174,9 +174,9 @@ export function startBracket() {
   const wrap = findWrap();
   placeOpeningRound = watchOpeningRound(wrap);
   // Laying the bracket out resizes what this observes, so it waits a frame rather than loop the
-  // observer, and only while the bracket shows.
+  // observer, and only while the bracket shows. While the parts slide it holds still, as it shows.
   resizes = new ResizeObserver(() => {
-    if (isShown(wrap)) requestAnimationFrame(layOutAndMarkRound);
+    if (isShown(wrap) && !wrap.closest("[data-sliding]")) requestAnimationFrame(layOutAndMarkRound);
   });
   resizes.observe(wrap);
   resizes.observe(/** @type {HTMLElement} */ (wrap.closest(".season-part")));
