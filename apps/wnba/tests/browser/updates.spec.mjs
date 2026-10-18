@@ -391,6 +391,7 @@ test.describe("on a phone, with a release note out", () => {
     /** @param {string} selector */
     const expectMostOfScreen = async (selector) => {
       const view = page.locator(selector);
+      await page.evaluate(() => document.fonts.ready);
       expect(await view.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(
         Math.floor(568 * 0.6),
       );

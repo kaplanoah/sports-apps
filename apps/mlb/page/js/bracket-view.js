@@ -272,13 +272,18 @@ const isShown = (element) => element.getClientRects().length > 0;
 let renderedGrowth = 0;
 let renderedFits = false;
 
-// A floating tab bar's transform is left out, since the bar stretches while it moves.
+// Where the bracket's space ends with the page at its top, so its spaces hold however far the page
+// is scrolled. A floating tab bar's transform is left out, since the bar stretches while it moves.
 /** @param {HTMLElement} part the bracket's part, which scrolls on its own (pager.css) */
 function findSpaceBottom(part) {
   const tabBar = document.getElementById("tabBar");
   const tabBarStyle = getComputedStyle(tabBar);
   if (tabBarStyle.position !== "fixed")
-    return part.getBoundingClientRect().bottom - parseFloat(getComputedStyle(part).paddingBottom);
+    return (
+      part.getBoundingClientRect().bottom +
+      scrollY -
+      parseFloat(getComputedStyle(part).paddingBottom)
+    );
   const tabBarTop = innerHeight - parseFloat(tabBarStyle.bottom) - tabBar.offsetHeight;
   return tabBarTop - STACKED.tabBarClearance;
 }
@@ -295,7 +300,7 @@ const solveGrowth = (room) =>
 function measureGrowth(wrap) {
   if (!isShown(wrap)) return renderedGrowth || 1;
   const part = wrap.closest(".season-part");
-  const top = wrap.getBoundingClientRect().top + part.scrollTop;
+  const top = wrap.getBoundingClientRect().top + part.scrollTop + scrollY;
   const fixedHeight = 2 * STACKED.lineHeight + 4 * SERIES_HEIGHT;
   const growth = solveGrowth(findSpaceBottom(part) - top - fixedHeight);
   const bounded = Math.min(STACKED.maxGrowth, Math.max(STACKED.minGrowth, growth));

@@ -116,6 +116,32 @@ test.describe("on a phone, the bracket", () => {
     expect((await readCardGaps(page)).between).toEqual(atTop.between);
   });
 
+  test("keeps its gaps when it lays out again with the page scrolled under a tall box over the bracket, as a full Updates box leaves it", async ({
+    page,
+  }) => {
+    // A screen tall enough for the box to scroll the page while the cards spread between their
+    // tightest and widest gaps.
+    await page.setViewportSize({ width: PHONE.width, height: 1400 });
+    await openApp(page);
+    await page.locator("header").evaluate((header) => {
+      const box = Object.assign(document.createElement("div"), {
+        style: "flex: none; height: 590px",
+      });
+      header.after(box);
+    });
+    await expect
+      .poll(async () => (await readCardGaps(page)).between[0])
+      .toBeLessThan(Math.floor(1.45 * TIGHTEST_CARD_GAP));
+    const atTop = await readCardGaps(page);
+    expect(atTop.between[0]).toBeGreaterThan(TIGHTEST_CARD_GAP);
+    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+    expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+
+    await page.evaluate(() => dispatchEvent(new Event("resize")));
+
+    expect((await readCardGaps(page)).between).toEqual(atTop.between);
+  });
+
   test("never scrolls down, nor further sideways, once the screen shrinks after it spread its cards", async ({
     page,
   }) => {

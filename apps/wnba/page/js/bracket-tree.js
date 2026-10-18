@@ -121,8 +121,8 @@ const markScrollLeft = (tree) => tree.style.setProperty("--scroll-left", `${tree
 
 /**
  * While the round dots are pinned above a phone's tab bar, the gaps between the cards grow alike
- * so the bracket reaches down to them from where it starts in its part, however far the part is
- * scrolled (pager.css).
+ * so the bracket reaches down to them from where it starts with its part (pager.css) and the page
+ * at their tops, so the gaps hold however far either is scrolled.
  * @param {HTMLElement} tree
  */
 function sizeCardGaps(tree) {
@@ -136,7 +136,7 @@ function sizeCardGaps(tree) {
   const gap = parseFloat(style.getPropertyValue("--card-gap"));
   const tightestHeight = tree.offsetHeight - GAPS_BETWEEN_CARDS * (gap - tightestGap);
   const part = /** @type {HTMLElement} */ (tree.closest(".season-part"));
-  const top = tree.getBoundingClientRect().top + part.scrollTop;
+  const top = tree.getBoundingClientRect().top + part.scrollTop + scrollY;
   const room = dots.getBoundingClientRect().top - ROUND_DOTS_CLEARANCE - top;
   const fittingGap = tightestGap + (room - tightestHeight) / GAPS_BETWEEN_CARDS;
   const grownGap = Math.min(tightestGap * MAX_GAP_GROWTH, Math.max(tightestGap, fittingGap));

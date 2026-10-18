@@ -476,6 +476,34 @@ test("on a phone, the bracket keeps its spaces when it redraws however far its p
   expect(await readInnerSpaces()).toEqual(atTop);
 });
 
+test("on a phone, the bracket keeps its spaces when it redraws with the page scrolled under a tall box over it, as a full Updates box leaves it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 1400 });
+  await openBracket(page);
+  await expect(page.locator("#bracketWrap .league-head.al")).toBeVisible();
+  await page.locator("header").evaluate((header) => {
+    const box = Object.assign(document.createElement("div"), {
+      style: "flex: none; height: 590px",
+    });
+    header.after(box);
+  });
+  await expect
+    .poll(async () => (await readBracketFit(page)).stageBottom)
+    .toBeLessThan(await page.evaluate(() => innerHeight + scrollY));
+  const readInnerSpaces = async () => {
+    const { belowLine, betweenRows } = await readStackedSpaces(page);
+    return { belowLine, betweenRows };
+  };
+  const atTop = await readInnerSpaces();
+  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+
+  await page.evaluate(() => dispatchEvent(new Event("resize")));
+
+  expect(await readInnerSpaces()).toEqual(atTop);
+});
+
 test("on a phone a little short of room, the bracket's spaces shrink so it fits above the round dots", async ({
   page,
 }) => {
