@@ -8,6 +8,17 @@ const ACCESS_CODE = "FASTBREAK";
 // A broken page draws nothing, so a check of one waits only this long rather than a deploy's.
 const BROKEN_TIMEOUT_MS = 3000;
 
+/** @param {import("@playwright/test").Page} page */
+async function serveUnreachableStore(page) {
+  await page.route(matchPath(`${LOCKED_PAGE_PATH}store/`), (route) =>
+    route.fulfill({ status: 503 }),
+  );
+  await page.routeWebSocket(
+    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
+    (socket) => socket.close(),
+  );
+}
+
 /** @param {string | undefined} baseURL */
 const findPageUrl = (baseURL) => new URL(LOCKED_PAGE_PATH, baseURL).href;
 
@@ -48,13 +59,7 @@ test("a page that asks for no code passes once it draws, saying its code isn't n
 test("a page that asks for no code and draws nothing is broken", async ({ page, baseURL }) => {
   const { changeAccessCode } = await serveLockedApp(page, { accessCode: ACCESS_CODE });
   changeAccessCode("");
-  await page.route(matchPath(`${LOCKED_PAGE_PATH}store/`), (route) =>
-    route.fulfill({ status: 503 }),
-  );
-  await page.routeWebSocket(
-    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
-    (socket) => socket.close(),
-  );
+  await serveUnreachableStore(page);
 
   const check = await checkPage(page, {
     pageUrl: findPageUrl(baseURL),
@@ -70,13 +75,7 @@ test("a page that asks for no code and draws nothing is broken", async ({ page, 
 
 test("a page whose store doesn't answer is broken", async ({ page, baseURL }) => {
   await serveLockedApp(page, { accessCode: ACCESS_CODE });
-  await page.route(matchPath(`${LOCKED_PAGE_PATH}store/`), (route) =>
-    route.fulfill({ status: 503 }),
-  );
-  await page.routeWebSocket(
-    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
-    (socket) => socket.close(),
-  );
+  await serveUnreachableStore(page);
 
   const check = await checkPage(page, {
     pageUrl: findPageUrl(baseURL),
