@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { describeTimeSince, listChannelFacts } from "#shared/channel-tag.js";
+import { describeTimeSince, listChannelFacts, readChannelFacts } from "#shared/channel-tag.js";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -51,4 +51,20 @@ test("production, whose release has no label, has no tag", () => {
 test("a release the Worker no longer has, which names only its commit, has no tag", () => {
   const release = { version: null, commit: "3f2a91c", builtAt: null, label: null };
   assert.equal(listChannelFacts(release, Date.parse("2026-10-18T20:04:30Z")), null);
+});
+
+test("a release that can't be read, as offline, leaves no tag", async () => {
+  const unreadable = () => Promise.reject(new Error("version.json answered 500"));
+  assert.equal(await readChannelFacts(unreadable), null);
+});
+
+test("a release read now names how long ago it went live as of now", async (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-18T23:00:00Z") });
+  const release = {
+    version: "2.33.0-beta",
+    commit: "3f2a91c",
+    builtAt: "2026-10-18T20:00:00Z",
+    label: "beta",
+  };
+  assert.deepEqual(await readChannelFacts(async () => release), ["beta", "3f2a91c", "3 h ago"]);
 });

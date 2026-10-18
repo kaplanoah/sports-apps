@@ -34,11 +34,18 @@ export function listChannelFacts({ label, commit, builtAt }, now) {
   return [label, commit, describeTimeSince(now - Date.parse(builtAt))];
 }
 
-// A release that can't be read, as offline, leaves no tag, since a stale one would say the wrong
-// age.
+/**
+ * The tag's facts as of now, from the release `readRelease` reads. A release that can't be read,
+ * as offline, leaves no tag, since a stale one would say the wrong age.
+ * @param {() => Promise<import("./release.js").Release | null>} readRelease
+ */
+export async function readChannelFacts(readRelease) {
+  const release = await readRelease().catch(() => null);
+  return release && listChannelFacts(release, Date.now());
+}
+
 async function drawTag() {
-  const release = await loadRelease().catch(() => null);
-  const facts = release && listChannelFacts(release, Date.now());
+  const facts = await readChannelFacts(loadRelease);
   const tag = /** @type {HTMLElement} */ (document.getElementById("channelTag"));
   setHtml(tag, facts ? joinWithSeparator(facts) : html``);
   tag.hidden = !facts;

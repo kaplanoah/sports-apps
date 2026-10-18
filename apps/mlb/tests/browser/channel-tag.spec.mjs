@@ -69,20 +69,6 @@ test("a reload shows no tag until it has read its release, rather than the age i
   await expect(tag).toHaveText(/^beta•3f2a91c•\d+ min ago$/);
 });
 
-test("a reload whose release can't be read shows no tag", async ({ page }) => {
-  await serveRelease(page, BETA);
-  await openApp(page);
-  const tag = page.locator("#channelTag");
-  await expect(tag).toHaveText("beta•3f2a91c•4 min ago");
-
-  await page.route(matchPath("/version.json"), (route) => route.fulfill({ status: 500 }));
-  const releaseRead = page.waitForResponse(matchPath("/version.json"));
-  await page.reload();
-  await releaseRead;
-
-  await expect(tag).toBeHidden();
-});
-
 test("production has no tag", async ({ page }) => {
   await serveRelease(page, { ...BETA, version: "2.33.0", label: null });
   await openApp(page);
