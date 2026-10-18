@@ -1,10 +1,13 @@
 // The page's asks to be added to the Home Screen, which draw-home-screen-asks.js draws before the
 // first paint, and whose welcome keeps its own theme pick and closing: the welcome a phone's or
-// tablet's browser opens on, and the box at the bottom of settings. Neither shows on a computer, or
+// tablet's browser opens on, and the box at the top of settings. Neither shows on a computer, or
 // once the page is opened from the Home Screen. With Chrome's own install to hand, Install takes
-// the place of the steps in both.
+// the place of the steps in both. The welcome opens again from settings' Notifications, rising
+// as settings does, and closes as settings does, sliding down from its caret, Escape, Android's
+// back, or a swipe down.
 
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
+import { closeOnCancel, closeOnSwipeDown } from "./sheet-swipe.js";
 
 /**
  * Chrome's own install dialog, which it offers only to a page it can install.
@@ -67,9 +70,22 @@ function forgetAsks() {
   showAsks();
 }
 
+/** Opens the welcome over the page, rising as a sheet does. */
+export function openWelcome() {
+  findWelcome().showModal();
+}
+
+function wireWelcomeClosing() {
+  const welcome = findWelcome();
+  closeOnCancel(welcome);
+  closeOnSwipeDown(welcome, { isOwnGesture: () => false, findScroller: () => welcome });
+  welcome.addEventListener("close", () => welcome.removeAttribute("data-reopened"));
+}
+
 export function startHomeScreen() {
   findElement("homeScreenTip").addEventListener("click", followClick);
   findWelcome().addEventListener("click", followClick);
+  wireWelcomeClosing();
   // Chrome would otherwise show its own banner along the bottom of the screen.
   window.addEventListener("beforeinstallprompt", keepInstallPrompt);
   window.addEventListener("appinstalled", forgetAsks);

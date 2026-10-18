@@ -48,7 +48,7 @@ test.describe("on an iPhone, in the browser", () => {
     await openApp(page, { isShowingWelcome: true });
     const welcome = page.locator(WELCOME);
     await expect(welcome).toBeVisible();
-    await expect(welcome.getByRole("heading")).toHaveText("Add WNBA to your Home Screen");
+    await expect(welcome.getByRole("heading")).toHaveText("Add WNBA to your home screen");
     await expect(listWelcomeSteps(page)).toHaveText([
       PICK_STEP,
       "Tap Share",
@@ -76,14 +76,24 @@ test.describe("on an iPhone, in the browser", () => {
     expect(Math.abs(await measureStepNumbers(page))).toBeLessThan(MIDDLE_ALLOWANCE);
   });
 
-  test("the heading opens the welcome's room", async ({ page }) => {
+  test("the caret opens the welcome's room, at the left where every sheet's sits, 14px over the heading", async ({
+    page,
+  }) => {
     await openApp(page, { isShowingWelcome: true });
-    const headingGap = await page.locator(WELCOME).evaluate((welcome) => {
-      const roomTop =
-        welcome.getBoundingClientRect().top + parseFloat(getComputedStyle(welcome).paddingTop);
-      return welcome.querySelector(".welcome-title").getBoundingClientRect().top - roomTop;
+    const caret = await page.locator(WELCOME).evaluate((welcome) => {
+      const style = getComputedStyle(welcome);
+      const room = welcome.getBoundingClientRect();
+      const roomTop = room.top + parseFloat(style.paddingTop);
+      const roomLeft = room.left + parseFloat(style.paddingLeft);
+      const close = welcome.querySelector(".welcome-close").getBoundingClientRect();
+      const heading = welcome.querySelector(".welcome-title").getBoundingClientRect();
+      return {
+        overRoom: roomTop - close.top,
+        pastLeft: roomLeft - close.left,
+        overHeading: heading.top - close.bottom,
+      };
     });
-    expect(headingGap).toBe(0);
+    expect(caret).toEqual({ overRoom: 14, pastLeft: 12, overHeading: 14 });
   });
 
   // An iPhone's bottom inset, which keeps its home bar clear, is 34px, and Android's Chrome has none.
@@ -198,7 +208,7 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator(WELCOME)).toBeHidden();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toHaveText(
-      "Use this site like an app Tap Share, then Add to Home Screen. It opens full screen, without the browser's bars.",
+      "Use this site like an app Tap Share then Add to Home Screen. It'll open full screen, without the browser's bars.",
       { useInnerText: true },
     );
   });
@@ -278,7 +288,7 @@ test.describe("on an Android phone, in the browser", () => {
     await page.locator(WELCOME).getByRole("button", CONTINUE).click();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toHaveText(
-      "Use this site like an app Tap Menu, then Add to Home screen. It opens full screen, without the browser's bars.",
+      "Use this site like an app Tap Menu then Add to Home screen. It'll open full screen, without the browser's bars.",
       { useInnerText: true },
     );
   });
@@ -295,7 +305,7 @@ test.describe("on an Android phone, in the browser", () => {
     await page.locator(WELCOME).getByRole("button", CONTINUE).click();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toHaveText(
-      "Use this site like an app It opens full screen, without the browser's bars INSTALL",
+      "Use this site like an app It'll open full screen, without the browser's bars INSTALL",
       { useInnerText: true },
     );
     expect(await listStrayPeriods(page)).toEqual([]);
@@ -320,7 +330,7 @@ test.describe("on an Android phone, in the browser", () => {
     await openSettings(page);
     await page.locator("#homeScreenTip").getByRole("button", { name: "Install" }).click();
 
-    await expect(page.locator("#homeScreenTip")).toContainText("Tap Menu, then Add to Home screen");
+    await expect(page.locator("#homeScreenTip")).toContainText("Tap Menu then Add to Home screen");
     await expect(page.locator("#homeScreenTip").getByRole("button")).toHaveCount(0);
     expect(await page.evaluate(() => /** @type {any} */ (window).installShown)).toBe(1);
   });

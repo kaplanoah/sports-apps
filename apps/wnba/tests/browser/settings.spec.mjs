@@ -224,6 +224,7 @@ const readSettingsBoxes = (page) =>
       head: readBox(".sheet-head"),
       title: readBox("h2"),
       close: readBox(".sheet-close"),
+      tip: readBox("#homeScreenTip"),
       controls: readBox(".settings-controls"),
       footer: readBox(".settings-footer"),
     };
@@ -239,15 +240,17 @@ test.describe("on a phone, settings", () => {
     expect([sheet.top, sheet.height]).toEqual([0, 844]);
   });
 
-  test("set their title level with their close button and 32px over the first setting, and end 17px over the bottom", async ({
+  // A phone's browser shows the Home Screen box at the top of settings, over the first setting.
+  test("set their title level with their close button and 32px over the Home Screen box, then the first setting, and end 17px over the bottom", async ({
     page,
   }) => {
     await openSettingsWithRelease(page);
-    const { sheet, top, head, title, close, controls, footer } = await readSettingsBoxes(page);
+    const { sheet, top, head, title, close, tip, controls, footer } = await readSettingsBoxes(page);
     const findMiddle = (box) => box.top + box.height / 2;
     expect(Math.abs(findMiddle(title) - findMiddle(close))).toBeLessThan(1);
     expect(head.bottom).toBeLessThanOrEqual(top.bottom);
-    expect(Math.round(controls.top - title.bottom)).toBe(32);
+    expect(Math.round(tip.top - title.bottom)).toBe(32);
+    expect(Math.round(controls.top - tip.bottom)).toBe(14);
     expect(Math.round(sheet.bottom - footer.bottom)).toBe(17);
   });
 });

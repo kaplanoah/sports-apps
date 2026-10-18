@@ -193,7 +193,7 @@ says why the Worker couldn't read the league, and `write` names the save that fa
 in Safari and choose **Share > Add to Home Screen**. It then opens full
 screen with its own icon. On a phone, the page shows these steps itself, in a
 welcome over the whole screen until the page is added or the viewer goes on in
-the browser, and at the bottom of settings, and on Android its **Install**
+the browser, and at the top of settings, and on Android its **Install**
 button opens Chrome's own install dialog.
 
 **6. Turn on notifications.** From the home screen icon, have them tap the

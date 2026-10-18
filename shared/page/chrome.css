@@ -608,6 +608,41 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
     color: var(--ink-hover);
   }
 }
+/* The ? at the end of the Notifications note opens the welcome's steps. It keeps to the note's
+   last word, so it never wraps onto a line of its own. Its tap reaches past the line, above and
+   below, without making it taller, and its icon sits a pixel above the line's middle, on its
+   letters' middle. */
+.notify-help-end {
+  white-space: nowrap;
+}
+.notify-help {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -14px -12px -14px -10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  vertical-align: middle;
+  cursor: pointer;
+}
+.notify-help svg {
+  position: relative;
+  top: -1px;
+  width: 15px;
+  height: 15px;
+}
+@media (hover: hover) {
+  .notify-help:hover {
+    color: var(--ink-hover);
+  }
+}
+body.kbd .notify-help:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -12px;
+}
 .select-field {
   font: inherit;
   font-family: var(--select-face);
@@ -661,7 +696,7 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   cursor: default;
   opacity: 0.5;
 }
-/* The box at the bottom of settings that keeps the steps to add the page to the Home Screen
+/* The box at the top of settings that keeps the steps to add the page to the Home Screen
    (draw-home-screen-asks.js). */
 .home-screen-tip {
   display: flex;
@@ -718,6 +753,12 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   vertical-align: -2px;
   color: var(--ink);
 }
+/* The menu's dots fill only the middle of their icon, so they reach into its sides to sit as close
+   to their words as the Share icon does. */
+.home-screen-steps .menu-glyph {
+  margin: 0 -1.5px;
+  vertical-align: -1.5px;
+}
 .home-screen-install {
   flex: none;
   margin-top: 7px;
@@ -760,8 +801,32 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   display: flex;
   flex-direction: column;
 }
+/* It leaves what's behind it as it is, as a sheet does, so the page shows as it rises or slides. */
 .welcome::backdrop {
-  background: var(--bg);
+  background: none;
+}
+/* Its caret closes it from the spot every sheet's does. */
+.welcome-close {
+  flex: none;
+  align-self: flex-start;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -14px 0 14px -12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+.welcome-close svg {
+  width: 26px;
+  height: 26px;
+}
+body.kbd .welcome-close:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .welcome .gate-title {
   margin: 0 0 22px;
@@ -813,6 +878,12 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   width: 16px;
   height: 16px;
   margin: 0 4px;
+}
+/* As in the box, the menu's dots sit as close to their words as the Share icon does. */
+.welcome-step .menu-glyph {
+  position: relative;
+  top: -0.5px;
+  margin: 0;
 }
 .welcome-note {
   grid-column: 2;
@@ -904,11 +975,12 @@ body.kbd .welcome-continue:focus {
     margin: 0;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .settings-panel[open] {
+    :is(.settings-panel, .welcome)[open] {
       animation: sheet-rise var(--sheet-motion);
     }
-    /* A sheet the page put back open as it loaded was already showing, so it doesn't rise again. */
-    .settings-panel[open][data-reopened] {
+    /* A sheet the page put back open as it loaded was already showing, so it doesn't rise again,
+       nor does the welcome a first visit opens on. */
+    :is(.settings-panel, .welcome)[open][data-reopened] {
       animation: none;
     }
   }

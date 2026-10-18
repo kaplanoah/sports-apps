@@ -15,20 +15,24 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 const PAGE_FOLDER = new URL("../../page/", import.meta.url);
 
 /**
- * How far below the settings the Home Screen box starts, and how far below it the ranking's
- * heading does, read together, since the sheet may still be rising.
+ * How far below the header the Home Screen box starts, how far below it the settings do, and how
+ * far it is from the ranking's heading, read together, since the sheet may still be rising.
  * @param {import("@playwright/test").Page} page
  */
 const measureTip = (page) =>
   page.locator("#homeScreenTip").evaluate((tip) => {
     const readBox = (selector) => document.querySelector(selector).getBoundingClientRect();
     const box = tip.getBoundingClientRect();
+    const header = readBox("#settingsDialog .sheet-top");
     const settings = readBox(".settings-controls");
     const ranking = readBox("#rankingTitle");
+    const rankingHeading = readBox(".ranking-heading");
     return {
-      belowSettings: box.top - settings.bottom,
+      belowHeader: box.top - header.bottom,
+      aboveSettings: settings.top - box.bottom,
       aboveRanking: ranking.top - box.bottom,
       besideRanking: ranking.left - box.right,
+      levelWithRanking: Math.round(box.top - rankingHeading.top),
     };
   });
 
@@ -46,7 +50,7 @@ test.describe("on an iPhone, in the browser", () => {
     await page.emulateMedia({ colorScheme: "dark" });
     await openApp(page, { isShowingWelcome: true });
     const welcome = page.locator("#homeScreenWelcome");
-    await expect(welcome.getByRole("heading")).toHaveText("Add MLB to your Home Screen");
+    await expect(welcome.getByRole("heading")).toHaveText("Add MLB to your home screen");
     await expect(welcome.locator(".welcome-steps > li:visible")).toHaveText([
       "Pick your theme You can change it later in Settings System Ball Night Game",
       "Tap Share",
@@ -115,16 +119,16 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await listThemeLayoutChanges(page)).toEqual([]);
   });
 
-  test("the settings say how to add the page to the Home Screen, above the ranking", async ({
+  test("the settings say how to add the page to the Home Screen at their top, over the first setting", async ({
     page,
   }) => {
     await openApp(page);
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toContainText(
-      "Tap Share, then Add to Home Screen. It opens full screen",
+      "Tap Share then Add to Home Screen. It'll open full screen",
     );
-    const { belowSettings, aboveRanking } = await measureTip(page);
-    expect(belowSettings).toBeGreaterThan(0);
+    const { belowHeader, aboveSettings, aboveRanking } = await measureTip(page);
+    expect([belowHeader, aboveSettings]).toEqual([14, 14]);
     expect(aboveRanking).toBeGreaterThan(0);
   });
 
@@ -222,13 +226,16 @@ test.describe("on a tablet, in the browser", () => {
     userAgent: IPHONE_AGENT.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
   });
 
-  test("the Home Screen box sits under the settings, beside the ranking", async ({ page }) => {
+  test("the Home Screen box sits at the top of the settings, level with the ranking's heading beside it", async ({
+    page,
+  }) => {
     await openApp(page);
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeVisible();
-    const { belowSettings, besideRanking } = await measureTip(page);
-    expect(belowSettings).toBeGreaterThan(0);
+    const { aboveSettings, besideRanking, levelWithRanking } = await measureTip(page);
+    expect(aboveSettings).toBeGreaterThan(0);
     expect(besideRanking).toBeGreaterThan(0);
+    expect(levelWithRanking).toBe(20);
   });
 
   test("the welcome keeps to a column as wide as a phone's, in the middle of the screen", async ({

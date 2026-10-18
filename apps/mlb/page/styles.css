@@ -1441,12 +1441,16 @@ body.kbd .rank-item .grip:focus {
   font-weight: var(--type-label-weight);
 }
 
-/* The settings and, on a phone, the box under them that says how to add the page to the Home
-   Screen. */
+/* The settings and, in a phone's or tablet's browser, the box over them that says how to add the
+   page to the Home Screen. */
 .settings-main {
   display: flex;
   flex-direction: column;
   gap: var(--section-gap);
+}
+/* The News switches end with a line, as the settings above them do, which sets the ranking apart. */
+.settings-group-rows {
+  border-bottom: 1px solid var(--divider);
 }
 /* Settings fill the whole sheet, so the ranking can be one sheet tall, and a scroll settles on the
    settings, the ranking, the copyright at their end, or Diagnostics past it, each of which would
@@ -1533,6 +1537,10 @@ body.kbd .rank-item .grip:focus {
   }
   .settings-controls {
     border-top: 0;
+  }
+  /* The box at the settings' top starts level with the ranking's heading. */
+  .settings-main > .home-screen-tip {
+    margin-top: 20px;
   }
   .settings-ranking {
     display: contents;

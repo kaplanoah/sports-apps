@@ -1,4 +1,4 @@
-import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
+import { test, expect, openApp, openSettings, serveLockedApp, ON_A_PHONE } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import {
@@ -136,29 +136,47 @@ test("Appearance sits under Notifications, above the News switches, each choice 
     expect(await icon.boundingBox()).toMatchObject({ width: 60, height: 60 });
 });
 
-test("a line ends the settings above News, and none sits under its label, between its switches, or under them, each switch's row right under the one before", async ({
-  page,
-}) => {
-  await openApp(page);
-  await openSettings(page);
-  const settingsAbove = page.locator("#settingsDialog .settings-main > .settings-controls");
-  expect(
-    await settingsAbove.evaluate((controls) => getComputedStyle(controls).borderBottomStyle),
-  ).toBe("solid");
-  const news = page.getByRole("group", { name: "News" });
-  const newsLines = await news.evaluate((group) =>
-    [group, ...group.children, ...group.querySelectorAll(".control-row")].flatMap((part) => {
-      const style = getComputedStyle(part);
-      return [style.borderTopStyle, style.borderBottomStyle].filter((line) => line !== "none");
-    }),
-  );
-  expect(newsLines).toEqual([]);
-  const rowEdges = await news.locator(".control-row").evaluateAll((rows) =>
-    rows.map((row) => {
-      const box = row.getBoundingClientRect();
-      return { top: box.top, bottom: box.bottom };
-    }),
-  );
-  const gaps = rowEdges.slice(1).map((row, index) => row.top - rowEdges[index].bottom);
-  expect(gaps).toEqual([0, 0]);
+test.describe("on an iPhone's Home Screen app, which has no Home Screen box", () => {
+  test.use({ ...ON_A_PHONE, userAgent: IPHONE_AGENT });
+
+  test("a line ends the settings above News and the News switches, over the ranking, and none sits under News's label or between its switches, each switch's row right under the one before", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => true });
+    });
+    await openApp(page);
+    await openSettings(page);
+    await expect(page.locator("#homeScreenTip")).toBeHidden();
+    const settingsAbove = page.locator("#settingsDialog .settings-main > .settings-controls");
+    expect(
+      await settingsAbove.evaluate((controls) => getComputedStyle(controls).borderBottomStyle),
+    ).toBe("solid");
+    const news = page.getByRole("group", { name: "News" });
+    const newsLines = await news.evaluate((group) =>
+      [group, ...group.children, ...group.querySelectorAll(".control-row")].flatMap((part) => {
+        const style = getComputedStyle(part);
+        return ["Top", "Bottom"]
+          .filter((side) => style[`border${side}Style`] !== "none")
+          .map((side) => `${part.className} ${side}`);
+      }),
+    );
+    expect(newsLines).toEqual(["settings-group-rows Bottom"]);
+    const lineToRanking = await news.evaluate((group) => {
+      const rows = group.querySelector(".settings-group-rows").getBoundingClientRect();
+      const lastRow = [...group.querySelectorAll(".control-row")].at(-1).getBoundingClientRect();
+      const ranking = document.getElementById("rankingTitle").getBoundingClientRect();
+      return { underLastRow: rows.bottom - lastRow.bottom, overRanking: ranking.top - rows.bottom };
+    });
+    expect(lineToRanking.underLastRow).toBe(1);
+    expect(lineToRanking.overRanking).toBeGreaterThan(0);
+    const rowEdges = await news.locator(".control-row").evaluateAll((rows) =>
+      rows.map((row) => {
+        const box = row.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom };
+      }),
+    );
+    const gaps = rowEdges.slice(1).map((row, index) => row.top - rowEdges[index].bottom);
+    expect(gaps).toEqual([0, 0]);
+  });
 });

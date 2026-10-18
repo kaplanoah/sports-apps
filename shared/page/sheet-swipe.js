@@ -72,6 +72,17 @@ export function closeSheet(dialog) {
 }
 
 /**
+ * Has Escape, Android's back, and a close the page requests slide the sheet down too.
+ * @param {HTMLDialogElement} dialog
+ */
+export function closeOnCancel(dialog) {
+  dialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeSheet(dialog);
+  });
+}
+
+/**
  * Moves the sheet with a finger swiping down from its top, and closes it at the end of a far or
  * fast enough swipe. A swipe down the scrolled content scrolls it to its top, then moves the
  * sheet. Touches on the sheet's own gestures, and swipes mostly sideways, leave it where it is.
