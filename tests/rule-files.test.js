@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  RULES_FOLDER,
   isRuleFile,
   listRulesFor,
   matchesGlob,
@@ -47,6 +48,19 @@ test("each rule file's paths each match a file in the repo", () => {
       .map((glob) => `${path}: ${glob}`),
   );
   assert.deepEqual(stale, []);
+});
+
+// A session learns from AGENTS.md where the rest of the guidance is before it opens a file.
+test("AGENTS.md names each rule file and skill", () => {
+  const agents = readRule("AGENTS.md");
+  const skills = repoFiles.flatMap(
+    (path) => path.match(/^\.claude\/skills\/([^/]+)\/SKILL\.md$/)?.[1] ?? [],
+  );
+  const unnamed = [
+    ...ruleFiles.filter((path) => !agents.includes(`\`${path.slice(RULES_FOLDER.length)}\``)),
+    ...skills.filter((name) => !agents.includes(`\`${name}\` skill`)),
+  ];
+  assert.deepEqual(unnamed, []);
 });
 
 test("a rule file's paths are the items its frontmatter lists, quoted or not", () => {

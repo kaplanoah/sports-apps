@@ -1,4 +1,5 @@
 import { test as base, expect } from "@playwright/test";
+import { escapePattern } from "../../worker/rule-files.mjs";
 import { createDurableObjectContext } from "../durable-object-context.js";
 
 /** @type {import("@playwright/test").Fixtures<{ pageErrors: string[] }, {}, import("@playwright/test").PlaywrightTestArgs>} */
@@ -58,9 +59,6 @@ export function createTestStore(
 export const TEST_SERVER = /^http:\/\/127\.0\.0\.1[:/]/;
 const OTHER_HOSTS = /^https?:\/\/(?!127\.0\.0\.1[:/])/;
 
-/** @param {string} text */
-const escapeForPattern = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 /**
  * Matches requests for `path`, whatever their query, or for anything under it when it ends with a
  * slash.
@@ -68,7 +66,7 @@ const escapeForPattern = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  */
 export function matchPath(path) {
   const end = path.endsWith("/") ? "" : "(?:[?#]|$)";
-  return new RegExp(`^\\w+://[^/]+${escapeForPattern(path)}${end}`);
+  return new RegExp(`^\\w+://[^/]+${escapePattern(path)}${end}`);
 }
 
 /** @param {import("@playwright/test").Page} page */

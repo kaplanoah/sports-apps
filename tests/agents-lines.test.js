@@ -13,6 +13,8 @@ const isGuidance = (/** @type {string} */ path) =>
   /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(path);
 const GUIDANCE = listTrackedFiles().filter(isGuidance);
 const LONGEST_LINE = 240;
+// Claude Code reads AGENTS.md whole into every session, and follows less of a longer one.
+const LONGEST_AGENTS = 200;
 
 const readProse = (line) => line.replace(/^\s*\d+\. /, "").replaceAll(/`[^`]*`/g, "``");
 
@@ -39,6 +41,11 @@ test("each line of a guidance file starts at most one sentence", () => {
     listBrokenLines((line) => /[.?!] [A-Z]/.test(readProse(line))),
     [],
   );
+});
+
+test("AGENTS.md stays short enough for every session to follow", () => {
+  const lines = readFileSync(new URL("AGENTS.md", ROOT), "utf8").trimEnd().split("\n");
+  assert.ok(lines.length <= LONGEST_AGENTS, `AGENTS.md has ${lines.length} lines`);
 });
 
 test("a long sentence in a guidance file breaks after its commas", () => {
