@@ -18,13 +18,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { listStageKinds } from "./plan-review.mjs";
-import {
-  SUMMARY_MARKER,
-  WEIGHTS,
-  findSummary,
-  pluralize,
-  writeReviewedHead,
-} from "./review-state.mjs";
+import { SUMMARY_MARKER, WEIGHTS, findSummary, writeReviewedHead } from "./review-state.mjs";
 
 // What Claude Code's Read returns when it's given no limit.
 const READ_LINES = 2000;
@@ -263,6 +257,9 @@ const listUnread = ({ path, why }) => `- \`${path}\`: ${why}`;
 
 /** @param {string} path */
 const listFile = (path) => `- \`${path}\``;
+
+/** @param {number} count @param {string} noun */
+const pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** @param {string[]} weights */
 const describeFound = (weights) =>

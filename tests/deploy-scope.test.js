@@ -50,7 +50,6 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/review-context.mjs",
     "worker/review-state.mjs",
     "worker/set-app-key.mjs",
-    "worker/wait-for-review.mjs",
   ]);
   assert.equal(decision.isNeeded, false);
   assert.match(

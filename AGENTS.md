@@ -934,10 +934,6 @@ When a step says to go back to an earlier step, continue in order from there.
    The `check` job is the one that must pass; it fails whenever any other CI job fails.
    Each time you look while waiting, and whenever no CI run has started on the latest commit a few minutes after the push,
    go back to step 4 first: another PR may have merged into `main` and left this one in conflict.
-   To wait on the review, run `npm run wait-for-review -- <PR number>` in the foreground, with a 10-minute timeout, so your turn holds while it waits,
-   and again until it says the review finished: it lists every finding the review posted on the PR's head, from every page of its comments,
-   and exits nonzero unless the review passed, with a code for each reason its top comment names (`worker/wait-for-review.mjs`).
-   On a draft, which CI doesn't review, wait only on CI's checks: `wait-for-review` says it's a draft and ends at once until the PR is marked ready.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
@@ -960,7 +956,6 @@ When a step says to go back to an earlier step, continue in order from there.
    and anything it read but couldn't judge (`worker/judge-review.mjs`).
    It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each.
    If the summary names something it couldn't judge, tell the user.
-   Read every finding `npm run wait-for-review -- <PR number>` lists before you answer any.
    Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its thread, only when you won't fix it, saying why.
    Fix a finding in every place the PR's own change shows the same problem, not only on its line,
    and name a place outside the change that shows it in a line of the PR's description, rather than widening the PR.

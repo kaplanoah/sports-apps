@@ -4,10 +4,8 @@ import {
   SUMMARY_MARKER,
   findSummary,
   listFindingMarks,
-  pluralize,
   readReviewComments,
   readReviewedHead,
-  removeFindingMarks,
   writeFindingMark,
   writeReviewedHead,
 } from "../worker/review-state.mjs";
@@ -62,17 +60,4 @@ test("the review's comments are its own from every page of the review comments, 
     comments.map((comment) => comment.body),
     ["one", "two", "three"],
   );
-});
-
-test("a comment reads without the marks on lines of their own, as the review posts each", () => {
-  const mark = writeFindingMark("0".repeat(16), HEAD);
-  assert.equal(
-    removeFindingMarks(`**Nit** one\n\n${mark}\n- [ ] two\n  ${mark}\n- [ ] three\n  ${mark}`),
-    "**Nit** one\n\n- [ ] two\n- [ ] three",
-  );
-});
-
-test("a count names its noun once or many times", () => {
-  assert.equal(pluralize(1, "finding"), "1 finding");
-  assert.equal(pluralize(0, "minute"), "0 minutes");
 });

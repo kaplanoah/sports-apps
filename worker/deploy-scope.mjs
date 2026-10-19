@@ -48,7 +48,6 @@ const SKIPPED_FILES = new Set([
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
   "worker/set-page-host.mjs",
-  "worker/wait-for-review.mjs",
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);

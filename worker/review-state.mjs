@@ -18,8 +18,6 @@ export const WEIGHTS = ["Important", UNSURE, "Nit", "Pre-existing"];
 export const OFF_DIFF_HEADING = "Findings on files this pull request doesn't change:";
 const STATE = /<!-- claude-review-state (\{.*?\}) -->/;
 const FINDING_MARK = /<!-- claude-finding ([0-9a-f]{16}) ([0-9a-f]{40}) -->/g;
-// A mark on a line of its own, as each item of a checklist of Nits ends.
-const FINDING_MARK_LINE = new RegExp(String.raw`^[ \t]*${FINDING_MARK.source}[ \t]*(?:\n|$)`, "gm");
 
 /**
  * The review's own summary among a pull request's comments, never anyone else's that starts the
@@ -63,15 +61,6 @@ export const writeFindingMark = (key, head) => `<!-- claude-finding ${key} ${hea
  */
 export const listFindingMarks = (body) =>
   [...(body ?? "").matchAll(FINDING_MARK)].map((match) => ({ key: match[1], head: match[2] }));
-
-/**
- * A comment's text as it reads, without the marks of the findings it carries.
- * @param {string} body
- */
-export const removeFindingMarks = (body) => body.replace(FINDING_MARK_LINE, "").trim();
-
-/** @param {number} count @param {string} noun */
-export const pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Every comment the review posted on a pull request, from every page of its review comments and
