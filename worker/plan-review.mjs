@@ -18,6 +18,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { resolvePackageImport } from "./package-imports.mjs";
 import { findSummary, readReviewedHead } from "./review-state.mjs";
 
 const AREA_LINES = 2000;
@@ -441,9 +442,7 @@ export function listStaleNames(diff, grep, deletedFiles) {
 }
 
 // Where the pages' `#shared/` imports and `shared/` links lead, by package.json's imports.
-const SHARED_PAGE_FOLDER = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-).imports["#shared/*"].replace(/^\.\/|\*$/g, "");
+const SHARED_PAGE_FOLDER = String(resolvePackageImport("#shared/"));
 
 /**
  * Whether a place the search found may name a deleted file: some path in its text that the

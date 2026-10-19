@@ -1,15 +1,15 @@
 // Finds a pull request's CI run that passed on exactly some code. A pull request's CI tests it
 // merged into its base branch as that branch was then, and records that code's git tree: once
-// every check passed, so that main can deploy without waiting for CI to run again, since when the
-// base is main and nothing else merged first, the squash merge has the same tree; and once every
-// test passed, whatever the gate said, so that a label change, which brings no new code, runs only
-// the gate again.
+// every check passed and the gate didn't hold the change, so that main can deploy without waiting
+// for CI to run again, since when the base is main and nothing else merged first, the squash merge
+// has the same tree; and once every test passed, whatever the gate said, so that a label change,
+// which brings no new code, runs only the gate again.
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createGitHub } from "./github-api.mjs";
 
-const CI_WORKFLOW = ".github/workflows/ci.yml";
+export const CI_WORKFLOW = ".github/workflows/ci.yml";
 
 /** @param {string} tree */
 export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
@@ -58,7 +58,7 @@ async function findRecordingRun({
 }
 
 /**
- * A run on which every check, the gate too, passed.
+ * A run on which every check passed and the gate didn't hold the change.
  * @param {FindOptions} options
  */
 export const findPassedRun = ({ tree, ...options }) =>
@@ -69,8 +69,8 @@ export const findPassedRun = ({ tree, ...options }) =>
   });
 
 /**
- * A run on which every test passed. Its gate may have failed it, so the run's own conclusion
- * doesn't count: the record is made only once every other job has passed.
+ * A run on which every test passed. Its check may have held a red change, so the run's own
+ * conclusion doesn't count: the record is made only once every test and the review passed.
  * @param {FindOptions} options
  */
 export const findTestedRun = ({ tree, ...options }) =>

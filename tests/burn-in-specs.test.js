@@ -1,24 +1,76 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findBurnedInHead, isBurnedIn, listSpecsToBurnIn } from "../worker/burn-in-specs.mjs";
+import { listBrowserTestReach } from "../worker/browser-scope.mjs";
+import {
+  findBurnedInHead,
+  isBurnedIn,
+  listChangedSince,
+  listSpecsToBurnIn,
+} from "../worker/burn-in-specs.mjs";
 
 const SHEETS = "apps/wnba/tests/browser/sheet-stack.spec.mjs";
 const PAGE = "apps/mlb/tests/browser/page.spec.mjs";
+const REACHED = listBrowserTestReach();
 
-test("a spec that passed burn-in and hasn't changed since isn't burned in again", () => {
-  assert.deepEqual(listSpecsToBurnIn([SHEETS, PAGE], [PAGE, "shared/page/sheet.js"]), [PAGE]);
-  assert.deepEqual(listSpecsToBurnIn([SHEETS, PAGE], ["apps/wnba/page/styles.css"]), []);
+/**
+ * @param {string[]} changedSpecs
+ * @param {string[] | null} sinceBurnedIn
+ */
+const listSpecs = (changedSpecs, sinceBurnedIn) =>
+  listSpecsToBurnIn(changedSpecs, sinceBurnedIn, REACHED);
+
+test("a spec that passed burn-in and hasn't changed since isn't burned in again, whatever the page and the Worker did", () => {
+  assert.deepEqual(listSpecs([SHEETS, PAGE], [PAGE, "shared/page/sheet.js"]), [PAGE]);
+  for (const tested of [
+    "apps/wnba/page/styles.css",
+    "apps/wnba/worker/src/store.js",
+    "apps/mlb/worker/page-files.mjs",
+    "shared/worker/season-store.js",
+    "worker/plan-review.mjs",
+    "README.md",
+  ])
+    assert.deepEqual(listSpecs([SHEETS, PAGE], [tested]), [], tested);
 });
 
 test("every changed spec burns in with no earlier burn-in, or once what every spec runs with changed", () => {
-  assert.deepEqual(listSpecsToBurnIn([SHEETS, PAGE], null), [SHEETS, PAGE]);
+  assert.deepEqual(listSpecs([SHEETS, PAGE], null), [SHEETS, PAGE]);
   for (const shared of [
     "tests/browser/touch.mjs",
     "apps/wnba/tests/browser/harness.mjs",
+    "apps/wnba/tests/player-fixtures.js",
+    "worker/page-files.mjs",
     "playwright.config.mjs",
+    "package.json",
     "package-lock.json",
   ])
-    assert.deepEqual(listSpecsToBurnIn([SHEETS, PAGE], [shared]), [SHEETS, PAGE], shared);
+    assert.deepEqual(listSpecs([SHEETS, PAGE], [shared]), [SHEETS, PAGE], shared);
+});
+
+test("what changed since a burn-in is the pull request's side and its base's, or nothing known for a commit the checkout lacks", () => {
+  /** @type {string[][]} */
+  const asked = [];
+  /** @param {string[]} args */
+  const readGit = (args) => {
+    asked.push(args);
+    if (args[0] === "merge-base") return "old-base\n";
+    return args.includes("HEAD^2") ? "a.js\nb.js\n" : "b.js\ntests/browser/touch.mjs\n";
+  };
+  assert.deepEqual(listChangedSince("burned", readGit), [
+    "a.js",
+    "b.js",
+    "tests/browser/touch.mjs",
+  ]);
+  assert.deepEqual(asked, [
+    ["merge-base", "burned", "HEAD^1"],
+    ["diff", "--name-only", "--no-renames", "burned", "HEAD^2"],
+    ["diff", "--name-only", "--no-renames", "old-base", "HEAD^1"],
+  ]);
+  assert.equal(
+    listChangedSince("gone", () => {
+      throw new Error("bad object gone");
+    }),
+    null,
+  );
 });
 
 test("a run burned in only once every one of its burn-in machines passed", () => {
@@ -78,8 +130,9 @@ test("the last burned-in head is the newest earlier head of the branch's own run
     await findBurnedInHead({ readJson, branch: "claude/a b", headSha: "now" }),
     "pushed",
   );
-  assert.match(asked[0], /branch=claude%2Fa%20b&/);
+  assert.match(asked[0], /^\/actions\/workflows\/ci\.yml\/runs\?/);
   assert.match(asked[0], /event=pull_request&status=completed/);
+  assert.match(asked[0], /branch=claude%2Fa%20b&per_page=30$/);
   assert.deepEqual(asked.slice(1), [
     "/actions/runs/3/jobs?per_page=100&page=1",
     "/actions/runs/2/jobs?per_page=100&page=1",
@@ -108,4 +161,22 @@ test("a run's jobs are read past their first page", async () => {
       ? { workflow_runs: [buildRun(7, "earlier")] }
       : { jobs: pages[Number(path.match(/&page=(\d+)/)?.[1])] ?? [] };
   assert.equal(await findBurnedInHead({ readJson, branch: "x", headSha: "now" }), "earlier");
+});
+
+test("a branch's burn-ins GitHub won't give burn every changed spec in, and say why", async () => {
+  /** @type {string[]} */
+  const logged = [];
+  const readJson = async () => {
+    throw new Error("GitHub answered 502 for GET /actions/workflows/ci.yml/runs");
+  };
+  assert.equal(
+    await findBurnedInHead({
+      readJson,
+      branch: "x",
+      headSha: "now",
+      log: (message) => logged.push(message),
+    }),
+    null,
+  );
+  assert.match(logged[0], /^::warning::Couldn't read the branch's earlier burn-ins.*502/);
 });

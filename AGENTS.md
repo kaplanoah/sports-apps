@@ -63,7 +63,8 @@
   CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config,
   so a change to the docs or the tooling alone runs none (`worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
-  but for one that passed burn-in on an earlier push and hasn't changed since, with the helpers and config every spec runs with unchanged too (`worker/burn-in-specs.mjs`),
+  but for one that passed burn-in on an earlier push and hasn't changed since,
+  with every helper and config the specs reach by import, and the dependencies, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
@@ -775,31 +776,34 @@ Delete it once the app's first PR merges.
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) top-level statements,
   like `@layer` and `@import`, and declarations, under each selector and its at-rules,
   of a property that decides how parts layer, stack, scroll,
-  take a touch, or show, whatever its value (any below, any `position`, `overflow`,
-  `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
+  take a touch, or show, whatever its value (any below, any `position`, `overflow` but `overflow-wrap`,
+  `overscroll-behavior`, `scroll-snap`, `scroll-behavior`, `scroll-padding`, `scroll-margin`,
+  `touch-action`, `-webkit-touch-callout`, `user-select`, `pointer-events`, `z-index`,
   `opacity`, `visibility`, `display`, `isolation`, `mix-blend-mode`, `container`, `offset`,
-  `view-transition-name`, or `-webkit-box-reflect`),
+  `view-transition-name`, `-webkit-box-reflect`, or `zoom`),
   but not in their fonts, colors, spacing, or sizes, which CI checks,
   so a rule renamed, split, or merged that sets none of those isn't red;
   what any other stylesheet of a page adds that gives a part a layer of its own (`transform`,
   `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`),
-  or lifts it over others, makes it scroll, or decides how it takes a touch (any of those but `opacity`, `visibility`, and `display`,
+  or lifts it over others, or decides how it scrolls or takes a touch (any of those but `opacity`, `visibility`, and `display`,
   with a `position` only `absolute`, `fixed`, or sticky, and an `overflow` only when it isn't `visible`),
   and any top-level statement it adds or takes out;
   a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another,
   and the `@property` rule that registers one;
   a line a page's other JavaScript adds that sets one of those layer properties, a fixed or sticky `position`,
-  or a custom property with `setProperty`, or that holds the markup below;
+  what those other stylesheets would be red to add, on a part's `style` by name, with `setProperty`, in a style's object, or in its `cssText`,
+  or a custom property those declarations read, or one whose name the gate can't read, or that holds the markup below;
   a line an app's `page/*.html` adds or takes out that holds `<script`, `<style`, `<dialog`, or `popover`,
   or a `style=` that sets what one of those other stylesheets would be red to add, or a custom property those declarations read,
   or whose value the gate can't read, as where a template fills it in whole,
   or any change to the stylesheets it links, whose order sets the cascade, but not its other links, like a preload or an icon,
-  to its `viewport` and `apple-mobile-web-app-status-bar-style` metas, which fit it to the screen and color the phone's bars,
+  to its `viewport`, `apple-mobile-web-app-capable`, `mobile-web-app-capable`, and `apple-mobile-web-app-status-bar-style` metas,
+  which fit it to the screen, open it from the Home Screen without the browser's bars, and color the phone's own,
   or to its inline scripts and styles, which take effect in the order the page holds them;
   and a diff the gate can't read.
-  In a stylesheet or a `style=`, a declaration that reads a custom property, or a value a template fills in, counts as if it held any value,
+  In a stylesheet, a `style=`, or a script, a declaration that reads a custom property, or a value a template or the script fills in, counts as if it held any value,
   and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,
   `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
   so `none`, `all`, one that names none, or a keyword like `inherit` counts.
@@ -808,11 +812,12 @@ Delete it once the app's first PR merges.
   nor a class that markup or a script adds that a shared stacking rule then reaches.
   The base's copy of the gate's code, on the Node and modules the base names, judges a pull request's files,
   so a change to the gate's code can't let the pull request's own red change through,
-  and a change to the workflow's `gate` or `phone` job is the review's to weigh, as a change to a guard that `REVIEW.md` names.
+  and a change to the workflow's `gate`, `phone`, or `check` job is the review's to weigh, as a guard `REVIEW.md` names.
   Tests are never red.
   The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
   added by the owner after the PR's last push,
-  which main's rules require for a merge, so `check` passes on the PR's tests and review alone (`worker/phone-status.mjs`).
+  which main's rules require for a merge, so `check` passes on the PR's tests and review alone,
+  and holds the change itself whenever main's rules don't require that status, which its own step reads from GitHub (`.github/workflows/ci.yml`).
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     Its PR opens as a draft and stays one while the owner tries its design on beta:
@@ -870,7 +875,7 @@ When a step says to go back to an earlier step, continue in order from there.
    Even for a change to shared code, run the specs that exercise it by name,
    found by searching the tests for the module or the elements it draws; never pass a folder.
    Don't run the full test suite locally (`npm test`, `npm run test:browser`, or `npm run check`):
-   CI runs it on every push.
+   CI runs the Node tests, and the browser tests a change reaches, on every push.
    If anything fails, fix it and run it again.
    Repeat until it passes.
    Never push while it fails.

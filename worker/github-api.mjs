@@ -121,14 +121,16 @@ export function createGraphQL({ fetchImpl, env }) {
 
 /**
  * Every page of a listing, in order.
- * @param {(path: string) => Promise<any[]>} readJson
+ * @param {(path: string) => Promise<any>} readJson
  * @param {string} path
+ * @param {(answer: any) => any[]} [pickItems] the listing's items from a page's answer, for a
+ *   listing that wraps them, as a run's jobs are in { jobs }
  */
-export async function readAllPages(readJson, path) {
+export async function readAllPages(readJson, path, pickItems = (answer) => answer) {
   const items = [];
   for (let page = 1; ; page += 1) {
-    const batch = await readJson(
-      `${path}${path.includes("?") ? "&" : "?"}per_page=${PAGE_SIZE}&page=${page}`,
+    const batch = pickItems(
+      await readJson(`${path}${path.includes("?") ? "&" : "?"}per_page=${PAGE_SIZE}&page=${page}`),
     );
     items.push(...batch);
     if (batch.length < PAGE_SIZE) return items;

@@ -230,9 +230,10 @@ something doesn't match, point them to Cloudflare's
 
 `main` is what's deployed. Work on a branch and open a pull request into
 `main`. GitHub lints, checks formatting and types, looks for unused code, and
-runs the tests, in Node and in a browser, on every pull request, so merge once
-those pass and the pull request has no conflicts with `main`. If the repo has a
-`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret, Claude also reviews
+runs the Node tests, and the browser tests of the apps a change reaches, on every
+pull request, so merge once those pass and the pull request has no conflicts
+with `main`. If the repo has a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`
+secret, Claude also reviews
 each pull request, as [REVIEW.md](REVIEW.md) says: it splits the change into
 areas by what the files are about, has four reviewers read each area in full,
 each for one kind of problem (in the last read of the whole change, one reviewer
@@ -259,8 +260,8 @@ app and labeled the pull request `phone-ok`. The repo's ruleset for `main`
 every review thread resolved. Without `phone` in it, `check` holds a red change
 itself. The base branch's copy of the gate's code judges a pull request, so a
 change to that code can't let the pull request's own red change through; a
-change to the workflow's `gate` or `phone` job is the review's to weigh, which
-`REVIEW.md` counts as Important when it lets less through.
+change to the workflow's `gate`, `phone`, or `check` job is the review's to
+weigh, which `REVIEW.md` counts as Important when it lets less through.
 
 A pull request from a fork runs without the repo's secrets, so Claude can't review
 it, and it runs the fork's own copy of the workflows, which its author can change

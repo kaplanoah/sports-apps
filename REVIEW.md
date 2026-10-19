@@ -52,9 +52,14 @@ In order of what has mattered here.
    `worker/review-context.mjs`, or `worker/review-state.mjs`, or to a guard test,
    that lets less through is Important, naming what it no longer catches,
    since the pull request's own copy of them runs its review.
+   So is a change to the red-change gate that lets less through,
+   its `gate`, `phone`, or `check` job in `.github/workflows/ci.yml`,
+   `worker/red-change.mjs`, or `worker/red-change-styles.mjs`,
+   naming what it no longer holds for the owner's phone,
+   since the pull request's own copy of those jobs runs.
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
-   like `-webkit-touch-callout`, that `worker/red-change.mjs` doesn't list yet.
+   that `worker/red-change-styles.mjs` doesn't list yet.
 7. **Tests.**
    AGENTS.md: "Every change to behavior comes with tests that fail without it, in the same PR."
    Flag a change to behavior whose tests would still pass with it reverted.
