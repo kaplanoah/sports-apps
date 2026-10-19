@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { listTrackedFiles } from "./tracked-files.js";
 import { readFileSync } from "node:fs";
 
 // The repo is public, so nothing in it may name a real Worker, a page's key, the Cloudflare
@@ -64,11 +64,7 @@ const SECRETS = [
   },
 ];
 
-/** @returns {string[]} */
-const listTrackedFiles = () =>
-  execFileSync("git", ["ls-files"], { cwd: REPO_ROOT, encoding: "utf8" })
-    .split("\n")
-    .filter((path) => path && !BINARY_FILES.test(path));
+const listTextFiles = () => listTrackedFiles().filter((path) => !BINARY_FILES.test(path));
 
 /**
  * Each secret a text holds, by what it is and the line it's on.
@@ -94,7 +90,7 @@ const listSecretsIn = (path) =>
   );
 
 test("no tracked file names a real Worker, a page's key, the Cloudflare account, or an API key", () => {
-  const found = listTrackedFiles().flatMap(listSecretsIn);
+  const found = listTextFiles().flatMap(listSecretsIn);
   assert.deepEqual(found, []);
 });
 

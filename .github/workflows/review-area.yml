@@ -33,11 +33,12 @@ env:
   AREA: ${{ inputs.area }}
 
 jobs:
-  # A reviewer is told to read every line of its area's diffs, which a step then checks from the
-  # reads it actually made, and a second try reads what the first left unread, or judges the whole
-  # area again when the first gave no answer. The token is the run's own rather than Claude's
-  # app's, which works only while this file is as the default branch has it, so a change to the
-  # review is reviewed by its own jobs, and the guide has them flag one that lets less through.
+  # A reviewer is told to read every line of its area's diffs and rule files, which a step then
+  # checks from the reads it actually made, and a second try reads what the first left unread, or
+  # judges the whole area again when the first gave no answer. The token is the run's own rather
+  # than Claude's app's, which works only while this file is as the default branch has it, so a
+  # change to the review is reviewed by its own jobs, and the guide has them flag one that lets
+  # less through.
   find:
     name: find (${{ matrix.kind }})
     runs-on: ubuntu-latest
@@ -83,9 +84,9 @@ jobs:
           prompt: |
             You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. Its change is split into areas by what the files are about, and each area's reviewers each look for one kind of problem. You review area ${{ inputs.area }}, "${{ inputs.name }}", and look only for this: ${{ matrix.focus }}
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps.
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md and the rule files your area lists hold the rules the code keeps.
             2. Read `.review/pull-request.md`: the pull request's title and description, and every review thread on it so far, with its replies and whether it's resolved.
-            3. Read `.review/${{ env.STAGE }}.md`, which lists each area's files and the diff files that hold their change. Read every diff file listed under Area ${{ inputs.area }}, each whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of your area's diffs you didn't read.
+            3. Read `.review/${{ env.STAGE }}.md`, which lists each area's files, the diff files that hold their change, and the rule files for them. Read every diff file and rule file listed under Area ${{ inputs.area }}, each whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of your area's diffs or rule files you didn't read.
             4. Read what else you need to judge them: the files as the pull request leaves them, other areas' diffs, callers, and copies, with Read, Grep, and Glob, and history with git log, git show, git diff, and git blame, whose base is HEAD^1 and whose whole history is here. Run each command on its own, with no pipes or redirects.
             5. List every problem of your kind you find, not a sample, each once, naming every place it shows, in both apps too. Include one you're unsure of, with your confidence: a checker confirms each against the code before anything is posted. Leave out one a thread already raised, unless its reply is wrong or a fix it claims didn't hold, and then say so.
             6. Post nothing. End with your answer: each problem, on the line the diff changes nearest its first place, naming that place if it's another; and each file of your area you read but couldn't judge from the code, and why.
@@ -111,10 +112,10 @@ jobs:
           settings: *review-settings
           claude_args: *find-args
           prompt: |
-            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ inputs.area }}, "${{ inputs.name }}", and look only for this: ${{ matrix.focus }} An earlier try didn't finish. Diff files it left unread: ${{ steps.first.outputs.unread || 'none' }}. ${{ steps.first.outputs.answered == 'true' && 'Its answer is kept, so judge only what those files change.' || 'It gave no answer, so judge your whole area again.' }}
+            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ inputs.area }}, "${{ inputs.name }}", and look only for this: ${{ matrix.focus }} An earlier try didn't finish. Files it left unread: ${{ steps.first.outputs.unread || 'none' }}. ${{ steps.first.outputs.answered == 'true' && 'Its answer is kept, so judge only what those files change.' || 'It gave no answer, so judge your whole area again.' }}
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps. `.review/pull-request.md` holds the pull request's description and every review thread on it.
-            2. Read each diff file the earlier try left unread, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read. `.review/${{ env.STAGE }}.md` lists your area's diff files, to read as you need.
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md and the rule files your area lists hold the rules the code keeps. `.review/pull-request.md` holds the pull request's description and every review thread on it.
+            2. Read each file the earlier try left unread, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read. A rule file changes nothing itself, so judge your area's whole diff against each rule file the earlier try left unread. `.review/${{ env.STAGE }}.md` lists your area's diff files and rule files, to read as you need.
             3. Read what else you need, with Read, Grep, Glob, git log, git show, git diff, and git blame, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
             4. List every problem of your kind you find in what you judge, each once, naming every place it shows, unsure ones too, with your confidence. Leave out one a thread already raised, unless its reply is wrong or a fix it claims didn't hold.
             5. Post nothing. End with your answer: each problem, on the line the diff changes nearest its first place, and each file you read but couldn't judge from the code, and why.
@@ -138,7 +139,7 @@ jobs:
       - name: Fail when parts are still unread or the reviewer gave no answer
         if: ${{ !cancelled() && (steps.last.outputs.unread != '' || steps.last.outputs.answered == 'false') }}
         run: |
-          echo "::error::This reviewer didn't read every line of its area's diffs, or gave no answer."
+          echo "::error::This reviewer didn't read every line of its area's diffs and rule files, or gave no answer."
           exit 1
 
   # The area's checker confirms its reviewers' problems against the code, merges repeats, and weighs
@@ -184,12 +185,12 @@ jobs:
           prompt: |
             You check what the reviewers of one area of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, before anything is posted. Your area is ${{ inputs.area }}, "${{ inputs.name }}". Its reviewers each looked for one kind of problem and listed every problem of it, unsure ones included. Their candidates are in `.review/candidates-${{ env.STAGE }}-${{ env.AREA }}.json`.
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
-            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, and `.review/${{ env.STAGE }}.md`, which lists your area's diff files, and read those as you need.
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md and the rule files `.review/${{ env.STAGE }}.md` lists for your area hold the rules the code keeps.
+            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, and `.review/${{ env.STAGE }}.md`, which lists your area's diff files and rule files, and read those as you need.
             3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with git show HEAD^1:<path>. Use Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects.
             4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
             5. Merge candidates that are the same problem into one finding, whether they name one place or several, naming every id it merges: one problem is one finding, however many places it shows, in both apps too. Every candidate's id appears in exactly one finding, rejected ones too: a step after you checks.
-            6. Weigh each as the guide says: Important for a bug, meaning a wrong result someone can see, wrong data kept, or a failure, and for a security hole or a broken AGENTS.md rule; Nit for something worth fixing that doesn't block; Pre-existing for a problem in code the change didn't make worse.
+            6. Weigh each as the guide says: Important for a bug, meaning a wrong result someone can see, wrong data kept, or a failure, and for a security hole or a broken rule from AGENTS.md or a rule file; Nit for something worth fixing that doesn't block; Pre-existing for a problem in code the change didn't make worse.
             7. Write each finding's body as the guide's "How to report" says: what is wrong, when it goes wrong, and how to fix it, in a few sentences, without its weight, which a later step adds, naming every place it shows. Put it on the line the diff changes nearest its first place, naming that place if it's another.
             8. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
       - name: Keep the checker's answer
