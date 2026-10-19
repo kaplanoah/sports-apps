@@ -1,5 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import {
   listFillFades,
   noteNameFades,
@@ -390,6 +391,7 @@ test("a touch on the header lands on the part under it, so a drag there scrolls 
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const header = await page.locator("header.top").boundingBox();
 
   const found = await findTouchTargets(page, {
@@ -405,6 +407,7 @@ test("a touch on the pill's bar beside its names lands on the part under it, whi
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const bar = await page.locator("#bracketStandingsPill").boundingBox();
   const names = await findSeasonPill(page).boundingBox();
   const bracketName = findPillNames(page).filter({ hasText: "Bracket" });
