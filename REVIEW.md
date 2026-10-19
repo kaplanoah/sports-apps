@@ -47,7 +47,7 @@ In order of what has mattered here.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
-   A change to the review itself, its jobs in `.github/workflows/ci.yml`,
+   A change to the review itself, its jobs in `.github/workflows/ci.yml` and `.github/workflows/review-area.yml`,
    `worker/plan-review.mjs`, `worker/judge-review.mjs`, `worker/post-review.mjs`,
    `worker/review-context.mjs`, or `worker/review-state.mjs`, or to a guard test,
    that lets less through is Important, naming what it no longer catches,
@@ -99,9 +99,12 @@ and a step posts what they confirmed or left unsure.
   for a security hole, or for a broken AGENTS.md rule;
   **Nit** for something worth fixing that doesn't block;
   **Pre-existing** for a problem in code the change didn't make worse.
-- An **Important** or **Unsure** finding is posted on its line, a thread of its own.
-  A review's **Nit** and **Pre-existing** findings are posted together in one comment, a checklist on the file of the first,
-  each item naming its file and line, so they're one thread to answer and resolve.
+- An **Important** or **Unsure** finding is posted on its line, a thread of its own, or on its file when GitHub won't take the line.
+  A review's **Nit** and **Pre-existing** findings are posted together as a checklist, each item naming its file and line,
+  on the first of their files GitHub takes, and split into more than one only past GitHub's limit on a comment's length,
+  so they're one thread to answer and resolve.
+  A finding GitHub takes on no file goes in a comment in the pull request's conversation, which has no thread to resolve:
+  answer it with a reply in the conversation.
 - The numbered items above are never matters of taste:
   a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it.
 - Read the pull request's threads first.
@@ -109,6 +112,6 @@ and a step posts what they confirmed or left unsure.
   unless its answer is wrong or a fix it claims didn't hold, and then say so.
 - No praise.
 - The review ends with one summary comment: the commit reviewed, what it read, the findings by weight,
-  how many cases the checkers turned down, how many of the changed files were read in full out of how many,
+  how many of the problems the reviewers listed the checkers turned down, how many of the changed files were read in full out of how many,
   each one that wasn't and why, and anything read but not judged.
   In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge.

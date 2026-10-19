@@ -906,19 +906,22 @@ When a step says to go back to an earlier step, continue in order from there.
    To wait on the review, run `npm run wait-for-review -- <PR number>` in the foreground, with a 10-minute timeout, so your turn holds while it waits,
    and again until it says the review finished: it lists every finding the review posted on the PR's head, from every page of its comments,
    and exits nonzero unless the review passed, with a code for each reason its top comment names (`worker/wait-for-review.mjs`).
+   On a draft, which CI doesn't review, wait only on CI's checks: `wait-for-review` says it's a draft and ends at once until the PR is marked ready.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
 7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
    It splits the change into areas by what the files are about, each test with its code (`worker/plan-review.mjs`),
    and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests, and list every problem they find, each once with every place it shows.
-   A checker for each area confirms each case against the code, merges repeats, and weighs it,
+   A checker for each area confirms each problem against the code, merges repeats, and weighs it,
    a check across areas, when there's more than one, names repeats across them and adds what spans them,
-   and a step posts what they confirmed or left unsure: each Important or Unsure finding on the line it concerns,
-   and the review's Nits and Pre-existing findings together in one checklist on the file of the first.
+   and a step posts what they confirmed or left unsure: each Important or Unsure finding on the line it concerns, or its file,
+   and the review's Nits and Pre-existing findings together in a checklist on the first of their files GitHub takes,
+   split into more than one only past GitHub's limit on a comment's length,
+   and any finding GitHub takes on no file in a comment in the PR's conversation.
    Each area's reviewers and then its checker run on their own (`.github/workflows/review-area.yml`), so no area waits on another's.
    The first review reads the whole change, and each review after it reads what changed since the last review that finished.
-   A review of a push reads the whole change once more alongside, one reviewer an area,
+   A review of a push with anything to read reads the whole change once more alongside, one reviewer an area,
    and posts what that read found only when the push's review finishes and posts nothing new, and the summary names it then.
    A push that changes only what a merge of its base brings in isn't reviewed again.
    The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
@@ -933,6 +936,7 @@ When a step says to go back to an earlier step, continue in order from there.
    Once the push is up, resolve the thread of each finding you fixed, with no reply, since GitHub marks it outdated once its line changes,
    and of each you answered.
    Resolve a review's checklist of Nits once every item in it is fixed or answered in a reply on its thread.
+   A finding in the PR's conversation has no thread: answer one you won't fix with a reply in the conversation.
    `main` merges a PR only once every thread on it is resolved.
    A Nit you fix rides a push the PR needs anyway,
    or, when none is left, one last push just before the merge,

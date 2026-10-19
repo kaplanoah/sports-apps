@@ -507,6 +507,7 @@ test("each stage's areas are reviewed with the matrices the plan writes, each ar
     assert.deepEqual(Object.keys(given).toSorted(), declared.toSorted(), job);
     assert.equal(given.stage, stage, job);
     assert.equal(given.area, "${{ matrix.area }}", job);
+    assert.equal(given.name, "${{ matrix.name }}", job);
     assert.equal(given.kinds, `\${{ needs.review-plan.outputs.${prefix}kinds }}`, job);
     assert.match(
       caller,
@@ -536,25 +537,36 @@ test("no job that runs Claude can write to the pull request", () => {
   }
 });
 
-// The last read of the whole change reads alongside a push's review, and is checked across areas
-// and posted only once that review finished and posted nothing and each of its own areas finished.
+// The last read of the whole change reads alongside a push's review that has anything to read,
+// and is checked across areas and posted only once that review finished and posted nothing and
+// each of its own areas finished, a rule that one job holds for both.
 test("the last read of the whole change reads alongside a push's review, and posts only once that review finished and posted nothing", () => {
   assert.deepEqual(readNeeds("review-final-area"), ["review-plan"]);
-  assert.match(
-    readJob("review-final-area"),
-    /if: \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.final-count > 0 \}\}/,
-  );
-  const due =
-    "needs.review-final-area.result == 'success' && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0'";
-  assert.ok(readJob("review-final-post").includes(`if: \${{ !cancelled() && ${due} }}`));
   assert.ok(
-    readJob("review-final-across").includes(
-      "if: ${{ !cancelled() && needs.review-final-area.result == 'success' && needs.review-plan.outputs.final-area-count > 1 && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' }}",
+    readJob("review-final-area").includes(
+      "if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 && needs.review-plan.outputs.final-count > 0 }}",
     ),
   );
-  for (const job of ["review-final-across", "review-final-post"])
-    for (const need of ["review-area", "review-post", "review-final-area"])
-      assert.ok(readNeeds(job).includes(need), `${job} needs ${need}`);
+  assert.ok(
+    readJob("review-final-due").includes(
+      "if: ${{ !cancelled() && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-final-area.result == 'success' }}",
+    ),
+  );
+  assert.match(readJob("review-final-due"), /\n {4}steps:\n {6}- run: echo .*\n+$/);
+  assert.ok(
+    readJob("review-final-post").includes(
+      "if: ${{ !cancelled() && needs.review-final-due.result == 'success' }}",
+    ),
+  );
+  assert.ok(
+    readJob("review-final-across").includes(
+      "if: ${{ !cancelled() && needs.review-final-due.result == 'success' && needs.review-plan.outputs.final-area-count > 1 }}",
+    ),
+  );
+  const finalJobs = ["review-final-due", "review-final-across", "review-final-post"];
+  const dueRule = /review-area\.result|review-post\.outputs\.posted|review-final-area\.result/;
+  for (const job of finalJobs.slice(1))
+    assert.doesNotMatch(readJob(job), dueRule, `${job} reads the rule from review-final-due`);
   assert.match(readJob("review-post"), /posted: \$\{\{ steps\.post\.outputs\.posted \}\}/);
   assert.match(readJob("review-post"), /\n\s+id: post\n/);
   for (const job of ["review-final-across", "review-final-post"])
@@ -578,8 +590,12 @@ test("each review job waits for the jobs whose records it reads", () => {
     ["review-across", ["review-plan", "review-area"]],
     ["review-post", ["review-plan", "review-area", "review-across"]],
     ["review-final-area", ["review-plan"]],
-    ["review-final-across", ["review-plan", "review-final-area"]],
-    ["review-final-post", ["review-plan", "review-final-area", "review-final-across"]],
+    ["review-final-due", ["review-plan", "review-area", "review-post", "review-final-area"]],
+    ["review-final-across", ["review-plan", "review-final-area", "review-final-due"]],
+    [
+      "review-final-post",
+      ["review-plan", "review-final-area", "review-final-due", "review-final-across"],
+    ],
   ];
   for (const [job, before] of order)
     for (const need of before) assert.ok(readNeeds(job).includes(need), `${job} needs ${need}`);

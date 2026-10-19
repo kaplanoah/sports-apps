@@ -73,6 +73,7 @@ test("a thread past the comments read keeps its first, which holds what it raise
   };
   const [long, brief] = await readThreads(callGraphQL, { owner: "o", name: "n", number: 7 });
   assert.match(queries[0], /first: comments\(first: 1\)/);
+  assert.match(queries[0], /comments\(last: 49\) \{ totalCount /);
   assert.deepEqual(long.comments.nodes, [root, ...last]);
   assert.deepEqual(brief.comments.nodes, short);
   assert.ok(!("first" in long));

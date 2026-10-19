@@ -5,19 +5,50 @@ const API = "https://api.github.com";
 const REQUEST_TIMEOUT_MS = 10000;
 const PAGE_SIZE = 100;
 
-/** An answer GitHub refused, with the status it answered and when a used-up limit resets. */
+/**
+ * Whether GitHub refused an answer for a limit on requests: a 429, or a 403 with none left or a
+ * wait to keep, as for a secondary limit, rather than for a permission.
+ * @param {number} status
+ * @param {Headers | undefined} headers
+ */
+const isLimitRefusal = (status, headers) =>
+  status === 429 ||
+  (status === 403 &&
+    (headers?.get("x-ratelimit-remaining") === "0" || Boolean(headers?.has("retry-after"))));
+
+/**
+ * When a limit GitHub refused an answer for lets requests through again, from the wait it names or
+ * the time its limit resets, or null when it names neither.
+ * @param {Headers | undefined} headers
+ * @param {number} now
+ */
+function readLimitEnd(headers, now) {
+  const wait = Number(headers?.get("retry-after"));
+  if (wait > 0) return new Date(now + wait * 1000);
+  const reset = Number(headers?.get("x-ratelimit-reset"));
+  return reset > 0 ? new Date(reset * 1000) : null;
+}
+
+/**
+ * An answer GitHub refused, with the status it answered, and, for one it refused for a limit on
+ * requests, the limit and when it lets requests through again.
+ */
 export class GitHubError extends Error {
   /**
    * @param {number} status
    * @param {string} request
    * @param {Headers} [headers] the answer's
+   * @param {number} [now] when it answered
    */
-  constructor(status, request, headers) {
+  constructor(status, request, headers, now = Date.now()) {
     super(`GitHub answered ${status} for ${request}`);
     this.status = status;
-    const reset = Number(headers?.get("x-ratelimit-reset"));
+    this.isLimited = isLimitRefusal(status, headers);
+    const limit = Number(headers?.get("x-ratelimit-limit"));
+    /** @type {number | null} requests an hour */
+    this.limit = this.isLimited && limit > 0 ? limit : null;
     /** @type {Date | null} */
-    this.resetsAt = reset > 0 ? new Date(reset * 1000) : null;
+    this.resetsAt = this.isLimited ? readLimitEnd(headers, now) : null;
   }
 }
 

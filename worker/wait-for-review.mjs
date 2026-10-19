@@ -1,30 +1,39 @@
 // Waits until CI's review of a pull request's head has finished, then prints whether it passed
 // and every finding it posted on that head, in full, from every page of the pull request's
 // comments, so a session reads all of a review's findings before it answers any. A cloud session
-// holds no token, so it reads the public repo unsigned, asking about once a minute to keep within
-// GitHub's limit for an address, and stops after about nine minutes, before a cloud session's
-// command times out, saying to run it again. It reads the pull request again each time it asks,
-// and stops when a newer push replaced the head, since the newer push's run cancels the head's
-// review, or the pull request is a draft, which CI doesn't review.
+// holds no token, so it reads the public repo unsigned, within GitHub's limit of 60 requests an
+// hour for an address: it asks for the review's check run once every POLL_MS, reads the pull
+// request again only every PULL_EVERY asks, and stops after about nine minutes, before a cloud
+// session's command times out, saying to run it again, so even an hour of waits back to back
+// leaves room to read a finished review's comments. A review counts only from the head's newest CI
+// run, since an earlier one's, like a draft's, which passes without reviewing, can still be on the
+// head. It stops when a newer push replaced the head, since the newer push's run cancels the
+// head's review, or when the pull request is a draft, which CI doesn't review.
 // Usage: node worker/wait-for-review.mjs <pull request number>, in a clone of the repo. It exits
 // with EXIT_CODES: 0 once the review passed, 1 once it didn't, 2 while it's still going, 3 when a
 // newer push replaced the head, 4 when CI hasn't started on the head, as on a pull request in
-// conflict, 5 for a draft, 6 once GitHub's limit for the address is used up, and 7 when it isn't
-// handed a pull request's number.
+// conflict, 5 for a draft, 6 once GitHub's limit is used up, and 7 when it isn't handed a pull
+// request's number.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { GitHubError, createGitHub, readAllPages } from "./github-api.mjs";
-import { REVIEWER, listFindingMarks, removeFindingMarks } from "./review-state.mjs";
+import { GitHubError, createGitHub } from "./github-api.mjs";
+import {
+  listFindingMarks,
+  pluralize,
+  readReviewComments,
+  removeFindingMarks,
+} from "./review-state.mjs";
 
-// The job in ci.yml that finishes the review, whose check run says how it went.
+// The workflow that reviews a pull request, and its job that finishes the review, whose check run
+// says how it went.
+const CI_WORKFLOW = "ci.yml";
 const REVIEW_JOB = "review";
-const POLL_MS = 60 * 1000;
+const POLL_MS = 3 * 60 * 1000;
+const PULL_EVERY = 3;
 const LONGEST_WAIT_MS = 9 * 60 * 1000;
 // The review's check run starts only once every review job before it has finished, so until
-// then whether CI started at all is told from whether the head has any check run.
+// then whether CI started at all is told from whether the head has a CI run.
 const START_WAIT_MS = 3 * 60 * 1000;
-const LIMIT_STATUSES = new Set([403, 429]);
-const UNSIGNED_LIMIT = 60;
 
 export const EXIT_CODES = Object.freeze({
   passed: 0,
@@ -77,7 +86,8 @@ async function readPull(readGitHub, pullNumber) {
 }
 
 /**
- * The latest run of the review's check on a commit, or null before it has started.
+ * The latest run of the review's check on a commit, from any of its CI runs, or null before one
+ * has started.
  * @param {ReadGitHub} readGitHub
  * @param {string} sha
  */
@@ -92,12 +102,25 @@ async function readReviewRun(readGitHub, sha) {
 }
 
 /**
- * Whether CI has started any check on a commit.
+ * The newest CI run on a commit, or null when CI hasn't started on it.
  * @param {ReadGitHub} readGitHub
  * @param {string} sha
  */
-const hasAnyCheck = async (readGitHub, sha) =>
-  (await readGitHub(`/commits/${sha}/check-runs?per_page=1`)).total_count > 0;
+async function readNewestCiRun(readGitHub, sha) {
+  const { workflow_runs: runs } = await readGitHub(
+    `/actions/workflows/${CI_WORKFLOW}/runs?head_sha=${sha}&per_page=1`,
+  );
+  return runs[0] ?? null;
+}
+
+/**
+ * Whether a review check run is the head's newest CI run's, rather than one a newer run replaced.
+ * @param {ReadGitHub} readGitHub
+ * @param {string} sha
+ * @param {any} run
+ */
+const isFromNewestCiRun = async (readGitHub, sha, run) =>
+  (await readNewestCiRun(readGitHub, sha))?.check_suite_id === run.check_suite?.id;
 
 /**
  * What stops the wait on a head before its review finishes: a newer push, or a draft.
@@ -111,10 +134,21 @@ function findStop(pull, sha) {
 }
 
 /**
- * How the wait for the review of a pull request's head ended, asking again about once a minute,
- * and reading the pull request each time, until the review finished, a newer push replaced the
- * head, the pull request is a draft, CI hasn't started on the head a few minutes on, or the wait
- * has gone as long as a session's command can.
+ * A finished review check run as how the wait ended.
+ * @param {any} run
+ * @param {string} sha
+ * @returns {Finished}
+ */
+const describeRun = (run, sha) => ({
+  outcome: run.conclusion === "success" ? "passed" : "failed",
+  sha,
+  conclusion: run.conclusion,
+});
+
+/**
+ * How the wait for the review of a pull request's head ended: the review of the head's newest CI
+ * run finished, a newer push replaced the head, the pull request is a draft, CI hasn't started on
+ * the head a few minutes on, or the wait has gone as long as a session's command can.
  * @param {object} options
  * @param {ReadGitHub} options.readGitHub
  * @param {string} options.pullNumber
@@ -126,20 +160,23 @@ async function waitForReview({ readGitHub, pullNumber, wait, now }) {
   const started = now();
   const { head: sha, isDraft } = await readPull(readGitHub, pullNumber);
   if (isDraft) return { outcome: "draft", sha };
+  /** @type {Set<number>} the check suites of CI runs a newer one replaced */
+  const staleSuites = new Set();
   let isStarted = false;
-  for (;;) {
+  for (let ask = 1; ; ask += 1) {
     const run = await readReviewRun(readGitHub, sha);
-    const stop = findStop(await readPull(readGitHub, pullNumber), sha);
-    if (stop) return stop;
-    if (run?.status === "completed")
-      return {
-        outcome: run.conclusion === "success" ? "passed" : "failed",
-        sha,
-        conclusion: run.conclusion,
-      };
     isStarted ||= Boolean(run);
+    const isDone = run?.status === "completed" && !staleSuites.has(run.check_suite?.id);
+    if (isDone) {
+      if (await isFromNewestCiRun(readGitHub, sha, run))
+        return findStop(await readPull(readGitHub, pullNumber), sha) ?? describeRun(run, sha);
+      staleSuites.add(run.check_suite?.id);
+    } else if (ask % PULL_EVERY === 0) {
+      const stop = findStop(await readPull(readGitHub, pullNumber), sha);
+      if (stop) return stop;
+    }
     if (!isStarted && now() - started >= START_WAIT_MS) {
-      isStarted = await hasAnyCheck(readGitHub, sha);
+      isStarted = Boolean(await readNewestCiRun(readGitHub, sha));
       if (!isStarted) return { outcome: "unstarted", sha };
     }
     if (now() - started + POLL_MS > LONGEST_WAIT_MS) return { outcome: "going", sha };
@@ -161,12 +198,12 @@ function nameCommentSpot(comment) {
 /**
  * The comments in which the review posted findings on a commit, never a reply, each with where it
  * is, its text without the marks, and how many findings it holds.
- * @param {any[]} comments the pull request's review comments and issue comments
+ * @param {any[]} comments the review's own, as readReviewComments reads them
  * @param {string} sha
  */
 export const listFindingComments = (comments, sha) =>
   comments
-    .filter((comment) => comment.user?.login === REVIEWER && !comment.in_reply_to_id)
+    .filter((comment) => !comment.in_reply_to_id)
     .map((comment) => ({
       spot: nameCommentSpot(comment),
       text: removeFindingMarks(comment.body ?? ""),
@@ -183,9 +220,6 @@ const describeComment = ({ spot, text }) => [
   ...text.split("\n").map((line) => (line ? `  ${line}` : "")),
 ];
 
-/** @param {number} count */
-const countFindings = (count) => `${count} finding${count === 1 ? "" : "s"}`;
-
 /**
  * The lines on a finished review: whether it passed, and every finding it posted on the head.
  * @param {ReadGitHub} readGitHub
@@ -193,30 +227,28 @@ const countFindings = (count) => `${count} finding${count === 1 ? "" : "s"}`;
  * @param {{ sha: string, conclusion: string }} review
  */
 async function describeFinished(readGitHub, pullNumber, { sha, conclusion }) {
-  const comments = [
-    ...(await readAllPages(readGitHub, `/pulls/${pullNumber}/comments`)),
-    ...(await readAllPages(readGitHub, `/issues/${pullNumber}/comments`)),
-  ];
-  const found = listFindingComments(comments, sha);
+  const found = listFindingComments(await readReviewComments(readGitHub, pullNumber), sha);
   const total = found.reduce((sum, { count }) => sum + count, 0);
   const outcome =
     conclusion === "success" ? "passed" : `didn't pass (${conclusion}): read its summary`;
   return [
-    `The review of ${sha.slice(0, 7)} ${outcome}, and posted ${countFindings(total)} on it.`,
+    `The review of ${sha.slice(0, 7)} ${outcome}, and posted ${pluralize(total, "finding")} on it.`,
     ...found.flatMap(describeComment),
   ];
 }
 
 /**
- * What to say when GitHub's limit for the address is used up, with when it resets.
- * @param {Date | null} resetsAt
+ * What to say when GitHub refused a request for a limit, with when it lets requests through.
+ * @param {{ limit: number | null, resetsAt: Date | null }} refusal
  * @param {number} now
  */
-export function describeLimit(resetsAt, now) {
-  const lead = `GitHub's limit of ${UNSIGNED_LIMIT} requests an hour for this address is used up`;
-  if (!resetsAt) return `${lead}: run this again within the hour.`;
+export function describeLimit({ limit, resetsAt }, now) {
+  const lead = limit
+    ? `GitHub's limit of ${limit} requests an hour is used up`
+    : "GitHub is holding back requests";
+  if (!resetsAt) return `${lead}: run this again later.`;
   const minutes = Math.max(1, Math.ceil((resetsAt.getTime() - now) / 60000));
-  return `${lead}: run this again in ${minutes} minute${minutes === 1 ? "" : "s"}, once it resets.`;
+  return `${lead}: run this again in ${pluralize(minutes, "minute")}, once it lets requests through.`;
 }
 
 /**
@@ -253,8 +285,8 @@ export async function reportReview(options) {
       return { code, lines: await describeFinished(readGitHub, pullNumber, ended) };
     return { code, lines: [describeStop(ended, pullNumber)] };
   } catch (error) {
-    if (!(error instanceof GitHubError) || !LIMIT_STATUSES.has(error.status)) throw error;
-    return { code: EXIT_CODES.limited, lines: [describeLimit(error.resetsAt, now())] };
+    if (!(error instanceof GitHubError) || !error.isLimited) throw error;
+    return { code: EXIT_CODES.limited, lines: [describeLimit(error, now())] };
   }
 }
 

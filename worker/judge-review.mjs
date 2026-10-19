@@ -18,7 +18,13 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { listStageKinds } from "./plan-review.mjs";
-import { SUMMARY_MARKER, WEIGHTS, findSummary, writeReviewedHead } from "./review-state.mjs";
+import {
+  SUMMARY_MARKER,
+  WEIGHTS,
+  findSummary,
+  pluralize,
+  writeReviewedHead,
+} from "./review-state.mjs";
 
 // What Claude Code's Read returns when it's given no limit.
 const READ_LINES = 2000;
@@ -139,8 +145,9 @@ const readExecution = (path) => (path && existsSync(path) ? readJson(path) : [])
 const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.areas);
 
 // Each job's record, by the name it's saved under in the review's folder: its job, then what it
-// covers, so the judge reads back each job's records, and only theirs, by the job alone. An area
-// can be the expression ci.yml names it by, so a test can check ci.yml's paths against these.
+// can be the expression a workflow names it by, so a test can check the workflows' paths against
+// these.
+// can be the expression a workflow names it by, so a test can check the workflows' paths against these.
 const RECORD_JOBS = Object.freeze({
   find: "find",
   candidates: "candidates",
@@ -256,9 +263,6 @@ const listUnread = ({ path, why }) => `- \`${path}\`: ${why}`;
 
 /** @param {string} path */
 const listFile = (path) => `- \`${path}\``;
-
-/** @param {number} count @param {string} noun */
-const pluralize = (count, noun) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** @param {string[]} weights */
 const describeFound = (weights) =>

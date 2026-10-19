@@ -16,7 +16,7 @@ import {
   readChecks,
   readPostInputs,
 } from "../worker/post-review.mjs";
-import { OFF_DIFF_HEADING, writeFindingMark } from "../worker/review-state.mjs";
+import { OFF_DIFF_HEADING, readReviewComments, writeFindingMark } from "../worker/review-state.mjs";
 
 /** @typedef {import("../worker/post-review.mjs").Across} Across */
 
@@ -211,6 +211,7 @@ test("a check across areas that gave no answer, or one of another shape, reads a
   assert.equal(readAcross('{"findings": []}'), null);
   const duplicates = [
     { refs: ["1.1", "2.1"], body: "in both apps" },
+    null,
     ["1.2"],
     "1.3",
     { refs: "1.4" },
@@ -243,6 +244,18 @@ test("a finding that stands in for its repeats says what the check across areas 
     ["shared/page/sheet.js", 12, "a bug"],
     ["shared/page/sheet.js", 12, "can't settle"],
   ]);
+  for (const [lastWords, shown] of [
+    ["the bug in both apps and the nit", "the bug in both apps and the nit"],
+    ["", "the bug in both apps"],
+  ])
+    assert.deepEqual(
+      posted([
+        { refs: ["2.2", "1.1"], body: "the bug in both apps" },
+        { refs: ["2.2", "2.1"], body: lastWords },
+      ]),
+      [["shared/page/sheet.js", 12, shown]],
+      `a second group led by the same ref, with ${lastWords ? "words" : "none"}`,
+    );
 });
 
 /**
@@ -334,7 +347,7 @@ test("a review's Nits and Pre-existing findings go together in one checklist on 
         LIST_HEADING,
         "",
         "- [ ] `apps/mlb/page/js/app.js:30`: **Nit** a nit, with code:",
-        "  ",
+        "",
         "  ```js",
         "  a();",
         "  ```",
@@ -604,12 +617,14 @@ test("a finding already posted in any form isn't posted again, and counts as new
       body: writeFindingMark(nameFinding(fresh), EARLIER),
     },
   ];
+  const readGitHub = async (/** @type {string} */ path) =>
+    path.startsWith("/pulls/7/comments?per_page=100&page=1") ? comments : [];
   const { calls, callGitHub } = fakeGitHub(() => true);
   const result = await postFindings(callGitHub, {
     pullNumber: "7",
     sha: SHA,
     findings: [offFile, listed, fromEarlier, fresh],
-    posted: listPosted(comments),
+    posted: listPosted(await readReviewComments(readGitHub, "7")),
   });
   assert.deepEqual(result, { weights: ["Important", "Nit", "Nit"], repeated: 1 });
   assert.deepEqual(

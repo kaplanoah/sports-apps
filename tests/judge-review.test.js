@@ -382,14 +382,12 @@ const AREAS = [
     area: 1,
     name: "mlb page",
     files: ["a.js"],
-    lines: 4,
     partsByFile: { "a.js": ["first/a.js.diff"] },
   },
   {
     area: 2,
     name: "shared page",
     files: ["b.js", "c.js"],
-    lines: 2400,
     partsByFile: {
       "b.js": ["first/b.js.part-1.diff", "first/b.js.part-2.diff"],
       "c.js": ["first/c.js.diff"],

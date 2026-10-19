@@ -19,7 +19,7 @@ import { createHash } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createGitHub, readAllPages } from "./github-api.mjs";
+import { createGitHub } from "./github-api.mjs";
 import {
   nameAcrossRecord,
   nameCheckRecord,
@@ -30,10 +30,10 @@ import {
 } from "./judge-review.mjs";
 import {
   OFF_DIFF_HEADING,
-  REVIEWER,
   UNSURE,
   WEIGHTS,
   listFindingMarks,
+  readReviewComments,
   writeFindingMark,
 } from "./review-state.mjs";
 
@@ -220,7 +220,7 @@ const writeBody = (finding, head, shown = finding.body) =>
 
 /**
  * A finding as an item of the checklist of a review's Nits, naming where it is, each line after
- * its first indented to stay in the item, as a code block in it must.
+ * its first but a blank one indented to stay in the item, as a code block in it must.
  * @param {Finding} finding
  * @param {string} head
  */
@@ -230,7 +230,7 @@ const writeItem = (finding, head) =>
     writeFindingMark(nameFinding(finding), head),
   ]
     .join("\n")
-    .replaceAll("\n", "\n  ");
+    .replace(/\n(?=.)/g, "\n  ");
 
 /**
  * A finding as an entry of the comment that lists the findings on files the diff doesn't show.
@@ -382,15 +382,13 @@ export async function postFindings(callGitHub, { pullNumber, sha, findings, post
 
 /**
  * The findings the review already posted, in any form, each with the heads it was posted on.
- * @param {any[]} comments the pull request's review comments and issue comments
+ * @param {any[]} comments the review's own, as readReviewComments reads them
  * @returns {Map<string, Set<string>>}
  */
 export function listPosted(comments) {
   /** @type {Map<string, Set<string>>} */
   const posted = new Map();
-  const marks = comments
-    .filter((comment) => comment.user?.login === REVIEWER)
-    .flatMap((comment) => listFindingMarks(comment.body));
+  const marks = comments.flatMap((comment) => listFindingMarks(comment.body));
   for (const { key, head } of marks) posted.set(key, new Set([...(posted.get(key) ?? []), head]));
   return posted;
 }
@@ -403,6 +401,7 @@ export function listPosted(comments) {
 export function readAcross(structuredOutput) {
   const answer = readAnswer(structuredOutput, ["duplicates", "added"]);
   if (!answer) return null;
+  // readAnswer keeps only the entries that are objects, so reading refs never meets a null.
   const isGroup = (/** @type {any} */ group) =>
     Array.isArray(group.refs) &&
     group.refs.every((/** @type {unknown} */ ref) => typeof ref === "string");
@@ -444,8 +443,8 @@ export const readChecks = (folder, stage, areaCount) =>
 /**
  * What a stage's posting step reads: what its checkers confirmed or left unsure, less the repeats
  * the check across areas named, and every finding already on the pull request, in a review
- * comment or in the one comment for files it doesn't change. A stage of more than one area posts
- * nothing until the check across areas has left its answer.
+ * comment, a checklist, or a comment for files it doesn't change. A stage of more than one area
+ * posts nothing until the check across areas has left its answer.
  * @param {CallGitHub} callGitHub
  * @param {{ folder: string, stage: string, areaCount: number, pullNumber: string }} options
  */
@@ -455,13 +454,9 @@ export async function readPostInputs(callGitHub, { folder, stage, areaCount, pul
   const across = existsSync(acrossPath) ? readJson(acrossPath) : null;
   if (areaCount > 1 && !across)
     throw new Error("The check across areas didn't leave its answer, so nothing was posted.");
-  const comments = [
-    ...(await readAllPages(callGitHub, `/pulls/${pullNumber}/comments`)),
-    ...(await readAllPages(callGitHub, `/issues/${pullNumber}/comments`)),
-  ];
   return {
     findings: listToPost(listCheckedFindings(readChecks(folder, stage, areaCount)), across),
-    posted: listPosted(comments),
+    posted: listPosted(await readReviewComments(callGitHub, pullNumber)),
     across,
   };
 }

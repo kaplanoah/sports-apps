@@ -643,15 +643,14 @@ jobs:
           retention-days: 14
           overwrite: true
 
-  # A push's review reads the whole change once more alongside, by FINAL_KIND's reviewer in each
-  # area, to find what the earlier reads missed. Only when the push's review finishes and posts
-  # nothing, and every area of this read finished, are its findings checked across areas and
-  # posted, and the summary says what it found. check doesn't need it, since it fails when an area
-  # does, even one whose read wasn't due; review judges whether it was.
+  # A push's review that has anything to read reads the whole change once more alongside, by
+  # FINAL_KIND's reviewer in each area, to find what the earlier reads missed. check doesn't need
+  # it, since it fails when an area does, even one whose read wasn't due; review judges whether it
+  # was.
   review-final-area:
     name: review-final-area (${{ matrix.name }})
     needs: review-plan
-    if: ${{ !cancelled() && needs.review-plan.outputs.final-count > 0 }}
+    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 && needs.review-plan.outputs.final-count > 0 }}
     permissions:
       contents: read
       pull-requests: read
@@ -667,9 +666,20 @@ jobs:
       kinds: ${{ needs.review-plan.outputs.final-kinds }}
     secrets: *review-secrets
 
-  review-final-across:
+  # The last read's findings are due once the push's review finished and posted nothing, and each
+  # of the last read's areas finished: then they're checked across areas and posted, and the
+  # summary says what they found. Both of those jobs wait on this one, so the rule is in one place.
+  review-final-due:
     needs: [review-plan, review-area, review-post, review-final-area]
-    if: ${{ !cancelled() && needs.review-final-area.result == 'success' && needs.review-plan.outputs.final-area-count > 1 && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' }}
+    if: ${{ !cancelled() && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-final-area.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "The last read of the whole change is due to be checked across areas and posted."
+
+  review-final-across:
+    needs: [review-plan, review-final-area, review-final-due]
+    if: ${{ !cancelled() && needs.review-final-due.result == 'success' && needs.review-plan.outputs.final-area-count > 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -681,8 +691,8 @@ jobs:
     steps: *across-steps
 
   review-final-post:
-    needs: [review-plan, review-area, review-post, review-final-area, review-final-across]
-    if: ${{ !cancelled() && needs.review-final-area.result == 'success' && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' }}
+    needs: [review-plan, review-final-area, review-final-due, review-final-across]
+    if: ${{ !cancelled() && needs.review-final-due.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -704,6 +714,7 @@ jobs:
         review-across,
         review-post,
         review-final-area,
+        review-final-due,
         review-final-across,
         review-final-post,
       ]
@@ -759,6 +770,7 @@ jobs:
         review-area,
         review-across,
         review-post,
+        review-final-due,
         review-final-across,
         review-final-post,
         review,

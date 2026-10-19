@@ -21,20 +21,35 @@ test("a refused REST request says GitHub's status, which a caller can tell apart
   assert.match(error.message, /GitHub answered 422 for POST \/pulls\/7\/comments/);
 });
 
-test("a refusal says when the limit it ran into resets, or nothing when GitHub doesn't say", async () => {
-  /** @param {Record<string, string>} headers */
-  const refuseWith = (headers) =>
-    createGitHub({
-      repository: "o/r",
-      fetchImpl: async () => new Response("{}", { status: 403, headers }),
-      env,
-    })("/pulls/7").catch((/** @type {unknown} */ caught) => caught);
-  const limited = await refuseWith({ "x-ratelimit-reset": "1700000000" });
-  assert.ok(limited instanceof GitHubError);
-  assert.equal(limited.resetsAt?.toISOString(), "2023-11-14T22:13:20.000Z");
-  const unsaid = await refuseWith({});
-  assert.ok(unsaid instanceof GitHubError);
-  assert.equal(unsaid.resetsAt, null);
+test("a refusal counts as a used-up limit only for a 429 or a 403 with none left or a wait, with the limit and when it ends", async () => {
+  const reset = { "x-ratelimit-reset": "1700000000", "x-ratelimit-limit": "60" };
+  /**
+   * What REST and GraphQL each throw for one refusal.
+   * @param {number} status
+   * @param {Record<string, string>} headers
+   */
+  const refuseWith = async (status, headers) => {
+    const fetchImpl = async () => new Response("{}", { status, headers });
+    return Promise.all([
+      createGitHub({ repository: "o/r", fetchImpl, env })("/pulls/7").catch((caught) => caught),
+      createGraphQL({ fetchImpl, env })("query { x }", {}).catch((caught) => caught),
+    ]);
+  };
+  /** @param {unknown} error */
+  const describe = (error) => {
+    assert.ok(error instanceof GitHubError);
+    return [error.isLimited, error.limit, error.resetsAt?.toISOString() ?? null];
+  };
+  const usedUp = [true, 60, "2023-11-14T22:13:20.000Z"];
+  for (const error of await refuseWith(403, { ...reset, "x-ratelimit-remaining": "0" }))
+    assert.deepEqual(describe(error), usedUp);
+  for (const error of await refuseWith(429, reset)) assert.deepEqual(describe(error), usedUp);
+  for (const error of await refuseWith(403, { ...reset, "x-ratelimit-remaining": "12" }))
+    assert.deepEqual(describe(error), [false, null, null]);
+  for (const error of await refuseWith(403, {}))
+    assert.deepEqual(describe(error), [false, null, null]);
+  const secondary = new GitHubError(403, "GET /pulls/7", new Headers({ "retry-after": "90" }), 0);
+  assert.deepEqual(describe(secondary), [true, null, "1970-01-01T00:01:30.000Z"]);
 });
 
 test("a REST request is signed with the token when there is one, and goes unsigned without one", async () => {

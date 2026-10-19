@@ -321,9 +321,7 @@ test("a plan reads every file but the unread ones, and names why each goes unrea
     "4\t1\tshared/page/sheet.js\n900\t0\tapps/mlb/tests/fixtures/x.json\n1\t0\ticon.svg\n3\t0\tapps/mlb/page/js/sortable.min.js\n",
     REPO,
   );
-  assert.deepEqual(plan.areas, [
-    { area: 1, name: "shared page", files: ["shared/page/sheet.js"], lines: 5 },
-  ]);
+  assert.deepEqual(plan.areas, [{ area: 1, name: "shared page", files: ["shared/page/sheet.js"] }]);
   assert.deepEqual(plan.unread, [
     { path: "apps/mlb/tests/fixtures/x.json", why: "a test's recorded data" },
     { path: "icon.svg", why: "a drawing or a minified library, written by a tool" },
@@ -336,8 +334,8 @@ test("a plan reads every file but the unread ones, and names why each goes unrea
 
 test("each area has a reviewer for each kind of problem, two for bugs, and one checker", () => {
   const areas = [
-    { area: 1, name: "mlb page", lines: 40 },
-    { area: 2, name: "docs", lines: 9 },
+    { area: 1, name: "mlb page" },
+    { area: 2, name: "docs" },
   ];
   const jobs = listJobs(areas, KINDS);
   assert.deepEqual(

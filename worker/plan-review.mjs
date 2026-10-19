@@ -1,9 +1,9 @@
 // Splits a pull request's change into areas by what its files are about, each test with the code
-// it tests, so CI's review (the review jobs in ci.yml) has a reviewer for each kind of problem in
-// KINDS read each area in full. The first review reads the whole change. A review after it reads
-// only what the pushes since the last full read changed, and the whole change is read once more
-// alongside it, by FINAL_KIND's reviewer, whose findings are posted only when that review finishes
-// and posts nothing. A push that changes only what a merge of the base brings in is read by no
+// it tests, so CI's review (the review jobs in ci.yml, and review-area.yml for each area) has a
+// reviewer for each kind of problem in KINDS read each area in full. The first review reads the
+// whole change. A review after it reads only what the pushes since the last full read changed,
+// and the whole change is read once more alongside it, by FINAL_KIND's reviewer, whose findings
+// are posted only when that review finishes and posts nothing. A push that changes only what a merge of the base brings in is read by no
 // one, and neither is a run on the head the last full read ended on, as a label's is. A test's
 // recorded data, the lockfile, a binary file, and a drawing or minified library a tool wrote go
 // unread, named in the summary instead.
@@ -261,7 +261,6 @@ function groupInAreas(files, repoFiles, areaLines) {
       return parts.map((part, index) => ({
         name: parts.length > 1 ? `${name}, part ${index + 1}` : name,
         files: part.map((file) => file.path),
-        lines: sum(part),
       }));
     },
   );
@@ -273,7 +272,7 @@ function groupInAreas(files, repoFiles, areaLines) {
  * own name.
  * @param {{ path: string, lines: number }[]} files
  * @param {string[]} repoFiles
- * @returns {{ area: number, name: string, files: string[], lines: number }[]}
+ * @returns {{ area: number, name: string, files: string[] }[]}
  */
 export function listAreas(files, repoFiles) {
   const total = files.reduce((sum, file) => sum + file.lines, 0);
