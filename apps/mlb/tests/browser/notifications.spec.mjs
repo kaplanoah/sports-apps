@@ -1,3 +1,4 @@
+import { takeAwayPush } from "../../../../tests/browser/devices.mjs";
 import { test, expect, matchPath, openApp, openSettings } from "./harness.mjs";
 
 // The switch subscribes through the page's service worker.
@@ -207,8 +208,8 @@ test("on an iPhone, blocked notifications point to Settings", async ({ page }) =
 });
 
 test("on an iPhone outside the Home Screen, the page says to add it there", async ({ page }) => {
+  await takeAwayPush(page);
   await page.addInitScript(() => {
-    delete window.PushManager;
     Object.defineProperty(navigator, "userAgent", {
       get: () => "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
     });

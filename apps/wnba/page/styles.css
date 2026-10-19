@@ -2424,7 +2424,7 @@ table.standings tr.playoff-line + tr td {
 .settings-panel {
   --sheet: var(--bg);
 }
-/* The title stands alone in the header, close over the first setting. */
+/* The title stands alone in the header, close over what settings show first. */
 .settings-panel .sheet-top {
   min-height: 0;
 }

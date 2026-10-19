@@ -682,11 +682,6 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   width: 15px;
   height: 15px;
 }
-@media (hover: hover) {
-  .notify-help:hover {
-    color: var(--ink-hover);
-  }
-}
 body.kbd .notify-help:focus {
   outline: 2px solid var(--focus-ring);
   outline-offset: -12px;

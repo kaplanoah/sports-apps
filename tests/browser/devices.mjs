@@ -14,5 +14,11 @@ export const IPHONE = {
 };
 // The widest iPhone, as an iPhone 16 or 17 Pro Max's Safari lays its pages out.
 export const WIDE_IPHONE = { ...IPHONE, viewport: { width: 440, height: 956 } };
+// A browser without push, as Safari is outside the Home Screen.
+/** @param {import("@playwright/test").Page} page */
+export const takeAwayPush = (page) =>
+  page.addInitScript(() => {
+    delete (/** @type {any} */ (window).PushManager);
+  });
 export const ANDROID_AGENT =
   "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";

@@ -3,12 +3,13 @@
 // does.
 
 import { expect } from "@playwright/test";
+import { takeAwayPush } from "./devices.mjs";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
 import { drag } from "./touch.mjs";
 
-const WELCOME = "#homeScreenWelcome";
+export const WELCOME = "#homeScreenWelcome";
 const SETTINGS = "#settingsDialog";
 const HOME_SCREEN_NOTE = /add this site to your home screen/;
 
@@ -22,13 +23,6 @@ const HOME_SCREEN_NOTE = /add this site to your home screen/;
  *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
  * }} App
  */
-
-// Safari has no push outside the Home Screen.
-/** @param {import("@playwright/test").Page} page */
-const takeAwayPush = (page) =>
-  page.addInitScript(() => {
-    delete (/** @type {any} */ (window).PushManager);
-  });
 
 /** @param {import("@playwright/test").Page} page */
 const findHelp = (page) => page.getByRole("button", { name: "How to get notifications" });
