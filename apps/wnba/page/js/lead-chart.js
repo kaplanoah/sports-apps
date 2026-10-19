@@ -1,5 +1,5 @@
 import { capitalize, html } from "#shared/html.js";
-import { namePeriod, REGULATION_PERIODS } from "./periods.js";
+import { namePeriod, OVERTIME_SECONDS, QUARTER_SECONDS, REGULATION_PERIODS } from "./periods.js";
 import { nameTeam } from "./series.js";
 
 // The game sheet's chart of the lead through a game: the visitors' lead above the middle line and
@@ -10,9 +10,6 @@ import { nameTeam } from "./series.js";
 // type role's size however wide it shows.
 
 /** @typedef {{ periods: number, isOver: boolean, scores: [number, number, number][] }} Lead each score's seconds from tip-off, then the away and home scores */
-
-const QUARTER_SECONDS = 10 * 60;
-const OVERTIME_SECONDS = 5 * 60;
 
 const WIDTH = 320;
 const LEFT = 30;

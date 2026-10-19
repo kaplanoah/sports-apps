@@ -16,7 +16,7 @@
 
 /* The buttons only clear the browser's own look, so a team's or a player's name keeps the type of
    wherever it sits. */
-:where(.player-open) {
+:where(.team-open, .player-open) {
   padding: 0;
   border: 0;
   background: none;
@@ -24,19 +24,14 @@
   letter-spacing: inherit;
   color: inherit;
   text-align: inherit;
-  cursor: pointer;
 }
 :where(.team-open) {
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-  text-align: inherit;
+}
+:where(.player-open) {
+  cursor: pointer;
 }
 [data-team] {
   cursor: pointer;

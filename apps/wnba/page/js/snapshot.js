@@ -10,6 +10,7 @@ import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import { findTeamCode, findTeamCodeByEspnId, TEAMS } from "./teams.js";
 import { findTeamNearestGames } from "./nearest-games.js";
+import { REGULATION_PERIODS } from "./periods.js";
 
 // The shape of a snapshot, and of the season record saved from it, which a page reads only when it
 // knows it.
@@ -605,7 +606,6 @@ const POLL_LIVE_MS = 15 * 1000;
 // The last minutes of the 4th quarter and all of overtime are followed as fast as the Worker's
 // copy of the scoreboard turns over.
 const POLL_CLOSING_MS = 5 * 1000;
-const FOURTH_QUARTER = 4;
 const CLOSING_SECONDS = 5 * 60;
 
 // A clock reads like 4:32, or 45.2 under a minute.
@@ -616,9 +616,9 @@ function readClockSeconds(clock) {
 
 function isClosingStretch(game) {
   if (game.state !== "live") return false;
-  if (game.period > FOURTH_QUARTER) return true;
+  if (game.period > REGULATION_PERIODS) return true;
   return (
-    game.period === FOURTH_QUARTER &&
+    game.period === REGULATION_PERIODS &&
     typeof game.clock === "string" &&
     readClockSeconds(game.clock) <= CLOSING_SECONDS
   );

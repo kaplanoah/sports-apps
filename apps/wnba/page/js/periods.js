@@ -1,6 +1,8 @@
-// A game's periods: four quarters, then as many overtimes as it takes.
+// A game's periods: four ten-minute quarters, then as many five-minute overtimes as it takes.
 
 export const REGULATION_PERIODS = 4;
+export const QUARTER_SECONDS = 10 * 60;
+export const OVERTIME_SECONDS = 5 * 60;
 
 /**
  * An overtime by its period's number from 1, as "OT" or "2OT".
