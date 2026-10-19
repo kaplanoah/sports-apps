@@ -1,6 +1,6 @@
-import { test, expect, openApp, openSettings, serveLockedApp, ON_A_PHONE } from "./harness.mjs";
+import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { IPHONE, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import {
   checkHandoffRenewal,
@@ -138,7 +138,7 @@ test("Appearance sits under Notifications, above the News switches, each choice 
 });
 
 test.describe("on an iPhone's Home Screen app, which has no Home Screen box", () => {
-  test.use({ ...ON_A_PHONE, userAgent: IPHONE_AGENT });
+  test.use(IPHONE);
 
   test.beforeEach(async ({ page }) => {
     await openFromHomeScreen(page);
