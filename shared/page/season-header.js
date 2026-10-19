@@ -66,8 +66,8 @@ function findRiders() {
 
 /**
  * Where the parts start and how far the header rides, from the page laid out with nothing ridden:
- * the pill holds at the height its bar's band above it reaches down to. The ride is in whole pixels,
- * as far as Safari scrolls a part.
+ * the pill holds at the height its bar's band above it reaches down to, or the fraction of a pixel
+ * above it that keeps the ride in whole pixels, as far as Safari scrolls a part.
  * @param {HTMLElement} view
  */
 function measureRide(view) {
@@ -78,7 +78,7 @@ function measureRide(view) {
   return {
     viewTop,
     partsTop: pillTop + pill.offsetHeight,
-    reach: Math.max(0, Math.round(pillTop - holdTop)),
+    reach: Math.max(0, Math.ceil(pillTop - holdTop)),
     pageHeight: document.body.offsetHeight,
   };
 }

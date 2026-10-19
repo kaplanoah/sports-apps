@@ -276,6 +276,44 @@ test("with the header just gone, the band above the pill covers it, and the pill
   await expect(pill).toHaveClass(/\bstuck\b/);
 });
 
+test("over a header of a fractional height, the header rides whole pixels, holding the pill no lower than its band reaches", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const view = page.locator("#view-bracket-standings");
+  /** @returns {Promise<string>} */
+  const readPartsTop = () =>
+    view.evaluate((element) => element.style.getPropertyValue("--parts-top"));
+  const partsTop = await readPartsTop();
+
+  // The header grows so its ride ends 0.3px past a whole pixel, which rounding to the nearest drops.
+  await page.evaluate(() => {
+    const header = /** @type {HTMLElement} */ (document.querySelector("header.top"));
+    const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
+    const ride =
+      pill.getBoundingClientRect().top - parseFloat(getComputedStyle(pill, "::before").height);
+    const height = header.getBoundingClientRect().height;
+    Object.assign(header.style, {
+      boxSizing: "border-box",
+      height: `${height + 1.3 - (ride % 1)}px`,
+    });
+  });
+
+  await expect.poll(readPartsTop).not.toBe(partsTop);
+  const reach = await readHeaderReach(page);
+  expect(Number.isInteger(reach)).toBe(true);
+
+  await scrollSeasonPart(page, "standings", reach);
+
+  const { pillTop, holdTop } = await page.locator("#bracketStandingsPill").evaluate((pill) => ({
+    pillTop: pill.getBoundingClientRect().top,
+    holdTop: parseFloat(getComputedStyle(pill, "::before").height),
+  }));
+  expect(pillTop).toBeLessThanOrEqual(holdTop);
+  expect(pillTop).toBeGreaterThan(holdTop - 1);
+});
+
 test("the standings' last row ends above the tab bar once they're scrolled to their end", async ({
   page,
 }) => {

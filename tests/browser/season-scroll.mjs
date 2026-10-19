@@ -244,10 +244,8 @@ export const isPillBandShown = (page) =>
  */
 export const readHeaderReach = (page) =>
   page.evaluate(() =>
-    Math.round(
-      parseFloat(
-        document.getElementById("view-bracket-standings").style.getPropertyValue("--header-reach"),
-      ),
+    parseFloat(
+      document.getElementById("view-bracket-standings").style.getPropertyValue("--header-reach"),
     ),
   );
 
