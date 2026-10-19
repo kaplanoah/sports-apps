@@ -8,8 +8,11 @@ import { html, setHtml } from "./html.js";
 
 const BOX_BUTTONS = "#updates .game-open, #dismissUpdates";
 
-/** @type {HTMLElement[]} */
-let standsFor = [];
+/** The Updates box's buttons that show, in the order their stand-ins are laid. */
+const listBoxButtons = () =>
+  /** @type {HTMLElement[]} */ ([...document.querySelectorAll(BOX_BUTTONS)]).filter(
+    (button) => button.getClientRects().length > 0,
+  );
 
 /**
  * The button `element` stands in for, or null for an element that isn't a stand-in.
@@ -18,7 +21,7 @@ let standsFor = [];
  */
 function findButtonStoodFor(element) {
   const index = element instanceof HTMLElement ? element.dataset.standIn : undefined;
-  return index === undefined ? null : (standsFor[Number(index)] ?? null);
+  return index === undefined ? null : (listBoxButtons()[Number(index)] ?? null);
 }
 
 /**
@@ -51,14 +54,6 @@ export const placeStandIn = (button, pill, pillTop, partLeft) => ({
 const listTapHolders = (view) =>
   /** @type {HTMLElement[]} */ ([...view.querySelectorAll(".rider-taps")]);
 
-/** @param {HTMLElement} view */
-function listBoxButtons(view) {
-  if (!view.hasAttribute("data-follows")) return [];
-  return /** @type {HTMLElement[]} */ ([...document.querySelectorAll(BOX_BUTTONS)]).filter(
-    (button) => button.getClientRects().length > 0,
-  );
-}
-
 /**
  * @param {HTMLElement} tap
  * @param {Box} place
@@ -87,14 +82,14 @@ function drawStandIns(taps, places) {
  * @param {HTMLElement} pill
  */
 function placeRiderTaps(view, pill) {
-  standsFor = listBoxButtons(view);
+  const buttons = view.hasAttribute("data-follows") ? listBoxButtons() : [];
   const pillBox = pill.getBoundingClientRect();
   const pillTop = parseFloat(view.style.getPropertyValue("--parts-top")) - pill.offsetHeight;
   // Every part fills the row that holds them, which holds still while slide-panels.js moves a part
   // aside, so the row's left edge is where each part starts at rest.
   const partsRow = /** @type {HTMLElement} */ (view.querySelector(".season-parts"));
   const partLeft = partsRow.getBoundingClientRect().left;
-  const places = standsFor.map((button) =>
+  const places = buttons.map((button) =>
     placeStandIn(button.getBoundingClientRect(), pillBox, pillTop, partLeft),
   );
   for (const taps of listTapHolders(view)) drawStandIns(taps, places);
@@ -130,7 +125,8 @@ function passTap(event) {
 
 /**
  * Gives each of the view's parts a place for its stand-ins, has each stand-in pass its taps on,
- * and lays them again whenever the header's ride is measured again or the Updates box changes.
+ * and lays them again whenever the header's ride is measured again, as it is whenever what rides,
+ * the Updates box among it, changes size.
  * @param {HTMLElement} view
  * @param {HTMLElement} pill
  * @param {HTMLElement[]} parts
@@ -146,13 +142,5 @@ export function startRiderTaps(view, pill, parts) {
   }
   const place = () => placeRiderTaps(view, pill);
   view.addEventListener("headerride", place);
-  const box = document.getElementById("updates");
-  if (box)
-    new MutationObserver(place).observe(box, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["hidden"],
-    });
   place();
 }
