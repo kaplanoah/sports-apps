@@ -7,7 +7,8 @@
 // service worker kept (service-worker-steps.js), which it keeps on its own, since a load it never
 // let reach the page is what they're for, and the logs of the viewport's changes
 // (viewport-log.js), of what each dialog's row of sheets does (sheet-log.js), of what a season's
-// list of days does (day-strip-log.js), and of each error the page's code doesn't catch
+// list of days does (day-strip-log.js), of what became of each touch on a season's standings and
+// bracket (bracket-standings-log.js), and of each error the page's code doesn't catch
 // (error-log.js). It records nothing while it's off, which it starts as.
 
 import {
