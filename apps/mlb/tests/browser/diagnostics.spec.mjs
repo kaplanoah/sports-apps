@@ -2,11 +2,12 @@ import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import {
+  findDiagnosticsSwitch,
+  turnOnDiagnostics,
+} from "../../../../tests/browser/diagnostics-switch.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
-
-/** @param {import("@playwright/test").Page} page */
-const findSwitch = (page) => page.getByRole("switch", { name: "Diagnostics" });
 
 /**
  * @param {import("@playwright/test").Page} page
@@ -37,11 +38,11 @@ test("on a phone, Diagnostics sit past the copyright, a scroll beyond where sett
 
   await scrollSettings(page, copyrightBottom - PHONE.height + 40);
   await expect(copyright).toBeInViewport({ ratio: 1 });
-  await expect(findSwitch(page)).not.toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
 
   await scrollSettings(page, 2000);
-  await expect(findSwitch(page)).toBeInViewport();
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "false");
+  await expect(findDiagnosticsSwitch(page)).toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "false");
   await expect(page.locator("#diagnostics")).toBeHidden();
   await expect(page.locator(".diagnostics-area .control-label")).toHaveText("Diagnostics");
 });
@@ -53,12 +54,12 @@ test("on a wide screen, Diagnostics sit under the settings and ranking, a scroll
   await openApp(page);
   await openSettings(page);
   await expect(page.locator(".rank-frame")).toBeInViewport();
-  await expect(findSwitch(page)).not.toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
   await page.mouse.move(LAPTOP.width / 2, LAPTOP.height / 2);
 
   await scrollSettings(page, 600);
 
-  await expect(findSwitch(page)).toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).toBeInViewport();
 });
 
 /** @param {import("@playwright/test").Page} page */
@@ -86,8 +87,8 @@ test.describe("on a phone", () => {
     await stubShare(page);
     await openApp(page);
     await openSettings(page);
-    await findSwitch(page).click();
-    await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
+    await findDiagnosticsSwitch(page).click();
+    await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "true");
 
     const button = findReportButton(page);
     await expect(button).toHaveText("Share report");
@@ -98,15 +99,6 @@ test.describe("on a phone", () => {
     expect(copied).toMatch(/^Pitchers job(: no run saved| last ran .*, \d+ requests?)/m);
   });
 });
-
-/** @param {import("@playwright/test").Page} page */
-async function turnOnDiagnostics(page) {
-  await openSettings(page);
-  await findSwitch(page).click();
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
-}
 
 /**
  * Opens the Games tab on the whole season, with Diagnostics on.

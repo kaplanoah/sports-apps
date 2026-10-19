@@ -1,6 +1,10 @@
 import { test, expect, findGameButton, openApp, NOW } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
+import {
+  findDiagnosticsSwitch,
+  turnOnDiagnostics,
+} from "../../../../tests/browser/diagnostics-switch.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -15,19 +19,7 @@ const RECORD_MS = 5000;
 const openSettings = (page) => page.getByRole("button", { name: "Settings", exact: true }).click();
 
 /** @param {import("@playwright/test").Page} page */
-const findSwitch = (page) => page.getByRole("switch", { name: "Diagnostics" });
-
-/** @param {import("@playwright/test").Page} page */
 const findRecords = (page) => page.locator("#diagnostics");
-
-/** @param {import("@playwright/test").Page} page */
-async function turnOnDiagnostics(page) {
-  await openSettings(page);
-  await findSwitch(page).click();
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
-}
 
 /** @param {import("@playwright/test").Page} page */
 async function reloadAndRecord(page) {
@@ -44,8 +36,8 @@ test("Diagnostics sit past the end of settings, off, with nothing recorded, with
   await openSettings(page);
 
   await expect(page.locator("#settingsDialog")).toContainText("Noah Kaplan");
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "false");
-  await expect(findSwitch(page)).not.toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "false");
+  await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
   await expect(findRecords(page)).toBeHidden();
   await expect(page.locator(".diagnostics-area .control-label")).toHaveText("Diagnostics");
 });
@@ -428,9 +420,9 @@ test("turning Diagnostics off forgets what it recorded", async ({ page }) => {
     findRecords(page).locator(".diagnostics-record", { hasText: "Games list" }),
   ).toHaveCount(1);
 
-  await findSwitch(page).click();
+  await findDiagnosticsSwitch(page).click();
   await expect(findRecords(page)).toBeHidden();
-  await findSwitch(page).click();
+  await findDiagnosticsSwitch(page).click();
 
   await expect(findRecords(page)).toContainText("Nothing yet");
   await expect(findRecords(page).locator(".diagnostics-record")).toHaveCount(0);
