@@ -922,6 +922,7 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="--team-stat-columns: ${isWide && columns}">',
     '<div style="--team-stat-columns: ${count({ wide: 1 })}">',
     "<div style=\"--team-stat-columns: ${isOpen ? '}' : '1'}\">",
+    "<div style=\"--team-stat-columns: ${isOpen ? 'a\\'}' : '1'}\">",
     '<div style="--team: #f60">',
     '<div style="color: var(--ink)">',
     '<div style="position: relative; overflow: visible">',
@@ -1269,6 +1270,15 @@ test("the lines of each object Object.assign hands a part's style are found, and
     [1, 2, 3],
   );
   assert.deepEqual([...findStyleObjectLines("Object.assign(mystyle, { scale: 1 });")], []);
+  const commented = [
+    "Object.assign(tip.style, {",
+    "  // don't lift it",
+    "  content: '}',",
+    "  zIndex: 5,",
+    "});",
+    "const after = { offset: 1 };",
+  ].join("\n");
+  assert.deepEqual([...findStyleObjectLines(commented)], [1, 2, 3, 4, 5]);
 });
 
 // As a page pulses a part, with the call above what a hunk shows of its keyframes.

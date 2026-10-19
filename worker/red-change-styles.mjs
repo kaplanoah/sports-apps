@@ -435,8 +435,34 @@ export const isEncoded = (text) => ENCODED_TEXT.test(text);
 const CLOSING_BRACKETS = { "{": "}", "[": "]" };
 
 /**
+ * The index of the last character of a script's string or comment that starts at `at`, or `at`
+ * when none starts there, or the text's end when it never ends.
+ * @param {string} text
+ * @param {number} at
+ */
+function findStringOrCommentEnd(text, at) {
+  const character = text[at];
+  if (`"'\``.includes(character)) {
+    for (let end = at + 1; end < text.length; end += 1) {
+      if (text[end] === "\\") end += 1;
+      else if (text[end] === character) return end;
+    }
+    return text.length;
+  }
+  if (text.startsWith("//", at)) {
+    const end = text.indexOf("\n", at);
+    return end === -1 ? text.length : end;
+  }
+  if (text.startsWith("/*", at)) {
+    const end = text.indexOf("*/", at + 2);
+    return end === -1 ? text.length : end + 1;
+  }
+  return at;
+}
+
+/**
  * The index of the brace or bracket that closes the one at `open`, past any in a script's
- * strings, or the text's end when none does.
+ * strings and comments, or the text's end when none does.
  * @param {string} text
  * @param {number} open
  */
@@ -444,17 +470,11 @@ export function findClosingBracket(text, open) {
   const opening = text[open];
   const closing = CLOSING_BRACKETS[/** @type {"{" | "["} */ (opening)];
   let depth = 0;
-  let quote = "";
   for (let at = open; at < text.length; at += 1) {
-    const character = text[at];
-    if (quote) {
-      if (character === "\\") at += 1;
-      else if (character === quote) quote = "";
-      continue;
-    }
-    if (`"'\``.includes(character)) quote = character;
-    else if (character === opening) depth += 1;
-    else if (character === closing) depth -= 1;
+    const skipped = findStringOrCommentEnd(text, at);
+    if (skipped !== at) at = skipped;
+    else if (text[at] === opening) depth += 1;
+    else if (text[at] === closing) depth -= 1;
     if (depth === 0) return at;
   }
   return text.length;
@@ -462,7 +482,7 @@ export function findClosingBracket(text, open) {
 
 /**
  * Each hole a script's template fills in, as `${...}`, from its start to the brace that closes
- * it, or null when one never closes, as where a string in it holds a brace of its own.
+ * it, or null when one never closes, as where a string or brace in it is left open.
  * @param {string} text
  * @returns {string[] | null}
  */
