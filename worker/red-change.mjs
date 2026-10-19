@@ -475,13 +475,14 @@ const findPropertyCallSetting = (text, isWatched) =>
 
 /**
  * Whether a line writes through an index into a style, as `style[key] = value` does, up to the
- * index's own closing bracket, however many it holds.
+ * index's own closing bracket, however many it holds, or holds an index the gate can't find the
+ * end of, as where a quote in it never closes.
  * @param {string} text
  */
 const isStyleIndexAssignment = (text) =>
   [...text.matchAll(STYLE_INDEX)].some((match) => {
     const close = findClosingBracket(text, match.index + match[0].length - 1);
-    return STARTS_ASSIGNMENT.test(text.slice(close + 1));
+    return close === text.length || STARTS_ASSIGNMENT.test(text.slice(close + 1));
   });
 
 /**

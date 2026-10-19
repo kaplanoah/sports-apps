@@ -1484,6 +1484,7 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     "  part.style[key] = value;",
     "  part.style[names[0]] = value;",
     '  part.style[map["z-index"]] = 5;',
+    `  part.style[name.replace(/'/g, "")] = 5;`,
     '  const sheet = document.createElement("dialog");',
     "  const rules = document.createElement('style');",
     "  const loader = document.createElement(`script`);",
