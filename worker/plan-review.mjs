@@ -679,12 +679,19 @@ export function listStageKinds(stage) {
  * @param {{ area: number, name: string }[]} areas
  * @param {{ kind: string, focus: string }[]} kinds
  */
-export const listJobs = (areas, kinds) => ({
-  areas: areas.map(({ name }) => ({ name })),
-  areaNumbers: Object.fromEntries(areas.map(({ area, name }) => [name, area])),
-  kinds: kinds.map(({ kind, focus }) => ({ kind, focus })),
-  count: areas.length * kinds.length,
-});
+export function listJobs(areas, kinds) {
+  const names = areas.map(({ name }) => name);
+  if (new Set(names).size < names.length)
+    throw new Error(
+      `Two areas share a name, so a job can't look up its area: ${names.join(", ")}.`,
+    );
+  return {
+    areas: names.map((name) => ({ name })),
+    areaNumbers: Object.fromEntries(areas.map(({ area, name }) => [name, area])),
+    kinds: kinds.map(({ kind, focus }) => ({ kind, focus })),
+    count: areas.length * kinds.length,
+  };
+}
 
 /**
  * A stage's matrices as the lines for $GITHUB_OUTPUT, each named after the prefix its jobs read.

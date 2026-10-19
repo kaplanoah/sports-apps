@@ -48,7 +48,7 @@
 
 - Apps: one per league, each in `apps/<app>/` with its own `page/`,
   `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`.
-  Paths below are inside an app's folder, except `shared/` and the ones named as the root's.
+  Paths here, in the rule files, and in the skills are inside an app's folder, except `shared/` and the ones named as the root's.
 - Page:
   `page/`.
   `page/js/app.js` is the entry module; shared page data lives in `page/js/session.js`.
@@ -64,7 +64,7 @@
   and each league hands it only what differs, as each app's `readGameDay`,
   `renderGameRow`, and `listSeasonDays` calls do; never copy it into a second app.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
-  How to write them is under "Tests" below and in `.claude/rules/tests.md` and `browser-tests.md`.
+  How to write them is under "Tests" above and in `.claude/rules/tests.md` and `browser-tests.md`.
 - Commands:
   `npm ci` once.
   `npm run check` runs everything CI does, but locally run only what step 2 of "Shipping a change" names.
@@ -300,6 +300,7 @@ When a step says to go back to an earlier step, continue in order from there.
 7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
    It splits the change into areas by what the files are about, each test with its code (`worker/plan-review.mjs`),
    and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests, and list every problem they find, each once with every place it shows.
+   Each area's reviewers read the rule files whose `paths` match its files, as well as its diffs.
    A checker for each area confirms each problem against the code, merges repeats, and weighs it,
    a check across areas, when there's more than one, names repeats across them and adds what spans them,
    and a step posts what they confirmed or left unsure: each Important or Unsure finding on the line it concerns, or its file,
@@ -314,7 +315,8 @@ When a step says to go back to an earlier step, continue in order from there.
    The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
    how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
    and anything it read but couldn't judge (`worker/judge-review.mjs`).
-   It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each.
+   It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each,
+   a reviewer that left one of its area's rule files unread among them.
    If the summary names something it couldn't judge, tell the user.
    Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its thread, only when you won't fix it, saying why.
    Fix a finding in every place the PR's own change shows the same problem, not only on its line,

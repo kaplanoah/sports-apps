@@ -2,6 +2,17 @@
 paths:
   - "apps/*/page/**"
   - "shared/page/**"
+  - "tests/type-roles.test.js"
+  - "tests/shape-tokens.test.js"
+  - "tests/icons.test.js"
+  - "tests/browser/theme-layout.mjs"
+  - "tests/browser/type-roles.mjs"
+  - "tests/browser/tap-states.mjs"
+  - "apps/*/tests/browser/themes.spec.mjs"
+  - "apps/*/tests/browser/sheet-stack.spec.mjs"
+  - "apps/*/tests/browser/role-looks.spec.mjs"
+  - "apps/*/tests/browser/views.mjs"
+  - "apps/wnba/tests/hardwood.test.js"
 ---
 
 # How the pages look

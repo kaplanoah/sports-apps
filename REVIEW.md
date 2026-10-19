@@ -49,7 +49,7 @@ In order of what has mattered here.
    and a pull request's own code run with a secret.
    A change to the review itself, its jobs in `.github/workflows/ci.yml` and `.github/workflows/review-area.yml`,
    `worker/plan-review.mjs`, `worker/judge-review.mjs`, `worker/post-review.mjs`,
-   `worker/review-context.mjs`, or `worker/review-state.mjs`, or to a guard test,
+   `worker/review-context.mjs`, `worker/review-state.mjs`, or `worker/rule-files.mjs`, or to a guard test,
    that lets less through is Important, naming what it no longer catches,
    since the pull request's own copy of them runs its review.
    So is a change to the red-change gate that lets less through,

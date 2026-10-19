@@ -3,6 +3,11 @@ paths:
   - "tests/browser/**"
   - "apps/*/tests/browser/**"
   - "playwright.config.mjs"
+  - "worker/browser-scope.mjs"
+  - "worker/burn-in-specs.mjs"
+  - "worker/judge-burn-in.mjs"
+  - "worker/report-flaky-tests.mjs"
+  - ".github/workflows/flaky.yml"
 ---
 
 # Browser tests

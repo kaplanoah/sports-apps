@@ -356,10 +356,17 @@ test("each area has a reviewer for each kind of problem, two for bugs, and one c
   assert.equal(last.count, 2);
 });
 
-// GitHub names a matrix's job by every value in it, and a skipped one by the job alone.
 test("each area's matrix holds only the name its job shows", () => {
   const { areas } = listJobs([{ area: 1, name: "mlb page" }], KINDS);
   assert.ok(areas.every((area) => Object.keys(area).join() === "name"));
+});
+
+test("two areas of one name stop the plan rather than one area's job reviewing the other's", () => {
+  const areas = [
+    { area: 1, name: "docs" },
+    { area: 2, name: "docs" },
+  ];
+  assert.throws(() => listJobs(areas, KINDS), /Two areas share a name/);
 });
 
 test("each stage's matrices are handed to ci.yml under the names its review jobs read", () => {

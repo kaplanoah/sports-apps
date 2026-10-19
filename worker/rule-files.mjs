@@ -1,6 +1,5 @@
 // Reads the scoped rule files in .claude/rules/, which Claude Code loads once a session reads or
-// edits a file one of their `paths` globs matches, so CI's review can hand each area the rules for
-// its files (plan-review.mjs) and a test can check each glob still matches a file.
+// edits a file one of their `paths` globs matches, so a file's rules are known without a session.
 
 export const RULES_FOLDER = ".claude/rules/";
 
@@ -11,33 +10,49 @@ export const RULES_FOLDER = ".claude/rules/";
 export const isRuleFile = (path) => path.startsWith(RULES_FOLDER) && path.endsWith(".md");
 
 /**
- * The `paths` globs a rule file's frontmatter lists, each a quoted item of its own, or none when
- * it has no frontmatter.
+ * The `paths` globs a rule file's frontmatter lists, each an item of its own, quoted or not, or
+ * none when it has no frontmatter.
  * @param {string} text
  * @returns {string[]}
  */
 export function readRulePaths(text) {
-  const frontmatter = text.match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? "";
-  return [...frontmatter.matchAll(/^\s+- "([^"]+)"$/gm)].map((match) => match[1]);
+  const frontmatter = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/)?.[1] ?? "";
+  return [...frontmatter.matchAll(/^\s+-\s+(["']?)(.+?)\1\s*$/gm)].map((match) => match[2]);
+}
+
+/** @param {string} text */
+const escapeText = (text) => text.replace(/[.+?^$()|[\]\\]/g, "\\$&");
+
+/**
+ * A glob as a regular expression: `**` matches across folders, and a `**` followed by a slash
+ * matches no folder too; `*` matches within a folder; and `{a,b}` matches either.
+ * @param {string} glob
+ */
+function readGlob(glob) {
+  let pattern = "";
+  for (let index = 0; index < glob.length; index += 1) {
+    const char = glob[index];
+    if (glob.startsWith("**/", index)) {
+      pattern += "(?:.*/)?";
+      index += 2;
+    } else if (glob.startsWith("**", index)) {
+      pattern += ".*";
+      index += 1;
+    } else if (char === "*") pattern += "[^/]*";
+    else if (char === "{") pattern += "(?:";
+    else if (char === "}") pattern += ")";
+    else if (char === ",") pattern += "|";
+    else pattern += escapeText(char);
+  }
+  return new RegExp(`^${pattern}$`);
 }
 
 /**
- * Whether a path matches a glob, where `**` matches across folders and `*` within one.
+ * Whether a path matches a glob.
  * @param {string} path
  * @param {string} glob
  */
-export function matchesGlob(path, glob) {
-  const pattern = glob
-    .split("**")
-    .map((piece) =>
-      piece
-        .split("*")
-        .map((text) => text.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-        .join("[^/]*"),
-    )
-    .join(".*");
-  return new RegExp(`^${pattern}$`).test(path);
-}
+export const matchesGlob = (path, glob) => readGlob(glob).test(path);
 
 /**
  * The rules whose globs match any of the files.

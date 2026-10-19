@@ -2,6 +2,19 @@
 paths:
   - "apps/*/worker/**"
   - "shared/worker/**"
+  - "apps/*/page/gate.html"
+  - "apps/*/page/sw.js"
+  - "shared/page/access.js"
+  - "shared/page/appearance.js"
+  - "shared/page/gate.js"
+  - "shared/page/gate.css"
+  - "shared/page/service-worker.js"
+  - "shared/page/offline-worker.js"
+  - "shared/page/service-worker-steps.js"
+  - "shared/page/release-guard.js"
+  - "worker/build.mjs"
+  - "worker/page-files.mjs"
+  - "apps/*/tests/*-updater.test.js"
 ---
 
 # The Workers

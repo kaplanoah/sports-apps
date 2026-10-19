@@ -1,16 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { isRuleFile, listRulesFor, matchesGlob, readRulePaths } from "../worker/rule-files.mjs";
+import { listTrackedFiles } from "./tracked-files.js";
 
 const ROOT = new URL("../", import.meta.url);
 
-const listRepoFiles = () =>
-  execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" }).split("\n").filter(Boolean);
-
-const repoFiles = listRepoFiles();
+const repoFiles = listTrackedFiles();
 const ruleFiles = repoFiles.filter(isRuleFile);
+
+/** @param {string} path */
+const readRule = (path) => readFileSync(new URL(path, ROOT), "utf8");
 
 test("the repo holds rule files", () => {
   assert.ok(ruleFiles.length > 0);
@@ -18,36 +18,52 @@ test("the repo holds rule files", () => {
 
 // A rule file with no paths loads into every session, which AGENTS.md is for.
 test("each rule file lists the paths it loads for", () => {
-  const unscoped = ruleFiles.filter(
-    (path) => !readRulePaths(readFileSync(new URL(path, ROOT), "utf8")).length,
-  );
+  const unscoped = ruleFiles.filter((path) => !readRulePaths(readRule(path)).length);
   assert.deepEqual(unscoped, []);
+});
+
+// An item the reader drops would leave its files without the rule in CI's review, though Claude
+// Code loads it for them.
+test("each item a rule file's frontmatter lists is read as a path", () => {
+  const unread = ruleFiles.filter((path) => {
+    const frontmatter = readRule(path).split("\n---\n")[0];
+    const items = frontmatter.split("\n").filter((line) => /^\s+-/.test(line));
+    return items.length !== readRulePaths(readRule(path)).length;
+  });
+  assert.deepEqual(unread, []);
 });
 
 // A glob that matches no file never loads its rules, as one left behind by a moved folder.
 test("each rule file's paths each match a file in the repo", () => {
   const stale = ruleFiles.flatMap((path) =>
-    readRulePaths(readFileSync(new URL(path, ROOT), "utf8"))
+    readRulePaths(readRule(path))
       .filter((glob) => !repoFiles.some((file) => matchesGlob(file, glob)))
       .map((glob) => `${path}: ${glob}`),
   );
   assert.deepEqual(stale, []);
 });
 
-test("a rule file's paths are the quoted items its frontmatter lists", () => {
+test("a rule file's paths are the items its frontmatter lists, quoted or not", () => {
   assert.deepEqual(
     readRulePaths(
-      '---\npaths:\n  - "apps/*/page/**"\n  - "playwright.config.mjs"\n---\n\n- A rule',
+      "---\npaths:\n  - \"apps/*/page/**\"\n  - 'shared/**'\n  - playwright.config.mjs\n---\n\n- A rule",
     ),
-    ["apps/*/page/**", "playwright.config.mjs"],
+    ["apps/*/page/**", "shared/**", "playwright.config.mjs"],
   );
+  assert.deepEqual(readRulePaths('---\r\npaths:\r\n  - "tests/**"\r\n---\r\n'), ["tests/**"]);
   assert.deepEqual(readRulePaths('# No frontmatter\n\n  - "apps/**"\n'), []);
 });
 
-test("a glob's ** matches across folders and its * within one", () => {
+test("a glob's ** matches across folders, or none before a slash, its * within one, and braces either", () => {
   assert.ok(matchesGlob("apps/mlb/page/js/app.js", "apps/*/page/**"));
   assert.ok(!matchesGlob("apps/mlb/worker/src/index.js", "apps/*/page/**"));
   assert.ok(!matchesGlob("apps/mlb/extra/page/app.js", "apps/*/page/**"));
+  assert.ok(matchesGlob("README.md", "**/*.md"));
+  assert.ok(matchesGlob("apps/mlb/README.md", "**/*.md"));
+  assert.ok(matchesGlob("apps/x.js", "apps/**/x.js"));
+  assert.ok(matchesGlob("apps/mlb/page/x.js", "apps/**/x.js"));
+  assert.ok(matchesGlob("worker/deploy.mjs", "worker/*.{js,mjs}"));
+  assert.ok(!matchesGlob("worker/deploy.ts", "worker/*.{js,mjs}"));
   assert.ok(matchesGlob("playwright.config.mjs", "playwright.config.mjs"));
   assert.ok(!matchesGlob("playwrightXconfig.mjs", "playwright.config.mjs"));
   assert.ok(matchesGlob(".github/workflows/ci.yml", ".github/**"));

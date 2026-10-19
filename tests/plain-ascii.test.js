@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { listTrackedFiles } from "./tracked-files.js";
 
 const ROOT = new URL("../", import.meta.url);
 
@@ -11,10 +11,7 @@ const isTestFile = (/** @type {string} */ file) => /^(tests|apps\/[^/]+\/tests)\
 // Git's own test for a binary file, like a font or an image: a NUL byte in its first 8000.
 const isBinary = (/** @type {Buffer} */ bytes) => bytes.subarray(0, 8000).includes(0);
 
-const listCheckedFiles = () =>
-  execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" })
-    .split("\n")
-    .filter((file) => file && !isTestFile(file));
+const listCheckedFiles = () => listTrackedFiles().filter((file) => !isTestFile(file));
 
 /**
  * Each line of the file with a character outside plain ASCII, as file:line.

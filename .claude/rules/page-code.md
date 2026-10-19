@@ -2,6 +2,7 @@
 paths:
   - "apps/*/page/**"
   - "shared/page/**"
+  - "apps/*/tests/browser/sheet-reload.spec.mjs"
 ---
 
 # How the pages are built
