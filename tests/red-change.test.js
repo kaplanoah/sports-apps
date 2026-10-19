@@ -1281,6 +1281,12 @@ test("the lines of each object Object.assign hands a part's style are found, and
     ].join("\n");
     assert.deepEqual([...findStyleObjectLines(commented)], [1, 2, 3, 4, 5], comment);
   }
+  for (const comment of ["/* open", "// open"])
+    assert.deepEqual(
+      [...findStyleObjectLines(`Object.assign(tip.style, {\n  zIndex: 5, ${comment}`)],
+      [1, 2],
+      comment,
+    );
 });
 
 // As a page pulses a part, with the call above what a hunk shows of its keyframes.
