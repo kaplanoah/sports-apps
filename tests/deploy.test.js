@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { listApps } from "../worker/apps.mjs";
+import { readRepoFile } from "./repo-files.js";
 
 const loadDeployModule = () => import("../worker/deploy.mjs");
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
@@ -266,7 +266,7 @@ test("a migration already applied isn't sent again", async () => {
 test("each app's wrangler.toml declares the same bindings and migrations", async () => {
   const { MIGRATIONS } = await loadDeployModule();
   for (const app of listApps()) {
-    const toml = readFileSync(`${import.meta.dirname}/../apps/${app}/worker/wrangler.toml`, "utf8");
+    const toml = readRepoFile(`apps/${app}/worker/wrangler.toml`);
     assert.match(
       toml,
       /\[\[durable_objects\.bindings\]\]\nname = "STORE"\nclass_name = "SeasonStore"/,
@@ -374,7 +374,7 @@ test("the workers.dev subdomain comes from its secret, checked before anything i
 });
 
 test("the deploy step passes each Cloudflare secret the deploy reads", () => {
-  const workflow = readFileSync(`${import.meta.dirname}/../.github/workflows/deploy.yml`, "utf8");
+  const workflow = readRepoFile(".github/workflows/deploy.yml");
   for (const secret of [
     "CLOUDFLARE_API_TOKEN",
     "CLOUDFLARE_ACCOUNT_ID",
@@ -764,8 +764,7 @@ test("a new version passes once its Worker answers and its page draws, or has no
 
 test("each deploy and each watch of the apps opens every app's page with its own secrets", async () => {
   const { nameAccessSecrets } = await import("../worker/check-page.mjs");
-  const readWorkflow = (name) =>
-    readFileSync(`${import.meta.dirname}/../.github/workflows/${name}`, "utf8");
+  const readWorkflow = (name) => readRepoFile(`.github/workflows/${name}`);
   const listPassed = (workflow, channel) =>
     listApps().flatMap((app) =>
       Object.values(nameAccessSecrets(app, channel)).filter(
@@ -953,7 +952,7 @@ test("a checkout at a commit beta never held isn't a beta release, and says how 
 });
 
 test("a push to beta deploys the beta channel, and main still waits for its CI", () => {
-  const workflow = readFileSync(`${import.meta.dirname}/../.github/workflows/deploy.yml`, "utf8");
+  const workflow = readRepoFile(".github/workflows/deploy.yml");
   assert.match(workflow, /push:\n {4}branches: \[main, beta\]/);
   assert.match(
     workflow,
@@ -970,14 +969,12 @@ test("a push to beta deploys the beta channel, and main still waits for its CI",
 });
 
 test("deploy:api runs the tests before it deploys, and sends its calls through any proxy", () => {
-  const scripts = JSON.parse(
-    readFileSync(`${import.meta.dirname}/../package.json`, "utf8"),
-  ).scripts;
+  const scripts = JSON.parse(readRepoFile("package.json")).scripts;
   assert.equal(scripts["deploy:api"], "npm test && NODE_USE_ENV_PROXY=1 node worker/deploy.mjs");
 });
 
 test("the deploy job runs no package's install scripts or tests while it holds the token", () => {
-  const workflow = readFileSync(`${import.meta.dirname}/../.github/workflows/deploy.yml`, "utf8");
+  const workflow = readRepoFile(".github/workflows/deploy.yml");
   assert.match(workflow, /- run: npm ci --ignore-scripts\n/);
   assert.match(workflow, /\n {10}node worker\/deploy\.mjs --channel "\$CHANNEL"\n/);
   assert.doesNotMatch(workflow, /npm run deploy:api|npm test/);
@@ -985,9 +982,7 @@ test("the deploy job runs no package's install scripts or tests while it holds t
 });
 
 test("project settings ask before any deploy but beta's or a key change, and deny running them any other way", () => {
-  const { permissions } = JSON.parse(
-    readFileSync(`${import.meta.dirname}/../.claude/settings.json`, "utf8"),
-  );
+  const { permissions } = JSON.parse(readRepoFile(".claude/settings.json"));
   assert.deepEqual(permissions.allow, ["Bash(git push -f origin *:beta)"]);
   for (const rule of [
     "Bash(npm run deploy)",

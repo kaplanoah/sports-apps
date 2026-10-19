@@ -1,10 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { decideDeploy, findDeployedChanges, listChangedFiles } from "../worker/deploy-scope.mjs";
-
-/** @param {string} path from the repo's root */
-const readRepoFile = (path) => readFileSync(`${import.meta.dirname}/../${path}`, "utf8");
+import { readRepoFile } from "./repo-files.js";
 
 /**
  * The root worker/ modules a script imports, and the ones they import, with the script.

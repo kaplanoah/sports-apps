@@ -17,17 +17,12 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { escapePattern } from "../shared/page/escape-pattern.js";
 import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 import { findSummary, readReviewedHead } from "./review-state.mjs";
-import {
-  RULES_FOLDER,
-  escapePattern,
-  listRulesFor,
-  readRuleFiles,
-  readRulePaths,
-} from "./rule-files.mjs";
+import { RULES_FOLDER, listRulesFor, readRuleFiles, readRulePaths } from "./rule-files.mjs";
 
 const AREA_LINES = 2000;
 // A smaller area shares its reviewers with the other small ones.

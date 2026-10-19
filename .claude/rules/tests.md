@@ -12,3 +12,4 @@ paths:
 - Test what searches, matches, or ranks across a league against all of it, recorded, never a few rows picked by hand,
   which hide the collisions a whole league has, like a first name that starts a city's,
   as the sweep reads every player on a roster from `apps/mlb/tests/fixtures/2026-10-13-player-index.json`.
+- Tests pass in any `TZ`: a test that asserts a time picks its zone with the root's `tests/time-zone.js` or `test.use({ timezoneId })`.
