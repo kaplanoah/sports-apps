@@ -10,11 +10,8 @@ import {
   nameFindRecord,
   namePostRecord,
 } from "../worker/judge-review.mjs";
-import {
-  escapePattern,
-  formatJobOutputs,
-  listJobs as listPlanJobs,
-} from "../worker/plan-review.mjs";
+import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
+import { escapePattern } from "../worker/rule-files.mjs";
 
 /** @param {string} path from the repo's root */
 const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -464,6 +461,12 @@ test("the review reads every area in full, checks before it posts, and fails on 
     ),
     "a retry judges its whole area again only when the first try gave no answer",
   );
+  assert.ok(
+    find.includes(
+      "judge your area's whole diff against each rule file the earlier try left unread",
+    ),
+    "a retry judges the whole area against a rule file the first try skipped",
+  );
   const check = readJob("check", AREA_WORKFLOW);
   assert.match(check, /needs: find\n\s+if: \$\{\{ !cancelled\(\) \}\}\n/);
   assert.match(
@@ -571,8 +574,15 @@ test("each stage's areas are reviewed with the matrices the plan writes, each ar
     );
     assert.deepEqual(Object.keys(given).toSorted(), declared.toSorted(), job);
     assert.equal(given.stage, stage, job);
-    assert.equal(given.area, "${{ matrix.area }}", job);
+    assert.equal(
+      given.area,
+      `\${{ fromJSON(needs.review-plan.outputs.${prefix}area-numbers)[matrix.name] }}`,
+      job,
+    );
     assert.equal(given.name, "${{ matrix.name }}", job);
+    // GitHub can't fill a skipped job's typed name from its matrix, so it would show it unfilled;
+    // an unnamed one is named by its matrix when it runs and by its key when skipped.
+    assert.doesNotMatch(caller, /^ {4}name:/m, job);
     assert.equal(given.kinds, `\${{ needs.review-plan.outputs.${prefix}kinds }}`, job);
     assert.match(
       caller,

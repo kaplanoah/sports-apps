@@ -1,7 +1,7 @@
 # Reviewing a pull request
 
 What a review of a pull request here reads, looks for, and reports.
-AGENTS.md holds the rules the code keeps; this file says how to check a change against them.
+AGENTS.md and the rule files in `.claude/rules/` hold the rules the code keeps; this file says how to check a change against them.
 
 ## Read all of it
 
@@ -37,7 +37,7 @@ In order of what has mattered here.
    AGENTS.md: "When fixing a bug, look for the same bug in all apps and in every view, sheet, and theme, and fix those in the same PR."
    Check the other app and the other views for what the change fixes or changes.
 4. **Budgets and outside services.**
-   Count the requests a run makes against Cloudflare's per-run cap, and check the reading stays lean ("Read ahead of the page" in AGENTS.md).
+   Count the requests a run makes against Cloudflare's per-run cap, and check the reading stays lean ("Read ahead of the page" in `.claude/rules/worker.md`).
    Count the work a key press does over a whole season.
    Never trust a league's feed or Claude to answer in the shape the code expects without checking it.
    A link from a feed reaches an `href` only through `isWebAddress`.
@@ -49,7 +49,7 @@ In order of what has mattered here.
    and a pull request's own code run with a secret.
    A change to the review itself, its jobs in `.github/workflows/ci.yml` and `.github/workflows/review-area.yml`,
    `worker/plan-review.mjs`, `worker/judge-review.mjs`, `worker/post-review.mjs`,
-   `worker/review-context.mjs`, or `worker/review-state.mjs`, or to a guard test,
+   `worker/review-context.mjs`, `worker/review-state.mjs`, or `worker/rule-files.mjs`, or to a guard test,
    that lets less through is Important, naming what it no longer catches,
    since the pull request's own copy of them runs its review.
    So is a change to the red-change gate that lets less through,
@@ -81,9 +81,9 @@ In order of what has mattered here.
    Each place a change adds is searchable from the app's `page/js/search-pages.js` and named in `COVERAGE`,
    or is left out for a reason a fan would agree with, and a place it removes leaves search too.
 10. **Docs and comments the change makes wrong.**
-    AGENTS.md or README.md describing what the code no longer does, a comment naming a file that's gone,
+    AGENTS.md, a rule file, a skill, or README.md describing what the code no longer does, a comment naming a file that's gone,
     and a comment that tells history or restates the code.
-11. **Any other rule in AGENTS.md** the changed lines break.
+11. **Any other rule in AGENTS.md or a rule file** the changed lines break.
 
 Skip what lint, Prettier, TypeScript, knip, and the repo's guard tests already catch, and matters of taste.
 Don't run the tests: CI runs them all.
@@ -107,7 +107,7 @@ and a step posts what they confirmed or left unsure.
   Say what is wrong, when it goes wrong (the input or state that shows it), and how to fix it, in a few sentences.
 - Start each with its weight:
   **Important** for a bug, meaning a wrong result someone can see, wrong data kept, or a failure,
-  for a security hole, or for a broken AGENTS.md rule;
+  for a security hole, or for a broken rule from AGENTS.md or a rule file;
   **Nit** for something worth fixing that doesn't block;
   **Pre-existing** for a problem in code the change didn't make worse.
 - An **Important** or **Unsure** finding is posted on its line, a thread of its own, or on its file when GitHub won't take the line.
