@@ -15,7 +15,10 @@ const HOME_SCREEN_NOTE = /add this site to your home screen/;
 /**
  * @typedef {{
  *   page: import("@playwright/test").Page,
- *   openApp: (page: import("@playwright/test").Page, options?: { isShowingWelcome?: boolean }) => Promise<unknown>,
+ *   openApp: (
+ *     page: import("@playwright/test").Page,
+ *     options?: { isShowingWelcome?: boolean },
+ *   ) => Promise<unknown>,
  *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
  * }} App
  */

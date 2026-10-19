@@ -2516,10 +2516,10 @@ body.kbd .player-open:focus {
 
 /* A player who is out has a box as her sheet's first part, outlined like the team sheet's game
    cards and washed in the chip's orange, --out-box-space from the band, the sheet's sides, and the
-   part under it, the sheet's sides being --sheet-side from its text. Her Out chip leads the box's first
-   line, its words a pixel up, so they sit centered on the chip, then RotoWire's sentence 6px under
-   it and where it's from 4px under that, closer, so it reads as the sentence's credit. Its reason
-   and sentence set their own sizes, matched by eye. */
+   part under it, the sheet's sides being --sheet-side from its text. Her Out chip leads the box's
+   first line, its words a pixel up, so they sit centered on the chip, then RotoWire's sentence 6px
+   under it and where it's from 4px under that, closer, so it reads as the sentence's credit. Its
+   reason and sentence set their own sizes, matched by eye. */
 .out-box {
   --out-box-space: 11.5px;
   margin: calc(var(--out-box-space) - var(--part-space-first))
