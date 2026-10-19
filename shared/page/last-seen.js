@@ -66,9 +66,9 @@ const readScrolls = (part) =>
       startTop: Number(element.dataset.startTop ?? element.scrollTop),
     }));
 
-// A part that scrolls in a holder of its own, like the standings in theirs (pager.css), keeps the
-// holder's place too. A holder on a tab not shown reads as unscrolled, so it keeps the place it last
-// scrolled to, or the one a load put back that it hasn't shown yet.
+// A part drawn inside the season's standings or bracket, which each scroll on their own (pager.css),
+// keeps that holder's place too. A holder on a tab not shown reads as unscrolled, so it keeps the
+// place it last scrolled to, or the one a load put back that it hasn't shown yet.
 /** @type {WeakMap<Element, number>} */
 const holderTops = new WeakMap();
 
