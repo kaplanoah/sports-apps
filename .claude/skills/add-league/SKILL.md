@@ -66,7 +66,7 @@ Delete it once the app's first PR merges.
    and MLB's American and National League colors do, through `renderAllStarMark` in `shared/page/all-star.js`,
    and `styles.css` sets the star's tokens that `game-row.css` lists from the league's own dot.
    `page/js/league-words.js` names what the league's fans call things and the words its pages never show,
-   as "Writing" in AGENTS.md says, and its search terms hand it to the shared search as `words`.
+   as `.claude/rules/page-look.md` says, and its search terms hand it to the shared search as `words`.
 6. **Tests.** Record a real afternoon of the league's feeds as a fixture in `tests/fixtures/`,
    and test the snapshot, the Worker, the season updater, and the page's views against it.
    Copy each of the WNBA's tests of what the PR builds, since they run the shared checks:
@@ -76,7 +76,7 @@ Delete it once the app's first PR merges.
    the last two walking the views listed in `tests/browser/views.mjs`,
    `at-rest.spec.mjs`, which runs in WebKit too,
    and `release-check.spec.mjs`, `access.spec.mjs`, and `offline.spec.mjs`.
-   Its `tests/search.test.js` names each place in `COVERAGE`, as "Search finds every place" in AGENTS.md says,
+   Its `tests/search.test.js` names each place in `COVERAGE`, as `.claude/rules/page-code.md` says,
    and its `tests/search-typing.test.js` types every team, place, and player with the root's `tests/search-sweep.js`,
    from a recorded list of the league's players.
    Each sheet joins `sheet-stack.spec.mjs` and `sheet-reload.spec.mjs` in the PR that adds it.
@@ -86,7 +86,7 @@ Delete it once the app's first PR merges.
    and name it beside them in AGENTS.md's list of rule files.
 8. **Ship it.** Open it as a `feat:` PR, which starts the app at version 1.0.0.
    Its page adds lines that give parts layers of their own, so it's a red change,
-   tried on the owner's phone from beta before it merges, as "Workflow" in AGENTS.md says.
+   tried on the owner's phone from beta before it merges, as the `ship` skill says.
    Each channel's token can edit only the Workers it names, so before the first deploy of each channel,
    the owner creates its Worker in Cloudflare's dashboard and adds it to that environment's token:
    `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
