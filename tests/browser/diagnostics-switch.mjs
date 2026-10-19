@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { openSettings } from "./settings.mjs";
 
 // The settings switch that turns Diagnostics on, which every app's settings has.
 
@@ -10,7 +11,7 @@ export const findDiagnosticsSwitch = (page) => page.getByRole("switch", { name: 
  * @param {import("@playwright/test").Page} page
  */
 export async function turnOnDiagnostics(page) {
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openSettings(page);
   await findDiagnosticsSwitch(page).click();
   await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("Escape");

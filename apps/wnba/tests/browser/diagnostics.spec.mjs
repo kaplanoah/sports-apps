@@ -5,6 +5,7 @@ import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -14,9 +15,6 @@ test.use({
 });
 
 const RECORD_MS = 5000;
-
-/** @param {import("@playwright/test").Page} page */
-const openSettings = (page) => page.getByRole("button", { name: "Settings", exact: true }).click();
 
 /** @param {import("@playwright/test").Page} page */
 const findRecords = (page) => page.locator("#diagnostics");

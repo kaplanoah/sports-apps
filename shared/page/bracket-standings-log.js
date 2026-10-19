@@ -18,10 +18,11 @@ export const bracketStandingsLog = createStepLog({
  * A distance in whole pixels and its way, or nothing for one that rounds to none.
  * @param {number} distance
  * @param {[string, string]} ways the way a negative distance goes, then a positive one
+ * @param {string} [unit] written after the number, as "px"
  */
-function describeDistance(distance, [back, on]) {
+function describeDistance(distance, [back, on], unit = "") {
   const pixels = Math.round(distance);
-  return pixels ? `${Math.abs(pixels)} ${pixels < 0 ? back : on}` : "";
+  return pixels ? `${Math.abs(pixels)}${unit} ${pixels < 0 ? back : on}` : "";
 }
 
 /**
@@ -52,9 +53,8 @@ function describeTaking(takenAt) {
 
 /** @param {number} scrolled */
 function describeScroll(scrolled) {
-  const pixels = Math.round(scrolled);
-  if (!pixels) return "the page didn't scroll";
-  return `the page scrolled ${Math.abs(pixels)}px ${pixels < 0 ? "up" : "down"}`;
+  const distance = describeDistance(scrolled, ["up", "down"], "px");
+  return distance ? `the page scrolled ${distance}` : "the page didn't scroll";
 }
 
 /**
