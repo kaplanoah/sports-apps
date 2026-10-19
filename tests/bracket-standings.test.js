@@ -12,6 +12,7 @@ test("with the header gone, a part a switch brings in stays where it was left, b
   assert.equal(findTopToShow(900, 400, reach), 400);
   assert.equal(findTopToShow(900, 0, reach), reach);
   assert.equal(findTopToShow(reach, 40, reach), reach);
+  assert.equal(findTopToShow(reach - 1 / 3, 40, reach), reach);
 });
 
 test("while the header still shows, a part a switch brings in is scrolled as far as the part shown, so the header stays where it is", () => {

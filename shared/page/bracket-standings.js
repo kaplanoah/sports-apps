@@ -4,7 +4,7 @@ import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
 import { holdRoundDots } from "./round-dots.js";
 import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
-import { isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
+import { isAsFarAs, isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
 /* global followSeasonPart, listAboveSeasonView -- from season-header.js */
@@ -82,7 +82,7 @@ function markPillHeld() {
  * @param {number} reach how far a part scrolls before the pill holds at the top
  */
 export const findTopToShow = (shownTop, comingTop, reach) =>
-  shownTop >= reach ? Math.max(comingTop, reach) : shownTop;
+  isAsFarAs(shownTop, reach) ? Math.max(comingTop, reach) : shownTop;
 
 /**
  * Scrolls a part a switch brings in to where the header rides as it does over the part the pill
