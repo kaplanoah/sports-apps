@@ -136,6 +136,7 @@ test("a tap on the tab while the standings show scrolled down takes them back to
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   await scrollSeasonPartToEnd(page, "standings");
 
   await findSeasonTab(page).click();
@@ -178,6 +179,7 @@ test("where the header rides, a tap on the tab with the page a pixel down from i
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
+  await waitForLoadToSettle(page);
   expect(await leavePagePixelDown(page)).toBe(1);
 
   await findSeasonTab(page).click();
@@ -192,6 +194,7 @@ test("a tap on the tab with the standings left a fraction of a pixel down, as a 
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
+  await waitForLoadToSettle(page);
   // Chromium keeps a scroll at whole pixels, so the standings report the fraction a phone's leaves.
   await findSeasonPart(page, "standings").evaluate((part) => {
     const scrollTop = /** @type {PropertyDescriptor} */ (
@@ -234,6 +237,7 @@ test("once the header is gone, the pill holds at the top and ends in its line as
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const header = page.locator("header.top");
   const pill = page.locator("#bracketStandingsPill");
 
@@ -320,6 +324,7 @@ test("the standings' last row ends above the tab bar once they're scrolled to th
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
+  await waitForLoadToSettle(page);
 
   await scrollSeasonPartToEnd(page, "standings");
 
@@ -504,6 +509,7 @@ test.describe("in full motion", () => {
     await openApp(page);
     await openSeasonPart(page, "Standings");
     await expect(page.locator("#standings-league")).toBeVisible();
+    await waitForLoadToSettle(page);
     await scrollSeasonPart(page, "standings", 40);
 
     await findSeasonPart(page, "standings").evaluate((standings) => {

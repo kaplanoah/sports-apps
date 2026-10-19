@@ -27,6 +27,7 @@ import {
   scrollSeasonPartToEnd,
   trackSeasonFrames,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
@@ -63,6 +64,7 @@ test.describe("in full motion", () => {
     const parts = page.locator("#bracketStandingsParts");
     await expect(parts).not.toHaveAttribute("data-sliding");
     await expect(page.locator("#bracketWrap .round-dots .on")).toHaveCount(1);
+    await waitForLoadToSettle(page);
     const restingTop = await readRoundDotsTop(page);
     const pill = findSeasonPill(page);
 
@@ -88,6 +90,8 @@ test.describe("in full motion", () => {
     const pill = findSeasonPill(page);
     await pill.getByRole("tab", { name: "Standings" }).click();
     await expect(parts).not.toHaveAttribute("data-sliding");
+    await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+    await waitForLoadToSettle(page);
     await scrollSeasonPartToEnd(page, "standings");
     const standingsScroll = await readSeasonPartScroll(page, "standings");
 
@@ -534,6 +538,7 @@ test("on a phone, the bracket keeps its spaces when it redraws however far its p
   await page.setViewportSize({ width: 390, height: 600 });
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head.al")).toBeVisible();
+  await waitForLoadToSettle(page);
   const atTop = await readInnerSpaces(page);
   await page.locator("#bracketWrap").evaluate((wrap) => {
     const room = Object.assign(document.createElement("div"), { style: "height: 2000px" });
@@ -553,6 +558,7 @@ test("on a phone where the header stays put, the bracket keeps its spaces when i
   await holdHeaderStill(page);
   await openBracket(page);
   await expect(page.locator("#bracketWrap .league-head.al")).toBeVisible();
+  await waitForLoadToSettle(page);
   await page.locator("header").evaluate((header) => {
     const box = Object.assign(document.createElement("div"), {
       style: "flex: none; height: 590px",

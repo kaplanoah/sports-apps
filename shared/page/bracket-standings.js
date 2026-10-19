@@ -98,11 +98,13 @@ function placeComingPart(part) {
   part.scrollTop = findTopToShow(shownPart.scrollTop, part.scrollTop, readHeaderReach());
 }
 
-// A swipe brings in the part beside the one shown, which shows as soon as the finger moves it.
+// A swipe brings in the part beside the one shown, which shows as soon as the finger moves it. The
+// round dots hold from where the bracket ends up, so they follow its placing.
 function placePartsBeside() {
+  if (findParts().dataset.sliding === "finger") {
+    for (const part of readOrder().map(findPart)) placeComingPart(part);
+  }
   holdBracketDots();
-  if (findParts().dataset.sliding !== "finger") return;
-  for (const part of readOrder().map(findPart)) placeComingPart(part);
 }
 
 // The header rides with the part the parts set off for from the start of a slide, which a switch

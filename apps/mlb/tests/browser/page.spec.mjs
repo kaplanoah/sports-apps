@@ -122,6 +122,7 @@ test("on a phone, tapping the tab that's showing scrolls its part back to the to
   await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
   await openSeasonPart(page, "Bracket");
   await expect(page.locator("#bracketWrap")).toBeVisible();
+  await waitForLoadToSettle(page);
   await page.mouse.move(PHONE.width / 2, 300);
   await page.mouse.wheel(0, 800);
   await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBeGreaterThan(0);
@@ -145,6 +146,7 @@ test("on a phone, each tab comes back where it was left, and a tab not shown yet
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
   await scrollSeasonPartToEnd(page, "standings");
   const left = await readSeasonPartScroll(page, "standings");
   expect(left).toBeGreaterThan(0);
@@ -183,6 +185,7 @@ test("on a phone, once the header is gone, the pill holds at the top and ends in
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
   const pill = page.locator("#bracketStandingsPill");
 
   await scrollSeasonPartToEnd(page, "standings");
@@ -292,6 +295,7 @@ test("on a phone, the standings' last row ends above the tab bar once they're sc
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
 
   await scrollSeasonPartToEnd(page, "standings");
 

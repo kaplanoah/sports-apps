@@ -1,3 +1,5 @@
+import { findSeasonPart } from "./season-scroll.mjs";
+
 /**
  * Brings the page's tabs back into view as a person does, scrolling the season's part shown back
  * to its top, since on a wide screen the tabs ride away with the header as it scrolls.
@@ -9,13 +11,13 @@ export async function scrollTabsIntoView(page) {
     return box.bottom > 0 && box.top < innerHeight;
   });
   if (isTabInView) return;
-  await page
-    .locator("#bracketStandingsParts > .season-part")
-    .evaluateAll((parts) =>
-      parts
-        .find((part) => getComputedStyle(part).visibility === "visible")
-        ?.scrollTo({ top: 0, behavior: "instant" }),
-    );
+  const shown = await findSeasonPill(page)
+    .locator('[aria-selected="true"]')
+    .getAttribute("data-tab");
+  if (shown !== "standings" && shown !== "bracket") return;
+  await findSeasonPart(page, shown).evaluate((part) =>
+    part.scrollTo({ top: 0, behavior: "instant" }),
+  );
 }
 
 /**

@@ -1,4 +1,5 @@
 import { test, expect, openApp } from "./harness.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import {
   holdHeaderStill,
   readSeasonPartScroll,
@@ -134,6 +135,7 @@ test.describe("on a phone, the bracket", () => {
   }) => {
     await page.setViewportSize({ width: PHONE.width, height: 600 });
     await openApp(page);
+    await waitForLoadToSettle(page);
     const atTop = await readCardGaps(page);
     await page.locator("#bracketWrap").evaluate((wrap) => {
       const room = Object.assign(document.createElement("div"), { style: "height: 2000px" });
@@ -155,6 +157,7 @@ test.describe("on a phone, the bracket", () => {
     await page.setViewportSize({ width: PHONE.width, height: 1400 });
     await holdHeaderStill(page);
     await openApp(page);
+    await waitForLoadToSettle(page);
     await page.locator("header").evaluate((header) => {
       const box = Object.assign(document.createElement("div"), {
         style: "flex: none; height: 590px",
