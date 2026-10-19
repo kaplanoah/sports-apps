@@ -164,6 +164,7 @@ test("on a phone, the header and the pill ride up as far as the standings scroll
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
   const before = await readSeasonRide(page);
 
   await scrollSeasonPart(page, "standings", 40);
@@ -270,6 +271,7 @@ test("on a phone where the browser has no scroll-driven animations, the header s
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
   const before = await readSeasonRide(page);
 
   await scrollSeasonPartToEnd(page, "standings");

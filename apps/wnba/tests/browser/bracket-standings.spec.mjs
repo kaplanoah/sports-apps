@@ -217,6 +217,7 @@ test("the header and the pill ride up as far as the standings scroll, the page h
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const pill = page.locator("#bracketStandingsPill");
   const before = await readSeasonRide(page);
 
@@ -257,6 +258,7 @@ test("with the header just gone, the band above the pill covers it, and the pill
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const pill = page.locator("#bracketStandingsPill");
   const reach = await readHeaderReach(page);
 
@@ -282,6 +284,7 @@ test("over a header of a fractional height, the header rides whole pixels, holdi
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const view = page.locator("#view-bracket-standings");
   /** @returns {Promise<string>} */
   const readPartsTop = () =>
@@ -330,6 +333,7 @@ test("each part keeps its own place: the bracket chosen far down the standings s
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   await scrollSeasonPartToEnd(page, "standings");
   const standingsScroll = await readSeasonPartScroll(page, "standings");
   const reach = await readHeaderReach(page);
@@ -358,6 +362,7 @@ test("the pill gives up its line once what's above it grows past where the stand
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const pill = page.locator("#bracketStandingsPill");
   await scrollSeasonPart(page, "standings", (await readHeaderReach(page)) + 20);
   await expect(pill).toHaveClass(/\bstuck\b/);
@@ -372,6 +377,7 @@ test("with the header still partly showing, the bracket chosen shows scrolled as
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const before = await readSeasonRide(page);
   await scrollSeasonPart(page, "standings", 40);
   await expect.poll(() => readSeasonRide(page)).toMatchObject({ pillTop: before.pillTop - 40 });
@@ -426,6 +432,7 @@ test("where the browser has no scroll-driven animations, the header stays put an
   await holdHeaderStill(page);
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const before = await readSeasonRide(page);
 
   await scrollSeasonPartToEnd(page, "standings");
