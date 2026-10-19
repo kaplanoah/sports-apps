@@ -29,6 +29,7 @@ import {
   describeUnreadable,
   findInlineStyleSettings,
   findStyleReasons,
+  isEncoded,
   isPageLayerDeclaration,
   readMinifiedCode,
 } from "./red-change-styles.mjs";
@@ -346,12 +347,13 @@ const toKebabCase = (name) =>
 
 /**
  * The value a script writes, as its string or number holds it, or as a template's hole for one
- * it works out, which can hold any value.
+ * it works out or one whose escapes the gate doesn't decode, either of which can hold any value.
  * @param {string} text from where the value starts
  */
 function readScriptValue(text) {
   const literal = text.match(SCRIPT_LITERAL);
-  return literal ? (literal[2] ?? literal[3]) : `\${${text.trim()}}`;
+  const value = literal?.[2] ?? literal?.[3];
+  return value === undefined || isEncoded(value) ? `\${${text.trim()}}` : value;
 }
 
 /**
@@ -365,6 +367,7 @@ function readScriptValue(text) {
 function describeStyleProperty(property, value, isWatched) {
   const counts =
     property.includes("${") ||
+    isEncoded(property) ||
     (property.startsWith("--") ? isWatched(property) : isPageLayerDeclaration({ property, value }));
   return counts ? `a style property that sets ${property}` : null;
 }

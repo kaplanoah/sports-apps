@@ -76,13 +76,12 @@ const PAGE_QUIET_PROPERTIES = ["opacity", "visibility", "display"];
 const OUT_OF_FLOW_POSITION = /^(?:absolute|fixed|sticky|-webkit-sticky)$/i;
 const SCROLLING_OVERFLOW = /^overflow(?:-x|-y|-inline|-block|-scrolling)?$/;
 
-// A comment in a part of an inline style, which the split around it has already left out of any
-// quoted text, and which runs to the part's end when it's never closed; a bare word, like
-// percent, which sets nothing; and a CSS escape or an HTML entity, which a browser decodes into
-// what the gate reads past.
-const CSS_COMMENT = /\/\*[\s\S]*?(?:\*\/|$)/g;
-const BARE_WORD = /^[\w-]+$/;
-const ENCODED_TEXT = /\\|&#?\w+;/;
+// A CSS escape, a script's string escape, or an HTML entity, which a browser decodes into what
+// the gate would read past, and a property's name, which a template's hole in it isn't.
+const ENCODED_TEXT = /\\|&/;
+const PROPERTY_NAME = /^-{0,2}[a-z][\w-]*$/i;
+// What stands in for each hole a script's template fills in, which reads as any value.
+const HOLE_NAME = "--template-hole-";
 
 // The properties a transition can ease that only repaint a part, never layer or move it.
 const PAINT_ONLY_PROPERTY =
@@ -426,23 +425,85 @@ export function createWatchCheck({ changed, unchanged }) {
 }
 
 /**
+ * Whether text holds an escape or an entity, which a browser decodes into what the gate can't
+ * read.
+ * @param {string} text
+ */
+export const isEncoded = (text) => ENCODED_TEXT.test(text);
+
+/**
+ * Each hole a script's template fills in, as `${...}`, from its start to the brace that closes
+ * it.
+ * @param {string} text
+ */
+function findTemplateHoles(text) {
+  const holes = [];
+  for (let start = text.indexOf("${"); start !== -1; start = text.indexOf("${", start + 1)) {
+    let depth = 0;
+    let end = start + 1;
+    for (; end < text.length; end += 1) {
+      if (text[end] === "{") depth += 1;
+      else if (text[end] === "}" && --depth === 0) break;
+    }
+    holes.push(text.slice(start, end + 1));
+    start = end;
+  }
+  return holes;
+}
+
+/**
+ * The declarations of an inline style as a browser reads them, past its comments and with its
+ * strings whole, each hole a template fills in read as a custom property, which can hold any
+ * value, or null when it can't be read as one style, as when a brace in it closes the style, or
+ * when what the template doesn't fill in holds an escape or an entity.
+ * @param {string} style
+ * @returns {Declaration[] | null}
+ */
+function readInlineStyle(style) {
+  const holes = findTemplateHoles(style);
+  const filled = holes.reduce(
+    (text, hole, index) => text.replace(hole, `var(${HOLE_NAME}${index})`),
+    style,
+  );
+  if (isEncoded(filled)) return null;
+  const items = readStyleSheet(`a{${filled}}`);
+  if (items === null) return null;
+  if (!items.length) return [];
+  const [rule] = items;
+  if (items.length > 1 || !isStyleRule(rule) || rule.reaches.join() !== "a") return null;
+  /** @param {string} text */
+  const restoreHoles = (text) =>
+    holes.reduce(
+      (restored, hole, index) => restored.replace(`var(${HOLE_NAME}${index})`, hole),
+      text,
+    );
+  return rule.declarations.map(({ property, value }) => ({
+    property: restoreHoles(property),
+    value: restoreHoles(value),
+  }));
+}
+
+/**
  * Each declaration of an inline style, as a style attribute holds it, that a page's other
- * stylesheets would be red to add, or that sets a watched custom property, and each part of it
- * the gate can't read as a declaration, as one a script's template fills in whole or one that
- * holds an escape or an entity, but for a bare word, which sets nothing.
+ * stylesheets would be red to add, or that sets a watched custom property, and each the gate
+ * can't read as one, as where a script's template fills in its name, or the whole style where it
+ * holds an escape or an entity or can't be read as one style.
  * @param {string} style
  * @param {(property: string) => boolean} isWatched
+ * @returns {string[]}
  */
-export const findInlineStyleSettings = (style, isWatched) =>
-  splitTopLevel(style, ";")
-    .map((part) => part.replace(CSS_COMMENT, " ").trim())
-    .filter((text) => {
-      if (!text) return false;
-      if (!/^-{0,2}[a-z][\w-]*\s*:/i.test(text)) return !BARE_WORD.test(text);
-      if (ENCODED_TEXT.test(text)) return true;
-      const declaration = readDeclaration(text);
-      return isPageLayerDeclaration(declaration) || isWatched(declaration.property);
-    });
+export function findInlineStyleSettings(style, isWatched) {
+  const declarations = readInlineStyle(style);
+  if (declarations === null) return [style];
+  return declarations
+    .filter(
+      (declaration) =>
+        !PROPERTY_NAME.test(declaration.property) ||
+        isPageLayerDeclaration(declaration) ||
+        isWatched(declaration.property),
+    )
+    .map(({ property, value }) => (value ? `${property}: ${value}` : property));
+}
 
 /**
  * Why each changed stylesheet of a page is red.

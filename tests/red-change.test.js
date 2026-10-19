@@ -908,7 +908,11 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="z\\-index: 2">',
     "<div style=\"--icon: '/*'; z-index: 2\">",
     '<div style="position: f\\69xed">',
-    '<div style="overflow: &#97;uto">',
+    '<div style="position: &#102;ixed">',
+    '<div style="position: f&#x69;xed">',
+    '<div style="/* don\'t lift */ color: red; z-index: 2">',
+    '<div style="color: red /* ( */; z-index: 2">',
+    '<div style="color: red} .other {z-index: 2">',
   ];
   const quietStyles = [
     '<div style="--team-stat-columns: ${columns}">',
@@ -919,7 +923,6 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="">',
     '<div data-style="z-index: 2">',
     '<div style="/* note */ color: red">',
-    '<div style="color: red; /* z-index: 2">',
   ];
   for (const markup of redStyles) {
     assert.equal(
@@ -1342,6 +1345,9 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     "  style.removeProperty(property);",
     '  part.removeAttribute("style");',
     '  part.style.cssText = "/**/z-index: 2";',
+    '  part.style.position = "f\\69xed";',
+    '  part.style.setProperty("overflow", "\\61uto");',
+    '  part.style.setProperty("\\u007a-index", "2");',
     '  part.style.cssText = "";',
     '  part.style = "";',
     '  part.setAttribute("style", "");',
