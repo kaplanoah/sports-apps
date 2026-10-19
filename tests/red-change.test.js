@@ -906,6 +906,9 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="/* lift */ z-index: 2">',
     '<div style="/**/pointer-events: none">',
     '<div style="z\\-index: 2">',
+    "<div style=\"--icon: '/*'; z-index: 2\">",
+    '<div style="position: f\\69xed">',
+    '<div style="overflow: &#97;uto">',
   ];
   const quietStyles = [
     '<div style="--team-stat-columns: ${columns}">',
@@ -1386,6 +1389,11 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
   assert.deepEqual(findReasons(path, ["  part.style.zIndex = 5;"]), [
     `${path}:1 adds a style property that sets z-index: part.style.zIndex = 5;`,
   ]);
+  assert.deepEqual(
+    findReasons(path, ['  options.style = "";']),
+    [`${path}:1 adds a style that clears every property: options.style = "";`],
+    "a style emptied on what may not be a part's is held, since part.style = '' clears one",
+  );
   assert.deepEqual(findReasons(path, ["  part.style.left = part.style.zIndex = 5;"]), [
     `${path}:1 adds a style property that sets z-index: part.style.left = part.style.zIndex = 5;`,
   ]);

@@ -76,10 +76,13 @@ const PAGE_QUIET_PROPERTIES = ["opacity", "visibility", "display"];
 const OUT_OF_FLOW_POSITION = /^(?:absolute|fixed|sticky|-webkit-sticky)$/i;
 const SCROLLING_OVERFLOW = /^overflow(?:-x|-y|-inline|-block|-scrolling)?$/;
 
-// A comment in an inline style, which runs to the style's end when it's never closed, as a
-// browser reads it, and a bare word, like percent, which sets nothing.
+// A comment in a part of an inline style, which the split around it has already left out of any
+// quoted text, and which runs to the part's end when it's never closed; a bare word, like
+// percent, which sets nothing; and a CSS escape or an HTML entity, which a browser decodes into
+// what the gate reads past.
 const CSS_COMMENT = /\/\*[\s\S]*?(?:\*\/|$)/g;
 const BARE_WORD = /^[\w-]+$/;
+const ENCODED_TEXT = /\\|&#?\w+;/;
 
 // The properties a transition can ease that only repaint a part, never layer or move it.
 const PAINT_ONLY_PROPERTY =
@@ -425,17 +428,21 @@ export function createWatchCheck({ changed, unchanged }) {
 /**
  * Each declaration of an inline style, as a style attribute holds it, that a page's other
  * stylesheets would be red to add, or that sets a watched custom property, and each part of it
- * the gate can't read as a declaration, as one a script's template fills in whole or one whose
- * name holds an escape, but for a bare word, which sets nothing.
+ * the gate can't read as a declaration, as one a script's template fills in whole or one that
+ * holds an escape or an entity, but for a bare word, which sets nothing.
  * @param {string} style
  * @param {(property: string) => boolean} isWatched
  */
 export const findInlineStyleSettings = (style, isWatched) =>
-  splitTopLevel(style.replace(CSS_COMMENT, " "), ";").filter((text) => {
-    if (!/^-{0,2}[a-z][\w-]*\s*:/i.test(text)) return !BARE_WORD.test(text);
-    const declaration = readDeclaration(text);
-    return isPageLayerDeclaration(declaration) || isWatched(declaration.property);
-  });
+  splitTopLevel(style, ";")
+    .map((part) => part.replace(CSS_COMMENT, " ").trim())
+    .filter((text) => {
+      if (!text) return false;
+      if (!/^-{0,2}[a-z][\w-]*\s*:/i.test(text)) return !BARE_WORD.test(text);
+      if (ENCODED_TEXT.test(text)) return true;
+      const declaration = readDeclaration(text);
+      return isPageLayerDeclaration(declaration) || isWatched(declaration.property);
+    });
 
 /**
  * Why each changed stylesheet of a page is red.
