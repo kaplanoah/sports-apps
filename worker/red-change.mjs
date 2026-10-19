@@ -81,6 +81,11 @@ const LAYER_SETTINGS = [
   { name: "a fixed or sticky position", pattern: /\b(position\s*:\s*(?:fixed|sticky))\b/ },
 ];
 
+// Where a style's text comes from: markup, a page's or a script's template, decodes entities,
+// while what a script writes into a style reaches it as it is.
+const IN_MARKUP = { isMarkup: true };
+const IN_SCRIPT = { isMarkup: false };
+
 // An assignment, plain or compound, as `=`, `+=`, or `||=`, but not a comparison.
 const ASSIGNS = String.raw`\s*(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?!=)`;
 // A part's style, as `part.style`, or as a script holds it by that name, as
@@ -137,6 +142,10 @@ const DIFF_HEADER = /^diff --git a\/(.+) b\/\1$/;
 const isPageCode = (path) => /^(?:shared\/page|apps\/[^/]+\/page)\/.+\.(?:css|js)$/.test(path);
 const isPageStylesheet = (path) => isPageCode(path) && path.endsWith(".css");
 const isPageMarkup = (path) => /^apps\/[^/]+\/page\/[^/]+\.html$/.test(path);
+const isPageManifest = (path) => /^apps\/[^/]+\/page\/[^/]+\.webmanifest$/.test(path);
+// What a Home Screen app takes from its manifest on how it opens: without the browser's bars, and
+// which way it turns, which no CI browser draws.
+const MANIFEST_SCREEN_KEYS = ["display", "display_override", "orientation"];
 const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
 
 /** @typedef {{ number: number, text: string }} AddedLine */
@@ -336,7 +345,9 @@ const toKebabCase = (name) =>
 function readScriptValue(text) {
   const literal = text.match(SCRIPT_LITERAL);
   const value = literal?.[2] ?? literal?.[3];
-  return value === undefined || isEncodedOutsideHoles(value) ? `\${${text.trim()}}` : value;
+  return value === undefined || isEncodedOutsideHoles(value, IN_SCRIPT)
+    ? `\${${text.trim()}}`
+    : value;
 }
 
 /**
@@ -350,7 +361,7 @@ function readScriptValue(text) {
 function describeStyleProperty(property, value, isWatched) {
   const counts =
     property.includes("${") ||
-    isEncoded(property) ||
+    isEncoded(property, IN_SCRIPT) ||
     (property.startsWith("--") ? isWatched(property) : isPageLayerDeclaration({ property, value }));
   return counts ? `a style property that sets ${property}` : null;
 }
@@ -363,7 +374,7 @@ function describeStyleProperty(property, value, isWatched) {
  */
 function describeStyleText(value, isWatched) {
   if (!value.trim()) return "a style that clears every property";
-  const settings = findInlineStyleSettings(value, isWatched);
+  const settings = findInlineStyleSettings(value, isWatched, IN_SCRIPT);
   return settings.length ? `a style that sets ${settings.join("; ")}` : null;
 }
 
@@ -475,7 +486,7 @@ const findAttributeSettings = (text, isWatched) =>
   [...text.matchAll(STYLE_ATTRIBUTE)].flatMap((match) => {
     const style = match[1] ?? match[2];
     if (style === undefined || /\$\{[^}]*$/.test(style)) return [match[0]];
-    return findInlineStyleSettings(style, isWatched);
+    return findInlineStyleSettings(style, isWatched, IN_MARKUP);
   });
 
 /**
@@ -570,6 +581,36 @@ function findPageMarkupReasons(file, readPageFile, isWatched) {
 }
 
 /**
+ * What a manifest says about how its Home Screen app opens, as one text to compare, or null when
+ * it isn't JSON.
+ * @param {string} text the manifest, or nothing for one that's gone
+ */
+function readManifestScreen(text) {
+  try {
+    const manifest = JSON.parse(text || "{}");
+    return JSON.stringify(MANIFEST_SCREEN_KEYS.map((key) => manifest[key] ?? null));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Why a change to an app's manifest is red: it changes how the Home Screen app opens, or the gate
+ * can't read the manifest before or after it.
+ * @param {ChangedFile} file
+ * @param {ReadPageFile} readPageFile
+ */
+function findManifestReasons(file, readPageFile) {
+  const after = readPageFile(file.path);
+  const before = readFileBefore(after, file);
+  const [screenBefore, screenAfter] = [before, after].map((text) =>
+    text === null ? null : readManifestScreen(text),
+  );
+  if (screenBefore === null || screenAfter === null) return [describeUnreadable(file.path)];
+  return screenBefore === screenAfter ? [] : [`${file.path} changes how the Home Screen app opens`];
+}
+
+/**
  * The file a path names as the change leaves it, or nothing when there's none to read.
  * @param {string} path from the repository's root
  */
@@ -642,8 +683,9 @@ function readWhenAsked(read) {
  */
 function findFileReasons(file, { readPageFile, styleReasons, isWatched }) {
   const { path } = file;
-  if (file.isUnreadable && (isPageCode(path) || isPageMarkup(path)))
+  if (file.isUnreadable && (isPageCode(path) || isPageMarkup(path) || isPageManifest(path)))
     return [describeUnreadable(path)];
+  if (isPageManifest(path)) return findManifestReasons(file, readPageFile);
   if (RED_FILES.has(path) && !file.hunks.length) return [describeSharedCode(file)];
   if (isPageStylesheet(path)) return styleReasons.get(path) ?? [];
   if (RED_FILES.has(path))

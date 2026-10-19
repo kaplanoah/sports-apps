@@ -76,10 +76,12 @@ const PAGE_QUIET_PROPERTIES = ["opacity", "visibility", "display"];
 const OUT_OF_FLOW_POSITION = /^(?:absolute|fixed|sticky|-webkit-sticky)$/i;
 const SCROLLING_OVERFLOW = /^overflow(?:-x|-y|-inline|-block|-scrolling)?$/;
 
-// Any backslash or ampersand, since either can start a CSS escape, a script's string escape, or
-// an HTML entity, with or without its semicolon, which a browser decodes into what the gate would
-// read past, and a property's name, which a template's hole in it isn't.
-const ENCODED_TEXT = /\\|&/;
+// Any backslash, which can start a CSS escape or a script's string escape, and in markup any
+// ampersand too, which can start an HTML entity, with or without its semicolon, each of which a
+// browser decodes into what the gate would read past, and a property's name, which a template's
+// hole in it isn't.
+const SCRIPT_ENCODED_TEXT = /\\/;
+const MARKUP_ENCODED_TEXT = /\\|&/;
 const PROPERTY_NAME = /^-{0,2}[a-z][\w-]*$/i;
 // What stands in for each hole a script's template fills in, which reads as any value.
 const HOLE_NAME = "--template-hole-";
@@ -425,12 +427,17 @@ export function createWatchCheck({ changed, unchanged }) {
   return (property) => property.startsWith("--") && (readNames === null || readNames.has(property));
 }
 
+/** @typedef {{ isMarkup: boolean }} TextSource whether text is markup, which decodes entities */
+
 /**
- * Whether text holds any backslash or ampersand, either of which can start an escape or an entity
- * that a browser decodes into what the gate can't read.
+ * Whether text holds any backslash, or in markup any ampersand, either of which can start an
+ * escape or an entity that a browser decodes into what the gate can't read. A script's own text
+ * takes no entity: what it writes reaches the style as it is.
  * @param {string} text
+ * @param {TextSource} source
  */
-export const isEncoded = (text) => ENCODED_TEXT.test(text);
+export const isEncoded = (text, { isMarkup }) =>
+  (isMarkup ? MARKUP_ENCODED_TEXT : SCRIPT_ENCODED_TEXT).test(text);
 
 const CLOSING_BRACKETS = { "{": "}", "[": "]" };
 
@@ -502,11 +509,14 @@ function findTemplateHoles(text) {
  * Whether text, outside the holes its template fills in, holds what can start an escape or an
  * entity, as text with a hole that never closes counts too.
  * @param {string} text
+ * @param {TextSource} source
  */
-export function isEncodedOutsideHoles(text) {
+export function isEncodedOutsideHoles(text, source) {
   const holes = findTemplateHoles(text);
-  return (
-    holes === null || isEncoded(holes.reduce((outside, hole) => outside.replace(hole, ""), text))
+  if (holes === null) return true;
+  return isEncoded(
+    holes.reduce((outside, hole) => outside.replace(hole, ""), text),
+    source,
   );
 }
 
@@ -516,10 +526,11 @@ export function isEncodedOutsideHoles(text) {
  * value, or null when it can't be read as one style, as when a brace in it closes the style or a
  * hole never closes, or when what the template doesn't fill in holds an escape or an entity.
  * @param {string} style
+ * @param {TextSource} source
  * @returns {Declaration[] | null}
  */
-function readInlineStyle(style) {
-  if (isEncodedOutsideHoles(style)) return null;
+function readInlineStyle(style, source) {
+  if (isEncodedOutsideHoles(style, source)) return null;
   const holes = /** @type {string[]} */ (findTemplateHoles(style));
   const filled = holes.reduce(
     (text, hole, index) => text.replace(hole, `var(${HOLE_NAME}${index})`),
@@ -549,10 +560,11 @@ function readInlineStyle(style) {
  * holds an escape or an entity or can't be read as one style.
  * @param {string} style
  * @param {(property: string) => boolean} isWatched
+ * @param {TextSource} source
  * @returns {string[]}
  */
-export function findInlineStyleSettings(style, isWatched) {
-  const declarations = readInlineStyle(style);
+export function findInlineStyleSettings(style, isWatched, source) {
+  const declarations = readInlineStyle(style, source);
   if (declarations === null) return [style];
   return declarations
     .filter(

@@ -4,6 +4,7 @@ import { listBrowserTestReach } from "../worker/browser-scope.mjs";
 import {
   findBurnedInHead,
   isBurnedIn,
+  listBrowserSpecs,
   listChangedSince,
   listSpecsToBurnIn,
 } from "../worker/burn-in-specs.mjs";
@@ -18,6 +19,19 @@ const REACHED = listBrowserTestReach();
  */
 const listSpecs = (changedSpecs, sinceBurnedIn) =>
   listSpecsToBurnIn(changedSpecs, sinceBurnedIn, REACHED);
+
+test("the specs a change touches are an app's browser specs, and not a helper in a folder under them", () => {
+  assert.deepEqual(
+    listBrowserSpecs([
+      SHEETS,
+      "apps/wnba/tests/browser/helpers/drag.spec.mjs",
+      "apps/wnba/tests/browser/harness.mjs",
+      "apps/wnba/tests/page.test.js",
+      PAGE,
+    ]),
+    [SHEETS, PAGE],
+  );
+});
 
 test("a spec that passed burn-in and hasn't changed since isn't burned in again, whatever the page and the Worker did", () => {
   assert.deepEqual(listSpecs([SHEETS, PAGE], [PAGE, "shared/page/sheet.js"]), [PAGE]);

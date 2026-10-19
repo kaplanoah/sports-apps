@@ -119,10 +119,14 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
       /run: npx playwright install --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
+  const webkitSpec = readRepoFile("playwright.config.mjs").match(/testMatch: "([^"]+)"/)?.[1];
+  assert.ok(webkitSpec, "the Playwright config names the spec its WebKit projects run");
   assert.match(
     readJob("burn-in"),
-    /- if: contains\(needs\.scope\.outputs\.specs, 'at-rest\.spec\.mjs'\)\n\s+run: npx playwright install --with-deps webkit\n/,
-    "burn-in installs WebKit whenever an at-rest spec is among the ones it repeats",
+    new RegExp(
+      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(webkitSpec)}'\\)\\n\\s+run: npx playwright install --with-deps webkit\\n`,
+    ),
+    "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
   );
 });
 
@@ -130,7 +134,7 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
 // libraries, run the WebKit projects, so only the jobs that install Chromium alone save it.
 test("no job that installs WebKit saves the browsers' cache", () => {
   for (const job of ["burn-in", "webkit"])
-    assert.doesNotMatch(readJob(job), /uses: actions\/cache@/, job);
+    assert.doesNotMatch(readJob(job), /uses: actions\/cache(?:\/save)?@/, job);
 });
 
 // A Node test's failure is read from the end of the job's log, which a session reaches only so

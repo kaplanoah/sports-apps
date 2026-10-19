@@ -1112,6 +1112,39 @@ test("a page's markup is red where it changes whether the Home Screen app opens 
     );
 });
 
+test("an app's manifest is red where it changes how the Home Screen app opens, or can't be read", () => {
+  const manifest = "apps/wnba/page/manifest.webmanifest";
+  /** @param {string[]} lines */
+  const wrap = (lines) => ["{", ...lines, '  "name": "WNBA"', "}"];
+  /** @param {string[]} before @param {string[]} after */
+  const findManifestChange = (before, after) =>
+    findChangeReasons({ [manifest]: { before: wrap(before), after: wrap(after) } });
+  for (const [before, after] of [
+    [['  "display": "standalone",'], ['  "display": "browser",']],
+    [['  "display": "standalone",'], []],
+    [[], ['  "orientation": "portrait",']],
+    [[], ['  "display_override": ["fullscreen"],']],
+  ])
+    assert.deepEqual(
+      findManifestChange(before, after),
+      [`${manifest} changes how the Home Screen app opens`],
+      `${before.join()} to ${after.join()}`,
+    );
+  assert.deepEqual(
+    findManifestChange(
+      ['  "display": "standalone",', '  "theme_color": "#000",'],
+      ['  "display": "standalone",', '  "theme_color": "#111",'],
+    ),
+    [],
+    "a manifest's colors",
+  );
+  assert.deepEqual(
+    findManifestChange(['  "theme_color": "#000",'], ['  "theme_color": "#111"']),
+    [`${manifest} changes in a way the gate can't read, so it may change anything`],
+    "a manifest that isn't JSON",
+  );
+});
+
 test("the page stylesheets the gate reads beside a change are every page's, and only those", () => {
   const stylesheets = listPageStylesheets();
   assert.ok(stylesheets.includes("shared/page/sheet.css"));
@@ -1445,6 +1478,8 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
   for (const line of [
     '  part.style.cssText = "/* note */ color: red";',
     "  part.style.cssText = `color: ${isOn && ink}`;",
+    '  part.style.cssText = "background: url(a?x=1&y=2)";',
+    '  part.setAttribute("style", "background: url(a?x=1&y=2)");',
   ])
     assert.deepEqual(findReasons(path, [line]), [], line);
   assert.deepEqual(

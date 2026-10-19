@@ -61,7 +61,7 @@
   and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config,
-  so a change to the docs or the tooling alone runs none (`worker/browser-scope.mjs`).
+  so a change to the docs, or to tooling no browser test imports, runs none (`worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   but for one that passed burn-in on an earlier push and hasn't changed since,
   with every helper and config the specs reach by import, and the dependencies, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
@@ -805,6 +805,8 @@ Delete it once the app's first PR merges.
   to its `viewport`, `apple-mobile-web-app-capable`, `mobile-web-app-capable`, and `apple-mobile-web-app-status-bar-style` metas,
   which fit it to the screen, open it from the Home Screen without the browser's bars, and color the phone's own,
   or to its inline scripts and styles, which take effect in the order the page holds them;
+  a change to the `display`, `display_override`, or `orientation` an app's `page/*.webmanifest` gives,
+  which open its Home Screen app without the browser's bars and turn it, or to a manifest the gate can't read;
   and a diff the gate can't read.
   In a stylesheet, a `style=`, or a script, a declaration that reads a custom property, or a value a template or the script fills in, counts as if it held any value,
   and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,

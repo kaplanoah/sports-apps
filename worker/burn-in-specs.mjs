@@ -15,7 +15,6 @@ import { listBrowserTestReach } from "./browser-scope.mjs";
 import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
-const SPECS = "apps/*/tests/browser/*.spec.mjs";
 const SPEC = /^apps\/[^/]+\/tests\/browser\/[^/]+\.spec\.mjs$/;
 const DEPENDENCIES = /^package(-lock)?\.json$/;
 // What a spec tests rather than runs with.
@@ -33,6 +32,13 @@ const RUNS_READ = 30;
  */
 const isSharedBySpecs = (path, reached) =>
   !SPEC.test(path) && (DEPENDENCIES.test(path) || (reached.has(path) && !TESTED_CODE.test(path)));
+
+/**
+ * The browser specs among the files a pull request adds or changes, by the one rule for what a
+ * spec is, which a helper in a folder under tests/browser/ isn't.
+ * @param {string[]} paths
+ */
+export const listBrowserSpecs = (paths) => paths.filter((path) => SPEC.test(path));
 
 /**
  * @param {string[]} changedSpecs the specs the pull request adds or changes
@@ -115,17 +121,10 @@ export function listChangedSince(since, git = runGit) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const changedSpecs = listLines(
-    runGit([
-      "diff",
-      "--name-only",
-      "--no-renames",
-      "--diff-filter=AM",
-      "HEAD^1",
-      "HEAD",
-      "--",
-      SPECS,
-    ]),
+  const changedSpecs = listBrowserSpecs(
+    listLines(
+      runGit(["diff", "--name-only", "--no-renames", "--diff-filter=AM", "HEAD^1", "HEAD"]),
+    ),
   );
   const readJson = createGitHub({
     repository: String(process.env.GITHUB_REPOSITORY),
