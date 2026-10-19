@@ -15,15 +15,40 @@ export const bracketStandingsLog = createStepLog({
 /** @typedef {{ x: number, y: number }} Move */
 
 /**
+ * A distance in whole pixels and its way, or nothing for one that rounds to none.
  * @param {number} distance
  * @param {[string, string]} ways the way a negative distance goes, then a positive one
  */
-const describeDistance = (distance, [back, on]) =>
-  `${Math.abs(Math.round(distance))} ${distance < 0 ? back : on}`;
+function describeDistance(distance, [back, on]) {
+  const pixels = Math.round(distance);
+  return pixels ? `${Math.abs(pixels)} ${pixels < 0 ? back : on}` : "";
+}
 
-/** @param {Move} move */
+/**
+ * How far a finger moved each way it went, or nothing for a finger that didn't.
+ * @param {Move} move
+ */
 const describeMove = (move) =>
-  `${describeDistance(move.x, ["left", "right"])} and ${describeDistance(move.y, ["up", "down"])}`;
+  [describeDistance(move.x, ["left", "right"]), describeDistance(move.y, ["up", "down"])]
+    .filter(Boolean)
+    .join(" and ");
+
+/**
+ * @param {Move} moved
+ * @param {boolean} isCancelled
+ */
+function describeLift(moved, isCancelled) {
+  const end = isCancelled ? "cancelled" : "lifted";
+  const distance = describeMove(moved);
+  return distance ? `${end} after moving ${distance}` : `${end} without moving`;
+}
+
+/** @param {Move} takenAt */
+function describeTaking(takenAt) {
+  const distance = describeMove(takenAt);
+  const when = distance ? `once it had moved ${distance}` : "before it moved";
+  return `the page's code took the touch ${when}`;
+}
 
 /** @param {number} scrolled */
 function describeScroll(scrolled) {
@@ -40,11 +65,8 @@ function describeScroll(scrolled) {
  * @returns {string}
  */
 export function describeTouchEnd({ isCancelled, moved, takenAt, scrolled }) {
-  const end = `${isCancelled ? "cancelled" : "lifted"} after moving ${describeMove(moved)}`;
-  const taken = takenAt
-    ? `the page's code took the touch once it had moved ${describeMove(takenAt)}`
-    : "the browser kept the touch";
-  return `${end}; ${taken}; ${describeScroll(scrolled)}`;
+  const taken = takenAt ? describeTaking(takenAt) : "the browser kept the touch";
+  return `${describeLift(moved, isCancelled)}; ${taken}; ${describeScroll(scrolled)}`;
 }
 
 /**

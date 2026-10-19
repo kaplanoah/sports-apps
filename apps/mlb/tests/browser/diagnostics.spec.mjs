@@ -276,9 +276,14 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   const box = /** @type {{ y: number, height: number }} */ (await row.boundingBox());
   const from = { x: PHONE.width / 2, y: box.y + box.height / 2 };
 
+  // A drag too short and too slow to bring in the bracket springs back to the standings.
   await (
-    await drag(page, from, { x: -30, y: 3 })
+    await drag(page, from, { x: -30, y: 3 }, { durationMs: 1000 })
   )();
+  await expect(page.locator("#bracketStandingsParts")).not.toHaveAttribute("data-sliding");
+  await expect(
+    page.locator('#bracketStandingsParts > [data-part="standings"]'),
+  ).not.toHaveAttribute("inert");
   await (
     await drag(page, from, { y: -200 })
   )();
@@ -287,12 +292,12 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on Team details: /));
   expect(lines).toContainEqual(
     expect.stringMatching(
-      /^lifted after moving 30 left and 3 down; the page's code took the touch once it had moved \d+ left and \d down; the page didn't scroll$/,
+      /^lifted after moving 30 left and 3 down; the page's code took the touch once it had moved \d+ left( and \d down)?; the page didn't scroll$/,
     ),
   );
   expect(lines).toContainEqual(
     expect.stringMatching(
-      /^lifted after moving 0 right and 200 up; the browser kept the touch; the page scrolled \d+px down$/,
+      /^lifted after moving 200 up; the browser kept the touch; the page scrolled \d+px down$/,
     ),
   );
 });
