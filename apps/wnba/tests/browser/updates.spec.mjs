@@ -316,6 +316,29 @@ test.describe("on a phone, tapping an update", () => {
     await expect(page.locator('[data-part="bracket"] .rider-taps')).toHaveCSS("display", "none");
   });
 
+  test("on the season tab, an update that loses its game's button while the box keeps its size leaves the stand-ins under the others, so a tap on the update under it opens that update's own game", async ({
+    page,
+  }) => {
+    await openApp(page, { updatesBox: "shown" });
+    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await expect(page.locator(".rider-tap")).toHaveCount(2 * 3);
+    const box = page.locator("#updates");
+    const height = (await box.boundingBox())?.height;
+
+    await page
+      .locator("#updates li")
+      .first()
+      .locator(".game-open")
+      .evaluate((button) => button.remove());
+
+    await expect(page.locator(".rider-tap")).toHaveCount(2 * 2);
+    expect((await box.boundingBox())?.height).toBe(height);
+    const at = findCenter(await page.locator("#updates li").nth(1).boundingBox());
+    await page.touchscreen.tap(at.x, at.y);
+
+    await expect(page.locator("#gameSheet #gameWhen")).toContainText("Fever won");
+  });
+
   test("where the header stays put, a tap on an update opens its game from the update itself, with no stand-in over the bracket", async ({
     page,
   }) => {

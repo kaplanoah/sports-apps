@@ -15,21 +15,20 @@ const listBoxButtons = () =>
   );
 
 /**
- * The button `element` stands in for, or null for an element that isn't a stand-in.
- * @param {Element} element
- * @returns {HTMLElement | null}
- */
-function findButtonStoodFor(element) {
-  const index = element instanceof HTMLElement ? element.dataset.standIn : undefined;
-  return index === undefined ? null : (listBoxButtons()[Number(index)] ?? null);
-}
-
-/**
  * Whether `element` is a stand-in, whose press its button hears as its own (`passPress`).
  * @param {EventTarget | null} element
+ * @returns {element is HTMLElement}
  */
 export const isStandIn = (element) =>
   element instanceof HTMLElement && element.classList.contains("rider-tap");
+
+/**
+ * The button `element` stands in for, or null for an element that isn't a stand-in.
+ * @param {EventTarget | null} element
+ * @returns {HTMLElement | null}
+ */
+const findButtonStoodFor = (element) =>
+  isStandIn(element) ? (listBoxButtons()[Number(element.dataset.standIn)] ?? null) : null;
 
 /** @typedef {{ top: number, left: number, width: number, height: number }} Box */
 
@@ -96,7 +95,7 @@ function placeRiderTaps(view, pill) {
 }
 
 /** @param {Event} event */
-const findTapped = (event) => findButtonStoodFor(/** @type {Element} */ (event.target));
+const findTapped = (event) => findButtonStoodFor(event.target);
 
 // The button a stand-in stands in for hears the stand-in's press as its own, so it readies what it
 // opens as a finger lands, as a game's row does.
@@ -125,8 +124,9 @@ function passTap(event) {
 
 /**
  * Gives each of the view's parts a place for its stand-ins, has each stand-in pass its taps on,
- * and lays them again whenever the header's ride is measured again, as it is whenever what rides,
- * the Updates box among it, changes size.
+ * and lays them again whenever the header's ride is measured again, as it is whenever what rides
+ * changes size, or the Updates box changes, since an update can gain or lose its button and keep
+ * its size.
  * @param {HTMLElement} view
  * @param {HTMLElement} pill
  * @param {HTMLElement[]} parts
@@ -142,5 +142,13 @@ export function startRiderTaps(view, pill, parts) {
   }
   const place = () => placeRiderTaps(view, pill);
   view.addEventListener("headerride", place);
+  const box = document.getElementById("updates");
+  if (box)
+    new MutationObserver(place).observe(box, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["hidden"],
+    });
   place();
 }
