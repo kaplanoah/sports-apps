@@ -59,6 +59,15 @@ export const renderStampTime = (date, day = "") =>
 export const isFullSlate = (count) => count > 2;
 
 /**
+ * Whether a day's games are a full slate, every one of them in one state, as one over or still to
+ * start.
+ * @param {{ state: string }[]} games the day's games
+ * @param {string} state
+ */
+export const isWholeSlate = (games, state) =>
+  isFullSlate(games.length) && games.every((game) => game.state === state);
+
+/**
  * A full day's games, as the header counts them after the one it names: "slate of 5 under way",
  * or, before any has begun, "starts slate of 5".
  * @param {number} count

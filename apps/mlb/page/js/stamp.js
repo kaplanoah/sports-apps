@@ -4,6 +4,7 @@ import {
   describeFinishedDay,
   describeSlate,
   isFullSlate,
+  isWholeSlate,
   renderStampNow,
   renderStampTime,
 } from "#shared/stamp.js";
@@ -54,8 +55,7 @@ function describeGame(game) {
 
 function describeDaySlate(games) {
   if (!isFullSlate(games.length)) return "";
-  const isOver = games.every((game) => game.state === "final");
-  return describeSlate(games.length, isOver ? "over" : "under way");
+  return describeSlate(games.length, isWholeSlate(games, "final") ? "over" : "under way");
 }
 const joinClause = (phrase, clause) => (clause ? html`${phrase}, ${clause}` : phrase);
 
@@ -139,14 +139,12 @@ export function describeUpNextGame(slate, context) {
     if (!ahead.length) continue;
     const game = pickGame(ahead, context, PICK_STARTS);
     const matchup = `${formatStampName(game.away)} @ ${formatStampName(game.home)}`;
-    const hasBegun = games.some((other) => other.state !== "pre");
     return {
       at: game.start,
       tbd: !!game.tbd,
-      text:
-        !hasBegun && isFullSlate(games.length)
-          ? `${matchup}, ${describeSlate(games.length, "starts")}`
-          : matchup,
+      text: isWholeSlate(games, "pre")
+        ? `${matchup}, ${describeSlate(games.length, "starts")}`
+        : matchup,
     };
   }
   return null;

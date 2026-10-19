@@ -4,6 +4,7 @@ import {
   describeFinishedDay,
   describeSlate,
   isFullSlate,
+  isWholeSlate,
   renderStampLine,
   renderStampNow,
   renderStampTime,
@@ -120,14 +121,6 @@ function listDayGames(games, game, seriesById) {
       hasBothTeams(each) && isToBePlayed(each, seriesById) && readGameDay(each)?.getTime() === day,
   );
 }
-
-/**
- * Whether a day's games are a full slate all in one state.
- * @param {Game[]} dayGames
- * @param {string} state
- */
-const isWholeSlate = (dayGames, state) =>
-  isFullSlate(dayGames.length) && dayGames.every((game) => game.state === state);
 
 /**
  * Each game under way on a day of few games, or else the one that tipped off last and the day's

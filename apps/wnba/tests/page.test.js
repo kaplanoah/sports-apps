@@ -1360,10 +1360,10 @@ test("a third game on the day makes a full slate, but not one its series no long
     const bothNamed =
       "NOW Dream @ Mystics 30-27 with 5:10 in Q2 | Valkyries @ Wings 30-27 with 5:10 in Q2";
 
-    assert.equal(
-      readStampLines(withLaterGame({}), NOW)[0],
+    assert.deepEqual(readStampLines(withLaterGame({}), NOW), [
       "NOW Valkyries @ Wings 30-27 with 5:10 in Q2, slate of 3 under way",
-    );
+      "Next tip-off 10:00 PM - Mercury @ Sparks",
+    ]);
     assert.equal(readStampLines(withLaterGame({ winner: "GSV" }), NOW)[0], bothNamed);
     assert.equal(readStampLines(withLaterGame({ status: "Postponed" }), NOW)[0], bothNamed);
   }));
@@ -1398,6 +1398,8 @@ test("a full slate still to start says so after the next tip-off, and once today
       readStampLines(over, NOW)[0],
       "Last game Mercury 80 Sparks 70 final, slate of 3 over",
     );
+    const nextDay = NOW + 24 * 60 * 60 * 1000;
+    assert.doesNotMatch(readStampLines(over, nextDay)[0], /slate/);
   }));
 
 test("a game whose time isn't set tips off on its day, and one its series no longer needs never does", () =>
