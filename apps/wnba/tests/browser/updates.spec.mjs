@@ -1,5 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import {
@@ -65,6 +66,17 @@ const serveReleaseNote = (page, notes = [CHANNELS_NOTE]) =>
 export const RELEASE_NOTES = [${notes.map((note) => `{ at: "${note.at}", text: html\`${note.text}\` }`).join(", ")}];`,
     }),
   );
+
+/**
+ * Opens the app on the bracket with the Updates box shown, once the page has drawn what the store
+ * sent, so the box and its stand-ins hold still where a test measures them.
+ * @param {import("@playwright/test").Page} page
+ */
+async function openBracketWithUpdates(page) {
+  await openApp(page, { updatesBox: "shown" });
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await waitForLoadToSettle(page);
+}
 
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -274,8 +286,7 @@ test.describe("on a phone, tapping an update", () => {
   test("on the season tab, a finger on an update lands in the bracket, so a press tints the update and a drag scrolls the bracket without opening the game", async ({
     page,
   }) => {
-    await openApp(page, { updatesBox: "shown" });
-    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await openBracketWithUpdates(page);
     const update = page.locator("#updates li").first();
     const from = findCenter(await update.boundingBox());
 
@@ -299,8 +310,7 @@ test.describe("on a phone, tapping an update", () => {
   test("on the season tab, an update's stand-in rides with it, so a tap with the header partly gone opens its game, and once the pill holds the stand-ins take no touch", async ({
     page,
   }) => {
-    await openApp(page, { updatesBox: "shown" });
-    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await openBracketWithUpdates(page);
     await scrollSeasonPart(page, "bracket", 30);
     const update = page.locator("#updates li").first();
     const at = findCenter(await update.boundingBox());
@@ -319,8 +329,7 @@ test.describe("on a phone, tapping an update", () => {
   test("on the season tab, an update that loses its game's button while the box keeps its size leaves the stand-ins under the others, so a tap on the update under it opens that update's own game", async ({
     page,
   }) => {
-    await openApp(page, { updatesBox: "shown" });
-    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await openBracketWithUpdates(page);
     await expect(page.locator(".rider-tap")).toHaveCount(2 * 3);
     const box = page.locator("#updates");
     const height = (await box.boundingBox())?.height;
@@ -343,8 +352,7 @@ test.describe("on a phone, tapping an update", () => {
     page,
   }) => {
     await holdHeaderStill(page);
-    await openApp(page, { updatesBox: "shown" });
-    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await openBracketWithUpdates(page);
 
     await expect(page.locator(".rider-tap")).toHaveCount(0);
 
@@ -376,8 +384,7 @@ test.describe("on a phone, in full motion", () => {
   test("on the season tab, after a trip to the standings and back, a tap on an update still opens its game and a tap on the X still closes the box", async ({
     page,
   }) => {
-    await openApp(page, { updatesBox: "shown" });
-    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await openBracketWithUpdates(page);
     const parts = page.locator("#bracketStandingsParts");
     await openSeasonPart(page, "Standings");
     await expect(page.locator("#standings-league")).toBeInViewport();

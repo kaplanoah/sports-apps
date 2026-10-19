@@ -248,7 +248,10 @@ test.describe("on a phone", () => {
       .poll(() => readSeasonRide(page))
       .toMatchObject({ pillTop: await readPillHoldTop(page) });
     await expect(pill).toHaveClass(/\bstuck\b/);
+    // Only the page's code keeps when it was last current, so once that's back its code has drawn.
+    await page.evaluate(() => localStorage.removeItem("syncedAt"));
     release();
+    await page.waitForLoadState("domcontentloaded");
     await waitForLoadToSettle(page);
     expect(await readSeasonPartScroll(page, "standings")).toBe(left);
     expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
