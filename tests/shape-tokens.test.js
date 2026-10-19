@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,6 +9,7 @@ import {
   listRootTokens,
   listSharedStylesheets,
   listStrayCorners,
+  readPageFile,
 } from "./css-rules.js";
 
 // What the shared stylesheets ask every app's :root for, so each app sets its own shapes, its
@@ -40,10 +41,11 @@ test("every corner each app's own styles draw comes from its shape tokens", () =
   for (const path of listAppStylesheets()) assert.deepEqual(listStrayCorners(path), [], path);
 });
 
-const ROOT = new URL("../", import.meta.url);
-
 // MLB's seed lock is an icon drawn for its place, so its corners are its own.
 const OWN_SHAPED_FILES = new Map([["apps/mlb/page/js/games-view.js", 1]]);
+
+// An SVG shape's rx or ry, in markup with either quote or set by a script.
+const TYPED_CORNER = /\br[xy]\s*=\s*["']|setAttribute\(\s*["']r[xy]["']/g;
 
 /**
  * How many corners each page file types into what it draws, as an SVG shape's rx or ry.
@@ -52,7 +54,7 @@ const OWN_SHAPED_FILES = new Map([["apps/mlb/page/js/games-view.js", 1]]);
 function countTypedCorners() {
   const counts = new Map();
   for (const path of listPageFiles()) {
-    const corners = readFileSync(new URL(path, ROOT), "utf8").match(/\br[xy]="/g) ?? [];
+    const corners = readPageFile(path).match(TYPED_CORNER) ?? [];
     if (corners.length) counts.set(path, corners.length);
   }
   return counts;

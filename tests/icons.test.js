@@ -1,12 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IconStyle, icons } from "@phosphor-icons/core";
-import { listPageFiles } from "./css-rules.js";
-
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+import { listPageFiles, readPageFile } from "./css-rules.js";
 
 /** @param {string} name @param {string} style */
 function readPhosphorIcon(name, style) {
@@ -64,9 +61,8 @@ const listSvgs = (source) =>
 
 /** @param {string} file */
 const countHandDrawnIcons = (file) =>
-  listSvgs(readFileSync(join(ROOT, file), "utf8")).filter(
-    ({ svg }) => !isDrawing(svg) && describeIconProblem(svg),
-  ).length;
+  listSvgs(readPageFile(file)).filter(({ svg }) => !isDrawing(svg) && describeIconProblem(svg))
+    .length;
 
 test("every icon on the pages is a Phosphor icon, copied path for path, but the named few drawn by hand", () => {
   const counts = Object.fromEntries(
@@ -106,7 +102,7 @@ const isNamedIn = (comment, { name, style }) =>
  * @param {string} file
  */
 function listUnnamedIcons(file) {
-  const source = readFileSync(join(ROOT, file), "utf8");
+  const source = readPageFile(file);
   const comments = listComments(source);
   return listSvgs(source)
     .filter(({ svg }) => !isDrawing(svg) && !describeIconProblem(svg))
@@ -127,6 +123,6 @@ test("every Phosphor icon on the pages follows a comment naming the icon and its
 });
 
 test("pull to refresh's spinner has every one of its eight spokes", () => {
-  const [spinner] = readPaths(readFileSync(join(ROOT, "shared/page/pull-to-refresh.js"), "utf8"));
+  const [spinner] = readPaths(readPageFile("shared/page/pull-to-refresh.js"));
   assert.equal(spinner.match(/[Mm]/g)?.length, 8);
 });

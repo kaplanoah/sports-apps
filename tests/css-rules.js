@@ -22,6 +22,12 @@ export const listPageFiles = () =>
       .map((path) => `${folder}/${path}`),
   );
 
+/**
+ * A page file's text, by the path from the repo's root that `listPageFiles` gives.
+ * @param {string} path
+ */
+export const readPageFile = (path) => readFileSync(new URL(path, ROOT), "utf8");
+
 /** @typedef {{ selectors: string[], property: string, value: string }} Declaration */
 
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");

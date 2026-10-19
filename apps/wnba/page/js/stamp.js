@@ -9,7 +9,7 @@ import {
   renderStampTime,
   renderStampWhen,
 } from "#shared/stamp.js";
-import { readGameDay } from "./days.js";
+import { isGameToday, readGameDay } from "./days.js";
 import { describeLiveMoment, isCalledOff, listSeasonGames } from "./games-view.js";
 import { isPutOff } from "./nearest-games.js";
 import { nameTeam, orderBySeriesWins } from "./series.js";
@@ -77,12 +77,13 @@ function describeFinalWhen(game, now) {
 
 /**
  * @param {Game} game
+ * @param {string} slate how today's full slate stands once it's over, or nothing
  * @param {Map<string, Series>} seriesById
  * @param {Date} now
  */
-function describeLatestFinal(game, seriesById, now) {
+function describeLatestFinal(game, slate, seriesById, now) {
   const when = describeFinalWhen(game, now);
-  const sentence = html`Last game ${describeScore(game)} final${when && html` ${when}`}`;
+  const sentence = html`Last game ${describeScore(game)} final${when && html` ${when}`}${slate && `, ${slate}`}`;
   const standing = describeSeriesAfter(seriesById.get(game.series ?? ""));
   return standing ? html`${sentence} &mdash; ${standing}` : sentence;
 }
@@ -107,18 +108,26 @@ const listGamesInState = (games, state) =>
 const isToBePlayed = (game, seriesById) => !isCalledOff(game, seriesById) && !isPutOff(game);
 
 /**
- * How many games will be played on a game's day.
+ * The games that will be played on a game's day.
  * @param {Game[]} games
  * @param {Game} game
  * @param {Map<string, Series>} seriesById
  */
-function countDayGames(games, game, seriesById) {
+function listDayGames(games, game, seriesById) {
   const day = readGameDay(game)?.getTime();
   return games.filter(
     (each) =>
       hasBothTeams(each) && isToBePlayed(each, seriesById) && readGameDay(each)?.getTime() === day,
-  ).length;
+  );
 }
+
+/**
+ * Whether a day's games are a full slate all in one state.
+ * @param {Game[]} dayGames
+ * @param {string} state
+ */
+const isWholeSlate = (dayGames, state) =>
+  isFullSlate(dayGames.length) && dayGames.every((game) => game.state === state);
 
 /**
  * Each game under way on a day of few games, or else the one that tipped off last and the day's
@@ -129,7 +138,7 @@ function countDayGames(games, game, seriesById) {
  */
 function describeLiveGames(live, games, seriesById) {
   const lead = /** @type {Game} */ (live.at(-1));
-  const dayGames = countDayGames(games, lead, seriesById);
+  const dayGames = listDayGames(games, lead, seriesById).length;
   if (!isFullSlate(dayGames)) return joinWithSeparator(live.map(describeLiveGame));
   return `${describeLiveGame(lead)}, ${describeSlate(dayGames, "under way")}`;
 }
@@ -143,7 +152,11 @@ function describeLatest(games, seriesById, now) {
   const live = listGamesInState(games, "live");
   if (live.length) return html`${renderStampNow()} ${describeLiveGames(live, games, seriesById)}`;
   const latestFinal = listGamesInState(games, "final").at(-1);
-  return latestFinal ? describeLatestFinal(latestFinal, seriesById, now) : "";
+  if (!latestFinal) return "";
+  const dayGames = listDayGames(games, latestFinal, seriesById);
+  const isTodayOver = isGameToday(latestFinal, now.getTime()) && isWholeSlate(dayGames, "final");
+  const slate = isTodayOver ? describeSlate(dayGames.length, "over") : "";
+  return describeLatestFinal(latestFinal, slate, seriesById, now);
 }
 
 /**
@@ -155,13 +168,19 @@ const findNextGame = (games, seriesById) =>
 
 /**
  * @param {Game} game
+ * @param {Game[]} games
+ * @param {Map<string, Series>} seriesById
  * @param {Date} now
  */
-function renderNextTipOff(game, now) {
+function renderNextTipOff(game, games, seriesById, now) {
   const when = game.isTimeSet
     ? renderStampWhen(new Date(readStart(game)), now)
     : nameDay(/** @type {Date} */ (readGameDay(game)), now);
-  return renderStampLine("Next tip-off", when, formatMatchup(game));
+  const dayGames = listDayGames(games, game, seriesById);
+  const matchup = isWholeSlate(dayGames, "pre")
+    ? `${formatMatchup(game)}, ${describeSlate(dayGames.length, "starts")}`
+    : formatMatchup(game);
+  return renderStampLine("Next tip-off", when, matchup);
 }
 
 /**
@@ -178,7 +197,7 @@ export function renderStampLines(season, now) {
   const latest = describeLatest(games, seriesById, today);
   const lines = latest ? [html`<span>${latest}</span>`] : [];
   const next = findNextGame(games, seriesById);
-  if (next) lines.push(renderNextTipOff(next, today));
+  if (next) lines.push(renderNextTipOff(next, games, seriesById, today));
   return lines;
 }
 

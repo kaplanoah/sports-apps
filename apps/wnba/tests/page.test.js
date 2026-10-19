@@ -1368,6 +1368,38 @@ test("a third game on the day makes a full slate, but not one its series no long
     assert.equal(readStampLines(withLaterGame({ status: "Postponed" }), NOW)[0], bothNamed);
   }));
 
+test("a full slate still to start says so after the next tip-off, and once today's is over after the last game", () =>
+  inEastern(() => {
+    const thirdGame = {
+      ...structuredClone(SEASON.games.find((game) => game.id === "1042600132")),
+      id: "third-tonight",
+      start: "2026-10-01T02:00:00Z",
+      series: undefined,
+      round: undefined,
+      away: { team: "PHX", score: null },
+      home: { team: "LAS", score: null },
+    };
+    const fullDay = { ...SEASON, games: [...SEASON.games, thirdGame] };
+    assert.equal(
+      readStampLines(fullDay, NOW)[1],
+      "Next tip-off 7:00 PM - Dream @ Mystics, starts slate of 3",
+    );
+
+    const over = ["1042600132", "1042600112", "third-tonight"].reduce(
+      (season, id) =>
+        changeGame(season, id, (game) => {
+          Object.assign(game, { state: "final", status: "Final" });
+          Object.assign(game.away, { score: 80 });
+          Object.assign(game.home, { score: 70 });
+        }),
+      fullDay,
+    );
+    assert.equal(
+      readStampLines(over, NOW)[0],
+      "Last game Mercury 80 Sparks 70 final, slate of 3 over",
+    );
+  }));
+
 test("a game whose time isn't set tips off on its day, and one its series no longer needs never does", () =>
   inEastern(() => {
     const finals = ["1042600132", "1042600112", "1042600123"].reduce(
