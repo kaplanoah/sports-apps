@@ -13,15 +13,29 @@ test("the seasons the store keeps list newest first, leaving out anything that i
 });
 
 test("the picker names each season, newest first, with the shown one among them and chosen", () => {
-  assert.deepEqual(listSeasonOptions(["2024", "2025"], 2026, { seasonSpansYears: true }), [
-    { year: "2026", name: "2026-27", isShown: true },
-    { year: "2025", name: "2025-26", isShown: false },
-    { year: "2024", name: "2024-25", isShown: false },
-  ]);
-  assert.deepEqual(listSeasonOptions(["2026", "2025"], 2025, { seasonSpansYears: false }), [
-    { year: "2026", name: "2026", isShown: false },
-    { year: "2025", name: "2025", isShown: true },
-  ]);
+  assert.deepEqual(
+    listSeasonOptions(
+      ["2024", "2025"],
+      { shownYear: 2026, currentYear: null },
+      { seasonSpansYears: true },
+    ),
+    [
+      { year: "2026", name: "2026-27", isShown: true },
+      { year: "2025", name: "2025-26", isShown: false },
+      { year: "2024", name: "2024-25", isShown: false },
+    ],
+  );
+  assert.deepEqual(
+    listSeasonOptions(
+      ["2026", "2025"],
+      { shownYear: 2025, currentYear: null },
+      { seasonSpansYears: false },
+    ),
+    [
+      { year: "2026", name: "2026", isShown: false },
+      { year: "2025", name: "2025", isShown: true },
+    ],
+  );
 });
 
 test("the seasons the store keeps stand as it last said while a read fails, and none before it has said", async () => {
@@ -39,4 +53,18 @@ test("the seasons the store keeps stand as it last said while a read fails, and 
   assert.deepEqual(await readSeasonYears(), ["2026", "2025", "2024"]);
   assert.deepEqual(await readSeasonYears(), ["2026", "2025", "2024"]);
   assert.deepEqual(await readSeasonYears(), ["2026", "2025"]);
+});
+
+test("the picker lists the current season even where the seasons it knows end before it", () => {
+  assert.deepEqual(
+    listSeasonOptions(
+      ["2025"],
+      { shownYear: 2025, currentYear: 2026 },
+      { seasonSpansYears: false },
+    ),
+    [
+      { year: "2026", name: "2026", isShown: false },
+      { year: "2025", name: "2025", isShown: true },
+    ],
+  );
 });

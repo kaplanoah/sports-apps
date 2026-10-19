@@ -18,14 +18,16 @@ export const listSeasonYears = (docs) =>
     .reverse();
 
 /**
- * The picker's options, newest first, each a season's year and its name.
+ * The picker's options, newest first, each a season's year and its name, with the current one and
+ * the shown one always among them.
  * @param {string[]} years
- * @param {number} shownYear
+ * @param {{ shownYear: number, currentYear: number | null }} seasons
  * @param {Pick<import("./league-words.js").LeagueWords, "seasonSpansYears">} words
  */
-export function listSeasonOptions(years, shownYear, words) {
+export function listSeasonOptions(years, { shownYear, currentYear }, words) {
   const shown = String(shownYear);
-  return [...new Set([shown, ...years])]
+  const current = currentYear === null ? [] : [String(currentYear)];
+  return [...new Set([shown, ...current, ...years])]
     .sort()
     .reverse()
     .map((year) => ({ year, name: nameSeason(Number(year), words), isShown: year === shown }));
@@ -63,9 +65,11 @@ const readListedYears = (row) =>
  * @param {Pick<import("./league-words.js").LeagueWords, "seasonSpansYears">} words
  */
 export function fillSeasonPicker(row, { years, shownYear, currentYear }, words) {
-  const known = years ?? readListedYears(row);
-  const withCurrent = currentYear === null ? known : [String(currentYear), ...known];
-  const listed = listSeasonOptions(withCurrent, shownYear, words);
+  const listed = listSeasonOptions(
+    years ?? readListedYears(row),
+    { shownYear, currentYear },
+    words,
+  );
   const options = listed.map(
     ({ year, name, isShown }) =>
       html`<option value="${year}" ${isShown ? "selected" : ""}>${name}</option>`,
