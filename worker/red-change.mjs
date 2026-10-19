@@ -72,10 +72,17 @@ const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
 // template ends a declaration with a semicolon or its string's end, unless the object is a
 // style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find.
 // Each match holds the declaration's property, the name of its family, its value, and what ends
-// the value: a semicolon or a brace, or a quote, with a plus where the script adds more to it.
+// the value: a semicolon or a brace, or a quote, with the rest of the line after it.
 const CSS_DECLARATION = new RegExp(
-  `(?:^|[\\s{;"'\`])((?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*)\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))(?=([^;"'\`}]*)(?:([;}])|(["'\`])\\s*(\\+)?)?)`,
+  `(?:^|[\\s{;"'\`])((?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*)\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))(?=([^;"'\`}]*)(?:([;}])|(["'\`])(.*))?)`,
   "g",
+);
+// Where a value a script writes ends, as its expression does.
+const SCRIPT_VALUE_END = String.raw`\s*(?:[;,)}\]]|$)`;
+// What follows a quote that ends a CSS declaration's value whole: its expression's end, or, in
+// markup a template holds, its tag's end or its next attribute, rather than more the script adds.
+const QUOTED_VALUE_END = new RegExp(
+  String.raw`^(?:${SCRIPT_VALUE_END}|\s*\/?>|\s+[A-Za-z][\w:-]*(?=\s*(?:=|\/?>|$)|\s+[A-Za-z]))`,
 );
 const LAYER_SETTINGS = [
   { name: "an animation", pattern: /\.(animate)\(/ },
@@ -106,7 +113,9 @@ const STYLE_PROPERTY_CALL =
   /\.(?:set|remove)Property\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(?=(.*)))?/g;
 const STYLE_INDEX_ASSIGNMENT = new RegExp(`${STYLE}\\s*\\[[^\\]]*\\]${ASSIGNS}`);
 // A value as a script writes it: a string or a number, which ends where its expression does.
-const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*(?:[;,)}\]]|$))/;
+const SCRIPT_LITERAL = new RegExp(
+  String.raw`^\s*(?:(["'\x60])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=${SCRIPT_VALUE_END})`,
+);
 
 // Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) or
 // Object.assign(style, { ... }) hands a part's style, and in the keyframes
@@ -237,16 +246,24 @@ function findDiffProblem(diff) {
 }
 
 /**
- * A CSS declaration's value as a line of a script holds it, or a template's hole for one the line
- * doesn't hold whole, as where it's left empty, ends in a comma, runs on past the line, or has
- * more added to it, which can hold any value.
+ * A value the gate can't read, as a template's hole that holds it, which reads as any value.
+ * @param {string} text
+ */
+const markUnreadable = (text) => `\${${text.trim()}}`;
+
+/**
+ * A CSS declaration's value as a line of a script holds it, or one the gate can't read where the
+ * line doesn't hold it whole, as where it's left empty, ends in a comma, runs on past the line, or
+ * has more added to it.
  * @param {RegExpMatchArray} match a match of CSS_DECLARATION
  */
-function readDeclarationValue([, , , text, terminator, quote, addition]) {
+function readDeclarationValue([, , , text, terminator, quote, afterQuote]) {
   const value = text.trim();
   const isWhole =
-    value !== "" && !value.endsWith(",") && Boolean(terminator || (quote && !addition));
-  return isWhole ? value : `\${${value}}`;
+    value !== "" &&
+    !value.endsWith(",") &&
+    Boolean(terminator || (quote && QUOTED_VALUE_END.test(afterQuote)));
+  return isWhole ? value : markUnreadable(value);
 }
 
 /**
@@ -393,7 +410,7 @@ function readScriptValue(text) {
   const literal = text.match(SCRIPT_LITERAL);
   const value = literal?.[2] ?? literal?.[3];
   return value === undefined || isEncodedOutsideHoles(value, IN_SCRIPT)
-    ? `\${${text.trim()}}`
+    ? markUnreadable(text)
     : value;
 }
 

@@ -933,6 +933,9 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div data-style="z-index: 2">',
     '<div style="/* note */ color: red">',
     '<div style="transition: color 0.2s">',
+    '<div style="transition: color 0.2s" class="tip">',
+    '<div style="transition: color 0.2s" hidden>',
+    '<img style="transition: color 0.2s" />',
     '<div style="transition: background-color 0.15s, box-shadow 0.15s; color: red">',
   ];
   for (const markup of redStyles) {
@@ -1446,6 +1449,9 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.cssText = "transition: color 0.2s, translate 0.2s";',
     '  sheet.insertRule(".tip { transition: color 0.2s, transform 0.2s }");',
     '  sheet.insertRule(".tip { transition: " + eased + " }");',
+    '  sheet.insertRule(".tip { transition: color 0.2s" + eased + " }");',
+    '  const MOTION = "transition: color 0.2s,"',
+    '  const MOTION = "transition: color 0.2s".concat(", ", eased);',
     '  part.style.transition = "";',
     '  const MOTION = { transition: "transform 0.2s" };',
     '  part.style.cssText = "transition: color 0.2s, " + eased;',
@@ -1492,6 +1498,8 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.setProperty("color", ink);',
     '  part.style.cssText = "color: red";',
     '  part.style.cssText = "transition: background-color 0.15s";',
+    '  const MOTION = "transition: color 0.2s";',
+    '  sheet.insertRule(".tip { transition: color 0.2s }");',
     '  part.style.transition = "color 0.2s";',
     '  part.setAttribute("style", "transition: color 0.2s, box-shadow 0.2s");',
     '  if (part.style.zIndex === "2") return;',
