@@ -51,6 +51,20 @@ export const renderStampWhen = (date, now = new Date()) =>
 export const renderStampTime = (date, day = "") =>
   html`<b>${renderMeridiem(formatClockTime(date))}${day && ` ${day}`}</b>`;
 
+/**
+ * Whether a day holds too many games for the header to name each, so it names one and counts the
+ * day's slate.
+ * @param {number} count the day's games
+ */
+export const isFullSlate = (count) => count > 2;
+
+/**
+ * A full day's games, as the header counts them after the one it names: "slate of 5 under way".
+ * @param {number} count
+ * @param {"under way" | "over"} stage
+ */
+export const describeSlate = (count, stage) => `slate of ${count} ${stage}`;
+
 /** Leads a line about the games under way, set apart as a time is. */
 export const renderStampNow = () => html`<b class="now">NOW</b>`;
 

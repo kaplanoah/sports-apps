@@ -1329,6 +1329,45 @@ test("on a night of three or more games, the header names the game under way tha
     );
   }));
 
+test("a third game on the day makes a full slate, but not one its series no longer needs or the league put off", () =>
+  inEastern(() => {
+    const live = ["1042600132", "1042600112"].reduce(
+      (season, id) =>
+        changeGame(season, id, (game) => {
+          Object.assign(game, { state: "live", status: "Q2 5:10", period: 2, clock: "5:10" });
+          Object.assign(game.away, { score: 30 });
+          Object.assign(game.home, { score: 27 });
+        }),
+      SEASON,
+    );
+    const laterGame = {
+      ...structuredClone(live.games.find((game) => game.id === "1042600132")),
+      id: "later-tonight",
+      start: "2026-10-01T02:00:00Z",
+      state: "pre",
+      status: "",
+      isIfNeeded: true,
+      series: "1-1",
+      away: { team: "PHX", score: null },
+      home: { team: "LAS", score: null },
+    };
+    /** @param {{ winner?: string, status?: string }} change */
+    const withLaterGame = ({ winner, status = "" }) => ({
+      ...live,
+      games: [...live.games, { ...laterGame, status }],
+      series: live.series.map((series) => (series.id === "1-1" ? { ...series, winner } : series)),
+    });
+    const bothNamed =
+      "NOW Dream @ Mystics 30-27 with 5:10 in Q2 | Valkyries @ Wings 30-27 with 5:10 in Q2";
+
+    assert.equal(
+      readStampLines(withLaterGame({}), NOW)[0],
+      "NOW Valkyries @ Wings 30-27 with 5:10 in Q2, slate of 3 under way",
+    );
+    assert.equal(readStampLines(withLaterGame({ winner: "GSV" }), NOW)[0], bothNamed);
+    assert.equal(readStampLines(withLaterGame({ status: "Postponed" }), NOW)[0], bothNamed);
+  }));
+
 test("a game whose time isn't set tips off on its day, and one its series no longer needs never does", () =>
   inEastern(() => {
     const finals = ["1042600132", "1042600112", "1042600123"].reduce(

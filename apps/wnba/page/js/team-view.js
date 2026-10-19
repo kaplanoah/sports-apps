@@ -52,7 +52,7 @@ export const findTeamLeaders = (season, team) =>
 export const formatAverage = (value) => (value == null ? "-" : value.toFixed(1));
 
 /** @param {number | null | undefined} share */
-const formatPercentage = (share) => (share == null ? "-" : (share * 100).toFixed(1));
+export const formatPercentage = (share) => (share == null ? "-" : (share * 100).toFixed(1));
 
 // Points, rebounds, and assists, then how well each player shoots and how much she plays.
 /** @type {LeaderColumn[]} */

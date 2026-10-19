@@ -15,6 +15,7 @@ import { formatMarkColors } from "./sheet-colors.js";
 import { renderSheetMessage } from "./sheet-parts.js";
 import {
   formatAverage,
+  formatPercentage,
   readTeamPlayoffs,
   renderChip,
   renderFinishedGame,
@@ -108,12 +109,6 @@ export const describePosition = (position) =>
     .split("-")
     .map((letter) => POSITION_WORDS[/** @type {"G" | "F" | "C"} */ (letter)] ?? letter)
     .join("-");
-
-/** @param {number | null} value */
-function formatStat(value, isShare = false) {
-  if (value == null) return "-";
-  return isShare ? (value * 100).toFixed(1) : value.toFixed(1);
-}
 
 /**
  * Her dot and name.
@@ -399,7 +394,7 @@ function renderRegularSeason(team, season, isPastSeason) {
     const stat = /** @type {RankedStat} */ (season.stats.find((each) => each.key === key));
     return renderRankRow({
       label,
-      shown: formatStat(stat.value, isShare),
+      shown: isShare ? formatPercentage(stat.value) : formatAverage(stat.value),
       stat: addWouldRank(stat, isFewestFirst),
       isFewestFirst,
     });

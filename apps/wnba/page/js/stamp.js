@@ -2,6 +2,8 @@ import { nameDay } from "#shared/days.js";
 import { html, joinNames, joinWithSeparator } from "#shared/html.js";
 import {
   describeFinishedDay,
+  describeSlate,
+  isFullSlate,
   renderStampLine,
   renderStampNow,
   renderStampTime,
@@ -97,30 +99,39 @@ const listGamesInState = (games, state) =>
     )
     .sort((first, second) => readStart(first) - readStart(second));
 
-// A day of this many games or fewer names each one under way.
-const FEW_GAMES = 2;
+/**
+ * Whether a game will be played: one its series no longer needs, or the league put off, won't.
+ * @param {Game} game
+ * @param {Map<string, Series>} seriesById
+ */
+const isToBePlayed = (game, seriesById) => !isCalledOff(game, seriesById) && !isPutOff(game);
 
 /**
- * How many games share a game's day.
+ * How many games will be played on a game's day.
  * @param {Game[]} games
  * @param {Game} game
+ * @param {Map<string, Series>} seriesById
  */
-function countDayGames(games, game) {
+function countDayGames(games, game, seriesById) {
   const day = readGameDay(game)?.getTime();
-  return games.filter((each) => hasBothTeams(each) && readGameDay(each)?.getTime() === day).length;
+  return games.filter(
+    (each) =>
+      hasBothTeams(each) && isToBePlayed(each, seriesById) && readGameDay(each)?.getTime() === day,
+  ).length;
 }
 
 /**
- * Each game under way on a day of few games, or else the one that tipped off last and how many
- * the day has, as MLB's header says a full slate.
+ * Each game under way on a day of few games, or else the one that tipped off last and the day's
+ * slate.
  * @param {Game[]} live the games under way, earliest first
  * @param {Game[]} games
+ * @param {Map<string, Series>} seriesById
  */
-function describeLiveGames(live, games) {
+function describeLiveGames(live, games, seriesById) {
   const lead = /** @type {Game} */ (live.at(-1));
-  const dayGames = countDayGames(games, lead);
-  if (dayGames <= FEW_GAMES) return joinWithSeparator(live.map(describeLiveGame));
-  return `${describeLiveGame(lead)}, slate of ${dayGames} under way`;
+  const dayGames = countDayGames(games, lead, seriesById);
+  if (!isFullSlate(dayGames)) return joinWithSeparator(live.map(describeLiveGame));
+  return `${describeLiveGame(lead)}, ${describeSlate(dayGames, "under way")}`;
 }
 
 /**
@@ -130,7 +141,7 @@ function describeLiveGames(live, games) {
  */
 function describeLatest(games, seriesById, now) {
   const live = listGamesInState(games, "live");
-  if (live.length) return html`${renderStampNow()} ${describeLiveGames(live, games)}`;
+  if (live.length) return html`${renderStampNow()} ${describeLiveGames(live, games, seriesById)}`;
   const latestFinal = listGamesInState(games, "final").at(-1);
   return latestFinal ? describeLatestFinal(latestFinal, seriesById, now) : "";
 }
@@ -140,7 +151,7 @@ function describeLatest(games, seriesById, now) {
  * @param {Map<string, Series>} seriesById
  */
 const findNextGame = (games, seriesById) =>
-  listGamesInState(games, "pre").find((game) => !isCalledOff(game, seriesById) && !isPutOff(game));
+  listGamesInState(games, "pre").find((game) => isToBePlayed(game, seriesById));
 
 /**
  * @param {Game} game

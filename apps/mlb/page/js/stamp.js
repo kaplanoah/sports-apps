@@ -1,6 +1,12 @@
 import { html } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
-import { describeFinishedDay, renderStampNow, renderStampTime } from "#shared/stamp.js";
+import {
+  describeFinishedDay,
+  describeSlate,
+  isFullSlate,
+  renderStampNow,
+  renderStampTime,
+} from "#shared/stamp.js";
 import { nameSeries } from "./bracket.js";
 import { TEAMS } from "./teams.js";
 
@@ -46,11 +52,10 @@ function describeGame(game) {
   return describeFirstPitch(game);
 }
 
-function describeSlate(games) {
-  if (games.length < 3) return "";
-  return games.every((game) => game.state === "final")
-    ? `slate of ${games.length} over`
-    : `slate of ${games.length} under way`;
+function describeDaySlate(games) {
+  if (!isFullSlate(games.length)) return "";
+  const isOver = games.every((game) => game.state === "final");
+  return describeSlate(games.length, isOver ? "over" : "under way");
 }
 const joinClause = (phrase, clause) => (clause ? html`${phrase}, ${clause}` : phrase);
 
@@ -121,9 +126,9 @@ export function describeLastStamp(slate, context) {
   if (!started.length) return describeLastFinal(slate.lastFinal, context.now);
   const describeWithNote = (game) =>
     html`${describeGame(game)}${(game.state === "final" && context.seriesNote?.(game)) || ""}`;
-  if (games.length <= 2) return describeFewGames(started, describeWithNote);
+  if (!isFullSlate(games.length)) return describeFewGames(started, describeWithNote);
   const lead = pickLeadGame(slate, started, context);
-  return markLive(joinClause(describeWithNote(lead), describeSlate(games)), isLive(lead));
+  return markLive(joinClause(describeWithNote(lead), describeDaySlate(games)), isLive(lead));
 }
 
 export function describeUpNextGame(slate, context) {
@@ -139,7 +144,9 @@ export function describeUpNextGame(slate, context) {
       at: game.start,
       tbd: !!game.tbd,
       text:
-        !hasBegun && games.length >= 3 ? `${matchup}, starts slate of ${games.length}` : matchup,
+        !hasBegun && isFullSlate(games.length)
+          ? `${matchup}, starts slate of ${games.length}`
+          : matchup,
     };
   }
   return null;
