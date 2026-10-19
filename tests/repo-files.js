@@ -18,9 +18,12 @@ export const listTrackedFiles = () =>
  */
 export const readRepoFile = (path) => readFileSync(new URL(path, REPO_ROOT), "utf8");
 
-// Only the PNG images and fonts the repo holds on purpose go unread, so the secrets check reads a
-// binary of any other kind, and the plain-ASCII check fails on one outside the tests' folders.
-const BINARY_FILES = /\.(?:png|woff2)$/;
+/**
+ * Whether a path is one of the PNG images or fonts the repo holds on purpose, which alone go
+ * unread, so any other binary is read and checked.
+ * @param {string} path
+ */
+export const isKeptBinary = (path) => /\.(?:png|woff2)$/.test(path);
 
 /**
  * Every tracked file but the repo's PNG images and fonts, with its text.
@@ -28,7 +31,7 @@ const BINARY_FILES = /\.(?:png|woff2)$/;
  */
 export const readTextFiles = () =>
   listTrackedFiles()
-    .filter((path) => !BINARY_FILES.test(path))
+    .filter((path) => !isKeptBinary(path))
     .map((path) => ({ path, text: readRepoFile(path) }));
 
 /**
