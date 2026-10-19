@@ -11,6 +11,7 @@ import {
   ROSTER_DOCS,
   readColor,
 } from "./harness.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
@@ -324,7 +325,7 @@ test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing a
   await expect
     .poll(readPillTransitions)
     .toEqual(["transitionrun transform", "transitionend transform"]);
-  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await waitForTimedAnimations(page);
   const pillBox = await pill.boundingBox();
   const tabBox = await page.getByRole("tab", { name: "Games" }).boundingBox();
   expect(pillBox.x + pillBox.width / 2).toBeCloseTo(tabBox.x + tabBox.width / 2, 0);

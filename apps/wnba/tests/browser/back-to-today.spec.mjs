@@ -1,4 +1,8 @@
 import { test, expect, expectDayAtTop } from "./harness.mjs";
+import {
+  describeTimedAnimations,
+  waitForTimedAnimations,
+} from "../../../../tests/browser/animations.mjs";
 import { leavePagePixelDown, scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 import { findCell, findDay, findList, openSeasonGames } from "./season-games.mjs";
@@ -103,7 +107,7 @@ test.describe("with reduced motion", () => {
     await page.locator("#seasonGames .go-today").click();
 
     expect(await findList(page).evaluate((list) => list.scrollTop)).toBe(top);
-    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+    expect(await describeTimedAnimations(page)).toEqual([]);
   });
 });
 
@@ -233,6 +237,6 @@ test("a tap on Today where the list already is pulses today's date, 4% bigger an
     { day: "2026-09-30", duration: 290, transforms: ["scale(1)", "scale(1.04)", "scale(1)"] },
   ]);
   await page.clock.runFor(400);
-  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await waitForTimedAnimations(page);
   await expectDayAtTop(page, "2026-09-30");
 });

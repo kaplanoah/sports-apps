@@ -77,6 +77,7 @@ function measureRide(view) {
   const holdTop = parseFloat(getComputedStyle(pill, "::before").height) || 0;
   return {
     viewTop,
+    pillTop,
     partsTop: pillTop + pill.offsetHeight,
     reach: Math.max(0, Math.ceil(pillTop - holdTop)),
     pageHeight: document.body.offsetHeight,
@@ -145,8 +146,9 @@ function rideWith(part, reach) {
  * @param {HTMLElement} view
  * @param {ReturnType<typeof measureRide>} ride
  */
-function placeParts(view, { viewTop, partsTop, reach, pageHeight }) {
+function placeParts(view, { viewTop, pillTop, partsTop, reach, pageHeight }) {
   view.style.setProperty("--view-top", `${viewTop}px`);
+  view.style.setProperty("--pill-top", `${pillTop}px`);
   view.style.setProperty("--parts-top", `${partsTop}px`);
   view.style.setProperty("--header-reach", `${reach}px`);
   view.style.setProperty("--page-height", `${pageHeight}px`);

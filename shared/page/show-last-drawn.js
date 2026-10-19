@@ -95,8 +95,9 @@ function showPart(id, { markup, hidden, classes, style, scrolls, holderTop, save
   if (typeof classes === "string") element.classList.add(...classes.split(" ").filter(Boolean));
   if (typeof style === "string") element.setAttribute("style", keepCustomProperties(style));
   restoreScrolls(element, scrolls, savedAt);
-  // A part that scrolls in a holder of its own, like the standings in theirs, goes back to where
-  // the holder was scrolled, which its code can take again once it knows the holder's room.
+  // A part drawn inside the season's standings or bracket, which each scroll on their own, goes
+  // back to where its holder was scrolled, which season-header.js takes again once it knows the
+  // holder's room.
   const holder = element.parentElement;
   if (Number(holderTop) > 0 && holder) {
     holder.scrollTop = Number(holderTop);

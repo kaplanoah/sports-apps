@@ -1,6 +1,6 @@
 // The page's animations that play over time, by the page's own clock. One a scroll drives, like
-// the season tab's header riding up with its part or a sheet's as its row moves, moves only as its
-// scroller does, so it lasts as long as what it moves and never counts here.
+// the season tab's header riding up with its part, moves only as its scroller does, so it lasts as
+// long as what it moves and never counts here.
 
 import { expect } from "@playwright/test";
 

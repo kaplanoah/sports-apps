@@ -83,7 +83,7 @@ function drawStandIns(taps, places) {
 function placeRiderTaps(view, pill) {
   const buttons = view.hasAttribute("data-follows") ? listBoxButtons() : [];
   const pillBox = pill.getBoundingClientRect();
-  const pillTop = parseFloat(view.style.getPropertyValue("--parts-top")) - pill.offsetHeight;
+  const pillTop = parseFloat(view.style.getPropertyValue("--pill-top"));
   // Every part fills the row that holds them, which holds still while slide-panels.js moves a part
   // aside, so the row's left edge is where each part starts at rest.
   const partsRow = /** @type {HTMLElement} */ (view.querySelector(".season-parts"));

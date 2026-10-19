@@ -30,6 +30,8 @@ const TABS = [
 ];
 
 const LEAGUE_NAMES = { AL: "American League", NL: "National League" };
+/** The standings' part their playoff fields lead, which opens them at their top. */
+export const PLAYOFF_FIELDS = "playoffs";
 const DIVISIONS = ["East", "Central", "West"];
 
 /**
@@ -48,7 +50,7 @@ const describeStandingsPart = (part, name, words) => ({
 
 /** @type {PagePlace[]} */
 const STANDINGS = [
-  describeStandingsPart("playoffs", "Playoffs", [
+  describeStandingsPart(PLAYOFF_FIELDS, "Playoffs", [
     "playoffs",
     "postseason",
     "playoff field",
