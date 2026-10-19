@@ -1,9 +1,9 @@
 // Lists the browser specs burn-in repeats: each one a pull request adds or changes, but for one
 // that has passed burn-in on an earlier push and hasn't changed since. A file the specs reach by
-// import, or the dependencies they run with, that changed since then, on the pull request's side
-// or its base's, burns them all in again. A change to the page or the Worker alone doesn't, since
-// the spec already ran ten times as it is, and the browser job and the nightly run catch a test
-// the page made flaky.
+// import, or the dependencies and the Node version they run with, that changed since then, on the
+// pull request's side or its base's, burns them all in again. A change to the page or the Worker
+// alone doesn't, since the spec already ran ten times as it is, and the browser job and the
+// nightly run catch a test the page made flaky.
 // Usage: node worker/burn-in-specs.mjs, in a full checkout of the pull request's merge commit,
 // with GH_TOKEN, GITHUB_REPOSITORY, BRANCH (the pull request's head branch), and HEAD_SHA set. It
 // writes the specs to $GITHUB_OUTPUT as specs=<spec> <spec>.
@@ -26,8 +26,8 @@ const TESTED_CODE = /^(?:apps\/[^/]+\/(?:page|worker)|shared\/(?:page|worker))\/
 const RUNS_READ = 30;
 
 /**
- * Whether a changed file is one every spec runs with: a helper or config the specs reach, or a
- * dependency.
+ * Whether a changed file is one every spec runs with: a helper or config the specs reach, a
+ * dependency, or the Node version.
  * @param {string} path
  * @param {Set<string>} reached every file the browser specs, their helpers, and the config reach
  */

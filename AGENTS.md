@@ -65,7 +65,7 @@
   and runs every app's for CI's own workflow, the dependencies, or a kind of file it doesn't know (`worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   but for one that passed burn-in on an earlier push and hasn't changed since,
-  with every helper and config the specs reach by import, and the dependencies, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
+  with every helper and config the specs reach by import, and the dependencies and the Node version, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
