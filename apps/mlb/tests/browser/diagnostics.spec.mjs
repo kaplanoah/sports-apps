@@ -3,6 +3,7 @@ import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { findSeasonPart, scrollSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
+import { waitForScrollEnd } from "../../../../tests/browser/scroll-end.mjs";
 import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
@@ -14,17 +15,8 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
  * @param {import("@playwright/test").Page} page
  * @param {number} distance
  */
-async function scrollSettings(page, distance) {
-  const settings = page.locator("#settingsDialog");
-  await settings.evaluate((dialog) =>
-    dialog.addEventListener("scrollend", () => dialog.setAttribute("data-scrolled", ""), {
-      once: true,
-    }),
-  );
-  await page.mouse.wheel(0, distance);
-  await expect(settings).toHaveAttribute("data-scrolled");
-  await settings.evaluate((dialog) => dialog.removeAttribute("data-scrolled"));
-}
+const scrollSettings = (page, distance) =>
+  waitForScrollEnd(page.locator("#settingsDialog"), () => page.mouse.wheel(0, distance));
 
 test("on a phone, Diagnostics sit past the copyright, a scroll beyond where settings rest, off, with no note under their name", async ({
   page,
@@ -277,17 +269,10 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   await expect(
     page.locator('#bracketStandingsParts > [data-part="standings"]'),
   ).not.toHaveAttribute("inert");
-  const standings = findSeasonPart(page, "standings");
-  await standings.evaluate((part) =>
-    part.addEventListener("scrollend", () => part.setAttribute("data-scroll-ended", ""), {
-      once: true,
-    }),
+  await waitForScrollEnd(findSeasonPart(page, "standings"), async () =>
+    (await drag(page, from, { y: -200 }))(),
   );
-  await (
-    await drag(page, from, { y: -200 })
-  )();
   // The drag, and the flick it ends in, ride the header and settings' button out of sight.
-  await expect(standings).toHaveAttribute("data-scroll-ended");
   await scrollSeasonPart(page, "standings", 0);
 
   const lines = await readLog(page, "Standings and bracket");

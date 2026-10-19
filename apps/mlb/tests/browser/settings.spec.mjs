@@ -17,6 +17,7 @@ import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
+import { waitForScrollEnd } from "../../../../tests/browser/scroll-end.mjs";
 import { readYearGap, readYearTracking } from "../../../../tests/browser/title-row.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -304,18 +305,12 @@ test("on a phone, a scroll just past the end of settings rests at their end, wit
   await openSettings(page);
   await expect(page.locator("#versionNote")).toBeVisible();
   const settings = page.locator("#settingsDialog");
-  await settings.evaluate((dialog) =>
-    dialog.addEventListener("scrollend", () => dialog.setAttribute("data-scrolled", ""), {
-      once: true,
-    }),
-  );
 
   const copyright = page.getByText("\u00a9 2026 Noah Kaplan");
   const copyrightBottom = await copyright.evaluate((line) => line.getBoundingClientRect().bottom);
 
   await page.mouse.move(PHONE.width / 2, PHONE.height / 2);
-  await page.mouse.wheel(0, copyrightBottom - PHONE.height + 40);
-  await expect(settings).toHaveAttribute("data-scrolled");
+  await waitForScrollEnd(settings, () => page.mouse.wheel(0, copyrightBottom - PHONE.height + 40));
 
   await expect(copyright).toBeInViewport({ ratio: 1 });
   const distanceToEnd = await settings.evaluate(

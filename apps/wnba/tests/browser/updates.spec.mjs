@@ -3,12 +3,19 @@ import { listAnimations } from "../../../../tests/browser/animations.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import {
+  findCenter,
+  findTouchTargets,
   holdHeaderStill,
+  readHeaderReach,
   readPillHoldTop,
+  readSeasonPartScroll,
   readSeasonRide,
+  scrollSeasonPart,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { drag } from "../../../../tests/browser/touch.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
+import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -116,7 +123,7 @@ test.describe("on a phone", () => {
       "Fever beat the Aces 99-89 in Game\u00a02, tie the First Round 1-1",
     ]);
 
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
     await expect(updates).toBeHidden();
     await page.reload();
     await expect(page.locator(".series").first()).toBeVisible();
@@ -141,7 +148,7 @@ test.describe("on a phone", () => {
       "Valkyries beat the Wings 90-84 to win the First Round 2-0",
     );
 
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
     await expect(updates).toBeHidden();
 
     await app.changeSeason((season) =>
@@ -262,6 +269,59 @@ test.describe("on a phone, tapping an update", () => {
     await expect(sheet.locator("#gameWhen")).toContainText("Fever won");
     await expect(page.locator("#teamSheet")).toBeHidden();
   });
+
+  test("on the season tab, a finger on an update lands in the bracket, so a press tints the update and a drag scrolls the bracket without opening the game", async ({
+    page,
+  }) => {
+    await openApp(page, { updatesBox: "shown" });
+    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    const update = page.locator("#updates li").first();
+    const from = findCenter(
+      /** @type {{ x: number, y: number, width: number, height: number }} */ (
+        await update.boundingBox()
+      ),
+    );
+
+    expect(await findTouchTargets(page, { update: from })).toEqual({ update: "bracket" });
+
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await expect(update.locator(".game-open")).toHaveClass(/\bis-pressed\b/);
+    await page.mouse.move(from.x, from.y + 40);
+    await page.mouse.up();
+    await expect(update.locator(".game-open")).not.toHaveClass(/\bis-pressed\b/);
+
+    await (
+      await drag(page, from, { y: -120 })
+    )();
+
+    await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBeGreaterThan(0);
+    await expect(page.locator("#gameSheet")).toBeHidden();
+  });
+
+  test("on the season tab, an update's stand-in rides with it, so a tap with the header partly gone opens its game, and once the pill holds the stand-ins take no touch", async ({
+    page,
+  }) => {
+    await openApp(page, { updatesBox: "shown" });
+    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await scrollSeasonPart(page, "bracket", 30);
+    const update = page.locator("#updates li").first();
+    const at = findCenter(
+      /** @type {{ x: number, y: number, width: number, height: number }} */ (
+        await update.boundingBox()
+      ),
+    );
+
+    await page.touchscreen.tap(at.x, at.y);
+
+    await expect(page.locator("#gameSheet #gameWhen")).toContainText("Liberty won");
+    await page.locator("#gameCloseBtn").dispatchEvent("click");
+    await expect(page.locator("#gameSheet")).toBeHidden();
+
+    await scrollSeasonPart(page, "bracket", await readHeaderReach(page));
+
+    await expect(page.locator('[data-part="bracket"] .rider-taps')).toHaveCSS("display", "none");
+  });
 });
 
 test.describe("on a phone, in full motion", () => {
@@ -290,7 +350,7 @@ test.describe("on a phone, in full motion", () => {
     const updates = page.locator("#updates");
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
 
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
 
     expect((await readAnimations()).filter(isClosing)).toHaveLength(1);
     // Shrunk to nothing, the box looks hidden a frame before it is, and a final in between
@@ -307,7 +367,7 @@ test.describe("on a phone, in full motion", () => {
     const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
     await page.evaluate(() => document.getAnimations().forEach((animation) => animation.pause()));
 
     await app.changeSeason(finishDreamAtMystics);
@@ -352,7 +412,7 @@ test.describe("on a phone, with a release note out", () => {
     const notes = await updates.locator(".updates-notes").boundingBox();
     expect(notes.y).toBeGreaterThan(finals.y + finals.height);
 
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
     await expect(updates).toBeHidden();
     await page.reload();
     await expect(page.locator(".series").first()).toBeVisible();

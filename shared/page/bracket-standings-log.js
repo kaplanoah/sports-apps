@@ -1,8 +1,5 @@
+import { findPartHolding } from "./season-part.js";
 import { createStepLog } from "./step-log.js";
-
-/** @param {Element} target */
-const findPartHolding = (target) =>
-  /** @type {HTMLElement | null} */ (target.closest(".season-part"));
 
 /** @param {Element} target */
 const isOnParts = (target) => !!findPartHolding(target);

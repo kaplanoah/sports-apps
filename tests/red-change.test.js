@@ -97,6 +97,7 @@ test("any change to the shared code that moves, layers, or draws the page is red
     "eased-redraw.js",
     "show-last-drawn.js",
     "season-header.js",
+    "rider-taps.js",
     "day-strip.js",
     "strip-slide.js",
     "chrome.css",

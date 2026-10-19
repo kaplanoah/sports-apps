@@ -454,6 +454,9 @@
   a swipe on the bracket scrolling it to its end first, as a team's Roster does, in `bracket-standings.js`,
   each scrolling on its own with the header riding up over the one shown until the pill holds at the top,
   as a profile's tabs do in a phone's apps, in `season-header.js`,
+  with a stand-in under each of the Updates box's buttons in each part's empty top,
+  so a tap on one opens what it does and a finger that drags from it scrolls the part, as a button inside a list does,
+  in `rider-taps.js`,
   the accent block under a pill's shown name, which never travels between names but hands off from one to the next once a tap or a finger's lift sets what's under it off,
   in `pill-thumb.js`, a season's games as one list of its game days under a strip of every day,
   whose chosen day is the one at the list's top, its box holding still while the list's scroll slides the dates behind it on a spring (`strip-slide.js`),
@@ -769,7 +772,7 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `season-header.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
+  `show-last-drawn.js`, `season-header.js`, `rider-taps.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
   but not to its comments, blank lines, or formatting, which draw nothing;
   a change to its shared stylesheets (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),

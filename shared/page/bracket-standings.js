@@ -2,7 +2,9 @@ import { markBarHeld, markBarStuck } from "./held-bar.js";
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
+import { startRiderTaps } from "./rider-taps.js";
 import { holdRoundDots } from "./round-dots.js";
+import { findPartHolding } from "./season-part.js";
 import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
 import { isAsFarAs, isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
@@ -118,16 +120,13 @@ function showOn(index, isSliding) {
   markPillHeld();
 }
 
-/** @param {Element} element */
-const findPartHolding = (element) => /** @type {HTMLElement} */ (element.closest(".season-part"));
-
 /**
  * Brings `element` up just under the pill, held at the top with the header gone, as a search's row
  * for a part of the standings asks.
  * @param {Element} element
  */
 export function scrollUnderPill(element) {
-  const part = findPartHolding(element);
+  const part = /** @type {HTMLElement} */ (findPartHolding(element));
   const top =
     element.getBoundingClientRect().top -
     part.getBoundingClientRect().top +
@@ -143,7 +142,9 @@ export function scrollUnderPill(element) {
  * @param {Element} element
  */
 export const measureTopAtRest = (element) =>
-  element.getBoundingClientRect().top + findPartHolding(element).scrollTop + scrollY;
+  element.getBoundingClientRect().top +
+  /** @type {HTMLElement} */ (findPartHolding(element)).scrollTop +
+  scrollY;
 
 /**
  * Has `observer` watch what sets the room for `element`'s part: the part itself, and what stands
@@ -153,7 +154,7 @@ export const measureTopAtRest = (element) =>
  * @param {Element} element
  */
 export function observeRoomForPart(observer, element) {
-  observer.observe(findPartHolding(element));
+  observer.observe(/** @type {HTMLElement} */ (findPartHolding(element)));
   for (const above of listAboveSeasonView()) observer.observe(above);
 }
 
@@ -226,6 +227,7 @@ export function startBracketStandings() {
   for (const part of readOrder().map(findPart))
     part.addEventListener("scroll", markPillHeld, { passive: true });
   findView().addEventListener("headerride", markPillHeld);
+  startRiderTaps(findView(), findPill(), readOrder().map(findPart));
   findPart("bracket").addEventListener("scroll", holdBracketDotsWhileSliding, { passive: true });
   addEventListener("resize", holdBracketDotsWhileSliding);
 }

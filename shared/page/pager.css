@@ -90,13 +90,13 @@
 }
 /* What rides above the pill (season-header.js marks it) draws over all the parts hold, just under
    the pill, since a browser takes whatever draws over a moving part as overlapping it and gives it
-   a layer. All of it but the Updates box, which is all rows a tap opens, lets a finger that drags
-   anywhere but on a button scroll the part under it, as the page does on every other tab. */
+   a layer. It lets a finger that drags anywhere but on a button scroll the part under it, as the
+   page does on every other tab, and the Updates box, which is all rows a tap opens, lets its
+   buttons' touches through too, to their stand-ins in the part's empty top right under them
+   (rider-taps.js), so a finger that drags from a row scrolls the part as well. */
 :root:has(.bracket-standings.active[data-follows]) [data-rides] {
   position: relative;
   z-index: 4;
-}
-:root:has(.bracket-standings.active[data-follows]) [data-rides]:not(.updates) {
   pointer-events: none;
 }
 :root:has(.bracket-standings.active[data-follows])
@@ -121,6 +121,24 @@
 }
 .bracket-standings[data-follows] .pager-bar.held::before {
   visibility: visible;
+}
+/* The Updates box's stand-ins, each over its button but drawn under it, take its touches only
+   while the box shows: not once the pill holds, with the box out of sight under the band. */
+.rider-taps {
+  position: absolute;
+  inset: 0 auto auto 0;
+}
+.bracket-standings:not([data-follows]) .rider-taps,
+.bracket-standings:has(.pager-bar.held) .rider-taps {
+  display: none;
+}
+.rider-tap {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 /*
  * The names sit in a row as plain words, the chosen one's filled with the accent. The fill never

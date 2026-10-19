@@ -15,16 +15,16 @@ globalThis.addEventListener = /** @type {any} */ (
   (/** @type {string} */ type, /** @type {(event: any) => void} */ listener) =>
     windowListeners.set(type, listener)
 );
-/** A stand-in for an element, in the standings when `isOnParts`, which it stands in for too. */
+/** A stand-in for an element in the season part `part` names, which it stands in for too, or none. */
 class FakeElement {
-  /** @param {boolean} isOnParts */
-  constructor(isOnParts) {
-    this.isOnParts = isOnParts;
-    this.dataset = { part: "standings" };
+  /** @param {"standings" | "bracket" | null} part */
+  constructor(part) {
+    this.dataset = { part };
     this.scrollTop = 0;
   }
-  closest() {
-    return this.isOnParts ? this : null;
+  /** @param {string} selector */
+  closest(selector) {
+    return selector === ".season-part" && this.dataset.part ? this : null;
   }
 }
 globalThis.Element = /** @type {any} */ (FakeElement);
@@ -53,7 +53,8 @@ function readLiftsFrom(/** @type {() => void} */ sendTouches) {
 }
 
 test("a touch on the standings and bracket is logged as it lifts, with where the page's code took it and how far the part under it scrolled", () => {
-  const target = new FakeElement(true);
+  const target = new FakeElement("standings");
+  const bracket = new FakeElement("bracket");
   const lines = readLiftsFrom(() => {
     sendTouch("touchstart", { target, points: [{ x: 100, y: 200 }] });
     sendTouch("touchmove", { target, points: [{ x: 97, y: 200 }] });
@@ -64,16 +65,21 @@ test("a touch on the standings and bracket is logged as it lifts, with where the
     sendTouch("touchmove", { target, points: [{ x: 100, y: 200 }] });
     target.scrollTop = 240;
     sendTouch("touchend", { target, points: [] });
+    sendTouch("touchstart", { target: bracket, points: [{ x: 100, y: 200 }] });
+    sendTouch("touchmove", { target: bracket, points: [{ x: 100, y: 300 }] });
+    bracket.scrollTop = -60;
+    sendTouch("touchend", { target: bracket, points: [] });
   });
   assert.deepEqual(lines, [
     "lifted after moving 30 left and 3 down; the page's code took the touch once it had moved 7 left and 1 down; the standings didn't scroll",
     "lifted after moving 200 up; the browser kept the touch; the standings scrolled 240px down",
+    "lifted after moving 100 down; the browser kept the touch; the bracket scrolled 60px up",
   ]);
 });
 
 test("a touch elsewhere on the page, or one a second finger joins, isn't logged", () => {
-  const elsewhere = new FakeElement(false);
-  const onParts = new FakeElement(true);
+  const elsewhere = new FakeElement(null);
+  const onParts = new FakeElement("standings");
   const lines = readLiftsFrom(() => {
     sendTouch("touchstart", { target: elsewhere, points: [{ x: 100, y: 200 }] });
     sendTouch("touchmove", { target: elsewhere, points: [{ x: 70, y: 200 }] });
