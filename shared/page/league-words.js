@@ -1,6 +1,8 @@
 // What a league's pages call things, in the words its fans use. Shared code reads a league's words
 // from here instead of typing its own, so each app shows only its league's.
 
+import { escapePattern } from "./escape-pattern.js";
+
 /**
  * @typedef {object} LeagueWords
  * @property {string} seasonOpener its season's first game, as a fan says it mid-sentence
@@ -29,7 +31,7 @@ export const nameSeason = (year, { seasonSpansYears }) =>
 
 /** @param {string} word */
 const matchWholeWord = (word) =>
-  new RegExp(`(?<![\\w-])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`, "i");
+  new RegExp(`(?<![\\w-])${escapePattern(word)}(?![\\w-])`, "i");
 
 /**
  * Each of a league's never-shown words that a text holds as a whole word, in any case.

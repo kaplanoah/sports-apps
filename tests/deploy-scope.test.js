@@ -1,10 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { decideDeploy, findDeployedChanges, listChangedFiles } from "../worker/deploy-scope.mjs";
-
-/** @param {string} path from the repo's root */
-const readRepoFile = (path) => readFileSync(`${import.meta.dirname}/../${path}`, "utf8");
+import { readRepoFile } from "./tracked-files.js";
 
 /**
  * The root worker/ modules a script imports, and the ones they import, with the script.
@@ -42,7 +39,6 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "eslint.config.mjs",
     "worker/browser-scope.mjs",
     "worker/burn-in-specs.mjs",
-    "worker/escape-pattern.mjs",
     "worker/package-imports.mjs",
     "worker/red-change.mjs",
     "worker/red-change-styles.mjs",

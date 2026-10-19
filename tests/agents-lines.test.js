@@ -1,12 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { isRuleFile, readSkillName } from "../worker/rule-files.mjs";
-import { listTrackedFiles } from "./tracked-files.js";
+import { isRuleFile } from "../worker/rule-files.mjs";
+import { listTrackedFiles, readRepoFile, readSkillName } from "./tracked-files.js";
 
 // Two changes to a guidance file conflict only when they touch the same or neighboring lines, so
 // each sentence starts a line of its own and a long one breaks after its commas.
-const ROOT = new URL("../", import.meta.url);
 const isGuidance = (/** @type {string} */ path) =>
   ["AGENTS.md", "REVIEW.md"].includes(path) || isRuleFile(path) || Boolean(readSkillName(path));
 const GUIDANCE = listTrackedFiles().filter(isGuidance);
@@ -22,7 +20,7 @@ const readProse = (line) => line.replace(/^\s*\d+\. /, "").replaceAll(/`[^`]*`/g
  */
 const listBrokenLines = (isBroken) =>
   GUIDANCE.flatMap((path) =>
-    readFileSync(new URL(path, ROOT), "utf8")
+    readRepoFile(path)
       .split("\n")
       .flatMap((line, index) => (isBroken(line) ? [`${path}:${index + 1}`] : [])),
   );
@@ -42,7 +40,7 @@ test("each line of a guidance file starts at most one sentence", () => {
 });
 
 test("AGENTS.md stays short enough for every session to follow", () => {
-  const lines = readFileSync(new URL("AGENTS.md", ROOT), "utf8").trimEnd().split("\n");
+  const lines = readRepoFile("AGENTS.md").trimEnd().split("\n");
   assert.ok(lines.length <= MOST_AGENTS_LINES, `AGENTS.md has ${lines.length} lines`);
 });
 

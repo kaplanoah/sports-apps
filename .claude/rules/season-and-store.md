@@ -13,7 +13,6 @@ paths:
   Times show in the viewer's own time zone; only a league's own day is Eastern (read with the shared `readEasternDay` in `shared/page/days.js`: all of MLB's, and the WNBA's for a game without a set time).
   Pages count, read, and format days and times with `shared/page/days.js`, the one module lint lets read the machine's own calendar and clock, and its tests check each of its readings in zones on both sides of UTC;
   an app's own `readGameDay` only says which of its fields hold a game's start and its league's day.
-  Tests pass in any `TZ`: a test that asserts a time picks its zone with the root's `tests/time-zone.js` or `test.use({ timezoneId })`.
 - The store returns documents frozen, with sorted keys.
   The page writes nothing to the store; everything in it is written by the Worker.
   What a viewer chooses, like MLB's ranking, a dismissal of the Updates box,

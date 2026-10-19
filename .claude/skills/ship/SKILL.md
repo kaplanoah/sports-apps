@@ -48,7 +48,6 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 ## Step 4: conflicts
 
 - A merge to `main` that leaves an open PR in conflict comments on it (the root's `worker/flag-conflicts.mjs`), which wakes a session watching it.
-  Step 5 goes back to step 4 each time it looks, since another PR may have merged into `main` and left this one in conflict.
 
 ## Step 7: what CI's review does
 
@@ -101,10 +100,10 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 
 - The first says "No pull request's CI passed on exactly this code": the deploy waits for CI on `main`.
   Read the next Deploy run's log.
-- It says `worker check: ok`: the new version is live.
+- It says "worker check: ok": the new version is live.
   Tell the user.
-  A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date,
-  and one saying `page check: ok, but` a page that opened without the code its environment holds:
+  A line before it saying "page check: skipped" names a page the deploy couldn't open, like one whose secrets are missing or out of date,
+  and one saying "page check: ok, but" a page that opened without the code its environment holds:
   tell the user that too.
 - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
   Tell the user which.
@@ -112,12 +111,12 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   Read that run's log instead.
   Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.
   Saying "couldn't be asked", it deploys this merge because GitHub couldn't say how CI went on the newer one, so read on in this run's log too.
-- It says "already has": a newer merge's deploy went live first, and covers this one.
+- It says "which already has": a newer merge's deploy went live first, and covers this one.
   Read that run's log instead.
 - The run was skipped:
   CI failed on `main`.
   Read the CI log, fix the failure in a new PR, and start again at step 1.
-- It says "nothing was deployed": the channel's environment has no Cloudflare token.
+- It says "No CLOUDFLARE_API_TOKEN in the": the channel's environment has no Cloudflare token, so nothing was deployed.
   Tell the user.
 - The run failed: read the log.
   If it says "the earlier version is live again", the Worker rolled back and is unchanged.

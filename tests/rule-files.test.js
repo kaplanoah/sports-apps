@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   RULES_FOLDER,
   isRuleFile,
@@ -8,17 +7,11 @@ import {
   matchesGlob,
   readRuleFiles,
   readRulePaths,
-  readSkillName,
 } from "../worker/rule-files.mjs";
-import { listTrackedFiles } from "./tracked-files.js";
-
-const ROOT = new URL("../", import.meta.url);
+import { listTrackedFiles, readRepoFile, readSkillName } from "./tracked-files.js";
 
 const repoFiles = listTrackedFiles();
 const ruleFiles = repoFiles.filter(isRuleFile);
-
-/** @param {string} path */
-const readRepoFile = (path) => readFileSync(new URL(path, ROOT), "utf8");
 
 test("the repo holds rule files", () => {
   assert.ok(ruleFiles.length > 0);

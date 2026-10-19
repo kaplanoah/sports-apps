@@ -96,7 +96,6 @@
   `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
   which the root's `tests/no-secrets.test.js` tells from a real one, failing on any real one in a tracked file.
   Nothing a change logs or posts where the public can read it, like a workflow's log or an issue, carries any of these either.
-  Reviewing a change, check what it commits, logs, and posts for any of them.
 - The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
   each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
   Never ask for one in chat or put one in environment variables, code, or commits.
@@ -131,7 +130,8 @@ When a step says to go back to an earlier step, continue in order from there.
    If resolving a conflict would drop behavior from either side, resolve it in the way that best serves the spirit of both changes, and confirm with the user.
 5. Wait until every CI job on the PR's latest commit has finished.
    The `check` job is the one that must pass; it fails whenever any other CI job fails.
-   Each time you look while waiting, and whenever no CI run has started on the latest commit a few minutes after the push, go back to step 4 first.
+   Each time you look while waiting, and whenever no CI run has started on the latest commit a few minutes after the push,
+   go back to step 4 first, since another PR may have merged into `main` and left this one in conflict.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.

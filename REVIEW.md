@@ -43,13 +43,13 @@ In order of what has mattered here.
    A link from a feed reaches an `href` only through `isWebAddress`.
 5. **Security.**
    Text reaching the page without the `html` template, anything that weakens the `APP_KEY` check or the access gate,
-   and a secret, key, account ID, page address, or access code in code, docs, logs, issues, or a Diagnostics report.
+   and anything AGENTS.md's public-repo bullet keeps out of the repo in code, docs, logs, issues, or a Diagnostics report.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
    A change to the review itself, its jobs in `.github/workflows/ci.yml` and `.github/workflows/review-area.yml`,
    `worker/plan-review.mjs`, `worker/judge-review.mjs`, `worker/post-review.mjs`,
-   `worker/review-context.mjs`, `worker/review-state.mjs`, `worker/rule-files.mjs`, or `worker/escape-pattern.mjs`, or to a guard test,
+   `worker/review-context.mjs`, `worker/review-state.mjs`, `worker/rule-files.mjs`, or `shared/page/escape-pattern.js`, or to a guard test,
    that lets less through is Important, naming what it no longer catches,
    since the pull request's own copy of them runs its review.
    So is a change to the red-change gate that lets less through,
