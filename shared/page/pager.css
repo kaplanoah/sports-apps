@@ -66,8 +66,9 @@
 
 /* While the header rides up with the part shown (season-header.js), the parts are placed from the
    tab's view and reach up to the page's top, as tall as the page, each padded down to start under
-   the pill, with room to scroll at least as far as the header rides. The view's padding box starts
-   at the body's gutter, a pixel left of its content. */
+   the pill, with room to scroll at least as far as the header rides. The room is a float, which
+   Safari counts in a part's scroll in full, as it does not a box placed outside the flow. The
+   view's padding box starts at the body's gutter, a pixel left of its content. */
 .bracket-standings[data-follows] {
   position: relative;
 }
@@ -82,11 +83,9 @@
 }
 .bracket-standings[data-follows] .season-part::before {
   content: "";
-  position: absolute;
-  top: 0;
-  width: 1px;
+  float: left;
+  width: 0;
   height: calc(100% + var(--header-reach));
-  visibility: hidden;
 }
 /* What rides above the pill (season-header.js marks it) draws over all the parts hold, just under
    the pill, since a browser takes whatever draws over a moving part as overlapping it and gives it
