@@ -435,8 +435,9 @@ export const isEncoded = (text) => ENCODED_TEXT.test(text);
 const CLOSING_BRACKETS = { "{": "}", "[": "]" };
 
 /**
- * The index of the last character of a script's string or comment that starts at `at`, or `at`
- * when none starts there, or the text's end when it never ends.
+ * The index of the last character of a script's string or comment that starts at `at`, a line
+ * comment running through the newline that ends it, or `at` when none starts there, or the
+ * text's end when it never ends.
  * @param {string} text
  * @param {number} at
  */
