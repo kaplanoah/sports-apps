@@ -1376,6 +1376,9 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
   assert.deepEqual(findReasons(path, ["  part.style.zIndex = 5;"]), [
     `${path}:1 adds a style property that sets z-index: part.style.zIndex = 5;`,
   ]);
+  assert.deepEqual(findReasons(path, ["  part.style.left = part.style.zIndex = 5;"]), [
+    `${path}:1 adds a style property that sets z-index: part.style.left = part.style.zIndex = 5;`,
+  ]);
 });
 
 test("a key of a style's object is red where a page's stylesheet would be", () => {
