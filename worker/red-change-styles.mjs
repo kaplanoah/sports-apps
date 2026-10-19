@@ -252,14 +252,20 @@ const readTransitionedProperty = (item) =>
   splitTopLevel(item, " ").find((part) => !TRANSITION_TIMING.test(part)) ?? "all";
 
 /**
+ * Whether a property is a transition, or the list of what transitions ease.
+ * @param {string} property
+ */
+export const isTransition = (property) =>
+  ["transition", "transition-property"].includes(readBareName(property));
+
+/**
  * Whether a declaration is a transition, or the list of what transitions ease, that names
  * properties, and only ones that repaint a part.
  * @param {Declaration} declaration
  */
 function isPaintOnlyTransition(declaration) {
+  if (!isTransition(declaration.property) || hasVariable(declaration)) return false;
   const name = readBareName(declaration.property);
-  if (!["transition", "transition-property"].includes(name) || hasVariable(declaration))
-    return false;
   const items = splitTopLevel(declaration.value, ",");
   const eased = name === "transition" ? items.map(readTransitionedProperty) : items;
   return (

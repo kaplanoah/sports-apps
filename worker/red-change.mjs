@@ -34,6 +34,7 @@ import {
   isEncoded,
   isEncodedOutsideHoles,
   isPageLayerDeclaration,
+  isTransition,
   readMinifiedCode,
 } from "./red-change-styles.mjs";
 
@@ -120,8 +121,6 @@ const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*
 const STYLE_OBJECT = /Object\.assign\(\s*(?:[\w$.]+\.)?style\s*,\s*\{/g;
 const KEYFRAMES = /\.animate\(\s*[[{]/g;
 const KEYFRAME_TIMING_KEYS = new Set(["offset", "easing", "composite"]);
-// A transition keyed there counts whatever it eases, however its key is written.
-const TRANSITION_PROPERTY = /^(?:-webkit-)?transition(?:-property)?$/;
 // A keyframe names the CSS offset property cssOffset, since offset is its place.
 const KEYFRAME_CSS_NAMES = new Map([["cssOffset", "offset"]]);
 // The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
@@ -496,7 +495,7 @@ function findStyleKey(text, readProperty, isWatched) {
   for (const match of text.matchAll(STYLE_KEY)) {
     const property = readProperty(match[2]);
     if (property === null) continue;
-    if (TRANSITION_PROPERTY.test(property)) return `a style property that sets ${property}`;
+    if (isTransition(property)) return `a style property that sets ${property}`;
     const value = readScriptValue(text.slice((match.index ?? 0) + match[0].length));
     const setting = describeStyleProperty(property, value, isWatched);
     if (setting) return setting;
