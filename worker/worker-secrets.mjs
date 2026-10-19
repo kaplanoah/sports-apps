@@ -3,8 +3,10 @@
 import {
   createCloudflareCaller,
   findWorkersApi,
+  formatWorkerUrl,
   readAccount,
   readAppWorkerConfig,
+  readWorkersSubdomain,
 } from "./deploy.mjs";
 
 /**
@@ -38,11 +40,6 @@ export function createSecretsClient({ app, channel, fetchImpl, env, log }) {
     /** @param {string} secretName */
     deleteSecret: (secretName) =>
       callCloudflare(secretName, `${secretsUrl}/${secretName}`, { method: "DELETE" }),
-    readWorkerUrl: async () => {
-      const { subdomain } = await callCloudflare("subdomain", `${base}/subdomain`, {
-        method: "GET",
-      });
-      return `https://${name}.${subdomain}.workers.dev/`;
-    },
+    readWorkerUrl: () => formatWorkerUrl(name, readWorkersSubdomain(env)),
   };
 }
