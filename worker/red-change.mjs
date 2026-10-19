@@ -11,11 +11,13 @@
 // reads who last added it and lets the change through only from the repository's owner, and only
 // when the label came after the pull request's head commit reached GitHub, which the owner hasn't
 // used on the phone otherwise.
-// Usage: git diff --no-renames <base> | node worker/red-change.mjs '<labels as JSON>'
+// Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
+//   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
-// the last two. The diff ends at the files on disk, as CI's `<base> HEAD` in a clean checkout
-// does, since a changed file before the change is rebuilt from the file and the hunks. It writes
-// whether the change is held to $GITHUB_OUTPUT as held=true or held=false.
+// the last two. The diff shows every file's text, whatever .gitattributes says of it, and ends at
+// the files on disk, as CI's `<base> HEAD` in a clean checkout does, since a changed file before
+// the change is rebuilt from the file and the hunks. It writes whether the change is held to
+// $GITHUB_OUTPUT as held=true or held=false.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -88,6 +90,7 @@ const LAYER_SETTINGS = [
     name: "a fixed or sticky position",
     pattern: /(setProperty\(\s*["']position["']\s*,\s*["'`](?:fixed|sticky))\b/,
   },
+  { name: "a style property", pattern: /setProperty\(\s*["'`](--[\w-]*)/ },
 ];
 
 // Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) hands a
@@ -99,10 +102,15 @@ const STYLE_KEY = new RegExp(
   `(?:^|[\\s{,])["']?(?:-webkit-|webkit|Webkit)?(${PROPERTY_NAMES}|${CAMEL_PROPERTY_NAMES})(?:-[a-z]+|[A-Z][a-z]+)*["']?\\s*:`,
 );
 
-// A line of a page's markup that runs its scripts, in their order, or opens a dialog, a popover,
-// or a style of its own, each of which can stack its parts.
-const PAGE_MARKUP_LAYER = /<script\b|<dialog\b|\bpopover\b|\bstyle=/i;
-const INLINE_SCRIPT = /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi;
+// A line of a page's markup, or of a script's, that runs scripts, in their order, or opens a
+// dialog, a popover, or styles of its own, each of which can stack its parts.
+const PAGE_MARKUP_LAYER = /<script\b|<style\b|<dialog\b|\bpopover\b|\bstyle=/i;
+const INLINE_SCRIPT = /<script\b(?![^>]*(?<![\w-])src=)[^>]*>[\s\S]*?<\/script>/gi;
+const INLINE_STYLE = /<style\b[^>]*>[\s\S]*?<\/style>/gi;
+// How the page fits the screen and colors the phone's own bars, which no CI browser draws.
+const META_TAG = /<meta\b[^>]*>/gi;
+const SCREEN_META_NAME =
+  /\bname\s*=\s*["']?(?:viewport|apple-mobile-web-app-status-bar-style)(?![\w-])/i;
 // A link, its attributes on as many lines as it takes, and whether it links a stylesheet, whose
 // order sets the cascade, rather than a preload or an icon, which sets nothing.
 const LINK_TAG = /<link\b[^>]*>/gi;
@@ -124,6 +132,8 @@ const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
  * @property {AddedLine[]} addedLines
  * @property {HunkLine[][]} hunks
  * @property {number[]} hunkStarts the line, from 1, each hunk starts at in the new file
+ * @property {boolean} [isUnreadable] whether the diff hides how its content changed, as it does
+ *   for a file it takes as binary, or one it shows no hunks for whose mode didn't change
  */
 /** @typedef {(path: string) => string} ReadPageFile a page's file as the change leaves it */
 
@@ -142,6 +152,8 @@ export function readDiff(diff) {
   /** @type {HunkLine[] | null} */
   let hunk = null;
   let lineNumber = 0;
+  const modeChanges = new Set();
+  const binaries = new Set();
   for (const line of diff.split("\n")) {
     const header = line.match(DIFF_HEADER);
     if (header) {
@@ -153,6 +165,8 @@ export function readDiff(diff) {
         files.push({ path: oldPath, addedLines: [], hunks: [], hunkStarts: [] });
       continue;
     }
+    if (current && !hunk && /^(?:old|new) mode /.test(line)) modeChanges.add(current);
+    if (current && !hunk && /^(?:Binary files |GIT binary patch)/.test(line)) binaries.add(current);
     const hunkHeader = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
     if (hunkHeader && current) {
       lineNumber = Number(hunkHeader[1]);
@@ -174,7 +188,10 @@ export function readDiff(diff) {
       lineNumber += 1;
     }
   }
-  return files;
+  return files.map((file) => ({
+    ...file,
+    isUnreadable: binaries.has(file) || (!file.hunks.length && !modeChanges.has(file)),
+  }));
 }
 
 /**
@@ -335,14 +352,23 @@ function findAddedSetting({ number, text }, styleLines) {
 }
 
 /**
- * Why a change to any other script of a page is red: each line it adds that makes a layer.
+ * What markup a script's line holds that runs or layers the page, as a template that opens a
+ * dialog does, or null when it holds none.
+ * @param {string} text
+ */
+const findAddedMarkup = (text) =>
+  !isComment(text) && PAGE_MARKUP_LAYER.test(text) ? "markup that runs or layers the page" : null;
+
+/**
+ * Why a change to any other script of a page is red: each line it adds that makes a layer, sets
+ * a custom property, or holds markup that runs or layers the page.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  */
 function findPageScriptReasons({ path, addedLines }, readPageFile) {
   const styleLines = findStyleObjectLines(readPageFile(path));
   return addedLines.flatMap((line) => {
-    const setting = findAddedSetting(line, styleLines);
+    const setting = findAddedSetting(line, styleLines) ?? findAddedMarkup(line.text);
     return setting ? [`${path}:${line.number} adds ${setting}: ${line.text.trim()}`] : [];
   });
 }
@@ -355,18 +381,34 @@ function findPageScriptReasons({ path, addedLines }, readPageFile) {
 const listInlineScripts = (markup) => markup.match(INLINE_SCRIPT) ?? [];
 
 /**
- * The stylesheets a page's markup links, each link's attributes on one line, in its order.
+ * The styles a page's markup holds in its own style elements, in its order.
  * @param {string} markup
  */
-const listStylesheetLinks = (markup) =>
-  (markup.match(LINK_TAG) ?? [])
-    .filter((link) => STYLESHEET_REL.test(link))
-    .map((link) => link.replace(/\s+/g, " "));
+const listInlineStyles = (markup) => markup.match(INLINE_STYLE) ?? [];
+
+/**
+ * Each of `tagPattern`'s tags in a page's markup that `keptPattern` matches, its attributes on one
+ * line, in its order.
+ * @param {string} markup
+ * @param {RegExp} tagPattern
+ * @param {RegExp} keptPattern
+ */
+const listTags = (markup, tagPattern, keptPattern) =>
+  (markup.match(tagPattern) ?? [])
+    .filter((tag) => keptPattern.test(tag))
+    .map((tag) => tag.replace(/\s+/g, " "));
+
+/** @param {string} markup */
+const listStylesheetLinks = (markup) => listTags(markup, LINK_TAG, STYLESHEET_REL);
+
+/** @param {string} markup */
+const listScreenMetas = (markup) => listTags(markup, META_TAG, SCREEN_META_NAME);
 
 /**
  * Why a change to a page's markup is red: each line it adds or takes out that runs the page's
- * scripts, whose order it decides too, or opens a dialog, a popover, or a style of its own, and
- * any change to the stylesheets it links, their order too, or to what its inline scripts run.
+ * scripts, whose order it decides too, or opens a dialog, a popover, or styles of its own, and any
+ * change to the stylesheets it links, their order too, to how it fits the screen and colors the
+ * phone's bars, or to its inline scripts and styles.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  */
@@ -386,7 +428,9 @@ function findPageMarkupReasons(file, readPageFile) {
   return [
     ...lineReasons,
     ...(isKept(listStylesheetLinks) ? [] : [`${file.path} changes the stylesheets it links`]),
+    ...(isKept(listScreenMetas) ? [] : [`${file.path} changes how it fits the screen or its bars`]),
     ...(isKept(listInlineScripts) ? [] : [`${file.path} changes what its inline scripts run`]),
+    ...(isKept(listInlineStyles) ? [] : [`${file.path} changes its inline styles`]),
   ];
 }
 
@@ -421,7 +465,7 @@ function findChangedStyleReasons(files, readPageFile, listStylesheets) {
   const changedPaths = new Set(stylesheets.map(({ path }) => path));
   const changed = stylesheets.map((file) => {
     const after = readPageFile(file.path);
-    const before = readFileBefore(after, file);
+    const before = file.isUnreadable ? null : readFileBefore(after, file);
     return {
       path: file.path,
       isShared: RED_FILES.has(file.path),
@@ -442,6 +486,8 @@ function findChangedStyleReasons(files, readPageFile, listStylesheets) {
  */
 function findFileReasons(file, styleReasons, readPageFile) {
   const { path } = file;
+  if (file.isUnreadable && (isPageCode(path) || isPageMarkup(path)))
+    return [describeUnreadable(path)];
   if (RED_FILES.has(path) && !file.hunks.length) return [describeSharedCode(file)];
   if (isPageStylesheet(path)) return styleReasons.get(path) ?? [];
   if (RED_FILES.has(path))

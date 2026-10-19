@@ -50,9 +50,11 @@ jobs:
   # (worker/red-change.mjs), which reads the pull request's timeline for who added the label, and
   # the head commit's check suites for whether the label came after the head was pushed, so a push
   # after phone-ok holds the pull request again. The merge commit's first parent is the base branch,
-  # whose own gate, with the modules its own lockfile names, judges the pull request's files, so a
-  # pull request that changes the gate can't let its own red change through. It holds the change
-  # on the phone job's status rather than by failing (worker/phone-status.mjs).
+  # whose copy of the gate's code, run on the Node and modules the base names, judges the pull
+  # request's files, so a change to the gate's code can't let the pull request's own red change
+  # through; a change to this job or the phone job is the review's to weigh. The diff shows every
+  # file's text, whatever .gitattributes says of it. It holds the change on the phone job's status
+  # rather than by failing (worker/phone-status.mjs).
   gate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -70,16 +72,27 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - *setup-node
       - name: Check out the base's gate
         run: git worktree add "$RUNNER_TEMP/base" HEAD^1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: ${{ runner.temp }}/base/.nvmrc
       # The gate parses a page's scripts and stylesheets with esbuild, to tell what a change does
-      # from how it's written. No module the base installs runs a script of its own.
+      # from how it's written. Its modules' cache is keyed on the base's lockfile alone, since the
+      # checks job's cache, under the pull request's lockfile, is one its own code could write.
+      - name: Name the base's modules
+        id: base-modules-key
+        run: echo "key=gate-modules-${{ runner.os }}-$(git rev-parse HEAD^1:package-lock.json)" >> "$GITHUB_OUTPUT"
+      - id: base-modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/base/node_modules
+          key: ${{ steps.base-modules-key.outputs.key }}
+      # No module the base installs runs a script of its own.
       - name: Install the base's modules
+        if: steps.base-modules.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}/base
         run: npm ci --ignore-scripts
-      # A base from before the gate wrote held= fails this step when it holds the change, so one
-      # that passes without writing it let the change through.
       - name: Hold a red change for the owner's phone
         id: hold
         shell: bash
@@ -88,9 +101,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          git diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"
-          grep -q '^held=' "$GITHUB_OUTPUT" || echo "held=false" >> "$GITHUB_OUTPUT"
+        run: git diff --text --no-textconv --no-ext-diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"
 
   # The status a held red change waits on, pending until phone-ok, which main's rules require. It
   # runs none of the pull request's code, since its token can set the status.

@@ -67,6 +67,8 @@ const TRANSITION_TIMING =
  * @property {string[]} reaches each selector the rule reaches, after the at-rules and selectors
  *   around it
  * @property {Declaration[]} declarations
+ * @property {string | null} registers the custom property an `@property` rule registers, whose
+ *   declarations set how it starts, inherits, and eases
  */
 /** @typedef {{ statement: string }} StyleStatement a top-level statement, like `@layer a,b` */
 /** @typedef {StyleRule | StyleStatement} StyleItem */
@@ -134,7 +136,11 @@ function createStyleRule(context, declarations) {
   const prelude = context.at(-1) ?? "";
   const around = context.slice(0, -1);
   const selectors = prelude.startsWith("@") ? [prelude] : splitTopLevel(prelude, ",");
-  return { reaches: selectors.map((selector) => [...around, selector].join(" ")), declarations };
+  return {
+    reaches: selectors.map((selector) => [...around, selector].join(" ")),
+    declarations,
+    registers: prelude.match(/^@property\s+(--[\w-]+)/i)?.[1] ?? null,
+  };
 }
 
 /**
@@ -210,7 +216,7 @@ const hasVariable = ({ value }) => /var\(/i.test(value);
 
 /** @param {Declaration} declaration */
 const listVariables = ({ value }) =>
-  [...value.matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1]);
+  [...value.matchAll(/var\(\s*(--[\w-]+)/gi)].map((match) => match[1]);
 
 /**
  * The property an item of a transition's list eases, or all of them when it names none.
@@ -284,8 +290,8 @@ const describeDeclaration = (reach, { property, value }) => `${reach} { ${proper
 /**
  * Each top-level statement of a stylesheet, and each of its declarations that `isKept` keeps,
  * under each selector it reaches, as `@media (min-width:780px) .tabs { position: sticky }`, in the
- * order readStyleSheet reads them, with whether it's a statement or a watched custom property,
- * which any change to makes red.
+ * order readStyleSheet reads them, with whether it's a statement, a watched custom property, or
+ * what registers one, any change to which makes red.
  * @param {StyleItem[]} items
  * @param {(declaration: Declaration) => boolean} isKept
  * @param {(property: string) => boolean} isWatched
@@ -294,13 +300,16 @@ const describeDeclaration = (reach, { property, value }) => `${reach} { ${proper
 const listEntries = (items, isKept, isWatched) =>
   items.flatMap((item) => {
     if (!isStyleRule(item)) return [{ text: item.statement, isWatched: true }];
+    const isRegistering = item.registers !== null && isWatched(item.registers);
+    /** @param {Declaration} declaration */
+    const isWatchedHere = (declaration) => isRegistering || isWatched(declaration.property);
     const kept = item.declarations.filter(
-      (declaration) => isKept(declaration) || isWatched(declaration.property),
+      (declaration) => isKept(declaration) || isWatchedHere(declaration),
     );
     return item.reaches.flatMap((reach) =>
       kept.map((declaration) => ({
         text: describeDeclaration(reach, declaration),
-        isWatched: isWatched(declaration.property),
+        isWatched: isWatchedHere(declaration),
       })),
     );
   });

@@ -785,19 +785,25 @@ Delete it once the app's first PR merges.
   or lifts it over others, makes it scroll, or decides how it takes a touch (any of those but `opacity`, `visibility`, and `display`,
   with a `position` only `absolute`, `fixed`, or sticky, and an `overflow` only when it isn't `visible`),
   and any top-level statement it adds or takes out;
-  a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another;
-  a line a page's other JavaScript adds that sets one of those layer properties or a fixed or sticky `position`;
-  a line an app's `page/*.html` adds or takes out that holds `<script`, `<dialog`, `popover`, or `style=`,
+  a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another,
+  and the `@property` rule that registers one;
+  a line a page's other JavaScript adds that sets one of those layer properties, a fixed or sticky `position`,
+  or a custom property with `setProperty`, or that holds the markup below;
+  a line an app's `page/*.html` adds or takes out that holds `<script`, `<style`, `<dialog`, `popover`, or `style=`,
   or any change to the stylesheets it links, whose order sets the cascade, but not its other links, like a preload or an icon,
-  or to its inline scripts, which run in the order the page holds them;
+  to its `viewport` and `apple-mobile-web-app-status-bar-style` metas, which fit it to the screen and color the phone's bars,
+  or to its inline scripts and styles, which take effect in the order the page holds them;
   and a diff the gate can't read.
   In a stylesheet, a declaration that reads a custom property counts as if it held any value,
   and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,
   `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
   so `none`, `all`, one that names none, or a keyword like `inherit` counts.
-  A script, stylesheet, or page the gate can't read is red.
-  The gate that judges a pull request is its base's, run with the base's own modules against the pull request's files,
-  so a pull request that changes the gate can't let its own red change through.
+  A script, stylesheet, or page the gate can't read is red, and so is one whose diff hides its content, as a binary one's does, from a diff that shows every file's text whatever `.gitattributes` says.
+  By design it can't see what a page's other stylesheets take out, or their `display` and `opacity` overriding a shared rule,
+  nor a class that markup or a script adds that a shared stacking rule then reaches.
+  The base's copy of the gate's code, on the Node and modules the base names, judges a pull request's files,
+  so a change to the gate's code can't let the pull request's own red change through,
+  and a change to the workflow's `gate` or `phone` job is the review's to weigh, as a change to a guard that `REVIEW.md` names.
   Tests are never red.
   The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
   added by the owner after the PR's last push,

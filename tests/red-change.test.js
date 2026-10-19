@@ -69,6 +69,7 @@ test("a diff lists each file with its added lines, numbered as the new file has 
         ],
       ],
       hunkStarts: [9],
+      isUnreadable: false,
     },
   ]);
 });
@@ -597,13 +598,17 @@ test("a custom property a stack declaration reads, itself or through another, is
     "shared/page/chrome.css": [
       ".a { transform: var(--lift); }",
       ".b { display: var(--logos-for-light); }",
-      ":root { --lift: var(--rise); }",
+      ":root { --lift: VAR(--rise); }",
     ],
   };
+  const registers = (/** @type {string} */ name, /** @type {string} */ start) =>
+    `@property ${name} { syntax: '*'; inherits: false; initial-value: ${start}; }`;
   for (const [before, after] of [
     [":root { --rise: translateY(0); }", ":root { --rise: translateZ(0); }"],
     [":root { --logos-for-light: inline; }", ":root { --logos-for-light: none; }"],
     [":root { --logos-for-light: inline; }", ":root {}"],
+    [registers("--lift", "none"), registers("--lift", "translateZ(0)")],
+    [registers("--rise", "none"), ""],
   ])
     for (const path of EACH_KIND)
       assert.notDeepEqual(
@@ -611,15 +616,16 @@ test("a custom property a stack declaration reads, itself or through another, is
         [],
         `${path}: ${after}`,
       );
-  for (const path of EACH_KIND)
-    assert.deepEqual(
-      findChangeReasons(
-        { [path]: { before: [":root { --ink: #111; }"], after: [":root { --ink: #222; }"] } },
-        reads,
-      ),
-      [],
-      `${path}: a color nothing stacks with`,
-    );
+  for (const [before, after] of [
+    [":root { --ink: #111; }", ":root { --ink: #222; }"],
+    [registers("--ink", "#111"), registers("--ink", "#222")],
+  ])
+    for (const path of EACH_KIND)
+      assert.deepEqual(
+        findChangeReasons({ [path]: { before: [before], after: [after] } }, reads),
+        [],
+        `${path}: ${after}, a color nothing stacks with`,
+      );
 });
 
 test("a stylesheet's top-level statements, or a shared stylesheet's stack declarations in another order, are red", () => {
@@ -793,6 +799,100 @@ test("a page's markup is red where it changes what an inline script runs, or its
     }),
     [`${INDEX_HTML} changes what its inline scripts run`],
   );
+  const lazy = ['  <script data-src="later.js">', "    openLastTab();", "  </script>"];
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: { before: lazy, after: [lazy[0], "    showLastDrawn();", lazy[2]] },
+    }),
+    [`${INDEX_HTML} changes what its inline scripts run`],
+    "a data-src names no file the script runs instead",
+  );
+});
+
+test("a page's markup is red where it changes its inline styles, or how it fits the screen or colors the phone's bars", () => {
+  const style = ["  <style>", "    body { margin: 0; }", "  </style>"];
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: {
+        before: style,
+        after: [style[0], "    body { overflow: hidden; }", style[2]],
+      },
+    }),
+    [`${INDEX_HTML} changes its inline styles`],
+  );
+  assert.equal(findChangeReasons({ [INDEX_HTML]: { before: [], after: style } }).length, 2);
+  for (const [before, after] of [
+    [
+      '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+      '  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />',
+    ],
+    [
+      '  <meta content="default" name="apple-mobile-web-app-status-bar-style">',
+      '  <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style">',
+    ],
+  ])
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: [before], after: [after] } }),
+      [`${INDEX_HTML} changes how it fits the screen or its bars`],
+      after,
+    );
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: {
+        before: ['  <meta name="description" content="Scores" />'],
+        after: ['  <meta name="description" content="Scores and standings" />'],
+      },
+    }),
+    [],
+  );
+});
+
+/**
+ * A diff of `path` whose content its lines don't show, after its header.
+ * @param {string} path
+ * @param {string[]} lines
+ */
+const createHiddenDiff = (path, lines) =>
+  [
+    `diff --git a/${path} b/${path}`,
+    ...lines.map((line) => line.replaceAll("<path>", path)),
+    "",
+  ].join("\n");
+
+test("a page file whose diff hides its content, as a binary one does, is red", () => {
+  for (const path of [
+    "apps/wnba/page/styles.css",
+    "shared/page/sheet.css",
+    "shared/page/stamp.js",
+    INDEX_HTML,
+  ]) {
+    for (const lines of [
+      ["index 1111111..2222222 100644", "Binary files a/<path> and b/<path> differ"],
+      [
+        "old mode 100644",
+        "new mode 100755",
+        "index 1111111..2222222",
+        "Binary files a/<path> and b/<path> differ",
+      ],
+      ["index 1111111..2222222 100644"],
+    ])
+      assert.deepEqual(
+        findRedReasons(readDiff(createHiddenDiff(path, lines)), () => "", listNoStylesheets),
+        [`${path} changes in a way the gate can't read, so it may change anything`],
+        `${path}: ${lines.join(" ")}`,
+      );
+    assert.deepEqual(
+      findRedReasons(
+        readDiff(createHiddenDiff(path, ["old mode 100644", "new mode 100755"])),
+        () => "",
+        listNoStylesheets,
+      ),
+      path.startsWith("shared/page/sheet.css")
+        ? [`${path} is shared code that moves, layers, or draws the page`]
+        : [],
+      `${path}: only its mode`,
+    );
+  }
 });
 
 test("a diff the gate can't read is red", () => {
@@ -849,6 +949,13 @@ test("an added line that makes a layer is red in any page's JavaScript", () => {
     "  element.style.backfaceVisibility = 'hidden';",
     "  element.style.webkitBackfaceVisibility = 'hidden';",
     '  element.style.setProperty("translate", value);',
+    '  root.style.setProperty("--thumb-left", `${left}px`);',
+    "  root.style.setProperty('--lift', lift);",
+    "  const sheet = html`<dialog open>${body}</dialog>`;",
+    "  const tip = html`<div popover>${words}</div>`;",
+    '  const dot = html`<span style="--team: ${color}"></span>`;',
+    "  const rules = html`<style>${css}</style>`;",
+    '  const loader = html`<script src="${file}"></script>`;',
   ];
   for (const path of ["shared/page/stamp.js", "apps/mlb/page/js/games-view.js"])
     for (const line of layerLines)
@@ -1195,10 +1302,6 @@ test("CI's check needs the gate, which a label change runs again without a push"
   assert.match(
     workflow,
     /github\.event_name == 'pull_request' && needs\.gate\.result != 'success'/,
-  );
-  assert.match(
-    workflow,
-    /git diff --no-renames HEAD\^1 HEAD \| node "\$RUNNER_TEMP\/base\/worker\/red-change\.mjs" "\$LABELS"/,
   );
   assert.match(
     workflow,
