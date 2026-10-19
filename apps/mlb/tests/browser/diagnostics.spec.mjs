@@ -251,7 +251,7 @@ test("with Diagnostics on, a slide of the strip's dates that leaves the strip sh
   );
 });
 
-test("with Diagnostics on, each touch on the standings logs how far it moved, whether the page's code took it, and how far the page scrolled", async ({
+test("with Diagnostics on, each touch on the standings logs how far it moved, whether the page's code took it, and how far the standings scrolled", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE);
@@ -284,12 +284,12 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on Team details: /));
   expect(lines).toContainEqual(
     expect.stringMatching(
-      /^lifted after moving 30 left and 3 down; the page's code took the touch once it had moved \d+ left( and \d down)?; the page didn't scroll$/,
+      /^lifted after moving 30 left and 3 down; the page's code took the touch once it had moved \d+ left( and \d down)?; the standings didn't scroll$/,
     ),
   );
   expect(lines).toContainEqual(
     expect.stringMatching(
-      /^lifted after moving 200 up; the browser kept the touch; the page scrolled \d+px down$/,
+      /^lifted after moving 200 up; the browser kept the touch; the standings scrolled \d+px down$/,
     ),
   );
 });

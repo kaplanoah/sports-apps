@@ -434,7 +434,7 @@
   any day that changes height as it's drawn whole or as a stand-in,
   and a strip that doesn't scroll where it's told, in `day-strip-log.js`,
   and each touch on a season's standings and bracket, how far it moved,
-  whether the page's code took it from the browser, and how far the page scrolled,
+  whether the page's code took it from the browser, and how far the part under it scrolled,
   and each click on them, in `bracket-standings-log.js`,
   and each error the page's code doesn't catch, in `error-log.js`,
   each a log made with `step-log.js`, the welcome over the whole screen that a phone's or tablet's browser opens on,
