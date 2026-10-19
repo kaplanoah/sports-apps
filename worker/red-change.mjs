@@ -80,22 +80,28 @@ const LAYER_SETTINGS = [
 
 // An assignment, plain or compound, as `=`, `+=`, or `||=`, but not a comparison.
 const ASSIGNS = String.raw`\s*(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?!=)`;
-// A property a script sets by its name, on a part's style or on what holds it, as
-// `const style = part.style; style.zIndex = 5` does, with the value it writes after it. A style's
-// whole text it sets as cssText, as the style itself, or as the style attribute.
-const PROPERTY_ASSIGNMENT = new RegExp(`\\.([A-Za-z]+)${ASSIGNS}(?=(.*))`, "g");
-const STYLE_TEXT_NAMES = new Set(["cssText", "style"]);
-const STYLE_ATTRIBUTE_SET = /setAttribute\(\s*["'`]style["'`]\s*,(.*)/;
-// A property a script sets by its CSS name, quoted, or by a name the gate can't read, as a
-// variable holds it or an index into a part's style names it.
-const STYLE_SET_PROPERTY = /setProperty\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(.*))?/;
-const STYLE_INDEX_ASSIGNMENT = new RegExp(`\\.style\\s*\\[[^\\]]*\\]${ASSIGNS}`);
+// A part's style, as `part.style`, or as a script holds it by that name, as
+// `const style = part.style` does, since a property's name, like position or container, names
+// other things too.
+const STYLE = String.raw`\bstyle`;
+// A property a script sets by its name on a part's style, with the value it writes after it, and
+// the style's whole text, as its cssText, as the style itself, or as its attribute, which a
+// removed attribute clears to any value.
+const STYLE_PROPERTY_ASSIGNMENT = new RegExp(`${STYLE}\\.([A-Za-z]+)${ASSIGNS}(?=(.*))`, "g");
+const STYLE_TEXT_ASSIGNMENT = new RegExp(`\\.style${ASSIGNS}(.*)`);
+const STYLE_ATTRIBUTE_CHANGE = /\.(?:set|remove)Attribute\(\s*["'`]style["'`]\s*(?:,(.*))?/;
+// A property a style's own methods set or clear, on whatever holds the style, by its CSS name,
+// quoted, with any value where it clears it, or by a name the gate can't read, as a variable
+// holds it or an index into the style names it.
+const STYLE_PROPERTY_CALL =
+  /\.(?:set|remove)Property\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(.*))?/;
+const STYLE_INDEX_ASSIGNMENT = new RegExp(`${STYLE}\\s*\\[[^\\]]*\\]${ASSIGNS}`);
 // A value as a script writes it: a string or a number, which ends where its expression does.
 const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*(?:[;,)}\]]|$))/;
 
 // Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) hands a
 // part's style, and in the keyframes <part>.animate([ ... ]) or <part>.animate({ ... }) takes.
-const STYLE_OBJECTS = [/Object\.assign\(\s*[\w$.]+\.style\s*,\s*\{/g, /\.animate\(\s*[[{]/g];
+const STYLE_OBJECTS = [/Object\.assign\(\s*(?:[\w$.]+\.)?style\s*,\s*\{/g, /\.animate\(\s*[[{]/g];
 // The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
 const KEYFRAMES_NAME = /\.animate\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 const STYLE_KEY = /(?:^|[\s{,])(["']?)(-{0,2}[A-Za-z][\w-]*)\1\s*:(?!:)/g;
@@ -376,20 +382,47 @@ function describeStyleText(value, isWatched) {
 const UNREADABLE_PROPERTY = "a style property whose name the gate can't read";
 
 /**
- * What a line sets by a property's name, on any object, that a page's stylesheet would be red
+ * What a line sets by a property's name on a part's style that a page's stylesheet would be red
  * for, or null when it sets nothing that is.
  * @param {string} text
  * @param {(property: string) => boolean} isWatched
  */
 function findAssignedSetting(text, isWatched) {
-  for (const [, name, written] of text.matchAll(PROPERTY_ASSIGNMENT)) {
+  for (const [, name, written] of text.matchAll(STYLE_PROPERTY_ASSIGNMENT)) {
     const value = readScriptValue(written);
-    const setting = STYLE_TEXT_NAMES.has(name)
-      ? describeStyleText(value, isWatched)
-      : describeStyleProperty(toKebabCase(name), value, isWatched);
+    const setting =
+      name === "cssText"
+        ? describeStyleText(value, isWatched)
+        : describeStyleProperty(toKebabCase(name), value, isWatched);
     if (setting) return setting;
   }
   return null;
+}
+
+/**
+ * What a line sets a part's whole style to, as the style itself or its attribute, that a page's
+ * stylesheet would be red for, or null when it sets nothing that is.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+function findStyleTextSetting(text, isWatched) {
+  const written = text.match(STYLE_TEXT_ASSIGNMENT)?.[1] ?? text.match(STYLE_ATTRIBUTE_CHANGE)?.[1];
+  const isWritten = written !== undefined || STYLE_ATTRIBUTE_CHANGE.test(text);
+  return isWritten ? describeStyleText(readScriptValue(written ?? ""), isWatched) : null;
+}
+
+/**
+ * What a line sets or clears with a style's own methods that a page's stylesheet would be red
+ * for, or a property whose name the gate can't read, or null when it sets nothing that is.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+function findPropertyCallSetting(text, isWatched) {
+  const call = text.match(STYLE_PROPERTY_CALL);
+  if (!call) return null;
+  return call[1]
+    ? describeStyleProperty(call[2], readScriptValue(call[3] ?? ""), isWatched)
+    : UNREADABLE_PROPERTY;
 }
 
 /**
@@ -399,18 +432,11 @@ function findAssignedSetting(text, isWatched) {
  * @param {string} text
  * @param {(property: string) => boolean} isWatched
  */
-function findStyleSetting(text, isWatched) {
-  if (STYLE_INDEX_ASSIGNMENT.test(text)) return UNREADABLE_PROPERTY;
-  const assigned = findAssignedSetting(text, isWatched);
-  if (assigned) return assigned;
-  const attribute = text.match(STYLE_ATTRIBUTE_SET);
-  if (attribute) return describeStyleText(readScriptValue(attribute[1]), isWatched);
-  const set = text.match(STYLE_SET_PROPERTY);
-  if (!set) return null;
-  return set[1]
-    ? describeStyleProperty(set[2], readScriptValue(set[3] ?? ""), isWatched)
-    : UNREADABLE_PROPERTY;
-}
+const findStyleSetting = (text, isWatched) =>
+  (STYLE_INDEX_ASSIGNMENT.test(text) ? UNREADABLE_PROPERTY : null) ??
+  findAssignedSetting(text, isWatched) ??
+  findStyleTextSetting(text, isWatched) ??
+  findPropertyCallSetting(text, isWatched);
 
 /**
  * What a line of a style's object, or of an animation's keyframes, sets by its keys that a

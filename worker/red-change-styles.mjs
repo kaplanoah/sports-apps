@@ -419,14 +419,15 @@ export function createWatchCheck({ changed, unchanged }) {
 
 /**
  * Each declaration of an inline style, as a style attribute holds it, that a page's other
- * stylesheets would be red to add, or that sets a watched custom property, and each part of it
- * the gate can't read as a declaration, as one a script's template fills in whole.
+ * stylesheets would be red to add, or that sets a watched custom property, and each part of it a
+ * script's template fills in whole, which the gate can't read as a declaration, while any other
+ * part that isn't one sets nothing.
  * @param {string} style
  * @param {(property: string) => boolean} isWatched
  */
 export const findInlineStyleSettings = (style, isWatched) =>
   splitTopLevel(style, ";").filter((text) => {
-    if (!/^-{0,2}[a-z][\w-]*\s*:/i.test(text)) return true;
+    if (!/^-{0,2}[a-z][\w-]*\s*:/i.test(text)) return text.includes("${");
     const declaration = readDeclaration(text);
     return isPageLayerDeclaration(declaration) || isWatched(declaration.property);
   });

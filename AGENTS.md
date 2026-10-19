@@ -793,9 +793,10 @@ Delete it once the app's first PR merges.
   a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another,
   and the `@property` rule that registers one;
   a line a page's other JavaScript adds that writes one of those layer properties or a fixed or sticky `position` as CSS, or starts an animation,
-  that sets what those other stylesheets would be red to add, by a property's name on any object, as `style.zIndex = 5` does, with `setProperty`, in a style's object,
-  or in a style's whole text, through its `cssText`, the `style` itself, or `setAttribute("style", ...)`,
-  or a custom property those declarations read, or a style property whose name a template, a variable in `setProperty`, or an index into `style` holds,
+  that sets or clears what those other stylesheets would be red to add, by a property's name on a part's style or on one a script holds as `style`, as `style.zIndex = 5` does,
+  with `setProperty` or `removeProperty`, in a style's object,
+  or in a style's whole text, through its `cssText`, the `style` itself, or `setAttribute("style", ...)` and `removeAttribute("style")`,
+  or a custom property those declarations read, or a style property whose name a template, a variable in `setProperty` or `removeProperty`, or an index into `style` holds,
   that creates a `dialog`, `style`, or `script` element, or that holds the markup below;
   a line an app's `page/*.html` adds or takes out that holds `<script`, `<style`, `<dialog`, or `popover`,
   or a `style=` that sets what one of those other stylesheets would be red to add, or a custom property those declarations read,

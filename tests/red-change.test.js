@@ -1232,6 +1232,11 @@ test("a key of the object Object.assign hands a part's style sets that style, a 
 test("the lines of each object Object.assign hands a part's style are found, and no others", () => {
   assert.deepEqual([...findStyleObjectLines(STYLE_SCRIPT)], [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   assert.deepEqual([...findStyleObjectLines("Object.assign(session, { scale: 1 });")], []);
+  assert.deepEqual(
+    [...findStyleObjectLines("Object.assign(style, {\n  zIndex: 5,\n});")],
+    [1, 2, 3],
+  );
+  assert.deepEqual([...findStyleObjectLines("Object.assign(mystyle, { scale: 1 });")], []);
 });
 
 // As a page pulses a part, with the call above what a hunk shows of its keyframes.
@@ -1318,8 +1323,11 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     "  style.zIndex = 5;",
     '  style.touchAction = "none";',
     '  style.position = "absolute";',
-    '  holder.position = "fixed";',
     "  part.style.zIndex ||= 5;",
+    "  style[key] = value;",
+    '  part.style.removeProperty("z-index");',
+    "  style.removeProperty(property);",
+    '  part.removeAttribute("style");',
     '  part.style = "z-index: 2";',
     '  part.setAttribute("style", "z-index: 2");',
     "  part.setAttribute('style', `position: ${place}`);",
@@ -1355,6 +1363,14 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     "  if (part.style.zIndex >= 2) return;",
     '  const cell = document.createElement("div");',
     "  item.position = 3;",
+    "  item.position = index;",
+    '  holder.position = "fixed";',
+    "  this.container = root;",
+    "  drag.offsetX = event.clientX;",
+    "  view.zoom = 2;",
+    '  options.style = "percent";',
+    '  part.style.removeProperty("color");',
+    '  part.removeAttribute("class");',
   ])
     assert.deepEqual(findReasons(path, [line]), [], line);
   assert.deepEqual(findReasons(path, ["  part.style.zIndex = 5;"]), [
