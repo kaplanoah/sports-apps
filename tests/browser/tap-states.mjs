@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { TAPPABLE } from "../../shared/page/press.js";
 
 /**
  * Waits until no row is pressed, so the tint a test's own tap leaves for a moment after it lets go
@@ -56,9 +57,7 @@ export const listTouchHoverRules = (page) =>
  * @returns {Promise<string[]>}
  */
 export const listTapsOffButtons = (page) =>
-  page.evaluate(() => {
-    const TAPPABLE = "button, a[href], label, summary, select, input, textarea";
-
+  page.evaluate((tappable) => {
     /** @param {Element} element */
     const findMiddle = (element) => {
       const box = element.getBoundingClientRect();
@@ -74,11 +73,11 @@ export const listTapsOffButtons = (page) =>
 
     const spots = new Set();
     for (const element of document.body.querySelectorAll("*")) {
-      if (getComputedStyle(element).cursor !== "pointer" || element.closest(TAPPABLE)) continue;
+      if (getComputedStyle(element).cursor !== "pointer" || element.closest(tappable)) continue;
       const middle = findMiddle(element);
       const landing = middle && document.elementFromPoint(middle.x, middle.y);
-      if (landing && element.contains(landing) && !landing.closest(TAPPABLE))
+      if (landing && element.contains(landing) && !landing.closest(tappable))
         spots.add(describe(element));
     }
     return [...spots];
-  });
+  }, TAPPABLE);
