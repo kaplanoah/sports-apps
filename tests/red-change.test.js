@@ -1126,21 +1126,21 @@ test("an app's manifest is red where it changes how the Home Screen app opens, o
     [[], ['  "orientation": "portrait",']],
     [[], ['  "display_override": ["fullscreen"],']],
     [['  "scope": "./",'], ['  "scope": "./games/",']],
-    [['  "start_url": "./",'], ['  "start_url": "./?from=home",']],
   ])
     assert.deepEqual(
       findManifestChange(before, after),
       [`${manifest} changes how the Home Screen app opens`],
       `${before.join()} to ${after.join()}`,
     );
-  assert.deepEqual(
-    findManifestChange(
-      ['  "display": "standalone",', '  "theme_color": "#000",'],
-      ['  "display": "standalone",', '  "theme_color": "#111",'],
-    ),
-    [],
-    "a manifest's colors",
-  );
+  for (const { key, before, after } of [
+    { key: "theme_color", before: "#000", after: "#111" },
+    { key: "start_url", before: "./", after: "./?from=home" },
+  ])
+    assert.deepEqual(
+      findManifestChange([`  "${key}": "${before}",`], [`  "${key}": "${after}",`]),
+      [],
+      `${key}, which Safari's Home Screen app doesn't open by`,
+    );
   assert.deepEqual(
     findManifestChange(['  "theme_color": "#000",'], ['  "theme_color": "#111"']),
     [`${manifest} changes in a way the gate can't read, so it may change anything`],

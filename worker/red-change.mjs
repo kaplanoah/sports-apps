@@ -145,9 +145,9 @@ const isPageStylesheet = (path) => isPageCode(path) && path.endsWith(".css");
 const isPageMarkup = (path) => /^apps\/[^/]+\/page\/[^/]+\.html$/.test(path);
 const isPageManifest = (path) => /^apps\/[^/]+\/page\/[^/]+\.webmanifest$/.test(path);
 // What a Home Screen app takes from its manifest on how it opens: without the browser's bars,
-// which way it turns, and where it starts and which pages it keeps without the bars, which no CI
-// browser draws.
-const MANIFEST_SCREEN_KEYS = ["display", "display_override", "orientation", "scope", "start_url"];
+// which way it turns, and which pages it keeps without them, which no CI browser draws. Its
+// start_url isn't one, since the Worker leaves it out of the manifest it hands Safari.
+const MANIFEST_SCREEN_KEYS = ["display", "display_override", "orientation", "scope"];
 const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
 
 /** @typedef {{ number: number, text: string }} AddedLine */

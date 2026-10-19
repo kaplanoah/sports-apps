@@ -204,7 +204,7 @@ export default [
   },
   {
     // Callbacks passed to page.evaluate run in the page.
-    files: ["apps/*/tests/browser/*.mjs", "tests/browser/*.mjs"],
+    files: ["apps/*/tests/browser/**/*.mjs", "tests/browser/**/*.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
     rules: {
       // A fixed wait, or one for the network to go quiet, is too short on a slow machine and wasted
