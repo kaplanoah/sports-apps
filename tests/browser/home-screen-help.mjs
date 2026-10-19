@@ -10,7 +10,7 @@ import { listTapsOffButtons } from "./tap-states.mjs";
 import { drag } from "./touch.mjs";
 
 export const WELCOME = "#homeScreenWelcome";
-const SETTINGS = "#settingsDialog";
+export const SETTINGS = "#settingsDialog";
 const HOME_SCREEN_NOTE = /add this site to your home screen/;
 
 /**
@@ -134,21 +134,24 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
  * @returns {Promise<() => Promise<{ welcomeTop: number | null, settings: string }[]>>}
  */
 async function trackWelcomeFrames(page) {
-  await page.evaluate(() => {
-    const welcome = /** @type {HTMLDialogElement} */ (document.getElementById("homeScreenWelcome"));
-    const settings = /** @type {HTMLElement} */ (document.getElementById("settingsDialog"));
-    const frames = /** @type {object[]} */ ([]);
-    const note = () => {
-      const box = settings.getBoundingClientRect();
-      frames.push({
-        welcomeTop: welcome.open ? welcome.getBoundingClientRect().top : null,
-        settings: [box.left, box.top, box.width, box.height].join(" "),
-      });
-      if (/** @type {any} */ (window).trackedFrames === frames) requestAnimationFrame(note);
-    };
-    Object.assign(window, { trackedFrames: frames });
-    requestAnimationFrame(note);
-  });
+  await page.evaluate(
+    ({ welcomeSelector, settingsSelector }) => {
+      const welcome = /** @type {HTMLDialogElement} */ (document.querySelector(welcomeSelector));
+      const settings = /** @type {HTMLElement} */ (document.querySelector(settingsSelector));
+      const frames = /** @type {object[]} */ ([]);
+      const note = () => {
+        const box = settings.getBoundingClientRect();
+        frames.push({
+          welcomeTop: welcome.open ? welcome.getBoundingClientRect().top : null,
+          settings: [box.left, box.top, box.width, box.height].join(" "),
+        });
+        if (/** @type {any} */ (window).trackedFrames === frames) requestAnimationFrame(note);
+      };
+      Object.assign(window, { trackedFrames: frames });
+      requestAnimationFrame(note);
+    },
+    { welcomeSelector: WELCOME, settingsSelector: SETTINGS },
+  );
   return () =>
     page.evaluate(() => {
       const frames = /** @type {any} */ (window).trackedFrames;
@@ -293,13 +296,13 @@ export async function checkCaretBeforeCode({ page, openApp }) {
  */
 async function measureWelcomeCaret(app) {
   await openWelcomeFromHelp(app);
-  return app.page.locator(WELCOME).evaluate((welcome) => {
+  return app.page.locator(WELCOME).evaluate((welcome, settingsSelector) => {
     const style = getComputedStyle(welcome);
     const room = welcome.getBoundingClientRect();
     const close = welcome.querySelector(".welcome-close").getBoundingClientRect();
     const heading = welcome.querySelector(".welcome-title").getBoundingClientRect();
     const settingsClose = document
-      .querySelector("#settingsDialog .sheet-close")
+      .querySelector(`${settingsSelector} .sheet-close`)
       .getBoundingClientRect();
     return {
       overRoom: room.top + parseFloat(style.paddingTop) - close.top,
@@ -307,7 +310,7 @@ async function measureWelcomeCaret(app) {
       besideSettingsCaret: close.left - settingsClose.left,
       overHeading: heading.top - close.bottom,
     };
-  });
+  }, SETTINGS);
 }
 
 /**
