@@ -221,7 +221,8 @@ test("a held red change waits on the phone status, and check holds it whenever m
   const phone = readJob("phone");
   assert.match(
     phone,
-    /needs: gate\n\s+if: \$\{\{ !cancelled\(\) && needs\.gate\.result == 'success' \}\}\n/,
+    /needs: gate\n\s+if: \$\{\{ !cancelled\(\) && needs\.gate\.result == 'success' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository \}\}\n/,
+    "phone runs on every pull request from this repository, whose token can post the status",
   );
   assert.match(phone, /permissions:\n\s+statuses: write\n\s+steps:/);
   assert.doesNotMatch(phone, /actions\/checkout|node /);
@@ -240,7 +241,8 @@ test("a held red change waits on the phone status, and check holds it whenever m
   );
   assert.match(
     check,
-    /\(needs\.gate\.outputs\.held == 'true' && steps\.phone\.outputs\.required != 'true'\)\n\s+run: exit 1/,
+    /\(needs\.gate\.outputs\.held == 'true' && \(steps\.phone\.outputs\.required != 'true' \|\|\n\s+github\.event\.pull_request\.head\.repo\.full_name != github\.repository\)\)\n\s+run: exit 1/,
+    "check holds a red change itself where main's rules don't require phone, or a fork can't post it",
   );
   assert.match(
     check,

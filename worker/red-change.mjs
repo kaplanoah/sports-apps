@@ -70,7 +70,7 @@ const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
 // A property's longhands set it too, as transition-duration and -webkit-mask-image do. A number an
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
 // template ends a declaration with a semicolon or its string's end, unless the object is a
-// style's or an animation's keyframes, which findStyleObjectLines finds.
+// style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find.
 const LAYER_SETTINGS = [
   {
     name: "a CSS declaration",
@@ -110,8 +110,11 @@ const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*
 
 // Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) or
 // Object.assign(style, { ... }) hands a part's style, and in the keyframes
-// <part>.animate([ ... ]) or <part>.animate({ ... }) takes.
-const STYLE_OBJECTS = [/Object\.assign\(\s*(?:[\w$.]+\.)?style\s*,\s*\{/g, /\.animate\(\s*[[{]/g];
+// <part>.animate([ ... ]) or <part>.animate({ ... }) takes, but for a keyframe's own keys, which
+// place it in the animation rather than style the part.
+const STYLE_OBJECT = /Object\.assign\(\s*(?:[\w$.]+\.)?style\s*,\s*\{/g;
+const KEYFRAMES = /\.animate\(\s*[[{]/g;
+const KEYFRAME_TIMING_KEYS = new Set(["offset", "easing", "composite"]);
 // The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
 const KEYFRAMES_NAME = /\.animate\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 const STYLE_KEY = /(?:^|[\s{,])(["']?)(-{0,2}[A-Za-z][\w-]*)\1\s*:(?!:)/g;
@@ -309,17 +312,36 @@ function findNamedKeyframes(text) {
 }
 
 /**
- * The line numbers, from 1, that lie in a style's object or an animation's keyframes, whose keys
- * a hunk's lines can't show as styles when the call sits above them.
+ * Where each bracket opens that ends a match of `pattern`.
+ * @param {string} text
+ * @param {RegExp} pattern global
+ */
+const findOpenings = (text, pattern) =>
+  [...text.matchAll(pattern)].map((match) => (match.index ?? 0) + match[0].length - 1);
+
+/**
+ * The line numbers, from 1, that lie in a style's object, whose keys a hunk's lines can't show as
+ * styles when the call sits above them.
  * @param {string} text a script as the change leaves it
  */
-export function findStyleObjectLines(text) {
-  const opens = [
-    ...STYLE_OBJECTS.flatMap((pattern) =>
-      [...text.matchAll(pattern)].map((match) => (match.index ?? 0) + match[0].length - 1),
-    ),
-    ...findNamedKeyframes(text),
-  ];
+export const findStyleObjectLines = (text) =>
+  listBracketLines(text, findOpenings(text, STYLE_OBJECT));
+
+/**
+ * The line numbers, from 1, that lie in an animation's keyframes, inline or named, whose keys a
+ * hunk's lines can't show as styles when the call sits above them.
+ * @param {string} text a script as the change leaves it
+ */
+export const findKeyframeLines = (text) =>
+  listBracketLines(text, [...findOpenings(text, KEYFRAMES), ...findNamedKeyframes(text)]);
+
+/**
+ * The line numbers, from 1, from each opening bracket to the one that closes it.
+ * @param {string} text
+ * @param {number[]} opens
+ */
+function listBracketLines(text, opens) {
+  /** @type {Set<number>} */
   const lines = new Set();
   for (const open of opens) {
     const last = findLineNumber(text, findClosingBracket(text, open));
@@ -454,9 +476,11 @@ const findStyleSetting = (text, isWatched) =>
  * What a line of a style's object, or of an animation's keyframes, sets by its keys that a
  * page's stylesheet would be red for, or null when it sets nothing that is.
  * @param {string} text
+ * @param {Set<string>} skippedKeys the keys that set no style where the line lies
  */
-function findStyleKey(text) {
+function findStyleKey(text, skippedKeys) {
   for (const match of text.matchAll(STYLE_KEY)) {
+    if (skippedKeys.has(match[2])) continue;
     const property = toKebabCase(match[2]);
     const value = readScriptValue(text.slice((match.index ?? 0) + match[0].length));
     if (isPageLayerDeclaration({ property, value }))
@@ -466,16 +490,32 @@ function findStyleKey(text) {
 }
 
 /**
- * What an added line sets that makes a layer or that a page's stylesheet would be red for, given
- * whether it lies in a style's object.
+ * The lines of a script that lie in a style's object, and those that lie in an animation's
+ * keyframes.
+ * @typedef {{ styleLines: Set<number>, keyframeLines: Set<number> }} StyleObjectLines
+ */
+
+/**
+ * What a line of a style's object or of keyframes sets by its keys, or null for any other line.
  * @param {AddedLine} line
- * @param {Set<number>} styleLines
+ * @param {StyleObjectLines} objectLines
+ */
+function findObjectKeySetting({ number, text }, { styleLines, keyframeLines }) {
+  if (styleLines.has(number)) return findStyleKey(text, new Set());
+  return keyframeLines.has(number) ? findStyleKey(text, KEYFRAME_TIMING_KEYS) : null;
+}
+
+/**
+ * What an added line sets that makes a layer or that a page's stylesheet would be red for, given
+ * whether it lies in a style's object or in keyframes.
+ * @param {AddedLine} line
+ * @param {StyleObjectLines} objectLines
  * @param {(property: string) => boolean} isWatched
  */
-const findAddedSetting = ({ number, text }, styleLines, isWatched) =>
-  findLayerSetting(text) ??
-  findStyleSetting(text, isWatched) ??
-  (styleLines.has(number) ? findStyleKey(text) : null);
+const findAddedSetting = (line, objectLines, isWatched) =>
+  findLayerSetting(line.text) ??
+  findStyleSetting(line.text, isWatched) ??
+  findObjectKeySetting(line, objectLines);
 
 /**
  * What each style attribute a line of markup holds sets that a page's stylesheet would be red
@@ -512,11 +552,15 @@ function findMarkupLayer(text, isWatched) {
  * @param {(property: string) => boolean} isWatched
  */
 function findPageScriptReasons({ path, addedLines }, readPageFile, isWatched) {
-  const styleLines = findStyleObjectLines(readPageFile(path));
+  const script = readPageFile(path);
+  const objectLines = {
+    styleLines: findStyleObjectLines(script),
+    keyframeLines: findKeyframeLines(script),
+  };
   return addedLines.flatMap((line) => {
     if (isComment(line.text)) return [];
     const setting =
-      findAddedSetting(line, styleLines, isWatched) ?? findMarkupLayer(line.text, isWatched);
+      findAddedSetting(line, objectLines, isWatched) ?? findMarkupLayer(line.text, isWatched);
     return setting ? [`${path}:${line.number} adds ${setting}: ${line.text.trim()}`] : [];
   });
 }
@@ -656,8 +700,7 @@ function readStylesheets(files, readPageFile, listStylesheets) {
 }
 
 /**
- * A read that runs only once it's first asked for, and only once, as the page's stylesheets are
- * read only for a change that touches one or sets a custom property in an inline style.
+ * A read that runs only once it's first asked for, and only once.
  * @template T
  * @param {() => T} read
  * @returns {() => T}

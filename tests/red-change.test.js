@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   decideGate,
   findLabeling,
+  findKeyframeLines,
   findRedReasons,
   findStyleObjectLines,
   listPageStylesheets,
@@ -1357,6 +1358,7 @@ const KEYFRAMES_SCRIPT = [
   "}",
   "const SHRINK = [",
   "  { scale: 0.9 },",
+  "  { opacity: 0.6, offset: 0.4, easing: 'ease-in' },",
   "];",
   "const shrink = (part) => part.animate(SHRINK, { duration: 200 });",
   "const sizes = [{ scale: 2 }];",
@@ -1381,9 +1383,10 @@ test("a key of the keyframes a part's animate takes sets that style, a number to
     `${path}:5 adds a style property that sets scale: { scale: 1.1, offset: 0.4 },`,
   ]);
   assert.equal(findLineReasons(12).length, 1, "a keyframe of a named list");
-  for (const quiet of [8, 15])
+  for (const quiet of [8, 13, 16])
     assert.deepEqual(findLineReasons(quiet), [], KEYFRAMES_SCRIPT.split("\n")[quiet - 1]);
-  assert.deepEqual([...findStyleObjectLines(KEYFRAMES_SCRIPT)], [3, 4, 5, 6, 7, 11, 12, 13]);
+  assert.deepEqual([...findKeyframeLines(KEYFRAMES_SCRIPT)], [3, 4, 5, 6, 7, 11, 12, 13, 14]);
+  assert.deepEqual([...findStyleObjectLines(KEYFRAMES_SCRIPT)], []);
 });
 
 test("a page's script lines that only read or name those properties aren't red", () => {
@@ -1523,6 +1526,7 @@ test("a key of a style's object is red where a page's stylesheet would be", () =
     '  position: "relative",',
     "  left: `${left}px`,",
     "  opacity: 0,",
+    "  offset: \"path('M 0 0')\",",
     "});",
   ];
   const reasons = findRedReasons(
@@ -1541,6 +1545,7 @@ test("a key of a style's object is red where a page's stylesheet would be", () =
     `${path}:2 adds a style property that sets pointer-events: pointerEvents: "none",`,
     `${path}:3 adds a style property that sets position: position: "absolute",`,
     `${path}:4 adds a style property that sets z-index: "z-index": 3,`,
+    `${path}:8 adds a style property that sets offset: offset: "path('M 0 0')",`,
   ]);
 });
 

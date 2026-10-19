@@ -823,7 +823,8 @@ Delete it once the app's first PR merges.
   The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
   added by the owner after the PR's last push,
   which main's rules require for a merge, so `check` passes on the PR's tests and review alone,
-  and holds the change itself whenever main's rules don't require that status, which its own step reads from GitHub (`.github/workflows/ci.yml`).
+  and holds the change itself whenever main's rules don't require that status, which its own step reads from GitHub,
+  or the pull request comes from a fork, whose token can't post it (`.github/workflows/ci.yml`).
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     When you ask the owner to add `phone-ok`, link the PR in the same message.

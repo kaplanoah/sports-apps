@@ -101,10 +101,11 @@ jobs:
         run: git diff --text --no-textconv --no-ext-diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"
 
   # The status a held red change waits on, pending until phone-ok, which main's rules require. It
-  # runs none of the pull request's code, since its token can set the status.
+  # runs none of the pull request's code, since its token can set the status. A fork's pull
+  # request gets a token that can't, so it skips this, and check holds its red change itself.
   phone:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.result == 'success' }}
+    if: ${{ !cancelled() && needs.gate.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -1006,7 +1007,8 @@ jobs:
           steps.tested.outputs.tested != 'true' ||
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
           (github.event_name == 'pull_request' && needs.gate.result != 'success') ||
-          (needs.gate.outputs.held == 'true' && steps.phone.outputs.required != 'true')
+          (needs.gate.outputs.held == 'true' && (steps.phone.outputs.required != 'true' ||
+          github.event.pull_request.head.repo.full_name != github.repository))
         run: exit 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: github.event_name == 'pull_request' && needs.gate.outputs.held != 'true'
