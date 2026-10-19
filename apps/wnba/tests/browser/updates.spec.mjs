@@ -375,17 +375,17 @@ test.describe("on a phone, in full motion", () => {
     contextOptions: { reducedMotion: "no-preference" },
   });
 
-  /** @typedef {import("../../../../tests/browser/animations.mjs").Animation} Animation */
-  /** @param {Animation} animation */
+  /** @typedef {import("../../../../tests/browser/animations.mjs").PlayedAnimation} PlayedAnimation */
+  /** @param {PlayedAnimation} animation */
   const isGrowing = ({ classes, first, last }) =>
     classes.includes("updates") &&
     first.height === "0px" &&
     first.marginBottom === "0px" &&
     parseFloat(String(last.height)) > 0;
-  /** @param {Animation} animation */
+  /** @param {PlayedAnimation} animation */
   const isOpening = (animation) => isGrowing(animation) && animation.direction === "normal";
   // The box shrinks away as its opening played backward.
-  /** @param {Animation} animation */
+  /** @param {PlayedAnimation} animation */
   const isClosing = (animation) => isGrowing(animation) && animation.direction === "reverse";
 
   test("on the season tab, after a trip to the standings and back, a tap on an update still opens its game and a tap on the X still closes the box", async ({

@@ -277,13 +277,17 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   await finishTimedAnimations(page);
   await expect(note).toBeEmpty();
   const halfOpen = await pickHeldHalfway("light");
-  await pick(page, looks.dark);
+  const closedFromHalfOpen = await pickHeldHalfway("dark");
   const closing = await readLastEasing();
   expect(closing.direction).toBe("reverse");
   expect(closing.last.height).toBe(halfOpen.height);
   expect(parseFloat(halfOpen.height)).toBeLessThan(parseFloat(full));
   await pick(page, looks.light);
-  expect((await readLastEasing()).last).toMatchObject({ height: full, opacity: "1" });
+  expect(await readLastEasing()).toMatchObject({
+    direction: "normal",
+    first: { height: closedFromHalfOpen.height, opacity: closedFromHalfOpen.opacity },
+    last: { height: full, opacity: "1" },
+  });
   await finishTimedAnimations(page);
   await expect(note).toHaveCSS("height", full);
   await pick(page, looks.dark);

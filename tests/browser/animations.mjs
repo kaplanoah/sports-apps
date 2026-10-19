@@ -54,18 +54,18 @@ export const finishTimedAnimations = (page) =>
 /**
  * An animation the page played over time: the classes of the element it moves, its first and last
  * frames, and the way it plays them.
- * @typedef {{ classes: string[], first: Keyframe, last: Keyframe, direction: string }} Animation
+ * @typedef {{ classes: string[], first: Keyframe, last: Keyframe, direction: string }} PlayedAnimation
  */
 
 /**
  * Keeps a list of each animation the page plays over time from then on, and returns a way to read
  * the list.
  * @param {import("@playwright/test").Page} page
- * @returns {Promise<() => Promise<Animation[]>>}
+ * @returns {Promise<() => Promise<PlayedAnimation[]>>}
  */
 export async function listAnimations(page) {
   await page.addInitScript(() => {
-    /** @type {Animation[]} */
+    /** @type {PlayedAnimation[]} */
     const animations = [];
     Object.assign(window, { animations });
     const animate = Element.prototype.animate;
