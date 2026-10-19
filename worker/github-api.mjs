@@ -5,15 +5,19 @@ const API = "https://api.github.com";
 const REQUEST_TIMEOUT_MS = 10000;
 const PAGE_SIZE = 100;
 
-/** An answer GitHub refused, with the status it answered. */
+/** An answer GitHub refused, with the status it answered and when a used-up limit resets. */
 export class GitHubError extends Error {
   /**
    * @param {number} status
    * @param {string} request
+   * @param {Headers} [headers] the answer's
    */
-  constructor(status, request) {
+  constructor(status, request, headers) {
     super(`GitHub answered ${status} for ${request}`);
     this.status = status;
+    const reset = Number(headers?.get("x-ratelimit-reset"));
+    /** @type {Date | null} */
+    this.resetsAt = reset > 0 ? new Date(reset * 1000) : null;
   }
 }
 
@@ -44,7 +48,7 @@ export function createGitHub({ repository, fetchImpl, env }) {
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!response.ok) throw new GitHubError(response.status, `${method} ${path}`);
+    if (!response.ok) throw new GitHubError(response.status, `${method} ${path}`, response.headers);
     return response.json();
   };
 }
@@ -68,7 +72,7 @@ export function createGraphQL({ fetchImpl, env }) {
       body: JSON.stringify({ query, variables }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!response.ok) throw new GitHubError(response.status, "a GraphQL query");
+    if (!response.ok) throw new GitHubError(response.status, "a GraphQL query", response.headers);
     const answer = await response.json();
     if (answer.errors?.length)
       throw new Error(`GitHub's GraphQL API refused the query: ${answer.errors[0].message}`);

@@ -116,10 +116,15 @@ const readNeeds = (job, workflow = "ci.yml") =>
     .filter(Boolean);
 
 // check is the one job a merge waits on, so a job it doesn't need could fail without stopping
-// one. caches only costs pull requests their cache when it fails.
-test("the check job needs every other job but caches", () => {
-  const others = listJobs().filter((job) => !["check", "caches"].includes(job));
+// one. caches only costs pull requests their cache when it fails. The last read of the whole
+// change runs on every push's review, though it's due only once that review posts nothing, so
+// review, which check needs, judges whether its failure counts.
+test("the check job needs every other job but caches and the last read's areas", () => {
+  const others = listJobs().filter(
+    (job) => !["check", "caches", "review-final-area"].includes(job),
+  );
   assert.deepEqual(readNeeds("check").toSorted(), others.toSorted());
+  assert.ok(readNeeds("review").includes("review-final-area"));
 });
 
 // The config leaves out the WebKit projects wherever WebKit isn't installed, so a job that stopped
@@ -432,7 +437,7 @@ test("no job that runs Claude can write to the pull request", () => {
 });
 
 // The last read of the whole change reads alongside a push's review, and is checked across areas
-// and posted only once that review finished and posted nothing.
+// and posted only once that review finished and posted nothing and each of its own areas finished.
 test("the last read of the whole change reads alongside a push's review, and posts only once that review finished and posted nothing", () => {
   assert.deepEqual(readNeeds("review-final-area"), ["review-plan"]);
   assert.match(
@@ -440,11 +445,11 @@ test("the last read of the whole change reads alongside a push's review, and pos
     /if: \$\{\{ !cancelled\(\) && needs\.review-plan\.outputs\.final-count > 0 \}\}/,
   );
   const due =
-    "needs.review-final-area.result != 'skipped' && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0'";
+    "needs.review-final-area.result == 'success' && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0'";
   assert.ok(readJob("review-final-post").includes(`if: \${{ !cancelled() && ${due} }}`));
   assert.ok(
     readJob("review-final-across").includes(
-      "if: ${{ !cancelled() && needs.review-final-area.result != 'skipped' && needs.review-plan.outputs.final-area-count > 1 && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' }}",
+      "if: ${{ !cancelled() && needs.review-final-area.result == 'success' && needs.review-plan.outputs.final-area-count > 1 && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' }}",
     ),
   );
   for (const job of ["review-final-across", "review-final-post"])

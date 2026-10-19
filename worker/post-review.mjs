@@ -1,11 +1,12 @@
 // Posts what a stage of CI's checkers confirmed or left unsure, so no reviewer or checker holds a
 // token that writes to the pull request: each Important or Unsure finding on the line it's about,
-// a thread of its own, and the stage's Nits and Pre-existing findings together in one comment, a
-// checklist on the first of their files, so a review's smaller findings are one thread to resolve.
+// a thread of its own, and the stage's Nits and Pre-existing findings together in a checklist on
+// the first of their files, one comment unless it would run past GitHub's limit for one, so a
+// review's smaller findings are one thread to resolve.
 // The check across areas names only the repeats to merge, with the words that name each place
 // they show, and what it adds, so no finding a checker kept can drop out of its answer. A finding
 // on a line the diff doesn't show goes on its file, and one on a file the diff doesn't show, or a
-// checklist none of whose files it shows, goes in one comment on the pull request. Each finding
+// checklist none of whose files it shows, goes in a comment on the pull request. Each finding
 // carries a mark, so a finding already posted in any form, as by an earlier try of this step,
 // isn't posted again. A finding counts as posted when this head's review posted it, in this try or
 // an earlier one, and as already on the pull request when an earlier head's review did.
@@ -58,6 +59,8 @@ import {
 const LISTED_WEIGHTS = new Set(["Nit", "Pre-existing"]);
 export const LIST_HEADING =
   "Nits and Pre-existing findings, each to fix, or to answer in a reply on this thread:";
+// GitHub refuses a comment longer than 65,536 characters, so a long list goes in several.
+const LONGEST_COMMENT = 60000;
 
 /**
  * What each area's checker confirmed or left unsure, in area order, each with the ref the check
@@ -216,12 +219,50 @@ const writeBody = (finding, head, shown = finding.body) =>
   `**${finding.weight}** ${shown}\n\n${writeFindingMark(nameFinding(finding), head)}`;
 
 /**
- * A finding as an item of the checklist of a review's Nits, naming where it is, on one line.
+ * A finding as an item of the checklist of a review's Nits, naming where it is, each line after
+ * its first indented to stay in the item, as a code block in it must.
  * @param {Finding} finding
  * @param {string} head
  */
 const writeItem = (finding, head) =>
-  `- [ ] \`${nameSpot(finding)}\`: ${writeBody(finding, head).replace(/\s*\n\s*/g, " ")}`;
+  [
+    `- [ ] \`${nameSpot(finding)}\`: **${finding.weight}** ${finding.body}`,
+    writeFindingMark(nameFinding(finding), head),
+  ]
+    .join("\n")
+    .replaceAll("\n", "\n  ");
+
+/**
+ * A finding as an entry of the comment that lists the findings on files the diff doesn't show.
+ * @param {Finding} finding
+ * @param {string} head
+ */
+const writeOffDiffEntry = (finding, head) =>
+  `- \`${nameSpot(finding)}\`: ${writeBody(finding, head)}`;
+
+/**
+ * Findings in order, gathered under a heading into as few comments as keep each under GitHub's
+ * limit, a finding too long for one alone in its own.
+ * @param {string} heading
+ * @param {Finding[]} findings
+ * @param {(finding: Finding) => string} writeEntry
+ * @returns {{ findings: Finding[], body: string }[]}
+ */
+function splitIntoComments(heading, findings, writeEntry) {
+  /** @type {{ findings: Finding[], body: string }[]} */
+  const comments = [];
+  for (const finding of findings) {
+    const entry = writeEntry(finding);
+    const last = comments.at(-1);
+    if (last && last.body.length + entry.length + 1 <= LONGEST_COMMENT) {
+      last.findings.push(finding);
+      last.body += `\n${entry}`;
+    } else {
+      comments.push({ findings: [finding], body: `${heading}\n\n${entry}` });
+    }
+  }
+  return comments;
+}
 
 /** @param {unknown} error */
 const isRefusedLine = (error) => /** @type {{ status?: number }} */ (error)?.status === 422;
@@ -269,20 +310,36 @@ async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
 }
 
 /**
- * Posts findings as one checklist on the first of their files GitHub takes, and returns false
- * when it takes none.
+ * Posts a comment on the first of these files GitHub takes it on, and returns false when it takes
+ * it on none.
  * @param {CallGitHub} callGitHub
- * @param {{ pullNumber: string, sha: string, findings: Finding[] }} post
+ * @param {{ pullNumber: string, sha: string, paths: Iterable<string>, body: string }} post
  */
-async function postList(callGitHub, { pullNumber, sha, findings }) {
-  const body = [LIST_HEADING, "", ...findings.map((finding) => writeItem(finding, sha))].join("\n");
-  for (const path of new Set(findings.map((finding) => finding.path)))
+async function postOnFirstFile(callGitHub, { pullNumber, sha, paths, body }) {
+  for (const path of paths)
     if (await postOnFile(callGitHub, { pullNumber, sha, path, body })) return true;
   return false;
 }
 
 /**
- * Posts each finding not already on the pull request, the Nits and Pre-existing ones as one
+ * Posts findings as a checklist, in as few comments as GitHub's limit allows, each on the first of
+ * its findings' files GitHub takes, and returns the findings of those it took on none.
+ * @param {CallGitHub} callGitHub
+ * @param {{ pullNumber: string, sha: string, findings: Finding[] }} post
+ */
+async function postLists(callGitHub, { pullNumber, sha, findings }) {
+  /** @type {Finding[]} */
+  const unposted = [];
+  for (const list of splitIntoComments(LIST_HEADING, findings, (each) => writeItem(each, sha))) {
+    const paths = new Set(list.findings.map((finding) => finding.path));
+    const isPosted = await postOnFirstFile(callGitHub, { pullNumber, sha, paths, body: list.body });
+    if (!isPosted) unposted.push(...list.findings);
+  }
+  return unposted;
+}
+
+/**
+ * Posts each finding not already on the pull request, the Nits and Pre-existing ones as a
  * checklist, and returns the weight of each this head's review posted, an earlier try's too, and
  * how many an earlier head's review had posted.
  * @param {CallGitHub} callGitHub
@@ -308,16 +365,12 @@ export async function postFindings(callGitHub, { pullNumber, sha, findings, post
     const isOnDiff = await postOnDiff(callGitHub, { pullNumber, sha, finding });
     if (!isOnDiff) offDiff.push(finding);
   }
-  if (listed.length && !(await postList(callGitHub, { pullNumber, sha, findings: listed })))
-    offDiff.push(...listed);
-  if (offDiff.length) {
-    const body = [
-      OFF_DIFF_HEADING,
-      "",
-      ...offDiff.map((finding) => `- \`${nameSpot(finding)}\`: ${writeBody(finding, sha)}`),
-    ].join("\n");
+  offDiff.push(...(await postLists(callGitHub, { pullNumber, sha, findings: listed })));
+  const offDiffComments = splitIntoComments(OFF_DIFF_HEADING, offDiff, (each) =>
+    writeOffDiffEntry(each, sha),
+  );
+  for (const { body } of offDiffComments)
     await callGitHub(`/issues/${pullNumber}/comments`, { method: "POST", body: { body } });
-  }
   const repeated = findings.filter(isFromEarlierHead);
   return {
     weights: findings

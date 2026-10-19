@@ -17,6 +17,8 @@ export const WEIGHTS = ["Important", UNSURE, "Nit", "Pre-existing"];
 export const OFF_DIFF_HEADING = "Findings on files this pull request doesn't change:";
 const STATE = /<!-- claude-review-state (\{.*?\}) -->/;
 const FINDING_MARK = /<!-- claude-finding ([0-9a-f]{16}) ([0-9a-f]{40}) -->/g;
+// A mark on a line of its own, as each item of a checklist of Nits ends.
+const FINDING_MARK_LINE = new RegExp(String.raw`^[ \t]*${FINDING_MARK.source}[ \t]*(?:\n|$)`, "gm");
 
 /**
  * The review's own summary among a pull request's comments, never anyone else's that starts the
@@ -67,6 +69,7 @@ export const listFindingMarks = (body) =>
  */
 export const removeFindingMarks = (body) =>
   body
+    .replace(FINDING_MARK_LINE, "")
     .replace(FINDING_MARK, "")
     .replace(/[ \t]+$/gm, "")
     .trim();

@@ -308,13 +308,13 @@ test("each Important or Unsure finding goes on its line, or on its file off the 
   );
 });
 
-test("a review's Nits and Pre-existing findings go together in one checklist on the first's file, each item on one line naming its place", async () => {
+test("a review's Nits and Pre-existing findings go together in one checklist on the first's file, each item naming its place and keeping its body whole", async () => {
   const { calls, callGitHub } = fakeGitHub(() => true);
   const important = finding({ weight: "Important", body: "a bug" });
   const nit = finding({
     path: "apps/mlb/page/js/app.js",
     line: 30,
-    body: "a nit,\nsaid over lines",
+    body: "a nit, with code:\n\n```js\na();\n```",
   });
   const old = finding({ weight: "Pre-existing", line: 0, body: "from before" });
   const result = await postFindings(callGitHub, {
@@ -333,8 +333,14 @@ test("a review's Nits and Pre-existing findings go together in one checklist on 
       body: [
         LIST_HEADING,
         "",
-        `- [ ] \`apps/mlb/page/js/app.js:30\`: **Nit** a nit, said over lines ${writeFindingMark(nameFinding(nit), SHA)}`,
-        `- [ ] \`shared/page/sheet.js\`: **Pre-existing** from before ${writeFindingMark(nameFinding(old), SHA)}`,
+        "- [ ] `apps/mlb/page/js/app.js:30`: **Nit** a nit, with code:",
+        "  ",
+        "  ```js",
+        "  a();",
+        "  ```",
+        `  ${writeFindingMark(nameFinding(nit), SHA)}`,
+        "- [ ] `shared/page/sheet.js`: **Pre-existing** from before",
+        `  ${writeFindingMark(nameFinding(old), SHA)}`,
       ].join("\n"),
       commit_id: SHA,
       path: "apps/mlb/page/js/app.js",
@@ -376,6 +382,39 @@ test("the checklist goes on the next of its files when GitHub won't take the fir
     offFiles.calls.at(-1)?.body.body,
     /^Findings on files[^]*\n- `apps\/wnba\/page\/js\/app\.js:12`: \*\*Nit\*\* elsewhere\n[^]*\n- `shared\/page\/sheet\.js:12`: \*\*Nit\*\* on the diff\n/,
   );
+});
+
+test("a checklist or a comment off the pull request's files too long for one comment goes in several, each under GitHub's limit", async () => {
+  const long = (/** @type {number} */ index) => `${index} ${"x".repeat(5000)}`;
+  const nits = Array.from({ length: 25 }, (_, index) =>
+    finding({ line: index + 1, body: long(index) }),
+  );
+  for (const isFileTaken of [true, false]) {
+    const { calls, callGitHub } = fakeGitHub(
+      (body) => body.path === undefined || (isFileTaken && body.subject_type === "file"),
+    );
+    const result = await postFindings(callGitHub, {
+      pullNumber: "7",
+      sha: SHA,
+      findings: nits,
+      posted: new Map(),
+    });
+    assert.equal(result.weights.length, 25);
+    const taken = calls.filter((call) => call.isTaken);
+    assert.equal(taken.length, 3, String(isFileTaken));
+    assert.ok(taken.every(({ body }) => body.body.length < 65536));
+    const heading = isFileTaken ? LIST_HEADING : OFF_DIFF_HEADING;
+    assert.ok(taken.every(({ body }) => body.body.startsWith(`${heading}\n\n`)));
+    assert.deepEqual(
+      [
+        ...taken
+          .map(({ body }) => body.body)
+          .join("")
+          .matchAll(/(\d+) x{5000}/g),
+      ].map(([, index]) => Number(index)),
+      nits.map((_, index) => index),
+    );
+  }
 });
 
 test("a finding that names no line goes on its file without one, or off the pull request's files by its file alone", async () => {
@@ -577,7 +616,8 @@ test("a finding already posted in any form isn't posted again, and counts as new
     calls.map((call) => call.body.body.split("\n").slice(2)),
     [
       [
-        `- [ ] \`shared/page/sheet.js:12\`: **Nit** new ${writeFindingMark(nameFinding(fresh), SHA)}`,
+        "- [ ] `shared/page/sheet.js:12`: **Nit** new",
+        `  ${writeFindingMark(nameFinding(fresh), SHA)}`,
       ],
     ],
   );

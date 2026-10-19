@@ -21,6 +21,22 @@ test("a refused REST request says GitHub's status, which a caller can tell apart
   assert.match(error.message, /GitHub answered 422 for POST \/pulls\/7\/comments/);
 });
 
+test("a refusal says when the limit it ran into resets, or nothing when GitHub doesn't say", async () => {
+  /** @param {Record<string, string>} headers */
+  const refuseWith = (headers) =>
+    createGitHub({
+      repository: "o/r",
+      fetchImpl: async () => new Response("{}", { status: 403, headers }),
+      env,
+    })("/pulls/7").catch((/** @type {unknown} */ caught) => caught);
+  const limited = await refuseWith({ "x-ratelimit-reset": "1700000000" });
+  assert.ok(limited instanceof GitHubError);
+  assert.equal(limited.resetsAt?.toISOString(), "2023-11-14T22:13:20.000Z");
+  const unsaid = await refuseWith({});
+  assert.ok(unsaid instanceof GitHubError);
+  assert.equal(unsaid.resetsAt, null);
+});
+
 test("a REST request is signed with the token when there is one, and goes unsigned without one", async () => {
   /** @type {any[]} */
   const requests = [];

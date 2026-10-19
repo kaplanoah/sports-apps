@@ -50,6 +50,34 @@ test("every thread is read, page after page, until GitHub says there are no more
   );
 });
 
+test("a thread past the comments read keeps its first, which holds what it raised, and a short one holds each once", async () => {
+  const comment = (/** @type {string} */ body) => ({ author: { login: "kaplanoah" }, body });
+  const root = comment("the checklist");
+  const last = Array.from({ length: 49 }, (_, index) => comment(`reply ${index + 12}`));
+  const short = [root, comment("reply 1")];
+  /** @type {string[]} */
+  const queries = [];
+  const callGraphQL = async (/** @type {string} */ query) => {
+    queries.push(query);
+    const nodes = [
+      { ...thread({}), first: { nodes: [root] }, comments: { totalCount: 60, nodes: last } },
+      { ...thread({}), first: { nodes: [root] }, comments: { totalCount: 2, nodes: short } },
+    ];
+    return {
+      repository: {
+        pullRequest: {
+          reviewThreads: { nodes, pageInfo: { hasNextPage: false, endCursor: null } },
+        },
+      },
+    };
+  };
+  const [long, brief] = await readThreads(callGraphQL, { owner: "o", name: "n", number: 7 });
+  assert.match(queries[0], /first: comments\(first: 1\)/);
+  assert.deepEqual(long.comments.nodes, [root, ...last]);
+  assert.deepEqual(brief.comments.nodes, short);
+  assert.ok(!("first" in long));
+});
+
 test("the context names each thread's place and state, with every reply, under the description", () => {
   const page = renderContext({
     title: "fix: Hold the sheet's title",
