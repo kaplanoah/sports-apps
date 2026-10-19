@@ -72,6 +72,23 @@ test("standings open on each league's playoff field, and every table lines up", 
   expect(new Set(await readHeights("#standingsWrap .div-title")).size).toBe(1);
 });
 
+test("on a wide screen, every column of the standings shows inside its table", async ({ page }) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const tables = page.locator("#standingsWrap table.st");
+  await expect(tables).toHaveCount(8);
+
+  const cellsPastTheirTable = await tables.evaluateAll((all) =>
+    all.flatMap((table) => {
+      const right = table.closest(".st-scroll").getBoundingClientRect().right;
+      return [...table.querySelectorAll("th, td")]
+        .filter((cell) => cell.getBoundingClientRect().right > right + 0.5)
+        .map((cell) => cell.textContent.trim());
+    }),
+  );
+  expect(cellsPastTheirTable).toEqual([]);
+});
+
 test("the standings show each club's game under way, and a delay in gold", async ({ page }) => {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   const delayedGame = snapshot.slate.today.games.find((game) => game.home === "BOS");
