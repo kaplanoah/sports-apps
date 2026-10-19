@@ -2,6 +2,7 @@
 // standings and the bracket moves them.
 
 import { expect } from "@playwright/test";
+import { findSeasonPart } from "./season-scroll.mjs";
 
 /**
  * @typedef {object} DotsFrame
@@ -38,11 +39,8 @@ export const readRoundDotsLift = (page) =>
  * @returns {Promise<() => Promise<DotsFrame[]>>}
  */
 export async function trackRoundDots(page) {
-  await page.evaluate(() => {
+  await findSeasonPart(page, "bracket").evaluate((part) => {
     const dots = /** @type {HTMLElement} */ (document.querySelector("#bracketWrap .round-dots"));
-    const part = /** @type {HTMLElement} */ (
-      document.querySelector('#bracketStandingsParts > [data-part="bracket"]')
-    );
     const noted = /** @type {DotsFrame[]} */ ([]);
     const note = () => {
       const box = dots.getBoundingClientRect();

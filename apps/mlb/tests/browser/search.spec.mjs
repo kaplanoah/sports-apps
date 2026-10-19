@@ -14,6 +14,7 @@ import { listTextOffRoles, measureFieldFace } from "../../../../tests/browser/ty
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { readSeasonPartScroll } from "../../../../tests/browser/season-scroll.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 // Search, the round button beside the tab bar, over MLB's whole 2026 season and its players, on a
@@ -440,7 +441,7 @@ test("standings words find the playoff fields and each league's divisions, and a
   await findRows(page).filter({ hasText: "Playoffs" }).tap();
 
   await expect(page.locator("#standingsWrap")).toBeVisible();
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(0);
 });
 
 test("a club's matchup finds its next game, marked with a baseball, and its row opens that game's sheet on its Matchup", async ({

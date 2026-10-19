@@ -7,11 +7,13 @@ import {
 } from "./bracket.js";
 import { listRankedOrder, renderRankTag, renderClub } from "./clubs.js";
 import { readGameDay } from "./dates.js";
+import { measureTopAtRest, observeRoomForPart } from "#shared/bracket-standings.js";
 import { formatClockTime, formatShortDate, formatShortWeekday, nameDay } from "#shared/days.js";
 import { describeInning, renderOutLights } from "./games-view.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { findOpeningRound, watchOpeningRound } from "#shared/opening-round.js";
 import { markScrolledRound, renderRoundDots } from "#shared/round-dots.js";
+import { findPartHolding } from "#shared/season-part.js";
 import { session } from "./session.js";
 
 const renderSeriesWins = (wins, isWinner = false) =>
@@ -61,8 +63,8 @@ const STACKED = {
   noteHeight: 22,
   lineHeight: 19,
   // Room above the tab bar for the round dots, which chrome.css pins there, and a gap above them.
-  // It matches what --tab-bar-clearance in chrome.css adds to the bar, so a bracket that fills the
-  // screen leaves the page nothing to scroll.
+  // It matches what --view-end-room in chrome.css leaves past the bar on a phone, so a bracket that
+  // fills the screen ends where its part's room does.
   tabBarClearance: 24,
   minGrowth: 0.5,
   maxGrowth: 3,
@@ -272,12 +274,18 @@ const isShown = (element) => element.getClientRects().length > 0;
 let renderedGrowth = 0;
 let renderedFits = false;
 
-// A floating tab bar's transform is left out, since the bar stretches while it moves.
-function findSpaceBottom() {
+// Where the bracket's space ends with the page at its top, so its spaces hold however far the page
+// is scrolled. A floating tab bar's transform is left out, since the bar stretches while it moves.
+/** @param {HTMLElement} part the bracket's part, which scrolls on its own (pager.css) */
+function findSpaceBottom(part) {
   const tabBar = document.getElementById("tabBar");
   const tabBarStyle = getComputedStyle(tabBar);
   if (tabBarStyle.position !== "fixed")
-    return innerHeight - parseFloat(getComputedStyle(document.body).paddingBottom);
+    return (
+      part.getBoundingClientRect().bottom +
+      scrollY -
+      parseFloat(getComputedStyle(part).paddingBottom)
+    );
   const tabBarTop = innerHeight - parseFloat(tabBarStyle.bottom) - tabBar.offsetHeight;
   return tabBarTop - STACKED.tabBarClearance;
 }
@@ -293,9 +301,9 @@ const solveGrowth = (room) =>
 // Solves the stage's height, the sized spaces plus the lines and rows, for the space it has.
 function measureGrowth(wrap) {
   if (!isShown(wrap)) return renderedGrowth || 1;
-  const top = wrap.getBoundingClientRect().top + scrollY;
+  const part = findPartHolding(wrap);
   const fixedHeight = 2 * STACKED.lineHeight + 4 * SERIES_HEIGHT;
-  const growth = solveGrowth(findSpaceBottom() - top - fixedHeight);
+  const growth = solveGrowth(findSpaceBottom(part) - measureTopAtRest(wrap) - fixedHeight);
   const bounded = Math.min(STACKED.maxGrowth, Math.max(STACKED.minGrowth, growth));
   return Math.floor(bounded * 100) / 100;
 }
@@ -460,9 +468,10 @@ export function watchBracketSpace() {
   addEventListener("resize", redrawIfResized);
   wrap.addEventListener("scroll", markRoundScrolledTo, { capture: true, passive: true });
   new ResizeObserver(markRoundScrolledTo).observe(wrap);
-  // A redraw resizes the body, so it waits a frame rather than loop the observer, and only while
-  // the bracket shows.
-  new ResizeObserver(() => {
+  // It waits a frame, as a redraw can change the part's own layout, and only while the bracket
+  // shows.
+  const resizes = new ResizeObserver(() => {
     if (isShown(wrap)) requestAnimationFrame(redrawIfResized);
-  }).observe(document.body);
+  });
+  observeRoomForPart(resizes, wrap);
 }

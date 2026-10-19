@@ -150,6 +150,7 @@ export default [
       "shared/page/draw-home-screen-asks.js",
       "shared/page/open-last-tab.js",
       "shared/page/pick-theme.js",
+      "shared/page/season-header.js",
       "shared/page/show-last-drawn.js",
       "shared/page/slow-load.js",
     ],
