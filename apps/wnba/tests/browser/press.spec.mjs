@@ -74,15 +74,57 @@ test("a finger that starts a scroll on a row never tints it", async ({ page }) =
 });
 
 /**
- * Clicks a team's button in the standings, as iOS can after a finger left it, and says whether
- * the team's sheet opened.
+ * Clicks a button, as iOS can after a finger left it, and says whether the sheet opened.
  * @param {import("@playwright/test").Locator} button
+ * @param {string} sheetId
  */
-const clickAndReadSheetOpen = (button) =>
-  button.evaluate((element) => {
+const clickAndReadSheetOpen = (button, sheetId) =>
+  button.evaluate((element, id) => {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    return document.querySelector("dialog[open] #teamSheet:not([hidden])") !== null;
-  });
+    return document.querySelector(`dialog[open] #${id}:not([hidden])`) !== null;
+  }, sheetId);
+
+/**
+ * Sends a finger's pointer on a button as the browser does: down at its middle, each move down
+ * the screen by `moves`, then up, or cancelled once the browser takes the touch for a scroll, and
+ * the touch's end.
+ * @param {import("@playwright/test").Locator} button
+ * @param {{ moves: number[], isCancelled?: boolean }} finger
+ */
+const sendFinger = (button, { moves, isCancelled = false }) =>
+  button.evaluate(
+    (element, finger) => {
+      const box = element.getBoundingClientRect();
+      /**
+       * @param {string} type
+       * @param {number} down
+       */
+      const send = (type, down) =>
+        element.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            pointerType: "touch",
+            isPrimary: true,
+            clientX: box.left + box.width / 2,
+            clientY: box.top + box.height / 2 + down,
+          }),
+        );
+      send("pointerdown", 0);
+      for (const down of finger.moves) send("pointermove", down);
+      send(finger.isCancelled ? "pointercancel" : "pointerup", finger.moves.at(-1) ?? 0);
+      element.dispatchEvent(new TouchEvent("touchend", { bubbles: true }));
+    },
+    { moves, isCancelled },
+  );
+
+/** @param {import("@playwright/test").Page} page */
+async function openStandings(page) {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const button = page.locator('#standings-league tr[data-team="LVA"] .team-open');
+  await expect(button).toBeAttached();
+  return button;
+}
 
 test("a finger that drags a team's row in the standings never opens the team, even when iOS still sends the tap", async ({
   page,
@@ -96,7 +138,69 @@ test("a finger that drags a team's row in the standings never opens the team, ev
     await drag(page, await findMiddle(row), { y: -30 })
   )();
 
-  expect(await clickAndReadSheetOpen(row.locator(".team-open"))).toBe(false);
+  expect(await clickAndReadSheetOpen(row.locator(".team-open"), "teamSheet")).toBe(false);
+});
+
+test("a finger the browser takes for a scroll before it drifts never opens the team", async ({
+  page,
+}) => {
+  const button = await openStandings(page);
+
+  await sendFinger(button, { moves: [4], isCancelled: true });
+
+  expect(await clickAndReadSheetOpen(button, "teamSheet")).toBe(false);
+});
+
+test("a finger that drifts past 10px never opens a team, even one the click lands on beside it", async ({
+  page,
+}) => {
+  const button = await openStandings(page);
+
+  await sendFinger(button, { moves: [6, 12] });
+
+  const beside = page
+    .locator('#standings-league tr[data-team]:not([data-team="LVA"]) .team-open')
+    .first();
+  expect(await clickAndReadSheetOpen(beside, "teamSheet")).toBe(false);
+});
+
+test("a second finger landing after the first drifted doesn't let the first one's click through", async ({
+  page,
+}) => {
+  const button = await openStandings(page);
+  await sendFinger(button, { moves: [12] });
+
+  await button.evaluate((element) =>
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch", isPrimary: false }),
+    ),
+  );
+
+  expect(await clickAndReadSheetOpen(button, "teamSheet")).toBe(false);
+});
+
+test("a click a second after a finger drifted, like a screen reader's, still opens the team", async ({
+  page,
+}) => {
+  const button = await openStandings(page);
+  await sendFinger(button, { moves: [12] });
+
+  await page.clock.runFor(1000);
+
+  expect(await clickAndReadSheetOpen(button, "teamSheet")).toBe(true);
+});
+
+test("a finger that drifts on a player's name in a roster never opens her", async ({ page }) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+  await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
+  const name = page.locator("#rosterSection .player-open").first();
+  await expect(name).toBeVisible();
+
+  await sendFinger(name, { moves: [12] });
+
+  expect(await clickAndReadSheetOpen(name, "playerSheet")).toBe(false);
 });
 
 test("a still tap on a team's row in the standings opens the team, and Enter after a drag does too", async ({
