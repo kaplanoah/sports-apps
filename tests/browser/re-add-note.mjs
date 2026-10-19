@@ -171,6 +171,8 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
   await pick(page, looks.light);
   const note = findNote(page);
   await expect(note).toHaveText(NOTE_WORDS);
+  const readHeight = () => note.evaluate((element) => element.getBoundingClientRect().height);
+  const height = await readHeight();
   const release = await holdRequests(page, matchPath("/js/app.js"));
 
   await page.reload({ waitUntil: "commit" });
@@ -178,7 +180,12 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
   await expect(page.locator("#settingsDialog")).toBeVisible();
   await expect(note).toHaveText(NOTE_WORDS);
   expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  expect(await readHeight()).toBe(height);
+
   release();
+  await page.waitForLoadState("domcontentloaded");
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await readHeight()).toBe(height);
 }
 
 /**
