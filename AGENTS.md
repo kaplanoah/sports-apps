@@ -787,11 +787,12 @@ Delete it once the app's first PR merges.
   and any top-level statement it adds or takes out;
   a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another;
   a line a page's other JavaScript adds that sets one of those layer properties or a fixed or sticky `position`;
-  a line an app's `page/*.html` adds or takes out that holds `<link`, `<script`, `<dialog`, `popover`, or `style=`,
-  or any change to its inline scripts, which run in the order the page holds them;
+  a line an app's `page/*.html` adds or takes out that holds `<script`, `<dialog`, `popover`, or `style=`,
+  or any change to the stylesheets it links, whose order sets the cascade, but not its other links, like a preload or an icon,
+  or to its inline scripts, which run in the order the page holds them;
   and a diff the gate can't read.
   In a stylesheet, a declaration that reads a custom property counts as if it held any value,
-  and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background-color`,
+  and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,
   `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
   so `none`, `all`, one that names none, or a keyword like `inherit` counts.
   A script, stylesheet, or page the gate can't read is red.

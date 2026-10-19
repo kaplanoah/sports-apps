@@ -99,10 +99,15 @@ const STYLE_KEY = new RegExp(
   `(?:^|[\\s{,])["']?(?:-webkit-|webkit|Webkit)?(${PROPERTY_NAMES}|${CAMEL_PROPERTY_NAMES})(?:-[a-z]+|[A-Z][a-z]+)*["']?\\s*:`,
 );
 
-// A line of a page's markup that loads or runs its files, in their order, or opens a dialog, a
-// popover, or a style of its own, each of which can stack its parts.
-const PAGE_MARKUP_LAYER = /<link\b|<script\b|<dialog\b|\bpopover\b|\bstyle=/i;
+// A line of a page's markup that runs its scripts, in their order, or opens a dialog, a popover,
+// or a style of its own, each of which can stack its parts.
+const PAGE_MARKUP_LAYER = /<script\b|<dialog\b|\bpopover\b|\bstyle=/i;
 const INLINE_SCRIPT = /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi;
+// A link, its attributes on as many lines as it takes, and whether it links a stylesheet, whose
+// order sets the cascade, rather than a preload or an icon, which sets nothing.
+const LINK_TAG = /<link\b[^>]*>/gi;
+const STYLESHEET_REL =
+  /\brel\s*=\s*(?:"[^"]*\bstylesheet\b[^"]*"|'[^']*\bstylesheet\b[^']*'|stylesheet\b)/i;
 const DIFF_HEADER = /^diff --git a\/(.+) b\/(.+)$/;
 
 // Tests live outside every page's folder, so they're never red.
@@ -350,9 +355,18 @@ function findPageScriptReasons({ path, addedLines }, readPageFile) {
 const listInlineScripts = (markup) => markup.match(INLINE_SCRIPT) ?? [];
 
 /**
- * Why a change to a page's markup is red: each line it adds or takes out that loads or runs the
- * page's files, whose order it decides too, or opens a dialog, a popover, or a style of its own,
- * and any change to what its inline scripts run.
+ * The stylesheets a page's markup links, each link's attributes on one line, in its order.
+ * @param {string} markup
+ */
+const listStylesheetLinks = (markup) =>
+  (markup.match(LINK_TAG) ?? [])
+    .filter((link) => STYLESHEET_REL.test(link))
+    .map((link) => link.replace(/\s+/g, " "));
+
+/**
+ * Why a change to a page's markup is red: each line it adds or takes out that runs the page's
+ * scripts, whose order it decides too, or opens a dialog, a popover, or a style of its own, and
+ * any change to the stylesheets it links, their order too, or to what its inline scripts run.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  */
@@ -362,15 +376,18 @@ function findPageMarkupReasons(file, readPageFile) {
     .filter(({ kind, text }) => kind !== "kept" && PAGE_MARKUP_LAYER.test(text))
     .map(
       ({ kind, text }) =>
-        `${file.path} ${kind === "added" ? "adds" : "takes out"} a line that loads, runs, or layers the page: ${text.trim()}`,
+        `${file.path} ${kind === "added" ? "adds" : "takes out"} a line that runs or layers the page: ${text.trim()}`,
     );
   const after = readPageFile(file.path);
   const before = readFileBefore(after, file);
   if (before === null) return [...lineReasons, describeUnreadable(file.path)];
-  const isScriptKept = listInlineScripts(before).join("\n") === listInlineScripts(after).join("\n");
-  return isScriptKept
-    ? lineReasons
-    : [...lineReasons, `${file.path} changes what its inline scripts run`];
+  /** @param {(markup: string) => string[]} listParts */
+  const isKept = (listParts) => listParts(before).join("\n") === listParts(after).join("\n");
+  return [
+    ...lineReasons,
+    ...(isKept(listStylesheetLinks) ? [] : [`${file.path} changes the stylesheets it links`]),
+    ...(isKept(listInlineScripts) ? [] : [`${file.path} changes what its inline scripts run`]),
+  ];
 }
 
 /**

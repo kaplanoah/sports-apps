@@ -55,7 +55,7 @@ const SCROLLING_OVERFLOW = /^overflow(?:-x|-y|-inline|-block|-scrolling)?$/;
 
 // The properties a transition can ease that only repaint a part, never layer or move it.
 const PAINT_ONLY_PROPERTY =
-  /^(?:color|background-color|border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?-color|outline-color|box-shadow|text-decoration-color|fill|stroke|caret-color)$/;
+  /^(?:color|background|background-color|border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?-color|outline-color|box-shadow|text-decoration-color|fill|stroke|caret-color)$/;
 // What a transition's list holds beside the property it eases: its times, its easing, and how it
 // treats a property that can't ease.
 const TRANSITION_TIMING =

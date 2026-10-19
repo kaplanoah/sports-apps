@@ -501,11 +501,12 @@ test("a transition is red unless every property it eases only repaints a part", 
       "  transition: fill 0.2s, stroke 0.2s;",
       "  -webkit-transition: color 0.2s;",
       "  transition-property: color, background-color;",
+      "  transition: background 0.15s;",
+      "  transition: background 0.15s, box-shadow 0.15s;",
     ],
     { count: 0 },
   );
   assertRedInEach([
-    "  transition: background 0.15s;",
     "  transition: opacity 0.2s;",
     "  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);",
     "  transition: -webkit-transform 0.3s;",
@@ -729,16 +730,42 @@ test("a stylesheet the gate can't read is red and says so, and beside one, any c
 
 const INDEX_HTML = "apps/wnba/page/index.html";
 
-test("a page's markup is red where it adds or takes out a line that loads or runs its files, or opens a dialog, a popover, or a style of its own", () => {
+test("a page's markup is red where it changes the stylesheets it links or their order, but not its other links", () => {
   const head = [
     '  <link rel="stylesheet" href="shared/sheet.css" />',
     '  <link rel="stylesheet" href="styles.css" />',
   ];
-  assert.notDeepEqual(
+  assert.deepEqual(
     findChangeReasons({ [INDEX_HTML]: { before: head, after: head.toReversed() } }),
-    [],
+    [`${INDEX_HTML} changes the stylesheets it links`],
     "the app's styles moved above a shared stylesheet",
   );
+  for (const link of [
+    ['  <link href="extra.css" rel="stylesheet" />'],
+    ["  <link rel='stylesheet' href='extra.css'>"],
+    ["  <link rel=stylesheet href=extra.css>"],
+    ["  <link", '    href="extra.css"', '    rel="alternate stylesheet"', "  />"],
+  ])
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: head, after: [...head, ...link] } }),
+      [`${INDEX_HTML} changes the stylesheets it links`],
+      link.join("\n"),
+    );
+  for (const link of [
+    [
+      '  <link rel="preload" href="fonts/barlow-400.woff2" as="font" type="font/woff2" crossorigin />',
+    ],
+    ['  <link rel="icon" href="icon.svg" type="image/svg+xml" />'],
+    ["  <link", '    rel="preload"', '    href="fonts/barlow-500.woff2"', "  />"],
+  ])
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: head, after: [...head, ...link] } }),
+      [],
+      link.join("\n"),
+    );
+});
+
+test("a page's markup is red where it adds or takes out a line that runs its scripts, or opens a dialog, a popover, or a style of its own", () => {
   for (const line of [
     '  <script src="shared/slow-load.js"></script>',
     '  <dialog id="settings" class="sheet">',
