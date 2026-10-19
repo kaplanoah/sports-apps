@@ -10,8 +10,7 @@ import { drag } from "./touch.mjs";
 
 const WELCOME = "#homeScreenWelcome";
 const SETTINGS = "#settingsDialog";
-const HOME_SCREEN_NOTE =
-  "Apple only supports notifications from sites saved to your home screen. To configure notifications, add this site to your home screen.";
+const HOME_SCREEN_NOTE = /add this site to your home screen/;
 
 /**
  * @typedef {{
@@ -21,7 +20,7 @@ const HOME_SCREEN_NOTE =
  * }} App
  */
 
-// Safari has no push outside the Home Screen, nor does a browser that can't show notifications.
+// Safari has no push outside the Home Screen.
 /** @param {import("@playwright/test").Page} page */
 const takeAwayPush = (page) =>
   page.addInitScript(() => {

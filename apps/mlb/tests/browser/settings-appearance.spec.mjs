@@ -178,4 +178,17 @@ test.describe("on an iPhone's Home Screen app, which has no Home Screen box", ()
     const gaps = rowEdges.slice(1).map((row, index) => row.top - rowEdges[index].bottom);
     expect(gaps).toEqual([0, 0]);
   });
+
+  test("the first setting sits 38px under the settings title", async ({ page }) => {
+    await openFromHomeScreen(page);
+    await openApp(page);
+    await openSettings(page);
+    await expect(page.locator("#homeScreenTip")).toBeHidden();
+    const [title, controls] = await Promise.all(
+      ["#settingsTitle", "#settingsDialog .settings-main > .settings-controls"].map((selector) =>
+        page.locator(selector).evaluate((part) => part.getBoundingClientRect().toJSON()),
+      ),
+    );
+    expect(Math.round(controls.top - title.bottom)).toBe(38);
+  });
 });
