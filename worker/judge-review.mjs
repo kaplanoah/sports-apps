@@ -2,7 +2,8 @@
 // rather than what it says it read, gathers each area's candidates for its checker, and keeps one
 // summary comment on the pull request up to date. A reviewer has read a diff part once a Read of
 // it returned every line, so a part it never opened, or opened only in part, is named for its
-// retry and, still unread then, fails the review (plan-review.mjs writes the parts).
+// retry and, still unread then, fails the review, as does a rule file its area calls for
+// (plan-review.mjs writes the parts and the rule files' copies).
 // A reviewer that gave no answer, as one that ran out of turns, is tried again too, and a checker
 // that left any of its reviewers' cases unnamed hasn't finished.
 // Usage, after each try of a reviewer: node worker/judge-review.mjs find <folder> <stage> <area>
@@ -185,7 +186,7 @@ export function recordFindTry(folder, { stage, area, kind }, env) {
   const plan = readJson(join(folder, "plan.json"));
   const planned = listStageAreas(plan, stage).find((entry) => entry.area === area);
   if (!planned) throw new Error(`The plan's ${stage} stage has no area ${area}.`);
-  const parts = Object.values(planned.partsByFile).flat();
+  const parts = [...Object.values(planned.partsByFile).flat(), ...planned.rules];
   const recordPath = join(folder, nameFindRecord(stage, area, kind));
   const record = existsSync(recordPath) ? readJson(recordPath) : { stage, area, kind, tries: [] };
   record.tries.push({
@@ -317,19 +318,23 @@ export function keepCheck(folder, { stage, area }, structuredOutput) {
 }
 
 /**
- * The files an area's reviewers left unread, and the reviewers and checker that didn't finish.
+ * The files an area's reviewers left unread, and the reviewers and checker that didn't finish,
+ * a reviewer that left a rule file unread among them.
  * @param {string} stage
  * @param {PlannedArea} area
  * @param {Map<string, any>} records
  */
-function judgeArea(stage, { area, name, files, partsByFile }, records) {
+function judgeArea(stage, { area, name, files, partsByFile, rules }, records) {
   /** @type {string[]} */
   const unreadFiles = [];
   /** @type {string[]} */
   const missing = [];
   for (const { kind, role } of listStageKinds(stage)) {
     const record = records.get(nameFindRecord(stage, area, kind));
+    const unreadRules = record ? rules.filter((rule) => record.unread.includes(rule)) : [];
     if (!record || !record.isAnswered) missing.push(`the ${role} of ${name}`);
+    else if (unreadRules.length)
+      missing.push(`the ${role} of ${name}, which left ${unreadRules.join(", ")} unread`);
     unreadFiles.push(
       ...files.filter(
         (path) => !record || partsByFile[path].some((part) => record.unread.includes(part)),

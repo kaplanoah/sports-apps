@@ -49,7 +49,10 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/report-flaky-tests.mjs",
     "worker/review-context.mjs",
     "worker/review-state.mjs",
+    "worker/rule-files.mjs",
     "worker/set-app-key.mjs",
+    ".claude/rules/page-look.md",
+    ".claude/skills/add-league/SKILL.md",
   ]);
   assert.equal(decision.isNeeded, false);
   assert.match(

@@ -7,7 +7,8 @@
 // merge of the base brings in is read by no one, and neither is a run on the head the last full
 // read ended on, as a label's is. A test's recorded data, the lockfile, a binary file, and a
 // drawing or minified library a tool wrote go unread, named in the summary instead.
-// Each file's diff is written in parts a reviewer reads whole, which judge-review.mjs checks.
+// Each file's diff is written in parts a reviewer reads whole, as is each rule file whose paths
+// match a file of its area, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
 // commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,
 // GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints each stage's areas
@@ -20,6 +21,13 @@ import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 import { findSummary, readReviewedHead } from "./review-state.mjs";
+import {
+  RULES_FOLDER,
+  escapePattern,
+  listRulesFor,
+  readRuleFiles,
+  readRulePaths,
+} from "./rule-files.mjs";
 
 const AREA_LINES = 2000;
 // A smaller area shares its reviewers with the other small ones.
@@ -57,7 +65,7 @@ export const KINDS = [
     kind: "rules",
     role: "rules reviewer",
     focus:
-      'REVIEW.md\'s "What to look for" items 2 (One fact, one rule, one place), 3 (Both apps, every place), 8 (Leftovers), 9 (Search), 10 (Docs and comments the change makes wrong), and 11 (Any other rule in AGENTS.md). For each new helper, constant, rule, or wording, search the repo for one that already does the same. Start from `.review/stale-names.md`, which lists the first places that still name each thing the change removed, and search the repo for the rest.',
+      'REVIEW.md\'s "What to look for" items 2 (One fact, one rule, one place), 3 (Both apps, every place), 8 (Leftovers), 9 (Search), 10 (Docs and comments the change makes wrong), and 11 (Any other rule in AGENTS.md or a rule file). For each new helper, constant, rule, or wording, search the repo for one that already does the same. Start from `.review/stale-names.md`, which lists the first places that still name each thing the change removed, and search the repo for the rest.',
   },
   {
     kind: "tests",
@@ -112,7 +120,7 @@ export function nameCodeArea(path) {
   if (app) return `${app[1]} ${app[2] === "page" ? "page" : "Worker"}`;
   if (path.startsWith("shared/page/")) return "shared page";
   if (path.startsWith("shared/worker/")) return "shared Worker";
-  if (/^[^/]+\.md$/.test(path)) return "docs";
+  if (path.endsWith(".md")) return "docs";
   return "tooling";
 }
 
@@ -395,12 +403,6 @@ const MOST_STALE_HITS = 15;
 const HIT_LENGTH = 220;
 
 /**
- * Text made safe to match word for word in a regular expression.
- * @param {string} text
- */
-export const escapePattern = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/**
  * The first places in the repo that still name each function, constant, or file the change
  * removed, a deleted file's places that may name it ahead of those that name only another file
  * of its name.
@@ -564,14 +566,24 @@ const nameParts = (stage, path, partCount) =>
     ? [`${stage}/${path}.diff`]
     : Array.from({ length: partCount }, (_, index) => `${stage}/${path}.part-${index + 1}.diff`);
 
+/** @typedef {{ copy: string, paths: string[] }} RuleCopy a rule file's copy under the folder */
+
+/**
+ * @typedef {object} StageChange
+ * @property {string} numstat
+ * @property {string} diff
+ * @property {string[]} repoFiles
+ * @property {RuleCopy[]} rules
+ */
+
 /**
  * Writes each part of a change's diff for one of the review's stages, and returns its areas with
- * the parts of each file.
+ * the parts of each file and the rule files their files call for.
  * @param {string} folder
  * @param {string} stage
- * @param {{ numstat: string, diff: string, repoFiles: string[] }} change
+ * @param {StageChange} change
  */
-export function writeStage(folder, stage, { numstat, diff, repoFiles }) {
+export function writeStage(folder, stage, { numstat, diff, repoFiles, rules }) {
   const plan = planReview(numstat, repoFiles);
   const diffs = splitDiffByFile(diff);
   const areas = plan.areas.map((area) => {
@@ -589,9 +601,25 @@ export function writeStage(folder, stage, { numstat, diff, repoFiles }) {
       });
       partsByFile[path] = names;
     }
-    return { ...area, partsByFile };
+    return { ...area, partsByFile, rules: listRulesFor(area.files, rules).map(({ copy }) => copy) };
   });
   return { areas, unread: plan.unread };
+}
+
+/**
+ * Writes a copy of each rule file under the folder, for reviewers to read, and returns where each
+ * went with its globs.
+ * @param {string} folder
+ * @param {{ path: string, text: string }[]} rules
+ * @returns {RuleCopy[]}
+ */
+export function writeRuleCopies(folder, rules) {
+  return rules.map(({ path, text }) => {
+    const copy = `rules/${path.slice(RULES_FOLDER.length)}`;
+    mkdirSync(dirname(join(folder, copy)), { recursive: true });
+    writeFileSync(join(folder, copy), text);
+    return { copy, paths: readRulePaths(text) };
+  });
 }
 
 const SHOW_WHOLE_FILE = `\`git diff ${WHOLE_CHANGE.join(" ")} -- <path>\` shows a file's whole change.`;
@@ -604,17 +632,18 @@ const STAGE_WORDS = {
 };
 
 /**
- * The index a reviewer reads first: each area's files with their diff parts, then the files left
- * unread.
+ * The index a reviewer reads first: each area's files with their diff parts and the rule files
+ * they call for, then the files left unread.
  * @param {keyof typeof STAGE_WORDS} words
  * @param {ReturnType<typeof writeStage>} written
  */
 function renderIndex(words, { areas, unread }) {
-  const areaLines = areas.flatMap(({ area, name, files, partsByFile }) => [
+  const areaLines = areas.flatMap(({ area, name, files, partsByFile, rules }) => [
     `## Area ${area}: ${name}`,
     "",
     ...files.map((path) => `- ${path}: ${partsByFile[path].join(", ")}`),
     "",
+    ...(rules.length ? [`Rule files: ${rules.join(", ")}`, ""] : []),
   ]);
   const unreadLines = unread.length
     ? ["## Not read", "", ...unread.map(({ path, why }) => `- ${path}: ${why}`), ""]
@@ -641,26 +670,38 @@ export function listStageKinds(stage) {
   return stage === "final" ? [FINAL_KIND] : [];
 }
 
+// GitHub names a matrix's job by its values, and a skipped one, whose matrix it never reads, by
+// the job alone, so each area holds only the name its job shows, and the job looks up its number.
 /**
  * A stage's matrices: its areas, each of which review-area.yml reviews and then checks on its own,
- * the kinds of reviewer each area has, and how many reviewers that makes.
+ * each area's number by its name, the kinds of reviewer each area has, and how many reviewers that
+ * makes.
  * @param {{ area: number, name: string }[]} areas
  * @param {{ kind: string, focus: string }[]} kinds
  */
-export const listJobs = (areas, kinds) => ({
-  areas: areas.map(({ area, name }) => ({ area, name })),
-  kinds: kinds.map(({ kind, focus }) => ({ kind, focus })),
-  count: areas.length * kinds.length,
-});
+export function listJobs(areas, kinds) {
+  const names = areas.map(({ name }) => name);
+  if (new Set(names).size < names.length)
+    throw new Error(
+      `Two areas share a name, so a job can't look up its area: ${names.join(", ")}.`,
+    );
+  return {
+    areas: names.map((name) => ({ name })),
+    areaNumbers: Object.fromEntries(areas.map(({ area, name }) => [name, area])),
+    kinds: kinds.map(({ kind, focus }) => ({ kind, focus })),
+    count: areas.length * kinds.length,
+  };
+}
 
 /**
  * A stage's matrices as the lines for $GITHUB_OUTPUT, each named after the prefix its jobs read.
  * @param {string} prefix
  * @param {ReturnType<typeof listJobs>} jobs
  */
-export const formatJobOutputs = (prefix, { areas, kinds, count }) =>
+export const formatJobOutputs = (prefix, { areas, areaNumbers, kinds, count }) =>
   [
     `${prefix}areas=${JSON.stringify(areas)}`,
+    `${prefix}area-numbers=${JSON.stringify(areaNumbers)}`,
     `${prefix}area-count=${areas.length}`,
     `${prefix}kinds=${JSON.stringify(kinds)}`,
     `${prefix}count=${count}`,
@@ -670,7 +711,7 @@ export const formatJobOutputs = (prefix, { areas, kinds, count }) =>
  * Writes a stage's diffs and index, and returns its areas and files left unread.
  * @param {string} folder
  * @param {"first" | "push" | "final"} stage
- * @param {{ numstat: string, diff: string, repoFiles: string[] }} change
+ * @param {StageChange} change
  * @param {keyof typeof STAGE_WORDS} [words]
  */
 function writeIndexedStage(folder, stage, change, words = stage) {
@@ -694,7 +735,7 @@ function writeIndexedStage(folder, stage, change, words = stage) {
 
 /**
  * Writes the review's plan, its stages' diffs and indexes, and, for a stage with reviewers, the
- * list of stale names.
+ * list of stale names and a copy of each rule file.
  * @param {string} folder
  * @param {object} review
  * @param {ReturnType<typeof chooseStage>} review.choice
@@ -704,11 +745,16 @@ function writeIndexedStage(folder, stage, change, words = stage) {
  * @param {(range: string[], files?: string[]) => { numstat: string, diff: string }} review.readDiff
  * @param {string[]} review.repoFiles
  * @param {() => { name: string, hits: string[] }[]} review.listStale
+ * @param {{ path: string, text: string }[]} review.rules the rule files as the change leaves them
  */
-export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles, listStale }) {
+export function writeReview(
+  folder,
+  { choice, since, pushed, readDiff, repoFiles, listStale, rules: ruleFiles },
+) {
   mkdirSync(folder, { recursive: true });
-  if (listStageKinds(choice.stage).length)
-    writeFileSync(join(folder, "stale-names.md"), renderStaleNames(listStale()));
+  const hasReviewers = listStageKinds(choice.stage).length > 0;
+  if (hasReviewers) writeFileSync(join(folder, "stale-names.md"), renderStaleNames(listStale()));
+  const rules = hasReviewers ? writeRuleCopies(folder, ruleFiles) : [];
   /** @type {Plan} */
   const plan = {
     stage: choice.stage,
@@ -721,13 +767,14 @@ export function writeReview(folder, { choice, since, pushed, readDiff, repoFiles
   if (choice.stage === "first")
     Object.assign(
       plan,
-      writeIndexedStage(folder, "first", { ...readDiff(WHOLE_CHANGE), repoFiles }),
+      writeIndexedStage(folder, "first", { ...readDiff(WHOLE_CHANGE), repoFiles, rules }),
     );
   if (choice.stage === "push") {
-    const change = { ...readDiff(pushed.range, choice.files), repoFiles };
+    const change = { ...readDiff(pushed.range, choice.files), repoFiles, rules };
     const words = pushed.hasBase ? "push-with-base" : "push";
     Object.assign(plan, writeIndexedStage(folder, "push", change, words));
-    const last = writeIndexedStage(folder, "final", { ...readDiff(WHOLE_CHANGE), repoFiles });
+    const whole = { ...readDiff(WHOLE_CHANGE), repoFiles, rules };
+    const last = writeIndexedStage(folder, "final", whole);
     Object.assign(plan, { final: last.areas, finalUnread: last.unread });
   }
   writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
@@ -859,18 +906,20 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       }),
   });
   const pushed = choice.stage === "push" ? readPushedRange() : null;
+  const repoFiles = runGit(["ls-files"]).split("\n").filter(Boolean);
   const plan = writeReview(folder, {
     choice,
     since: reviewedHead,
     pushed,
     readDiff,
-    repoFiles: runGit(["ls-files"]).split("\n").filter(Boolean),
+    repoFiles,
     listStale: () =>
       listStaleNames(
         readDiff(WHOLE_CHANGE).diff,
         (pattern, isWord) => grepRepo(pattern, isWord, tryGit),
         listDeletedFiles(runGit),
       ),
+    rules: readRuleFiles(repoFiles, (path) => readFileSync(path, "utf8")),
   });
   console.log(`stage=${plan.stage}`);
   console.log(formatJobOutputs("", listJobs(plan.areas, listStageKinds(plan.stage))));
