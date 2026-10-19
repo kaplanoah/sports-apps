@@ -30,8 +30,7 @@ export const nameSeason = (year, { seasonSpansYears }) =>
   seasonSpansYears ? `${year}-${String((year + 1) % 100).padStart(2, "0")}` : String(year);
 
 /** @param {string} word */
-const matchWholeWord = (word) =>
-  new RegExp(`(?<![\\w-])${escapePattern(word)}(?![\\w-])`, "i");
+const matchWholeWord = (word) => new RegExp(`(?<![\\w-])${escapePattern(word)}(?![\\w-])`, "i");
 
 /**
  * Each of a league's never-shown words that a text holds as a whole word, in any case.
