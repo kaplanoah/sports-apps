@@ -912,6 +912,7 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="position: f&#x69;xed">',
     '<div style="position: &#102ixed">',
     "<div style=\"color: ${open ? '{' : 'b'}; z-index: 2\">",
+    "<div style=\"color: ${shut ? '}' : 'b'}; z-index: 2\">",
     '<div style="/* don\'t lift */ color: red; z-index: 2">',
     '<div style="color: red /* ( */; z-index: 2">',
     '<div style="color: red} .other {z-index: 2">',
@@ -920,6 +921,7 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="--team-stat-columns: ${columns}">',
     '<div style="--team-stat-columns: ${isWide && columns}">',
     '<div style="--team-stat-columns: ${count({ wide: 1 })}">',
+    "<div style=\"--team-stat-columns: ${isOpen ? '}' : '1'}\">",
     '<div style="--team: #f60">',
     '<div style="color: var(--ink)">',
     '<div style="position: relative; overflow: visible">',
@@ -974,6 +976,7 @@ test("an inline style in a page's markup or a script's template is red only wher
   );
   for (const [markup, setting] of [
     ['<div style="top: ${top}px; position: ${position}">', "position: ${position}"],
+    ["<div style=\"position: ${x ? '$&' : ''}\">", "position: ${x ? '$&' : ''}"],
     ['<div style="color: red; /* note">', "color: red; /* note"],
   ])
     assert.deepEqual(
@@ -1361,6 +1364,7 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.position = "f\\69xed";',
     '  part.style.setProperty("position", "\\66ixed");',
     '  part.style.cssText = `color: ${a ? "{" : "b"}; z-index: 2`;',
+    '  part.style.cssText = `color: ${a ? "}" : "b"}; z-index: 2`;',
     '  part.style.setProperty("\\u007a-index", "2");',
     '  part.style.cssText = "";',
     '  part.style = "";',

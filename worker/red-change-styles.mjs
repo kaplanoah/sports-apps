@@ -435,8 +435,8 @@ export const isEncoded = (text) => ENCODED_TEXT.test(text);
 const CLOSING_BRACKETS = { "{": "}", "[": "]" };
 
 /**
- * The index of the brace or bracket that closes the one at `open`, or the text's end when none
- * does.
+ * The index of the brace or bracket that closes the one at `open`, past any in a script's
+ * strings, or the text's end when none does.
  * @param {string} text
  * @param {number} open
  */
@@ -444,9 +444,17 @@ export function findClosingBracket(text, open) {
   const opening = text[open];
   const closing = CLOSING_BRACKETS[/** @type {"{" | "["} */ (opening)];
   let depth = 0;
+  let quote = "";
   for (let at = open; at < text.length; at += 1) {
-    if (text[at] === opening) depth += 1;
-    if (text[at] === closing) depth -= 1;
+    const character = text[at];
+    if (quote) {
+      if (character === "\\") at += 1;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (`"'\``.includes(character)) quote = character;
+    else if (character === opening) depth += 1;
+    else if (character === closing) depth -= 1;
     if (depth === 0) return at;
   }
   return text.length;
@@ -458,7 +466,7 @@ export function findClosingBracket(text, open) {
  * @param {string} text
  * @returns {string[] | null}
  */
-export function findTemplateHoles(text) {
+function findTemplateHoles(text) {
   const holes = [];
   for (let start = text.indexOf("${"); start !== -1;) {
     const end = findClosingBracket(text, start + 1);
@@ -470,6 +478,18 @@ export function findTemplateHoles(text) {
 }
 
 /**
+ * Whether text, outside the holes its template fills in, holds what can start an escape or an
+ * entity, as text with a hole that never closes counts too.
+ * @param {string} text
+ */
+export function isEncodedOutsideHoles(text) {
+  const holes = findTemplateHoles(text);
+  return (
+    holes === null || isEncoded(holes.reduce((outside, hole) => outside.replace(hole, ""), text))
+  );
+}
+
+/**
  * The declarations of an inline style as a browser reads them, past its comments and with its
  * strings whole, each hole a template fills in read as a custom property, which can hold any
  * value, or null when it can't be read as one style, as when a brace in it closes the style or a
@@ -478,13 +498,12 @@ export function findTemplateHoles(text) {
  * @returns {Declaration[] | null}
  */
 function readInlineStyle(style) {
-  const holes = findTemplateHoles(style);
-  if (holes === null) return null;
+  if (isEncodedOutsideHoles(style)) return null;
+  const holes = /** @type {string[]} */ (findTemplateHoles(style));
   const filled = holes.reduce(
     (text, hole, index) => text.replace(hole, `var(${HOLE_NAME}${index})`),
     style,
   );
-  if (isEncoded(filled)) return null;
   const items = readStyleSheet(`a{${filled}}`);
   if (items === null) return null;
   if (!items.length) return [];

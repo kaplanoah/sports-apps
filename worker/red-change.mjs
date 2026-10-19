@@ -30,8 +30,8 @@ import {
   findClosingBracket,
   findInlineStyleSettings,
   findStyleReasons,
-  findTemplateHoles,
   isEncoded,
+  isEncodedOutsideHoles,
   isPageLayerDeclaration,
   readMinifiedCode,
 } from "./red-change-styles.mjs";
@@ -337,16 +337,6 @@ function readScriptValue(text) {
   const literal = text.match(SCRIPT_LITERAL);
   const value = literal?.[2] ?? literal?.[3];
   return value === undefined || isEncodedOutsideHoles(value) ? `\${${text.trim()}}` : value;
-}
-
-/**
- * Whether a script's string, outside the holes its template fills in, holds what can start an
- * escape or an entity, as one with a hole that never closes counts too.
- * @param {string} value
- */
-function isEncodedOutsideHoles(value) {
-  const holes = findTemplateHoles(value);
-  return holes === null || isEncoded(holes.reduce((text, hole) => text.replace(hole, ""), value));
 }
 
 /**
