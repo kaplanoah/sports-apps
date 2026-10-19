@@ -764,19 +764,24 @@ Delete it once the app's first PR merges.
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
   `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
-  but not to its comments, blank lines, or formatting, which draw nothing;
-  a change to its shared stylesheets (`sheet.css`, `pager.css`,
-  `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),
-  added or removed, in a selector or at-rule, which says which parts a rule reaches,
-  or in a property that decides how parts layer, stack, scroll,
-  take a touch, or show (any below, any `position`, `overflow`,
+  but not to its comments, blank lines, formatting, or imports, which draw nothing,
+  nor code it moves unchanged among those scripts and the shared ones they import;
+  a change to what the rules of its shared stylesheets (`sheet.css`, `pager.css`,
+  `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) set for each selector,
+  under its at-rules, in a property that decides how parts layer, stack, scroll,
+  take a touch, or show (any below, any `position` but a `relative` or `static` one in a rule without a `z-index`, `overflow`,
   `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
-  `opacity`, `visibility`, `display`, `isolation`, or `mix-blend-mode`),
-  but not in their fonts, colors, spacing, or sizes, which CI checks;
-  or an added line in a page's CSS or JavaScript that sets a property that gives a part a layer of its own (`transform`,
+  `opacity`, `visibility`, a `display` of `none` or `contents`, `isolation`, or `mix-blend-mode`),
+  but not in their fonts, colors, spacing, or sizes, which CI checks,
+  nor a selector renamed, or a rule split or merged, that leaves each selector setting the same;
+  or a property a page's CSS adds, or a line its JavaScript adds, that gives a part a layer of its own (`transform`,
   `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
-  `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`).
+  `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`),
+  or, in its CSS, lifts a part over others or makes it scroll (an absolute `position`, a `z-index`, or an `overflow` but `visible`).
+  In a stylesheet, a `transition` counts only when it eases one of these properties, or all of them, not when it only recolors,
+  and a `translate`, `rotate`, or `scale` in two dimensions only in keyframes or in a rule with an `animation`, a `will-change`, or a `transition` that counts,
+  since WebKit gives a layer of its own only to a transform in three dimensions or on the move.
   Tests are never red.
   The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label,
   added by the owner after the PR's last push.
