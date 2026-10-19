@@ -26,6 +26,7 @@ const SKIPPED_FILES = new Set([
   ".github/workflows/ci.yml",
   ".github/workflows/conflicts.yml",
   ".github/workflows/flaky.yml",
+  ".github/workflows/review-area.yml",
   ".github/workflows/watch.yml",
   "playwright.config.mjs",
   "types/globals.d.ts",

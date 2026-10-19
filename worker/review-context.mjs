@@ -1,8 +1,8 @@
 // Writes what CI's reviewers and checkers read besides the code: the pull request's title and
-// description, every review thread on it so far, each with its latest replies and whether it's
-// resolved or outdated, and the findings the review posted on files the pull request doesn't
-// change, so a finding that was answered or fixed isn't raised again unless the answer is wrong
-// or the fix didn't hold.
+// description, every review thread on it so far, each with its first comment and latest replies and
+// whether it's resolved or outdated, and the findings the review posted on files the pull request
+// doesn't change, so a finding that was answered or fixed isn't raised again unless the answer is
+// wrong or the fix didn't hold.
 // Usage: node worker/review-context.mjs <folder>, with GH_TOKEN, GITHUB_REPOSITORY, PR, TITLE,
 // and DESCRIPTION set.
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -11,7 +11,9 @@ import { fileURLToPath } from "node:url";
 import { createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
 import { OFF_DIFF_HEADING, REVIEWER } from "./review-state.mjs";
 
-// A thread's last comments, since its newest replies hold its answer.
+// A thread's first comment, which holds what it raised, as every item of a checklist of Nits, and
+// its last ones, since its newest replies hold its answer.
+const LAST_COMMENTS = 49;
 const THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -23,12 +25,28 @@ const THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!, $a
           path
           line
           originalLine
-          comments(last: 50) { nodes { author { login } body } }
+          first: comments(first: 1) { nodes { author { login } body } }
+          comments(last: ${LAST_COMMENTS}) { totalCount nodes { author { login } body } }
         }
       }
     }
   }
 }`;
+
+/**
+ * A thread as GitHub answers it with its first comment and its last ones, as one list of its
+ * comments, the first never twice.
+ * @param {any} thread
+ */
+const joinComments = ({ first, comments, ...thread }) => ({
+  ...thread,
+  comments: {
+    nodes:
+      comments.totalCount > comments.nodes.length
+        ? [...first.nodes, ...comments.nodes]
+        : comments.nodes,
+  },
+});
 
 /**
  * Every review thread on the pull request, page by page until GitHub says there are no more.
@@ -42,7 +60,7 @@ export async function readThreads(callGraphQL, pullRequest) {
   for (;;) {
     const data = await callGraphQL(THREADS_QUERY, { ...pullRequest, after });
     const page = data.repository.pullRequest.reviewThreads;
-    threads.push(...page.nodes);
+    threads.push(...page.nodes.map(joinComments));
     if (!page.pageInfo.hasNextPage) return threads;
     after = page.pageInfo.endCursor;
   }

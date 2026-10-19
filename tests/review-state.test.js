@@ -4,6 +4,7 @@ import {
   SUMMARY_MARKER,
   findSummary,
   listFindingMarks,
+  readReviewComments,
   readReviewedHead,
   writeFindingMark,
   writeReviewedHead,
@@ -43,4 +44,20 @@ test("a comment's finding marks read back as written, however many it holds", ()
   ]);
   assert.deepEqual(listFindingMarks(undefined), []);
   assert.deepEqual(listFindingMarks("<!-- claude-finding 0123456789abcdef -->"), []);
+});
+
+test("the review's comments are its own from every page of the review comments, then the conversation's", async () => {
+  const bot = { login: "github-actions[bot]" };
+  const others = Array.from({ length: 99 }, () => ({ user: { login: "someone" }, body: "ok" }));
+  /** @type {Record<string, any[]>} */
+  const pages = {
+    "/pulls/7/comments?per_page=100&page=1": [{ user: bot, body: "one" }, ...others],
+    "/pulls/7/comments?per_page=100&page=2": [{ user: bot, body: "two" }],
+    "/issues/7/comments?per_page=100&page=1": [{ user: bot, body: "three" }, { body: "no one" }],
+  };
+  const comments = await readReviewComments(async (path) => pages[path] ?? [], "7");
+  assert.deepEqual(
+    comments.map((comment) => comment.body),
+    ["one", "two", "three"],
+  );
 });
