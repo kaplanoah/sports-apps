@@ -15,6 +15,7 @@ import {
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { holdClock, sendClick, sendFinger } from "../../../../tests/browser/stray-click.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
@@ -324,6 +325,21 @@ test.describe("on a phone, tapping an update", () => {
     await scrollSeasonPart(page, "bracket", await readHeaderReach(page));
 
     await expect(page.locator('[data-part="bracket"] .rider-taps')).toHaveCSS("display", "none");
+  });
+
+  test("on the season tab, a finger the browser takes for a scroll on an update's stand-in never opens its game, even when iOS still sends the tap", async ({
+    page,
+  }) => {
+    await openBracketWithUpdates(page);
+    await scrollSeasonPart(page, "bracket", 30);
+    const standIn = page.locator('[data-part="bracket"] .rider-tap').first();
+    await expect(standIn).toBeAttached();
+    await holdClock(page);
+
+    await sendFinger(standIn, { moves: [12], isCancelled: true });
+
+    expect(await sendClick(standIn)).toBe(false);
+    await expect(page.locator("#gameSheet")).toBeHidden();
   });
 
   test("on the season tab, an update that loses its game's button while the box keeps its size leaves the stand-ins under the others, so a tap on the update under it opens that update's own game", async ({
