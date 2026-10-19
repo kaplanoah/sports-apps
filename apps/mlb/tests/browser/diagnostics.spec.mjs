@@ -4,6 +4,7 @@ import { drag } from "../../../../tests/browser/touch.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { findSeasonPart, scrollSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
 import { waitForScrollEnd } from "../../../../tests/browser/scroll-end.mjs";
+import { holdClock, sendClick, sendFinger } from "../../../../tests/browser/stray-click.mjs";
 import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
@@ -244,7 +245,26 @@ test("with Diagnostics on, a slide of the strip's dates that leaves the strip sh
   );
 });
 
-test("with Diagnostics on, each touch on the standings logs how far it moved, whether the page's code took it, and how far the standings scrolled", async ({
+test("with Diagnostics on, a click iOS sends after the browser took a touch on the standings for a scroll isn't logged, since the page drops it first", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await openSeasonPart(page, "Standings");
+  const button = page.locator("#standingsWrap tr[data-team] button").first();
+  await expect(button).toBeInViewport();
+  await holdClock(page);
+
+  await sendFinger(button, { moves: [12], isCancelled: true });
+  expect(await sendClick(button)).toBe(false);
+
+  const lines = await readLog(page, "Standings and bracket");
+  expect(lines).toContainEqual(expect.stringMatching(/^touchend on Team details: /));
+  expect(lines).not.toContainEqual(expect.stringMatching(/^click /));
+});
+
+test("with Diagnostics on, each touch on the standings logs how far it moved, whether the page's code took it, whether its pointer was cancelled, and how far the standings scrolled", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE);
@@ -279,12 +299,12 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on Team details: /));
   expect(lines).toContainEqual(
     expect.stringMatching(
-      /^lifted after moving 30 left and 3 down; the page's code took the touch once it had moved \d+ left( and \d down)?; the standings didn't scroll$/,
+      /^lifted after moving 30 left and 3 down; the page's code took the touch once it had moved \d+ left( and \d down)?; its pointer wasn't cancelled; the standings didn't scroll$/,
     ),
   );
   expect(lines).toContainEqual(
     expect.stringMatching(
-      /^lifted after moving 200 up; the browser kept the touch; the standings scrolled \d+px down$/,
+      /^lifted after moving 200 up; the browser kept the touch; its pointer was cancelled; the standings scrolled \d+px down$/,
     ),
   );
 });
