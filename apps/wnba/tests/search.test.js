@@ -93,7 +93,7 @@ test("next game is the one on now or next, even before its opponent is known", (
 });
 
 test("a game the league put off is never a team's next game", () => {
-  const [next] = SEASON_GAMES.filter(
+  const [next, after] = SEASON_GAMES.filter(
     (game) => game.state === "pre" && [game.away.team, game.home.team].includes("NYL"),
   );
   const putOff = SEASON_GAMES.map((game) =>
@@ -103,9 +103,7 @@ test("a game the league put off is never a team's next game", () => {
   const context = { ...CONTEXT, games };
   const asked = readSearch("Liberty next game", context);
   const found = findSearchGames(asked, context).games.map((game) => game.id);
-  assert.ok(next);
-  assert.equal(found.length, 1);
-  assert.notEqual(found[0], next.id);
+  assert.deepEqual(found, [after.id]);
 });
 
 test("nicknames, cities, and filler words read as a fan would mean them", () => {

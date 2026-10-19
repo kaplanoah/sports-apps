@@ -165,8 +165,8 @@ function readStartMinutes(game) {
 }
 
 /**
- * A WNBA game as a search reads it, or null for one without a day or one the league put off, which
- * is played on another day.
+ * A WNBA game as a search reads it, or null for one without a day or one the league put off or
+ * called off, which won't be played that day.
  * @param {Game} game
  * @param {Record<string, number> | null} overtimes how many overtimes each final that went past
  *   regulation played, by its id, as the store keeps them
