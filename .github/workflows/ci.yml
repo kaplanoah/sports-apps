@@ -69,7 +69,8 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - *setup-node
-      # The gate parses a shared script's change with esbuild, to tell its code from its comments.
+      # The gate parses a page's scripts and stylesheets with esbuild and acorn, to tell what a
+      # change does from how it's written.
       - &restore-modules
         id: modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
