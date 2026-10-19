@@ -43,7 +43,7 @@ import {
   showYear,
   startSeasonData,
 } from "./season-data.js";
-import { composeState, session, readSeasonYear } from "./session.js";
+import { composeState, session } from "./session.js";
 import { startSettings } from "./settings.js";
 import { startPlayerSheet } from "./player-sheet.js";
 import { fillRoster, readShownRoster, reopenRoster, startRosterSection } from "./roster-section.js";
@@ -56,7 +56,7 @@ import { showLeagueStandings } from "./standings.js";
 import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
-import { fillSeasonPicker, watchSeasonPicks } from "#shared/season-picker.js";
+import { fillSeasonPicker, keepSeasonYears, watchSeasonPicks } from "#shared/season-picker.js";
 import { startAppearance } from "#shared/appearance.js";
 import { showSeasonPart, startBracketStandings } from "#shared/bracket-standings.js";
 import { LOOKS } from "./looks.js";
@@ -81,16 +81,9 @@ async function switchYear(year) {
   renderAll();
 }
 
-async function listYears() {
-  const recent = [readSeasonYear(), readSeasonYear() - 1, readSeasonYear() - 2].map(String);
-  try {
-    return await loadSeasonList();
-  } catch {
-    return recent;
-  }
-}
+const listYears = keepSeasonYears(loadSeasonList);
 
-/** @param {string[]} years */
+/** @param {string[] | null} years */
 const fillYearPicker = (years) =>
   fillSeasonPicker(findSeasonRow(), years, session.activeYear, LEAGUE_WORDS);
 

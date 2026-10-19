@@ -6,6 +6,11 @@
 // openLastTab(), before anything is painted, since a part on a hidden tab can't take back where it
 // was scrolled.
 
+// What last-seen.js saves the page's parts, open sheets, and settings' switches under.
+const LAST_DRAWN_KEY = "lastDrawn";
+const OPEN_SHEETS_KEY = "openSheets";
+const LAST_SWITCHED_KEY = "lastSwitched";
+
 // Storage can be empty or refuse access, as in a private window, so the page never depends on it.
 /** @param {string} key */
 function readSaved(key) {
@@ -17,7 +22,7 @@ function readSaved(key) {
 }
 
 function readLastDrawn() {
-  const saved = readSaved("lastDrawn");
+  const saved = readSaved(LAST_DRAWN_KEY);
   return saved && typeof saved === "object" ? saved : {};
 }
 
@@ -183,7 +188,7 @@ function showLastDialog(dialog, sheets) {
 // again, beside any it was opened from, until the page's modules take it over (sheet.js's
 // reopenSheets) or close it, unless it was left open longer than it stays (sheet-memory.js).
 function showLastSheets() {
-  const saved = readSaved("openSheets");
+  const saved = readSaved(OPEN_SHEETS_KEY);
   if (!Array.isArray(saved)) return;
   /** @type {Map<HTMLDialogElement, { sheet: HTMLElement, saved: any }[]>} */
   const dialogs = new Map();
@@ -202,9 +207,8 @@ function showLastSheets() {
 /* global readPickedAppearance -- from pick-theme.js */
 
 // Settings' switches show the device's own choices, which their modules set only once they load,
-// so the page saves each as it leaves the screen (last-seen.js), but for one inside a part drawn
-// whole, which that part's markup holds.
-const LAST_SWITCHED_KEY = "lastSwitched";
+// each kept under its own key by its own rules, so the page saves what each showed as it leaves the
+// screen, but for one inside a part drawn whole, which that part's markup holds.
 const KEPT_SWITCHES = "[data-setting] [role=switch][id]:not([data-last-drawn] *)";
 
 function showLastSwitches() {

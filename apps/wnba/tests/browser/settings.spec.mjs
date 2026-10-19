@@ -1,10 +1,13 @@
-import { test, expect, matchPath, openApp, serveLockedApp } from "./harness.mjs";
+import { test, expect, openApp, serveLockedApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
-import { checkSettingsOnReload } from "../../../../tests/browser/settings-reload.mjs";
+import {
+  checkSeasonsOnFailedList,
+  checkSettingsOnReload,
+} from "../../../../tests/browser/settings-reload.mjs";
 import {
   checkHandoffRenewal,
   checkIconKeptOnlyOnOpen,
@@ -84,22 +87,17 @@ test("a reload with settings open shows its seasons, switches, and look picked b
   });
 });
 
-test("a reload with settings open keeps the Season picker as it was while the store can't list its seasons", async ({
+test("a reload with settings open while the store can't list its seasons lists the ones it listed, with the season shown, even one the store moved on to, chosen", async ({
   page,
 }) => {
-  await openApp(page, ONE_PAST_SEASON);
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const row = page.locator("#seasonRow");
-  await expect(row.locator("option")).toHaveText(["2026", "2025"]);
-  await page.route(matchPath("/store/seasons"), (route) => route.abort());
-  // The page watches the news right after it fills the picker from what the store answered.
-  const watchingNews = page.waitForRequest(matchPath("/store/news/cards"));
-
-  await page.reload();
-
-  await watchingNews;
-  await expect(row).toBeVisible();
-  await expect(row.locator("option")).toHaveText(["2026", "2025"]);
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await checkSeasonsOnFailedList({
+    page,
+    openSettings: (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click(),
+    beforeReload: () => app.moveSeasonTo(2027),
+    seasons: ["2027", "2026", "2025"],
+    shown: "2027",
+  });
 });
 
 test("settings list Notifications, the News switches, and Appearance, with lines only between the three", async ({

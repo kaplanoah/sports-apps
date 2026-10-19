@@ -1,7 +1,10 @@
 import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
-import { checkSettingsOnReload } from "../../../../tests/browser/settings-reload.mjs";
+import {
+  checkSeasonsOnFailedList,
+  checkSettingsOnReload,
+} from "../../../../tests/browser/settings-reload.mjs";
 import { WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
 import {
   checkHandoffRenewal,
@@ -160,6 +163,13 @@ test("a reload with settings open shows its seasons, switches, and look picked b
     look: "Night Game",
     switchName: "Include content from The Athletic",
   });
+});
+
+test("a reload with settings open while the store can't list its seasons lists the ones it listed, with the season shown chosen", async ({
+  page,
+}) => {
+  await openApp(page, WITH_A_PAST_SEASON);
+  await checkSeasonsOnFailedList({ page, openSettings, seasons: ["2026", "2025"], shown: "2026" });
 });
 
 test("Appearance sits under Notifications, above the News switches, each choice showing the icon it offers", async ({

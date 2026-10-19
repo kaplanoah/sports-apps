@@ -25,7 +25,7 @@ import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
-import { fillSeasonPicker, watchSeasonPicks } from "#shared/season-picker.js";
+import { fillSeasonPicker, keepSeasonYears, watchSeasonPicks } from "#shared/season-picker.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { startServiceWorker } from "#shared/service-worker.js";
 import { isSettingShown, openSettings, startSettingsSheet } from "#shared/settings-sheet.js";
@@ -157,24 +157,11 @@ const readShown = () =>
 
 const findSeasonRow = () => findElement("seasonRow");
 
-/** @type {string[] | null} */
-let keptSeasonYears = null;
-
-// The seasons the store keeps, as it last said where it can't say now, or null where it never has,
-// which leaves the picker as the page drew it before it loaded.
-async function listSeasonYears() {
-  try {
-    keptSeasonYears = await loadSeasonYears();
-  } catch {
-    /* the store's last list stands */
-  }
-  return keptSeasonYears;
-}
+const listSeasonYears = keepSeasonYears(loadSeasonYears);
 
 /** @param {string[] | null} years */
-function fillSeasonList(years) {
-  if (years) fillSeasonPicker(findSeasonRow(), years, session.year, LEAGUE_WORDS);
-}
+const fillSeasonList = (years) =>
+  fillSeasonPicker(findSeasonRow(), years, session.year, LEAGUE_WORDS);
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 /** @param {number} year */

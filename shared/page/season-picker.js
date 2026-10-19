@@ -32,13 +32,39 @@ export function listSeasonOptions(years, shownYear, words) {
 }
 
 /**
+ * Reads the seasons the store keeps with `load`, keeping its last answer for a read that fails, or
+ * null where it has never answered.
+ * @param {() => Promise<string[]>} load
+ */
+export function keepSeasonYears(load) {
+  /** @type {string[] | null} */
+  let kept = null;
+  return async () => {
+    try {
+      kept = await load();
+    } catch {
+      /* the store's last answer stands */
+    }
+    return kept;
+  };
+}
+
+/** @param {HTMLElement} row */
+const readListedYears = (row) =>
+  [...row.querySelectorAll("option")].map(
+    (option) => /** @type {HTMLOptionElement} */ (option).value,
+  );
+
+/**
+ * Lists the seasons the store keeps, or, where it hasn't said, the ones the row lists as the page
+ * last drew it, with the shown one chosen.
  * @param {HTMLElement} row the picker's row, `#seasonRow`, whose select is `#seasonPicker`
- * @param {string[]} years
+ * @param {string[] | null} years
  * @param {number} shownYear
  * @param {Pick<import("./league-words.js").LeagueWords, "seasonSpansYears">} words
  */
 export function fillSeasonPicker(row, years, shownYear, words) {
-  const listed = listSeasonOptions(years, shownYear, words);
+  const listed = listSeasonOptions(years ?? readListedYears(row), shownYear, words);
   const options = listed.map(
     ({ year, name, isShown }) =>
       html`<option value="${year}" ${isShown ? "selected" : ""}>${name}</option>`,

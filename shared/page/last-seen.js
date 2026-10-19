@@ -6,7 +6,7 @@
 // load, before its sheets take back what they showed. A sheet left open too long is gone by the
 // time the page shows again (sheet-memory.js).
 
-/* global KEPT_SWITCHES, LAST_SWITCHED_KEY -- from show-last-drawn.js */
+/* global KEPT_SWITCHES, LAST_DRAWN_KEY, LAST_SWITCHED_KEY, OPEN_SHEETS_KEY -- from show-last-drawn.js */
 
 import { isSeasonPart } from "./season-part.js";
 import { keepImages } from "./service-worker.js";
@@ -14,8 +14,6 @@ import { closeForgottenDialogs, noteShownEndsSeen } from "./sheet-memory.js";
 import { listOpenSheets, reopenSheets } from "./sheet-reopen.js";
 
 const LAST_SEEN_KEY = "lastSeen";
-const LAST_DRAWN_KEY = "lastDrawn";
-const OPEN_SHEETS_KEY = "openSheets";
 // Another site's picture can count as several megabytes toward the storage the page's copy needs,
 // so only the first ones, which a load opens on, are kept.
 const KEPT_IMAGE_COUNT = 12;
