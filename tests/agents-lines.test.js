@@ -1,20 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isRuleFile } from "../worker/rule-files.mjs";
+import { isRuleFile, readSkillName } from "../worker/rule-files.mjs";
 import { listTrackedFiles } from "./tracked-files.js";
 
 // Two changes to a guidance file conflict only when they touch the same or neighboring lines, so
 // each sentence starts a line of its own and a long one breaks after its commas.
 const ROOT = new URL("../", import.meta.url);
 const isGuidance = (/** @type {string} */ path) =>
-  ["AGENTS.md", "REVIEW.md"].includes(path) ||
-  isRuleFile(path) ||
-  /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(path);
+  ["AGENTS.md", "REVIEW.md"].includes(path) || isRuleFile(path) || Boolean(readSkillName(path));
 const GUIDANCE = listTrackedFiles().filter(isGuidance);
 const LONGEST_LINE = 240;
 // Claude Code reads AGENTS.md whole into every session, and follows less of a longer one.
-const LONGEST_AGENTS = 200;
+const MOST_AGENTS_LINES = 200;
 
 const readProse = (line) => line.replace(/^\s*\d+\. /, "").replaceAll(/`[^`]*`/g, "``");
 
@@ -45,7 +43,7 @@ test("each line of a guidance file starts at most one sentence", () => {
 
 test("AGENTS.md stays short enough for every session to follow", () => {
   const lines = readFileSync(new URL("AGENTS.md", ROOT), "utf8").trimEnd().split("\n");
-  assert.ok(lines.length <= LONGEST_AGENTS, `AGENTS.md has ${lines.length} lines`);
+  assert.ok(lines.length <= MOST_AGENTS_LINES, `AGENTS.md has ${lines.length} lines`);
 });
 
 test("a long sentence in a guidance file breaks after its commas", () => {

@@ -42,6 +42,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "eslint.config.mjs",
     "worker/browser-scope.mjs",
     "worker/burn-in-specs.mjs",
+    "worker/escape-pattern.mjs",
     "worker/package-imports.mjs",
     "worker/red-change.mjs",
     "worker/red-change-styles.mjs",

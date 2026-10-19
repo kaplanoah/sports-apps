@@ -110,7 +110,6 @@ paths:
   never a design canvas, and copy the app's existing styles, separators,
   and colors from its `page/styles.css` instead of inventing new ones.
 - A phone and a wide screen look the same, except where the width forces a difference.
-
 - Things shown side by side for comparison share one scale, like two pitchers' speed lines.
 - Desktop hover is a subtle change of text color only, to the app's `--ink-hover`: never an underline, border, or highlight,
   which the root's `tests/hover-color.test.js` checks.
@@ -131,3 +130,8 @@ paths:
   and the words its pages never show, like another sport's.
   The root's `tests/browser/never-shown-words.mjs` lists any shown text that holds one,
   and each app's `page.spec.mjs` checks every view with it, wherever it checks the type roles.
+- Before pushing a change to how a page looks, screenshot every view it touches,
+  in each of the app's themes, on a phone and a wide screen, and look at each one: a test checks only what it names.
+  Look at a view built from a mockup beside the mockup, with the same data,
+  and a new view beside its siblings, like a new sheet beside the others, rather than on its own.
+  Fix anything off, and name the views and themes you looked at in the PR's description.

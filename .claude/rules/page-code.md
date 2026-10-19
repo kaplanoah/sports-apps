@@ -16,9 +16,7 @@ paths:
   beside what it shows, and draws again from that while it reads again,
   never its placeholders, as the game sheet does with its box score and a team's sheet with its roster (`sectionsKeeper` in `shared/page/team-sheet.js`).
   Each app's `tests/browser/sheet-reload.spec.mjs` reloads each sheet with its reads held and checks it shows the same; a new sheet joins its list, or the test fails.
-- Page:
-  `page/`.
-  `page/js/app.js` is the entry module; shared page data lives in `page/js/session.js`.
+- Each app's `page/js/app.js` is its entry module; shared page data lives in `page/js/session.js`.
 - Release notes: each app's `page/js/release-notes.js` lists what's new in the app,
   which its Updates box shows under New in the app, the newest three and how many more,
   until it's dismissed or two weeks after the device first showed it,
@@ -31,6 +29,10 @@ paths:
   in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.
 - A Diagnostics report, which a viewer shares wherever they like, carries no page's address, key, or access code, nor the account's id:
   each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
+- Search finds every place the app has, as the phone's own search does: each tab,
+  sheet, sheet section, and setting, and each kind of thing with a page of its own,
+  like a team or a player, and a coach once coaches have pages.
+  Anything a change adds that a fan could look for is searchable, in words a fan would type, unless there's a reason to leave it out.
 - When you add a place, make it searchable in the app's `page/js/search-pages.js`,
   with its row, its words, and what it opens, and add it to `COVERAGE` in the app's `tests/search.test.js`,
   with the search that finds it, or with why search leaves it out.

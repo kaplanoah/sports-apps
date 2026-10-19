@@ -11,7 +11,7 @@ import {
   namePostRecord,
 } from "../worker/judge-review.mjs";
 import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
-import { escapePattern } from "../worker/rule-files.mjs";
+import { escapePattern } from "../worker/escape-pattern.mjs";
 
 /** @param {string} path from the repo's root */
 const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");

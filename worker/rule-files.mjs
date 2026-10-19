@@ -1,6 +1,8 @@
 // Reads the scoped rule files in .claude/rules/, which Claude Code loads once a session reads or
 // edits a file one of their `paths` globs matches, so a file's rules are known without a session.
 
+import { escapePattern } from "./escape-pattern.mjs";
+
 export const RULES_FOLDER = ".claude/rules/";
 
 /**
@@ -8,6 +10,12 @@ export const RULES_FOLDER = ".claude/rules/";
  * @param {string} path
  */
 export const isRuleFile = (path) => path.startsWith(RULES_FOLDER) && path.endsWith(".md");
+
+/**
+ * The name of the skill a path holds, or none when it holds no skill.
+ * @param {string} path
+ */
+export const readSkillName = (path) => path.match(/^\.claude\/skills\/([^/]+)\/SKILL\.md$/)?.[1];
 
 /**
  * Each rule file among the repo's files, with its text.
@@ -27,12 +35,6 @@ export function readRulePaths(text) {
   const frontmatter = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/)?.[1] ?? "";
   return [...frontmatter.matchAll(/^\s+-\s+(["']?)(.+?)\1\s*$/gm)].map((match) => match[2]);
 }
-
-/**
- * Text made safe to match word for word in a regular expression.
- * @param {string} text
- */
-export const escapePattern = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * A glob as a regular expression: `**` matches across folders, and a `**` followed by a slash

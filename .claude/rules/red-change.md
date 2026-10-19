@@ -66,7 +66,7 @@ paths:
   nor a class that markup or a script adds that a shared stacking rule then reaches.
   The base's copy of the gate's code, on the Node and modules the base names, judges a pull request's files,
   so a change to the gate's code can't let the pull request's own red change through,
-  and a change to the workflow's `gate`, `phone`, or `check` job is the review's to weigh, as a guard `REVIEW.md` names.
+  and a change to the workflow's `gate`, `phone`, or `check` job is the review's to weigh, as a guard the root's `REVIEW.md` names.
   Tests are never red.
   The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
   added by the owner after the PR's last push,
@@ -74,3 +74,4 @@ paths:
   and holds the change itself whenever main's rules don't require that status, which its own step reads from GitHub,
   or the pull request comes from a fork, whose token can't post it,
   so a fork's pull request has no `phone` status and merges only past main's rules while they require it (`.github/workflows/ci.yml`).
+- If parts of a page ever stop drawing on the phone again, the first step is a phone restart and a Diagnostics report from settings, not a code change.

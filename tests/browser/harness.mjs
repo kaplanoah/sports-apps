@@ -1,5 +1,5 @@
 import { test as base, expect } from "@playwright/test";
-import { escapePattern } from "../../worker/rule-files.mjs";
+import { escapePattern } from "../../worker/escape-pattern.mjs";
 import { createDurableObjectContext } from "../durable-object-context.js";
 
 /** @type {import("@playwright/test").Fixtures<{ pageErrors: string[] }, {}, import("@playwright/test").PlaywrightTestArgs>} */

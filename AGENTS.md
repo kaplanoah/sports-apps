@@ -55,18 +55,15 @@
   `season-and-store.md` for the current season and the store, `red-change.md` for what only a phone can test,
   `shared-modules.md` for what each shared module does, `mlb.md` and `wnba.md` for what each app holds,
   `tests.md` and `browser-tests.md` for tests, and `tooling.md` for the root's `worker/` and `.github/`.
-  The `ship` skill holds the rest of shipping a change, the `steward` skill how to answer CI's review,
-  and the `add-league` skill how to add a league.
-- Shared code:
-  `shared/page/` and `shared/worker/` hold what every app uses, which `.claude/rules/shared-modules.md` lists.
+  The `ship` skill holds the rest of shipping a change, the `steward` skill how to answer CI's review, and the `add-league` skill how to add a league.
+- Shared code: `shared/page/` and `shared/worker/` hold what every app uses, which `.claude/rules/shared-modules.md` lists.
   A change there reaches every app, so shared code never imports an app's modules: an app hands it what it needs, as `watchReturns({ isBusy, catchUp })` does.
   Logic or a view that more than one app needs lives there once,
   and each league hands it only what differs, as each app's `readGameDay`,
   `renderGameRow`, and `listSeasonDays` calls do; never copy it into a second app.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" above and in `.claude/rules/tests.md` and `browser-tests.md`.
-- Commands:
-  `npm ci` once.
+- Commands: `npm ci` once.
   `npm run check` runs everything CI does, but locally run only what step 2 of "Shipping a change" names.
   `npm run format` fixes formatting.
   Types are checked from JSDoc by `npm run typecheck`; the code stays plain JavaScript.
@@ -79,6 +76,7 @@
 - Never push to another session's branch.
 - Run each command so it needs no approval: one command per call, from the repo's root, where every session starts.
   Never start with `cd`, never join `cd` to a `git` command, and never pipe or chain after a command `.claude/settings.json` allows, like the beta force-push.
+  When a command still asks, add it to the allow list in `.claude/settings.json` in the same PR if it's safe for any session to run, or say why it asks.
 - Refer to PRs by number, not branch.
 - Start every PR title with a type.
   The squash merge carries it to `main`, where it sets the next version of each app it changes (the root's `worker/release.mjs`);
@@ -88,15 +86,17 @@
   `refactor:` for code the Worker runs with no visible change (patch),
   `build:` for dependencies, the build, and the deploy (patch),
   and `docs:`, `test:`, `ci:`, or `chore:` for changes the deploy skips (no version).
+  Add `!` after a type that releases, as in `feat!:`, for a major change: a new address, lost data, or something that's gone, as the `ship` skill says.
 - Each app has a beta channel, a second Worker the `beta` branch deploys, which the `ship` skill says how to use.
   `beta` is a scratch branch: never commit to it or open a PR from it.
 - A red change is one only the owner's phone can test: `.claude/rules/red-change.md` says what makes one, and the `ship` skill how it ships.
 - `npm run rollback`, `set-app-key`, `set-access-code`, and `set-page-host` change the live apps: run each only as `.claude/rules/tooling.md` says.
 - The repo is public.
-  Never commit secrets, keys, account IDs, real Worker addresses or subdomains, or personal data; use placeholders in tests and docs:
+  Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, or page hosts, or personal data; use placeholders in tests and docs:
   `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
   which the root's `tests/no-secrets.test.js` tells from a real one, failing on any real one in a tracked file.
-  Reviewing a change, check what it commits, logs, and posts for any of these.
+  Nothing a change logs or posts where the public can read it, like a workflow's log or an issue, carries any of these either.
+  Reviewing a change, check what it commits, logs, and posts for any of them.
 - The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
   each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
   Never ask for one in chat or put one in environment variables, code, or commits.
@@ -105,13 +105,14 @@
 
 ### Shipping a change
 
-Follow these steps in order.
+Follow these steps in order, with the `ship` skill loaded, which adds to most of them.
 When a step says to go back to an earlier step, continue in order from there.
 
 1. Fetch `main` and start your branch from it, or, for a stacked PR (step 12), from the branch of the PR it builds on.
    If the branch's last PR has merged, reset the branch to `origin/main` first.
 2. Run `npm run lint`, `npm run format:check`, `npm run typecheck`,
    and `npm run deadcode`, and the tests that cover what you changed: a test file with `node --test <file>`, or a browser spec with `npx playwright test <file>`.
+   Name each spec that exercises the change, shared code too, found by searching the tests for the module or what it draws; never pass a folder.
    Don't run the full test suite locally (`npm test`, `npm run test:browser`, or `npm run check`):
    CI runs the Node tests, and the browser tests a change reaches, on every push.
    If anything fails, fix it and run it again.
@@ -123,16 +124,19 @@ When a step says to go back to an earlier step, continue in order from there.
    If that brought in anything new, go back to step 2.
    Then commit, push, and open a PR into `main`, or a stacked PR into the branch it builds on.
    If the PR is already open, the push updates it.
-   If `node worker/red-change.mjs` says the change is red, ship it by the `ship` skill's steps for one.
+   If `git diff --text --no-textconv --no-ext-diff --no-renames origin/main | node worker/red-change.mjs` says the change is red, ship it by the `ship` skill's steps for one.
 4. Check whether the PR has merge conflicts with its base branch.
+   GitHub runs no CI on a PR with conflicts, so waiting on one would never end.
    If it has them, merge the base branch into your branch, resolve the conflicts, and go back to step 2.
+   If resolving a conflict would drop behavior from either side, resolve it in the way that best serves the spirit of both changes, and confirm with the user.
 5. Wait until every CI job on the PR's latest commit has finished.
    The `check` job is the one that must pass; it fails whenever any other CI job fails.
+   Each time you look while waiting, and whenever no CI run has started a few minutes after the push, go back to step 4 first.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
 7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
-   Answer its findings as the `steward` skill says.
+   Answer its findings as the `steward` skill says, and read a failed `review` job as the `ship` skill says.
    `main` merges a PR only once every thread on it is resolved.
 8. Squash-merge the PR once all of these are true:
    `check` passed on the latest commit, the PR has no merge conflicts, every review thread is resolved, and its base is `main`.
@@ -165,13 +169,6 @@ When a step says to go back to an earlier step, continue in order from there.
   Never stack guesses in production.
 - Once a bug is fixed, take out any attempted fixes that didn't help, and put back anything removed that turned out not to be the cause.
 - When something replaces an old system, delete the old code in the same PR.
-
-### Search finds every place
-
-- Search finds every place the app has, as the phone's own search does: each tab,
-  sheet, sheet section, and setting, and each kind of thing with a page of its own,
-  like a team or a player, and a coach once coaches have pages.
-  Anything a change adds that a fan could look for is searchable, in words a fan would type, unless there's a reason to leave it out.
 
 ### What the apps should feel like
 
