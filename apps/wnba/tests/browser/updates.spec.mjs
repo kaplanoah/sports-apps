@@ -373,6 +373,7 @@ test.describe("on a phone, in full motion", () => {
     await dismissUpdatesBox(page);
 
     await expect(page.locator("#updates")).toBeHidden();
+    await expect(page.locator(".rider-tap")).toHaveCount(0);
   });
 
   test("the Updates box shrinks away when it's dismissed, and grows open for a new final", async ({
