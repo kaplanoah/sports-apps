@@ -11,10 +11,9 @@ export async function scrollTabsIntoView(page) {
     return box.bottom > 0 && box.top < innerHeight;
   });
   if (isTabInView) return;
-  const shown = await findSeasonPill(page)
-    .locator('[aria-selected="true"]')
-    .getAttribute("data-tab");
-  if (shown !== "standings" && shown !== "bracket") return;
+  const shown = /** @type {import("#shared/bracket-standings.js").SeasonPart} */ (
+    await findSeasonPill(page).locator('[aria-selected="true"]').getAttribute("data-tab")
+  );
   await findSeasonPart(page, shown).evaluate((part) =>
     part.scrollTo({ top: 0, behavior: "instant" }),
   );
