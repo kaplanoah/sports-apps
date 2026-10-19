@@ -1,5 +1,7 @@
 import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
+import { drag } from "../../../../tests/browser/touch.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -97,6 +99,15 @@ test.describe("on a phone", () => {
   });
 });
 
+/** @param {import("@playwright/test").Page} page */
+async function turnOnDiagnostics(page) {
+  await openSettings(page);
+  await findSwitch(page).click();
+  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#settingsDialog")).toBeHidden();
+}
+
 /**
  * Opens the Games tab on the whole season, with Diagnostics on.
  * @param {import("@playwright/test").Page} page
@@ -104,11 +115,7 @@ test.describe("on a phone", () => {
 async function openSeasonGamesLogging(page) {
   await page.setViewportSize(PHONE);
   const app = await openApp(page, { isWholeSeason: true });
-  await openSettings(page);
-  await findSwitch(page).click();
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
+  await turnOnDiagnostics(page);
   await page.getByRole("tab", { name: "Games" }).click();
   await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
   return app;
@@ -249,5 +256,43 @@ test("with Diagnostics on, a slide of the strip's dates that leaves the strip sh
   expect(lines).toContain("top day 2026-09-25, slide");
   expect(lines).toContainEqual(
     expect.stringMatching(/^the strip was told to scroll to \d+ but is at 0$/),
+  );
+});
+
+test("with Diagnostics on, each touch on the standings logs how far it moved, whether the page's code took it, and how far the page scrolled", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await openSeasonPart(page, "Standings");
+  // At its end, the table leaves a swipe left to the pill's next part, the bracket.
+  await page
+    .locator("#standingsWrap .st-scroll")
+    .first()
+    .evaluate((table) => table.scrollTo({ left: table.scrollWidth, behavior: "instant" }));
+  const row = page.locator("#standingsWrap tr[data-team]").first();
+  await expect(row).toBeInViewport();
+  const box = /** @type {{ y: number, height: number }} */ (await row.boundingBox());
+  const from = { x: PHONE.width / 2, y: box.y + box.height / 2 };
+
+  await (
+    await drag(page, from, { x: -30, y: 3 })
+  )();
+  await (
+    await drag(page, from, { y: -200 })
+  )();
+
+  const lines = await readLog(page, "Standings and bracket");
+  expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on Team details: /));
+  expect(lines).toContainEqual(
+    expect.stringMatching(
+      /^lifted after moving 30 left and 3 down; the page's code took the touch once it had moved \d+ left and \d down; the page didn't scroll$/,
+    ),
+  );
+  expect(lines).toContainEqual(
+    expect.stringMatching(
+      /^lifted after moving 0 right and 200 up; the browser kept the touch; the page scrolled \d+px down$/,
+    ),
   );
 });
