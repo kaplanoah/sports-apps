@@ -5,13 +5,13 @@
 // decides how parts layer, stack, scroll, and show, and anything a page's other stylesheets add
 // that gives a part a layer of its own, lifts it over others, or decides how it scrolls or takes a
 // touch (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a
-// layer of its own, sets what those stylesheets would be red for or a custom property they stack
-// with, or holds or creates markup that runs or layers the page; a line a page's markup adds or
-// takes out that loads, runs, or layers its parts; and a diff the gate can't read. A red change
-// merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone who can
-// label a pull request could add the label, so the gate reads who last added it and lets the
-// change through only from the repository's owner, and only when the label came after the pull
-// request's head commit reached GitHub, which the owner hasn't used on the phone otherwise.
+// layer of its own, sets or clears what those stylesheets would be red for or a custom property
+// they stack with, or holds or creates markup that runs or layers the page; a line a page's markup
+// adds or takes out that loads, runs, or layers its parts; and a diff the gate can't read. A red
+// change merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone
+// who can label a pull request could add the label, so the gate reads who last added it and lets
+// the change through only from the repository's owner, and only when the label came after the
+// pull request's head commit reached GitHub, which the owner hasn't used on the phone otherwise.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
@@ -84,23 +84,24 @@ const ASSIGNS = String.raw`\s*(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?!=)`;
 // `const style = part.style` does, since a property's name, like position or container, names
 // other things too.
 const STYLE = String.raw`\bstyle`;
-// A property a script sets by its name on a part's style, with the value it writes after it, and
-// the style's whole text, as its cssText, as the style itself, or as its attribute, which a
-// removed attribute clears to any value.
+// A property a script sets by its name on a part's style, and the style's whole text, as its
+// cssText, as the style itself, or as its attribute, each with the rest of the line, where the
+// value it writes starts.
 const STYLE_PROPERTY_ASSIGNMENT = new RegExp(`${STYLE}\\.([A-Za-z]+)${ASSIGNS}(?=(.*))`, "g");
-const STYLE_TEXT_ASSIGNMENT = new RegExp(`\\.style${ASSIGNS}(.*)`);
-const STYLE_ATTRIBUTE_CHANGE = /\.(?:set|remove)Attribute\(\s*["'`]style["'`]\s*(?:,(.*))?/;
+const STYLE_TEXT_ASSIGNMENT = new RegExp(`\\.style${ASSIGNS}(?=(.*))`, "g");
+const STYLE_ATTRIBUTE_CHANGE = /\.(set|remove)Attribute\(\s*["'`]style["'`]\s*(?:,(?=(.*)))?/g;
 // A property a style's own methods set or clear, on whatever holds the style, by its CSS name,
 // quoted, with any value where it clears it, or by a name the gate can't read, as a variable
 // holds it or an index into the style names it.
 const STYLE_PROPERTY_CALL =
-  /\.(?:set|remove)Property\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(.*))?/;
+  /\.(?:set|remove)Property\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(?=(.*)))?/g;
 const STYLE_INDEX_ASSIGNMENT = new RegExp(`${STYLE}\\s*\\[[^\\]]*\\]${ASSIGNS}`);
 // A value as a script writes it: a string or a number, which ends where its expression does.
 const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*(?:[;,)}\]]|$))/;
 
-// Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) hands a
-// part's style, and in the keyframes <part>.animate([ ... ]) or <part>.animate({ ... }) takes.
+// Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) or
+// Object.assign(style, { ... }) hands a part's style, and in the keyframes
+// <part>.animate([ ... ]) or <part>.animate({ ... }) takes.
 const STYLE_OBJECTS = [/Object\.assign\(\s*(?:[\w$.]+\.)?style\s*,\s*\{/g, /\.animate\(\s*[[{]/g];
 // The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
 const KEYFRAMES_NAME = /\.animate\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
@@ -375,6 +376,7 @@ function describeStyleProperty(property, value, isWatched) {
  * @param {(property: string) => boolean} isWatched
  */
 function describeStyleText(value, isWatched) {
+  if (!value.trim()) return "a style that clears every property";
   const settings = findInlineStyleSettings(value, isWatched);
   return settings.length ? `a style that sets ${settings.join("; ")}` : null;
 }
@@ -382,34 +384,46 @@ function describeStyleText(value, isWatched) {
 const UNREADABLE_PROPERTY = "a style property whose name the gate can't read";
 
 /**
- * What a line sets by a property's name on a part's style that a page's stylesheet would be red
- * for, or null when it sets nothing that is.
+ * The first of a line's writes that sets something red, past any that don't.
  * @param {string} text
- * @param {(property: string) => boolean} isWatched
+ * @param {RegExp} pattern global, one match for each write
+ * @param {(match: RegExpMatchArray) => string | null} describe
  */
-function findAssignedSetting(text, isWatched) {
-  for (const [, name, written] of text.matchAll(STYLE_PROPERTY_ASSIGNMENT)) {
-    const value = readScriptValue(written);
-    const setting =
-      name === "cssText"
-        ? describeStyleText(value, isWatched)
-        : describeStyleProperty(toKebabCase(name), value, isWatched);
+function findFirstSetting(text, pattern, describe) {
+  for (const match of text.matchAll(pattern)) {
+    const setting = describe(match);
     if (setting) return setting;
   }
   return null;
 }
 
 /**
- * What a line sets a part's whole style to, as the style itself or its attribute, that a page's
- * stylesheet would be red for, or null when it sets nothing that is.
+ * What a line sets by a property's name on a part's style that a page's stylesheet would be red
+ * for, or null when it sets nothing that is.
  * @param {string} text
  * @param {(property: string) => boolean} isWatched
  */
-function findStyleTextSetting(text, isWatched) {
-  const written = text.match(STYLE_TEXT_ASSIGNMENT)?.[1] ?? text.match(STYLE_ATTRIBUTE_CHANGE)?.[1];
-  const isWritten = written !== undefined || STYLE_ATTRIBUTE_CHANGE.test(text);
-  return isWritten ? describeStyleText(readScriptValue(written ?? ""), isWatched) : null;
-}
+const findAssignedSetting = (text, isWatched) =>
+  findFirstSetting(text, STYLE_PROPERTY_ASSIGNMENT, ([, name, written]) => {
+    const value = readScriptValue(written);
+    return name === "cssText"
+      ? describeStyleText(value, isWatched)
+      : describeStyleProperty(toKebabCase(name), value, isWatched);
+  });
+
+/**
+ * What a line sets or clears a part's whole style to, as the style itself or its attribute, that a
+ * page's stylesheet would be red for, or null when it sets nothing that is.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+const findStyleTextSetting = (text, isWatched) =>
+  findFirstSetting(text, STYLE_TEXT_ASSIGNMENT, ([, written]) =>
+    describeStyleText(readScriptValue(written), isWatched),
+  ) ??
+  findFirstSetting(text, STYLE_ATTRIBUTE_CHANGE, ([, change, written]) =>
+    describeStyleText(change === "remove" ? "" : readScriptValue(written ?? ""), isWatched),
+  );
 
 /**
  * What a line sets or clears with a style's own methods that a page's stylesheet would be red
@@ -417,18 +431,17 @@ function findStyleTextSetting(text, isWatched) {
  * @param {string} text
  * @param {(property: string) => boolean} isWatched
  */
-function findPropertyCallSetting(text, isWatched) {
-  const call = text.match(STYLE_PROPERTY_CALL);
-  if (!call) return null;
-  return call[1]
-    ? describeStyleProperty(call[2], readScriptValue(call[3] ?? ""), isWatched)
-    : UNREADABLE_PROPERTY;
-}
+const findPropertyCallSetting = (text, isWatched) =>
+  findFirstSetting(text, STYLE_PROPERTY_CALL, ([, quote, name, written]) =>
+    quote
+      ? describeStyleProperty(name, readScriptValue(written ?? ""), isWatched)
+      : UNREADABLE_PROPERTY,
+  );
 
 /**
- * What a line sets on a part's style, by a property's name, its CSS name, or its whole text, that
- * a page's stylesheet would be red for, or a property whose name the gate can't read, or null when
- * it sets nothing that is.
+ * What a line sets or clears on a part's style, by a property's name, its CSS name, or its whole
+ * text, that a page's stylesheet would be red for, or a property whose name the gate can't read,
+ * or null when it sets nothing that is.
  * @param {string} text
  * @param {(property: string) => boolean} isWatched
  */

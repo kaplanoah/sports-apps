@@ -903,6 +903,9 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="${style}">',
     "<div style=${style}>",
     '<div style="color: ${isOn ? "red" : "blue"}">',
+    '<div style="/* lift */ z-index: 2">',
+    '<div style="/**/pointer-events: none">',
+    '<div style="z\\-index: 2">',
   ];
   const quietStyles = [
     '<div style="--team-stat-columns: ${columns}">',
@@ -1328,6 +1331,13 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.removeProperty("z-index");',
     "  style.removeProperty(property);",
     '  part.removeAttribute("style");',
+    '  part.style.cssText = "/**/z-index: 2";',
+    '  part.style.cssText = "";',
+    '  part.style = "";',
+    '  part.setAttribute("style", "");',
+    '  part.style.removeProperty("color"), part.style.removeProperty("z-index");',
+    '  a.setAttribute("style", "color: red"), b.setAttribute("style", "z-index: 2");',
+    '  a.style = "color: red", b.style = "z-index: 2";',
     '  part.style = "z-index: 2";',
     '  part.setAttribute("style", "z-index: 2");',
     "  part.setAttribute('style', `position: ${place}`);",
