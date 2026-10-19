@@ -2,7 +2,8 @@ import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
-// A row that opens something tints while it's pressed, as an iPhone's lists do (press.js).
+// A row that opens something tints while it's pressed, and a finger that drifts or that the
+// browser takes for a scroll never taps a button or link, as on an iPhone (press.js).
 
 test.use({
   viewport: { width: 390, height: 844 },

@@ -87,7 +87,7 @@ function noteLift() {
   if (touch) touch.liftedAt = performance.now();
 }
 
-// A key's click, as Enter on a row's button, is never a finger's.
+// A key's click, as Enter on a focused button, is never a finger's.
 function forgetTouch() {
   touch = null;
 }
