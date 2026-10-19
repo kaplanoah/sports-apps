@@ -307,11 +307,7 @@ test("over a header of a fractional height, the header rides whole pixels, holdi
 
   await scrollSeasonPart(page, "standings", reach);
 
-  const pillTop = await page
-    .locator("#bracketStandingsPill")
-    .evaluate((pill) => pill.getBoundingClientRect().top);
-  expect(pillTop).toBeLessThanOrEqual(holdTop);
-  expect(pillTop).toBeGreaterThan(holdTop - 1);
+  expect(await readSeasonRide(page)).toMatchObject({ pillTop: holdTop });
 });
 
 test("the standings' last row ends above the tab bar once they're scrolled to their end", async ({
