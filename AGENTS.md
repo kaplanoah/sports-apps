@@ -60,7 +60,13 @@
   the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
   and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
+  CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config,
+  so a change to the docs, the other workflows, the files that only configure the checks,
+  or tooling or Node tests no browser test imports, runs none,
+  and runs every app's for shared code, CI's own workflow, the dependencies, or a kind of file it doesn't know (`worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
+  but for one that passed burn-in in an earlier run, on this push or one before it, and hasn't changed since,
+  with every helper and config the specs reach by import, and the dependencies, the Node version, and CI's own workflow, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
@@ -603,9 +609,10 @@
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`),
   which each deploy does for its new version, putting the one before back when it doesn't,
   and which the `Watch apps` workflow does every 15 minutes,
-  keeping one open issue for each app that isn't opening, which closes once it opens again (`watch-apps.mjs`),
+  keeping one open issue for each app that isn't opening, which closes once it opens again,
+  and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`),
   both from each page's address and code in the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
-  with `_BETA` after the app's name for its beta channel.
+  and a beta deploy from the `beta` environment's, with `_BETA` after the app's name.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" below.
 - Commands:
@@ -716,12 +723,15 @@ Delete it once the app's first PR merges.
 8. **Ship it.** Open it as a `feat:` PR, which starts the app at version 1.0.0.
    Its page adds lines that give parts layers of their own, so it's a red change,
    tried on the owner's phone from beta before it merges, as "Workflow" says.
-   Once its CI passes, push it to `beta`, whose deploy creates `<app>-app-beta`,
+   Each channel's token can edit only the Workers it names, so before the first deploy of each channel,
+   the owner creates its Worker in Cloudflare's dashboard and adds it to that environment's token:
+   `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
+   Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`,
    which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
    Give the owner that address, and ask them to set its code with `npm run set-access-code -- <app> <code> --channel beta`,
-   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `production` environment's secrets,
+   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `beta` environment's secrets,
    add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
-   The merge's deploy then creates `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
+   The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
    and the owner adds its address and code as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
 
@@ -777,23 +787,66 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `season-header.js`, `rider-taps.js`, `held-bar.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
+  `show-last-drawn.js`, `season-header.js`, `rider-taps.js`, `held-bar.js`,
+  `day-strip.js`, `strip-slide.js`, `pull-to-refresh.js`, and `spring-scroll.js` in `shared/page/`),
   but not to its comments, blank lines, or formatting, which draw nothing;
-  a change to its shared stylesheets (`sheet.css`, `pager.css`,
-  `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),
-  added or removed, in a selector or at-rule, which says which parts a rule reaches,
-  or in a property that decides how parts layer, stack, scroll,
-  take a touch, or show (any below, any `position`, `overflow`,
-  `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
-  `opacity`, `visibility`, `display`, `isolation`, or `mix-blend-mode`),
-  but not in their fonts, colors, spacing, or sizes, which CI checks;
-  or an added line in a page's CSS or JavaScript that sets a property that gives a part a layer of its own (`transform`,
+  a change to the sequence of its shared stylesheets' (`sheet.css`, `pager.css`,
+  `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) top-level statements,
+  like `@layer` and `@import`, and declarations, under each selector and its at-rules,
+  of a property that decides how parts layer, stack, scroll,
+  take a touch, or show, whatever its value (any below, any `position`, `overflow` but `overflow-wrap`,
+  `overscroll-behavior`, `scroll-snap`, `scroll-behavior`, `scroll-padding`, `scroll-margin`,
+  `touch-action`, `-webkit-touch-callout`, `user-select`, `pointer-events`, `z-index`,
+  `opacity`, `visibility`, `display`, `isolation`, `mix-blend-mode`, `container`, `offset`,
+  `view-transition-name`, `-webkit-box-reflect`, or `zoom`),
+  but not in their fonts, colors, spacing, or sizes, which CI checks,
+  so a rule renamed, split, or merged that sets none of those isn't red;
+  what any other stylesheet of a page adds that gives a part a layer of its own (`transform`,
   `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
-  `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`).
+  `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`),
+  or lifts it over others, or decides how it scrolls or takes a touch (any of those but `opacity`, `visibility`, and `display`,
+  with a `position` only `absolute`, `fixed`, or sticky, and an `overflow` only when it isn't `visible`),
+  and any top-level statement it adds or takes out;
+  a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another,
+  and the `@property` rule that registers one;
+  a line a page's other JavaScript adds that writes one of those layer properties or a fixed or sticky `position` as CSS, or starts an animation,
+  that sets or clears what those other stylesheets would be red to add, by a property's name on a part's style or on one a script holds as `style`, as `style.zIndex = 5` does,
+  with `setProperty` or `removeProperty`, in a style's object,
+  or in a style's whole text, through its `cssText`, the `style` itself, or `setAttribute("style", ...)` and `removeAttribute("style")`,
+  or a custom property those declarations read, or a style property whose name a template, a variable in `setProperty` or `removeProperty`, or an index into `style` holds,
+  that creates a `dialog`, `style`, or `script` element, or that holds the markup below;
+  a line an app's `page/*.html` adds or takes out that holds `<script`, `<style`, `<dialog`, or `popover`,
+  or a `style=` that sets what one of those other stylesheets would be red to add, or a custom property those declarations read,
+  or whose value the gate can't read, as where a template fills it in whole,
+  or any change to the stylesheets it links, whose order sets the cascade, but not its other links, like a preload or an icon,
+  to its `viewport`, `apple-mobile-web-app-capable`, `mobile-web-app-capable`, and `apple-mobile-web-app-status-bar-style` metas,
+  which fit it to the screen, open it from the Home Screen without the browser's bars, and color the phone's own,
+  or to its inline scripts and styles, which take effect in the order the page holds them;
+  a change to the `display`, `display_override`, `orientation`, or `scope` an app's `page/*.webmanifest` gives,
+  which open its Home Screen app without the browser's bars, turn it, and say which pages keep it so,
+  or to a manifest the gate can't read;
+  and a diff the gate can't read.
+  In a stylesheet, a `style=`, or a script, a declaration that reads a custom property, or a value a template or the script fills in, counts as if it held any value,
+  and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,
+  `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
+  so `none`, `all`, one that names none, or a keyword like `inherit` counts,
+  but for one in a script's CSS text, as in its template or a string, or keyed in a style's object or keyframes,
+  however its key is written, which counts whatever it eases,
+  since the script can add to it past where the gate reads it.
+  A script, stylesheet, or page the gate can't read is red, and so is one whose diff hides its content, as a binary one's does, from a diff that shows every file's text whatever `.gitattributes` says.
+  By design it can't see what a page's other stylesheets take out, or their `display` and `opacity` overriding a shared rule,
+  nor a class that markup or a script adds that a shared stacking rule then reaches.
+  The base's copy of the gate's code, on the Node and modules the base names, judges a pull request's files,
+  so a change to the gate's code can't let the pull request's own red change through,
+  and a change to the workflow's `gate`, `phone`, or `check` job is the review's to weigh, as a guard `REVIEW.md` names.
   Tests are never red.
-  The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label,
-  added by the owner after the PR's last push.
+  The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
+  added by the owner after the PR's last push,
+  which main's rules require for a merge, so `check` passes on the PR's tests and review alone,
+  and holds the change itself whenever main's rules don't require that status, which its own step reads from GitHub,
+  or the pull request comes from a fork, whose token can't post it,
+  so a fork's pull request has no `phone` status and merges only past main's rules while they require it (`.github/workflows/ci.yml`).
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     When you ask the owner to add `phone-ok`, link the PR in the same message.
@@ -802,7 +855,7 @@ Delete it once the app's first PR merges.
     A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
     so deploy it to beta and ask.
     Merge `main` into the branch just before each deploy to beta, so the commit the owner labels is the one that merges, since a PR merges while behind `main` as long as it has no conflicts.
-    Merge a red PR once `check` passes with `phone-ok` on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again.
+    Merge a red PR once `check` and `phone` pass with `phone-ok` on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again.
     An OK in chat never stands in for the label.
     Merge it yourself: the owner doesn't.
   - One red change goes live per deploy.
@@ -829,8 +882,9 @@ Delete it once the app's first PR merges.
   Nor does a Diagnostics report, which a viewer shares wherever they like:
   each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
   Reviewing a change, check what it commits, logs, and posts for any of these.
-- The Cloudflare token lives only in the cloud environment's API credentials and the repo's `production` GitHub environment.
-  Never ask for it in chat or put it in environment variables, code, or commits.
+- The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
+  each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
+  Never ask for one in chat or put one in environment variables, code, or commits.
 - Keep scratch work (design playgrounds, test harnesses) out of git, and never point tests at the real page.
 - When unsure, do what best serves the intent of the work, and confirm with the user.
   If you genuinely need a decision from the user, give all the context concisely, list the pros and cons of each option, and make a recommendation.
@@ -847,7 +901,7 @@ When a step says to go back to an earlier step, continue in order from there.
    Even for a change to shared code, run the specs that exercise it by name,
    found by searching the tests for the module or the elements it draws; never pass a folder.
    Don't run the full test suite locally (`npm test`, `npm run test:browser`, or `npm run check`):
-   CI runs it on every push.
+   CI runs the Node tests, and the browser tests a change reaches, on every push.
    If anything fails, fix it and run it again.
    Repeat until it passes.
    Never push while it fails.
@@ -863,7 +917,8 @@ When a step says to go back to an earlier step, continue in order from there.
    If that brought in anything new, go back to step 2.
    Then commit, push, and open a PR into `main`, or a stacked PR into the branch it builds on.
    If the PR is already open, the push updates it.
-   - If the change is red (`node worker/red-change.mjs` with the branch's diff from `main` on stdin says why),
+   - If the change is red (`node worker/red-change.mjs`,
+     with `git diff --text --no-textconv --no-ext-diff --no-renames origin/main` on stdin, as CI runs it, says why),
      also deploy it to beta once its CI passes (`git push -f origin <branch>:beta`,
      as "Workflow" says), unless another red change is still on beta or unconfirmed.
      Then tell the user it's on beta and what to use on the phone, and keep to steps 4 to 7 while the owner tries it.
@@ -909,7 +964,7 @@ When a step says to go back to an earlier step, continue in order from there.
 8. Squash-merge the PR once all of these are true:
    `check` passed on the latest commit, the PR has no merge conflicts, every review finding is answered, and its base is `main`.
    If GitHub refuses the merge, go back to step 4.
-   - Merge a red PR only once `check` passed with the `phone-ok` label on it, which is the owner's go-ahead to merge: until then, tell the user it's ready and wait.
+   - Merge a red PR only once `check` and `phone` passed with the `phone-ok` label on it, which is the owner's go-ahead to merge: until then, tell the user it's ready and wait.
      An OK in chat never stands in for the label.
      One red change goes live per deploy.
 9. Don't deploy.
@@ -928,7 +983,8 @@ When a step says to go back to an earlier step, continue in order from there.
       Read the next Deploy run's log.
     - It says `worker check: ok`: the new version is live.
       Tell the user.
-      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date:
+      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date,
+      and one saying `page check: ok, but` a page that opened without the code its environment holds:
       tell the user that too.
     - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
       Tell the user which.
@@ -941,7 +997,7 @@ When a step says to go back to an earlier step, continue in order from there.
     - The run was skipped:
       CI failed on `main`.
       Read the CI log, fix the failure in a new PR, and start again at step 1.
-    - It says "nothing was deployed": the `production` environment has no Cloudflare token.
+    - It says "nothing was deployed": the channel's environment has no Cloudflare token.
       Tell the user.
     - The run failed: read the log.
       If it says "the earlier version is live again", the Worker rolled back and is unchanged.

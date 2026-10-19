@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createKey, setAppKey } from "../worker/set-app-key.mjs";
 
-const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123" };
+const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
 const API = "https://api.cloudflare.com/client/v4/accounts/acct123/workers";
 
 function createFakeCloudflare({ secrets = [] } = {}) {
@@ -11,7 +11,6 @@ function createFakeCloudflare({ secrets = [] } = {}) {
     calls.push({ url, init });
     let result = {};
     if (url.endsWith("/secrets") && init.method === "GET") result = secrets;
-    if (url.endsWith("/workers/subdomain")) result = { subdomain: "example-subdomain" };
     return new Response(JSON.stringify({ success: true, result }));
   };
   return { fetchImpl, calls };
@@ -77,4 +76,22 @@ test("the beta channel's key goes to the beta Worker, whose address it prints", 
   assert.equal(url, "https://mlb-app-beta.example-subdomain.workers.dev/n3wkey/");
   const put = cloudflare.calls.find((call) => call.init.method === "PUT");
   assert.equal(put.url, `${API}/scripts/mlb-app-beta/secrets`);
+});
+
+test("the address comes from the subdomain's variable, and a missing one stops before anything is sent", async () => {
+  const cloudflare = createFakeCloudflare();
+  await setAppKey({ app: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {} });
+  assert.ok(!cloudflare.calls.some((call) => call.url.endsWith("/workers/subdomain")));
+
+  const unnamed = createFakeCloudflare();
+  await assert.rejects(
+    setAppKey({
+      app: "mlb",
+      fetchImpl: unnamed.fetchImpl,
+      env: { CLOUDFLARE_ACCOUNT_ID: "acct123" },
+      log: () => {},
+    }),
+    /Set CLOUDFLARE_WORKERS_SUBDOMAIN/,
+  );
+  assert.deepEqual(unnamed.calls, []);
 });

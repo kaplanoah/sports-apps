@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import {
   nameAcrossRecord,
@@ -118,6 +119,22 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
       /run: npx playwright install --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
+  const webkitSpec = readRepoFile("playwright.config.mjs").match(/testMatch: "([^"]+)"/)?.[1];
+  assert.ok(webkitSpec, "the Playwright config names the spec its WebKit projects run");
+  assert.match(
+    readJob("burn-in"),
+    new RegExp(
+      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(webkitSpec)}'\\)\\n\\s+run: npx playwright install --with-deps webkit\\n`,
+    ),
+    "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
+  );
+});
+
+// A cache saved with WebKit in it would have the browser job, whose machines lack WebKit's system
+// libraries, run the WebKit projects, so only the jobs that install Chromium alone save it.
+test("no job that installs WebKit saves the browsers' cache", () => {
+  for (const job of ["burn-in", "webkit"])
+    assert.doesNotMatch(readJob(job), /uses: actions\/cache(?:\/save)?@/, job);
 });
 
 // A Node test's failure is read from the end of the job's log, which a session reaches only so
@@ -146,25 +163,169 @@ test("burn-in runs every test ten times however many fail, and fails only on a t
   assert.match(burnIn, /name: burn-in-flaky-/);
 });
 
-// Burn-in's machines start only for a pull request that changes a browser spec, and check
+// Burn-in's machines start only for a pull request with a browser spec to repeat, and check
 // requires them to pass then.
-test("burn-in runs only when a pull request changes a browser spec, and check requires it then", () => {
-  // Without --no-renames, a spec moved or split from another reads as renamed, not added.
-  assert.match(
-    readJob("changed-specs"),
-    /git diff --name-only --no-renames --diff-filter=AM HEAD\^1 HEAD/,
+test("burn-in runs only when a pull request has a browser spec to repeat, and check requires it then", () => {
+  const scope = readJob("scope");
+  assert.match(scope, /run: node worker\/burn-in-specs\.mjs/);
+  assert.match(scope, /fetch-depth: 0/);
+  assert.match(scope, /actions: read/);
+  assert.match(scope, /BRANCH: \$\{\{ github\.event\.pull_request\.head\.ref \}\}/);
+  assert.doesNotMatch(
+    scope,
+    /HEAD_SHA/,
+    "an earlier run's burn-in on this same head counts, so the head isn't handed in to skip",
   );
   const burnIn = readJob("burn-in");
-  assert.match(burnIn, /needs: changed-specs/);
+  assert.match(burnIn, /needs: scope/);
   assert.match(
     burnIn,
-    /if: .*needs\.changed-specs\.result == 'success' && needs\.changed-specs\.outputs\.specs != ''/,
+    /if: .*needs\.scope\.result == 'success' && needs\.scope\.outputs\.specs != ''/,
   );
-  assert.match(burnIn, /SPECS: \$\{\{ needs\.changed-specs\.outputs\.specs \}\}/);
+  assert.match(burnIn, /SPECS: \$\{\{ needs\.scope\.outputs\.specs \}\}/);
   assert.match(
     readJob("check"),
-    /\(needs\.changed-specs\.outputs\.specs == '' \|\| needs\.burn-in\.result == 'success'\)/,
+    /\(needs\.scope\.outputs\.specs == '' \|\| needs\.burn-in\.result == 'success'\)/,
   );
+});
+
+// The browser tests run only for the apps the change reaches, and check requires them then.
+test("the browser and WebKit jobs run only the apps the change reaches, and check requires them then", () => {
+  assert.match(
+    readJob("scope"),
+    /shell: bash\n\s+run: git diff --name-only --no-renames HEAD\^1 HEAD \| node worker\/browser-scope\.mjs/,
+  );
+  for (const [job, project] of [
+    ["browser", '"$app"'],
+    ["webkit", '"$app-webkit"'],
+  ]) {
+    const text = readJob(job);
+    assert.match(text, /needs: \[passed, scope\]/, job);
+    assert.match(text, /if: .* && needs\.scope\.outputs\.apps != '' \}\}/, job);
+    assert.match(text, /APPS: \$\{\{ needs\.scope\.outputs\.apps \}\}/, job);
+    assert.ok(text.includes(`for app in $APPS; do projects+=(--project ${project}); done`), job);
+    assert.match(text, /npm run test:browser -- .*"\$\{projects\[@\]\}"/, job);
+  }
+  assert.match(
+    readJob("check"),
+    /\(needs\.scope\.outputs\.apps == '' \|\| \(needs\.browser\.result == 'success' &&\n\s+needs\.webkit\.result == 'success'\)\)/,
+  );
+});
+
+// The phone status's name, set once for the workflow.
+const PHONE_CONTEXT =
+  readRepoFile(".github/workflows/ci.yml").match(/^env:\n {2}PHONE_CONTEXT: (\S+)$/m)?.[1] ?? "";
+
+// A held red change waits on the phone status, set on every pull request from this repository
+// whose gate ran by a job that runs none of the pull request's code since only it can set a
+// status, and check holds the change itself whenever main's rules don't require that status, from
+// a lookup in the workflow rather than the pull request's code, or the pull request comes from a
+// fork, and never records it as passed for main to deploy at once.
+test("a held red change waits on the phone status, and check holds it whenever main's rules don't, or it comes from a fork", () => {
+  assert.equal(PHONE_CONTEXT, "phone");
+  assert.match(readJob("gate"), /held: \$\{\{ steps\.hold\.outputs\.held \}\}/);
+  assert.match(
+    readJob("gate"),
+    /forked: \$\{\{ github\.event\.pull_request\.head\.repo\.full_name != github\.repository \}\}/,
+    "the gate says once whether a pull request comes from a fork, for phone and check both",
+  );
+  assert.equal(
+    [...readRepoFile(".github/workflows/ci.yml").matchAll(/head\.repo\.full_name/g)].length,
+    1,
+  );
+  const phone = readJob("phone");
+  assert.match(
+    phone,
+    /needs: gate\n\s+if: \$\{\{ !cancelled\(\) && needs\.gate\.result == 'success' && needs\.gate\.outputs\.forked != 'true' \}\}\n/,
+    "phone runs on every pull request from this repository, whose token can post the status",
+  );
+  assert.match(phone, /permissions:\n\s+statuses: write\n\s+steps:/);
+  assert.doesNotMatch(phone, /actions\/checkout|node /);
+  assert.ok(phone.includes('-f context="$PHONE_CONTEXT" '));
+  assert.match(
+    phone,
+    /STATE: \$\{\{ needs\.gate\.outputs\.held == 'true' && 'pending' \|\| 'success' \}\}/,
+  );
+  const writers = listJobs().filter((job) => /statuses: write/.test(readJob(job)));
+  assert.deepEqual(writers, ["phone"]);
+  const check = readJob("check");
+  assert.doesNotMatch(check, /node worker\//);
+  assert.match(
+    check,
+    /id: phone\n\s+if: needs\.gate\.outputs\.held == 'true'\n[\s\S]*required=\$\(gh api "repos\/\$REPO\/rules\/branches\/main" --jq '[^']*\$ENV\.PHONE_CONTEXT[^']*'\)\n\s+.*\n\s+echo "required=\$required" >> "\$GITHUB_OUTPUT"/,
+  );
+  assert.match(
+    check,
+    /\(needs\.gate\.outputs\.held == 'true' && \(steps\.phone\.outputs\.required != 'true' \|\|\n\s+needs\.gate\.outputs\.forked == 'true'\)\)\n\s+run: exit 1/,
+    "check holds a red change itself where main's rules don't require phone, or a fork can't post it",
+  );
+  assert.match(
+    check,
+    /if: github\.event_name == 'pull_request' && needs\.gate\.outputs\.held != 'true'\n\s+with:\n\s+name: ci-passed-/,
+  );
+});
+
+/**
+ * What check's filter of main's rules says of a ruleset, run with jq as gh runs it.
+ * @param {object[]} rules
+ */
+function readPhoneRequired(rules) {
+  const filter = readJob("check").match(/rules\/branches\/main" --jq '([^']*)'/)?.[1] ?? "";
+  const { stdout, status, stderr } = spawnSync("jq", [filter], {
+    input: JSON.stringify(rules),
+    encoding: "utf8",
+    env: { ...process.env, PHONE_CONTEXT },
+  });
+  assert.equal(status, 0, stderr);
+  return stdout.trim();
+}
+
+/** @param {string[]} contexts */
+const requireChecks = (...contexts) => ({
+  type: "required_status_checks",
+  parameters: { required_status_checks: contexts.map((context) => ({ context })) },
+});
+
+test("check's filter of main's rules finds the phone status only where they require it", () => {
+  assert.equal(
+    readPhoneRequired([{ type: "deletion" }, requireChecks("check", PHONE_CONTEXT)]),
+    "true",
+  );
+  assert.equal(readPhoneRequired([requireChecks("check")]), "false");
+  assert.equal(readPhoneRequired([{ type: "required_status_checks", parameters: {} }]), "false");
+  assert.equal(readPhoneRequired([]), "false");
+});
+
+// A pull request that changes the gate's code would otherwise judge its own change, so the base's
+// copy, on the Node and modules the base names, reads the pull request's files from its checkout,
+// from a diff that shows every file's text whatever .gitattributes says. A pull request's own run
+// can save a cache its later runs restore first, so no job caches the base's modules.
+test("the gate judges a pull request with the base's own gate, Node, and modules", () => {
+  const gate = readJob("gate");
+  const worktree = gate.indexOf('run: git worktree add "$RUNNER_TEMP/base" HEAD^1\n');
+  const node = gate.indexOf("node-version-file: ${{ runner.temp }}/base/.nvmrc\n");
+  assert.ok(
+    worktree !== -1 && node > worktree,
+    "Node from the base's .nvmrc, once it's checked out",
+  );
+  assert.doesNotMatch(gate, /\*setup-node|\*restore-modules|\*install-modules|node worker\//);
+  assert.match(
+    gate,
+    /- name: Install the base's modules\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts\n/,
+  );
+  assert.doesNotMatch(gate, /actions\/cache/);
+  for (const workflow of WORKFLOWS)
+    assert.doesNotMatch(
+      readRepoFile(`.github/workflows/${workflow}`),
+      /path: .*base\/node_modules/,
+      workflow,
+    );
+  assert.ok(
+    gate.includes(
+      'run: git diff --text --no-textconv --no-ext-diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"\n',
+    ),
+  );
+  assert.doesNotMatch(gate, /held=false/);
 });
 
 /**
@@ -227,7 +388,7 @@ test("a label change runs only the gate again once a run passed every test on th
     passed,
     /SEARCH: \$\{\{ github\.event_name == 'pull_request' && '--tested' \|\| '' \}\}/,
   );
-  assert.match(readJob("changed-specs"), /needs: passed\n.*!needs\.passed\.outputs\.run/);
+  assert.match(readJob("scope"), /needs: passed\n.*!needs\.passed\.outputs\.run/);
   const check = readJob("check");
   assert.match(
     check,
