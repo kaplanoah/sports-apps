@@ -74,9 +74,8 @@ const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
 // template ends a declaration with a semicolon or its string's end, unless the object is a
 // style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find. A
-// transition in a script's CSS text, or keyed in its object, counts whatever it eases, since the
-// script can add to the text past where the gate reads it, and an object it keys can become a
-// style's later.
+// transition in a script's CSS text, or keyed in a style's object or keyframes, counts whatever it
+// eases, since the script can add to it past where the gate reads it.
 const LAYER_SETTINGS = [
   {
     name: "a CSS declaration",
@@ -121,6 +120,8 @@ const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*
 const STYLE_OBJECT = /Object\.assign\(\s*(?:[\w$.]+\.)?style\s*,\s*\{/g;
 const KEYFRAMES = /\.animate\(\s*[[{]/g;
 const KEYFRAME_TIMING_KEYS = new Set(["offset", "easing", "composite"]);
+// A transition keyed there counts whatever it eases, however its key is written.
+const TRANSITION_PROPERTY = /^(?:-webkit-)?transition(?:-property)?$/;
 // A keyframe names the CSS offset property cssOffset, since offset is its place.
 const KEYFRAME_CSS_NAMES = new Map([["cssOffset", "offset"]]);
 // The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
@@ -495,6 +496,7 @@ function findStyleKey(text, readProperty, isWatched) {
   for (const match of text.matchAll(STYLE_KEY)) {
     const property = readProperty(match[2]);
     if (property === null) continue;
+    if (TRANSITION_PROPERTY.test(property)) return `a style property that sets ${property}`;
     const value = readScriptValue(text.slice((match.index ?? 0) + match[0].length));
     const setting = describeStyleProperty(property, value, isWatched);
     if (setting) return setting;

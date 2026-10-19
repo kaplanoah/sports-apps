@@ -1581,6 +1581,43 @@ test("a key of a style's object is red where a page's stylesheet would be", () =
   ]);
 });
 
+test("a transition keyed in a style's object or keyframes is red whatever it eases, however its key is written", () => {
+  const path = "apps/wnba/page/js/tip.js";
+  const script = [
+    "Object.assign(tip.style, {",
+    '  transition: "color 0.2s",',
+    '  "transition": "color 0.2s",',
+    '  transitionProperty: "color",',
+    '  webkitTransition: "color 0.2s",',
+    "});",
+    "tip.animate([",
+    '  { transition: "color 0.2s" },',
+    '  { "transition-property": "color" },',
+    "]);",
+  ];
+  const keyedLines = [2, 3, 4, 5, 8, 9];
+  const reasons = findRedReasons(
+    [
+      {
+        path,
+        addedLines: keyedLines.map((number) => ({ number, text: script[number - 1] })),
+        hunks: [],
+        hunkStarts: [],
+      },
+    ],
+    () => script.join("\n"),
+    listNoStylesheets,
+  );
+  assert.deepEqual(reasons, [
+    `${path}:2 adds a CSS declaration that sets transition: transition: "color 0.2s",`,
+    `${path}:3 adds a style property that sets transition: "transition": "color 0.2s",`,
+    `${path}:4 adds a style property that sets transition-property: transitionProperty: "color",`,
+    `${path}:5 adds a style property that sets -webkit-transition: webkitTransition: "color 0.2s",`,
+    `${path}:8 adds a CSS declaration that sets transition: { transition: "color 0.2s" },`,
+    `${path}:9 adds a style property that sets transition-property: { "transition-property": "color" },`,
+  ]);
+});
+
 test("a page's script that sets a custom property is red only where a stack declaration reads it, or its name can't be read", () => {
   const reads = {
     "shared/page/chrome.css": [".a { transform: var(--lift); translate: var(--slideX); }"],
@@ -1624,16 +1661,6 @@ test("a page's script that sets a custom property is red only where a stack decl
     ),
     [],
     "a style's object sets no custom property, which only setProperty sets",
-  );
-  assert.equal(
-    findChangeReasons({
-      [path]: {
-        before: [],
-        after: ["Object.assign(part.style, {", '  transition: "color 0.2s",', "});"],
-      },
-    }).length,
-    1,
-    "a transition keyed in a script's object counts whatever it eases",
   );
 });
 

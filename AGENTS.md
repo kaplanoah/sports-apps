@@ -820,9 +820,9 @@ Delete it once the app's first PR merges.
   and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,
   `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
   so `none`, `all`, one that names none, or a keyword like `inherit` counts,
-  but for one in a script's CSS text, as in its template or a string, or keyed in its object, as a style's or keyframes are,
-  which counts whatever it eases,
-  since the script can add to the text past where the gate reads it, and an object it keys can become a style's later.
+  but for one in a script's CSS text, as in its template or a string, or keyed in a style's object or keyframes,
+  however its key is written, which counts whatever it eases,
+  since the script can add to it past where the gate reads it.
   A script, stylesheet, or page the gate can't read is red, and so is one whose diff hides its content, as a binary one's does, from a diff that shows every file's text whatever `.gitattributes` says.
   By design it can't see what a page's other stylesheets take out, or their `display` and `opacity` overriding a shared rule,
   nor a class that markup or a script adds that a shared stacking rule then reaches.
