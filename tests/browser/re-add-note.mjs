@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { EASE_HALFWAY_MS, listAnimations } from "./animations.mjs";
+import { EASE_HALFWAY_MS, finishTimedAnimations, listAnimations } from "./animations.mjs";
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
 import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
 import { listLowContrastText } from "./contrast.mjs";
@@ -245,15 +245,13 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
       const { height, opacity } = getComputedStyle(element);
       return { height, opacity, isFilled: element.childElementCount > 0 };
     }, /** @type {const} */ ([look, EASE_HALFWAY_MS]));
-  const finishEasings = () =>
-    page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
 
   await pick(page, looks.light);
   await expect(note).toBeVisible();
   const opening = await readLastEasing();
   expect(opening).toMatchObject({ first: { height: "0px", opacity: 0 }, last: { opacity: "1" } });
   expect(opening.direction).toBe("normal");
-  await finishEasings();
+  await finishTimedAnimations(page);
   const full = await note.evaluate((element) => getComputedStyle(element).height);
 
   const halfClosed = await pickHeldHalfway("dark");
@@ -271,12 +269,12 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
     opacity: halfClosed.opacity,
   });
   expect(reopening.last).toMatchObject({ height: full, opacity: "1" });
-  await finishEasings();
+  await finishTimedAnimations(page);
   await expect(note).toBeVisible();
   await expect(note).toHaveText(NOTE_WORDS);
 
   await pick(page, looks.dark);
-  await finishEasings();
+  await finishTimedAnimations(page);
   await expect(note).toBeEmpty();
   const halfOpen = await pickHeldHalfway("light");
   await pick(page, looks.dark);
@@ -286,10 +284,10 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   expect(parseFloat(halfOpen.height)).toBeLessThan(parseFloat(full));
   await pick(page, looks.light);
   expect((await readLastEasing()).last).toMatchObject({ height: full, opacity: "1" });
-  await finishEasings();
+  await finishTimedAnimations(page);
   await expect(note).toHaveCSS("height", full);
   await pick(page, looks.dark);
-  await finishEasings();
+  await finishTimedAnimations(page);
   await expect(note).toBeHidden();
   await expect(note).toBeEmpty();
 }

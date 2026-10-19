@@ -1,5 +1,9 @@
 import { test, expect, openApp } from "./harness.mjs";
-import { EASE_HALFWAY_MS, listAnimations } from "../../../../tests/browser/animations.mjs";
+import {
+  EASE_HALFWAY_MS,
+  finishTimedAnimations,
+  listAnimations,
+} from "../../../../tests/browser/animations.mjs";
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
@@ -483,7 +487,7 @@ test.describe("on a phone, in full motion", () => {
     expect(closing.direction).toBe("reverse");
     expect(closing.last.height).toBe(halfReopened.height);
     expect((await readBox()).easings).toBe(1);
-    await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
+    await finishTimedAnimations(page);
     await expect(updates).toBeHidden();
   });
 });

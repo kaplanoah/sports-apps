@@ -40,6 +40,18 @@ export const waitForTimedAnimations = (page) =>
   expect.poll(async () => (await describeTimedAnimations(page)).length).toBe(0);
 
 /**
+ * Moves every animation on the page that plays over time to its end at once.
+ * @param {import("@playwright/test").Page} page
+ */
+export const finishTimedAnimations = (page) =>
+  page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((animation) => animation.timeline === document.timeline)
+      .forEach((animation) => animation.finish()),
+  );
+
+/**
  * An animation the page played over time: the classes of the element it moves, its first and last
  * frames, and the way it plays them.
  * @typedef {{ classes: string[], first: Keyframe, last: Keyframe, direction: string }} Animation
