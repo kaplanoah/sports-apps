@@ -910,12 +910,16 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="position: f\\69xed">',
     '<div style="position: &#102;ixed">',
     '<div style="position: f&#x69;xed">',
+    '<div style="position: &#102ixed">',
+    "<div style=\"color: ${open ? '{' : 'b'}; z-index: 2\">",
     '<div style="/* don\'t lift */ color: red; z-index: 2">',
     '<div style="color: red /* ( */; z-index: 2">',
     '<div style="color: red} .other {z-index: 2">',
   ];
   const quietStyles = [
     '<div style="--team-stat-columns: ${columns}">',
+    '<div style="--team-stat-columns: ${isWide && columns}">',
+    '<div style="--team-stat-columns: ${count({ wide: 1 })}">',
     '<div style="--team: #f60">',
     '<div style="color: var(--ink)">',
     '<div style="position: relative; overflow: visible">',
@@ -968,6 +972,15 @@ test("an inline style in a page's markup or a script's template is red only wher
     findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(commented)] } }),
     [`${script}:1 adds an inline style that sets z-index: 2: ${wrapInTemplate(commented).trim()}`],
   );
+  for (const [markup, setting] of [
+    ['<div style="top: ${top}px; position: ${position}">', "position: ${position}"],
+    ['<div style="color: red; /* note">', "color: red; /* note"],
+  ])
+    assert.deepEqual(
+      findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }),
+      [`${script}:1 adds an inline style that sets ${setting}: ${wrapInTemplate(markup).trim()}`],
+      markup,
+    );
   assert.deepEqual(
     findChangeReasons({ [script]: { before: [], after: ['  // <div style="z-index: 2">'] } }),
     [],
@@ -1346,7 +1359,8 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.removeAttribute("style");',
     '  part.style.cssText = "/**/z-index: 2";',
     '  part.style.position = "f\\69xed";',
-    '  part.style.setProperty("overflow", "\\61uto");',
+    '  part.style.setProperty("position", "\\66ixed");',
+    '  part.style.cssText = `color: ${a ? "{" : "b"}; z-index: 2`;',
     '  part.style.setProperty("\\u007a-index", "2");',
     '  part.style.cssText = "";',
     '  part.style = "";',
@@ -1406,7 +1420,11 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     assert.deepEqual(findReasons(path, [line]), [
       `${path}:1 adds a style that clears every property: ${line.trim()}`,
     ]);
-  assert.deepEqual(findReasons(path, ['  part.style.cssText = "/* note */ color: red";']), []);
+  for (const line of [
+    '  part.style.cssText = "/* note */ color: red";',
+    "  part.style.cssText = `color: ${isOn && ink}`;",
+  ])
+    assert.deepEqual(findReasons(path, [line]), [], line);
   assert.deepEqual(
     findReasons(path, ['  options.style = "";']),
     [`${path}:1 adds a style that clears every property: options.style = "";`],

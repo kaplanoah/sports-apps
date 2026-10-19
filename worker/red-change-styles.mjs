@@ -76,8 +76,9 @@ const PAGE_QUIET_PROPERTIES = ["opacity", "visibility", "display"];
 const OUT_OF_FLOW_POSITION = /^(?:absolute|fixed|sticky|-webkit-sticky)$/i;
 const SCROLLING_OVERFLOW = /^overflow(?:-x|-y|-inline|-block|-scrolling)?$/;
 
-// A CSS escape, a script's string escape, or an HTML entity, which a browser decodes into what
-// the gate would read past, and a property's name, which a template's hole in it isn't.
+// Any backslash or ampersand, since either can start a CSS escape, a script's string escape, or
+// an HTML entity, with or without its semicolon, which a browser decodes into what the gate would
+// read past, and a property's name, which a template's hole in it isn't.
 const ENCODED_TEXT = /\\|&/;
 const PROPERTY_NAME = /^-{0,2}[a-z][\w-]*$/i;
 // What stands in for each hole a script's template fills in, which reads as any value.
@@ -425,28 +426,45 @@ export function createWatchCheck({ changed, unchanged }) {
 }
 
 /**
- * Whether text holds an escape or an entity, which a browser decodes into what the gate can't
- * read.
+ * Whether text holds any backslash or ampersand, either of which can start an escape or an entity
+ * that a browser decodes into what the gate can't read.
  * @param {string} text
  */
 export const isEncoded = (text) => ENCODED_TEXT.test(text);
 
+const CLOSING_BRACKETS = { "{": "}", "[": "]" };
+
+/**
+ * The index of the brace or bracket that closes the one at `open`, or the text's end when none
+ * does.
+ * @param {string} text
+ * @param {number} open
+ */
+export function findClosingBracket(text, open) {
+  const opening = text[open];
+  const closing = CLOSING_BRACKETS[/** @type {"{" | "["} */ (opening)];
+  let depth = 0;
+  for (let at = open; at < text.length; at += 1) {
+    if (text[at] === opening) depth += 1;
+    if (text[at] === closing) depth -= 1;
+    if (depth === 0) return at;
+  }
+  return text.length;
+}
+
 /**
  * Each hole a script's template fills in, as `${...}`, from its start to the brace that closes
- * it.
+ * it, or null when one never closes, as where a string in it holds a brace of its own.
  * @param {string} text
+ * @returns {string[] | null}
  */
-function findTemplateHoles(text) {
+export function findTemplateHoles(text) {
   const holes = [];
-  for (let start = text.indexOf("${"); start !== -1; start = text.indexOf("${", start + 1)) {
-    let depth = 0;
-    let end = start + 1;
-    for (; end < text.length; end += 1) {
-      if (text[end] === "{") depth += 1;
-      else if (text[end] === "}" && --depth === 0) break;
-    }
+  for (let start = text.indexOf("${"); start !== -1;) {
+    const end = findClosingBracket(text, start + 1);
+    if (end === text.length) return null;
     holes.push(text.slice(start, end + 1));
-    start = end;
+    start = text.indexOf("${", end + 1);
   }
   return holes;
 }
@@ -454,13 +472,14 @@ function findTemplateHoles(text) {
 /**
  * The declarations of an inline style as a browser reads them, past its comments and with its
  * strings whole, each hole a template fills in read as a custom property, which can hold any
- * value, or null when it can't be read as one style, as when a brace in it closes the style, or
- * when what the template doesn't fill in holds an escape or an entity.
+ * value, or null when it can't be read as one style, as when a brace in it closes the style or a
+ * hole never closes, or when what the template doesn't fill in holds an escape or an entity.
  * @param {string} style
  * @returns {Declaration[] | null}
  */
 function readInlineStyle(style) {
   const holes = findTemplateHoles(style);
+  if (holes === null) return null;
   const filled = holes.reduce(
     (text, hole, index) => text.replace(hole, `var(${HOLE_NAME}${index})`),
     style,
@@ -474,7 +493,7 @@ function readInlineStyle(style) {
   /** @param {string} text */
   const restoreHoles = (text) =>
     holes.reduce(
-      (restored, hole, index) => restored.replace(`var(${HOLE_NAME}${index})`, hole),
+      (restored, hole, index) => restored.replace(`var(${HOLE_NAME}${index})`, () => hole),
       text,
     );
   return rule.declarations.map(({ property, value }) => ({

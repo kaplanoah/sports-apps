@@ -27,8 +27,10 @@ import {
   LAYER_PROPERTIES,
   createWatchCheck,
   describeUnreadable,
+  findClosingBracket,
   findInlineStyleSettings,
   findStyleReasons,
+  findTemplateHoles,
   isEncoded,
   isPageLayerDeclaration,
   readMinifiedCode,
@@ -274,26 +276,6 @@ function changesScriptCode(file, readPageFile) {
 const describeSharedCode = ({ path }) =>
   `${path} is shared code that moves, layers, or draws the page`;
 
-const CLOSING_BRACKETS = { "{": "}", "[": "]" };
-
-/**
- * The index of the brace or bracket that closes the one at `open`, or the text's end when none
- * does.
- * @param {string} text
- * @param {number} open
- */
-function findClosingBracket(text, open) {
-  const opening = text[open];
-  const closing = CLOSING_BRACKETS[/** @type {"{" | "["} */ (opening)];
-  let depth = 0;
-  for (let at = open; at < text.length; at += 1) {
-    if (text[at] === opening) depth += 1;
-    if (text[at] === closing) depth -= 1;
-    if (depth === 0) return at;
-  }
-  return text.length;
-}
-
 /**
  * @param {string} text
  * @param {number} index
@@ -347,13 +329,24 @@ const toKebabCase = (name) =>
 
 /**
  * The value a script writes, as its string or number holds it, or as a template's hole for one
- * it works out or one whose escapes the gate doesn't decode, either of which can hold any value.
+ * it works out or one whose escapes, outside the holes its own template fills in, the gate
+ * doesn't decode, either of which can hold any value.
  * @param {string} text from where the value starts
  */
 function readScriptValue(text) {
   const literal = text.match(SCRIPT_LITERAL);
   const value = literal?.[2] ?? literal?.[3];
-  return value === undefined || isEncoded(value) ? `\${${text.trim()}}` : value;
+  return value === undefined || isEncodedOutsideHoles(value) ? `\${${text.trim()}}` : value;
+}
+
+/**
+ * Whether a script's string, outside the holes its template fills in, holds what can start an
+ * escape or an entity, as one with a hole that never closes counts too.
+ * @param {string} value
+ */
+function isEncodedOutsideHoles(value) {
+  const holes = findTemplateHoles(value);
+  return holes === null || isEncoded(holes.reduce((text, hole) => text.replace(hole, ""), value));
 }
 
 /**
