@@ -60,7 +60,7 @@ test("a rule file's paths are the items its frontmatter lists, quoted or not", (
   assert.deepEqual(readRulePaths('# No frontmatter\n\n  - "apps/**"\n'), []);
 });
 
-test("a glob's ** matches across folders, or none before a slash, its * within one, and braces either, a comma or brace outside them being literal", () => {
+test("a glob's ** matches across folders, or none before a slash, its * within one, and braces either, a comma or a stray } outside them being literal, and an unclosed { an error", () => {
   assert.ok(matchesGlob("apps/mlb/page/js/app.js", "apps/*/page/**"));
   assert.ok(!matchesGlob("apps/mlb/worker/src/index.js", "apps/*/page/**"));
   assert.ok(!matchesGlob("apps/mlb/extra/page/app.js", "apps/*/page/**"));
