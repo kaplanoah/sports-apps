@@ -3,6 +3,7 @@
 // it posts, each by its weight and marked with what it says and the head it was posted on, so no
 // try posts one twice and the review can tell a finding an earlier head's review posted from a
 // new one.
+import { readAllPages } from "./github-api.mjs";
 
 export const SUMMARY_MARKER = "<!-- claude-review-summary -->";
 // The posting and summary steps post with the run's own token.
@@ -60,3 +61,17 @@ export const writeFindingMark = (key, head) => `<!-- claude-finding ${key} ${hea
  */
 export const listFindingMarks = (body) =>
   [...(body ?? "").matchAll(FINDING_MARK)].map((match) => ({ key: match[1], head: match[2] }));
+
+/**
+ * Every comment the review posted on a pull request, from every page of its review comments and
+ * then its conversation's, where the findings it posted are.
+ * @param {(path: string) => Promise<any>} readGitHub
+ * @param {string} pullNumber
+ */
+export async function readReviewComments(readGitHub, pullNumber) {
+  const comments = [
+    ...(await readAllPages(readGitHub, `/pulls/${pullNumber}/comments`)),
+    ...(await readAllPages(readGitHub, `/issues/${pullNumber}/comments`)),
+  ];
+  return comments.filter((comment) => comment.user?.login === REVIEWER);
+}

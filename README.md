@@ -238,14 +238,20 @@ request, so merge once those pass and the pull request has no conflicts with
 secret, Claude also reviews each pull request, as [REVIEW.md](REVIEW.md) says:
 it splits the change into areas by what the files are about, has four reviewers
 read each area in full, each for one kind of problem (in the last read of the
-whole change, one reviewer an area looks for every kind), checks every case they
-list against the code, comments on each finding's line, and keeps one summary
-comment up to date. The first review reads the whole change, and each review
-after it reads what changed since the last review that finished. The review is
-one of the checks that must pass, so a review that can't run, that left a
-changed file unread, or whose reviewers, checkers, check across areas, or
-posting step didn't finish, blocks the merge. Its findings don't fail the check;
-answer all of a review's findings in one push, by fixing each or replying.
+whole change, one reviewer an area looks for every kind), checks every problem
+they list against the code, comments on each Important or Unsure finding's line,
+lists a review's Nits and Pre-existing findings together in a checklist comment
+on the first of its items' files GitHub takes (in more than one, each its own
+thread, only past GitHub's limit on a comment's length), puts any finding GitHub
+takes on no file in a comment in the conversation, and keeps one summary comment
+up to date. The first review reads the whole change, and each review after it
+reads what changed since the last review that finished. The review is one of the
+checks that must pass, so a review that can't run, that left a changed file
+unread, or whose reviewers, checkers, check across areas, or posting step didn't
+finish, blocks the merge. Its findings don't fail the check; answer all of a
+review's findings in one push, by fixing each or replying why not, and resolve
+each thread, since `main` merges only once every thread is resolved. A finding
+in the conversation has no thread, so answer it there.
 
 A change that only an iPhone can test, like one to how the page's parts slide or
 layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone`

@@ -38,6 +38,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "apps/mlb/tests/browser/page.spec.mjs",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
+    ".github/workflows/review-area.yml",
     "eslint.config.mjs",
     "worker/browser-scope.mjs",
     "worker/burn-in-specs.mjs",
