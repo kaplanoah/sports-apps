@@ -2,8 +2,9 @@
 // shows a moment after it lands, so a finger that starts a scroll never tints a row, a quick tap
 // still shows, and the tint fades as it lets go. A mouse's shows at once. The page marks the
 // pressed row's button with .is-pressed, and each row's stylesheet tints the row it covers.
-// As on an iPhone's lists, a finger that drifts or scrolls a list never opens what it landed on,
-// though iOS sometimes still sends a click for it, as when the finger stops a list still gliding.
+// As on an iPhone, a finger that drifts or that the browser takes for a scroll is never a tap on
+// the button or link it landed on, though iOS sometimes still sends a click for it, as when the
+// finger stops a list still gliding.
 
 // How long a finger rests before its press shows, and how long a quick tap's press stays.
 const TOUCH_SETTLE_MS = 60;
@@ -23,15 +24,12 @@ const SHARED_ROW_BUTTONS = [
   ".search-games-line",
   ".row-button-cell button",
 ];
-// What else opens something from a list, with no row of its own to tint: a team's or a player's
-// name, a highlight's clip, and a game's starters.
-const OPENING_BUTTONS = [".team-open", ".player-open", ".clip-open", ".starters-open"];
-
-/** @typedef {{ row: string, opening: string }} Buttons */
+// What a finger taps, whether or not a row of it tints.
+const TAPPABLE = "button, a";
 
 /** @type {{ button: Element, x: number, y: number, timer: number | null } | null} */
 let press = null;
-// The last finger on something that opens, until its click, whether it's still a tap, and when it
+// The last finger on a button or link, until its click, whether it's still a tap, and when it
 // lifted.
 /** @type {{ x: number, y: number, isTap: boolean, liftedAt: number | null } | null} */
 let touch = null;
@@ -48,17 +46,16 @@ function letGo() {
 
 /**
  * @param {PointerEvent} event
- * @param {Buttons} buttons
+ * @param {string} rowButtons
  */
-function startPress(event, buttons) {
+function startPress(event, rowButtons) {
   letGo();
   if (!event.isPrimary || event.button !== 0) return;
   const target = /** @type {Element} */ (event.target);
   const { clientX: x, clientY: y } = event;
   const isFinger = event.pointerType === "touch";
-  touch =
-    isFinger && target.closest(buttons.opening) ? { x, y, isTap: true, liftedAt: null } : null;
-  const button = target.closest(buttons.row);
+  touch = isFinger && target.closest(TAPPABLE) ? { x, y, isTap: true, liftedAt: null } : null;
+  const button = target.closest(rowButtons);
   if (!button) return;
   press = { button, x, y, timer: null };
   if (isFinger) press.timer = window.setTimeout(() => markPressed(button), TOUCH_SETTLE_MS);
@@ -100,16 +97,15 @@ const isJustLifted = ({ liftedAt }) =>
   liftedAt !== null && performance.now() - liftedAt < LIFT_CLICK_MS;
 
 /**
- * Drops the click iOS sends for a finger that drifted or scrolled a list, on whatever opening
- * button it lands, before anything that opens it hears of it.
+ * Drops the click iOS sends for a finger that drifted or scrolled, on whatever button or link it
+ * lands, before anything it opens hears of it.
  * @param {MouseEvent} event
- * @param {string} openingButtons
  */
-function dropClickAfterScroll(event, openingButtons) {
+function dropClickAfterScroll(event) {
   const last = touch;
   touch = null;
   if (!last || last.isTap || !isJustLifted(last)) return;
-  if (!(event.target instanceof Element) || !event.target.closest(openingButtons)) return;
+  if (!(event.target instanceof Element) || !event.target.closest(TAPPABLE)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
 }
@@ -136,18 +132,12 @@ export function runAfterPress(row, action) {
 
 /**
  * Tints each row the page shares, and any the app adds by its buttons' selectors, while pressed,
- * and drops the click iOS sends for a finger that drifted or scrolled a list, on a row or anything
- * else that opens from one.
+ * and drops the click iOS sends for a finger that drifted or scrolled, on any button or link.
  * @param {string[]} [appRowButtons] the buttons of the app's own rows, like a bracket's team lines
  */
 export function watchPresses(appRowButtons = []) {
-  const rowButtons = [...SHARED_ROW_BUTTONS, ...appRowButtons];
-  /** @type {Buttons} */
-  const buttons = {
-    row: rowButtons.join(", "),
-    opening: [...rowButtons, ...OPENING_BUTTONS].join(", "),
-  };
-  document.addEventListener("pointerdown", (event) => startPress(event, buttons), {
+  const rowButtons = [...SHARED_ROW_BUTTONS, ...appRowButtons].join(", ");
+  document.addEventListener("pointerdown", (event) => startPress(event, rowButtons), {
     passive: true,
   });
   document.addEventListener("pointermove", followDrift, { passive: true });
@@ -156,8 +146,6 @@ export function watchPresses(appRowButtons = []) {
   document.addEventListener("touchend", noteLift, { passive: true });
   document.addEventListener("touchcancel", noteLift, { passive: true });
   document.addEventListener("scroll", letGo, { capture: true, passive: true });
-  document.addEventListener("click", (event) => dropClickAfterScroll(event, buttons.opening), {
-    capture: true,
-  });
+  document.addEventListener("click", dropClickAfterScroll, { capture: true });
   document.addEventListener("keydown", forgetTouch, { capture: true, passive: true });
 }
