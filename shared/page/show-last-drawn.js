@@ -6,8 +6,9 @@
 // openLastTab(), before anything is painted, since a part on a hidden tab can't take back where it
 // was scrolled.
 
-// What last-seen.js saves the page's parts, open sheets, and settings' switches under.
-const LAST_DRAWN_KEY = "lastDrawn";
+/* global LAST_DRAWN_KEY -- from open-last-tab.js */
+
+// What last-seen.js saves the page's open sheets and settings' switches under.
 const OPEN_SHEETS_KEY = "openSheets";
 const LAST_SWITCHED_KEY = "lastSwitched";
 

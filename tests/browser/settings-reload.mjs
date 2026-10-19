@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
+import { openSettings } from "./settings.mjs";
 
 /**
  * What settings shows of the device's choices and the seasons it can pick.
@@ -30,12 +31,11 @@ const readSettings = (page) =>
  * they were before the page's code arrives, and the same once it runs.
  * @param {{
  *   page: import("@playwright/test").Page,
- *   openSettings: (page: import("@playwright/test").Page) => Promise<void>,
  *   look: string,
  *   switchName: string,
  * }} options a look and a switch other than the ones a device starts on
  */
-export async function checkSettingsOnReload({ page, openSettings, look, switchName }) {
+export async function checkSettingsOnReload({ page, look, switchName }) {
   await openSettings(page);
   const settings = page.locator("#settingsDialog");
   await settings.getByRole("radio", { name: look, exact: true }).check();
@@ -71,19 +71,12 @@ const waitForSettingsFill = (page) => page.waitForRequest(matchPath("/store/news
  * picker listed before, with the season the page shows, which `beforeReload` can move on, chosen.
  * @param {{
  *   page: import("@playwright/test").Page,
- *   openSettings: (page: import("@playwright/test").Page) => Promise<void>,
  *   beforeReload?: () => Promise<void>,
  *   seasons: string[],
  *   shown: string,
  * }} options
  */
-export async function checkSeasonsOnFailedList({
-  page,
-  openSettings,
-  beforeReload,
-  seasons,
-  shown,
-}) {
+export async function checkSeasonsOnFailedList({ page, beforeReload, seasons, shown }) {
   await openSettings(page);
   const row = page.locator("#seasonRow");
   await expect(row.locator("option")).not.toHaveCount(0);

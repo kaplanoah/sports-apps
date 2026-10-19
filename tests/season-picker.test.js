@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listSeasonOptions, listSeasonYears } from "../shared/page/season-picker.js";
+import {
+  keepSeasonYears,
+  listSeasonOptions,
+  listSeasonYears,
+} from "../shared/page/season-picker.js";
 
 test("the seasons the store keeps list newest first, leaving out anything that isn't a year", () => {
   const docs = [{ id: "2025" }, { id: "2027" }, { id: "notes" }, { id: "2026" }];
@@ -18,4 +22,21 @@ test("the picker names each season, newest first, with the shown one among them 
     { year: "2026", name: "2026", isShown: false },
     { year: "2025", name: "2025", isShown: true },
   ]);
+});
+
+test("the seasons the store keeps stand as it last said while a read fails, and none before it has said", async () => {
+  const answers = [
+    () => Promise.reject(new Error("offline")),
+    () => Promise.resolve(["2026", "2025", "2024"]),
+    () => Promise.reject(new Error("offline")),
+    () => Promise.resolve(["2026", "2025"]),
+  ];
+  const readSeasonYears = keepSeasonYears(() =>
+    /** @type {() => Promise<string[]>} */ (answers.shift())(),
+  );
+
+  assert.equal(await readSeasonYears(), null);
+  assert.deepEqual(await readSeasonYears(), ["2026", "2025", "2024"]);
+  assert.deepEqual(await readSeasonYears(), ["2026", "2025", "2024"]);
+  assert.deepEqual(await readSeasonYears(), ["2026", "2025"]);
 });

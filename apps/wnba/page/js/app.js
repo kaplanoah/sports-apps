@@ -157,11 +157,15 @@ const readShown = () =>
 
 const findSeasonRow = () => findElement("seasonRow");
 
-const listSeasonYears = keepSeasonYears(loadSeasonYears);
+const readSeasonYears = keepSeasonYears(loadSeasonYears);
 
 /** @param {string[] | null} years */
 const fillSeasonList = (years) =>
-  fillSeasonPicker(findSeasonRow(), years, session.year, LEAGUE_WORDS);
+  fillSeasonPicker(
+    findSeasonRow(),
+    { years, shownYear: session.year, currentYear: session.currentYear },
+    LEAGUE_WORDS,
+  );
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 /** @param {number} year */
@@ -175,7 +179,7 @@ async function switchSeason(year) {
 async function showNewCurrentYear() {
   startOverDayStrip();
   renderAll();
-  fillSeasonList(await listSeasonYears());
+  fillSeasonList(await readSeasonYears());
 }
 
 const readSearchPages = () =>
@@ -301,7 +305,7 @@ async function boot() {
     showCurrentYear: showNewCurrentYear,
     showUnreadable: reloadIfReplaced,
   });
-  const [years] = await Promise.all([listSeasonYears(), loadSeason()]);
+  const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillSeasonList(years);
   redrawEased(drawLoadedSeason);
   watchNews(session.db, (news) => {

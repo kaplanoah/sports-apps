@@ -81,17 +81,21 @@ async function switchYear(year) {
   renderAll();
 }
 
-const listYears = keepSeasonYears(loadSeasonList);
+const readSeasonYears = keepSeasonYears(loadSeasonList);
 
 /** @param {string[] | null} years */
 const fillYearPicker = (years) =>
-  fillSeasonPicker(findSeasonRow(), years, session.activeYear, LEAGUE_WORDS);
+  fillSeasonPicker(
+    findSeasonRow(),
+    { years, shownYear: session.activeYear, currentYear: session.currentSeason },
+    LEAGUE_WORDS,
+  );
 
 // A new current season changes what the stamp says, and the picker lists it.
 async function showNewCurrentYear() {
   startOverDayStrip();
   renderAll();
-  fillYearPicker(await listYears());
+  fillYearPicker(await readSeasonYears());
 }
 
 // Sortable has already moved the dragged card, so redrawing the list keeps it where it was dropped.
@@ -297,7 +301,7 @@ async function boot() {
     showCurrentYear: showNewCurrentYear,
     showUnreadable: reloadIfReplaced,
   });
-  const [years] = await Promise.all([listYears(), loadSeason()]);
+  const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillYearPicker(years);
   redrawEased(drawLoadedSeason);
   watchNews(session.db, (news) => {

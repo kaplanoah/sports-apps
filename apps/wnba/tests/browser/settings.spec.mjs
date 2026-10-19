@@ -81,7 +81,6 @@ test("a reload with settings open shows its seasons, switches, and look picked b
   await openApp(page, ONE_PAST_SEASON);
   await checkSettingsOnReload({
     page,
-    openSettings: (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click(),
     look: "Walnut",
     switchName: "Include content from The Athletic",
   });
@@ -93,7 +92,6 @@ test("a reload with settings open while the store can't list its seasons lists t
   const app = await openApp(page, ONE_PAST_SEASON);
   await checkSeasonsOnFailedList({
     page,
-    openSettings: (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click(),
     beforeReload: () => app.moveSeasonTo(2027),
     seasons: ["2027", "2026", "2025"],
     shown: "2027",

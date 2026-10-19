@@ -159,7 +159,6 @@ test("a reload with settings open shows its seasons, switches, and look picked b
   await openApp(page, WITH_A_PAST_SEASON);
   await checkSettingsOnReload({
     page,
-    openSettings,
     look: "Night Game",
     switchName: "Include content from The Athletic",
   });
@@ -169,7 +168,7 @@ test("a reload with settings open while the store can't list its seasons lists t
   page,
 }) => {
   await openApp(page, WITH_A_PAST_SEASON);
-  await checkSeasonsOnFailedList({ page, openSettings, seasons: ["2026", "2025"], shown: "2026" });
+  await checkSeasonsOnFailedList({ page, seasons: ["2026", "2025"], shown: "2026" });
 });
 
 test("Appearance sits under Notifications, above the News switches, each choice showing the icon it offers", async ({

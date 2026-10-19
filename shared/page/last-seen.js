@@ -6,7 +6,8 @@
 // load, before its sheets take back what they showed. A sheet left open too long is gone by the
 // time the page shows again (sheet-memory.js).
 
-/* global KEPT_SWITCHES, LAST_DRAWN_KEY, LAST_SWITCHED_KEY, OPEN_SHEETS_KEY -- from show-last-drawn.js */
+/* global LAST_DRAWN_KEY -- from open-last-tab.js */
+/* global KEPT_SWITCHES, LAST_SWITCHED_KEY, OPEN_SHEETS_KEY -- from show-last-drawn.js */
 
 import { isSeasonPart } from "./season-part.js";
 import { keepImages } from "./service-worker.js";

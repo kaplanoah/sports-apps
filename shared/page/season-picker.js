@@ -57,14 +57,15 @@ const readListedYears = (row) =>
 
 /**
  * Lists the seasons the store keeps, or, where it hasn't said, the ones the row lists as the page
- * last drew it, with the shown one chosen.
+ * last drew it, with the current one, and the shown one chosen.
  * @param {HTMLElement} row the picker's row, `#seasonRow`, whose select is `#seasonPicker`
- * @param {string[] | null} years
- * @param {number} shownYear
+ * @param {{ years: string[] | null, shownYear: number, currentYear: number | null }} seasons
  * @param {Pick<import("./league-words.js").LeagueWords, "seasonSpansYears">} words
  */
-export function fillSeasonPicker(row, years, shownYear, words) {
-  const listed = listSeasonOptions(years ?? readListedYears(row), shownYear, words);
+export function fillSeasonPicker(row, { years, shownYear, currentYear }, words) {
+  const known = years ?? readListedYears(row);
+  const withCurrent = currentYear === null ? known : [String(currentYear), ...known];
+  const listed = listSeasonOptions(withCurrent, shownYear, words);
   const options = listed.map(
     ({ year, name, isShown }) =>
       html`<option value="${year}" ${isShown ? "selected" : ""}>${name}</option>`,
