@@ -1399,7 +1399,10 @@ test("a full slate still to start says so after the next tip-off, and once today
       "Last game Mercury 80 Sparks 70 final, slate of 3 over",
     );
     const nextDay = NOW + 24 * 60 * 60 * 1000;
-    assert.doesNotMatch(readStampLines(over, nextDay)[0], /slate/);
+    assert.equal(
+      readStampLines(over, nextDay)[0],
+      "Last game Mercury 80 Sparks 70 final yesterday",
+    );
   }));
 
 test("a game whose time isn't set tips off on its day, and one its series no longer needs never does", () =>

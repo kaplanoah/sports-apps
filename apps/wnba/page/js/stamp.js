@@ -131,9 +131,9 @@ function listDayGames(games, game, seriesById) {
  */
 function describeLiveGames(live, games, seriesById) {
   const lead = /** @type {Game} */ (live.at(-1));
-  const dayGames = listDayGames(games, lead, seriesById).length;
-  if (!isFullSlate(dayGames)) return joinWithSeparator(live.map(describeLiveGame));
-  return `${describeLiveGame(lead)}, ${describeSlate(dayGames, "under way")}`;
+  const dayGames = listDayGames(games, lead, seriesById);
+  if (!isFullSlate(dayGames.length)) return joinWithSeparator(live.map(describeLiveGame));
+  return `${describeLiveGame(lead)}, ${describeSlate(dayGames.length, "under way")}`;
 }
 
 /**
