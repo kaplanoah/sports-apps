@@ -436,6 +436,9 @@
   what each fill draws and where it leaves the list, each new day at its top and whether the strip's dates slide to it,
   any day that changes height as it's drawn whole or as a stand-in,
   and a strip that doesn't scroll where it's told, in `day-strip-log.js`,
+  and each touch on a season's standings and bracket, how far it moved,
+  whether the page's code took it from the browser, and how far the page scrolled,
+  and each click on them, in `bracket-standings-log.js`,
   and each error the page's code doesn't catch, in `error-log.js`,
   each a log made with `step-log.js`, the welcome over the whole screen that a phone's or tablet's browser opens on,
   whose numbered steps pick the theme the Home Screen icon takes and say how to add the page there,
@@ -766,25 +769,46 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
-  but not to its comments, blank lines, formatting, or imports, which draw nothing,
-  nor code it moves unchanged among those scripts and the shared ones they import;
-  a change to what the rules of its shared stylesheets (`sheet.css`, `pager.css`,
-  `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) set for each selector,
-  under its at-rules, in a property that decides how parts layer, stack, scroll,
-  take a touch, or show (any below, any `position` but a `relative` or `static` one in a rule without a `z-index`, `overflow`,
+  `show-last-drawn.js`, `day-strip.js`, `strip-slide.js`, `pull-to-refresh.js`, and `spring-scroll.js` in `shared/page/`),
+  but not to its comments, blank lines, or formatting, which draw nothing;
+  a change to the sequence of its shared stylesheets' (`sheet.css`, `pager.css`,
+  `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) top-level statements,
+  like `@layer` and `@import`, and declarations, under each selector and its at-rules,
+  of a property that decides how parts layer, stack, scroll,
+  take a touch, or show, whatever its value (any below, any `position`, `overflow`,
   `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
-  `opacity`, `visibility`, a `display` of `none` or `contents`, `isolation`, or `mix-blend-mode`),
+  `opacity`, `visibility`, `display`, `isolation`, `mix-blend-mode`, `container`, `offset`,
+  `view-transition-name`, or `-webkit-box-reflect`),
   but not in their fonts, colors, spacing, or sizes, which CI checks,
-  nor a selector renamed, or a rule split or merged, that leaves each selector setting the same;
-  or a property a page's CSS adds, or a line its JavaScript adds, that gives a part a layer of its own (`transform`,
+  so a rule renamed, split, or merged that sets none of those isn't red;
+  what any other stylesheet of a page adds that gives a part a layer of its own (`transform`,
   `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`),
-  or, in its CSS, lifts a part over others or makes it scroll (an absolute `position`, a `z-index`, or an `overflow` but `visible`).
-  In a stylesheet, a `transition` counts only when it eases one of these properties, or all of them, not when it only recolors,
-  and a `translate`, `rotate`, or `scale` in two dimensions only in keyframes or in a rule with an `animation`, a `will-change`, or a `transition` that counts,
-  since WebKit gives a layer of its own only to a transform in three dimensions or on the move.
+  or lifts it over others, makes it scroll, or decides how it takes a touch (any of those but `opacity`, `visibility`, and `display`,
+  with a `position` only `absolute`, `fixed`, or sticky, and an `overflow` only when it isn't `visible`),
+  and any top-level statement it adds or takes out;
+  a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another,
+  and the `@property` rule that registers one;
+  a line a page's other JavaScript adds that sets one of those layer properties, a fixed or sticky `position`,
+  or a custom property with `setProperty`, or that holds the markup below;
+  a line an app's `page/*.html` adds or takes out that holds `<script`, `<style`, `<dialog`, or `popover`,
+  or a `style=` that sets what one of those other stylesheets would be red to add, or a custom property those declarations read,
+  or whose value the gate can't read, as where a template fills it in whole,
+  or any change to the stylesheets it links, whose order sets the cascade, but not its other links, like a preload or an icon,
+  to its `viewport` and `apple-mobile-web-app-status-bar-style` metas, which fit it to the screen and color the phone's bars,
+  or to its inline scripts and styles, which take effect in the order the page holds them;
+  and a diff the gate can't read.
+  In a stylesheet or a `style=`, a declaration that reads a custom property, or a value a template fills in, counts as if it held any value,
+  and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,
+  `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
+  so `none`, `all`, one that names none, or a keyword like `inherit` counts.
+  A script, stylesheet, or page the gate can't read is red, and so is one whose diff hides its content, as a binary one's does, from a diff that shows every file's text whatever `.gitattributes` says.
+  By design it can't see what a page's other stylesheets take out, or their `display` and `opacity` overriding a shared rule,
+  nor a class that markup or a script adds that a shared stacking rule then reaches.
+  The base's copy of the gate's code, on the Node and modules the base names, judges a pull request's files,
+  so a change to the gate's code can't let the pull request's own red change through,
+  and a change to the workflow's `gate` or `phone` job is the review's to weigh, as a change to a guard that `REVIEW.md` names.
   Tests are never red.
   The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
   added by the owner after the PR's last push,

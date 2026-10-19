@@ -256,6 +256,39 @@ test("a held red change waits on the phone status, and check holds it whenever m
   );
 });
 
+// A pull request that changes the gate's code would otherwise judge its own change, so the base's
+// copy, on the Node and modules the base names, reads the pull request's files from its checkout,
+// from a diff that shows every file's text whatever .gitattributes says.
+test("the gate judges a pull request with the base's own gate, Node, and modules", () => {
+  const gate = readJob("gate");
+  const worktree = gate.indexOf('run: git worktree add "$RUNNER_TEMP/base" HEAD^1\n');
+  const node = gate.indexOf("node-version-file: ${{ runner.temp }}/base/.nvmrc\n");
+  assert.ok(
+    worktree !== -1 && node > worktree,
+    "Node from the base's .nvmrc, once it's checked out",
+  );
+  assert.doesNotMatch(gate, /\*setup-node|\*restore-modules|\*install-modules|node worker\//);
+  assert.ok(
+    gate.includes(
+      'run: echo "key=gate-modules-${{ runner.os }}-$(git rev-parse HEAD^1:package-lock.json)" >> "$GITHUB_OUTPUT"\n',
+    ),
+  );
+  assert.match(
+    gate,
+    /- id: base-modules\n\s+uses: actions\/cache@[0-9a-f]{40} # .*\n\s+with:\n\s+path: \$\{\{ runner\.temp \}\}\/base\/node_modules\n\s+key: \$\{\{ steps\.base-modules-key\.outputs\.key \}\}\n/,
+  );
+  assert.match(
+    gate,
+    /if: steps\.base-modules\.outputs\.cache-hit != 'true'\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts\n/,
+  );
+  assert.ok(
+    gate.includes(
+      'run: git diff --text --no-textconv --no-ext-diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"\n',
+    ),
+  );
+  assert.doesNotMatch(gate, /held=false/);
+});
+
 /**
  * A job's condition, the anchored one it names when it names one.
  * @param {string} condition

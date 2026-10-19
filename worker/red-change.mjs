@@ -1,26 +1,35 @@
 // Says whether a pull request is a red change: one whose bugs no CI browser would show, since none
 // touches, scrolls, layers, and draws as an iPhone does, or that touches what iOS has drawn wrong
-// before. That's a change to the code of the shared JavaScript that moves and draws the page,
-// beyond its comments, formatting, and imports and the code it moves unchanged among those scripts
-// and the shared ones they import; a change to what its shared stylesheets' rules set, selector by
-// selector, in what decides how parts layer, stack, scroll, and show; and anything else a page
-// adds that draws a part on a layer of its own or, in its CSS, lifts it over others or makes it
-// scroll. A red change merges only once the owner has used it on the beta app and labeled it
-// phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
-// added it and lets the change through only from the repository's owner, and only when the label
-// came after the pull request's head commit reached GitHub, which the owner hasn't used on the
-// phone otherwise.
-// Usage: git diff --no-renames <base> | node worker/red-change.mjs '<labels as JSON>'
+// before. That's any change to the code, not the comments, blank lines, or formatting, of the
+// shared JavaScript that moves and draws the page; a change to its shared stylesheets in what
+// decides how parts layer, stack, scroll, and show, and anything a page's other stylesheets add
+// that gives a part a layer of its own, lifts it over others, or makes it scroll
+// (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a layer
+// of its own; a line a page's markup adds or takes out that loads, runs, or layers its parts; and
+// a diff the gate can't read. A red change merges only once the owner has used it on the beta app
+// and labeled it phone-ok. Anyone who can label a pull request could add the label, so the gate
+// reads who last added it and lets the change through only from the repository's owner, and only
+// when the label came after the pull request's head commit reached GitHub, which the owner hasn't
+// used on the phone otherwise.
+// Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
+//   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
-// the last two. The diff ends at the files on disk, as CI's `<base> HEAD` in a clean checkout
-// does, since a changed file before the change is rebuilt from the file and the hunks. It writes
-// whether the change is held to $GITHUB_OUTPUT as held=true or held=false.
+// the last two. The diff shows every file's text, whatever .gitattributes says of it, and ends at
+// the files on disk, as CI's `<base> HEAD` in a clean checkout does, since a changed file before
+// the change is rebuilt from the file and the hunks. It writes whether the change is held to
+// $GITHUB_OUTPUT as held=true or held=false.
+import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
-import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse } from "acorn";
 import { transformSync } from "esbuild";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import {
+  LAYER_PROPERTIES,
+  createWatchCheck,
+  describeUnreadable,
+  findInlineStyleSettings,
+  findStyleReasons,
+} from "./red-change-styles.mjs";
 
 export const PHONE_OK_LABEL = "phone-ok";
 
@@ -41,31 +50,14 @@ const RED_FILES = new Set(
     "show-last-drawn.js",
     "day-strip.js",
     "strip-slide.js",
+    "pull-to-refresh.js",
+    "spring-scroll.js",
     "chrome.css",
     "team-sheet.css",
     "game-cards.css",
     "day-strip.css",
   ].map((file) => `shared/page/${file}`),
 );
-
-const LAYER_PROPERTIES = [
-  "transform",
-  "translate",
-  "rotate",
-  "scale",
-  "perspective",
-  "backface-visibility",
-  "filter",
-  "backdrop-filter",
-  "mask",
-  "mask-image",
-  "clip-path",
-  "will-change",
-  "animation",
-  "transition",
-  "contain",
-  "content-visibility",
-];
 
 const toCamelCase = (property) =>
   property.replace(/-([a-z])/g, (_dash, letter) => letter.toUpperCase());
@@ -104,6 +96,7 @@ const LAYER_SETTINGS = [
     name: "a fixed or sticky position",
     pattern: /(setProperty\(\s*["']position["']\s*,\s*["'`](?:fixed|sticky))\b/,
   },
+  { name: "a style property", pattern: /setProperty\(\s*["'`](--[\w-]*)/ },
 ];
 
 // Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) hands a
@@ -115,42 +108,28 @@ const STYLE_KEY = new RegExp(
   `(?:^|[\\s{,])["']?(?:-webkit-|webkit|Webkit)?(${PROPERTY_NAMES}|${CAMEL_PROPERTY_NAMES})(?:-[a-z]+|[A-Z][a-z]+)*["']?\\s*:`,
 );
 
-// Beside the layers, what in the shared stylesheets decides how iOS stacks, scrolls, and shows
-// the page's parts: where a part sits over others, what scrolls and takes a touch, and whether a
-// part draws at all. Their fonts, colors, spacing, and sizes CI checks as an iPhone shows them.
-const STACK_PROPERTIES = [
-  ...LAYER_PROPERTIES,
-  "position",
-  "overflow",
-  "overscroll-behavior",
-  "scroll-snap",
-  "touch-action",
-  "pointer-events",
-  "z-index",
-  "opacity",
-  "visibility",
-  "display",
-  "isolation",
-  "mix-blend-mode",
-];
-
-// What a transition's list holds beside the property it eases: its times, its easing, and how it
-// treats a property that can't ease.
-const TRANSITION_TIMING =
-  /^(?:-?[\d.]+m?s|ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end|normal|allow-discrete)$|\(/i;
-
-// The transform functions, and the most values each transform property holds, that stay in two
-// dimensions, which WebKit paints with the rest of the page unless something moves them.
-const FLAT_TRANSFORM_FUNCTION = /^(?:translate[xy]?|rotate|scale[xy]?)\(/i;
-const FLAT_TRANSFORM_VALUES = new Map([
-  ["translate", 2],
-  ["rotate", 1],
-  ["scale", 2],
-]);
+// A line of a page's markup, or of a script's, that runs scripts, in their order, or opens a
+// dialog, a popover, or a style element, each of which can stack its parts.
+const PAGE_MARKUP_LAYER = /<script\b|<style\b|<dialog\b|\bpopover\b/i;
+// A style attribute and its value, which is missing where a template fills it in whole.
+const STYLE_ATTRIBUTE = /(?<![\w-])style=(?:"([^"]*)"|'([^']*)')?/gi;
+const INLINE_SCRIPT = /<script\b(?![^>]*(?<![\w-])src=)[^>]*>[\s\S]*?<\/script>/gi;
+const INLINE_STYLE = /<style\b[^>]*>[\s\S]*?<\/style>/gi;
+// How the page fits the screen and colors the phone's own bars, which no CI browser draws.
+const META_TAG = /<meta\b[^>]*>/gi;
+const SCREEN_META_NAME =
+  /\bname\s*=\s*["']?(?:viewport|apple-mobile-web-app-status-bar-style)(?![\w-])/i;
+// A link, its attributes on as many lines as it takes, and whether it links a stylesheet, whose
+// order sets the cascade, rather than a preload or an icon, which sets nothing.
+const LINK_TAG = /<link\b[^>]*>/gi;
+const STYLESHEET_REL =
+  /\brel\s*=\s*(?:"[^"]*\bstylesheet\b[^"]*"|'[^']*\bstylesheet\b[^']*'|stylesheet\b)/i;
+const DIFF_HEADER = /^diff --git a\/(.+) b\/(.+)$/;
 
 // Tests live outside every page's folder, so they're never red.
 const isPageCode = (path) => /^(?:shared\/page|apps\/[^/]+\/page)\/.+\.(?:css|js)$/.test(path);
-const isSharedScript = (path) => /^shared\/page\/.+\.js$/.test(path);
+const isPageStylesheet = (path) => isPageCode(path) && path.endsWith(".css");
+const isPageMarkup = (path) => /^apps\/[^/]+\/page\/[^/]+\.html$/.test(path);
 const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
 
 /** @typedef {{ number: number, text: string }} AddedLine */
@@ -161,6 +140,8 @@ const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
  * @property {AddedLine[]} addedLines
  * @property {HunkLine[][]} hunks
  * @property {number[]} hunkStarts the line, from 1, each hunk starts at in the new file
+ * @property {boolean} [isUnreadable] whether the diff hides how its content changed, as it does
+ *   for a file it takes as binary, or one it shows no hunks for whose mode didn't change
  */
 /** @typedef {(path: string) => string} ReadPageFile a page's file as the change leaves it */
 
@@ -179,8 +160,10 @@ export function readDiff(diff) {
   /** @type {HunkLine[] | null} */
   let hunk = null;
   let lineNumber = 0;
+  const modeChanges = new Set();
+  const binaries = new Set();
   for (const line of diff.split("\n")) {
-    const header = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+    const header = line.match(DIFF_HEADER);
     if (header) {
       const [, oldPath, newPath] = header;
       current = { path: newPath, addedLines: [], hunks: [], hunkStarts: [] };
@@ -190,6 +173,8 @@ export function readDiff(diff) {
         files.push({ path: oldPath, addedLines: [], hunks: [], hunkStarts: [] });
       continue;
     }
+    if (current && !hunk && /^(?:old|new) mode /.test(line)) modeChanges.add(current);
+    if (current && !hunk && /^(?:Binary files |GIT binary patch)/.test(line)) binaries.add(current);
     const hunkHeader = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
     if (hunkHeader && current) {
       lineNumber = Number(hunkHeader[1]);
@@ -211,7 +196,36 @@ export function readDiff(diff) {
       lineNumber += 1;
     }
   }
-  return files;
+  return files.map((file) => ({
+    ...file,
+    isUnreadable: binaries.has(file) || (!file.hunks.length && !modeChanges.has(file)),
+  }));
+}
+
+/**
+ * Why the gate can't read a diff, as with a file whose header it can't tell the paths of, or a
+ * diff that names no file at all, or null when it can.
+ * @param {string} diff
+ */
+function findDiffProblem(diff) {
+  const headers = diff.split("\n").filter((line) => line.startsWith("diff --git "));
+  const isUnreadable = headers.some((line) => !DIFF_HEADER.test(line));
+  if (isUnreadable || (diff.trim() && !headers.length))
+    return "The gate can't read the diff, so it may change anything";
+  return null;
+}
+
+/**
+ * What a line sets that makes a layer, or null when it sets nothing that does.
+ * @param {string} text
+ */
+function findLayerSetting(text) {
+  if (isComment(text)) return null;
+  for (const { name, pattern } of LAYER_SETTINGS) {
+    const match = text.match(pattern);
+    if (match) return `${name} that sets ${match[1]}`;
+  }
+  return null;
 }
 
 /**
@@ -240,331 +254,6 @@ function readFileBefore(after, { hunks, hunkStarts }) {
 }
 
 /**
- * A changed file as it was before the change and as the change leaves it, or null when the
- * change's hunks don't fit it.
- * @param {ChangedFile} file
- * @param {ReadPageFile} readPageFile
- */
-function readBothSides(file, readPageFile) {
-  const after = readPageFile(file.path);
-  const before = readFileBefore(after, file);
-  return before === null ? null : { before, after };
-}
-
-/**
- * The items of `items` that `taken` doesn't account for, each item of `taken` taking one copy
- * away.
- * @param {string[]} items
- * @param {string[]} taken
- */
-function subtractEach(items, taken) {
-  const counts = new Map();
-  for (const item of taken) counts.set(item, (counts.get(item) ?? 0) + 1);
-  return items.filter((item) => {
-    const count = counts.get(item) ?? 0;
-    counts.set(item, count - 1);
-    return count <= 0;
-  });
-}
-
-/**
- * The indexes of each of `marks` in CSS that lie outside its strings and parentheses.
- * @param {string} text
- * @param {string} marks
- */
-function findTopLevelMarks(text, marks) {
-  const found = [];
-  let quote = "";
-  let depth = 0;
-  for (let at = 0; at < text.length; at += 1) {
-    const character = text[at];
-    if (quote) {
-      if (character === "\\") at += 1;
-      else if (character === quote) quote = "";
-    } else if (character === '"' || character === "'") quote = character;
-    else if (character === "(") depth += 1;
-    else if (character === ")") depth -= 1;
-    else if (depth === 0 && marks.includes(character)) found.push(at);
-  }
-  return found;
-}
-
-/**
- * CSS cut at each `separator` outside its strings and parentheses, with each part trimmed and the
- * empty ones left out.
- * @param {string} text
- * @param {string} separator
- */
-function splitTopLevel(text, separator) {
-  const ends = [...findTopLevelMarks(text, separator), text.length];
-  return ends
-    .map((end, index) => text.slice(index ? ends[index - 1] + 1 : 0, end).trim())
-    .filter(Boolean);
-}
-
-/** @typedef {{ property: string, value: string }} Declaration */
-/**
- * @typedef {object} StyleRule
- * @property {string[]} reaches each selector the rule reaches, after the at-rules around it
- * @property {Declaration[]} declarations
- * @property {boolean} isKeyframe whether it's a step of an animation's keyframes
- */
-
-/** @param {string} text */
-function readDeclaration(text) {
-  const [property, ...value] = text.split(":");
-  return { property: property.trim().toLowerCase(), value: value.join(":").trim() };
-}
-
-/**
- * @param {string[]} context the at-rules and selectors around the rule, from the outside in
- * @param {Declaration[]} declarations
- * @returns {StyleRule}
- */
-function createStyleRule(context, declarations) {
-  const prelude = context.at(-1) ?? "";
-  const around = context.slice(0, -1);
-  const selectors = prelude.startsWith("@") ? [prelude] : splitTopLevel(prelude, ",");
-  return {
-    reaches: selectors.map((selector) => [...around, selector].join(" ")),
-    declarations,
-    isKeyframe: around.some((rule) => /^@(?:-webkit-)?keyframes\b/i.test(rule)),
-  };
-}
-
-/**
- * A stylesheet's rules as esbuild reads it, without its comments and formatting, or null when
- * esbuild can't.
- * @param {string} sheet
- */
-function readStyleRules(sheet) {
-  let code;
-  try {
-    code = transformSync(sheet, {
-      loader: "css",
-      legalComments: "none",
-      minifyWhitespace: true,
-    }).code;
-  } catch {
-    return null;
-  }
-  /** @type {StyleRule[]} */
-  const rules = [];
-  /** @type {string[]} */
-  const context = [];
-  /** @type {Declaration[][]} */
-  const openBlocks = [[]];
-  let start = 0;
-  for (const at of findTopLevelMarks(code, "{;}")) {
-    const text = code.slice(start, at).trim();
-    start = at + 1;
-    if (code[at] === "{") {
-      context.push(text);
-      openBlocks.push([]);
-      continue;
-    }
-    const declarations = /** @type {Declaration[]} */ (openBlocks.at(-1));
-    if (text) declarations.push(readDeclaration(text));
-    if (code[at] !== "}") continue;
-    if (declarations.length) rules.push(createStyleRule(context, declarations));
-    context.pop();
-    openBlocks.pop();
-  }
-  return rules;
-}
-
-/** @param {string} property */
-const readBareName = (property) => property.replace(/^-webkit-/, "");
-
-/**
- * Whether a property is one of `families` or one of their longhands, as overflow-x is overflow's,
- * with or without the -webkit- prefix.
- * @param {string} property
- * @param {string[]} families
- */
-function isInFamily(property, families) {
-  const name = readBareName(property);
-  return families.some((family) => name === family || name.startsWith(`${family}-`));
-}
-
-/** @param {Declaration} declaration */
-const readValue = ({ value }) => value.replace(/\s*!important$/i, "");
-
-/**
- * The property an item of a transition's list eases, or all of them when it names none.
- * @param {string} item
- */
-const readTransitionedProperty = (item) =>
-  splitTopLevel(item, " ").find((part) => !TRANSITION_TIMING.test(part)) ?? "all";
-
-/**
- * The properties a rule's transitions ease, which are all of them when it times a transition
- * without naming what it eases.
- * @param {Declaration[]} declarations
- */
-function listTransitioned(declarations) {
-  const named = declarations.flatMap(({ property, value }) => {
-    const name = readBareName(property);
-    if (name === "transition") return splitTopLevel(value, ",").map(readTransitionedProperty);
-    return name === "transition-property" ? splitTopLevel(value, ",") : [];
-  });
-  const isTimed = declarations.some(({ property }) => isInFamily(property, ["transition"]));
-  return named.length || !isTimed ? named : ["all"];
-}
-
-/**
- * Whether a rule's transitions move, fade, or show a part, rather than only recolor it.
- * @param {Declaration[]} declarations
- */
-const isTransitionMoving = (declarations) =>
-  listTransitioned(declarations)
-    .map((name) => name.toLowerCase())
-    .some((name) => name === "all" || isInFamily(name, STACK_PROPERTIES));
-
-/**
- * Whether a rule moves what it reaches: a step of keyframes, an animation, a will-change, or a
- * transition that moves.
- * @param {StyleRule} rule
- */
-const isMovingRule = ({ declarations, isKeyframe }) =>
-  isKeyframe ||
-  declarations.some(({ property }) => isInFamily(property, ["animation", "will-change"])) ||
-  isTransitionMoving(declarations);
-
-/**
- * Whether a transform, translate, rotate, or scale declaration stays in two dimensions.
- * @param {Declaration} declaration
- */
-function isFlatTransform(declaration) {
-  const name = readBareName(declaration.property);
-  const value = readValue(declaration);
-  const parts = splitTopLevel(value, " ");
-  if (name === "transform")
-    return (
-      value.toLowerCase() === "none" || parts.every((part) => FLAT_TRANSFORM_FUNCTION.test(part))
-    );
-  const most = FLAT_TRANSFORM_VALUES.get(name);
-  return most !== undefined && parts.length <= most;
-}
-
-/**
- * Whether a declaration gives a part a layer of its own: any of the layer properties, but a
- * transition only when it moves something, and a transform in two dimensions only in a rule that
- * moves it, since WebKit composites only a transform in three dimensions or on the move.
- * @param {Declaration} declaration
- * @param {StyleRule} rule
- */
-function isLayerDeclaration(declaration, rule) {
-  const name = readBareName(declaration.property);
-  if (isInFamily(name, ["transition"])) return isTransitionMoving(rule.declarations);
-  if (name === "transform" || FLAT_TRANSFORM_VALUES.has(name))
-    return !isFlatTransform(declaration) || isMovingRule(rule);
-  return isInFamily(name, LAYER_PROPERTIES);
-}
-
-/**
- * Whether a declaration in a shared stylesheet decides how iOS layers, stacks, scrolls, or shows a
- * part: any of the stack properties, but a display only when it hides a part or its box, and a
- * relative or static position only beside a z-index, which stacks it.
- * @param {Declaration} declaration
- * @param {StyleRule} rule
- */
-function isStackDeclaration(declaration, rule) {
-  const name = readBareName(declaration.property);
-  const value = readValue(declaration);
-  if (name === "display") return /^(?:none|contents)$/i.test(value);
-  if (name === "position")
-    return (
-      !/^(?:relative|static)$/i.test(value) ||
-      rule.declarations.some(({ property }) => property === "z-index")
-    );
-  if (isInFamily(name, LAYER_PROPERTIES)) return isLayerDeclaration(declaration, rule);
-  return isInFamily(name, STACK_PROPERTIES);
-}
-
-/**
- * Whether a declaration in any other stylesheet of a page gives a part a layer of its own, or lifts it
- * over others or makes it scroll: a fixed, sticky, or absolute position, a z-index, or an overflow
- * that isn't visible.
- * @param {Declaration} declaration
- * @param {StyleRule} rule
- */
-function isPageLayerDeclaration(declaration, rule) {
-  const name = readBareName(declaration.property);
-  const value = readValue(declaration);
-  if (name === "position") return /^(?:fixed|sticky|absolute)$/i.test(value);
-  if (/^overflow(?:-x|-y|-inline|-block)?$/.test(name)) return !/^visible$/i.test(value);
-  return name === "z-index" || isLayerDeclaration(declaration, rule);
-}
-
-/**
- * Each declaration of a stylesheet's rules that `isKept` keeps, under each selector it reaches,
- * as `@media (min-width:780px) .tabs { position: sticky }`.
- * @param {StyleRule[]} rules
- * @param {(declaration: Declaration, rule: StyleRule) => boolean} isKept
- */
-const listKeptDeclarations = (rules, isKept) =>
-  rules.flatMap((rule) =>
-    rule.declarations
-      .filter((declaration) => isKept(declaration, rule))
-      .flatMap(({ property, value }) =>
-        rule.reaches.map((reach) => `${reach} { ${property}: ${value} }`),
-      ),
-  );
-
-/**
- * A changed stylesheet's rules before the change and after it, or null when either can't be
- * read.
- * @param {ChangedFile} file
- * @param {ReadPageFile} readPageFile
- */
-function readStyleSides(file, readPageFile) {
-  const sides = readBothSides(file, readPageFile);
-  const before = sides && readStyleRules(sides.before);
-  const after = sides && readStyleRules(sides.after);
-  return before && after ? { before, after } : null;
-}
-
-/** @param {ChangedFile} file */
-const describeSharedCode = ({ path }) =>
-  `${path} is shared code that moves, layers, or draws the page`;
-
-/**
- * Why a change to a shared stylesheet is red: each declaration that decides how parts layer,
- * stack, scroll, or show that a selector gains or loses. A rule renamed, split, or merged that
- * sets each selector the same isn't red. One that's moved, or can't be read, is red whatever it
- * held.
- * @param {ChangedFile} file
- * @param {ReadPageFile} readPageFile
- */
-function findSharedStyleReasons(file, readPageFile) {
-  const rules = file.hunks.length ? readStyleSides(file, readPageFile) : null;
-  if (!rules) return [describeSharedCode(file)];
-  const before = listKeptDeclarations(rules.before, isStackDeclaration);
-  const after = listKeptDeclarations(rules.after, isStackDeclaration);
-  const changes = `${file.path} changes how parts layer, stack, scroll, or show:`;
-  return [
-    ...subtractEach(after, before).map((declaration) => `${changes} adds ${declaration}`),
-    ...subtractEach(before, after).map((declaration) => `${changes} drops ${declaration}`),
-  ];
-}
-
-/**
- * Why a change to any other stylesheet of a page is red: each declaration it adds that gives a
- * part a layer of its own, lifts it over others, or makes it scroll.
- * @param {ChangedFile} file
- * @param {ReadPageFile} readPageFile
- */
-function findPageStyleReasons(file, readPageFile) {
-  const rules = readStyleSides(file, readPageFile);
-  if (!rules) return [`${file.path} changes in a way the gate can't read`];
-  const before = listKeptDeclarations(rules.before, isPageLayerDeclaration);
-  return subtractEach(listKeptDeclarations(rules.after, isPageLayerDeclaration), before).map(
-    (declaration) => `${file.path} adds a layer, a stack, or a scroll: ${declaration}`,
-  );
-}
-
-/**
  * A script's code with its comments, blank lines, and formatting taken out, as esbuild parses it,
  * or null when it doesn't parse.
  * @param {string} script
@@ -579,138 +268,23 @@ function readScriptCode(script) {
 }
 
 /**
- * A script's top-level code, each declaration or statement as esbuild prints it without comments
- * or formatting, leaving out its imports and re-exports and taking `export` off what it exports by
- * name, with the paths of the scripts it imports, or null when it doesn't parse.
- * @param {string} script
- * @param {string} path from the repository's root
- */
-function readTopLevelCode(script, path) {
-  const code = readScriptCode(script);
-  if (code === null) return null;
-  let program;
-  try {
-    program = parse(code, { ecmaVersion: "latest", sourceType: "module" });
-  } catch {
-    return null;
-  }
-  /** @type {string[]} */
-  const statements = [];
-  /** @type {string[]} */
-  const imports = [];
-  /** @param {import("acorn").Node} node */
-  const addStatement = (node) =>
-    statements.push(code.slice(node.start, node.end).replace(/;$/, ""));
-  for (const statement of program.body) {
-    if (
-      statement.type !== "ImportDeclaration" &&
-      statement.type !== "ExportAllDeclaration" &&
-      statement.type !== "ExportNamedDeclaration"
-    ) {
-      addStatement(statement);
-      continue;
-    }
-    const source = String(statement.source?.value ?? "");
-    if (source.startsWith(".")) imports.push(posix.join(posix.dirname(path), source));
-    if (statement.type === "ExportNamedDeclaration" && statement.declaration)
-      addStatement(statement.declaration);
-  }
-  return { statements, imports };
-}
-
-/**
- * A changed script's top-level code before the change and after it, or null when it's gone or
- * either can't be read.
+ * Whether a change to a script changes its code, rather than only its comments, blank lines, or
+ * formatting, which draw nothing. A script that's gone, or that the change's hunks don't fit,
+ * counts as changed.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  */
-function readScriptSides(file, readPageFile) {
-  const sides = readBothSides(file, readPageFile);
-  if (!sides?.after) return null;
-  const before = readTopLevelCode(sides.before, file.path);
-  const after = readTopLevelCode(sides.after, file.path);
-  return before && after ? { before, after } : null;
+function changesScriptCode(file, readPageFile) {
+  const after = readPageFile(file.path);
+  const before = after ? readFileBefore(after, file) : null;
+  if (before === null) return true;
+  const code = readScriptCode(after);
+  return code === null || code !== readScriptCode(before);
 }
 
-/** @typedef {NonNullable<ReturnType<typeof readScriptSides>>} ScriptSides */
-
-/**
- * Each shared script the given red scripts import, before the change or after it, as it was and
- * as the change leaves it, or null for one that can't be read.
- * @param {Map<ChangedFile, ScriptSides | null>} redSides
- * @param {ChangedFile[]} files every file the change touches
- * @param {ReadPageFile} readPageFile
- */
-function readImportedSides(redSides, files, readPageFile) {
-  const changed = new Map(files.map((file) => [file.path, file]));
-  const redPaths = new Set([...redSides.keys()].map(({ path }) => path));
-  const imported = new Set(
-    [...redSides.values()].flatMap((side) =>
-      side ? [...side.before.imports, ...side.after.imports] : [],
-    ),
-  );
-  return [...imported]
-    .filter((path) => isSharedScript(path) && !redPaths.has(path))
-    .map((path) =>
-      readScriptSides(
-        changed.get(path) ?? { path, addedLines: [], hunks: [], hunkStarts: [] },
-        readPageFile,
-      ),
-    );
-}
-
-/**
- * Whether a red script's change goes beyond moving code: whether a declaration or statement it
- * takes out or puts in shows up, across the scripts `isMoved` counts, a different number of times
- * after the change than before it. One that's gone, moved, or can't be read changes whatever it
- * held.
- * @param {ChangedFile} file
- * @param {ScriptSides | null | undefined} sides
- * @param {(statement: string) => boolean} isMoved
- */
-function changesScriptCode(file, sides, isMoved) {
-  if (!file.hunks.length || !sides) return true;
-  const { statements: was } = sides.before;
-  const { statements: is } = sides.after;
-  return [...subtractEach(is, was), ...subtractEach(was, is)].some(
-    (statement) => !isMoved(statement),
-  );
-}
-
-/**
- * The shared scripts that move and draw the page whose change is red: each whose code changes,
- * beyond its comments, formatting, and imports and the code that moves, unchanged, among those
- * scripts and the shared scripts they import.
- * @param {ChangedFile[]} files
- * @param {ReadPageFile} readPageFile
- */
-function findRedSharedScripts(files, readPageFile) {
-  const redScripts = files.filter(({ path }) => RED_FILES.has(path) && path.endsWith(".js"));
-  const redSides = new Map(redScripts.map((file) => [file, readScriptSides(file, readPageFile)]));
-  const group = [...redSides.values(), ...readImportedSides(redSides, files, readPageFile)].filter(
-    (sides) => sides !== null,
-  );
-  const before = group.flatMap((sides) => sides.before.statements);
-  const after = group.flatMap((sides) => sides.after.statements);
-  /** @param {string[]} statements @param {string} statement */
-  const count = (statements, statement) => statements.filter((code) => code === statement).length;
-  /** @param {string} statement */
-  const isMoved = (statement) => count(before, statement) === count(after, statement);
-  return new Set(redScripts.filter((file) => changesScriptCode(file, redSides.get(file), isMoved)));
-}
-
-/**
- * What a line sets that makes a layer, or null when it sets nothing that does.
- * @param {string} text
- */
-function findLayerSetting(text) {
-  if (isComment(text)) return null;
-  for (const { name, pattern } of LAYER_SETTINGS) {
-    const match = text.match(pattern);
-    if (match) return `${name} that sets ${match[1]}`;
-  }
-  return null;
-}
+/** @param {ChangedFile} file */
+const describeSharedCode = ({ path }) =>
+  `${path} is shared code that moves, layers, or draws the page`;
 
 const CLOSING_BRACKETS = { "{": "}", "[": "]" };
 
@@ -786,16 +360,106 @@ function findAddedSetting({ number, text }, styleLines) {
 }
 
 /**
- * Why a change to any other script of a page is red: each line it adds that makes a layer.
+ * What each style attribute a line of markup holds sets that a page's stylesheet would be red
+ * for, or the whole attribute where the gate can't read its value, as where a template fills in
+ * all of it or a value it holds runs on past the line.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+const findAttributeSettings = (text, isWatched) =>
+  [...text.matchAll(STYLE_ATTRIBUTE)].flatMap((match) => {
+    const style = match[1] ?? match[2];
+    if (style === undefined || /\$\{[^}]*$/.test(style)) return [match[0]];
+    return findInlineStyleSettings(style, isWatched);
+  });
+
+/**
+ * What a line of markup, or of a script's template, holds that runs or layers the page, as a
+ * dialog does, or an inline style that stacks a part, or null when it holds none.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+function findMarkupLayer(text, isWatched) {
+  if (PAGE_MARKUP_LAYER.test(text)) return "markup that runs or layers the page";
+  const settings = findAttributeSettings(text, isWatched);
+  return settings.length ? `an inline style that sets ${settings.join("; ")}` : null;
+}
+
+/**
+ * Why a change to any other script of a page is red: each line it adds that makes a layer, sets
+ * a custom property, or holds markup that runs or layers the page.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
+ * @param {(property: string) => boolean} isWatched
  */
-function findPageScriptReasons({ path, addedLines }, readPageFile) {
+function findPageScriptReasons({ path, addedLines }, readPageFile, isWatched) {
   const styleLines = findStyleObjectLines(readPageFile(path));
   return addedLines.flatMap((line) => {
-    const setting = findAddedSetting(line, styleLines);
+    const setting =
+      findAddedSetting(line, styleLines) ??
+      (isComment(line.text) ? null : findMarkupLayer(line.text, isWatched));
     return setting ? [`${path}:${line.number} adds ${setting}: ${line.text.trim()}`] : [];
   });
+}
+
+/**
+ * The inline scripts of a page's markup, as it holds them, which run as the page loads, in its
+ * order.
+ * @param {string} markup
+ */
+const listInlineScripts = (markup) => markup.match(INLINE_SCRIPT) ?? [];
+
+/**
+ * The styles a page's markup holds in its own style elements, in its order.
+ * @param {string} markup
+ */
+const listInlineStyles = (markup) => markup.match(INLINE_STYLE) ?? [];
+
+/**
+ * Each of `tagPattern`'s tags in a page's markup that `keptPattern` matches, its attributes on one
+ * line, in its order.
+ * @param {string} markup
+ * @param {RegExp} tagPattern
+ * @param {RegExp} keptPattern
+ */
+const listTags = (markup, tagPattern, keptPattern) =>
+  (markup.match(tagPattern) ?? [])
+    .filter((tag) => keptPattern.test(tag))
+    .map((tag) => tag.replace(/\s+/g, " "));
+
+/** @param {string} markup */
+const listStylesheetLinks = (markup) => listTags(markup, LINK_TAG, STYLESHEET_REL);
+
+/** @param {string} markup */
+const listScreenMetas = (markup) => listTags(markup, META_TAG, SCREEN_META_NAME);
+
+/**
+ * Why a change to a page's markup is red: each line it adds or takes out that runs the page's
+ * scripts, whose order it decides too, or opens a dialog, a popover, or a style element, or holds
+ * an inline style that stacks a part, and any change to the stylesheets it links, their order
+ * too, to how it fits the screen and colors the phone's bars, or to its inline scripts and styles.
+ * @param {ChangedFile} file
+ * @param {ReadPageFile} readPageFile
+ * @param {(property: string) => boolean} isWatched
+ */
+function findPageMarkupReasons(file, readPageFile, isWatched) {
+  const lineReasons = file.hunks.flat().flatMap(({ kind, text }) => {
+    const layer = kind === "kept" ? null : findMarkupLayer(text, isWatched);
+    const change = kind === "added" ? "adds" : "takes out";
+    return layer ? [`${file.path} ${change} ${layer}: ${text.trim()}`] : [];
+  });
+  const after = readPageFile(file.path);
+  const before = readFileBefore(after, file);
+  if (before === null) return [...lineReasons, describeUnreadable(file.path)];
+  /** @param {(markup: string) => string[]} listParts */
+  const isKept = (listParts) => listParts(before).join("\n") === listParts(after).join("\n");
+  return [
+    ...lineReasons,
+    ...(isKept(listStylesheetLinks) ? [] : [`${file.path} changes the stylesheets it links`]),
+    ...(isKept(listScreenMetas) ? [] : [`${file.path} changes how it fits the screen or its bars`]),
+    ...(isKept(listInlineScripts) ? [] : [`${file.path} changes what its inline scripts run`]),
+    ...(isKept(listInlineStyles) ? [] : [`${file.path} changes its inline styles`]),
+  ];
 }
 
 /**
@@ -810,30 +474,97 @@ function readChangedFile(path) {
   }
 }
 
+/** Every stylesheet of a page that git tracks, from the repository's root. */
+const listPageStylesheets = () =>
+  execFileSync("git", ["ls-files", "--", "shared/page", "apps"], { encoding: "utf8" })
+    .split("\n")
+    .filter(isPageStylesheet);
+
+/**
+ * Every stylesheet of a page: each one the change touches, before it and after, and each other
+ * one as it is.
+ * @param {ChangedFile[]} files
+ * @param {ReadPageFile} readPageFile
+ * @param {() => string[]} listStylesheets
+ */
+function readStylesheets(files, readPageFile, listStylesheets) {
+  const stylesheets = files.filter(({ path }) => isPageStylesheet(path));
+  const changedPaths = new Set(stylesheets.map(({ path }) => path));
+  const changed = stylesheets.map((file) => {
+    const after = readPageFile(file.path);
+    const before = file.isUnreadable ? null : readFileBefore(after, file);
+    return {
+      path: file.path,
+      isShared: RED_FILES.has(file.path),
+      sides: before === null ? null : { before, after },
+    };
+  });
+  const unchanged = listStylesheets()
+    .filter((path) => !changedPaths.has(path))
+    .map(readPageFile);
+  return { changed, unchanged };
+}
+
+/**
+ * A read that runs only once it's first asked for, and only once, as the page's stylesheets are
+ * read only for a change that touches one or sets a custom property in an inline style.
+ * @template T
+ * @param {() => T} read
+ * @returns {() => T}
+ */
+function readWhenAsked(read) {
+  /** @type {{ value: T } | null} */
+  let kept = null;
+  return () => {
+    kept ??= { value: read() };
+    return kept.value;
+  };
+}
+
+/**
+ * @typedef {object} PageStyles
+ * @property {ReadPageFile} readPageFile
+ * @property {Map<string, string[]>} styleReasons why each page stylesheet is red, by its path
+ * @property {(property: string) => boolean} isWatched whether a custom property is watched
+ */
+
 /**
  * @param {ChangedFile} file
- * @param {ReadPageFile} readPageFile
- * @param {Set<ChangedFile>} redSharedScripts
+ * @param {PageStyles} styles
  * @returns {string[]}
  */
-function findFileReasons(file, readPageFile, redSharedScripts) {
+function findFileReasons(file, { readPageFile, styleReasons, isWatched }) {
   const { path } = file;
-  if (redSharedScripts.has(file)) return [describeSharedCode(file)];
+  if (file.isUnreadable && (isPageCode(path) || isPageMarkup(path)))
+    return [describeUnreadable(path)];
+  if (RED_FILES.has(path) && !file.hunks.length) return [describeSharedCode(file)];
+  if (isPageStylesheet(path)) return styleReasons.get(path) ?? [];
   if (RED_FILES.has(path))
-    return path.endsWith(".css") ? findSharedStyleReasons(file, readPageFile) : [];
-  if (!isPageCode(path)) return [];
-  if (path.endsWith(".css")) return findPageStyleReasons(file, readPageFile);
-  return findPageScriptReasons(file, readPageFile);
+    return changesScriptCode(file, readPageFile) ? [describeSharedCode(file)] : [];
+  if (isPageMarkup(path)) return findPageMarkupReasons(file, readPageFile, isWatched);
+  return isPageCode(path) ? findPageScriptReasons(file, readPageFile, isWatched) : [];
 }
 
 /**
  * Why a change is red, one reason per file, declaration, or line, or none when it isn't.
  * @param {ChangedFile[]} files
  * @param {ReadPageFile} [readPageFile]
+ * @param {() => string[]} [listStylesheets] every stylesheet of a page
  */
-export function findRedReasons(files, readPageFile = readChangedFile) {
-  const redSharedScripts = findRedSharedScripts(files, readPageFile);
-  return files.flatMap((file) => findFileReasons(file, readPageFile, redSharedScripts));
+export function findRedReasons(
+  files,
+  readPageFile = readChangedFile,
+  listStylesheets = listPageStylesheets,
+) {
+  const readSheets = readWhenAsked(() => readStylesheets(files, readPageFile, listStylesheets));
+  const readWatchCheck = readWhenAsked(() => createWatchCheck(readSheets()));
+  /** @param {string} property */
+  const isWatched = (property) => readWatchCheck()(property);
+  const styleReasons = files.some(({ path }) => isPageStylesheet(path))
+    ? findStyleReasons(readSheets().changed, isWatched)
+    : new Map();
+  const styles = { readPageFile, styleReasons, isWatched };
+  return files.flatMap((file) => findFileReasons(file, styles));
 }
 
 /**
@@ -933,7 +664,8 @@ export function decideGate(
   diff,
   { labels, labeling = { labeler: null, isAfterLastPush: false }, owner = "" },
 ) {
-  const reasons = findRedReasons(readDiff(diff));
+  const diffProblem = findDiffProblem(diff);
+  const reasons = [...(diffProblem ? [diffProblem] : []), ...findRedReasons(readDiff(diff))];
   if (!reasons.length) return { isHeld: false, message: "Not a red change." };
   const listed = reasons.map((reason) => `- ${reason}`).join("\n");
   if (!labels.includes(PHONE_OK_LABEL))

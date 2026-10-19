@@ -33,6 +33,8 @@ const createDiff = (path, added, { kept = ["kept"], removed = ["removed"] } = {}
 
 // A script with no style's object in it, so only the diff's lines decide.
 const readPlainScript = () => "";
+// No stylesheet beside the ones the change touches, so only the change decides.
+const listNoStylesheets = () => [];
 
 /** @param {string} path @param {string[]} [addedLines] */
 const findReasons = (path, addedLines = []) =>
@@ -46,6 +48,7 @@ const findReasons = (path, addedLines = []) =>
       },
     ],
     readPlainScript,
+    listNoStylesheets,
   );
 
 test("a diff lists each file with its added lines, numbered as the new file has them, and its hunks", () => {
@@ -66,6 +69,7 @@ test("a diff lists each file with its added lines, numbered as the new file has 
         ],
       ],
       hunkStarts: [9],
+      isUnreadable: false,
     },
   ]);
 });
@@ -95,6 +99,8 @@ test("any change to the shared code that moves, layers, or draws the page is red
     "show-last-drawn.js",
     "day-strip.js",
     "strip-slide.js",
+    "pull-to-refresh.js",
+    "spring-scroll.js",
     "chrome.css",
     "team-sheet.css",
     "game-cards.css",
@@ -264,8 +270,36 @@ test("a shared script that's gone, that a change's hunks don't fit, or that does
 });
 
 /**
+ * The hunk a diff without context shows for a file from `before` to `after`: the lines between
+ * those both start and end with, taken out and put back in.
+ * @param {string[]} before
+ * @param {string[]} after
+ */
+function createHunk(before, after) {
+  let start = 0;
+  while (start < Math.min(before.length, after.length) && before[start] === after[start])
+    start += 1;
+  let end = 0;
+  while (
+    end < Math.min(before.length, after.length) - start &&
+    before.at(-1 - end) === after.at(-1 - end)
+  )
+    end += 1;
+  const removed = before.slice(start, before.length - end);
+  const added = after.slice(start, after.length - end);
+  // A side with no lines names the line before the hunk, as git does.
+  const describeSide = (/** @type {string[]} */ lines) =>
+    `${lines.length ? start + 1 : start},${lines.length}`;
+  return [
+    `@@ -${describeSide(removed)} +${describeSide(added)} @@`,
+    ...removed.map((line) => `-${line}`),
+    ...added.map((line) => `+${line}`),
+  ];
+}
+
+/**
  * Why a change is red, from each file it changes, as it was and as the change leaves it, each a
- * list of lines a diff takes out and puts back in, with the files it leaves as they were.
+ * list of lines, with the files it leaves as they were.
  * @param {Record<string, { before: string[], after: string[] }>} changed
  * @param {Record<string, string[]>} [kept]
  */
@@ -274,14 +308,16 @@ function findChangeReasons(changed, kept = {}) {
     `diff --git a/${path} b/${path}`,
     `--- a/${path}`,
     `+++ b/${path}`,
-    `@@ -${before.length ? 1 : 0},${before.length} +${after.length ? 1 : 0},${after.length} @@`,
-    ...before.map((line) => `-${line}`),
-    ...after.map((line) => `+${line}`),
+    ...createHunk(before, after),
   ]);
   /** @type {Record<string, string[]>} */
   const files = { ...kept };
   for (const [path, { after }] of Object.entries(changed)) files[path] = after;
-  return findRedReasons(readDiff(diff.join("\n")), (path) => files[path]?.join("\n") ?? "");
+  return findRedReasons(
+    readDiff(diff.join("\n")),
+    (path) => files[path]?.join("\n") ?? "",
+    () => Object.keys(files).filter((path) => path.endsWith(".css")),
+  );
 }
 
 /**
@@ -344,6 +380,23 @@ function assertRedInEach(lines, kept) {
   assertRuleReasons([PAGE_STYLESHEET], lines, { count: 1, isRemovalRed: false, kept });
 }
 
+/**
+ * Asserts that a change to a stylesheet of each kind, from `before` to `after`, is red, with the
+ * page stylesheets it leaves as they were.
+ * @param {string[]} before
+ * @param {string[]} after
+ * @param {string} why
+ * @param {Record<string, string[]>} [kept]
+ */
+function assertRedChange(before, after, why, kept = {}) {
+  for (const path of EACH_KIND)
+    assert.notDeepEqual(
+      findChangeReasons({ [path]: { before, after } }, kept),
+      [],
+      `${path}: ${why}`,
+    );
+}
+
 test("a stylesheet's change to how text looks, or to its spacing, sizes, and colors, isn't red", () => {
   assertRuleReasons(
     [...SHARED_STYLESHEETS, ...PAGE_STYLESHEETS],
@@ -385,256 +438,104 @@ test("a stylesheet's comments aren't red, even ones that name what would be", ()
   }
 });
 
-test("a shared stylesheet's change to how parts layer, stack, scroll, or show is red, added or removed", () => {
+test("a shared stylesheet's declaration of a property that decides how parts layer, stack, scroll, or show is red whatever its value, added or removed", () => {
   assertRuleReasons(
     SHARED_STYLESHEETS,
     [
-      "  transform: translate3d(var(--thumb-left, 0), 0, 0);",
+      "  transform: translateX(var(--thumb-left, 0));",
+      "  transform: none;",
+      "  translate: 0 -1px;",
+      "  rotate: 45deg;",
+      "  scale: 1.02;",
       "  will-change: transform;",
-      "  transition: opacity 0.2s;",
       "  -webkit-backdrop-filter: blur(8px);",
-      "  position: absolute;",
-      "  position: fixed;",
+      "  position: relative;",
+      "  position: static;",
       "  position: sticky;",
-      "  overflow: hidden;",
+      "  overflow: visible;",
       "  overflow-x: auto;",
       "  overscroll-behavior: none;",
       "  -webkit-overflow-scrolling: touch;",
       "  scroll-snap-type: x mandatory;",
-      "  scroll-snap-align: start;",
+      "  scroll-snap-stop: always;",
       "  touch-action: pan-y;",
-      "  pointer-events: none;",
-      "  translate: 0 -1px 0;",
-      "  z-index: 20;",
-      "  opacity: 0;",
-      "  visibility: hidden;",
-      "  display: none;",
-      "  display: contents;",
+      "  pointer-events: auto;",
+      "  z-index: auto;",
+      "  opacity: 1;",
+      "  visibility: visible;",
+      "  display: flex;",
+      "  display: block;",
+      "  display: none !important;",
       "  isolation: isolate;",
       "  mix-blend-mode: multiply;",
       "  contain: paint;",
+      "  container-type: inline-size;",
+      "  container: card / size;",
+      "  offset-path: path('M 0 0');",
+      "  view-transition-name: sheet;",
+      "  -webkit-box-reflect: below;",
     ],
     { count: 1 },
   );
-  assert.match(
-    findRuleChangeReasons("shared/page/pager.css", { added: ["  overflow-x: clip;"] }).join(),
-    /^shared\/page\/pager\.css changes how parts layer, stack, scroll, or show: adds \.part \{ overflow-x: clip \}$/,
-  );
-  assert.match(
-    findRuleChangeReasons("shared/page/pager.css", { removed: ["  overflow-x: clip;"] }).join(),
-    /: drops \.part \{ overflow-x: clip \}$/,
-  );
-});
-
-test("a shared stylesheet's display is red only to or from none or contents, and a relative or static position only beside a z-index", () => {
-  assertRuleReasons(
-    [SHARED_STYLESHEET],
+  assert.deepEqual(
+    findRuleChangeReasons("shared/page/pager.css", { added: ["  overflow-x: clip;"] }),
     [
-      "  display: block;",
-      "  display: flex;",
-      "  display: grid;",
-      "  display: inline-flex;",
-      "  position: relative;",
-      "  position: static;",
+      "shared/page/pager.css changes how parts layer, stack, scroll, or show: adds .part { overflow-x: clip }",
     ],
-    { count: 0 },
   );
   assert.deepEqual(
-    findChangeReasons({
-      [SHARED_STYLESHEET]: {
-        before: [".part {", "  display: flex;", "}"],
-        after: [".part {", "  display: grid;", "}"],
-      },
-    }),
-    [],
+    findRuleChangeReasons("shared/page/pager.css", { removed: ["  display: none;"] }),
+    [
+      "shared/page/pager.css changes how parts layer, stack, scroll, or show: drops .part { display: none }",
+    ],
   );
-  assert.equal(
-    findChangeReasons({
-      [SHARED_STYLESHEET]: {
-        before: [".part {", "  display: flex;", "}"],
-        after: [".part {", "  display: none;", "}"],
-      },
-    }).length,
-    1,
-  );
-  assertRuleReasons([SHARED_STYLESHEET], ["  position: relative;", "  position: static;"], {
-    count: 1,
-    kept: ["  z-index: 2;"],
-  });
 });
 
-test("a transition is red only when it moves, fades, or shows a part, not when it only recolors one", () => {
+test("a transition is red unless every property it eases only repaints a part", () => {
   assertRuleReasons(
     EACH_KIND,
     [
       "  transition: color 0.15s;",
+      "  transition: background-color 0.18s ease-in-out, box-shadow 0.18s ease-in-out, color 0.2s ease-in-out 25ms;",
+      "  transition: border-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), border-top-color 0.2s;",
+      "  transition: outline-color 0.1s linear, text-decoration-color 0.1s, caret-color 0.1s;",
+      "  transition: fill 0.2s, stroke 0.2s;",
+      "  -webkit-transition: color 0.2s;",
+      "  transition-property: color, background-color;",
+      "  transition: background 0.15s;",
       "  transition: background 0.15s, box-shadow 0.15s;",
-      "  transition: background-color 0.18s ease-in-out, border-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);",
-      "  transition: outline 0.1s linear 25ms;",
-      "  transition: none;",
-      "  transition-property: color;",
     ],
     { count: 0 },
   );
-  assertRuleReasons(EACH_KIND, ["  transition-duration: 0.2s;"], {
-    count: 0,
-    kept: ["  transition-property: background-color;"],
-  });
   assertRedInEach([
     "  transition: opacity 0.2s;",
     "  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);",
     "  transition: -webkit-transform 0.3s;",
+    "  transition: color 0.2s, translate 0.2s;",
     "  transition: all 0.2s;",
     "  transition: 0.2s ease;",
-    "  transition: color 0.2s, translate 0.2s;",
-    "  transition: filter 0.2s, clip-path 0.2s;",
+    "  transition: none;",
+    "  transition: inherit;",
+    "  transition: initial;",
+    "  transition: unset;",
+    "  transition: revert;",
+    "  transition: revert-layer;",
     "  transition: var(--motion);",
+    "  transition: color var(--pace);",
+    "  transition-property: var(--eased);",
+    "  transition-property: none;",
     "  transition-duration: 0.2s;",
-    "  transition-property: scale;",
   ]);
 });
 
-test("a translate, rotate, or scale in two dimensions is red only in a rule that moves it, and one in three always is", () => {
-  const flatLines = [
-    "  translate: 0 -1px;",
-    "  translate: 0 var(--network-name-offset);",
-    "  rotate: 45deg;",
-    "  scale: 1.02;",
-    "  scale: 1 -1;",
-    "  transform: translateX(var(--thumb-left, 0));",
-    "  transform: translate(-50%, 0) scale(1.1) rotate(2deg);",
-    "  -webkit-transform: translateY(1px);",
-    "  transform: none;",
-  ];
-  assertRuleReasons(EACH_KIND, flatLines, { count: 0 });
-  assertRuleReasons(EACH_KIND, flatLines, { count: 0, kept: ["  transition: color 0.2s;"] });
-  for (const motion of [
-    "  transition: transform 0.2s;",
-    "  animation: spin 1s linear infinite;",
-    "  will-change: transform;",
-  ])
-    assertRedInEach(flatLines, [motion]);
-  assertRedInEach([
-    "  transform: translate3d(0, 0, 0);",
-    "  transform: translateZ(0);",
-    "  transform: rotateX(10deg);",
-    "  transform: rotate3d(0, 0, 1, 10deg);",
-    "  transform: scale3d(1, 1, 1);",
-    "  transform: matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);",
-    "  transform: translateX(0) translateZ(0);",
-    "  transform: var(--lift);",
-    "  translate: 0 0 1px;",
-    "  rotate: x 10deg;",
-    "  scale: 1 1 2;",
-    "  perspective: 800px;",
-    "  backface-visibility: hidden;",
-  ]);
-  const keyframes = (/** @type {string} */ step) => [
-    "@keyframes rise {",
-    "  to {",
-    step,
-    "  }",
-    "}",
-  ];
-  for (const path of EACH_KIND)
-    assert.equal(
-      findChangeReasons({
-        [path]: {
-          before: keyframes("    color: red;"),
-          after: keyframes("    translate: 0 -4px;"),
-        },
-      }).length,
-      1,
-      `${path}'s keyframes`,
-    );
-});
-
-test("a shared stylesheet's selectors and at-rules are red only where they change what reaches a part that layers, stacks, scrolls, or shows", () => {
-  const path = "shared/page/game-cards.css";
-  /** @param {string[]} before @param {string[]} after */
-  const findReasons = (before, after) => findChangeReasons({ [path]: { before, after } });
-  const quiet = [
-    [
-      [".game-card-clock {", "  color: var(--now);", "}"],
-      [".game-card-now {", "  color: var(--now);", "}"],
-    ],
-    [
-      [".a,", ".b {", "  position: sticky;", "  color: red;", "}"],
-      [
-        ".a {",
-        "  color: red;",
-        "  position: sticky;",
-        "}",
-        ".b {",
-        "  position: sticky;",
-        "  color: red;",
-        "}",
-      ],
-    ],
-    [
-      [".a {", "  position: sticky;", "}", ".a {", "  z-index: 2;", "}"],
-      [".a {", "  position: sticky;", "  z-index: 2;", "}"],
-    ],
-    [
-      [".a {", "  z-index: 2;", "}"],
-      [
-        ".a {",
-        "  z-index: 2;",
-        "}",
-        "@media (hover: hover) {",
-        "  .a:hover {",
-        "    color: var(--ink-hover);",
-        "  }",
-        "}",
-      ],
-    ],
-    [
-      [".a {", "  z-index: 2;", "}"],
-      [
-        "@property --cover-end {",
-        "  syntax: '<length>';",
-        "  inherits: false;",
-        "  initial-value: 0px;",
-        "}",
-        ".a {",
-        "  z-index: 2;",
-        "}",
-      ],
-    ],
-  ];
-  for (const [before, after] of quiet)
-    assert.deepEqual(findReasons(before, after), [], after.join("\n"));
-  const red = [
-    [
-      [".home-screen-bar {", "  position: fixed;", "}"],
-      [".welcome {", "  position: fixed;", "}"],
-    ],
-    [
-      [".a,", ".b {", "  position: sticky;", "}"],
-      [".a {", "  position: sticky;", "}"],
-    ],
-    [
-      ["@media (min-width: 780px) {", "  .a {", "    position: sticky;", "  }", "}"],
-      ["@media (min-width: 600px) {", "  .a {", "    position: sticky;", "  }", "}"],
-    ],
-  ];
-  for (const [before, after] of red)
-    assert.match(
-      findReasons(before, after).join("\n"),
-      /shared\/page\/game-cards\.css changes how parts layer, stack, scroll, or show/,
-      after.join("\n"),
-    );
-});
-
-test("a page's other stylesheets are red where they add a layer, a part over others, or a scroll", () => {
+test("a page's other stylesheets are red where they add what can give a part a layer, lift it over others, or make it scroll", () => {
   assertRuleReasons(
     PAGE_STYLESHEETS,
     [
       "  transform: translateZ(0);",
+      "  translate: 0 -1px;",
       "  filter: blur(2px);",
-      "  backdrop-filter: blur(8px);",
       "  -webkit-backdrop-filter: blur(8px);",
-      "  mask: url(#m);",
       "  mask-image: linear-gradient(black, transparent);",
       "  clip-path: inset(0);",
       "  will-change: transform;",
@@ -642,17 +543,32 @@ test("a page's other stylesheets are red where they add a layer, a part over oth
       "  transition: opacity 200ms;",
       "  contain: paint;",
       "  content-visibility: auto;",
-      "  perspective: 800px;",
       "  perspective-origin: center;",
-      "  backface-visibility: hidden;",
       "  -webkit-backface-visibility: hidden;",
       "  position: fixed;",
       "  position:sticky;",
+      "  position: -webkit-sticky;",
       "  position: absolute;",
+      "  position: var(--place);",
       "  z-index: 2;",
       "  overflow: hidden;",
       "  overflow-x: auto;",
       "  overflow-y: clip;",
+      "  overflow: var(--scroll);",
+      "  -webkit-overflow-scrolling: touch;",
+      "  touch-action: pan-y;",
+      "  overscroll-behavior: contain;",
+      "  scroll-snap-type: x mandatory;",
+      "  scroll-snap-align: start;",
+      "  scroll-snap-stop: always;",
+      "  pointer-events: none;",
+      "  isolation: isolate;",
+      "  mix-blend-mode: multiply;",
+      "  container: card / size;",
+      "  container-type: inline-size;",
+      "  offset-path: path('M 0 0');",
+      "  view-transition-name: sheet;",
+      "  -webkit-box-reflect: below;",
     ],
     { count: 1, isRemovalRed: false },
   );
@@ -660,12 +576,12 @@ test("a page's other stylesheets are red where they add a layer, a part over oth
     PAGE_STYLESHEETS,
     [
       "  position: relative;",
+      "  position: static;",
       "  overflow: visible;",
       "  overflow-wrap: anywhere;",
       "  opacity: 0.5;",
       "  display: none;",
-      "  pointer-events: none;",
-      "  touch-action: pan-y;",
+      "  visibility: hidden;",
     ],
     { count: 0 },
   );
@@ -675,6 +591,391 @@ test("a page's other stylesheets are red where they add a layer, a part over oth
       "apps/wnba/page/styles.css adds a layer, a stack, or a scroll: .part { will-change: transform }",
     ],
   );
+});
+
+test("a custom property a stack declaration reads, itself or through another, is red to change in any page stylesheet", () => {
+  const reads = {
+    "shared/page/chrome.css": [
+      ".a { transform: var(--lift); }",
+      ".b { display: var(--logos-for-light); }",
+      ":root { --lift: VAR(--rise); }",
+    ],
+  };
+  const registers = (/** @type {string} */ name, /** @type {string} */ start) =>
+    `@property ${name} { syntax: '*'; inherits: false; initial-value: ${start}; }`;
+  for (const [before, after] of [
+    [":root { --rise: translateY(0); }", ":root { --rise: translateZ(0); }"],
+    [":root { --logos-for-light: inline; }", ":root { --logos-for-light: none; }"],
+    [":root { --logos-for-light: inline; }", ":root {}"],
+    [registers("--lift", "none"), registers("--lift", "translateZ(0)")],
+    [registers("--rise", "none"), ""],
+  ])
+    for (const path of EACH_KIND)
+      assert.notDeepEqual(
+        findChangeReasons({ [path]: { before: [before], after: [after] } }, reads),
+        [],
+        `${path}: ${after}`,
+      );
+  for (const [before, after] of [
+    [":root { --ink: #111; }", ":root { --ink: #222; }"],
+    [registers("--ink", "#111"), registers("--ink", "#222")],
+  ])
+    for (const path of EACH_KIND)
+      assert.deepEqual(
+        findChangeReasons({ [path]: { before: [before], after: [after] } }, reads),
+        [],
+        `${path}: ${after}, a color nothing stacks with`,
+      );
+});
+
+test("a stylesheet's top-level statements, or a shared stylesheet's stack declarations in another order, are red", () => {
+  assertRedChange(["@layer a, b;"], ["@layer b, a;"], "layers in another order");
+  assertRedChange([], ['@import url("extra.css");'], "an import");
+  for (const [before, after, why] of /** @type {[string[], string[], string][]} */ ([
+    [
+      [".a {", "  overflow: hidden;", "  overflow-x: auto;", "}"],
+      [".a {", "  overflow-x: auto;", "  overflow: hidden;", "}"],
+      "a rule's longhand before its shorthand",
+    ],
+    [
+      [".a { display: none; }", ".a.open { display: block; }"],
+      [".a.open { display: block; }", ".a { display: none; }"],
+      "two rules swapped",
+    ],
+  ]))
+    assert.match(
+      findChangeReasons({ [SHARED_STYLESHEET]: { before, after } }).join(),
+      /changes how parts layer, stack, scroll, or show: reorders/,
+      why,
+    );
+});
+
+test("a shared stylesheet's selectors and at-rules are red only where they change what reaches a declaration that stacks a part", () => {
+  const path = "shared/page/game-cards.css";
+  /** @param {string[]} before @param {string[]} after */
+  const findSelectorReasons = (before, after) => findChangeReasons({ [path]: { before, after } });
+  for (const [before, after] of [
+    [
+      [".game-card-clock {", "  color: var(--now);", "}"],
+      [".game-card-now {", "  color: var(--now);", "}"],
+    ],
+    [
+      [".a,", ".b {", "  position: sticky;", "  color: red;", "}"],
+      [".a {", "  color: red;", "  position: sticky;", "}", ".b {", "  position: sticky;", "}"],
+    ],
+    [
+      [".a {", "  position: sticky;", "}", ".a {", "  z-index: 2;", "}"],
+      [".a {", "  position: sticky;", "  z-index: 2;", "}"],
+    ],
+    [
+      [".a {", "  z-index: 2;", "}"],
+      [".a {", "  z-index: 2;", "}", "@media (hover: hover) {", "  .a:hover { color: red; }", "}"],
+    ],
+    [
+      [".a {", "  z-index: 2;", "}"],
+      [
+        "@property --cover-end {",
+        "  syntax: '<length>';",
+        "  inherits: false;",
+        "}",
+        ".a {",
+        "  z-index: 2;",
+        "}",
+      ],
+    ],
+  ])
+    assert.deepEqual(findSelectorReasons(before, after), [], after.join("\n"));
+  for (const [before, after] of [
+    [
+      [".home-screen-bar {", "  position: fixed;", "}"],
+      [".welcome {", "  position: fixed;", "}"],
+    ],
+    [
+      [".a,", ".b {", "  position: sticky;", "}"],
+      [".a {", "  position: sticky;", "}"],
+    ],
+    [
+      ["@media (min-width: 780px) {", "  .a { position: sticky; }", "}"],
+      ["@media (min-width: 600px) {", "  .a { position: sticky; }", "}"],
+    ],
+    [
+      ["@supports (display: grid) {", "  .a { position: sticky; }", "}"],
+      ["@supports (display: flex) {", "  .a { position: sticky; }", "}"],
+    ],
+    [
+      ["@container card (min-width: 300px) {", "  .a { position: sticky; }", "}"],
+      ["@container card (min-width: 400px) {", "  .a { position: sticky; }", "}"],
+    ],
+    [
+      [".k {", "  transition: transform 0.2s;", "}"],
+      [".k {", "  transition: transform 0.2s;", "  &.on { transform: translateX(4px); }", "}"],
+    ],
+  ])
+    assert.match(
+      findSelectorReasons(before, after).join("\n"),
+      /shared\/page\/game-cards\.css changes how parts layer, stack, scroll, or show/,
+      after.join("\n"),
+    );
+});
+
+test("a stylesheet the gate can't read is red and says so, and beside one, any custom property is watched", () => {
+  for (const path of EACH_KIND)
+    assert.deepEqual(
+      findChangeReasons({
+        [path]: {
+          before: [".a {", "  position: fixed;", "}"],
+          after: [".a {", "  position: fixed;", "}}}{{"],
+        },
+      }),
+      [`${path} changes in a way the gate can't read, so it may change anything`],
+    );
+  assertRedChange([":root { --ink: #111; }"], [":root { --ink: #222; }"], "beside one", {
+    "shared/page/chrome.css": [".a {", "  position: fixed;", "}}}{{"],
+  });
+});
+
+const INDEX_HTML = "apps/wnba/page/index.html";
+
+test("a page's markup is red where it changes the stylesheets it links or their order, but not its other links", () => {
+  const head = [
+    '  <link rel="stylesheet" href="shared/sheet.css" />',
+    '  <link rel="stylesheet" href="styles.css" />',
+  ];
+  assert.deepEqual(
+    findChangeReasons({ [INDEX_HTML]: { before: head, after: head.toReversed() } }),
+    [`${INDEX_HTML} changes the stylesheets it links`],
+    "the app's styles moved above a shared stylesheet",
+  );
+  for (const link of [
+    ['  <link href="extra.css" rel="stylesheet" />'],
+    ["  <link rel='stylesheet' href='extra.css'>"],
+    ["  <link rel=stylesheet href=extra.css>"],
+    ["  <link", '    href="extra.css"', '    rel="alternate stylesheet"', "  />"],
+  ])
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: head, after: [...head, ...link] } }),
+      [`${INDEX_HTML} changes the stylesheets it links`],
+      link.join("\n"),
+    );
+  for (const link of [
+    [
+      '  <link rel="preload" href="fonts/barlow-400.woff2" as="font" type="font/woff2" crossorigin />',
+    ],
+    ['  <link rel="icon" href="icon.svg" type="image/svg+xml" />'],
+    ["  <link", '    rel="preload"', '    href="fonts/barlow-500.woff2"', "  />"],
+  ])
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: head, after: [...head, ...link] } }),
+      [],
+      link.join("\n"),
+    );
+});
+
+test("a page's markup is red where it adds or takes out a line that runs its scripts, or opens a dialog, a popover, or a style of its own", () => {
+  for (const line of [
+    '  <script src="shared/slow-load.js"></script>',
+    '  <dialog id="settings" class="sheet">',
+    '  <div id="tip" popover>',
+    '  <div style="z-index: 2">',
+  ])
+    assert.equal(
+      findChangeReasons({ [INDEX_HTML]: { before: [], after: [line] } }).length,
+      1,
+      line,
+    );
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: { before: ["  <h2>Standings</h2>"], after: ["  <h2>Table</h2>"] },
+    }),
+    [],
+  );
+});
+
+test("a page's markup is red where it changes what an inline script runs, or its order", () => {
+  const calls = ["  <script>", "    openLastTab();", "    showLastDrawn();", "  </script>"];
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: { before: calls, after: [calls[0], calls[2], calls[1], calls[3]] },
+    }),
+    [`${INDEX_HTML} changes what its inline scripts run`],
+  );
+  const lazy = ['  <script data-src="later.js">', "    openLastTab();", "  </script>"];
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: { before: lazy, after: [lazy[0], "    showLastDrawn();", lazy[2]] },
+    }),
+    [`${INDEX_HTML} changes what its inline scripts run`],
+    "a data-src names no file the script runs instead",
+  );
+});
+
+test("a page's markup is red where it changes its inline styles, or how it fits the screen or colors the phone's bars", () => {
+  const style = ["  <style>", "    body { margin: 0; }", "  </style>"];
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: {
+        before: style,
+        after: [style[0], "    body { overflow: hidden; }", style[2]],
+      },
+    }),
+    [`${INDEX_HTML} changes its inline styles`],
+  );
+  assert.equal(findChangeReasons({ [INDEX_HTML]: { before: [], after: style } }).length, 2);
+  for (const [before, after] of [
+    [
+      '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+      '  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />',
+    ],
+    [
+      '  <meta content="default" name="apple-mobile-web-app-status-bar-style">',
+      '  <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style">',
+    ],
+  ])
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: [before], after: [after] } }),
+      [`${INDEX_HTML} changes how it fits the screen or its bars`],
+      after,
+    );
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: {
+        before: ['  <meta name="description" content="Scores" />'],
+        after: ['  <meta name="description" content="Scores and standings" />'],
+      },
+    }),
+    [],
+  );
+});
+
+test("an inline style in a page's markup or a script's template is red only where a page's stylesheet would be, or the gate can't read it", () => {
+  const reads = { "shared/page/chrome.css": [".a { transform: var(--lift); }"] };
+  const script = "apps/wnba/page/js/team-view.js";
+  /** @param {string} markup */
+  const wrapInTemplate = (markup) => `  const part = html\`${markup}\`;`;
+  const redStyles = [
+    '<div style="position: absolute">',
+    '<div style="color: red; z-index: 2">',
+    "<div style='overflow: auto'>",
+    '<div style="top: ${top}px; position: ${position}">',
+    '<div style="--lift: ${lift}">',
+    '<div style="--lift: translateZ(0)">',
+    '<div style="${style}">',
+    "<div style=${style}>",
+    '<div style="color: ${isOn ? "red" : "blue"}">',
+  ];
+  const quietStyles = [
+    '<div style="--team-stat-columns: ${columns}">',
+    '<div style="--team: #f60">',
+    '<div style="color: var(--ink)">',
+    '<div style="position: relative; overflow: visible">',
+    '<div style="display: none; opacity: 0.5">',
+    '<div style="">',
+    '<div data-style="z-index: 2">',
+  ];
+  for (const markup of redStyles) {
+    assert.equal(
+      findChangeReasons({ [INDEX_HTML]: { before: [], after: [`  ${markup}`] } }, reads).length,
+      1,
+      `${INDEX_HTML}: ${markup}`,
+    );
+    assert.equal(
+      findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }, reads)
+        .length,
+      1,
+      `${script}: ${markup}`,
+    );
+  }
+  for (const markup of quietStyles) {
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: [], after: [`  ${markup}`] } }, reads),
+      [],
+      `${INDEX_HTML}: ${markup}`,
+    );
+    assert.deepEqual(
+      findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }, reads),
+      [],
+      `${script}: ${markup}`,
+    );
+  }
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: { before: ['  <div style="position: absolute">'], after: [] },
+    }),
+    [
+      `${INDEX_HTML} takes out an inline style that sets position: absolute: <div style="position: absolute">`,
+    ],
+  );
+  assert.deepEqual(
+    findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(redStyles[1])] } }),
+    [
+      `${script}:1 adds an inline style that sets z-index: 2: ${wrapInTemplate(redStyles[1]).trim()}`,
+    ],
+  );
+  assert.deepEqual(
+    findChangeReasons({ [script]: { before: [], after: ['  // <div style="z-index: 2">'] } }),
+    [],
+    "a comment",
+  );
+});
+
+/**
+ * A diff of `path` whose content its lines don't show, after its header.
+ * @param {string} path
+ * @param {string[]} lines
+ */
+const createHiddenDiff = (path, lines) =>
+  [
+    `diff --git a/${path} b/${path}`,
+    ...lines.map((line) => line.replaceAll("<path>", path)),
+    "",
+  ].join("\n");
+
+test("a page file whose diff hides its content, as a binary one does, is red", () => {
+  for (const path of [
+    "apps/wnba/page/styles.css",
+    "shared/page/sheet.css",
+    "shared/page/stamp.js",
+    INDEX_HTML,
+  ]) {
+    for (const lines of [
+      ["index 1111111..2222222 100644", "Binary files a/<path> and b/<path> differ"],
+      [
+        "old mode 100644",
+        "new mode 100755",
+        "index 1111111..2222222",
+        "Binary files a/<path> and b/<path> differ",
+      ],
+      ["index 1111111..2222222 100644"],
+    ])
+      assert.deepEqual(
+        findRedReasons(readDiff(createHiddenDiff(path, lines)), () => "", listNoStylesheets),
+        [`${path} changes in a way the gate can't read, so it may change anything`],
+        `${path}: ${lines.join(" ")}`,
+      );
+    assert.deepEqual(
+      findRedReasons(
+        readDiff(createHiddenDiff(path, ["old mode 100644", "new mode 100755"])),
+        () => "",
+        listNoStylesheets,
+      ),
+      path.startsWith("shared/page/sheet.css")
+        ? [`${path} is shared code that moves, layers, or draws the page`]
+        : [],
+      `${path}: only its mode`,
+    );
+  }
+});
+
+test("a diff the gate can't read is red", () => {
+  for (const diff of [
+    'diff --git "a/apps/wnba/page/odd name.css" "b/apps/wnba/page/odd name.css"\n',
+    "not a diff at all\n",
+  ]) {
+    const { isHeld, message } = decideGate(diff, { labels: [] });
+    assert.equal(isHeld, true, diff);
+    assert.match(message, /The gate can't read the diff, so it may change anything/);
+  }
+  assert.equal(decideGate("", { labels: [] }).isHeld, false);
 });
 
 test("an added line that makes a layer is red in any page's JavaScript", () => {
@@ -719,115 +1020,17 @@ test("an added line that makes a layer is red in any page's JavaScript", () => {
     "  element.style.backfaceVisibility = 'hidden';",
     "  element.style.webkitBackfaceVisibility = 'hidden';",
     '  element.style.setProperty("translate", value);',
+    '  root.style.setProperty("--thumb-left", `${left}px`);',
+    "  root.style.setProperty('--lift', lift);",
+    "  const sheet = html`<dialog open>${body}</dialog>`;",
+    "  const tip = html`<div popover>${words}</div>`;",
+    '  const dot = html`<span style="${style}"></span>`;',
+    "  const rules = html`<style>${css}</style>`;",
+    '  const loader = html`<script src="${file}"></script>`;',
   ];
   for (const path of ["shared/page/stamp.js", "apps/mlb/page/js/games-view.js"])
     for (const line of layerLines)
       assert.equal(findReasons(path, [line]).length, 1, `${path}: ${line}`);
-});
-
-// As sheet.js settles a sheet once its slide ends, with what it imports from sheet-swipe.js.
-const SETTLE = ["function settle(dialog) {", "  dialog.inert = false;", "}"];
-const SHEET = [
-  'import { closeSheet } from "./sheet-swipe.js";',
-  "",
-  "export function openSheet(dialog) {",
-  "  dialog.showModal();",
-  "  settle(dialog);",
-  "}",
-];
-const SWIPE = ["export function closeSheet(dialog) {", "  dialog.close();", "}"];
-const REDUCED_MOTION = [
-  'export const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;',
-];
-
-test("a shared script's code moved unchanged among those that move the page and the shared scripts they import isn't red, nor a change to its imports or exports alone", () => {
-  assert.deepEqual(
-    findChangeReasons({
-      "shared/page/sheet.js": {
-        before: [...SHEET, "", ...SETTLE],
-        after: [SHEET[0].replace("{ closeSheet }", "{ closeSheet, settle }"), ...SHEET.slice(1)],
-      },
-      "shared/page/sheet-swipe.js": {
-        before: SWIPE,
-        after: [...SWIPE, "", ...SETTLE.map((line, index) => (index ? line : `export ${line}`))],
-      },
-    }),
-    [],
-    "moved between two of them",
-  );
-  assert.deepEqual(
-    findChangeReasons({
-      "shared/page/slide-panels.js": {
-        before: [...REDUCED_MOTION, "", ...SETTLE],
-        after: ['import { prefersReducedMotion } from "./reduced-motion.js";', "", ...SETTLE],
-      },
-      "shared/page/reduced-motion.js": { before: [], after: REDUCED_MOTION },
-    }),
-    [],
-    "moved into a module of its own",
-  );
-  assert.deepEqual(
-    findChangeReasons(
-      {
-        "shared/page/bracket-standings.js": {
-          before: [
-            'import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";',
-            ...SETTLE,
-          ],
-          after: [
-            'import { prefersReducedMotion } from "./reduced-motion.js";',
-            'import { createSlidePanels } from "./slide-panels.js";',
-            ...SETTLE.map((line, index) => (index ? line : `export ${line}`)),
-          ],
-        },
-      },
-      { "shared/page/reduced-motion.js": REDUCED_MOTION },
-    ),
-    [],
-    "imports split and an export added",
-  );
-});
-
-test("a shared script's code moved where none of those scripts imports it, changed on its way, or repeated, is red", () => {
-  const shared = (/** @type {string} */ path) => [
-    `${path} is shared code that moves, layers, or draws the page`,
-  ];
-  assert.deepEqual(
-    findChangeReasons({
-      "shared/page/sheet.js": { before: [...SHEET, "", ...SETTLE], after: SHEET },
-      "shared/page/stamp.js": { before: [], after: SETTLE },
-    }),
-    shared("shared/page/sheet.js"),
-    "moved where nothing it imports holds it",
-  );
-  assert.deepEqual(
-    findChangeReasons({
-      "shared/page/sheet.js": {
-        before: [...SHEET, "", ...SETTLE],
-        after: [SHEET[0].replace("{ closeSheet }", "{ closeSheet, settle }"), ...SHEET.slice(1)],
-      },
-      "shared/page/sheet-swipe.js": {
-        before: SWIPE,
-        after: [...SWIPE, "export function settle(dialog) {", "  dialog.inert = true;", "}"],
-      },
-    }),
-    [...shared("shared/page/sheet.js"), ...shared("shared/page/sheet-swipe.js")],
-    "changed on its way",
-  );
-  assert.deepEqual(
-    findChangeReasons({
-      "shared/page/sheet.js": {
-        before: [...SHEET, 'addEventListener("resize", settle);'],
-        after: [
-          ...SHEET,
-          'addEventListener("resize", settle);',
-          'addEventListener("resize", settle);',
-        ],
-      },
-    }),
-    shared("shared/page/sheet.js"),
-    "a statement repeated",
-  );
 });
 
 // As shared/page/strip-slide.js places its lens, with the call above what a hunk shows of it.
@@ -1170,10 +1373,6 @@ test("CI's check needs the gate, which a label change runs again without a push"
   assert.match(
     workflow,
     /github\.event_name == 'pull_request' && needs\.gate\.result != 'success'/,
-  );
-  assert.match(
-    workflow,
-    /git diff --no-renames HEAD\^1 HEAD \| node worker\/red-change\.mjs "\$LABELS"/,
   );
   assert.match(
     workflow,
