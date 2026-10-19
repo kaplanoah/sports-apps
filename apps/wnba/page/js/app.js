@@ -171,6 +171,8 @@ const fillSeasonList = (years) =>
 /** @param {number} year */
 async function switchSeason(year) {
   await showYear(year);
+  // The picker marks the season shown in its markup too, which a reload puts back first.
+  fillSeasonList(null);
   startOverDayStrip();
   renderAll();
 }

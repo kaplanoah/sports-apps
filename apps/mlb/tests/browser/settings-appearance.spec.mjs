@@ -2,6 +2,7 @@ import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.m
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import {
+  checkNewCurrentSeasonListed,
   checkSeasonsOnFailedList,
   checkSettingsOnReload,
 } from "../../../../tests/browser/settings-reload.mjs";
@@ -161,6 +162,19 @@ test("a reload with settings open shows its seasons, switches, and look picked b
     page,
     look: "Night Game",
     switchName: "Include content from The Athletic",
+    pastSeason: "2025",
+    currentSeason: "2026",
+  });
+});
+
+test("while the store can't list its seasons, a new current season joins the Season picker, with the past season shown still chosen", async ({
+  page,
+}) => {
+  const app = await openApp(page, WITH_A_PAST_SEASON);
+  await checkNewCurrentSeasonListed({
+    page,
+    pastSeason: "2025",
+    moveCurrentTo: (year) => app.writeFromWorker("live/current", { season: year }),
   });
 });
 

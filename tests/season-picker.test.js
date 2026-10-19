@@ -68,3 +68,16 @@ test("the picker lists the current season even where the seasons it knows end be
     ],
   );
 });
+
+test("an older read of the seasons that answers after a newer one leaves the newer's answer", async () => {
+  /** @type {((years: string[]) => void)[]} */
+  const answers = [];
+  const readSeasonYears = keepSeasonYears(() => new Promise((resolve) => answers.push(resolve)));
+  const older = readSeasonYears();
+  const newer = readSeasonYears();
+  answers[1](["2027", "2026"]);
+  assert.deepEqual(await newer, ["2027", "2026"]);
+  answers[0](["2026"]);
+
+  assert.deepEqual(await older, ["2027", "2026"]);
+});

@@ -4,8 +4,8 @@
 // it, current. Each app hands it its looks' icons and bar colors.
 
 // Every page that loads this runs pick-theme.js first.
-/* global buildSafariAddress, isAppearanceChoice, isLook, openThemeAddress, readHomeScreenIcon,
-   readPhoneLook -- from pick-theme.js */
+/* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, isLook, openThemeAddress,
+   readHomeScreenIcon, readPhoneLook -- from pick-theme.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
@@ -69,10 +69,7 @@ export function followSavedTheme(looks) {
 }
 
 /** @param {NodeListOf<HTMLInputElement>} choices */
-function checkSavedChoice(choices) {
-  const saved = appearance.read();
-  for (const choice of choices) choice.checked = choice.value === saved;
-}
+const checkSavedChoice = (choices) => checkPickedChoice(choices, appearance.read());
 
 const findSettings = () => findElement("settingsDialog");
 const findNote = () => findElement("appearanceNote");

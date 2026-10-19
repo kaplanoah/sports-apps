@@ -28,21 +28,25 @@ const readSettings = (page) =>
 
 /**
  * A reload with settings open shows the seasons it can pick, its switches, and the look picked as
- * they were before the page's code arrives, and the same once it runs.
+ * they were before the page's code arrives, and once it runs, what the device keeps, on the
+ * current season, which a load opens on.
  * @param {{
  *   page: import("@playwright/test").Page,
  *   look: string,
  *   switchName: string,
- * }} options a look and a switch other than the ones a device starts on
+ *   pastSeason: string,
+ *   currentSeason: string,
+ * }} options a look, a switch, and a season other than the ones a device starts on
  */
-export async function checkSettingsOnReload({ page, look, switchName }) {
+export async function checkSettingsOnReload({ page, look, switchName, pastSeason, currentSeason }) {
   await openSettings(page);
   const settings = page.locator("#settingsDialog");
   await settings.getByRole("radio", { name: look, exact: true }).check();
   const toggle = settings.getByRole("switch", { name: switchName });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await expect(page.locator("#seasonPicker option")).not.toHaveCount(0);
+  await page.locator("#seasonPicker").selectOption(pastSeason);
+  await expect(page.locator("#seasonPicker option[selected]")).toHaveAttribute("value", pastSeason);
   await expect(page.locator("#seasonRow")).toBeVisible();
   await expect(page.locator("#notifySwitch")).toBeAttached();
   const shown = await readSettings(page);
@@ -53,10 +57,21 @@ export async function checkSettingsOnReload({ page, look, switchName }) {
   await expect(settings).toBeVisible();
   await expect.poll(() => readSettings(page)).toEqual(shown);
 
+  // Another tab turns the switch back on while the page's code is still on its way, so only that
+  // code can show it.
+  await page.evaluate(() => localStorage.removeItem("newsChoices"));
   const filling = waitForSettingsFill(page);
   release();
   await filling;
-  await expect.poll(() => readSettings(page)).toEqual(shown);
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  const switchId = await toggle.getAttribute("id");
+  await expect
+    .poll(() => readSettings(page))
+    .toEqual({
+      ...shown,
+      season: currentSeason,
+      switches: shown.switches.map(([id, isOn]) => [id, id === switchId ? "true" : isOn]),
+    });
 }
 
 /**
@@ -90,4 +105,26 @@ export async function checkSeasonsOnFailedList({ page, beforeReload, seasons, sh
   await expect(row).toBeVisible();
   await expect(row.locator("option")).toHaveText(seasons);
   await expect(page.locator("#seasonPicker")).toHaveValue(shown);
+}
+
+/**
+ * While the store can't list the seasons it keeps, a new current season it moves on to joins the
+ * picker, with the past season shown still chosen.
+ * @param {{
+ *   page: import("@playwright/test").Page,
+ *   pastSeason: string,
+ *   moveCurrentTo: (year: number) => Promise<void>,
+ * }} options
+ */
+export async function checkNewCurrentSeasonListed({ page, pastSeason, moveCurrentTo }) {
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await picker.selectOption(pastSeason);
+  await expect(page.locator("#seasonPicker option[selected]")).toHaveAttribute("value", pastSeason);
+  await page.route(matchPath("/store/seasons"), (route) => route.abort());
+
+  await moveCurrentTo(2027);
+
+  await expect(picker.locator("option")).toHaveText(["2027", "2026", "2025"]);
+  await expect(picker).toHaveValue(pastSeason);
 }

@@ -7,7 +7,7 @@
 // work while the modules still load. home-screen.js runs Chrome's Install in both.
 
 /* global isOnHomeScreen, WELCOME_CLOSED_KEY -- from pick-theme.js */
-/* global keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
+/* global checkPickedChoice, keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
 /* global readStored -- from open-last-tab.js */
 
 const TIP_TITLE = "Use this site like an app";
@@ -75,12 +75,10 @@ function copyThemeChoices() {
   const choices = /** @type {HTMLElement} */ (
     document.querySelector(".appearance-row .appearance-choices").cloneNode(true)
   );
-  const picked = readPickedAppearance();
   choices.setAttribute("aria-labelledby", "welcomePickTitle");
-  for (const input of choices.querySelectorAll("input")) {
-    input.name = "welcomeAppearance";
-    input.checked = input.value === picked;
-  }
+  const inputs = choices.querySelectorAll("input");
+  for (const input of inputs) input.name = "welcomeAppearance";
+  checkPickedChoice(inputs, readPickedAppearance());
   return choices;
 }
 

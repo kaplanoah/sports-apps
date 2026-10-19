@@ -7,6 +7,7 @@
 // was scrolled.
 
 /* global LAST_DRAWN_KEY -- from open-last-tab.js */
+/* global checkPickedChoice, readPickedAppearance -- from pick-theme.js */
 
 // What last-seen.js saves the page's open sheets and settings' switches under.
 const OPEN_SHEETS_KEY = "openSheets";
@@ -205,8 +206,6 @@ function showLastSheets() {
     if (!sheets.some(({ saved }) => isForgotten(saved))) showLastDialog(dialog, sheets);
 }
 
-/* global readPickedAppearance -- from pick-theme.js */
-
 // Settings' switches show the device's own choices, which their modules set only once they load,
 // each kept under its own key by its own rules, so the page saves what each showed as it leaves the
 // screen, but for one inside a part drawn whole, which that part's markup holds.
@@ -224,11 +223,10 @@ function showLastSwitches() {
 
 // The look picked is the one pick-theme.js shows, read from where the page keeps it.
 function showPickedAppearance() {
-  const picked = readPickedAppearance();
   const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
     document.querySelectorAll("[data-setting] input[name=appearance]")
   );
-  for (const choice of choices) choice.checked = choice.value === picked;
+  checkPickedChoice(choices, readPickedAppearance());
 }
 
 // What the page last showed is a drawing of its own, so the note that its views are still empty

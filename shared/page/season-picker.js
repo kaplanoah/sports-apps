@@ -1,9 +1,10 @@
 import { html, setHtml } from "./html.js";
 import { nameSeason } from "./league-words.js";
 
-// The settings' Season picker: the seasons the store keeps, newest first, with the shown one always
-// among them. It shows only once there's another season to pick. Its row is drawn whole, so a
-// reload shows it as it was before the page's code arrives.
+// The settings' Season picker: the seasons the store keeps, or those it last listed, newest first,
+// with the current one and the shown one always among them. It shows only once there's another
+// season to pick. Its row is drawn whole, so a reload shows it as it was before the page's code
+// arrives.
 
 /**
  * The years of the seasons the store keeps, newest first.
@@ -34,16 +35,24 @@ export function listSeasonOptions(years, { shownYear, currentYear }, words) {
 }
 
 /**
- * Reads the seasons the store keeps with `load`, keeping its last answer for a read that fails, or
- * null where it has never answered.
+ * Reads the seasons the store keeps with `load`, keeping the answer to the newest read that has
+ * one, so a read that fails, or an older one that answers late, leaves it as it was, or null where
+ * the store has never answered.
  * @param {() => Promise<string[]>} load
  */
 export function keepSeasonYears(load) {
   /** @type {string[] | null} */
   let kept = null;
+  let started = 0;
+  let keptRead = 0;
   return async () => {
+    const read = ++started;
     try {
-      kept = await load();
+      const years = await load();
+      if (read > keptRead) {
+        kept = years;
+        keptRead = read;
+      }
     } catch {
       /* the store's last answer stands */
     }

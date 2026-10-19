@@ -28,6 +28,15 @@ function readPhoneLook() {
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+/**
+ * Checks the Appearance choice that names the look picked, among settings' or the welcome's.
+ * @param {Iterable<HTMLInputElement>} choices
+ * @param {string} picked
+ */
+function checkPickedChoice(choices, picked) {
+  for (const choice of choices) choice.checked = choice.value === picked;
+}
+
 // A device keeps the choice as JSON, or, if it kept one earlier, as its name. Storage can refuse
 // access, as in a private window, so the page never depends on it.
 function readPickedAppearance() {

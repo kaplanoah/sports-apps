@@ -7,6 +7,7 @@ declare const Sortable: {
 declare function isOnHomeScreen(): boolean;
 declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;
+declare function checkPickedChoice(choices: Iterable<HTMLInputElement>, picked: string): void;
 declare function keepPickedAppearance(choice: string): void;
 declare function openThemeAddress(choice: string): void;
 declare function buildSafariAddress(choice: string, address: string): string;
