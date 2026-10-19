@@ -1,6 +1,7 @@
 import { html } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import {
+  describeDaySlate,
   describeFinishedDay,
   describeSlate,
   isFullSlate,
@@ -53,10 +54,6 @@ function describeGame(game) {
   return describeFirstPitch(game);
 }
 
-function describeDaySlate(games) {
-  if (!isFullSlate(games.length)) return "";
-  return describeSlate(games.length, isWholeSlate(games, "final") ? "over" : "under way");
-}
 const joinClause = (phrase, clause) => (clause ? html`${phrase}, ${clause}` : phrase);
 
 function rankGame(game, context) {

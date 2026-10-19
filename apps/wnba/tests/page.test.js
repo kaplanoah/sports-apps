@@ -1263,7 +1263,7 @@ test("a final names its series as won, tied, or led", () =>
     });
     assert.equal(
       readStampLines(tiedSeries, NOW)[0],
-      "Last game Aces 90 Fever 84 final - series tied 1-1",
+      "Last game Aces 90 Fever 84 final - series tied 1-1, slate of 3 under way",
     );
   }));
 
@@ -1384,6 +1384,16 @@ test("a full slate still to start says so after the next tip-off, and once today
       readStampLines(fullDay, NOW)[1],
       "Next tip-off 7:00 PM - Dream @ Mystics, starts slate of 3",
     );
+
+    const betweenGames = changeGame(fullDay, "1042600132", (game) => {
+      Object.assign(game, { start: "2026-09-30T17:00:00Z", state: "final", status: "Final" });
+      Object.assign(game.away, { score: 80 });
+      Object.assign(game.home, { score: 70 });
+    });
+    assert.deepEqual(readStampLines(betweenGames, NOW), [
+      "Last game Dream 80 Mystics 70 final - Dream lead series 1-0, slate of 3 under way",
+      "Next tip-off 9:00 PM - Valkyries @ Wings",
+    ]);
 
     const over = ["1042600132", "1042600112", "third-tonight"].reduce(
       (season, id) =>

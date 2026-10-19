@@ -15,8 +15,8 @@
  *   --sheet-gap          the room between two sheets, or two sections, while they slide, in the
  *                        sheet's own color
  *
- * A game's sheet before it starts lists the teams' meetings, and a player's sheet her facts, which
- * take these, set by eye for the app's fonts:
+ * A game's sheet before it starts lists the teams' meetings, and a player's sheet the player's
+ * facts, which take these, set by eye for the app's fonts:
  *   --meeting-day-width     the column of each meeting's day
  *   --meeting-room          the room above and below each meeting
  *   --meeting-result-gap    the room between a meeting's winner and its score
@@ -327,8 +327,8 @@
   color: var(--ink);
 }
 
-/* A player's facts, like her position and age, in a row under her name, each value under a quiet
-   label, without lines between them. The app sets the labels' type. */
+/* A player's facts, like the player's position and age, in a row under the name, each value under
+   a quiet label, without lines between them. The app sets the labels' type. */
 .player-facts {
   display: flex;
   justify-content: center;

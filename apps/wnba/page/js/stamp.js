@@ -1,9 +1,9 @@
 import { nameDay } from "#shared/days.js";
 import { html, joinNames, joinWithSeparator } from "#shared/html.js";
 import {
+  describeDaySlate,
   describeFinishedDay,
   describeSlate,
-  isFullSlate,
   isWholeSlate,
   renderStampLine,
   renderStampNow,
@@ -78,15 +78,16 @@ function describeFinalWhen(game, now) {
 
 /**
  * @param {Game} game
- * @param {string} slate how today's full slate stands once it's over, or nothing
+ * @param {string} slate how today's full slate stands, or nothing
  * @param {Map<string, Series>} seriesById
  * @param {Date} now
  */
 function describeLatestFinal(game, slate, seriesById, now) {
   const when = describeFinalWhen(game, now);
-  const sentence = html`Last game ${describeScore(game)} final${when && html` ${when}`}${slate && `, ${slate}`}`;
+  const sentence = html`Last game ${describeScore(game)} final${when && html` ${when}`}`;
   const standing = describeSeriesAfter(seriesById.get(game.series ?? ""));
-  return standing ? html`${sentence} &mdash; ${standing}` : sentence;
+  const line = standing ? html`${sentence} &mdash; ${standing}` : sentence;
+  return slate ? html`${line}, ${slate}` : line;
 }
 
 /**
@@ -131,9 +132,9 @@ function listDayGames(games, game, seriesById) {
  */
 function describeLiveGames(live, games, seriesById) {
   const lead = /** @type {Game} */ (live.at(-1));
-  const dayGames = listDayGames(games, lead, seriesById);
-  if (!isFullSlate(dayGames.length)) return joinWithSeparator(live.map(describeLiveGame));
-  return `${describeLiveGame(lead)}, ${describeSlate(dayGames.length, "under way")}`;
+  const slate = describeDaySlate(listDayGames(games, lead, seriesById));
+  if (!slate) return joinWithSeparator(live.map(describeLiveGame));
+  return `${describeLiveGame(lead)}, ${slate}`;
 }
 
 /**
@@ -146,9 +147,9 @@ function describeLatest(games, seriesById, now) {
   if (live.length) return html`${renderStampNow()} ${describeLiveGames(live, games, seriesById)}`;
   const latestFinal = listGamesInState(games, "final").at(-1);
   if (!latestFinal) return "";
-  const dayGames = listDayGames(games, latestFinal, seriesById);
-  const isTodayOver = isGameToday(latestFinal, now.getTime()) && isWholeSlate(dayGames, "final");
-  const slate = isTodayOver ? describeSlate(dayGames.length, "over") : "";
+  const slate = isGameToday(latestFinal, now.getTime())
+    ? describeDaySlate(listDayGames(games, latestFinal, seriesById))
+    : "";
   return describeLatestFinal(latestFinal, slate, seriesById, now);
 }
 

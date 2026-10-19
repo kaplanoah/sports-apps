@@ -76,6 +76,16 @@ export const isWholeSlate = (games, state) =>
 export const describeSlate = (count, stage) =>
   stage === "starts" ? `starts slate of ${count}` : `slate of ${count} ${stage}`;
 
+/**
+ * How a full day that has begun stands, "slate of 5 under way" until every game is final and
+ * "slate of 5 over" after, or nothing for a day of few games.
+ * @param {{ state: string }[]} games the day's games
+ */
+export function describeDaySlate(games) {
+  if (!isFullSlate(games.length)) return "";
+  return describeSlate(games.length, isWholeSlate(games, "final") ? "over" : "under way");
+}
+
 /** Leads a line about the games under way, set apart as a time is. */
 export const renderStampNow = () => html`<b class="now">NOW</b>`;
 

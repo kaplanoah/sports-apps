@@ -6,6 +6,7 @@ import { formatCalendarDate, readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
 import { readGameDay } from "./days.js";
 import { LEAGUE_WORDS } from "./league-words.js";
+import { isPutOff } from "./nearest-games.js";
 import { isCupFinal, ROUNDS } from "./snapshot.js";
 import { TEAMS } from "./teams.js";
 
@@ -164,7 +165,8 @@ function readStartMinutes(game) {
 }
 
 /**
- * A WNBA game as a search reads it, or null for one without a day.
+ * A WNBA game as a search reads it, or null for one without a day or one the league put off, which
+ * is played on another day.
  * @param {Game} game
  * @param {Record<string, number> | null} overtimes how many overtimes each final that went past
  *   regulation played, by its id, as the store keeps them
@@ -172,7 +174,7 @@ function readStartMinutes(game) {
  */
 export function readSearchGame(game, overtimes) {
   const day = readGameDay(game);
-  if (!day) return null;
+  if (!day || isPutOff(game)) return null;
   return {
     id: game.id,
     day: formatCalendarDate(day),
