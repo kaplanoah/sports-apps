@@ -1,24 +1,24 @@
 // Waits until CI's review of a pull request's head has finished, then prints whether it passed
 // and every finding it posted on that head, in full, from every page of the pull request's
-// comments, so a session reads all of a review's findings before it answers any. A cloud session
-// holds no token, so it reads the public repo unsigned, within GitHub's limit of 60 requests an
-// hour for an address: it reads the pull request's events once, asks for the review's check run
-// once every POLL_MS, reads the pull request again only every PULL_EVERY asks, and stops after
-// about nine minutes, before a cloud session's command times out, saying to run it again, so even
-// an hour of waits back to back leaves room to read a finished review's comments. A review counts
-// only once it started since the pull request was last marked ready and since the head's newest
-// CI run started its current try, since a draft's run, which passes its review without reviewing,
-// and a re-run's earlier try can each still have a finished review check run on the head. It stops
-// when a newer push replaced the head, since the newer push's run cancels the head's review, or
-// when the pull request is a draft, which CI doesn't review.
+// comments, so a session reads all of a review's findings before it answers any. The head's CI run
+// is its newest one made since the pull request was last marked ready for review, since a draft's
+// run passes its review without reviewing, and the review is that run's `review` job as its latest
+// try has it, where a job a re-run left alone keeps its result. A cloud session holds no token, so
+// it reads the public repo unsigned, within GitHub's limit of 60 requests an hour for an address:
+// it reads the pull request and the last page of its events once, then, once every POLL_MS, asks
+// for the head's CI run until there is one and for that run's jobs, reads the pull request again
+// every PULL_EVERY asks, and stops after about nine minutes, before a cloud session's command
+// times out, saying to run it again, so even an hour of waits back to back leaves room to read a
+// finished review's comments. It stops when a newer push replaced the head, since the newer push's
+// run cancels the head's review, or when the pull request is a draft, which CI doesn't review.
 // Usage: node worker/wait-for-review.mjs <pull request number>, in a clone of the repo. It exits
 // with EXIT_CODES: 0 once the review passed, 1 once it didn't, 2 while it's still going, 3 when a
-// newer push replaced the head, 4 when CI hasn't started a run that counts on the head, as on a
-// pull request in conflict, 5 for a draft, 6 once GitHub's limit is used up, and 7 when it isn't
-// handed a pull request's number.
+// newer push replaced the head, 4 when CI hasn't started a run on the head since it was marked
+// ready, as on a pull request in conflict, 5 for a draft, 6 once GitHub's limit is used up, and 7
+// when it isn't handed a pull request's number.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { GitHubError, createGitHub, readAllPages } from "./github-api.mjs";
+import { GitHubError, createGitHub, readAllPages, readLastPage } from "./github-api.mjs";
 import {
   listFindingMarks,
   pluralize,
@@ -26,15 +26,15 @@ import {
   removeFindingMarks,
 } from "./review-state.mjs";
 
-// The workflow that reviews a pull request, and its job that finishes the review, whose check run
-// says how it went.
+// The workflow that reviews a pull request, and its job that finishes the review.
 const CI_WORKFLOW = "ci.yml";
 const REVIEW_JOB = "review";
-const POLL_MS = 3 * 60 * 1000;
+// Three asks a wait, the last re-reading the pull request, keep an hour of waits back to back
+// under GitHub's limit with room for the last one's comments, which a test counts.
+const POLL_MS = 4.5 * 60 * 1000;
 const PULL_EVERY = 3;
 const LONGEST_WAIT_MS = 9 * 60 * 1000;
-// The review's check run starts only once every review job before it has finished, so until
-// then whether CI started at all is told from whether the head has a CI run that counts.
+// How long a head can go without a CI run before the wait says CI hasn't started on it.
 const START_WAIT_MS = 3 * 60 * 1000;
 
 export const EXIT_CODES = Object.freeze({
@@ -48,7 +48,7 @@ export const EXIT_CODES = Object.freeze({
   usage: 7,
 });
 
-/** @typedef {(path: string) => Promise<any>} ReadGitHub */
+/** @typedef {(path: string, request?: { withLastPage?: boolean }) => Promise<any>} ReadGitHub */
 
 /** @typedef {{ outcome: "passed" | "failed", sha: string, conclusion: string }} Finished */
 
@@ -88,65 +88,43 @@ async function readPull(readGitHub, pullNumber) {
 }
 
 /**
- * The latest run of the review's check on a commit, from any of its CI runs, or null before one
- * has started.
- * @param {ReadGitHub} readGitHub
- * @param {string} sha
- */
-async function readReviewRun(readGitHub, sha) {
-  const { check_runs: runs } = await readGitHub(
-    `/commits/${sha}/check-runs?check_name=${REVIEW_JOB}`,
-  );
-  return (
-    runs.toSorted((/** @type {any} */ one, /** @type {any} */ other) => other.id - one.id)[0] ??
-    null
-  );
-}
-
-/**
- * The newest CI run on a commit, or null when CI hasn't started on it.
- * @param {ReadGitHub} readGitHub
- * @param {string} sha
- */
-async function readNewestCiRun(readGitHub, sha) {
-  const { workflow_runs: runs } = await readGitHub(
-    `/actions/workflows/${CI_WORKFLOW}/runs?head_sha=${sha}&per_page=1`,
-  );
-  return runs[0] ?? null;
-}
-
-/**
- * When the pull request was last marked ready for review, or 0 for one never a draft, from every
- * page of its events, which list that without the timeline's comments and reviews, so in fewer
- * pages.
+ * When the pull request was last marked ready for review, or 0 for one never a draft, from the
+ * last page of its events, which are listed oldest first.
  * @param {ReadGitHub} readGitHub
  * @param {string} pullNumber
  */
 async function readReadyAt(readGitHub, pullNumber) {
-  const events = await readAllPages(readGitHub, `/issues/${pullNumber}/events`);
-  const ready = events.filter((event) => event.event === "ready_for_review").at(-1);
-  return ready ? Date.parse(ready.created_at) : 0;
+  const events = await readLastPage(readGitHub, `/issues/${pullNumber}/events`);
+  const ready = events.filter((/** @type {any} */ event) => event.event === "ready_for_review");
+  return ready.length ? Date.parse(ready.at(-1).created_at) : 0;
 }
 
 /**
- * Whether a CI run counts for the head: it started since the pull request was last marked ready,
- * as a draft's run passes its review without reviewing.
- * @param {any} ciRun as GitHub lists a workflow run
- * @param {number} readyAt
+ * The head's CI run: its newest made since the pull request was last marked ready, or null while
+ * there's none.
+ * @param {ReadGitHub} readGitHub
+ * @param {{ sha: string, readyAt: number }} head
  */
-const isCountingCiRun = (ciRun, readyAt) => Date.parse(ciRun.run_started_at) >= readyAt;
+async function readCiRun(readGitHub, { sha, readyAt }) {
+  const { workflow_runs: runs } = await readGitHub(
+    `/actions/workflows/${CI_WORKFLOW}/runs?head_sha=${sha}&per_page=1`,
+  );
+  const [newest] = runs;
+  return newest && Date.parse(newest.created_at) >= readyAt ? newest : null;
+}
 
 /**
- * Whether a finished review check run counts: it started since the pull request was last marked
- * ready, and since the head's newest CI run started its current try, so neither a draft's run nor
- * a re-run's earlier try reads as the review.
+ * A CI run's review job as its latest try has it, or null before the run has one.
  * @param {ReadGitHub} readGitHub
- * @param {{ sha: string, readyAt: number, run: any }} review
+ * @param {number} runId
  */
-async function isCountingReview(readGitHub, { sha, readyAt, run }) {
-  const ciRun = await readNewestCiRun(readGitHub, sha);
-  const startedAt = Date.parse(run.started_at);
-  return Boolean(ciRun) && startedAt >= readyAt && startedAt >= Date.parse(ciRun.run_started_at);
+async function readReviewJob(readGitHub, runId) {
+  const jobs = await readAllPages(
+    readGitHub,
+    `/actions/runs/${runId}/jobs?filter=latest`,
+    (answer) => answer.jobs,
+  );
+  return jobs.find((/** @type {any} */ job) => job.name === REVIEW_JOB) ?? null;
 }
 
 /**
@@ -161,21 +139,21 @@ function findStop(pull, sha) {
 }
 
 /**
- * A finished review check run as how the wait ended.
- * @param {any} run
+ * A finished review job as how the wait ended.
+ * @param {any} job
  * @param {string} sha
  * @returns {Finished}
  */
-const describeRun = (run, sha) => ({
-  outcome: run.conclusion === "success" ? "passed" : "failed",
+const describeJob = (job, sha) => ({
+  outcome: job.conclusion === "success" ? "passed" : "failed",
   sha,
-  conclusion: run.conclusion,
+  conclusion: job.conclusion,
 });
 
 /**
- * How the wait for the review of a pull request's head ended: a review that counts finished, a
- * newer push replaced the head, the pull request is a draft, CI hasn't started a run that counts
- * on the head a few minutes on, or the wait has gone as long as a session's command can.
+ * How the wait for the review of a pull request's head ended: the head's CI run's review job
+ * finished, a newer push replaced the head, the pull request is a draft, the head has no CI run a
+ * few minutes on, or the wait has gone as long as a session's command can.
  * @param {object} options
  * @param {ReadGitHub} options.readGitHub
  * @param {string} options.pullNumber
@@ -188,27 +166,18 @@ async function waitForReview({ readGitHub, pullNumber, wait, now }) {
   const { head: sha, isDraft } = await readPull(readGitHub, pullNumber);
   if (isDraft) return { outcome: "draft", sha };
   const readyAt = await readReadyAt(readGitHub, pullNumber);
-  /** @type {Set<number>} finished review check runs that don't count, which never will */
-  const uncounted = new Set();
-  let isStarted = false;
+  /** @type {any} */
+  let ciRun = null;
   for (let ask = 1; ; ask += 1) {
-    const run = await readReviewRun(readGitHub, sha);
-    const isDone = run?.status === "completed" && !uncounted.has(run.id);
-    // Only a CI run going now has a review check run still going: a draft's and an earlier try's end.
-    isStarted ||= Boolean(run) && run.status !== "completed";
-    if (isDone) {
-      if (await isCountingReview(readGitHub, { sha, readyAt, run }))
-        return findStop(await readPull(readGitHub, pullNumber), sha) ?? describeRun(run, sha);
-      uncounted.add(run.id);
-    } else if (ask % PULL_EVERY === 0) {
+    ciRun ??= await readCiRun(readGitHub, { sha, readyAt });
+    if (!ciRun && now() - started >= START_WAIT_MS) return { outcome: "unstarted", sha };
+    const job = ciRun && (await readReviewJob(readGitHub, ciRun.id));
+    const isDone = job?.status === "completed";
+    if (isDone || ask % PULL_EVERY === 0) {
       const stop = findStop(await readPull(readGitHub, pullNumber), sha);
       if (stop) return stop;
     }
-    if (!isStarted && now() - started >= START_WAIT_MS) {
-      const ciRun = await readNewestCiRun(readGitHub, sha);
-      isStarted = Boolean(ciRun) && isCountingCiRun(ciRun, readyAt);
-      if (!isStarted) return { outcome: "unstarted", sha };
-    }
+    if (isDone) return describeJob(job, sha);
     if (now() - started + POLL_MS > LONGEST_WAIT_MS) return { outcome: "going", sha };
     await wait(POLL_MS);
   }

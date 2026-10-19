@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { GitHubError, createGitHub, createGraphQL } from "../worker/github-api.mjs";
+import { GitHubError, createGitHub, createGraphQL, readLastPage } from "../worker/github-api.mjs";
 
 /**
  * A fetch that answers every request with this status and body.
@@ -21,7 +21,7 @@ test("a refused REST request says GitHub's status, which a caller can tell apart
   assert.match(error.message, /GitHub answered 422 for POST \/pulls\/7\/comments/);
 });
 
-test("a refusal counts as a used-up limit only for a 429 or a 403 with none left or a wait, with the limit and when it ends", async () => {
+test("a refusal counts as a limit for a 429, or a 403 with the hour used up or a wait, naming the hour's limit and reset only once it's used up, and otherwise the wait a secondary limit names", async () => {
   const reset = { "x-ratelimit-reset": "1700000000", "x-ratelimit-limit": "60" };
   /**
    * What REST and GraphQL each throw for one refusal.
@@ -75,6 +75,42 @@ test("a REST request is signed with the token when there is one, and goes unsign
   assert.equal(requests[0].init.headers.authorization, "Bearer t0ken");
   assert.ok(!("authorization" in requests[1].init.headers));
   assert.equal(requests[1].init.headers.accept, "application/vnd.github+json");
+});
+
+test("a listing's last page, where the newest of one listed oldest first are, takes one request for one page and two for several, never reading the pages between", async () => {
+  /** @type {string[]} */
+  const requests = [];
+  /**
+   * A fetch that lists this many pages of events, with the Link header GitHub sends.
+   * @param {number} pageCount
+   * @returns {typeof fetch}
+   */
+  const listPages = (pageCount) => async (input) => {
+    const url = new URL(String(input));
+    requests.push(url.pathname + url.search);
+    const page = Number(url.searchParams.get("page"));
+    /** @param {number} to @param {string} rel */
+    const linkTo = (to, rel) =>
+      `<https://api.github.com/repositories/1/issues/7/events?per_page=100&page=${to}>; rel="${rel}"`;
+    const link = [linkTo(page + 1, "next"), linkTo(pageCount, "last")].join(", ");
+    return new Response(JSON.stringify([{ page }]), {
+      headers: page < pageCount ? { link } : {},
+    });
+  };
+  /** @param {number} pageCount */
+  const readEvents = (pageCount) =>
+    readLastPage(
+      createGitHub({ repository: "o/r", fetchImpl: listPages(pageCount), env }),
+      "/issues/7/events",
+    );
+  assert.deepEqual(await readEvents(1), [{ page: 1 }]);
+  assert.deepEqual(requests, ["/repos/o/r/issues/7/events?per_page=100&page=1"]);
+  requests.length = 0;
+  assert.deepEqual(await readEvents(3), [{ page: 3 }]);
+  assert.deepEqual(requests, [
+    "/repos/o/r/issues/7/events?per_page=100&page=1",
+    "/repos/o/r/issues/7/events?per_page=100&page=3",
+  ]);
 });
 
 test("a GraphQL query's status is checked before its answer is read", async () => {

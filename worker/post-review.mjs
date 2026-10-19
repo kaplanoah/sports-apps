@@ -1,15 +1,16 @@
 // Posts what a stage of CI's checkers confirmed or left unsure, so no reviewer or checker holds a
 // token that writes to the pull request: each Important or Unsure finding on the line it's about,
-// a thread of its own, and the stage's Nits and Pre-existing findings together in a checklist on
-// the first of their files, one comment unless it would run past GitHub's limit for one, so a
-// review's smaller findings are one thread to resolve.
+// a thread of its own, and the stage's Nits and Pre-existing findings together in a checklist, one
+// comment, or more only past GitHub's limit for one, each on the first of its items' files GitHub
+// takes and each a thread of its own.
 // The check across areas names only the repeats to merge, with the words that name each place
 // they show, and what it adds, so no finding a checker kept can drop out of its answer. A finding
 // on a line the diff doesn't show goes on its file, and one on a file the diff doesn't show, or a
-// checklist none of whose files it shows, goes in a comment on the pull request. Each finding
-// carries a mark, so a finding already posted in any form, as by an earlier try of this step,
-// isn't posted again. A finding counts as posted when this head's review posted it, in this try or
-// an earlier one, and as already on the pull request when an earlier head's review did.
+// checklist's comment GitHub takes on none of its files, goes in a comment on the pull request,
+// where it's no thread to resolve. Each finding carries a mark, so a finding already posted in any
+// form, as by an earlier try of this step, isn't posted again. A finding counts as posted when this
+// head's review posted it, in this try or an earlier one, and as already on the pull request when
+// an earlier head's review did.
 // Usage: node worker/post-review.mjs list <folder> <stage>, with AREAS set, after the stage's
 // checkers, writes what they confirmed or left unsure for the check across areas. node
 // worker/post-review.mjs across <folder> <stage>, with STRUCTURED_OUTPUT from that check, keeps its

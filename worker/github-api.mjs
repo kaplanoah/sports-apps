@@ -78,9 +78,11 @@ const writeHeaders = (env) => ({
 export function createGitHub({ repository, fetchImpl, env }) {
   /**
    * @param {string} path
-   * @param {{ method?: string, body?: unknown }} [request]
+   * @param {{ method?: string, body?: unknown, withLastPage?: boolean }} [request] withLastPage
+   *   answers { answer, lastPage }, with the number of the listing's last page from the Link
+   *   header, or null when the answer is its only page
    */
-  return async (path, { method = "GET", body } = {}) => {
+  return async (path, { method = "GET", body, withLastPage = false } = {}) => {
     const response = await fetchImpl(`${API}/repos/${repository}${path}`, {
       method,
       headers: { ...writeHeaders(env), ...(body ? { "content-type": "application/json" } : {}) },
@@ -88,8 +90,20 @@ export function createGitHub({ repository, fetchImpl, env }) {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new GitHubError(response.status, `${method} ${path}`, response.headers);
-    return response.json();
+    const answer = await response.json();
+    if (!withLastPage) return answer;
+    return { answer, lastPage: readLastPageNumber(response.headers.get("link")) };
   };
+}
+
+/**
+ * The number of the last page a Link header names, or null when it names none.
+ * @param {string | null} link
+ */
+function readLastPageNumber(link) {
+  const last = link?.split(",").find((part) => /rel="last"/.test(part));
+  const page = last?.match(/<([^>]+)>/)?.[1];
+  return page ? Number(new URL(page).searchParams.get("page")) : null;
 }
 
 /**
@@ -119,6 +133,21 @@ export function createGraphQL({ fetchImpl, env }) {
   };
 }
 
+/** @param {string} path @param {number} page */
+const addPage = (path, page) =>
+  `${path}${path.includes("?") ? "&" : "?"}per_page=${PAGE_SIZE}&page=${page}`;
+
+/**
+ * The last page of a listing, which holds the newest of one listed oldest first, in one request
+ * when the listing fits one page, and two otherwise.
+ * @param {(path: string, request?: { withLastPage?: boolean }) => Promise<any>} readJson
+ * @param {string} path
+ */
+export async function readLastPage(readJson, path) {
+  const { answer, lastPage } = await readJson(addPage(path, 1), { withLastPage: true });
+  return lastPage ? readJson(addPage(path, lastPage)) : answer;
+}
+
 /**
  * Every page of a listing, in order.
  * @param {(path: string) => Promise<any>} readJson
@@ -129,9 +158,7 @@ export function createGraphQL({ fetchImpl, env }) {
 export async function readAllPages(readJson, path, pickItems = (answer) => answer) {
   const items = [];
   for (let page = 1; ; page += 1) {
-    const batch = pickItems(
-      await readJson(`${path}${path.includes("?") ? "&" : "?"}per_page=${PAGE_SIZE}&page=${page}`),
-    );
+    const batch = pickItems(await readJson(addPage(path, page)));
     items.push(...batch);
     if (batch.length < PAGE_SIZE) return items;
   }
