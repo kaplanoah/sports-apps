@@ -1,18 +1,18 @@
 // Splits a pull request's change into areas by what its files are about, each test with the code
-// it tests, so CI's review (the review jobs in ci.yml) has a reviewer for each kind of problem in
-// KINDS read each area in full. The first review reads the whole change. A review after it reads
-// only what the pushes since the last full read changed, and when that review finishes and posts
-// nothing, the whole change is read once more, by FINAL_KIND's reviewer. A push that changes
-// only what a merge of the base brings in is read by no one, and neither is a run on the head the
-// last full read ended on, as a label's is. A test's recorded data, the lockfile, a binary file,
-// and a drawing or minified library a tool wrote go unread, named in the summary instead.
+// it tests, so CI's review (the review jobs in ci.yml, and review-area.yml for each area) has a
+// reviewer for each kind of problem in KINDS read each area in full. The first review reads the
+// whole change. A review after it reads only what the pushes since the last full read changed,
+// and the whole change is read once more alongside it, by FINAL_KIND's reviewer, whose findings
+// are posted only when that review finishes and posts nothing. A push that changes only what a
+// merge of the base brings in is read by no one, and neither is a run on the head the last full
+// read ended on, as a label's is. A test's recorded data, the lockfile, a binary file, and a
+// drawing or minified library a tool wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, as is each rule file whose paths
 // match a file of its area, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
 // commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,
-// GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints the reviewers' and
-// checkers' matrices and counts, each area's number by its name, and each kind's focus for
-// $GITHUB_OUTPUT.
+// GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints each stage's areas
+// and kinds of reviewer, and their counts, for $GITHUB_OUTPUT.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -264,7 +264,6 @@ function groupInAreas(files, repoFiles, areaLines) {
       return parts.map((part, index) => ({
         name: parts.length > 1 ? `${name}, part ${index + 1}` : name,
         files: part.map((file) => file.path),
-        lines: sum(part),
       }));
     },
   );
@@ -276,7 +275,7 @@ function groupInAreas(files, repoFiles, areaLines) {
  * own name.
  * @param {{ path: string, lines: number }[]} files
  * @param {string[]} repoFiles
- * @returns {{ area: number, name: string, files: string[], lines: number }[]}
+ * @returns {{ area: number, name: string, files: string[] }[]}
  */
 export function listAreas(files, repoFiles) {
   const total = files.reduce((sum, file) => sum + file.lines, 0);
@@ -672,22 +671,34 @@ export function listStageKinds(stage) {
 }
 
 // GitHub names a matrix's job by its values, and a skipped one, whose matrix it never reads, by
-// the job alone, so each matrix holds only what its job's name shows, and a job looks up the rest.
+// the job alone, so each area holds only the name its job shows, and the job looks up its number.
 /**
- * The reviewers' and checkers' matrices for a stage's areas, and each area's number by its name.
+ * A stage's matrices: its areas, each of which review-area.yml reviews and then checks on its own,
+ * each area's number by its name, the kinds of reviewer each area has, and how many reviewers that
+ * makes.
  * @param {{ area: number, name: string }[]} areas
- * @param {{ kind: string }[]} kinds
+ * @param {{ kind: string, focus: string }[]} kinds
  */
 export const listJobs = (areas, kinds) => ({
-  reviewers: areas.flatMap(({ name }) => kinds.map(({ kind }) => ({ name, kind }))),
-  checkers: areas.map(({ name }) => ({ name })),
+  areas: areas.map(({ name }) => ({ name })),
   areaNumbers: Object.fromEntries(areas.map(({ area, name }) => [name, area])),
+  kinds: kinds.map(({ kind, focus }) => ({ kind, focus })),
+  count: areas.length * kinds.length,
 });
 
-/** Each kind of reviewer's focus, by its kind. */
-export const FOCUSES = Object.fromEntries(
-  [...KINDS, FINAL_KIND].map(({ kind, focus }) => [kind, focus]),
-);
+/**
+ * A stage's matrices as the lines for $GITHUB_OUTPUT, each named after the prefix its jobs read.
+ * @param {string} prefix
+ * @param {ReturnType<typeof listJobs>} jobs
+ */
+export const formatJobOutputs = (prefix, { areas, areaNumbers, kinds, count }) =>
+  [
+    `${prefix}areas=${JSON.stringify(areas)}`,
+    `${prefix}area-numbers=${JSON.stringify(areaNumbers)}`,
+    `${prefix}area-count=${areas.length}`,
+    `${prefix}kinds=${JSON.stringify(kinds)}`,
+    `${prefix}count=${count}`,
+  ].join("\n");
 
 /**
  * Writes a stage's diffs and index, and returns its areas and files left unread.
@@ -711,7 +722,7 @@ function writeIndexedStage(folder, stage, change, words = stage) {
  *   until this review finishes
  * @property {PlannedArea[]} areas the stage's areas
  * @property {any[]} unread the files the stage leaves unread, and why
- * @property {PlannedArea[]} final the last read's areas, when a push's review is due one
+ * @property {PlannedArea[]} final the last read's areas, which a push's review reads alongside it
  * @property {any[]} finalUnread the files the last read leaves unread, and why
  */
 
@@ -903,18 +914,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       ),
     rules: repoFiles.filter(isRuleFile).map((path) => ({ path, text: readFileSync(path, "utf8") })),
   });
-  const now = listJobs(plan.areas, listStageKinds(plan.stage));
-  const last = listJobs(plan.final, listStageKinds("final"));
   console.log(`stage=${plan.stage}`);
-  console.log(`reviewers=${JSON.stringify(now.reviewers)}`);
-  console.log(`checkers=${JSON.stringify(now.checkers)}`);
-  console.log(`area-numbers=${JSON.stringify(now.areaNumbers)}`);
-  console.log(`areas=${now.checkers.length}`);
-  console.log(`count=${now.reviewers.length}`);
-  console.log(`final-reviewers=${JSON.stringify(last.reviewers)}`);
-  console.log(`final-checkers=${JSON.stringify(last.checkers)}`);
-  console.log(`final-area-numbers=${JSON.stringify(last.areaNumbers)}`);
-  console.log(`final-areas=${last.checkers.length}`);
-  console.log(`final-count=${last.reviewers.length}`);
-  console.log(`focus=${JSON.stringify(FOCUSES)}`);
+  console.log(formatJobOutputs("", listJobs(plan.areas, listStageKinds(plan.stage))));
+  console.log(formatJobOutputs("final-", listJobs(plan.final, listStageKinds("final"))));
 }

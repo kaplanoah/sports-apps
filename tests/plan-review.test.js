@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   FINAL_KIND,
-  FOCUSES,
   KINDS,
   PART_BYTES,
   PART_LINES,
@@ -14,6 +13,7 @@ import {
   explainUnread,
   findPushedRange,
   findTestedFile,
+  formatJobOutputs,
   grepRepo,
   isReviewedOnBranch,
   listAreas,
@@ -323,9 +323,7 @@ test("a plan reads every file but the unread ones, and names why each goes unrea
     "4\t1\tshared/page/sheet.js\n900\t0\tapps/mlb/tests/fixtures/x.json\n1\t0\ticon.svg\n3\t0\tapps/mlb/page/js/sortable.min.js\n",
     REPO,
   );
-  assert.deepEqual(plan.areas, [
-    { area: 1, name: "shared page", files: ["shared/page/sheet.js"], lines: 5 },
-  ]);
+  assert.deepEqual(plan.areas, [{ area: 1, name: "shared page", files: ["shared/page/sheet.js"] }]);
   assert.deepEqual(plan.unread, [
     { path: "apps/mlb/tests/fixtures/x.json", why: "a test's recorded data" },
     { path: "icon.svg", why: "a drawing or a minified library, written by a tool" },
@@ -338,32 +336,50 @@ test("a plan reads every file but the unread ones, and names why each goes unrea
 
 test("each area has a reviewer for each kind of problem, two for bugs, and one checker", () => {
   const areas = [
-    { area: 1, name: "mlb page", lines: 40 },
-    { area: 2, name: "tooling", lines: 9 },
+    { area: 1, name: "mlb page" },
+    { area: 2, name: "docs" },
   ];
-  const { reviewers, checkers, areaNumbers } = listJobs(areas, KINDS);
+  const jobs = listJobs(areas, KINDS);
   assert.deepEqual(
-    reviewers.filter((reviewer) => reviewer.name === "mlb page").map((reviewer) => reviewer.kind),
+    jobs.kinds.map((reviewer) => reviewer.kind),
     ["bugs", "bugs-from-end", "rules", "tests"],
   );
-  assert.deepEqual(checkers, [{ name: "mlb page" }, { name: "tooling" }]);
-  assert.deepEqual(areaNumbers, { "mlb page": 1, tooling: 2 });
+  assert.ok(jobs.kinds.every((reviewer) => reviewer.focus.includes("REVIEW.md")));
+  assert.deepEqual(jobs.areas, [{ name: "mlb page" }, { name: "docs" }]);
+  assert.deepEqual(jobs.areaNumbers, { "mlb page": 1, docs: 2 });
+  assert.equal(jobs.count, 8);
+  const last = listJobs(areas, [FINAL_KIND]);
   assert.deepEqual(
-    listJobs(areas, [FINAL_KIND]).reviewers.map((reviewer) => reviewer.kind),
-    ["all", "all"],
+    last.kinds.map((reviewer) => reviewer.kind),
+    ["all"],
   );
-  assert.ok(Object.values(FOCUSES).every((focus) => focus.includes("REVIEW.md")));
-  assert.deepEqual(
-    Object.keys(FOCUSES),
-    [...KINDS, FINAL_KIND].map(({ kind }) => kind),
-  );
+  assert.equal(last.count, 2);
 });
 
 // GitHub names a matrix's job by every value in it, and a skipped one by the job alone.
-test("each matrix holds only what names its job", () => {
-  const { reviewers, checkers } = listJobs([{ area: 1, name: "mlb page" }], KINDS);
-  assert.ok(reviewers.every((reviewer) => Object.keys(reviewer).join() === "name,kind"));
-  assert.ok(checkers.every((checker) => Object.keys(checker).join() === "name"));
+test("each area's matrix holds only the name its job shows", () => {
+  const { areas } = listJobs([{ area: 1, name: "mlb page" }], KINDS);
+  assert.ok(areas.every((area) => Object.keys(area).join() === "name"));
+});
+
+test("each stage's matrices are handed to ci.yml under the names its review jobs read", () => {
+  const jobs = listJobs([{ area: 1, name: "mlb page" }], [FINAL_KIND]);
+  assert.equal(
+    formatJobOutputs("final-", jobs),
+    [
+      'final-areas=[{"name":"mlb page"}]',
+      'final-area-numbers={"mlb page":1}',
+      "final-area-count=1",
+      `final-kinds=${JSON.stringify([{ kind: "all", focus: FINAL_KIND.focus }])}`,
+      "final-count=1",
+    ].join("\n"),
+  );
+  assert.equal(
+    formatJobOutputs("", listJobs([], KINDS)),
+    "areas=[]\narea-numbers={}\narea-count=0\nkinds=" +
+      JSON.stringify(KINDS.map(({ kind, focus }) => ({ kind, focus }))) +
+      "\ncount=0",
+  );
 });
 
 test("a change reads the same wherever a merge of the base moved it, but not once a block moves within it", () => {

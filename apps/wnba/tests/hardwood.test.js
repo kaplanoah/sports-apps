@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import {
   listStrayCorners,
   readDeclarations,
@@ -7,7 +8,7 @@ import {
   readRule,
 } from "../../../tests/css-rules.js";
 
-const STYLES = new URL("../page/styles.css", import.meta.url).pathname;
+const STYLES = fileURLToPath(new URL("../page/styles.css", import.meta.url));
 
 const namesOrangeOrTeal = (value) => /var\(--(orange|teal)(-ink)?\)/.test(value);
 
