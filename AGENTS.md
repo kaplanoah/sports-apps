@@ -50,10 +50,10 @@
 - Apps: one per league, each in `apps/<app>/` with its own `page/`,
   `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`.
   Paths here, in the rule files, and in the skills are inside an app's folder, except `shared/`, `.github/`, `.claude/`, and the ones named as the root's.
-- More rules load from `.claude/rules/` once a session reads or edits a file they cover:
-  `page-look.md` and `page-code.md` for the pages, `worker.md` for the Workers,
-  `season-and-store.md` for the current season and the store, `red-change.md` for what only a phone can test,
-  `shared-modules.md` for what each shared module does, `mlb.md` and `wnba.md` for what each app holds,
+- More rules load from `.claude/rules/` once a session reads or edits a file they cover.
+  They are `page-look.md` and `page-code.md` for the pages, `worker.md` for the Workers,
+  `season-and-store.md` for the current season and the store, and `red-change.md` for what only a phone can test.
+  They are also `shared-modules.md` for what each shared module does, `mlb.md` and `wnba.md` for what each app holds,
   `tests.md` and `browser-tests.md` for tests, and `tooling.md` for the root's `worker/` and `.github/`.
   The `ship` skill holds the rest of shipping a change, the `steward` skill how to answer CI's review, and the `add-league` skill how to add a league.
 - Shared code: `shared/page/` and `shared/worker/` hold what every app uses, which `.claude/rules/shared-modules.md` lists.
@@ -79,10 +79,10 @@
   When a command still asks, add it to the allow list in `.claude/settings.json` in the same PR if it's safe for any session to run, or say why it asks.
 - Refer to PRs by number, not branch.
 - Start every PR title with a type.
-  The squash merge carries it to `main`, where it sets the next version of each app it changes (the root's `worker/release.mjs`);
-  a PR that changes nothing an app's deploy counts (the root's `worker/deploy-scope.mjs`),
-  such as only its tests or other apps' folders, leaves that app's version alone:
-  `feat:` for something new to see or do (minor), `fix:` for fixes and polish (patch),
+  The squash merge carries it to `main`, where it sets the next version of each app it changes (the root's `worker/release.mjs`).
+  A PR that changes nothing an app's deploy counts (the root's `worker/deploy-scope.mjs`),
+  such as only its tests or other apps' folders, leaves that app's version alone.
+  Use `feat:` for something new to see or do (minor), `fix:` for fixes and polish (patch),
   `refactor:` for code the Worker runs with no visible change (patch),
   `build:` for dependencies, the build, and the deploy (patch),
   and `docs:`, `test:`, `ci:`, or `chore:` for changes the deploy skips (no version).
@@ -186,7 +186,8 @@ README and anything user-facing: be clear, direct, and concise.
 In this file, the rule files in `.claude/rules/`, the skills, and `REVIEW.md`,
 start each sentence on a line of its own, and break a long one after its commas,
 so two changes to one bullet touch different lines and rarely conflict.
-The root's `tests/agents-lines.test.js` checks it.
+Keep each sentence to 60 words or fewer, and write a long catalog as a list.
+The root's `tests/agents-lines.test.js` checks both.
 Each rule file lists the `paths` it loads for, each matching a file in the repo, which the root's `tests/rule-files.test.js` checks.
 This file stays at 200 lines or fewer, since every session reads all of it,
 so a rule only some work needs goes in the rule file or skill for that work (the root's `tests/agents-lines.test.js`).

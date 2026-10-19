@@ -12,7 +12,46 @@ const LONGEST_LINE = 240;
 // Claude Code reads AGENTS.md whole into every session, and follows less of a longer one.
 const MOST_AGENTS_LINES = 200;
 
+// Past about this many words a reader loses a sentence's subject, so a long catalog is a list.
+const MOST_SENTENCE_WORDS = 60;
+
 const readProse = (line) => line.replace(/^\s*\d+\. /, "").replaceAll(/`[^`]*`/g, "``");
+
+const startsUnit = (/** @type {string} */ line) =>
+  /^\s*(?:---|#|$)/.test(line) || /^\s*(?:[-*]|\d+\.)\s/.test(line);
+
+/** @param {string} piece */
+const countWords = (piece) =>
+  piece
+    .replace(/^\s*(?:[-*]|\d+\.|#+)\s+/, "")
+    .replaceAll(/`[^`]*`/g, "code")
+    .split(/\s+/)
+    .filter(Boolean).length;
+
+/**
+ * Each sentence of a text, as the line it starts on and its words. A sentence runs across lines
+ * until it ends in a period, a question mark, or an exclamation mark, or until a list item, a
+ * heading, or a blank line starts a new one; a code span counts as one word.
+ * @param {string} text
+ */
+function listSentences(text) {
+  /** @type {{ line: number, words: number }[]} */
+  const sentences = [];
+  let current = { line: 1, words: 0 };
+  const endSentence = (/** @type {number} */ nextLine) => {
+    if (current.words) sentences.push(current);
+    current = { line: nextLine, words: 0 };
+  };
+  text.split("\n").forEach((line, index) => {
+    if (startsUnit(line)) endSentence(index + 1);
+    for (const piece of line.split(/(?<=[.?!])\s+/)) {
+      current.words += countWords(piece);
+      if (/[.?!]$/.test(piece.trim())) endSentence(index + 2);
+    }
+  });
+  endSentence(0);
+  return sentences;
+}
 
 /**
  * Each line of every guidance file that breaks a rule, as file:line.
@@ -49,4 +88,23 @@ test("a long sentence in a guidance file breaks after its commas", () => {
     listBrokenLines((line) => line.length > LONGEST_LINE),
     [],
   );
+});
+
+test("a sentence in a guidance file is 60 words or fewer", () => {
+  const long = GUIDANCE.flatMap((path) =>
+    listSentences(readRepoFile(path))
+      .filter(({ words }) => words > MOST_SENTENCE_WORDS)
+      .map(({ line, words }) => `${path}:${line} (${words} words)`),
+  );
+  assert.deepEqual(long, []);
+});
+
+test("a sentence runs across lines to its period, and a list item or heading starts the next", () => {
+  const text = "# Title\n\n- One two\n  three `a b c` four.\n  Five six.\n- Seven\n  eight";
+  assert.deepEqual(listSentences(text), [
+    { line: 1, words: 1 },
+    { line: 3, words: 5 },
+    { line: 5, words: 2 },
+    { line: 6, words: 2 },
+  ]);
 });

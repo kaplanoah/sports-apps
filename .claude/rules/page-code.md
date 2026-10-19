@@ -17,11 +17,11 @@ paths:
   never its placeholders, as the game sheet does with its box score and a team's sheet with its roster (`sectionsKeeper` in `shared/page/team-sheet.js`).
   Each app's `tests/browser/sheet-reload.spec.mjs` reloads each sheet with its reads held and checks it shows the same; a new sheet joins its list, or the test fails.
 - Each app's `page/js/app.js` is its entry module; shared page data lives in `page/js/session.js`.
-- Release notes: each app's `page/js/release-notes.js` lists what's new in the app,
-  which its Updates box shows under New in the app, the newest three and how many more,
+- Release notes: each app's `page/js/release-notes.js` lists what's new in the app.
+  Its Updates box shows them under New in the app, the newest three and how many more,
   until it's dismissed or two weeks after the device first showed it,
-  so a viewer back from time away still sees what they missed,
-  but a device's first look counts every note already out as shown,
+  so a viewer back from time away still sees what they missed.
+  A device's first look, though, counts every note already out as shown,
   and starts its games' updates after every one already out,
   so a new phone opens with no box (`listNotesToShow` and `readOrStartSeenAt` in `shared/page/updates.js`).
   Add a note only when the user asks for one, whatever the PR's type, in the words they approve, with an `at` just before the PR merges.

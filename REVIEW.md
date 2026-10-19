@@ -24,10 +24,15 @@ AGENTS.md and the rule files in `.claude/rules/` hold the rules the code keeps; 
 In order of what has mattered here.
 
 1. **Bugs.** State and edge cases above all:
-   empty and missing values (a `null` or `NaN` that reaches the screen),
-   a game whose teams aren't known yet, doubleheaders, the playoffs, a season's first and last day,
-   a time zone on each side of UTC, a read that fails or answers late,
-   two reads that finish out of order, and a listener or timer that's never removed.
+   - empty and missing values (a `null` or `NaN` that reaches the screen)
+   - a game whose teams aren't known yet
+   - doubleheaders
+   - the playoffs
+   - a season's first and last day
+   - a time zone on each side of UTC
+   - a read that fails or answers late
+   - two reads that finish out of order
+   - a listener or timer that's never removed
 2. **One fact, one rule, one place.**
    AGENTS.md: "A rule or a limit two places share lives in one place",
    and "A fact two places show ... comes from one read, kept in one document".
@@ -60,9 +65,9 @@ In order of what has mattered here.
    So is a change to which tests a pull request runs, or which of their failures fail it,
    that runs or fails fewer: its `scope` and `burn-in` jobs in `.github/workflows/ci.yml`,
    `worker/browser-scope.mjs`, `worker/burn-in-specs.mjs`, and the modules they import to decide,
-   like `worker/deploy-scope.mjs` and `worker/package-imports.mjs`, and `worker/judge-burn-in.mjs`,
-   naming which browser tests or burn-in specs no longer run or fail,
-   since the pull request's own copy of them picks its own tests.
+   like `worker/deploy-scope.mjs` and `worker/package-imports.mjs`, and `worker/judge-burn-in.mjs`.
+   The finding names which browser tests or burn-in specs no longer run or fail,
+   since the pull request's own copy of those jobs and modules picks its own tests.
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
    that `worker/red-change-styles.mjs` doesn't list yet.
@@ -92,9 +97,9 @@ Don't run the tests: CI runs them all.
 
 In CI, each area's reviewers each look for one kind of problem
 (in the last read of the whole change, one reviewer an area looks for every kind)
-and list every problem they find,
-a checker confirms each against the code before anything is posted and merges repeats,
-a check across areas, when there's more than one, names repeats across them and adds what spans them,
+and list every problem they find.
+A checker confirms each against the code before anything is posted and merges repeats.
+A check across areas, when there's more than one, names repeats across them and adds what spans them,
 and a step posts what they confirmed or left unsure.
 
 - Report every problem you find, not a sample, each as one finding that names every place it shows,

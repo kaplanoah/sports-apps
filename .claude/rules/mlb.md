@@ -5,89 +5,123 @@ paths:
 
 # What MLB's app holds
 
-- `apps/mlb/` is baseball, Worker `mlb-app`, whose page reads each season's one record from the store,
-  which the Worker saves as it reads MLB, as the WNBA's does,
-  reading each game being played from MLB's live feed with each update, since the schedule's copy of it runs half a minute or more behind,
-  so every part shows the same inning, outs, and score (`page/js/snapshot.js`), and opens each club's sheet from its name or dot,
-  with cards of its nearest games from the slate, its season's runs,
-  runs allowed, and records at home and on the road ranked among every club's on curves,
-  and its postseason's as dots against the playoff field's (`page/js/team-view.js` and the shared `team-numbers.js`),
-  and its leaders in MLB's headline numbers, from its roster, AVG,
-  OPS, and ERA among qualified players only (`page/js/leaders-view.js`) and,
-  under its Roster pill, its active players and injured list, each with his regular season,
-  which the store keeps for each club for the current season, reading a club's roster again only after a transaction names it,
-  and once a day (`page/js/roster-section.js`, `roster-view.js`,
-  `worker/src/rosters.js`, and `roster-updater.js`), and each player's sheet,
-  which a tap anywhere on his row in a roster, a box score, or a lineup,
-  or on a starter's name in a matchup, opens over the sheet it's in,
-  with his facts, then, while he's on the injured list, a box with his stay and why,
-  from ESPN's injury report, read for the whole league once an hour (`worker/src/injuries.js`,
-  with the shared `injury-report.js` the WNBA's reads too),
-  but not when the box score that opened him shows him playing in a game under way or ended today,
-  which the report hasn't caught up with (the shared `playing-now.js`), his postseason,
-  and his regular season, a hitter's ranked among MLB's ranked hitters and a starter's among its qualified starters,
-  with what he throws, and his last few games, from the last few weeks of his game log,
-  read only as his games add up, which the same job keeps for each player on a roster,
-  holding his season's totals, on his sheet and his club's Roster,
-  as they were while his game log is still to read the game they count,
-  so the two never show different games, unless that read failed (`page/js/player-sheet.js`,
-  `player-view.js`, and `worker/src/players.js`), and each game's sheet from its row,
-  whose Game section shows the game, its starters on a line that slides to its Matchup,
-  before first pitch its clubs' season series (`page/js/season-series.js`),
-  and its box score, or each club's lineup before first pitch (`page/js/game-sheet.js`,
-  `matchup.js`, and `box-score-view.js`), over which a game under way has its Runs so far and a final its Runs,
-  each half inning that scored under its heading, and a line for each change of the score with the score after it,
-  with the runners who got on since the last one on a lighter line above the play that scored,
-  and a pinch runner who scored named with whom he ran for,
-  from each play in MLB's live feed, and, while a half inning is under way,
-  who's pinch running for whom over a drawing of the field with each runner's name by his base and how he got on,
-  and who's up against whom (`page/js/runs-view.js`), and, once it's final,
-  its Highlights section, MLB's recap video, MLB.com's story, and the clip of each play,
-  with its inning and the score after a play that scored, from MLB's content and the plays its live feed ties each clip to,
-  which the store keeps for each of the current season's finals,
-  read as it ends and again over the hours after, and reads on a tap for a season before (`worker/src/highlights.js` and `highlights-updater.js`),
-  each still showing the moment, never a headline: the recap's a frame from its video,
-  and a play's MLB's own unless Claude Haiku finds a headline laid over it,
-  as the store asks once for each still, a few a run,
-  since Cloudflare caps a run's requests,
-  and asks again a few times about one Claude doesn't answer, which shows as MLB's own meanwhile and then counts as clean,
-  then a frame from the play's video or,
-  for a clip without frames, MLB.com's photo of the game (`worker/src/headline-stills.js`),
-  which the store keeps for every finished game of each season it keeps,
-  the slate's first, then the rest of the current season's and each past season's,
-  newest first, and reads with each update for a game a page has open (`worker/src/box-score.js`,
-  `game-details-updater.js`, and `watched-games.js`), whose Games tab lists every game of the season,
-  the All-Star Game too, under a strip of its days, each day's heading held under the strip while its games pass,
-  and only the days near the screen drawn whole, each game away from today showing its starter with his arm,
-  and each club's record: as of the game once it's been played, from the schedule,
-  and its record now for a game still to come, from the standings, as today's rows show it,
-  each postseason game its series as it stood at the game, or its game until both clubs are known,
-  and If necessary under one MLB may not need, and each final its inning when it didn't end in the ninth (`page/js/series-games.js`),
-  from the season's whole schedule, which the store keeps a month to a document in `schedules-<year>`,
-  reading MLB's whole schedule once a day and the days around today with each update,
-  and saving only the months that changed, with each game's ballpark,
-  a game away from its home club's own one saying where in its label (`page/js/games-view.js` and `worker/src/season-updater.js`),
-  and whose Search, a round button beside the tab bar, finds the season's games as the WNBA's does,
-  from MLB's names for its clubs, ballparks, leagues and divisions,
-  each league's own rounds, and its starters, by the games each is named to start (`page/js/search-terms.js`),
-  and the app's own pages as the WNBA's does: each club's sheet and its Roster,
-  each player on a club's roster this season, by the names MLB uses for him,
-  from the list of players the store keeps beside its rosters (`worker/src/player-index.js`),
-  the latest final's Highlights and the next game's Matchup, the bracket and the News tab,
-  the standings' playoff fields and each league's divisions, and settings and each setting (`page/js/search-pages.js`),
-  apart from the slate the header, the Updates box, and the store follow (`page/js/slate.js`),
-  whose ranking each device keeps for itself, in name order until its first drag,
-  with when its Updates box counts from, its first look or last dismissal (`page/js/kept-on-device.js`),
-  which only phones and tablets show (`page/js/updates.js`), and which also serves each starting pitcher's matchup numbers,
-  ranked among MLB's qualified starters (`worker/src/pitchers.js`),
-  and, for a club yet to name one, its last starters and their rest (`worker/src/rotations.js`),
-  both of which the store keeps for the current season, with the qualified starters of each season it keeps from before,
-  reading MLB as a game ends and only the pitchers who pitched in it,
-  so a sheet reads only the store (`worker/src/pitcher-updater.js`),
-  and which fills in each past season's record once, with its standings,
-  from MLB (`worker/src/past-seasons.js`),
-  and whose News tab shows the news as the WNBA's does, from MLB's outlets and the Mets' own,
-  which the same shared news job keeps by MLB's prompt: anything about the Mets,
-  and another club's news only when it matters across baseball,
-  with a settings switch for each of its paid outlets (`worker/src/news-feeds.js`,
-  `news-prompts.js`, and `news-updater.js`, and `page/js/news-league.js`).
+- `apps/mlb/` is baseball, Worker `mlb-app`.
+- The record and the live feed (`page/js/snapshot.js`):
+  - The page reads each season's one record from the store,
+    which the Worker saves as it reads MLB, as the WNBA's does.
+  - The Worker reads each game being played from MLB's live feed with each update,
+    since the schedule's copy of it runs half a minute or more behind,
+    so every part shows the same inning, outs, and score.
+- A club's sheet, which the page opens from the club's name or dot (`page/js/team-view.js` and the shared `team-numbers.js`):
+  - cards of its nearest games from the slate
+  - its season's runs, runs allowed, and records at home and on the road, ranked among every club's on curves
+  - its postseason's as dots against the playoff field's
+- A club's leaders, on its sheet (`page/js/leaders-view.js`):
+  - its leaders in MLB's headline numbers, from its roster
+  - AVG, OPS, and ERA among qualified players only
+- A club's roster, under its sheet's Roster pill
+  (`page/js/roster-section.js`, `roster-view.js`, `worker/src/rosters.js`, and `roster-updater.js`):
+  - its active players and injured list, each with his regular season
+  - The store keeps the roster for each club for the current season,
+    reading a club's roster again only after a transaction names it, and once a day.
+- A player's sheet (`page/js/player-sheet.js`, `player-view.js`, and `worker/src/players.js`):
+  - A tap anywhere on his row in a roster, a box score, or a lineup,
+    or on a starter's name in a matchup, opens it over the sheet it's in.
+  - It shows, in order:
+    - his facts
+    - while he's on the injured list, a box with his stay and why (under "Injuries" below)
+    - his postseason
+    - his regular season, a hitter's ranked among MLB's ranked hitters and a starter's among its qualified starters, with what he throws
+    - his last few games, from the last few weeks of his game log, read only as his games add up
+  - The same job that keeps the rosters keeps his last few games for each player on a roster.
+  - That job holds his season's totals, on his sheet and his club's Roster,
+    as they were while his game log is still to read the game they count,
+    so the two never show different games, unless that read failed.
+- Injuries, in the box on a player's sheet:
+  - The box's stay and why come from ESPN's injury report, read for the whole league once an hour
+    (`worker/src/injuries.js`, with the shared `injury-report.js` the WNBA's reads too).
+  - The box doesn't show when the box score that opened him shows him playing in a game under way or ended today,
+    which the report hasn't caught up with (the shared `playing-now.js`).
+- A game's sheet, which opens from the game's row (`page/js/game-sheet.js`, `matchup.js`, and `box-score-view.js`):
+  - Its Game section shows the game.
+  - Its starters are on a line that slides to its Matchup.
+  - Before first pitch, it shows its clubs' season series (`page/js/season-series.js`).
+  - It shows its box score, or each club's lineup before first pitch.
+- The Runs, over the box score (`page/js/runs-view.js`):
+  - A game under way has its Runs so far, and a final its Runs.
+  - Each half inning that scored is under its heading,
+    with a line for each change of the score with the score after it.
+  - The runners who got on since the last one are on a lighter line above the play that scored.
+  - A pinch runner who scored is named with whom he ran for.
+  - These come from each play in MLB's live feed.
+  - While a half inning is under way, it shows who's pinch running for whom
+    over a drawing of the field with each runner's name by his base and how he got on,
+    and who's up against whom.
+- A final's Highlights section (`worker/src/highlights.js` and `highlights-updater.js`):
+  - It holds MLB's recap video, MLB.com's story, and the clip of each play,
+    with its inning and the score after a play that scored.
+  - These come from MLB's content and the plays its live feed ties each clip to.
+  - The store keeps them for each of the current season's finals,
+    read as it ends and again over the hours after,
+    and reads them on a tap for a season before.
+  - Each still shows the moment, never a headline (`worker/src/headline-stills.js`):
+    - The recap's is a frame from its video.
+    - A play's is MLB's own unless Claude Haiku finds a headline laid over it,
+      then a frame from the play's video or,
+      for a clip without frames, MLB.com's photo of the game.
+    - The store asks once for each still, a few a run,
+      since Cloudflare caps a run's requests.
+    - It asks again a few times about one Claude doesn't answer,
+      which shows as MLB's own meanwhile and then counts as clean.
+- The box score's store (`worker/src/box-score.js`, `game-details-updater.js`, and `watched-games.js`):
+  - The store keeps the box score for every finished game of each season it keeps,
+    the slate's first, then the rest of the current season's and each past season's, newest first.
+  - It reads the box score with each update for a game a page has open.
+- The Games tab (`page/js/games-view.js` and `worker/src/season-updater.js`):
+  - It lists every game of the season, the All-Star Game too, under a strip of its days,
+    each day's heading held under the strip while its games pass,
+    and only the days near the screen drawn whole.
+  - Each game's row (`page/js/series-games.js`):
+    - each game away from today shows its starter with his arm
+    - each club's record, as of the game once it's been played, from the schedule,
+      and its record now for a game still to come, from the standings, as today's rows show it
+    - each postseason game, its series as it stood at the game, or its game until both clubs are known
+    - If necessary under one MLB may not need
+    - each final, its inning when it didn't end in the ninth
+  - The list comes from the season's whole schedule,
+    which the store keeps a month to a document in `schedules-<year>`.
+  - The store reads MLB's whole schedule once a day and the days around today with each update,
+    and saves only the months that changed.
+  - Each game has its ballpark,
+    and a game away from its home club's own one says where in its label.
+- The slate (`page/js/slate.js`):
+  - The header, the Updates box, and the store follow the slate, apart from the season's whole schedule.
+  - Each device keeps the slate's ranking for itself, in name order until its first drag (`page/js/kept-on-device.js`).
+  - Each device also keeps when its Updates box counts from, its first look or last dismissal (`page/js/kept-on-device.js`).
+  - Only phones and tablets show the Updates box (`page/js/updates.js`).
+- Starting pitchers, which the Worker also serves:
+  - each starting pitcher's matchup numbers, ranked among MLB's qualified starters (`worker/src/pitchers.js`)
+  - for a club yet to name one, its last starters and their rest (`worker/src/rotations.js`)
+  - The store keeps both for the current season, with the qualified starters of each season it keeps from before,
+    reading MLB as a game ends and only the pitchers who pitched in it,
+    so a sheet reads only the store (`worker/src/pitcher-updater.js`).
+- Past seasons and their standings:
+  - The Worker fills in each past season's record once, with its standings, from MLB (`worker/src/past-seasons.js`).
+- Search, a round button beside the tab bar:
+  - It finds the season's games as the WNBA's does (`page/js/search-terms.js`), from:
+    - MLB's names for its clubs, ballparks, leagues and divisions
+    - each league's own rounds
+    - its starters, by the games each is named to start
+  - It finds the app's own pages as the WNBA's does (`page/js/search-pages.js`):
+    - each club's sheet and its Roster
+    - each player on a club's roster this season, by the names MLB uses for him,
+      from the list of players the store keeps beside its rosters (`worker/src/player-index.js`)
+    - the latest final's Highlights and the next game's Matchup
+    - the bracket and the News tab
+    - the standings' playoff fields and each league's divisions
+    - settings and each setting
+- The News tab (`worker/src/news-feeds.js`, `news-prompts.js`, and `news-updater.js`, and `page/js/news-league.js`):
+  - It shows the news as the WNBA's does, from MLB's outlets and the Mets' own.
+  - The same shared news job keeps it by MLB's prompt:
+    anything about the Mets, and another club's news only when it matters across baseball.
+  - It has a settings switch for each of its paid outlets.
