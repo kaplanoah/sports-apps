@@ -125,8 +125,8 @@ function passTap(event) {
 /**
  * Gives each of the view's parts a place for its stand-ins, has each stand-in pass its taps on,
  * and lays them again whenever the header's ride is measured again, as it is whenever what rides
- * changes size, or the Updates box changes, since an update can gain or lose its button and keep
- * its size.
+ * changes size, or the Updates box's rows change, since an update can gain or lose its button and
+ * keep its size.
  * @param {HTMLElement} view
  * @param {HTMLElement} pill
  * @param {HTMLElement[]} parts
@@ -143,12 +143,6 @@ export function startRiderTaps(view, pill, parts) {
   const place = () => placeRiderTaps(view, pill);
   view.addEventListener("headerride", place);
   const box = document.getElementById("updates");
-  if (box)
-    new MutationObserver(place).observe(box, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["hidden"],
-    });
+  if (box) new MutationObserver(place).observe(box, { childList: true, subtree: true });
   place();
 }
