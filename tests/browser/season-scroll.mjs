@@ -200,16 +200,18 @@ export const scrollSeasonPart = (page, part, top) =>
 
 /**
  * Where the header and the pill start down the page, and how far the page is scrolled, which a
- * phone's page, a pixel taller than the screen (chrome.css), can be by a pixel.
+ * phone's page, a pixel taller than the screen (chrome.css), can be by a pixel. The pill's top is
+ * rounded up, as the page rounds the header's ride, which holds the pill up to a pixel above where
+ * its band reaches.
  * @param {import("@playwright/test").Page} page
  */
 export const readSeasonRide = (page) =>
   page.evaluate(() => {
     /** @param {Element} element */
-    const readTop = (element) => Math.round(element.getBoundingClientRect().top + scrollY);
+    const readTop = (element) => element.getBoundingClientRect().top + scrollY;
     return {
-      headerTop: readTop(document.querySelector("header.top")),
-      pillTop: readTop(document.getElementById("bracketStandingsPill")),
+      headerTop: Math.round(readTop(document.querySelector("header.top"))),
+      pillTop: Math.ceil(readTop(document.getElementById("bracketStandingsPill"))),
       pageScroll: Math.round(scrollY),
     };
   });
