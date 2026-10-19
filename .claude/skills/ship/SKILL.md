@@ -1,6 +1,6 @@
 ---
 name: ship
-description: What the Shipping a change steps in AGENTS.md leave out: PR titles' major bumps, the beta channel, red changes and the owner's phone-ok, CI's review and a failed review job, the deploy and its log, and stacked PRs
+description: "What the Shipping a change steps in AGENTS.md leave out: PR titles' major bumps, the beta channel, red changes and the owner's phone-ok, CI's review and a failed review job, the deploy and its log, and stacked PRs"
 ---
 
 # Shipping a change
@@ -9,7 +9,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## PR titles
 
-- A `!` after a type, which AGENTS.md says when to add, is major for every app the PR's deploy changes, through shared code too;
+- A `!` after a type is major for every app the PR's deploy changes, through shared code too;
   when only one app breaks, name it, as in `feat(mlb)!:`, and the others take the type's own bump.
   A scope is only for that.
   A PR that mixes kinds takes the biggest bump.
@@ -30,12 +30,12 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Red changes
 
-- Take a red change to its branch and PR, deploy it to beta as "The beta channel" above says,
-  and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
-  Its PR opens as a draft and stays one while the owner tries its design on beta:
+- Take a red change to its branch and PR, open it as a draft, deploy it to beta once its CI passes, as "The beta channel" above says,
+  and stop there: tell the user what to use on the phone, and wait, keeping to steps 4 to 6 of AGENTS.md's list meanwhile.
+  Its PR stays a draft while the owner tries its design on beta:
   CI tests a draft, and beta deploys it, as for any PR, but CI reviews it only once it's ready for review.
   Once the owner says the design is the one to keep, mark the PR ready for review, which starts its first full review,
-  answer the review, and then deploy its reviewed head to beta for the owner's `phone-ok`.
+  go on to step 7 and answer the review, and then deploy its reviewed head to beta for the owner's `phone-ok`.
   When you ask the owner to add `phone-ok`, link the PR in the same message.
   Never add `phone-ok`.
   Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push.
@@ -44,15 +44,6 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Merge `main` into the branch just before each deploy to beta, so the commit the owner labels is the one that merges, since a PR merges while behind `main` as long as it has no conflicts.
 - One red change goes live per deploy.
   While a red change is on beta, or has merged and the owner hasn't confirmed it on the phone, no other red PR merges, and none replaces it on beta.
-
-## Step 3: a red change
-
-- If the change is red (`node worker/red-change.mjs`,
-  with `git diff --text --no-textconv --no-ext-diff --no-renames origin/main` on stdin, as CI runs it, says why),
-  open its PR as a draft, and deploy it to beta once its CI passes (`git push -f origin <branch>:beta`,
-  as "The beta channel" above says), unless another red change is still on beta or unconfirmed.
-  Then tell the user it's on beta and what to use on the phone, and keep to steps 4 to 6 while the owner tries its design.
-  Once the owner says it's the one to keep, mark the PR ready for review, and go on to step 7.
 
 ## Step 4: conflicts
 

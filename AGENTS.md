@@ -86,13 +86,13 @@
   `refactor:` for code the Worker runs with no visible change (patch),
   `build:` for dependencies, the build, and the deploy (patch),
   and `docs:`, `test:`, `ci:`, or `chore:` for changes the deploy skips (no version).
-  Add `!` after a type that releases, as in `feat!:`, for a major change: a new address, lost data, or something that's gone, as the `ship` skill says.
+  Add `!` after a type that releases, as in `feat!:`, for a major change: a new address, lost data, or something that's gone; the `ship` skill says how it reaches each app.
 - Each app has a beta channel, a second Worker the `beta` branch deploys, which the `ship` skill says how to use.
   `beta` is a scratch branch: never commit to it or open a PR from it.
 - A red change is one only the owner's phone can test: `.claude/rules/red-change.md` says what makes one, and the `ship` skill how it ships.
 - `npm run rollback`, `set-app-key`, `set-access-code`, and `set-page-host` change the live apps: run each only as `.claude/rules/tooling.md` says.
 - The repo is public.
-  Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, or page hosts, or personal data; use placeholders in tests and docs:
+  Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, page hosts, or personal data; use placeholders in tests and docs:
   `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
   which the root's `tests/no-secrets.test.js` tells from a real one, failing on any real one in a tracked file.
   Nothing a change logs or posts where the public can read it, like a workflow's log or an issue, carries any of these either.
@@ -112,7 +112,7 @@ When a step says to go back to an earlier step, continue in order from there.
    If the branch's last PR has merged, reset the branch to `origin/main` first.
 2. Run `npm run lint`, `npm run format:check`, `npm run typecheck`,
    and `npm run deadcode`, and the tests that cover what you changed: a test file with `node --test <file>`, or a browser spec with `npx playwright test <file>`.
-   Name each spec that exercises the change, shared code too, found by searching the tests for the module or what it draws; never pass a folder.
+   Name each spec that exercises the change, a change to shared code too, found by searching the tests for the module or what it draws; never pass a folder.
    Don't run the full test suite locally (`npm test`, `npm run test:browser`, or `npm run check`):
    CI runs the Node tests, and the browser tests a change reaches, on every push.
    If anything fails, fix it and run it again.
@@ -131,7 +131,7 @@ When a step says to go back to an earlier step, continue in order from there.
    If resolving a conflict would drop behavior from either side, resolve it in the way that best serves the spirit of both changes, and confirm with the user.
 5. Wait until every CI job on the PR's latest commit has finished.
    The `check` job is the one that must pass; it fails whenever any other CI job fails.
-   Each time you look while waiting, and whenever no CI run has started a few minutes after the push, go back to step 4 first.
+   Each time you look while waiting, and whenever no CI run has started on the latest commit a few minutes after the push, go back to step 4 first.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
