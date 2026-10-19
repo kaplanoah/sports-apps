@@ -218,15 +218,14 @@ export const readSeasonRide = (page) =>
 
 /**
  * How far down the page the pill holds once the header is gone: as far as its band above it
- * reaches, under the status bar.
+ * reaches, under the status bar, or the fraction of a pixel above it that keeps the header's ride
+ * in whole pixels, which `readSeasonRide` rounds away.
  * @param {import("@playwright/test").Page} page
  */
 export const readPillHoldTop = (page) =>
   page.evaluate(() =>
-    Math.round(
-      parseFloat(
-        getComputedStyle(document.getElementById("bracketStandingsPill"), "::before").height,
-      ),
+    parseFloat(
+      getComputedStyle(document.getElementById("bracketStandingsPill"), "::before").height,
     ),
   );
 

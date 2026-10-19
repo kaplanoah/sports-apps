@@ -287,18 +287,19 @@ test("over a header of a fractional height, the header rides whole pixels, holdi
     view.evaluate((element) => element.style.getPropertyValue("--parts-top"));
   const partsTop = await readPartsTop();
 
+  const holdTop = await readPillHoldTop(page);
+
   // The header grows so its ride ends 0.3px past a whole pixel, which rounding to the nearest drops.
-  await page.evaluate(() => {
+  await page.evaluate((heldAt) => {
     const header = /** @type {HTMLElement} */ (document.querySelector("header.top"));
     const pill = /** @type {HTMLElement} */ (document.getElementById("bracketStandingsPill"));
-    const ride =
-      pill.getBoundingClientRect().top - parseFloat(getComputedStyle(pill, "::before").height);
+    const ride = pill.getBoundingClientRect().top - heldAt;
     const height = header.getBoundingClientRect().height;
     Object.assign(header.style, {
       boxSizing: "border-box",
       height: `${height + 1.3 - (ride % 1)}px`,
     });
-  });
+  }, holdTop);
 
   await expect.poll(readPartsTop).not.toBe(partsTop);
   const reach = await readHeaderReach(page);
@@ -306,10 +307,9 @@ test("over a header of a fractional height, the header rides whole pixels, holdi
 
   await scrollSeasonPart(page, "standings", reach);
 
-  const { pillTop, holdTop } = await page.locator("#bracketStandingsPill").evaluate((pill) => ({
-    pillTop: pill.getBoundingClientRect().top,
-    holdTop: parseFloat(getComputedStyle(pill, "::before").height),
-  }));
+  const pillTop = await page
+    .locator("#bracketStandingsPill")
+    .evaluate((pill) => pill.getBoundingClientRect().top);
   expect(pillTop).toBeLessThanOrEqual(holdTop);
   expect(pillTop).toBeGreaterThan(holdTop - 1);
 });
