@@ -1,14 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listTrackedFiles } from "./repo-files.js";
-import { readFileSync } from "node:fs";
+import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 
 // The repo is public, so nothing in it may name a real Worker, a page's key, the Cloudflare
 // account, or a token or key. Tests and docs use placeholders: `example` or `example-subdomain`
 // for the account's workers.dev subdomain, `k3y` or `<key>` for a page's key, and a run of one
 // character, as "7".repeat(32) writes, for an account id or a token.
 
-const REPO_ROOT = `${import.meta.dirname}/..`;
 const BINARY_FILES = /\.(?:png|woff2)$/;
 const SUBDOMAIN_PLACEHOLDERS = new Set(["example", "example-subdomain", "<subdomain>"]);
 
@@ -85,9 +83,7 @@ const nameSecrets = (text) => scan(text).map(({ name }) => name);
  * @param {string} path
  */
 const listSecretsIn = (path) =>
-  scan(readFileSync(`${REPO_ROOT}/${path}`, "utf8")).map(
-    ({ name, line }) => `${path}:${line} ${name}`,
-  );
+  scan(readRepoFile(path)).map(({ name, line }) => `${path}:${line} ${name}`);
 
 test("no tracked file names a real Worker, a page's key, the Cloudflare account, or an API key", () => {
   const found = listTextFiles().flatMap(listSecretsIn);
