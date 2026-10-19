@@ -1,4 +1,5 @@
 import { logPatches } from "./html.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 
 // New data that changes what the page shows eases in: a part that grows or shrinks moves to its
 // new height, so what's under it slides instead of jumping, and what's new fades in. The page
@@ -10,8 +11,6 @@ const EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
 /** @type {WeakMap<Element, Animation>} */
 const resizes = new WeakMap();
-
-const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const canEase = () => !document.hidden && !prefersReducedMotion();
 
