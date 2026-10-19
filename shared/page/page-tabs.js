@@ -59,7 +59,7 @@ const startReturns = new Map();
 /**
  * Has choosing `tab` while it's showing call `returnToStart`, in the same tap that scrolls the
  * page to its top, since a view that scrolls in itself can still leave the page a pixel or two from
- * it.
+ * it, or on the next tap where the page scrolls the view.
  * @param {string} tab
  * @param {() => void} returnToStart
  */

@@ -13,6 +13,7 @@ import {
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 // How Search comes and goes: starting over, closing, and coming back after a reload, on a phone.
@@ -67,6 +68,26 @@ test("Search tapped again starts over at once, even with the page left a pixel f
   await tapSearch(page);
   await sendSearch(page, "Liberty");
   expect(await leavePagePixelDown(page)).toBe(1);
+
+  await tapSearch(page);
+
+  await expect(findInput(page)).toHaveValue("");
+});
+
+test("Search tapped again with the page scrolled under a tall Updates box takes the page back to its top, and only the next tap starts over", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await sendSearch(page, "Liberty");
+  await showTallUpdatesBox(page, 600);
+  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(1);
+
+  await tapSearch(page);
+
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect(findInput(page)).toHaveValue("Liberty");
 
   await tapSearch(page);
 
