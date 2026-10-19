@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readDiff } from "../worker/changed-files.mjs";
 import {
   decideGate,
   findLabeling,
   findRedReasons,
   findStyleObjectLines,
-  readDiff,
   readPushTime,
   readTimeline,
 } from "../worker/red-change.mjs";
@@ -33,6 +33,8 @@ const createDiff = (path, added, { kept = ["kept"], removed = ["removed"] } = {}
 
 // A script with no style's object in it, so only the diff's lines decide.
 const readPlainScript = () => "";
+// No stylesheet beside the ones the change touches, so only the change decides.
+const listNoStylesheets = () => [];
 
 /** @param {string} path @param {string[]} [addedLines] */
 const findReasons = (path, addedLines = []) =>
@@ -46,6 +48,7 @@ const findReasons = (path, addedLines = []) =>
       },
     ],
     readPlainScript,
+    listNoStylesheets,
   );
 
 test("a diff lists each file with its added lines, numbered as the new file has them, and its hunks", () => {
@@ -281,7 +284,11 @@ function findChangeReasons(changed, kept = {}) {
   /** @type {Record<string, string[]>} */
   const files = { ...kept };
   for (const [path, { after }] of Object.entries(changed)) files[path] = after;
-  return findRedReasons(readDiff(diff.join("\n")), (path) => files[path]?.join("\n") ?? "");
+  return findRedReasons(
+    readDiff(diff.join("\n")),
+    (path) => files[path]?.join("\n") ?? "",
+    () => Object.keys(files).filter((path) => path.endsWith(".css")),
+  );
 }
 
 /**
@@ -413,6 +420,8 @@ test("a shared stylesheet's change to how parts layer, stack, scroll, or show is
       "  isolation: isolate;",
       "  mix-blend-mode: multiply;",
       "  contain: paint;",
+      "  container-type: inline-size;",
+      "  container: card / size;",
     ],
     { count: 1 },
   );
@@ -448,14 +457,14 @@ test("a shared stylesheet's display is red only to or from none or contents, and
     }),
     [],
   );
-  assert.equal(
+  assert.match(
     findChangeReasons({
       [SHARED_STYLESHEET]: {
         before: [".part {", "  display: flex;", "}"],
         after: [".part {", "  display: none;", "}"],
       },
-    }).length,
-    1,
+    }).join(),
+    /adds \.part \{ display: none \}/,
   );
   assertRuleReasons([SHARED_STYLESHEET], ["  position: relative;", "  position: static;"], {
     count: 1,
@@ -491,17 +500,19 @@ test("a transition is red only when it moves, fades, or shows a part, not when i
     "  transition: var(--motion);",
     "  transition-duration: 0.2s;",
     "  transition-property: scale;",
+    "  transition: inherit;",
+    "  transition: initial;",
+    "  transition: unset;",
+    "  transition-property: revert;",
   ]);
 });
 
 test("a translate, rotate, or scale in two dimensions is red only in a rule that moves it, and one in three always is", () => {
   const flatLines = [
     "  translate: 0 -1px;",
-    "  translate: 0 var(--network-name-offset);",
     "  rotate: 45deg;",
     "  scale: 1.02;",
     "  scale: 1 -1;",
-    "  transform: translateX(var(--thumb-left, 0));",
     "  transform: translate(-50%, 0) scale(1.1) rotate(2deg);",
     "  -webkit-transform: translateY(1px);",
     "  transform: none;",
@@ -523,6 +534,7 @@ test("a translate, rotate, or scale in two dimensions is red only in a rule that
     "  transform: matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);",
     "  transform: translateX(0) translateZ(0);",
     "  transform: var(--lift);",
+    "  transform: translateX(var(--thumb-left, 0));",
     "  translate: 0 0 1px;",
     "  rotate: x 10deg;",
     "  scale: 1 1 2;",
@@ -653,6 +665,8 @@ test("a page's other stylesheets are red where they add a layer, a part over oth
       "  overflow: hidden;",
       "  overflow-x: auto;",
       "  overflow-y: clip;",
+      "  position: -webkit-sticky;",
+      "  -webkit-overflow-scrolling: touch;",
     ],
     { count: 1, isRemovalRed: false },
   );
@@ -675,6 +689,174 @@ test("a page's other stylesheets are red where they add a layer, a part over oth
       "apps/wnba/page/styles.css adds a layer, a stack, or a scroll: .part { will-change: transform }",
     ],
   );
+});
+
+/**
+ * Asserts that a change to a stylesheet of each kind, from `before` to `after`, is red, with the
+ * page stylesheets it leaves as they were.
+ * @param {string[]} before
+ * @param {string[]} after
+ * @param {string} why
+ * @param {Record<string, string[]>} [kept]
+ */
+function assertRedChange(before, after, why, kept = {}) {
+  for (const path of EACH_KIND)
+    assert.notDeepEqual(
+      findChangeReasons({ [path]: { before, after } }, kept),
+      [],
+      `${path}: ${why}`,
+    );
+}
+
+test("a transform in two dimensions is red where any page stylesheet's rule for the same part moves it, or the part can't be told", () => {
+  const knob = [
+    '.switch[aria-checked="true"] .switch-knob {',
+    "  transform: translateX(18px);",
+    "}",
+  ];
+  const easedKnob = [".switch-knob {", "  transition: transform 0.2s;", "}"];
+  assertRedChange([], knob, "another stylesheet eases it", { "shared/page/chrome.css": easedKnob });
+  assertRedChange(easedKnob, [...easedKnob, ...knob], "its own stylesheet eases it");
+  const easedK = [".k {", "  transition: transform 0.2s;"];
+  assertRedChange(
+    [...easedK, "}"],
+    [...easedK, "  &.on {", "    transform: translateX(4px);", "  }", "}"],
+    "a nested rule for the same part",
+  );
+  assertRedChange([], [":root {", "  translate: 0 1px;", "}"], "a part that can't be told");
+  for (const path of EACH_KIND)
+    assert.deepEqual(
+      findChangeReasons(
+        { [path]: { before: [], after: knob } },
+        { "shared/page/chrome.css": [".switch {", "  transition: transform 0.2s;", "}"] },
+      ),
+      [],
+      `${path}: another part eases`,
+    );
+});
+
+test("a shared stylesheet's display or relative position is red where any page stylesheet's rule for the same part hides it or sets its z-index", () => {
+  const raised = [".a {", "  z-index: 2;", "}"];
+  assert.match(
+    findChangeReasons({
+      [SHARED_STYLESHEET]: {
+        before: raised,
+        after: [...raised, ".a.b {", "  position: relative;", "}"],
+      },
+    }).join(),
+    /adds \.a\.b \{ position: relative \}/,
+  );
+  assert.match(
+    findChangeReasons(
+      {
+        [SHARED_STYLESHEET]: { before: [], after: [".open .a {", "  display: block;", "}"] },
+      },
+      { [PAGE_STYLESHEET]: [".a {", "  display: none;", "}"] },
+    ).join(),
+    /adds \.open \.a \{ display: block \}/,
+  );
+  assertRuleReasons([SHARED_STYLESHEET], ["  display: none !important;"], { count: 1 });
+});
+
+test("a declaration that reads a custom property is red as if it held any value, and so is a change to the custom property", () => {
+  assertRuleReasons([SHARED_STYLESHEET], ["  display: var(--logos-for-light);"], { count: 1 });
+  assertRedInEach([
+    "  translate: var(--xyz);",
+    "  transform: var(--lift);",
+    "  transition: var(--motion);",
+    "  transition: color var(--pace);",
+    "  transition-property: var(--eased);",
+    "  position: var(--place);",
+    "  overflow: var(--scroll);",
+  ]);
+  const lifts = [".a {", "  transform: var(--lift);", "}"];
+  for (const [before, after] of [
+    [":root { --lift: translateY(0); }", ":root { --lift: translateZ(0); }"],
+    [":root { --motion: color 0.2s; }", ":root { --motion: transform 0.2s; }"],
+    [":root { --hide: inline; }", ":root { --hide: none; }"],
+  ])
+    for (const path of EACH_KIND)
+      assert.notDeepEqual(
+        findChangeReasons(
+          { [path]: { before: [before], after: [after] } },
+          {
+            "shared/page/chrome.css": [
+              ...lifts,
+              ".b { transition: var(--motion); }",
+              ".c { display: var(--hide); }",
+            ],
+          },
+        ),
+        [],
+        `${path}: ${after}`,
+      );
+  for (const path of EACH_KIND)
+    assert.deepEqual(
+      findChangeReasons(
+        { [path]: { before: [":root { --ink: #111; }"], after: [":root { --ink: #222; }"] } },
+        { "shared/page/chrome.css": lifts },
+      ),
+      [],
+      `${path}: a color nothing stacks with`,
+    );
+});
+
+test("a stylesheet's declarations that decide a layer, a stack, or a scroll, or its top-level statements, read in another order, are red", () => {
+  assertRedChange(
+    [".a {", "  overflow: hidden;", "  overflow-x: auto;", "}"],
+    [".a {", "  overflow-x: auto;", "  overflow: hidden;", "}"],
+    "a rule's longhand before its shorthand",
+  );
+  assertRedChange(
+    [".a { position: fixed; }", ".a { position: static; }"],
+    [".a { position: static; }", ".a { position: fixed; }"],
+    "two rules swapped",
+  );
+  assertRedChange(["@layer a, b;"], ["@layer b, a;"], "layers in another order");
+  assertRedChange([], ['@import url("extra.css");'], "an import");
+  assertRedChange(
+    [".a { position: fixed; }", ".a.b { position: static; }"],
+    [".a { position: fixed; }"],
+    "an override of a layer taken out",
+  );
+});
+
+test("a shared stylesheet's change under @supports, @container, or a nested rule is red where it stacks a part", () => {
+  for (const [before, after] of [
+    [
+      ["@supports (display: grid) {", "  .a { position: sticky; }", "}"],
+      ["@supports (display: flex) {", "  .a { position: sticky; }", "}"],
+    ],
+    [
+      ["@container card (min-width: 300px) {", "  .a { position: sticky; }", "}"],
+      ["@container card (min-width: 400px) {", "  .a { position: sticky; }", "}"],
+    ],
+    [
+      [".a {", "  color: red;", "}"],
+      [".a {", "  color: red;", "  & .b {", "    position: fixed;", "  }", "}"],
+    ],
+  ])
+    assert.notDeepEqual(
+      findChangeReasons({ [SHARED_STYLESHEET]: { before, after } }),
+      [],
+      after.join("\n"),
+    );
+});
+
+test("a stylesheet the gate can't read is red, says so, and leaves any part counted as moved, stacked, or hidden anywhere", () => {
+  for (const path of EACH_KIND)
+    assert.deepEqual(
+      findChangeReasons({
+        [path]: {
+          before: [".a {", "  position: fixed;", "}"],
+          after: [".a {", "  position: fixed;", "}}}{{"],
+        },
+      }),
+      [`${path} changes in a way the gate can't read, so it may change anything`],
+    );
+  assertRedChange([], [".a {", "  translate: 0 1px;", "}"], "beside a stylesheet it can't read", {
+    "shared/page/chrome.css": [".a {", "  position: fixed;", "}}}{{"],
+  });
 });
 
 test("an added line that makes a layer is red in any page's JavaScript", () => {
@@ -727,6 +909,7 @@ test("an added line that makes a layer is red in any page's JavaScript", () => {
 
 // As sheet.js settles a sheet once its slide ends, with what it imports from sheet-swipe.js.
 const SETTLE = ["function settle(dialog) {", "  dialog.inert = false;", "}"];
+const EXPORTED_SETTLE = SETTLE.map((line, index) => (index ? line : `export ${line}`));
 const SHEET = [
   'import { closeSheet } from "./sheet-swipe.js";',
   "",
@@ -735,98 +918,207 @@ const SHEET = [
   "  settle(dialog);",
   "}",
 ];
+const SHEET_IMPORTING_SETTLE = [
+  SHEET[0].replace("{ closeSheet }", "{ closeSheet, settle }"),
+  ...SHEET.slice(1),
+];
 const SWIPE = ["export function closeSheet(dialog) {", "  dialog.close();", "}"];
 const REDUCED_MOTION = [
   'export const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;',
 ];
 
-test("a shared script's code moved unchanged among those that move the page and the shared scripts they import isn't red, nor a change to its imports or exports alone", () => {
+/** @param {string} path */
+const describeShared = (path) => [`${path} is shared code that moves, layers, or draws the page`];
+
+/**
+ * Why a change to one shared script that moves and draws the page is red, from its lines before
+ * the change and after it.
+ * @param {string[]} before
+ * @param {string[]} after
+ */
+const findSheetReasons = (before, after) =>
+  findChangeReasons({ "shared/page/sheet.js": { before, after } });
+
+test("a declaration moved unchanged between the shared scripts that move the page isn't red, with the imports and exports that follow it", () => {
   assert.deepEqual(
     findChangeReasons({
-      "shared/page/sheet.js": {
-        before: [...SHEET, "", ...SETTLE],
-        after: [SHEET[0].replace("{ closeSheet }", "{ closeSheet, settle }"), ...SHEET.slice(1)],
-      },
+      "shared/page/sheet.js": { before: [...SHEET, "", ...SETTLE], after: SHEET_IMPORTING_SETTLE },
+      "shared/page/sheet-swipe.js": { before: SWIPE, after: [...SWIPE, "", ...EXPORTED_SETTLE] },
+    }),
+    [],
+    "moved to a script it imports",
+  );
+  assert.deepEqual(
+    findChangeReasons({
+      "shared/page/slide-panels.js": { before: [...SWIPE, ...EXPORTED_SETTLE], after: SWIPE },
       "shared/page/sheet-swipe.js": {
-        before: SWIPE,
-        after: [...SWIPE, "", ...SETTLE.map((line, index) => (index ? line : `export ${line}`))],
+        before: ['import { settle } from "./slide-panels.js";', ...SHEET.slice(2)],
+        after: [...SHEET.slice(2), ...SETTLE],
       },
     }),
     [],
-    "moved between two of them",
+    "moved back from a script it imported, dropping the import",
   );
   assert.deepEqual(
     findChangeReasons({
-      "shared/page/slide-panels.js": {
-        before: [...REDUCED_MOTION, "", ...SETTLE],
-        after: ['import { prefersReducedMotion } from "./reduced-motion.js";', "", ...SETTLE],
+      "shared/page/slide-panels.js": { before: [...SWIPE, ...EXPORTED_SETTLE], after: SWIPE },
+      "shared/page/sheet-swipe.js": { before: SWIPE, after: [...SWIPE, ...EXPORTED_SETTLE] },
+      "shared/page/bracket-standings.js": {
+        before: ['import { settle } from "./slide-panels.js";', ...SHEET.slice(2)],
+        after: ['import { settle } from "./sheet-swipe.js";', ...SHEET.slice(2)],
       },
-      "shared/page/reduced-motion.js": { before: [], after: REDUCED_MOTION },
     }),
     [],
-    "moved into a module of its own",
-  );
-  assert.deepEqual(
-    findChangeReasons(
-      {
-        "shared/page/bracket-standings.js": {
-          before: [
-            'import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";',
-            ...SETTLE,
-          ],
-          after: [
-            'import { prefersReducedMotion } from "./reduced-motion.js";',
-            'import { createSlidePanels } from "./slide-panels.js";',
-            ...SETTLE.map((line, index) => (index ? line : `export ${line}`)),
-          ],
-        },
-      },
-      { "shared/page/reduced-motion.js": REDUCED_MOTION },
-    ),
-    [],
-    "imports split and an export added",
+    "an import of a moved declaration from where it went",
   );
 });
 
-test("a shared script's code moved where none of those scripts imports it, changed on its way, or repeated, is red", () => {
-  const shared = (/** @type {string} */ path) => [
-    `${path} is shared code that moves, layers, or draws the page`,
-  ];
+test("a shared script's imports split, or its function declarations reordered, aren't red", () => {
+  const functions = [...SETTLE, "function close() {", "  settle();", "}"];
+  assert.deepEqual(
+    findSheetReasons(
+      ['import { closeSheet, slideIn } from "./sheet-swipe.js";', ...functions],
+      [
+        'import { closeSheet } from "./sheet-swipe.js";',
+        'import { slideIn } from "./sheet-swipe.js";',
+        ...functions.slice(3),
+        ...functions.slice(0, 3),
+      ],
+    ),
+    [],
+  );
+});
+
+test("a shared script's declaration moved anywhere but another of those scripts, or one that reads a module's names or runs, is red", () => {
   assert.deepEqual(
     findChangeReasons({
       "shared/page/sheet.js": { before: [...SHEET, "", ...SETTLE], after: SHEET },
       "shared/page/stamp.js": { before: [], after: SETTLE },
     }),
-    shared("shared/page/sheet.js"),
-    "moved where nothing it imports holds it",
+    describeShared("shared/page/sheet.js"),
+    "moved where none of those scripts imports it",
+  );
+  assert.deepEqual(
+    findChangeReasons(
+      {
+        "shared/page/sheet.js": {
+          before: [...SHEET, "", ...SETTLE],
+          after: ['import { settle } from "./helpers.js";', ...SHEET],
+        },
+      },
+      { "shared/page/helpers.js": EXPORTED_SETTLE },
+    ),
+    describeShared("shared/page/sheet.js"),
+    "moved into a shared script it imports",
+  );
+  assert.deepEqual(
+    findChangeReasons(
+      {
+        "shared/page/slide-panels.js": {
+          before: ['import { prefersReducedMotion } from "./reduced-motion.js";', ...SWIPE],
+          after: [...REDUCED_MOTION, ...SWIPE],
+        },
+      },
+      { "shared/page/reduced-motion.js": REDUCED_MOTION },
+    ),
+    describeShared("shared/page/slide-panels.js"),
+    "moved back from a shared script it imported, dropping the import",
+  );
+  const readsModule = ["const SHEET_MOTION_MS = 500;", "const wait = () => SHEET_MOTION_MS;"];
+  assert.deepEqual(
+    findChangeReasons({
+      "shared/page/sheet.js": {
+        before: [...SHEET, ...readsModule],
+        after: [
+          'import { closeSheet, wait } from "./sheet-swipe.js";',
+          ...SHEET.slice(1),
+          readsModule[0],
+        ],
+      },
+      "shared/page/sheet-swipe.js": {
+        before: SWIPE,
+        after: [...SWIPE, `export ${readsModule[1]}`],
+      },
+    }),
+    [...describeShared("shared/page/sheet.js"), ...describeShared("shared/page/sheet-swipe.js")],
+    "a moved declaration that reads a name its module binds",
   );
   assert.deepEqual(
     findChangeReasons({
       "shared/page/sheet.js": {
-        before: [...SHEET, "", ...SETTLE],
-        after: [SHEET[0].replace("{ closeSheet }", "{ closeSheet, settle }"), ...SHEET.slice(1)],
+        before: [...SHEET, 'addEventListener("resize", close);'],
+        after: SHEET,
       },
+      "shared/page/sheet-swipe.js": {
+        before: SWIPE,
+        after: [...SWIPE, 'addEventListener("resize", close);'],
+      },
+    }),
+    [...describeShared("shared/page/sheet.js"), ...describeShared("shared/page/sheet-swipe.js")],
+    "a statement that runs, moved",
+  );
+});
+
+test("a shared script's code changed on its way, repeated, or in another order is red", () => {
+  assert.deepEqual(
+    findChangeReasons({
+      "shared/page/sheet.js": { before: [...SHEET, "", ...SETTLE], after: SHEET_IMPORTING_SETTLE },
       "shared/page/sheet-swipe.js": {
         before: SWIPE,
         after: [...SWIPE, "export function settle(dialog) {", "  dialog.inert = true;", "}"],
       },
     }),
-    [...shared("shared/page/sheet.js"), ...shared("shared/page/sheet-swipe.js")],
+    [...describeShared("shared/page/sheet.js"), ...describeShared("shared/page/sheet-swipe.js")],
     "changed on its way",
   );
+  const listen = 'addEventListener("resize", settle);';
+  for (const [before, after, why] of /** @type {[string[], string[], string][]} */ ([
+    [[...SHEET, listen], [...SHEET, listen, listen], "a statement repeated"],
+    [["const x = 1;", "start(x);"], ["start(x);", "const x = 1;"], "a use before its declaration"],
+    [
+      ['addEventListener("resize", settle);', 'addEventListener("scroll", settle);'],
+      ['addEventListener("scroll", settle);', 'addEventListener("resize", settle);'],
+      "two listeners swapped",
+    ],
+  ]))
+    assert.deepEqual(findSheetReasons(before, after), describeShared("shared/page/sheet.js"), why);
+});
+
+test("a shared script's import or export that changes without following a moved declaration is red", () => {
+  const declared = ["function open() {}", "function close() {}"];
+  for (const [before, after, why] of /** @type {[string[], string[], string][]} */ ([
+    [
+      ['import { slideIn } from "./slide-panels.js";'],
+      ['import { slideOut as slideIn } from "./slide-panels.js";'],
+      "an import's name",
+    ],
+    [
+      ['import { slideIn } from "./slide-panels.js";'],
+      ['import { slideIn } from "./side-swipe.js";'],
+      "an import's source",
+    ],
+    [[], ['import "./sheet-log.js";'], "a side-effect import"],
+    [['import "./sheet-log.js";'], [], "a side-effect import taken out"],
+    [
+      [...declared, "export { open as show, close as hide };"],
+      [...declared, "export { open as hide, close as show };"],
+      "export aliases swapped",
+    ],
+    [
+      ['import { a } from "./tabs.js";', 'import { b } from "./pill-thumb.js";'],
+      ['import { b } from "./pill-thumb.js";', 'import { a } from "./tabs.js";'],
+      "modules imported in another order",
+    ],
+  ]))
+    assert.deepEqual(
+      findSheetReasons([...before, ...SETTLE], [...after, ...SETTLE]),
+      describeShared("shared/page/sheet.js"),
+      why,
+    );
   assert.deepEqual(
-    findChangeReasons({
-      "shared/page/sheet.js": {
-        before: [...SHEET, 'addEventListener("resize", settle);'],
-        after: [
-          ...SHEET,
-          'addEventListener("resize", settle);',
-          'addEventListener("resize", settle);',
-        ],
-      },
-    }),
-    shared("shared/page/sheet.js"),
-    "a statement repeated",
+    findSheetReasons(SETTLE, EXPORTED_SETTLE),
+    describeShared("shared/page/sheet.js"),
+    "an export added to a declaration that stays",
   );
 });
 

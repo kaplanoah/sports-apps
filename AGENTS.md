@@ -767,24 +767,39 @@ Delete it once the app's first PR merges.
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
   `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
-  but not to its comments, blank lines, formatting, or imports, which draw nothing,
-  nor code it moves unchanged among those scripts and the shared ones they import;
-  a change to what the rules of its shared stylesheets (`sheet.css`, `pager.css`,
-  `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) set for each selector,
-  under its at-rules, in a property that decides how parts layer, stack, scroll,
-  take a touch, or show (any below, any `position` but a `relative` or `static` one in a rule without a `z-index`, `overflow`,
+  but not to its comments, blank lines, or formatting, which draw nothing,
+  nor a declaration it moves unchanged to another of those scripts, with the imports and exports that follow it,
+  when the declaration runs nothing as it's declared and reads no name the top level of either script binds,
+  though its statements in another order count, but for function declarations, which hoist,
+  and so does any other change to its imports and exports, their names, sources, and order;
+  a change to the sequence of its shared stylesheets' (`sheet.css`, `pager.css`,
+  `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) top-level statements,
+  like `@layer` and `@import`, and declarations, under each selector and its at-rules,
+  of a property that decides how parts layer, stack, scroll,
+  take a touch, or show (any below, any `position`, `overflow`,
   `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
-  `opacity`, `visibility`, a `display` of `none` or `contents`, `isolation`, or `mix-blend-mode`),
-  but not in their fonts, colors, spacing, or sizes, which CI checks,
-  nor a selector renamed, or a rule split or merged, that leaves each selector setting the same;
-  or a property a page's CSS adds, or a line its JavaScript adds, that gives a part a layer of its own (`transform`,
+  `opacity`, `visibility`, `display`, `isolation`, `mix-blend-mode`, or `container`), or of a custom property one of those reads,
+  where a `relative` or `static` `position` counts only where a rule in any page stylesheet for the same part sets a `z-index` or takes it out of the flow,
+  and a `display` only where it, or a rule for the same part, is `none` or `contents`,
+  but not in their fonts, colors, spacing, or sizes, which CI checks;
+  what any other stylesheet of a page adds that gives a part a layer of its own (`transform`,
   `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`),
-  or, in its CSS, lifts a part over others or makes it scroll (an absolute `position`, a `z-index`, or an `overflow` but `visible`).
-  In a stylesheet, a `transition` counts only when it eases one of these properties, or all of them, not when it only recolors,
-  and a `translate`, `rotate`, or `scale` in two dimensions only in keyframes or in a rule with an `animation`, a `will-change`, or a `transition` that counts,
+  or lifts it over others or makes it scroll (an absolute `position`, a `z-index`, an `overflow` but `visible`, or `-webkit-overflow-scrolling`),
+  any change to its top-level statements or to a custom property one of those reads,
+  what it takes out that may have overridden what it leaves of the same property for the same part,
+  and those it keeps in another order;
+  or a line a page's other JavaScript adds that sets one of those layer properties or a fixed or sticky `position`.
+  In a stylesheet, a declaration that reads a custom property counts whatever it holds,
+  a `transition` counts only when it eases one of these properties, all of them, or a keyword like `inherit`, not when it only recolors,
+  and a `translate`, `rotate`, or `scale` in two dimensions only in keyframes,
+  where a rule in any page stylesheet for the same part has an `animation`, a `will-change`, or a `transition` that counts,
+  or where the part can't be told,
   since WebKit gives a layer of its own only to a transform in three dimensions or on the move.
+  A rule's part is the last compound of its selector without its attributes, pseudo-classes, and pseudo-elements, a nested one's with its parent's,
+  and two rules style the same part when one's part holds all of the other's.
+  A script or stylesheet the gate can't read is red.
   Tests are never red.
   The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
   added by the owner after the PR's last push,
