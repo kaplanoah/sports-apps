@@ -20,7 +20,7 @@ export const nameTestedArtifact = (tree) => `ci-tested-${tree}`;
 // Only a pull request's run of the CI workflow's path, from a branch of this repository. A branch's
 // run uses the branch's own copy of the workflow, which only someone who can push here could
 // change, while a fork's could be anyone's, and could record a tree it never tested.
-const isPullRequestRun = (run) =>
+export const isPullRequestRun = (run) =>
   run.path === CI_WORKFLOW &&
   run.event === "pull_request" &&
   run.head_repository?.id === run.repository?.id;

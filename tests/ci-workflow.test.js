@@ -9,6 +9,7 @@ import {
   nameFindRecord,
   namePostRecord,
 } from "../worker/judge-review.mjs";
+import { PHONE_CONTEXT } from "../worker/phone-status.mjs";
 import {
   escapePattern,
   formatJobOutputs,
@@ -140,6 +141,18 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
       /run: npx playwright install --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
+  assert.match(
+    readJob("burn-in"),
+    /- if: contains\(needs\.scope\.outputs\.specs, 'at-rest\.spec\.mjs'\)\n\s+run: npx playwright install --with-deps webkit\n/,
+    "burn-in installs WebKit whenever an at-rest spec is among the ones it repeats",
+  );
+});
+
+// A cache saved with WebKit in it would have the browser job, whose machines lack WebKit's system
+// libraries, run the WebKit projects, so only the jobs that install Chromium alone save it.
+test("no job that installs WebKit saves the browsers' cache", () => {
+  for (const job of ["burn-in", "webkit"])
+    assert.doesNotMatch(readJob(job), /uses: actions\/cache@/, job);
 });
 
 // A Node test's failure is read from the end of the job's log, which a session reaches only so
@@ -168,24 +181,78 @@ test("burn-in runs every test ten times however many fail, and fails only on a t
   assert.match(burnIn, /name: burn-in-flaky-/);
 });
 
-// Burn-in's machines start only for a pull request that changes a browser spec, and check
+// Burn-in's machines start only for a pull request with a browser spec to repeat, and check
 // requires them to pass then.
-test("burn-in runs only when a pull request changes a browser spec, and check requires it then", () => {
-  // Without --no-renames, a spec moved or split from another reads as renamed, not added.
-  assert.match(
-    readJob("changed-specs"),
-    /git diff --name-only --no-renames --diff-filter=AM HEAD\^1 HEAD/,
-  );
+test("burn-in runs only when a pull request has a browser spec to repeat, and check requires it then", () => {
+  const scope = readJob("scope");
+  assert.match(scope, /run: node worker\/burn-in-specs\.mjs/);
+  assert.match(scope, /fetch-depth: 0/);
+  assert.match(scope, /actions: read/);
+  assert.match(scope, /BRANCH: \$\{\{ github\.event\.pull_request\.head\.ref \}\}/);
   const burnIn = readJob("burn-in");
-  assert.match(burnIn, /needs: changed-specs/);
+  assert.match(burnIn, /needs: scope/);
   assert.match(
     burnIn,
-    /if: .*needs\.changed-specs\.result == 'success' && needs\.changed-specs\.outputs\.specs != ''/,
+    /if: .*needs\.scope\.result == 'success' && needs\.scope\.outputs\.specs != ''/,
   );
-  assert.match(burnIn, /SPECS: \$\{\{ needs\.changed-specs\.outputs\.specs \}\}/);
+  assert.match(burnIn, /SPECS: \$\{\{ needs\.scope\.outputs\.specs \}\}/);
   assert.match(
     readJob("check"),
-    /\(needs\.changed-specs\.outputs\.specs == '' \|\| needs\.burn-in\.result == 'success'\)/,
+    /\(needs\.scope\.outputs\.specs == '' \|\| needs\.burn-in\.result == 'success'\)/,
+  );
+});
+
+// The browser tests run only for the apps the change reaches, and check requires them then.
+test("the browser and WebKit jobs run only the apps the change reaches, and check requires them then", () => {
+  assert.match(
+    readJob("scope"),
+    /shell: bash\n\s+run: git diff --name-only --no-renames HEAD\^1 HEAD \| node worker\/browser-scope\.mjs/,
+  );
+  for (const [job, project] of [
+    ["browser", '"$app"'],
+    ["webkit", '"$app-webkit"'],
+  ]) {
+    const text = readJob(job);
+    assert.match(text, /needs: \[passed, scope\]/, job);
+    assert.match(text, /if: .* && needs\.scope\.outputs\.apps != '' \}\}/, job);
+    assert.match(text, /APPS: \$\{\{ needs\.scope\.outputs\.apps \}\}/, job);
+    assert.ok(text.includes(`for app in $APPS; do projects+=(--project ${project}); done`), job);
+    assert.match(text, /npm run test:browser -- .*"\$\{projects\[@\]\}"/, job);
+  }
+  assert.match(
+    readJob("check"),
+    /\(needs\.scope\.outputs\.apps == '' \|\| \(needs\.browser\.result == 'success' &&\n\s+needs\.webkit\.result == 'success'\)\)/,
+  );
+});
+
+// A held red change waits on the phone status, set by a job that runs none of the pull request's
+// code since only it can set a status, and check holds the change itself whenever main's rules
+// don't require that status, and never records it as passed for main to deploy at once.
+test("a held red change waits on the phone status, and check holds it whenever main's rules don't", () => {
+  assert.match(readJob("gate"), /held: \$\{\{ steps\.hold\.outputs\.held \}\}/);
+  const phone = readJob("phone");
+  assert.match(phone, /needs: gate\n/);
+  assert.match(phone, /permissions:\n\s+statuses: write\n\s+steps:/);
+  assert.doesNotMatch(phone, /actions\/checkout|node /);
+  assert.ok(phone.includes(`-f context=${PHONE_CONTEXT} `));
+  assert.match(
+    phone,
+    /STATE: \$\{\{ needs\.gate\.outputs\.held == 'true' && 'pending' \|\| 'success' \}\}/,
+  );
+  const writers = listJobs().filter((job) => /statuses: write/.test(readJob(job)));
+  assert.deepEqual(writers, ["phone"]);
+  const check = readJob("check");
+  assert.match(
+    check,
+    /id: phone\n\s+if: needs\.gate\.outputs\.held == 'true'\n[\s\S]*run: node worker\/phone-status\.mjs/,
+  );
+  assert.match(
+    check,
+    /\(needs\.gate\.outputs\.held == 'true' && steps\.phone\.outputs\.required != 'true'\)\n\s+run: exit 1/,
+  );
+  assert.match(
+    check,
+    /if: github\.event_name == 'pull_request' && needs\.gate\.outputs\.held != 'true'\n\s+with:\n\s+name: ci-passed-/,
   );
 });
 
@@ -253,7 +320,7 @@ test("a label change runs only the gate again once a run passed every test on th
     passed,
     /SEARCH: \$\{\{ github\.event_name == 'pull_request' && '--tested' \|\| '' \}\}/,
   );
-  assert.match(readJob("changed-specs"), /needs: passed\n.*!needs\.passed\.outputs\.run/);
+  assert.match(readJob("scope"), /needs: passed\n.*!needs\.passed\.outputs\.run/);
   const check = readJob("check");
   assert.match(
     check,
