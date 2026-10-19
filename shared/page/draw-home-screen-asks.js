@@ -130,12 +130,13 @@ function wireWelcome(welcome) {
   welcome.addEventListener("change", (event) =>
     keepPickedAppearance(/** @type {HTMLInputElement} */ (event.target).value),
   );
-  welcome.querySelector(".welcome-continue").addEventListener("click", () => welcome.close());
-  // The caret asks to close it as Escape does: home-screen.js takes the ask and slides it down, and
+  // Its buttons ask to close it as Escape does: home-screen.js takes the ask and slides it down, and
   // until it loads, nothing does, so it closes at once.
-  welcome.querySelector(".welcome-close").addEventListener("click", () => {
+  const askToClose = () => {
     if (welcome.dispatchEvent(new Event("cancel", { cancelable: true }))) welcome.close();
-  });
+  };
+  welcome.querySelector(".welcome-continue").addEventListener("click", askToClose);
+  welcome.querySelector(".welcome-close").addEventListener("click", askToClose);
   // Continue in browser, the caret, Escape, and Android's back all close it, and it stays closed.
   welcome.addEventListener("close", keepWelcomeClosed);
   // Opened again from settings, it rises, even when it closed before the modules arrived.

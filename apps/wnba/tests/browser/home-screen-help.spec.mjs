@@ -25,7 +25,7 @@ test.describe("on an iPhone, in the browser", () => {
     await checkHelpOpensWelcome({ page, openApp, openSettings });
   });
 
-  test("the welcome from the ? rises as settings does, and its caret slides it down, while a first visit's is there from the start", async ({
+  test("the welcome from the ? rises as settings does, and its caret and Continue in browser slide it down, while a first visit's is there from the start", async ({
     page,
   }) => {
     await checkWelcomeRises({ page, openApp, openSettings });

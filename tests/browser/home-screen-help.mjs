@@ -104,7 +104,8 @@ export async function checkHelpOpensWelcome(app) {
 
 /**
  * On a phone, the welcome a first visit opens on is there from the first paint, while the one the
- * ? opens rises over settings as a sheet does, leaving them in sight, and the caret slides it down.
+ * ? opens rises over settings as a sheet does, leaving them in sight, and the caret and Continue in
+ * browser each slide it down.
  * @param {App} app
  */
 export async function checkWelcomeRises({ page, openApp, openSettings }) {
@@ -116,18 +117,20 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
   await welcome.getByRole("button", { name: "Continue in browser" }).click();
 
   await openSettings(page);
-  await findHelp(page).click();
-  await expect(welcome).toHaveCSS("animation-name", "sheet-rise");
-  expect(
-    await welcome.evaluate((dialog) => getComputedStyle(dialog, "::backdrop").backgroundColor),
-  ).toBe("rgba(0, 0, 0, 0)");
-  const isSliding = await welcome.evaluate((dialog) => {
-    /** @type {HTMLButtonElement} */ (dialog.querySelector(".welcome-close")).click();
-    return dialog.hasAttribute("open") && dialog.style.transform === "translateY(100%)";
-  });
-  expect(isSliding).toBe(true);
-  await expect(welcome).toBeHidden();
-  await expect(page.locator(SETTINGS)).toBeVisible();
+  for (const button of [".welcome-close", ".welcome-continue"]) {
+    await findHelp(page).click();
+    await expect(welcome).toHaveCSS("animation-name", "sheet-rise");
+    expect(
+      await welcome.evaluate((dialog) => getComputedStyle(dialog, "::backdrop").backgroundColor),
+    ).toBe("rgba(0, 0, 0, 0)");
+    const isSliding = await welcome.evaluate((dialog, selector) => {
+      /** @type {HTMLButtonElement} */ (dialog.querySelector(selector)).click();
+      return dialog.hasAttribute("open") && dialog.style.transform === "translateY(100%)";
+    }, button);
+    expect(isSliding, button).toBe(true);
+    await expect(welcome).toBeHidden();
+    await expect(page.locator(SETTINGS)).toBeVisible();
+  }
 }
 
 /**
