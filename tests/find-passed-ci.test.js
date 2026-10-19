@@ -93,10 +93,11 @@ test("a fork's run, a failed run, another workflow, another event, or an expired
   );
 });
 
-// A red change's first run fails at the gate, and a label change is how it passes.
-test("a run whose tests all passed on this exact code is found for a label change, even if its gate failed it", async () => {
-  const gateFailed = { ...PASSED_RUN, conclusion: "failure" };
-  const github = createFakeGitHub([buildArtifact(7)], [gateFailed], nameTestedArtifact(TREE));
+// A held red change's run, which check fails while main's rules don't require the phone status,
+// is found again on the label change that lets it through.
+test("a run whose tests all passed on this exact code is found for a label change, even if check held it", async () => {
+  const held = { ...PASSED_RUN, conclusion: "failure" };
+  const github = createFakeGitHub([buildArtifact(7)], [held], nameTestedArtifact(TREE));
   const runId = await findTestedRun({
     tree: TREE,
     repository: REPOSITORY,
