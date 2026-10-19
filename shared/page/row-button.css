@@ -8,8 +8,10 @@
  * team-sheet.css, before their own styles.css.
  */
 
+/* At least as wide as the table at its narrowest, so a table too wide for the screen scrolls whole.
+   Its widest has no end when its columns are shares of its width. */
 .row-button-clip {
-  min-width: max-content;
+  min-width: min-content;
   overflow-x: clip;
 }
 .row-button-cell {
