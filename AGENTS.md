@@ -61,7 +61,7 @@
   and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config,
-  so a change to the docs, or to tooling no browser test imports, runs none,
+  so a change to the docs, or to tooling or Node tests no browser test imports, runs none,
   and runs every app's for shared code, CI's own workflow, the dependencies, or a kind of file it doesn't know (`worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   but for one that passed burn-in in an earlier run, on this push or one before it, and hasn't changed since,

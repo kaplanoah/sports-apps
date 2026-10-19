@@ -113,7 +113,8 @@ const STYLE_ATTRIBUTE_CHANGE = /\.(set|remove)Attribute\(\s*["'`]style["'`]\s*(?
 // holds it or an index into the style names it.
 const STYLE_PROPERTY_CALL =
   /\.(?:set|remove)Property\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(?=(.*)))?/g;
-const STYLE_INDEX_ASSIGNMENT = new RegExp(`${STYLE}\\s*\\[[^\\]]*\\]${ASSIGNS}`);
+const STYLE_INDEX = new RegExp(`${STYLE}\\s*\\[`, "g");
+const STARTS_ASSIGNMENT = new RegExp(`^${ASSIGNS}`);
 // A value as a script writes it: a string or a number, which ends where its expression does.
 const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*(?:[;,)}\]]|$))/;
 
@@ -473,6 +474,17 @@ const findPropertyCallSetting = (text, isWatched) =>
   );
 
 /**
+ * Whether a line writes through an index into a style, as `style[key] = value` does, up to the
+ * index's own closing bracket, however many it holds.
+ * @param {string} text
+ */
+const isStyleIndexAssignment = (text) =>
+  [...text.matchAll(STYLE_INDEX)].some((match) => {
+    const close = findClosingBracket(text, match.index + match[0].length - 1);
+    return STARTS_ASSIGNMENT.test(text.slice(close + 1));
+  });
+
+/**
  * What a line sets or clears on a part's style, by a property's name, its CSS name, or its whole
  * text, that a page's stylesheet would be red for, or a property whose name the gate can't read,
  * or null when it sets nothing that is.
@@ -480,7 +492,7 @@ const findPropertyCallSetting = (text, isWatched) =>
  * @param {(property: string) => boolean} isWatched
  */
 const findStyleSetting = (text, isWatched) =>
-  (STYLE_INDEX_ASSIGNMENT.test(text) ? UNREADABLE_PROPERTY : null) ??
+  (isStyleIndexAssignment(text) ? UNREADABLE_PROPERTY : null) ??
   findAssignedSetting(text, isWatched) ??
   findStyleTextSetting(text, isWatched) ??
   findPropertyCallSetting(text, isWatched);
@@ -538,9 +550,9 @@ const readKeyframeProperty = (key) =>
   KEYFRAME_TIMING_KEYS.has(key) ? null : (KEYFRAME_CSS_NAMES.get(key) ?? toKebabCase(key));
 
 /**
- * What an added line sets that makes a layer or that a page's stylesheet would be red for, or a
- * transition, whatever it eases, in its CSS text or keyed in a style's object or keyframes, given
- * whether it lies in a style's object or in keyframes.
+ * What an added line sets that makes a layer, or sets or clears that a page's stylesheet would be
+ * red for, or a transition, whatever it eases, in its CSS text or keyed in a style's object or
+ * keyframes, given whether it lies in a style's object or in keyframes.
  * @param {AddedLine} line
  * @param {StyleObjectLines} objectLines
  * @param {(property: string) => boolean} isWatched
@@ -578,8 +590,8 @@ function findMarkupLayer(text, isWatched) {
 
 /**
  * Why a change to any other script of a page is red: each line it adds that makes a layer, sets
- * what a page's stylesheet would be red for or a custom property a stack declaration reads, or
- * holds or creates markup that runs or layers the page.
+ * or clears what a page's stylesheet would be red for or a custom property a stack declaration
+ * reads, or holds or creates markup that runs or layers the page.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  * @param {(property: string) => boolean} isWatched
