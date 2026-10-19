@@ -61,6 +61,13 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* A sheet's sides, and how far its caret reaches out past them into the side, so a caret's spot
+   is worked out once for every sheet and the welcome. */
+:root {
+  --sheet-side: 18px;
+  --caret-reach: 12px;
+}
+
 /* The icon sits flush with the page's edge, and its tap area runs past it. */
 .settings-btn {
   flex: none;
@@ -435,7 +442,7 @@ section.view.active {
 .sheet-close,
 .sheet-back {
   position: absolute;
-  left: -12px;
+  left: calc(-1 * var(--caret-reach));
   top: 0;
 }
 .sheet-close svg,
@@ -812,11 +819,11 @@ body.kbd .notify-help:focus {
 .welcome::backdrop {
   background: none;
 }
-/* Its caret, a sheet's own, closes it from the spot every sheet's does, 18px out from its words. */
+/* Its caret, a sheet's own, reaches out past its words as a sheet's does. */
 .welcome-close {
   flex: none;
   align-self: flex-start;
-  margin: -14px 0 14px -18px;
+  margin: -14px 0 14px calc(-1 * var(--caret-reach));
 }
 .welcome .gate-title {
   margin: 0 0 22px;
@@ -975,18 +982,18 @@ body.kbd .welcome-continue:focus {
     }
   }
   .settings-body {
-    padding-inline: 18px;
+    padding-inline: var(--sheet-side);
   }
-  /* On a phone, the welcome's caret sits over settings' own, 6px from the screen's edge, however
-     wide the sides of the welcome's column. */
+  /* On a phone, the welcome's caret sits over settings' own, from the screen's edge, however wide
+     the sides of the welcome's column. */
   .welcome-close {
-    margin-left: calc(6px - var(--welcome-start));
+    margin-left: calc(var(--sheet-side) - var(--caret-reach) - var(--welcome-start));
   }
   /* A sheet's top clears the status bar, which a Home Screen page draws over it. */
   .sheet-top {
     --top-inset: env(safe-area-inset-top);
-    margin-inline: -18px;
-    padding-inline: 18px;
+    margin-inline: calc(-1 * var(--sheet-side));
+    padding-inline: var(--sheet-side);
   }
 
   /*

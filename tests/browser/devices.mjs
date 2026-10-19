@@ -6,9 +6,9 @@ export const IPAD = {
   isMobile: true,
   userAgent: IPHONE_AGENT.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
 };
-// The widest iPhone, as an iPhone Pro Max's Safari lays its pages out.
+// The widest iPhone, as an iPhone 16 or 17 Pro Max's Safari lays its pages out.
 export const WIDE_IPHONE = {
-  viewport: { width: 430, height: 932 },
+  viewport: { width: 440, height: 956 },
   hasTouch: true,
   isMobile: true,
   userAgent: IPHONE_AGENT,
