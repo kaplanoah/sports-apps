@@ -161,6 +161,27 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
 }
 
 /**
+ * A reload with settings open on the note shows the note as it was before the page's code arrives,
+ * so nothing under it moves once the code runs.
+ * @param {App} app
+ */
+export async function checkReAddNoteOnReload({ page, openApp, openSettings, looks }) {
+  await openHomeScreenApp(page, openApp, "dark");
+  await openSettings(page);
+  await pick(page, looks.light);
+  const note = findNote(page);
+  await expect(note).toHaveText(NOTE_WORDS);
+  const release = await holdRequests(page, matchPath("/js/app.js"));
+
+  await page.reload({ waitUntil: "commit" });
+
+  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  release();
+}
+
+/**
  * The note's X takes it away for good in that install of the app: not on settings' next open, a
  * pick that sets the icon off again, or a reload.
  * @param {App} app

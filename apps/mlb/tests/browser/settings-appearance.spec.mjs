@@ -7,6 +7,7 @@ import {
   checkReAddNote,
   checkReAddNoteDismissal,
   checkReAddNoteEases,
+  checkReAddNoteOnReload,
   checkSystemInstallIcon,
 } from "../../../../tests/browser/re-add-note.mjs";
 
@@ -106,6 +107,12 @@ test.describe("in an iPhone's Home Screen app", () => {
 
   test("the icon note's X takes it away for good in that install", async ({ page }) => {
     await checkReAddNoteDismissal({ page, openApp, openSettings, looks });
+  });
+
+  test("a reload with settings open on the icon note shows the note before the page's code arrives", async ({
+    page,
+  }) => {
+    await checkReAddNoteOnReload({ page, openApp, openSettings, looks });
   });
 
   test("an app added on System has the icon the phone's setting showed as it first opened", async ({
