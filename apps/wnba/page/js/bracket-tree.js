@@ -172,7 +172,8 @@ export function startBracket() {
   const wrap = findWrap();
   placeOpeningRound = watchOpeningRound(wrap);
   // Laying the bracket out resizes what this observes, so it waits a frame rather than loop the
-  // observer, and only while the bracket shows. While the parts slide it holds still, as it shows.
+  // observer, and only while the bracket shows. While the parts slide it holds still, since laying
+  // it out then would move its cards as they slide in.
   resizes = new ResizeObserver(() => {
     if (isShown(wrap) && !wrap.closest("[data-sliding]")) requestAnimationFrame(layOutAndMarkRound);
   });

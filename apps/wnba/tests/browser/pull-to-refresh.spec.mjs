@@ -1,3 +1,4 @@
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { drag, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
@@ -160,6 +161,7 @@ test("on the season tab, a pull holds the standings down with the header", async
   await openSeasonPart(page, "Standings");
   const standings = page.locator("#standingsWrap");
   await expect(standings.locator("table").first()).toBeVisible();
+  await waitForLoadToSettle(page);
   const before = await standings.boundingBox();
   await app.holdStore();
 

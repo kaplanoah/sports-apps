@@ -11,6 +11,7 @@ import {
   ROSTER_DOCS,
   readColor,
 } from "./harness.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
@@ -205,6 +206,7 @@ test("on a phone, a touch on the header lands on the part under it, so a drag th
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const header = await page.locator("header.top").boundingBox();
 
   const found = await findTouchTargets(page, {
@@ -221,6 +223,7 @@ test("on a wide screen, where the tabs ride with the header, a touch on their tr
   await page.setViewportSize(WIDE_SCREEN);
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
   const track = await page.locator("nav.tabs").boundingBox();
 
   const found = await findTouchTargets(page, {

@@ -16,10 +16,11 @@ import { readSelectedTab, wireTabList } from "./tabs.js";
 // shown part with the other beside it, though a swipe on the bracket scrolls it until it reaches
 // its end, as a team's Roster does on its sheet. Until the playoff field is set the tab is named
 // Standings and opens on them; from then on, through the offseason, it's named Bracket and opens
-// on the bracket. The one it opens on comes first in the pill. While the tab shows, the page holds
-// still and each part scrolls on its own (pager.css), as a sheet's sections do, with the header
-// riding up over it until the pill holds at the top (season-header.js), so each keeps its place
-// while the other shows and a slide never scrolls the page.
+// on the bracket. The one it opens on comes first in the pill. Each part scrolls on its own
+// (pager.css), as a sheet's sections do, so each keeps its place while the other shows and a slide
+// never scrolls the page. Where the header rides up over the part until the pill holds at the top
+// (season-header.js), the page holds still; where it stays put, the page scrolls only to bring a
+// view a tall Updates box squeezes into sight.
 
 /** @typedef {"standings" | "bracket"} SeasonPart */
 

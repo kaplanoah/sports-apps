@@ -13,10 +13,11 @@
  * --control-room for its size. An app's styles.css sets the names' words as its other buttons'.
  */
 
-/* A season's standings and bracket under one pill, as wide as the view. While they show, the page
-   holds still (chrome.css) and the pill sits under the header. The pill's bar and the parts reach
-   past the body's gutter to the screen's edges, and on the left past the 1px chrome.css pads each
-   view with too. */
+/* A season's standings and bracket under one pill, as wide as the view, the pill under the header.
+   Where the header rides, the page holds still while they show (chrome.css); where it stays put,
+   the page scrolls only to bring a view a tall Updates box squeezes into sight. The pill's bar and
+   the parts reach past the body's gutter to the screen's edges, and on the left past the 1px
+   chrome.css pads each view with too. */
 .bracket-standings {
   --reach-left: calc(var(--page-gutter) + 1px);
   --reach-right: var(--page-gutter);

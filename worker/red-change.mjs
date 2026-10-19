@@ -36,6 +36,7 @@ const RED_FILES = new Set(
     "show-last-drawn.js",
     "season-header.js",
     "rider-taps.js",
+    "held-bar.js",
     "day-strip.js",
     "strip-slide.js",
     "chrome.css",
