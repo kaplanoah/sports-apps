@@ -792,9 +792,10 @@ body.kbd .notify-help:focus {
   max-height: none;
   margin: 0;
   padding-top: max(24px, env(safe-area-inset-top));
-  /* On a wide screen, it keeps to a column as wide as a phone's, in the middle, as the gate does. */
-  padding-inline: max(24px, env(safe-area-inset-left), (100% - 360px) / 2)
-    max(24px, env(safe-area-inset-right), (100% - 360px) / 2);
+  /* On a wide screen, it keeps to a column as wide as a phone's, in the middle, as the gate does.
+     The screen's width is in vw, which the welcome fills, so its caret reads the same width. */
+  --welcome-start: max(24px, env(safe-area-inset-left), (100vw - 360px) / 2);
+  padding-inline: var(--welcome-start) max(24px, env(safe-area-inset-right), (100vw - 360px) / 2);
   /* Continue sits in the room the bottom inset keeps clear above the iPhone's home bar, where
      Safari's own bar floats, its text half its height over the bottom. */
   padding-bottom: max(2px, env(safe-area-inset-bottom) - 32px);
@@ -811,7 +812,7 @@ body.kbd .notify-help:focus {
 .welcome::backdrop {
   background: none;
 }
-/* Its caret, a sheet's own, closes it from the spot every sheet's does, 6px from a phone's edge. */
+/* Its caret, a sheet's own, closes it from the spot every sheet's does, 18px out from its words. */
 .welcome-close {
   flex: none;
   align-self: flex-start;
@@ -975,6 +976,11 @@ body.kbd .welcome-continue:focus {
   }
   .settings-body {
     padding-inline: 18px;
+  }
+  /* On a phone, the welcome's caret sits over settings' own, 6px from the screen's edge, however
+     wide the sides of the welcome's column. */
+  .welcome-close {
+    margin-left: calc(6px - var(--welcome-start));
   }
   /* A sheet's top clears the status bar, which a Home Screen page draws over it. */
   .sheet-top {

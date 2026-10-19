@@ -1,4 +1,9 @@
-import { ANDROID_AGENT, IPAD, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import {
+  ANDROID_AGENT,
+  IPAD,
+  IPHONE_AGENT,
+  WIDE_IPHONE,
+} from "../../../../tests/browser/devices.mjs";
 import {
   checkCaretBeforeCode,
   checkCaretPlace,
@@ -57,6 +62,16 @@ test.describe("on an iPhone, in the browser", () => {
     page,
   }) => {
     await checkCaretBeforeCode({ page, openApp, openSettings });
+  });
+});
+
+test.describe("on the widest iPhone, in the browser", () => {
+  test.use(WIDE_IPHONE);
+
+  test("the welcome's caret from the ? still sits over settings' caret, where the welcome's column has wider sides", async ({
+    page,
+  }) => {
+    await checkCaretPlace({ page, openApp, openSettings });
   });
 });
 
