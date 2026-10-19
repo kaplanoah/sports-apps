@@ -3,8 +3,8 @@
 // tablet's browser opens on, and the box at the top of settings. Neither shows on a computer, or
 // once the page is opened from the Home Screen. With Chrome's own install to hand, Install takes
 // the place of the steps in both. The welcome opens again from settings' Notifications, rising
-// as settings does, and closes as settings does, sliding down from its caret, Escape, Android's
-// back, or a swipe down.
+// as settings does, and closes as settings does, sliding down from its caret, Continue in browser,
+// Escape, Android's back, or a swipe down.
 
 /* global forgetWelcomeClosed -- from pick-theme.js */
 

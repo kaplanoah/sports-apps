@@ -212,6 +212,7 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator(WELCOME).getByRole("radio", { name: "System" })).toBeChecked();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await page.locator(WELCOME).getByRole("button", CONTINUE).click();
+    await expect(page.locator(WELCOME)).toBeHidden();
     await page.goto("/?app-theme=sepia");
     expect(new URL(page.url()).search).toBe("");
     await expect(page.locator("#stamp")).toBeVisible();
