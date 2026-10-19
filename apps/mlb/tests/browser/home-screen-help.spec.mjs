@@ -1,6 +1,7 @@
 import { ANDROID_AGENT, IPAD, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import {
   checkCaretBeforeCode,
+  checkCaretPlace,
   checkHelpOpensWelcome,
   checkMenuDots,
   checkNoHelpWithoutTouch,
@@ -44,6 +45,12 @@ test.describe("on an iPhone, in the browser", () => {
     page,
   }) => {
     await checkRiseAfterEarlyClose({ page, openApp, openSettings });
+  });
+
+  test("the welcome's caret opens its room, at the left where every sheet's sits, 14px over the heading", async ({
+    page,
+  }) => {
+    await checkCaretPlace({ page, openApp, openSettings });
   });
 
   test("before the page's code arrives, the welcome's caret closes it for good", async ({

@@ -76,26 +76,6 @@ test.describe("on an iPhone, in the browser", () => {
     expect(Math.abs(await measureStepNumbers(page))).toBeLessThan(MIDDLE_ALLOWANCE);
   });
 
-  test("the caret opens the welcome's room, at the left where every sheet's sits, 14px over the heading", async ({
-    page,
-  }) => {
-    await openApp(page, { isShowingWelcome: true });
-    const caret = await page.locator(WELCOME).evaluate((welcome) => {
-      const style = getComputedStyle(welcome);
-      const room = welcome.getBoundingClientRect();
-      const roomTop = room.top + parseFloat(style.paddingTop);
-      const roomLeft = room.left + parseFloat(style.paddingLeft);
-      const close = welcome.querySelector(".welcome-close").getBoundingClientRect();
-      const heading = welcome.querySelector(".welcome-title").getBoundingClientRect();
-      return {
-        overRoom: roomTop - close.top,
-        pastLeft: roomLeft - close.left,
-        overHeading: heading.top - close.bottom,
-      };
-    });
-    expect(caret).toEqual({ overRoom: 14, pastLeft: 12, overHeading: 14 });
-  });
-
   // An iPhone's bottom inset, which keeps its home bar clear, is 34px, and Android's Chrome has none.
   test("Continue's text sits 24px over the welcome's bottom, on an iPhone and where there's no inset", async ({
     page,

@@ -144,15 +144,16 @@ async function trackWelcomeFrames(page) {
         welcomeTop: welcome.open ? welcome.getBoundingClientRect().top : null,
         settings: [box.left, box.top, box.width, box.height].join(" "),
       });
-      if (!(/** @type {any} */ (window).isTrackingDone)) requestAnimationFrame(note);
+      if (/** @type {any} */ (window).trackedFrames === frames) requestAnimationFrame(note);
     };
-    Object.assign(window, { trackedFrames: frames, isTrackingDone: false });
+    Object.assign(window, { trackedFrames: frames });
     requestAnimationFrame(note);
   });
   return () =>
     page.evaluate(() => {
-      Object.assign(window, { isTrackingDone: true });
-      return /** @type {any} */ (window).trackedFrames;
+      const frames = /** @type {any} */ (window).trackedFrames;
+      Object.assign(window, { trackedFrames: null });
+      return frames;
     });
 }
 
@@ -283,6 +284,28 @@ export async function checkCaretBeforeCode({ page, openApp }) {
   // The welcome is drawn before the first paint, so it would show by the time the page's code runs.
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(welcome).toBeHidden();
+}
+
+/**
+ * The welcome's caret opens its room, at the left where every sheet's sits, 14px over its heading.
+ * @param {App} app
+ */
+export async function checkCaretPlace({ page, openApp }) {
+  await openApp(page, { isShowingWelcome: true });
+  const caret = await page.locator(WELCOME).evaluate((welcome) => {
+    const style = getComputedStyle(welcome);
+    const room = welcome.getBoundingClientRect();
+    const roomTop = room.top + parseFloat(style.paddingTop);
+    const roomLeft = room.left + parseFloat(style.paddingLeft);
+    const close = welcome.querySelector(".welcome-close").getBoundingClientRect();
+    const heading = welcome.querySelector(".welcome-title").getBoundingClientRect();
+    return {
+      overRoom: roomTop - close.top,
+      pastLeft: roomLeft - close.left,
+      overHeading: heading.top - close.bottom,
+    };
+  });
+  expect(caret).toEqual({ overRoom: 14, pastLeft: 12, overHeading: 14 });
 }
 
 /**
