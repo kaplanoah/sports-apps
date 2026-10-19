@@ -3,12 +3,8 @@
 // no animation behind once it ends.
 
 import { PHONE_WIDTH_QUERY } from "./device.js";
-import {
-  SHEET_EASING,
-  SHEET_MOTION_MS,
-  prefersReducedMotion,
-  settleAfter,
-} from "./slide-panels.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
+import { SHEET_EASING, SHEET_MOTION_MS, settleAfter } from "./slide-panels.js";
 
 // A swipe down closes the sheet once it goes this far or this fast; anything less springs back.
 const CLOSE_DISTANCE_PX = 110;
