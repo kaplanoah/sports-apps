@@ -789,12 +789,14 @@ Delete it once the app's first PR merges.
   and the `@property` rule that registers one;
   a line a page's other JavaScript adds that sets one of those layer properties, a fixed or sticky `position`,
   or a custom property with `setProperty`, or that holds the markup below;
-  a line an app's `page/*.html` adds or takes out that holds `<script`, `<style`, `<dialog`, `popover`, or `style=`,
+  a line an app's `page/*.html` adds or takes out that holds `<script`, `<style`, `<dialog`, or `popover`,
+  or a `style=` that sets what one of those other stylesheets would be red to add, or a custom property those declarations read,
+  or whose value the gate can't read, as where a template fills it in whole,
   or any change to the stylesheets it links, whose order sets the cascade, but not its other links, like a preload or an icon,
   to its `viewport` and `apple-mobile-web-app-status-bar-style` metas, which fit it to the screen and color the phone's bars,
   or to its inline scripts and styles, which take effect in the order the page holds them;
   and a diff the gate can't read.
-  In a stylesheet, a declaration that reads a custom property counts as if it held any value,
+  In a stylesheet or a `style=`, a declaration that reads a custom property, or a value a template fills in, counts as if it held any value,
   and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,
   `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
   so `none`, `all`, one that names none, or a keyword like `inherit` counts.

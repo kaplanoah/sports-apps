@@ -23,7 +23,13 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { transformSync } from "esbuild";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { LAYER_PROPERTIES, describeUnreadable, findStyleReasons } from "./red-change-styles.mjs";
+import {
+  LAYER_PROPERTIES,
+  createWatchCheck,
+  describeUnreadable,
+  findInlineStyleSettings,
+  findStyleReasons,
+} from "./red-change-styles.mjs";
 
 export const PHONE_OK_LABEL = "phone-ok";
 
@@ -103,8 +109,10 @@ const STYLE_KEY = new RegExp(
 );
 
 // A line of a page's markup, or of a script's, that runs scripts, in their order, or opens a
-// dialog, a popover, or styles of its own, each of which can stack its parts.
-const PAGE_MARKUP_LAYER = /<script\b|<style\b|<dialog\b|\bpopover\b|\bstyle=/i;
+// dialog, a popover, or a style element, each of which can stack its parts.
+const PAGE_MARKUP_LAYER = /<script\b|<style\b|<dialog\b|\bpopover\b/i;
+// A style attribute and its value, which is missing where a template fills it in whole.
+const STYLE_ATTRIBUTE = /(?<![\w-])style=(?:"([^"]*)"|'([^']*)')?/gi;
 const INLINE_SCRIPT = /<script\b(?![^>]*(?<![\w-])src=)[^>]*>[\s\S]*?<\/script>/gi;
 const INLINE_STYLE = /<style\b[^>]*>[\s\S]*?<\/style>/gi;
 // How the page fits the screen and colors the phone's own bars, which no CI browser draws.
@@ -352,23 +360,44 @@ function findAddedSetting({ number, text }, styleLines) {
 }
 
 /**
- * What markup a script's line holds that runs or layers the page, as a template that opens a
- * dialog does, or null when it holds none.
+ * What each style attribute a line of markup holds sets that a page's stylesheet would be red
+ * for, or the whole attribute where the gate can't read its value, as where a template fills in
+ * all of it or a value it holds runs on past the line.
  * @param {string} text
+ * @param {(property: string) => boolean} isWatched
  */
-const findAddedMarkup = (text) =>
-  !isComment(text) && PAGE_MARKUP_LAYER.test(text) ? "markup that runs or layers the page" : null;
+const findAttributeSettings = (text, isWatched) =>
+  [...text.matchAll(STYLE_ATTRIBUTE)].flatMap((match) => {
+    const style = match[1] ?? match[2];
+    if (style === undefined || /\$\{[^}]*$/.test(style)) return [match[0]];
+    return findInlineStyleSettings(style, isWatched);
+  });
+
+/**
+ * What a line of markup, or of a script's template, holds that runs or layers the page, as a
+ * dialog does, or an inline style that stacks a part, or null when it holds none.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+function findMarkupLayer(text, isWatched) {
+  if (PAGE_MARKUP_LAYER.test(text)) return "markup that runs or layers the page";
+  const settings = findAttributeSettings(text, isWatched);
+  return settings.length ? `an inline style that sets ${settings.join("; ")}` : null;
+}
 
 /**
  * Why a change to any other script of a page is red: each line it adds that makes a layer, sets
  * a custom property, or holds markup that runs or layers the page.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
+ * @param {(property: string) => boolean} isWatched
  */
-function findPageScriptReasons({ path, addedLines }, readPageFile) {
+function findPageScriptReasons({ path, addedLines }, readPageFile, isWatched) {
   const styleLines = findStyleObjectLines(readPageFile(path));
   return addedLines.flatMap((line) => {
-    const setting = findAddedSetting(line, styleLines) ?? findAddedMarkup(line.text);
+    const setting =
+      findAddedSetting(line, styleLines) ??
+      (isComment(line.text) ? null : findMarkupLayer(line.text, isWatched));
     return setting ? [`${path}:${line.number} adds ${setting}: ${line.text.trim()}`] : [];
   });
 }
@@ -406,20 +435,19 @@ const listScreenMetas = (markup) => listTags(markup, META_TAG, SCREEN_META_NAME)
 
 /**
  * Why a change to a page's markup is red: each line it adds or takes out that runs the page's
- * scripts, whose order it decides too, or opens a dialog, a popover, or styles of its own, and any
- * change to the stylesheets it links, their order too, to how it fits the screen and colors the
- * phone's bars, or to its inline scripts and styles.
+ * scripts, whose order it decides too, or opens a dialog, a popover, or a style element, or holds
+ * an inline style that stacks a part, and any change to the stylesheets it links, their order
+ * too, to how it fits the screen and colors the phone's bars, or to its inline scripts and styles.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
+ * @param {(property: string) => boolean} isWatched
  */
-function findPageMarkupReasons(file, readPageFile) {
-  const lineReasons = file.hunks
-    .flat()
-    .filter(({ kind, text }) => kind !== "kept" && PAGE_MARKUP_LAYER.test(text))
-    .map(
-      ({ kind, text }) =>
-        `${file.path} ${kind === "added" ? "adds" : "takes out"} a line that runs or layers the page: ${text.trim()}`,
-    );
+function findPageMarkupReasons(file, readPageFile, isWatched) {
+  const lineReasons = file.hunks.flat().flatMap(({ kind, text }) => {
+    const layer = kind === "kept" ? null : findMarkupLayer(text, isWatched);
+    const change = kind === "added" ? "adds" : "takes out";
+    return layer ? [`${file.path} ${change} ${layer}: ${text.trim()}`] : [];
+  });
   const after = readPageFile(file.path);
   const before = readFileBefore(after, file);
   if (before === null) return [...lineReasons, describeUnreadable(file.path)];
@@ -453,15 +481,14 @@ const listPageStylesheets = () =>
     .filter(isPageStylesheet);
 
 /**
- * Why each page stylesheet the change touches is red, by its path, judged with every other page
- * stylesheet as the change leaves it.
+ * Every stylesheet of a page: each one the change touches, before it and after, and each other
+ * one as it is.
  * @param {ChangedFile[]} files
  * @param {ReadPageFile} readPageFile
  * @param {() => string[]} listStylesheets
  */
-function findChangedStyleReasons(files, readPageFile, listStylesheets) {
+function readStylesheets(files, readPageFile, listStylesheets) {
   const stylesheets = files.filter(({ path }) => isPageStylesheet(path));
-  if (!stylesheets.length) return new Map();
   const changedPaths = new Set(stylesheets.map(({ path }) => path));
   const changed = stylesheets.map((file) => {
     const after = readPageFile(file.path);
@@ -475,16 +502,38 @@ function findChangedStyleReasons(files, readPageFile, listStylesheets) {
   const unchanged = listStylesheets()
     .filter((path) => !changedPaths.has(path))
     .map(readPageFile);
-  return findStyleReasons(changed, unchanged);
+  return { changed, unchanged };
 }
 
 /**
+ * A read that runs only once it's first asked for, and only once, as the page's stylesheets are
+ * read only for a change that touches one or sets a custom property in an inline style.
+ * @template T
+ * @param {() => T} read
+ * @returns {() => T}
+ */
+function readWhenAsked(read) {
+  /** @type {{ value: T } | null} */
+  let kept = null;
+  return () => {
+    kept ??= { value: read() };
+    return kept.value;
+  };
+}
+
+/**
+ * @typedef {object} PageStyles
+ * @property {ReadPageFile} readPageFile
+ * @property {Map<string, string[]>} styleReasons why each page stylesheet is red, by its path
+ * @property {(property: string) => boolean} isWatched whether a custom property is watched
+ */
+
+/**
  * @param {ChangedFile} file
- * @param {Map<string, string[]>} styleReasons why each page stylesheet is red, by its path
- * @param {ReadPageFile} readPageFile
+ * @param {PageStyles} styles
  * @returns {string[]}
  */
-function findFileReasons(file, styleReasons, readPageFile) {
+function findFileReasons(file, { readPageFile, styleReasons, isWatched }) {
   const { path } = file;
   if (file.isUnreadable && (isPageCode(path) || isPageMarkup(path)))
     return [describeUnreadable(path)];
@@ -492,8 +541,8 @@ function findFileReasons(file, styleReasons, readPageFile) {
   if (isPageStylesheet(path)) return styleReasons.get(path) ?? [];
   if (RED_FILES.has(path))
     return changesScriptCode(file, readPageFile) ? [describeSharedCode(file)] : [];
-  if (isPageMarkup(path)) return findPageMarkupReasons(file, readPageFile);
-  return isPageCode(path) ? findPageScriptReasons(file, readPageFile) : [];
+  if (isPageMarkup(path)) return findPageMarkupReasons(file, readPageFile, isWatched);
+  return isPageCode(path) ? findPageScriptReasons(file, readPageFile, isWatched) : [];
 }
 
 /**
@@ -507,8 +556,15 @@ export function findRedReasons(
   readPageFile = readChangedFile,
   listStylesheets = listPageStylesheets,
 ) {
-  const styleReasons = findChangedStyleReasons(files, readPageFile, listStylesheets);
-  return files.flatMap((file) => findFileReasons(file, styleReasons, readPageFile));
+  const readSheets = readWhenAsked(() => readStylesheets(files, readPageFile, listStylesheets));
+  const readWatchCheck = readWhenAsked(() => createWatchCheck(readSheets()));
+  /** @param {string} property */
+  const isWatched = (property) => readWatchCheck()(property);
+  const styleReasons = files.some(({ path }) => isPageStylesheet(path))
+    ? findStyleReasons(readSheets().changed, isWatched)
+    : new Map();
+  const styles = { readPageFile, styleReasons, isWatched };
+  return files.flatMap((file) => findFileReasons(file, styles));
 }
 
 /**

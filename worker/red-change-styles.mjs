@@ -209,10 +209,11 @@ function isInFamily(property, families) {
 }
 
 /**
- * Whether a declaration's value reads a custom property, which can hold any value at all.
+ * Whether a declaration's value reads a custom property, or holds what a script's template fills
+ * in, either of which can hold any value at all.
  * @param {Declaration} declaration
  */
-const hasVariable = ({ value }) => /var\(/i.test(value);
+const hasVariable = ({ value }) => /var\(|\$\{/i.test(value);
 
 /** @param {Declaration} declaration */
 const listVariables = ({ value }) =>
@@ -381,29 +382,50 @@ function findPageStyleReasons(path, sheets, isWatched) {
 }
 
 /**
- * Why each changed stylesheet of a page is red, with the custom properties that every page
- * stylesheet's stack declarations read watched, before the change and after it, or every one of
- * them when a stylesheet can't be read.
+ * Whether a custom property is watched: read by a stack declaration of a page's stylesheets,
+ * itself or through another, before the change or after it, or any at all when one of them can't
+ * be read.
+ * @param {{ changed: ChangedStylesheet[], unchanged: string[] }} stylesheets every page
+ *   stylesheet, those the change touches and the others
+ * @returns {(property: string) => boolean}
+ */
+export function createWatchCheck({ changed, unchanged }) {
+  const sheets = [
+    ...unchanged,
+    ...changed.flatMap(({ sides }) => (sides ? [sides.before, sides.after] : [null])),
+  ].map((sheet) => (sheet === null ? null : readStyleSheet(sheet)));
+  const readNames = sheets.includes(null)
+    ? null
+    : listReadNames(sheets.flatMap((items) => items ?? []).filter(isStyleRule));
+  return (property) => property.startsWith("--") && (readNames === null || readNames.has(property));
+}
+
+/**
+ * Each declaration of an inline style, as a style attribute holds it, that a page's other
+ * stylesheets would be red to add, or that sets a watched custom property, and each part of it
+ * the gate can't read as a declaration, as one a script's template fills in whole.
+ * @param {string} style
+ * @param {(property: string) => boolean} isWatched
+ */
+export const findInlineStyleSettings = (style, isWatched) =>
+  splitTopLevel(style, ";").filter((text) => {
+    if (!/^-{0,2}[a-z][\w-]*\s*:/i.test(text)) return true;
+    const declaration = readDeclaration(text);
+    return isPageLayerDeclaration(declaration) || isWatched(declaration.property);
+  });
+
+/**
+ * Why each changed stylesheet of a page is red.
  * @param {ChangedStylesheet[]} changed
- * @param {string[]} unchanged every other stylesheet of a page
+ * @param {(property: string) => boolean} isWatched
  * @returns {Map<string, string[]>} the reasons, by each changed stylesheet's path
  */
-export function findStyleReasons(changed, unchanged) {
+export function findStyleReasons(changed, isWatched) {
   const read = changed.map(({ path, isShared, sides }) => {
     const before = sides && readStyleSheet(sides.before);
     const after = sides && readStyleSheet(sides.after);
     return { path, isShared, sheets: before && after ? { before, after } : null };
   });
-  const sheets = [
-    ...unchanged.map(readStyleSheet),
-    ...read.flatMap(({ sheets: both }) => (both ? [both.before, both.after] : [null])),
-  ];
-  const readNames = sheets.includes(null)
-    ? null
-    : listReadNames(sheets.flatMap((items) => items ?? []).filter(isStyleRule));
-  /** @param {string} property */
-  const isWatched = (property) =>
-    property.startsWith("--") && (readNames === null || readNames.has(property));
   return new Map(
     read.map(({ path, isShared, sheets: both }) => {
       if (!both) return [path, [describeUnreadable(path)]];

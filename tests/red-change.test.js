@@ -776,7 +776,7 @@ test("a page's markup is red where it adds or takes out a line that runs its scr
     '  <script src="shared/slow-load.js"></script>',
     '  <dialog id="settings" class="sheet">',
     '  <div id="tip" popover>',
-    '  <div style="--team: #f60">',
+    '  <div style="z-index: 2">',
   ])
     assert.equal(
       findChangeReasons({ [INDEX_HTML]: { before: [], after: [line] } }).length,
@@ -844,6 +844,77 @@ test("a page's markup is red where it changes its inline styles, or how it fits 
       },
     }),
     [],
+  );
+});
+
+test("an inline style in a page's markup or a script's template is red only where a page's stylesheet would be, or the gate can't read it", () => {
+  const reads = { "shared/page/chrome.css": [".a { transform: var(--lift); }"] };
+  const script = "apps/wnba/page/js/team-view.js";
+  /** @param {string} markup */
+  const wrapInTemplate = (markup) => `  const part = html\`${markup}\`;`;
+  const redStyles = [
+    '<div style="position: absolute">',
+    '<div style="color: red; z-index: 2">',
+    "<div style='overflow: auto'>",
+    '<div style="top: ${top}px; position: ${position}">',
+    '<div style="--lift: ${lift}">',
+    '<div style="--lift: translateZ(0)">',
+    '<div style="${style}">',
+    "<div style=${style}>",
+    '<div style="color: ${isOn ? "red" : "blue"}">',
+  ];
+  const quietStyles = [
+    '<div style="--team-stat-columns: ${columns}">',
+    '<div style="--team: #f60">',
+    '<div style="color: var(--ink)">',
+    '<div style="position: relative; overflow: visible">',
+    '<div style="display: none; opacity: 0.5">',
+    '<div style="">',
+    '<div data-style="z-index: 2">',
+  ];
+  for (const markup of redStyles) {
+    assert.equal(
+      findChangeReasons({ [INDEX_HTML]: { before: [], after: [`  ${markup}`] } }, reads).length,
+      1,
+      `${INDEX_HTML}: ${markup}`,
+    );
+    assert.equal(
+      findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }, reads)
+        .length,
+      1,
+      `${script}: ${markup}`,
+    );
+  }
+  for (const markup of quietStyles) {
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: [], after: [`  ${markup}`] } }, reads),
+      [],
+      `${INDEX_HTML}: ${markup}`,
+    );
+    assert.deepEqual(
+      findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }, reads),
+      [],
+      `${script}: ${markup}`,
+    );
+  }
+  assert.deepEqual(
+    findChangeReasons({
+      [INDEX_HTML]: { before: ['  <div style="position: absolute">'], after: [] },
+    }),
+    [
+      `${INDEX_HTML} takes out an inline style that sets position: absolute: <div style="position: absolute">`,
+    ],
+  );
+  assert.deepEqual(
+    findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(redStyles[1])] } }),
+    [
+      `${script}:1 adds an inline style that sets z-index: 2: ${wrapInTemplate(redStyles[1]).trim()}`,
+    ],
+  );
+  assert.deepEqual(
+    findChangeReasons({ [script]: { before: [], after: ['  // <div style="z-index: 2">'] } }),
+    [],
+    "a comment",
   );
 });
 
@@ -953,7 +1024,7 @@ test("an added line that makes a layer is red in any page's JavaScript", () => {
     "  root.style.setProperty('--lift', lift);",
     "  const sheet = html`<dialog open>${body}</dialog>`;",
     "  const tip = html`<div popover>${words}</div>`;",
-    '  const dot = html`<span style="--team: ${color}"></span>`;',
+    '  const dot = html`<span style="${style}"></span>`;',
     "  const rules = html`<style>${css}</style>`;",
     '  const loader = html`<script src="${file}"></script>`;',
   ];
