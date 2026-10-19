@@ -811,11 +811,11 @@ body.kbd .notify-help:focus {
 .welcome::backdrop {
   background: none;
 }
-/* Its caret, a sheet's own, closes it from the spot every sheet's does. */
+/* Its caret, a sheet's own, closes it from the spot every sheet's does, 6px from a phone's edge. */
 .welcome-close {
   flex: none;
   align-self: flex-start;
-  margin: -14px 0 14px -12px;
+  margin: -14px 0 14px -18px;
 }
 .welcome .gate-title {
   margin: 0 0 22px;

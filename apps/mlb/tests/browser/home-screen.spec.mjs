@@ -12,6 +12,12 @@ import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
+/** @param {import("@playwright/test").Page} page */
+const readSettingsTopLine = (page) =>
+  page
+    .locator(".settings-main > .settings-controls")
+    .evaluate((settings) => getComputedStyle(settings).borderTopStyle);
+
 const PAGE_FOLDER = new URL("../../page/", import.meta.url);
 
 /**
@@ -220,19 +226,32 @@ test.describe("on an iPhone, in the browser", () => {
   });
 });
 
+test.describe("on a computer", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  test("the settings start right under the header's line, with no Home Screen box and no line of their own", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSettings(page);
+    await expect(page.locator("#homeScreenTip")).toBeHidden();
+    expect(await readSettingsTopLine(page)).toBe("none");
+  });
+});
+
 test.describe("on a tablet, in the browser", () => {
   test.use(IPAD);
 
-  test("the Home Screen box sits at the top of the settings, level with the ranking's heading beside it", async ({
+  test("the Home Screen box sits at the top of the settings, level with the ranking's heading beside it, and 14px over the settings' line, as on a phone", async ({
     page,
   }) => {
     await openApp(page);
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeVisible();
     const { aboveSettings, besideRanking, levelWithRanking } = await measureTip(page);
-    expect(aboveSettings).toBeGreaterThan(0);
+    expect([aboveSettings, levelWithRanking]).toEqual([14, 0]);
     expect(besideRanking).toBeGreaterThan(0);
-    expect(levelWithRanking).toBe(0);
+    expect(await readSettingsTopLine(page)).toBe("solid");
   });
 
   test("the welcome keeps to a column as wide as a phone's, in the middle of the screen", async ({

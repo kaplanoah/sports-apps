@@ -287,25 +287,28 @@ export async function checkCaretBeforeCode({ page, openApp }) {
 }
 
 /**
- * The welcome's caret opens its room, at the left where every sheet's sits, 14px over its heading.
+ * The welcome's caret, opened from the ?, sits over settings' own caret, 14px over the welcome's
+ * room and 14px over its heading.
  * @param {App} app
  */
-export async function checkCaretPlace({ page, openApp }) {
-  await openApp(page, { isShowingWelcome: true });
+export async function checkCaretPlace(app) {
+  const { page } = app;
+  await openWelcomeFromHelp(app);
   const caret = await page.locator(WELCOME).evaluate((welcome) => {
-    const style = getComputedStyle(welcome);
-    const room = welcome.getBoundingClientRect();
-    const roomTop = room.top + parseFloat(style.paddingTop);
-    const roomLeft = room.left + parseFloat(style.paddingLeft);
+    const roomTop =
+      welcome.getBoundingClientRect().top + parseFloat(getComputedStyle(welcome).paddingTop);
     const close = welcome.querySelector(".welcome-close").getBoundingClientRect();
     const heading = welcome.querySelector(".welcome-title").getBoundingClientRect();
+    const settingsClose = document
+      .querySelector("#settingsDialog .sheet-close")
+      .getBoundingClientRect();
     return {
       overRoom: roomTop - close.top,
-      pastLeft: roomLeft - close.left,
+      besideSettingsCaret: close.left - settingsClose.left,
       overHeading: heading.top - close.bottom,
     };
   });
-  expect(caret).toEqual({ overRoom: 14, pastLeft: 12, overHeading: 14 });
+  expect(caret).toEqual({ overRoom: 14, besideSettingsCaret: 0, overHeading: 14 });
 }
 
 /**

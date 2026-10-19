@@ -47,7 +47,7 @@ test.describe("on an iPhone, in the browser", () => {
     await checkRiseAfterEarlyClose({ page, openApp, openSettings });
   });
 
-  test("the welcome's caret opens its room, at the left where every sheet's sits, 14px over the heading", async ({
+  test("the welcome's caret from the ? sits over settings' caret, 14px over the heading", async ({
     page,
   }) => {
     await checkCaretPlace({ page, openApp, openSettings });
