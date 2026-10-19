@@ -932,11 +932,6 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="">',
     '<div data-style="z-index: 2">',
     '<div style="/* note */ color: red">',
-    '<div style="transition: color 0.2s">',
-    '<div style="transition: color 0.2s" class="tip">',
-    '<div style="transition: color 0.2s" hidden>',
-    '<img style="transition: color 0.2s" />',
-    '<div style="transition: background-color 0.15s, box-shadow 0.15s; color: red">',
   ];
   for (const markup of redStyles) {
     assert.equal(
@@ -961,6 +956,22 @@ test("an inline style in a page's markup or a script's template is red only wher
       findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }, reads),
       [],
       `${script}: ${markup}`,
+    );
+  }
+  for (const markup of [
+    '<div style="transition: color 0.2s" class="tip">',
+    '<div style="transition: background-color 0.15s, box-shadow 0.15s; color: red">',
+  ]) {
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: [], after: [`  ${markup}`] } }, reads),
+      [],
+      `a transition that only repaints, in ${INDEX_HTML}: ${markup}`,
+    );
+    assert.equal(
+      findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }, reads)
+        .length,
+      1,
+      `a transition in a script's CSS text, whatever it eases: ${markup}`,
     );
   }
   assert.deepEqual(
@@ -1448,17 +1459,10 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.cssText = "/**/z-index: 2";',
     '  part.style.cssText = "transition: color 0.2s, translate 0.2s";',
     '  sheet.insertRule(".tip { transition: color 0.2s, transform 0.2s }");',
-    '  sheet.insertRule(".tip { transition: " + eased + " }");',
+    '  sheet.insertRule(".tip { transition: color 0.2s }");',
     '  sheet.insertRule(".tip { transition: color 0.2s" + eased + " }");',
-    '  const MOTION = "transition: color 0.2s,"',
-    '  const MOTION = "transition: color 0.2s".concat(", ", eased);',
     '  part.style.transition = "";',
     '  const MOTION = { transition: "transform 0.2s" };',
-    '  part.style.cssText = "transition: color 0.2s, " + eased;',
-    '  part.style.cssText = "transition: color 0.2s" + eased;',
-    "    transition: color 0.2s,",
-    "    transition: color 0.2s",
-    "    transition:",
     '  part.style.position = "f\\69xed";',
     '  part.style.setProperty("position", "\\66ixed");',
     '  part.style.cssText = `color: ${a ? "{" : "b"}; z-index: 2`;',
@@ -1497,11 +1501,8 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.setProperty("overflow", "visible");',
     '  part.style.setProperty("color", ink);',
     '  part.style.cssText = "color: red";',
-    '  part.style.cssText = "transition: background-color 0.15s";',
-    '  const MOTION = "transition: color 0.2s";',
-    '  sheet.insertRule(".tip { transition: color 0.2s }");',
     '  part.style.transition = "color 0.2s";',
-    '  part.setAttribute("style", "transition: color 0.2s, box-shadow 0.2s");',
+    '  part.style.setProperty("transition", "background-color 0.15s, box-shadow 0.15s");',
     '  if (part.style.zIndex === "2") return;',
     '  part.style = "color: red";',
     '  part.setAttribute("style", "color: red");',

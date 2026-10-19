@@ -70,21 +70,16 @@ const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
 // A property's longhands set it too, as transition-duration and -webkit-mask-image do. A number an
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
 // template ends a declaration with a semicolon or its string's end, unless the object is a
-// style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find.
-// Each match holds the declaration's property, the name of its family, its value, and what ends
-// the value: a semicolon or a brace, or a quote, with the rest of the line after it.
-const CSS_DECLARATION = new RegExp(
-  `(?:^|[\\s{;"'\`])((?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*)\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))(?=([^;"'\`}]*)(?:([;}])|(["'\`])(.*))?)`,
-  "g",
-);
-// Where a value a script writes ends, as its expression does.
-const SCRIPT_VALUE_END = String.raw`\s*(?:[;,)}\]]|$)`;
-// What follows a quote that ends a CSS declaration's value whole: its expression's end, or, in
-// markup a template holds, its tag's end or its next attribute, rather than more the script adds.
-const QUOTED_VALUE_END = new RegExp(
-  String.raw`^(?:${SCRIPT_VALUE_END}|\s*\/?>|\s+[A-Za-z][\w:-]*(?=\s*(?:=|\/?>|$)|\s+[A-Za-z]))`,
-);
+// style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find. A
+// transition in a script's CSS text counts whatever it eases, since the script can add to the
+// text past where the gate reads it.
 const LAYER_SETTINGS = [
+  {
+    name: "a CSS declaration",
+    pattern: new RegExp(
+      `(?:^|[\\s{;"'\`])(?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))`,
+    ),
+  },
   { name: "an animation", pattern: /\.(animate)\(/ },
   { name: "a fixed or sticky position", pattern: /\b(position\s*:\s*(?:fixed|sticky))\b/ },
 ];
@@ -113,9 +108,7 @@ const STYLE_PROPERTY_CALL =
   /\.(?:set|remove)Property\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(?=(.*)))?/g;
 const STYLE_INDEX_ASSIGNMENT = new RegExp(`${STYLE}\\s*\\[[^\\]]*\\]${ASSIGNS}`);
 // A value as a script writes it: a string or a number, which ends where its expression does.
-const SCRIPT_LITERAL = new RegExp(
-  String.raw`^\s*(?:(["'\x60])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=${SCRIPT_VALUE_END})`,
-);
+const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*(?:[;,)}\]]|$))/;
 
 // Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) or
 // Object.assign(style, { ... }) hands a part's style, and in the keyframes
@@ -246,37 +239,10 @@ function findDiffProblem(diff) {
 }
 
 /**
- * A value the gate can't read, as a template's hole that holds it, which reads as any value.
- * @param {string} text
- */
-const markUnreadable = (text) => `\${${text.trim()}}`;
-
-/**
- * A CSS declaration's value as a line of a script holds it, or one the gate can't read where the
- * line doesn't hold it whole, as where it's left empty, ends in a comma, runs on past the line, or
- * has more added to it.
- * @param {RegExpMatchArray} match a match of CSS_DECLARATION
- */
-function readDeclarationValue([, , , text, terminator, quote, afterQuote]) {
-  const value = text.trim();
-  const isWhole =
-    value !== "" &&
-    !value.endsWith(",") &&
-    Boolean(terminator || (quote && QUOTED_VALUE_END.test(afterQuote)));
-  return isWhole ? value : markUnreadable(value);
-}
-
-/**
  * What a line sets that makes a layer, or null when it sets nothing that does.
  * @param {string} text
  */
 function findLayerSetting(text) {
-  const declaration = findFirstSetting(text, CSS_DECLARATION, (match) =>
-    isPageLayerDeclaration({ property: match[1], value: readDeclarationValue(match) })
-      ? `a CSS declaration that sets ${match[2]}`
-      : null,
-  );
-  if (declaration) return declaration;
   for (const { name, pattern } of LAYER_SETTINGS) {
     const match = text.match(pattern);
     if (match) return `${name} that sets ${match[1]}`;
@@ -410,7 +376,7 @@ function readScriptValue(text) {
   const literal = text.match(SCRIPT_LITERAL);
   const value = literal?.[2] ?? literal?.[3];
   return value === undefined || isEncodedOutsideHoles(value, IN_SCRIPT)
-    ? markUnreadable(text)
+    ? `\${${text.trim()}}`
     : value;
 }
 
