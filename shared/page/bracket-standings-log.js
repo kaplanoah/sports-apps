@@ -1,11 +1,12 @@
+import { findPartHolding } from "./season-part.js";
 import { createStepLog } from "./step-log.js";
 
 /** @param {Element} target */
-const isOnParts = (target) => !!target.closest(".season-parts");
+const isOnParts = (target) => !!findPartHolding(target);
 
 // What a season's standings and bracket do with each touch: each touch and click on them, and as
 // the finger lifts, how far it moved, whether the page's own code took the touch from the browser,
-// which stops the browser's scroll, and how far the page scrolled.
+// which stops the browser's scroll, and how far the part under it scrolled.
 export const bracketStandingsLog = createStepLog({
   key: "diagnosticsBracketStandings",
   title: "Standings and bracket",
@@ -51,22 +52,26 @@ function describeTaking(takenAt) {
   return `the page's code took the touch ${when}`;
 }
 
-/** @param {number} scrolled */
-function describeScroll(scrolled) {
+/**
+ * @param {string} part
+ * @param {number} scrolled
+ */
+function describeScroll(part, scrolled) {
   const distance = describeDistance(scrolled, ["up", "down"], "px");
-  return distance ? `the page scrolled ${distance}` : "the page didn't scroll";
+  return distance ? `the ${part} scrolled ${distance}` : `the ${part} didn't scroll`;
 }
 
 /**
  * What became of a touch, as its finger lifts or the browser cancels it.
- * @param {{ isCancelled: boolean, moved: Move, takenAt: Move | null, scrolled: number }} touch
+ * @param {{ isCancelled: boolean, moved: Move, takenAt: Move | null, part: string, scrolled: number }} touch
  *   `takenAt` is how far the finger had moved when the page's code took the touch, or null when
- *   the browser kept it, and `scrolled` is how far the page scrolled down, or up when negative
+ *   the browser kept it, `part` names the part it started on, and `scrolled` is how far that part
+ *   scrolled down, or up when negative
  * @returns {string}
  */
-export function describeTouchEnd({ isCancelled, moved, takenAt, scrolled }) {
+export function describeTouchEnd({ isCancelled, moved, takenAt, part, scrolled }) {
   const taken = takenAt ? describeTaking(takenAt) : "the browser kept the touch";
-  return `${describeLift(moved, isCancelled)}; ${taken}; ${describeScroll(scrolled)}`;
+  return `${describeLift(moved, isCancelled)}; ${taken}; ${describeScroll(part, scrolled)}`;
 }
 
 /**
@@ -85,16 +90,23 @@ const measureMove = (point, origin) => ({
  * the browser's scroll.
  */
 export function watchTouches() {
-  /** @type {{ origin: { x: number, y: number }, scrollY: number, moved: Move, takenAt: Move | null } | null} */
+  /** @type {{ origin: { x: number, y: number }, part: HTMLElement, scrollTop: number, moved: Move, takenAt: Move | null } | null} */
   let touch = null;
 
   /** @param {TouchEvent} event */
   function startTouch(event) {
     touch = null;
     if (!bracketStandingsLog.isLogging() || event.touches.length !== 1) return;
-    if (!(event.target instanceof Element) || !isOnParts(event.target)) return;
+    const part = event.target instanceof Element ? findPartHolding(event.target) : null;
+    if (!part) return;
     const { clientX, clientY } = event.touches[0];
-    touch = { origin: { x: clientX, y: clientY }, scrollY, moved: { x: 0, y: 0 }, takenAt: null };
+    touch = {
+      origin: { x: clientX, y: clientY },
+      part,
+      scrollTop: part.scrollTop,
+      moved: { x: 0, y: 0 },
+      takenAt: null,
+    };
   }
 
   /** @param {TouchEvent} event */
@@ -111,11 +123,17 @@ export function watchTouches() {
   /** @param {TouchEvent} event */
   function endTouch(event) {
     if (!touch) return;
-    const { moved, takenAt } = touch;
-    const scrolled = scrollY - touch.scrollY;
+    const { moved, takenAt, part } = touch;
+    const scrolled = part.scrollTop - touch.scrollTop;
     touch = null;
     bracketStandingsLog.noteStep(
-      describeTouchEnd({ isCancelled: event.type === "touchcancel", moved, takenAt, scrolled }),
+      describeTouchEnd({
+        isCancelled: event.type === "touchcancel",
+        moved,
+        takenAt,
+        part: /** @type {string} */ (part.dataset.part),
+        scrolled,
+      }),
     );
   }
 

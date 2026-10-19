@@ -1,5 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
+import { findCenter } from "../../../../tests/browser/season-scroll.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // A row that opens something tints while it's pressed, and a finger that drifts or that the
@@ -16,12 +17,7 @@ test.use({
  * The middle of what a locator shows.
  * @param {import("@playwright/test").Locator} locator
  */
-async function findMiddle(locator) {
-  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (
-    await locator.boundingBox()
-  );
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-}
+const findMiddle = async (locator) => findCenter(await locator.boundingBox());
 
 /**
  * Notes, in the page, each time a button is first marked pressed.

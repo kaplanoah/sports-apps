@@ -12,6 +12,7 @@
 
 import { describeDay, readCalendarDate } from "./days.js";
 import { createSearchContext, createSearchDictionary, describeNoGames } from "./game-search.js";
+import { markBarStuck } from "./held-bar.js";
 import { html, isWebAddress, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
@@ -439,10 +440,7 @@ function placeList({ at, day }) {
   markStuck();
 }
 
-// The bar ends in a line once something has scrolled under it, as the day strip's does.
-function markStuck() {
-  findBar()?.classList.toggle("stuck", (findList()?.scrollTop ?? 0) > 0);
-}
+const markStuck = () => markBarStuck(findBar(), findList());
 
 // The days near the screen are drawn once a frame, however many scroll events it brings.
 function followScroll() {

@@ -307,7 +307,7 @@
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pill, and `--radius-sheet` for a sheet on a wide screen,
-  with `--held-bar-fade` and `--held-bar-line` under a bar held at the top.
+  with `--held-bar-line` under a bar held at the top once something scrolls under it.
   A dot is round, a switch is round like the phone's own, an app icon keeps its own shape,
   and the floating tab bar, tinted in the app's own color, stays a capsule like the phone's own;
   any other corner typed as a number fails the root's `tests/shape-tokens.test.js`.
@@ -434,7 +434,7 @@
   any day that changes height as it's drawn whole or as a stand-in,
   and a strip that doesn't scroll where it's told, in `day-strip-log.js`,
   and each touch on a season's standings and bracket, how far it moved,
-  whether the page's code took it from the browser, and how far the page scrolled,
+  whether the page's code took it from the browser, and how far the part under it scrolled,
   and each click on them, in `bracket-standings-log.js`,
   and each error the page's code doesn't catch, in `error-log.js`,
   each a log made with `step-log.js`, the welcome over the whole screen that a phone's or tablet's browser opens on,
@@ -452,6 +452,11 @@
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
   with the one it opens on first in the pill over them, side by side, which a tap on a name or a swipe slides between,
   a swipe on the bracket scrolling it to its end first, as a team's Roster does, in `bracket-standings.js`,
+  each scrolling on its own with the header riding up over the one shown until the pill holds at the top,
+  as a profile's tabs do in a phone's apps, in `season-header.js`,
+  with a stand-in under each of the Updates box's buttons in each part's empty top,
+  so a tap on one opens what it does and a finger that drags from it scrolls the part, as a button inside a list does,
+  in `rider-taps.js`,
   the accent block under a pill's shown name, which never travels between names but hands off from one to the next once a tap or a finger's lift sets what's under it off,
   in `pill-thumb.js`, a season's games as one list of its game days under a strip of every day,
   whose chosen day is the one at the list's top, its box holding still while the list's scroll slides the dates behind it on a spring (`strip-slide.js`),
@@ -668,8 +673,9 @@ Delete it once the app's first PR merges.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
    around its own `styles.css`, which sets every token their top comments list,
-   and calls `openLastTab()`, `showLastDrawn()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
-   in that order, so a part on the shown tab can take back its sideways scroll, and the welcome opens over any sheet put back.
+   and calls `openLastTab()`, `showLastDrawn()`, `followSeasonPart()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
+   in that order, so a part on the shown tab can take back its sideways scroll, the header rides as far as the season's part put back,
+   and the welcome opens over any sheet put back.
    Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
    load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
    It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
@@ -767,7 +773,7 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
+  `show-last-drawn.js`, `season-header.js`, `rider-taps.js`, `held-bar.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
   but not to its comments, blank lines, or formatting, which draw nothing;
   a change to its shared stylesheets (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),

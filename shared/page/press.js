@@ -1,7 +1,10 @@
+import { isStandIn } from "./rider-taps.js";
+
 // A row that opens something tints while it's pressed, as an iPhone's lists do: a finger's press
 // shows a moment after it lands, so a finger that starts a scroll never tints a row, a quick tap
 // still shows, and the tint fades as it lets go. A mouse's shows at once. The page marks the
-// pressed row's button with .is-pressed, and each row's stylesheet tints the row it covers.
+// pressed row's button with .is-pressed, and each row's stylesheet tints the row it covers. A
+// stand-in under a row's button (rider-taps.js) hands its press to the button, which presses it.
 // As on an iPhone, a finger that drifts or that the browser takes for a scroll is never a tap on
 // the button or link it landed on, though iOS sometimes still sends a click for it, as when the
 // finger stops a list still gliding.
@@ -49,6 +52,7 @@ function letGo() {
  * @param {string} rowButtons
  */
 function startPress(event, rowButtons) {
+  if (isStandIn(event.target)) return;
   letGo();
   if (!event.isPrimary || event.button !== 0) return;
   const target = /** @type {Element} */ (event.target);
