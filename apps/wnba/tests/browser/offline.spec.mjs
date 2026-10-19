@@ -1,4 +1,5 @@
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
+import { findDiagnosticsSwitch } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
 test.use({ serviceWorkers: "allow", contextOptions: { reducedMotion: "reduce" } });
@@ -100,7 +101,7 @@ test("Diagnostics show the steps the service worker kept: its start, install, an
   await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
 
-  await page.getByRole("switch", { name: "Diagnostics" }).click();
+  await findDiagnosticsSwitch(page).click();
 
   const steps = page.locator("#diagnostics .diagnostics-record", { hasText: "Service worker" });
   await expect(steps).toHaveCount(1);

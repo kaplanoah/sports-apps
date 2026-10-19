@@ -47,6 +47,7 @@ import {
 } from "../../../../tests/browser/harness.mjs";
 import { holdStore } from "../../../../tests/browser/hold-store.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 
 const loadFixture = (name) =>
   JSON.parse(readFileSync(new URL(`../fixtures/${name}.json`, import.meta.url), "utf8"));
@@ -318,7 +319,7 @@ export function buildSnapshotWithStarters() {
   return buildFixtureSnapshot(fixture);
 }
 
-export { test, expect, matchPath, LOCKED_PAGE_PATH };
+export { test, expect, matchPath, openSettings, LOCKED_PAGE_PATH };
 
 // A phone's screen and touch, where the Updates box shows.
 export const ON_A_PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
@@ -577,9 +578,6 @@ export const swipeSheetDown = (page, { target, distance, steps, stepMs, isCancel
       },
       { distance, steps, stepMs, isCancelled },
     );
-
-export const openSettings = (page) =>
-  page.getByRole("button", { name: "Settings", exact: true }).click();
 
 /**
  * Picks a season in the settings panel, then closes it.
