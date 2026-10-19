@@ -100,5 +100,8 @@ export function scrollWithSpring(scroller, top) {
   });
 }
 
+/** Whether the page has scrolled past its top, by more than a fraction of a pixel. */
+export const isPageOffTop = () => isPast(/** @type {Element} */ (document.scrollingElement), 0);
+
 export const scrollToTop = () =>
   scrollWithSpring(/** @type {Element} */ (document.scrollingElement), 0);

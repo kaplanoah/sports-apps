@@ -1,7 +1,7 @@
 import { isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
 import { reloadIfReplaced } from "./resume.js";
-import { isPast } from "./spring-scroll.js";
+import { isPageOffTop, isPast } from "./spring-scroll.js";
 
 // A phone gives a page on the Home Screen no pull to refresh, so the page draws its own, as an
 // iPhone list does: pulled down from the top, the page follows the finger as spokes appear one by
@@ -56,7 +56,7 @@ function isScrolledInside(target) {
 /** @param {EventTarget | null} target */
 function isPullable(target) {
   if (!(target instanceof Element)) return false;
-  if (document.scrollingElement && isPast(document.scrollingElement, 0)) return false;
+  if (isPageOffTop()) return false;
   if (target.closest("dialog")) return false;
   return !isScrolledInside(target);
 }

@@ -25,7 +25,7 @@ function findPartNamed() {
 
 /**
  * The page's own parts: the body's children, in order, but for its dialogs and scripts. What moves
- * as the header rides and as a pull to refresh pulls (pull-to-refresh.js) comes from these.
+ * as the header rides or the page is pulled comes from these.
  */
 function listPageParts() {
   return /** @type {HTMLElement[]} */ (

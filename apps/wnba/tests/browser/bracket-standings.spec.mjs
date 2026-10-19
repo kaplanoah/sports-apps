@@ -17,7 +17,6 @@ import {
   findTouchTargets,
   holdHeaderStill,
   isPillBandShown,
-  leaveSeasonPartFractionDown,
   readHeaderReach,
   readPillHoldTop,
   readSeasonPartScroll,
@@ -27,7 +26,12 @@ import {
   wheelPastSeasonPartEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
-import { leavePagePixelDown, scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
+import {
+  leaveFractionDown,
+  leavePageFractionDown,
+  leavePagePixelDown,
+  scrollPageToEnd,
+} from "../../../../tests/browser/page-left-down.mjs";
 import { findRows, sendSearch, tapSearch } from "./search-page.mjs";
 
 test.use({
@@ -191,6 +195,22 @@ test("where the header stays put, a tap on the tab with the page scrolled under 
   await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
+test("where the header stays put, a tap on the tab with the page under a tall Updates box left a fraction of a pixel down, as a phone can leave it, slides back to the bracket", async ({
+  page,
+}) => {
+  await holdHeaderStill(page);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-league")).toBeVisible();
+  await showTallUpdatesBox(page, 600);
+  await leavePageFractionDown(page);
+
+  await findSeasonTab(page).click();
+
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeHidden();
+});
+
 test("where the header rides, a tap on the tab with the page a pixel down from its top, as a phone can leave it, still slides back to the bracket", async ({
   page,
 }) => {
@@ -213,7 +233,7 @@ test("a tap on the tab with the standings left a fraction of a pixel down, as a 
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
   await waitForLoadToSettle(page);
-  await leaveSeasonPartFractionDown(page, "standings");
+  await leaveFractionDown(findSeasonPart(page, "standings"));
 
   await findSeasonTab(page).click();
 

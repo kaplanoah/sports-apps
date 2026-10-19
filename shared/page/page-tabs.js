@@ -1,5 +1,5 @@
 import { readTabBeforeLast, saveLastTab } from "./last-tab.js";
-import { scrollToTop } from "./spring-scroll.js";
+import { isPageOffTop, scrollToTop } from "./spring-scroll.js";
 import { moveTabSelection } from "./tab-bar.js";
 import { readSelectedTab, selectTab, wireTabs } from "./tabs.js";
 
@@ -83,7 +83,7 @@ function isViewScrolledByPage(tab) {
 // where it starts, the start waiting for a second tap where the page scrolls the view.
 /** @param {string} tab */
 function returnToStart(tab) {
-  const isScrolled = scrollY > 0;
+  const isScrolled = isPageOffTop();
   const isWaitingForTop = isScrolled && isViewScrolledByPage(tab);
   if (isScrolled) scrollToTop();
   if (!isWaitingForTop) startReturns.get(tab)?.();
