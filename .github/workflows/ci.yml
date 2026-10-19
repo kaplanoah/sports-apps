@@ -216,7 +216,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node worker/burn-in-specs.mjs
 
   # The browser tests take most of CI's time, so they run split across machines, for the apps the
@@ -273,7 +272,7 @@ jobs:
             test-results/
 
   # Each browser spec scope lists, the ones a pull request adds or changes but for one that passed
-  # burn-in on an earlier push and hasn't changed since, with what it runs with unchanged too
+  # burn-in in an earlier run and hasn't changed since, with what it runs with unchanged too
   # (worker/burn-in-specs.mjs), runs ten times over, with no retry, so a test that passes only some
   # of the time fails on the pull request that brings it, rather than on later ones. Only a test
   # the pull request wrote or edited fails it: any other that failed goes to the issue Flaky

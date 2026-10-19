@@ -230,36 +230,36 @@ something doesn't match, point them to Cloudflare's
 
 ## Making changes
 
-`main` is what's deployed. Work on a branch and open a pull request into
-`main`. GitHub lints, checks formatting and types, looks for unused code, and
-runs the Node tests, and the browser tests of the apps a change reaches, on every
-pull request, so merge once those pass and the pull request has no conflicts
-with `main`. If the repo has a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`
-secret, Claude also reviews
-each pull request, as [REVIEW.md](REVIEW.md) says: it splits the change into
-areas by what the files are about, has four reviewers read each area in full,
-each for one kind of problem (in the last read of the whole change, one reviewer
-an area looks for every kind), checks every case they list against the code,
-comments on each finding's line, and keeps one summary comment up to date. The
-first review reads the whole change, and each review after it reads what changed
-since the last review that finished. The review is one of the checks that must
-pass, so a review that can't run, that left a changed file unread, or whose
-reviewers, checkers, check across areas, or posting step didn't finish, blocks
-the merge. Its findings don't fail the check; answer all of a review's findings
-in one push, by fixing each or replying.
+`main` is what's deployed. Work on a branch and open a pull request into `main`.
+GitHub lints, checks formatting and types, looks for unused code, and runs the
+Node tests, and the browser tests of the apps a change reaches, on every pull
+request, so merge once those pass and the pull request has no conflicts with
+`main`. If the repo has a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`
+secret, Claude also reviews each pull request, as [REVIEW.md](REVIEW.md) says:
+it splits the change into areas by what the files are about, has four reviewers
+read each area in full, each for one kind of problem (in the last read of the
+whole change, one reviewer an area looks for every kind), checks every case they
+list against the code, comments on each finding's line, and keeps one summary
+comment up to date. The first review reads the whole change, and each review
+after it reads what changed since the last review that finished. The review is
+one of the checks that must pass, so a review that can't run, that left a
+changed file unread, or whose reviewers, checkers, check across areas, or
+posting step didn't finish, blocks the merge. Its findings don't fail the check;
+answer all of a review's findings in one push, by fixing each or replying.
 
 A change that only an iPhone can test, like one to how the page's parts slide or
-layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone` status
-on its head commit, which stays pending until the owner has used it on the beta
-app and labeled the pull request `phone-ok`. The repo's ruleset for `main`
-(**Settings > Rules > Rulesets**) requires the `check` and `phone` statuses and
-every review thread resolved. Without `phone` in it, or for a pull request from a
-fork, whose token can't post the status, `check` holds a red change itself; a
-fork's pull request gets no `phone` status, so while the ruleset requires it, it
-merges only through the ruleset's bypass. The base branch's copy of the gate's code judges a pull request, so a
-change to that code can't let the pull request's own red change through; a
-change to the workflow's `gate`, `phone`, or `check` job is the review's to
-weigh, which `REVIEW.md` counts as Important when it lets less through.
+layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone`
+status on its head commit, which stays pending until the owner has used it on
+the beta app and labeled the pull request `phone-ok`. The repo's ruleset for
+`main` (**Settings > Rules > Rulesets**) requires the `check` and `phone`
+statuses and every review thread resolved. Without `phone` in it, or for a pull
+request from a fork, whose token can't post the status, `check` holds a red
+change itself; a fork's pull request gets no `phone` status, so while the
+ruleset requires it, it merges only through the ruleset's bypass. The base
+branch's copy of the gate's code judges a pull request, so a change to that code
+can't let the pull request's own red change through; a change to the workflow's
+`gate`, `phone`, or `check` job is the review's to weigh, which `REVIEW.md`
+counts as Important when it lets less through.
 
 A pull request from a fork runs without the repo's secrets, so Claude can't review
 it, and it runs the fork's own copy of the workflows, which its author can change

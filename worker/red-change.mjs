@@ -7,12 +7,15 @@
 // touch (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a
 // layer of its own, sets or clears what those stylesheets would be red for or a custom property
 // they stack with, or holds or creates markup that runs or layers the page; a line a page's markup
-// adds or takes out that loads, runs, or layers its parts; a change to how an app's manifest opens
-// its Home Screen app, or to a manifest the gate can't read; and a diff the gate can't read. A red
-// change merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone
-// who can label a pull request could add the label, so the gate reads who last added it and lets
-// the change through only from the repository's owner, and only when the label came after the
-// pull request's head commit reached GitHub, which the owner hasn't used on the phone otherwise.
+// adds or takes out that loads, runs, or layers its parts, and any change to the stylesheets it
+// links or their order, to how it fits the screen, opens from the Home Screen without the browser's
+// bars, and colors the phone's own, or to its inline scripts and styles; a change to how an app's
+// manifest opens its Home Screen app, or to a manifest the gate can't read; and a diff the gate
+// can't read. A red change merges only once the owner has used it on the beta app and labeled it
+// phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
+// added it and lets the change through only from the repository's owner, and only when the label
+// came after the pull request's head commit reached GitHub, which the owner hasn't used on the
+// phone otherwise.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets

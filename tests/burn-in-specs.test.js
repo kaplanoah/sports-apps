@@ -131,7 +131,7 @@ const answerRuns = (runs, jobs) => {
   return { readJson, asked };
 };
 
-test("the last burned-in head is the newest earlier head of the branch's own runs whose burn-in passed", async () => {
+test("the last burned-in head is the newest head of the branch's own runs whose burn-in passed", async () => {
   const passed = [{ name: "burn-in (1)", conclusion: "success" }];
   const { readJson, asked } = answerRuns(
     [
@@ -141,26 +141,41 @@ test("the last burned-in head is the newest earlier head of the branch's own run
       buildRun(2, "pushed"),
       buildRun(1, "older"),
     ],
-    { 5: passed, 4: passed, 3: [{ name: "burn-in", conclusion: "skipped" }], 2: passed, 1: passed },
+    {
+      5: [{ name: "burn-in (1)", conclusion: "failure" }],
+      4: passed,
+      3: [{ name: "burn-in", conclusion: "skipped" }],
+      2: passed,
+      1: passed,
+    },
   );
-  assert.equal(
-    await findBurnedInHead({ readJson, branch: "claude/a b", headSha: "now" }),
-    "pushed",
-  );
+  assert.equal(await findBurnedInHead({ readJson, branch: "claude/a b" }), "pushed");
   assert.match(asked[0], /^\/actions\/workflows\/ci\.yml\/runs\?/);
   assert.match(asked[0], /event=pull_request&status=completed/);
   assert.match(asked[0], /branch=claude%2Fa%20b&per_page=30$/);
   assert.deepEqual(asked.slice(1), [
+    "/actions/runs/5/jobs?per_page=100&page=1",
     "/actions/runs/3/jobs?per_page=100&page=1",
     "/actions/runs/2/jobs?per_page=100&page=1",
   ]);
+});
+
+test("a burn-in that passed on this same head counts, as when another job of its run failed", async () => {
+  const { readJson } = answerRuns([buildRun(2, "now"), buildRun(1, "older")], {
+    2: [
+      { name: "burn-in (1)", conclusion: "success" },
+      { name: "browser (3)", conclusion: "failure" },
+    ],
+    1: [{ name: "burn-in (1)", conclusion: "success" }],
+  });
+  assert.equal(await findBurnedInHead({ readJson, branch: "x" }), "now");
 });
 
 test("with no earlier run whose burn-in passed, there's no burned-in head", async () => {
   const { readJson } = answerRuns([buildRun(2, "b")], {
     2: [{ name: "burn-in (1)", conclusion: "failure" }],
   });
-  assert.equal(await findBurnedInHead({ readJson, branch: "x", headSha: "c" }), null);
+  assert.equal(await findBurnedInHead({ readJson, branch: "x" }), null);
 });
 
 test("a run's jobs are read past their first page", async () => {
@@ -177,7 +192,7 @@ test("a run's jobs are read past their first page", async () => {
     path.startsWith("/actions/workflows/")
       ? { workflow_runs: [buildRun(7, "earlier")] }
       : { jobs: pages[Number(path.match(/&page=(\d+)/)?.[1])] ?? [] };
-  assert.equal(await findBurnedInHead({ readJson, branch: "x", headSha: "now" }), "earlier");
+  assert.equal(await findBurnedInHead({ readJson, branch: "x" }), "earlier");
 });
 
 test("a branch's burn-ins GitHub won't give burn every changed spec in, and say why", async () => {
@@ -190,7 +205,6 @@ test("a branch's burn-ins GitHub won't give burn every changed spec in, and say 
     await findBurnedInHead({
       readJson,
       branch: "x",
-      headSha: "now",
       log: (message) => logged.push(message),
     }),
     null,

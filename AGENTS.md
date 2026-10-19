@@ -62,9 +62,9 @@
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config,
   so a change to the docs, or to tooling no browser test imports, runs none,
-  and runs every app's for CI's own workflow, the dependencies, or a kind of file it doesn't know (`worker/browser-scope.mjs`).
+  and runs every app's for shared code, CI's own workflow, the dependencies, or a kind of file it doesn't know (`worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
-  but for one that passed burn-in on an earlier push and hasn't changed since,
+  but for one that passed burn-in in an earlier run, on this push or one before it, and hasn't changed since,
   with every helper and config the specs reach by import, and the dependencies, the Node version, and CI's own workflow, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,

@@ -1,11 +1,11 @@
 // Lists the browser specs burn-in repeats: each one a pull request adds or changes, but for one
-// that has passed burn-in on an earlier push and hasn't changed since. A file the specs reach by
-// import, or the dependencies, the Node version, or CI's own workflow they run with, that changed
-// since then, on the pull request's side or its base's, burns them all in again. A change to the
-// page or the Worker alone doesn't, since the spec already ran ten times as it is, and the browser
-// job and the nightly run catch a test the page made flaky.
+// that has passed burn-in in an earlier run, on this push or one before it, and hasn't changed
+// since. A file the specs reach by import, or the dependencies, the Node version, or CI's own
+// workflow they run with, that changed since then, on the pull request's side or its base's, burns
+// them all in again. A change to the page or the Worker alone doesn't, since the spec already ran
+// ten times as it is, and the browser job and the nightly run catch a test the page made flaky.
 // Usage: node worker/burn-in-specs.mjs, in a full checkout of the pull request's merge commit,
-// with GH_TOKEN, GITHUB_REPOSITORY, BRANCH (the pull request's head branch), and HEAD_SHA set. It
+// with GH_TOKEN, GITHUB_REPOSITORY, and BRANCH (the pull request's head branch) set. It
 // writes the specs to $GITHUB_OUTPUT as specs=<spec> <spec>.
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -64,21 +64,20 @@ export const isBurnedIn = (jobs) => {
 };
 
 /**
- * The newest head of the branch, before this one, on which burn-in passed, or null when there's
- * none or GitHub couldn't say, which burns every changed spec in.
+ * The newest head of the branch, this one too, on which burn-in passed, or null when there's none
+ * or GitHub couldn't say, which burns every changed spec in.
  * @param {object} options
  * @param {(path: string) => Promise<any>} options.readJson
  * @param {string} options.branch
- * @param {string} options.headSha
  * @param {(message: string) => void} [options.log]
  * @returns {Promise<string | null>}
  */
-export async function findBurnedInHead({ readJson, branch, headSha, log = console.log }) {
+export async function findBurnedInHead({ readJson, branch, log = console.log }) {
   try {
     const { workflow_runs: runs } = await readJson(
       `/actions/workflows/${posix.basename(CI_WORKFLOW)}/runs?event=pull_request&status=completed&branch=${encodeURIComponent(branch)}&per_page=${RUNS_READ}`,
     );
-    for (const run of runs.filter((each) => isPullRequestRun(each) && each.head_sha !== headSha)) {
+    for (const run of runs.filter(isPullRequestRun)) {
       const jobs = await readAllPages(
         readJson,
         `/actions/runs/${run.id}/jobs`,
@@ -134,11 +133,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     env: process.env,
   });
   const burnedIn = changedSpecs.length
-    ? await findBurnedInHead({
-        readJson,
-        branch: String(process.env.BRANCH),
-        headSha: String(process.env.HEAD_SHA),
-      })
+    ? await findBurnedInHead({ readJson, branch: String(process.env.BRANCH) })
     : null;
   const specs = listSpecsToBurnIn(
     changedSpecs,
