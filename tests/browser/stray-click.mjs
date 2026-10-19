@@ -45,6 +45,21 @@ export const sendFinger = (target, { moves, isCancelled = false, isTouchCancelle
   );
 
 /**
+ * Sends one of a second finger's pointer events on an element, as the browser does while the first
+ * finger is down.
+ * @param {import("@playwright/test").Locator} target
+ * @param {"pointerdown" | "pointercancel"} type
+ */
+export const sendSecondFinger = (target, type) =>
+  target.evaluate(
+    (element, eventType) =>
+      element.dispatchEvent(
+        new PointerEvent(eventType, { bubbles: true, pointerType: "touch", isPrimary: false }),
+      ),
+    type,
+  );
+
+/**
  * Holds the page's clock still, so a click sent after a finger comes as soon after its lift as
  * iOS sends it, however slow the machine.
  * @param {import("@playwright/test").Page} page
