@@ -253,6 +253,32 @@ export async function checkSystemInstallIcon({ page, openApp, openSettings, look
 }
 
 /**
+ * A reload, as a new release brings, opens at the address the app's open before it left without
+ * the look it was added with, so an app that has yet to keep its icon keeps none until it next
+ * opens, rather than the phone's setting, and settings says nothing of it meanwhile.
+ * @param {App} app
+ */
+export async function checkIconKeptOnlyOnOpen({ page, openApp, openSettings }) {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openHomeScreenApp(page, openApp, "dark");
+  const readIcon = () => page.evaluate(() => localStorage.getItem("homeScreenIcon"));
+  expect(await readIcon()).toBe("dark");
+  await page.evaluate(() => localStorage.removeItem("homeScreenIcon"));
+  // The test's fake clock stands in for the page's timing, which says how the browser loaded it.
+  await page.addInitScript(() => {
+    performance.getEntriesByType = (type) =>
+      type === "navigation" ? [/** @type {any} */ ({ type: "reload" })] : [];
+  });
+
+  await page.reload();
+
+  expect(await readIcon()).toBeNull();
+  await openSettings(page);
+  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(findNote(page)).toBeHidden();
+}
+
+/**
  * With motion on, the note grows in as a pick sets the icon off, and shrinks away as one brings it
  * back, its opening played backward, and only then empties, never starting over for another pick
  * that keeps it away while it shrinks, growing back from wherever its close has reached for one

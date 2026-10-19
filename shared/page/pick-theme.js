@@ -118,14 +118,19 @@ function takeThemeFromApp() {
 
 // A Home Screen app keeps the icon the page offered as it was added: the look its address names,
 // which it opens at each time, or, added on System, the look the phone's dark or light setting
-// showed then, which its first open is the nearest to.
+// showed then, which its first open is the nearest to. A reload, as a new release brings, opens at
+// the address the open before it left, which no longer names the look.
 const HOME_SCREEN_ICON_KEY = "homeScreenIcon";
+
+const isReload = () =>
+  /** @type {PerformanceNavigationTiming[]} */ (performance.getEntriesByType("navigation"))[0]
+    ?.type === "reload";
 
 function keepHomeScreenIcon() {
   const named = new URL(location.href).searchParams.get("theme");
   try {
     if (isLook(named)) localStorage.setItem(HOME_SCREEN_ICON_KEY, named);
-    else if (localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
+    else if (!isReload() && localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
       localStorage.setItem(HOME_SCREEN_ICON_KEY, readPhoneLook());
   } catch {
     /* without storage, settings can't tell the icon, and says nothing of it */

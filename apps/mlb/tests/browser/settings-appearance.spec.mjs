@@ -10,6 +10,7 @@ import {
   checkReAddNoteDismissal,
   checkReAddNoteEases,
   checkReAddNoteOnReload,
+  checkIconKeptOnlyOnOpen,
   checkSystemInstallIcon,
 } from "../../../../tests/browser/re-add-note.mjs";
 
@@ -115,6 +116,12 @@ test.describe("in an iPhone's Home Screen app", () => {
     page,
   }) => {
     await checkReAddNoteOnReload({ page, openApp, openSettings, looks });
+  });
+
+  test("a reload keeps no icon for an app that has none yet, rather than the phone's setting, and settings says nothing of it", async ({
+    page,
+  }) => {
+    await checkIconKeptOnlyOnOpen({ page, openApp, openSettings, looks });
   });
 
   test("an app added on System has the icon the phone's setting showed as it first opened", async ({
