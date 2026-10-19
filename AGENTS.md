@@ -487,6 +487,7 @@
   in `spring-scroll.js`, each game's row and its button that opens the game wherever the row is tapped in `game-row.js`,
   a row that opens something tinting while a finger or the mouse presses it,
   a moment after a finger lands so a scroll never tints one, and a tapped search row's search waiting for its tint to show,
+  and a finger that drifts or scrolls a list never opening what it landed on, even when iOS still sends its click,
   as an iPhone's lists do, in `press.js`,
   a player a box score shows in a game under way or ended today marked on his button for the sheet it opens,
   which then leaves out the injury report's box, in `playing-now.js`, an All-Star team's star,

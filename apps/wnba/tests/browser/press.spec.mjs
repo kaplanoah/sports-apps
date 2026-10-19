@@ -1,6 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
-import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // A row that opens something tints while it's pressed, as an iPhone's lists do (press.js).
 
@@ -162,6 +162,18 @@ test("a finger that drifts past 10px never opens a team, even one the click land
     .locator('#standings-league tr[data-team]:not([data-team="LVA"]) .team-open')
     .first();
   expect(await clickAndReadSheetOpen(beside, "teamSheet")).toBe(false);
+});
+
+test("a click on what doesn't open from a list, like the pill's Bracket, still works after a finger drifted", async ({
+  page,
+}) => {
+  const button = await openStandings(page);
+  await sendFinger(button, { moves: [12] });
+
+  const bracket = findSeasonPill(page).getByRole("tab", { name: "Bracket", exact: true });
+  await bracket.dispatchEvent("click");
+
+  await expect(bracket).toHaveAttribute("aria-selected", "true");
 });
 
 test("a second finger landing after the first drifted doesn't let the first one's click through", async ({

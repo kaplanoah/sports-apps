@@ -135,7 +135,9 @@ export function runAfterPress(row, action) {
 }
 
 /**
- * Tints each row the page shares, and any the app adds by its buttons' selectors, while pressed.
+ * Tints each row the page shares, and any the app adds by its buttons' selectors, while pressed,
+ * and drops the click iOS sends for a finger that drifted or scrolled a list, on a row or anything
+ * else that opens from one.
  * @param {string[]} [appRowButtons] the buttons of the app's own rows, like a bracket's team lines
  */
 export function watchPresses(appRowButtons = []) {
