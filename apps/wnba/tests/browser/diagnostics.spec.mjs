@@ -1,5 +1,11 @@
-import { test, expect, findGameButton, openApp, matchPath, NOW } from "./harness.mjs";
+import { test, expect, findGameButton, openApp, NOW } from "./harness.mjs";
+import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
+import {
+  findDiagnosticsSwitch,
+  turnOnDiagnostics,
+} from "../../../../tests/browser/diagnostics-switch.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -11,22 +17,7 @@ test.use({
 const RECORD_MS = 5000;
 
 /** @param {import("@playwright/test").Page} page */
-const openSettings = (page) => page.getByRole("button", { name: "Settings", exact: true }).click();
-
-/** @param {import("@playwright/test").Page} page */
-const findSwitch = (page) => page.getByRole("switch", { name: "Diagnostics" });
-
-/** @param {import("@playwright/test").Page} page */
 const findRecords = (page) => page.locator("#diagnostics");
-
-/** @param {import("@playwright/test").Page} page */
-async function turnOnDiagnostics(page) {
-  await openSettings(page);
-  await findSwitch(page).click();
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
-}
 
 /** @param {import("@playwright/test").Page} page */
 async function reloadAndRecord(page) {
@@ -43,8 +34,8 @@ test("Diagnostics sit past the end of settings, off, with nothing recorded, with
   await openSettings(page);
 
   await expect(page.locator("#settingsDialog")).toContainText("Noah Kaplan");
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "false");
-  await expect(findSwitch(page)).not.toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "false");
+  await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
   await expect(findRecords(page)).toBeHidden();
   await expect(page.locator(".diagnostics-area .control-label")).toHaveText("Diagnostics");
 });
@@ -52,11 +43,12 @@ test("Diagnostics sit past the end of settings, off, with nothing recorded, with
 test("Diagnostics, once on, start with the app, the release, and its commit, set apart by dots", async ({
   page,
 }) => {
-  await page.route(matchPath("/version.json"), (route) =>
-    route.fulfill({
-      json: { version: "3.6.0-beta", commit: "abc1234", builtAt: "2026-10-08T03:14:57Z" },
-    }),
-  );
+  await serveReleases(page, {
+    version: "3.6.0-beta",
+    commit: "abc1234",
+    builtAt: "2026-10-08T03:14:57Z",
+    label: "beta",
+  });
   await openApp(page);
 
   await turnOnDiagnostics(page);
@@ -426,9 +418,9 @@ test("turning Diagnostics off forgets what it recorded", async ({ page }) => {
     findRecords(page).locator(".diagnostics-record", { hasText: "Games list" }),
   ).toHaveCount(1);
 
-  await findSwitch(page).click();
+  await findDiagnosticsSwitch(page).click();
   await expect(findRecords(page)).toBeHidden();
-  await findSwitch(page).click();
+  await findDiagnosticsSwitch(page).click();
 
   await expect(findRecords(page)).toContainText("Nothing yet");
   await expect(findRecords(page).locator(".diagnostics-record")).toHaveCount(0);
@@ -494,6 +486,22 @@ test("Share report notes the page as it is, with the sheets open, and shares it 
   expect(copied).toMatch(/^\+0 Sheet settingsDialog, shown$/m);
   expect(copied).toMatch(/^\+0 Shows .*bracketWrap \d+\/\d+px/m);
   expect(copied).toMatch(/^\+0 Animations: /m);
+});
+
+test("a report on the season tab lists no animation for the header that rides up with its part, which moves only as the part scrolls", async ({
+  page,
+}) => {
+  await stubShare(page);
+  await openApp(page);
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await turnOnDiagnostics(page);
+  await openSettings(page);
+
+  await findReportButton(page).click();
+
+  await expect(findReportButton(page)).toHaveText("Shared");
+  const [{ text: copied }] = await readShares(page);
+  expect(copied).toMatch(/^\+0 Animations: none$/m);
 });
 
 test("each report notes the page as it is only for itself, and keeps every record of an open", async ({

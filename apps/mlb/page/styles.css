@@ -168,6 +168,8 @@
   --radius-control: 6px;
   --radius-tabs: 8px;
   --radius-sheet: 12px;
+  /* Puts the channel tag's middle half a pixel above the middle of the name's capitals. */
+  --channel-tag-lift: -0.85px;
   --control-height: 36px;
   --control-room: 14px;
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23625a52' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -186,8 +188,7 @@
   --tabs-chosen: var(--card);
   --tabs-chosen-edge: var(--card-border);
   --tabs-chosen-ink: var(--ink);
-  --held-bar-fade: 18px;
-  --held-bar-line: transparent;
+  --held-bar-line: var(--divider);
   --pager-label: var(--ink-dim);
   --updates-head: var(--highlight);
   --sheet-part-head: var(--highlight);
@@ -291,7 +292,7 @@ body {
   font-size: 16px;
   /* Insets are zero except in the home-screen app, which draws under the status bar and notch. */
   padding-inline: max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right));
-  padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
+  padding-block: calc(17px + env(safe-area-inset-top)) var(--view-end-room);
   /* WIDE_STAGE_WIDTH in bracket-view.js, plus .tree-scroll's 18px each side. */
   max-width: 1793px;
   margin: 0 auto;
@@ -344,6 +345,9 @@ header.top h1 {
   color: var(--ink);
   text-transform: uppercase;
   letter-spacing: var(--title-tracking);
+  /* A space in Chivo Mono is as wide as a digit, so the season's year would sit 14.5px from the
+     name at the title's 22.5px; it sits 9px from it. */
+  word-spacing: -0.2444em;
 }
 /* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
    spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */
@@ -367,6 +371,7 @@ header.top h1 .title-letter:nth-child(2) {
 /* The season's year recedes a step beside the app's name. */
 .season-year {
   font-weight: calc(var(--type-title-weight) - 50);
+  letter-spacing: 0.02em;
   color: var(--ink-dim);
 }
 .stamp {
@@ -2619,11 +2624,8 @@ body.kbd .player-open:focus {
     gap: 3px;
   }
 
-  body {
-    padding-bottom: var(--tab-bar-clearance);
-  }
-  /* The body's bottom padding already holds the round dots, so a bracket that fills the screen
-     leaves the page nothing to scroll. */
+  /* The bracket's part's bottom padding (pager.css) already holds the round dots, so a bracket that
+     fills the screen ends where its part's room does. */
   .tree-scroll.stacked {
     padding-bottom: 0;
   }

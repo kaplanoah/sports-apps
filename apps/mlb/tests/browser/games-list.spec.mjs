@@ -668,3 +668,26 @@ test("on a wide screen, the strip, its line, and a held day's line stop at the c
   expect(edges.monthLeft - edges.column.left).toBeCloseTo(0.5, 1);
   expect(edges.column.right - edges.todayRight).toBeCloseTo(0.5, 1);
 });
+
+test("on a phone, the Games strip and the Search bar each end in the divider's line once their list scrolls under them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  const line = `${await readColor(page, "--divider")} 0px 1px 0px 0px`;
+  const strip = page.locator("#seasonGames .day-bar");
+  await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 400 }));
+  await expect(strip).toHaveCSS("box-shadow", line);
+  await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 0 }));
+  await expect(strip).toHaveCSS("box-shadow", "none");
+
+  await page.locator("#tab-search").click();
+  await page.locator("#gameSearch .search-input").fill("games");
+  await page.locator("#gameSearch .search-input").press("Enter");
+  await expect(page.locator("#gameSearch .listed-day").first()).toBeAttached();
+  const bar = page.locator("#gameSearch .search-bar");
+  const list = page.locator("#gameSearch .search-list");
+  await list.evaluate((element) => element.scrollTo({ top: 400 }));
+  await expect(bar).toHaveCSS("box-shadow", line);
+  await list.evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(bar).toHaveCSS("box-shadow", "none");
+});

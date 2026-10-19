@@ -307,7 +307,7 @@
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pill, and `--radius-sheet` for a sheet on a wide screen,
-  with `--held-bar-fade` and `--held-bar-line` under a bar held at the top.
+  with `--held-bar-line` under a bar held at the top once something scrolls under it.
   A dot is round, a switch is round like the phone's own, an app icon keeps its own shape,
   and the floating tab bar, tinted in the app's own color, stays a capsule like the phone's own;
   any other corner typed as a number fails the root's `tests/shape-tokens.test.js`.
@@ -433,6 +433,9 @@
   what each fill draws and where it leaves the list, each new day at its top and whether the strip's dates slide to it,
   any day that changes height as it's drawn whole or as a stand-in,
   and a strip that doesn't scroll where it's told, in `day-strip-log.js`,
+  and each touch on a season's standings and bracket, how far it moved,
+  whether the page's code took it from the browser, and how far the part under it scrolled,
+  and each click on them, in `bracket-standings-log.js`,
   and each error the page's code doesn't catch, in `error-log.js`,
   each a log made with `step-log.js`, the welcome over the whole screen that a phone's or tablet's browser opens on,
   whose numbered steps pick the theme the Home Screen icon takes and say how to add the page there,
@@ -453,6 +456,11 @@
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
   with the one it opens on first in the pill over them, side by side, which a tap on a name or a swipe slides between,
   a swipe on the bracket scrolling it to its end first, as a team's Roster does, in `bracket-standings.js`,
+  each scrolling on its own with the header riding up over the one shown until the pill holds at the top,
+  as a profile's tabs do in a phone's apps, in `season-header.js`,
+  with a stand-in under each of the Updates box's buttons in each part's empty top,
+  so a tap on one opens what it does and a finger that drags from it scrolls the part, as a button inside a list does,
+  in `rider-taps.js`,
   the accent block under a pill's shown name, which never travels between names but hands off from one to the next once a tap or a finger's lift sets what's under it off,
   in `pill-thumb.js`, a season's games as one list of its game days under a strip of every day,
   whose chosen day is the one at the list's top, its box holding still while the list's scroll slides the dates behind it on a spring (`strip-slide.js`),
@@ -564,6 +572,7 @@
   `news.css` the News view's layout, `retry.css` what a sheet shows where a read failed,
   `highlights.css` a final's Highlights, `rank-curve.css` a rank curve and each player's mark on it,
   `no-field-note.css` the bracket before the playoff field is set,
+  `channel-tag.css` the tag beside the app's name on beta,
   and `gate.css` the access code's gate, whose title and button the welcome takes too;
   pages link them before their own `styles.css` and theme them with the tokens their top comments list.
   The Worker serves all of it under `shared/`.
@@ -668,8 +677,9 @@ Delete it once the app's first PR merges.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
    around its own `styles.css`, which sets every token their top comments list,
-   and calls `openLastTab()`, `showLastDrawn()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
-   in that order, so a part on the shown tab can take back its sideways scroll, and the welcome opens over any sheet put back.
+   and calls `openLastTab()`, `showLastDrawn()`, `followSeasonPart()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
+   in that order, so a part on the shown tab can take back its sideways scroll, the header rides as far as the season's part put back,
+   and the welcome opens over any sheet put back.
    Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
    load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
    It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
@@ -755,7 +765,8 @@ Delete it once the app's first PR merges.
   in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.
 - Each app has a beta channel: a second Worker, `<app>-app-beta`,
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
-  key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`).
+  key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`),
+  and in a tag beside the app's name, with the commit it runs and how long ago that went live (`shared/page/channel-tag.js`).
   A push to the `beta` branch deploys it at once, with the same checks and rollback as `main`'s deploy.
   To use a PR's change on the owner's phone before it merges, reset `beta` to the PR's branch and push (`git push -f origin <branch>:beta`),
   wait for that push's Deploy run to say `worker check: ok` for each app, and tell the user to use the beta app on the Home Screen.
@@ -766,7 +777,7 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
+  `show-last-drawn.js`, `season-header.js`, `rider-taps.js`, `held-bar.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
   but not to its comments, blank lines, or formatting, which draw nothing;
   a change to its shared stylesheets (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),

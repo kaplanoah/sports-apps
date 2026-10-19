@@ -1,6 +1,7 @@
 import { test, expect, expectDayAtTop, openApp, matchPath } from "./harness.mjs";
 import { SNAPSHOT_VERSION } from "../../page/js/snapshot.js";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { readYearTracking } from "../../../../tests/browser/title-row.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -161,7 +162,9 @@ test("once the Finals are won, the current season's year is in the title too", a
   await expect(findTitle(page)).toHaveText("WNBA 2026");
 });
 
-test("the year is the title's font and size, lighter and dimmer", async ({ page }) => {
+test("the year is the title's font and size, lighter, dimmer, and its digits 0.04em apart", async ({
+  page,
+}) => {
   await openApp(page, ONE_PAST_SEASON);
   await chooseSeason(page, 2025);
   await expect(findTitle(page)).toHaveText("WNBA 2025");
@@ -175,9 +178,15 @@ test("the year is the title's font and size, lighter and dimmer", async ({ page 
   const title = await readLook("header.top h1");
   const year = await readLook("#titleYear");
 
-  expect({ ...year, fontWeight: title.fontWeight, color: title.color }).toEqual(title);
+  const sameLook = {
+    fontWeight: title.fontWeight,
+    color: title.color,
+    letterSpacing: title.letterSpacing,
+  };
+  expect({ ...year, ...sameLook }).toEqual(title);
   expect(Number(year.fontWeight)).toBeLessThan(Number(title.fontWeight));
   expect(year.color).not.toBe(title.color);
+  expect(await readYearTracking(page)).toBeCloseTo(0.04, 3);
 });
 
 test.describe("on a phone", () => {

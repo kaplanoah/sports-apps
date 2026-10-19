@@ -1,5 +1,10 @@
 import { test, expect, expectDayAtTop } from "./harness.mjs";
-import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
+import {
+  describeTimedAnimations,
+  waitForTimedAnimations,
+} from "../../../../tests/browser/animations.mjs";
+import { leavePagePixelDown, scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
+import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 import { findCell, findDay, findList, openSeasonGames } from "./season-games.mjs";
 
 // A tap on Today, or on Games while it shows, brings the Games list back to today.
@@ -46,6 +51,26 @@ test.describe("with reduced motion", () => {
     await expectDayAtTop(page, "2026-09-30");
   });
 
+  test("a tap on Games with the page scrolled under a tall Updates box takes the page back to its top, and only the next tap brings today back", async ({
+    page,
+  }) => {
+    await openSeasonGames(page);
+    await expectDayAtTop(page, "2026-09-30");
+    await findCell(page, "2026-09-20").click();
+    await expectDayAtTop(page, "2026-09-20");
+    await showTallUpdatesBox(page, 600);
+    await scrollPageToEnd(page);
+
+    await page.getByRole("tab", { name: "Games" }).click();
+
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+    await expectDayAtTop(page, "2026-09-20");
+
+    await page.getByRole("tab", { name: "Games" }).click();
+
+    await expectDayAtTop(page, "2026-09-30");
+  });
+
   test("after a swipe of the strip, a tap on Games while it shows, or on Today, brings today's date back to the strip's middle and its month over it, leaving the list where it is", async ({
     page,
   }) => {
@@ -82,7 +107,7 @@ test.describe("with reduced motion", () => {
     await page.locator("#seasonGames .go-today").click();
 
     expect(await findList(page).evaluate((list) => list.scrollTop)).toBe(top);
-    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+    expect(await describeTimedAnimations(page)).toEqual([]);
   });
 });
 
@@ -212,6 +237,6 @@ test("a tap on Today where the list already is pulses today's date, 4% bigger an
     { day: "2026-09-30", duration: 290, transforms: ["scale(1)", "scale(1.04)", "scale(1)"] },
   ]);
   await page.clock.runFor(400);
-  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await waitForTimedAnimations(page);
   await expectDayAtTop(page, "2026-09-30");
 });

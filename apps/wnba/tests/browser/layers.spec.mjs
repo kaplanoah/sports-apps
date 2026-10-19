@@ -7,10 +7,11 @@ import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 // budget is the view's count in CI's Chromium once nothing asked for a layer ahead. A change that
 // should add a layer re-records its view's budget from the count this test names, once the owner's
 // phone has drawn it on beta.
-// Search's round button beside the tab bar is a layer of its own on every view, and the pill held
-// over the bracket and standings one on each of theirs.
+// Search's round button beside the tab bar is a layer of its own on every view, and the pill over
+// the bracket and standings one on each of theirs, as is the header that rides up with them.
 const BUDGETS = {
-  Bracket: 13,
+  // The bracket and the standings each scroll on their own, driving the header's ride.
+  Bracket: 15,
   // The strip of days and the list of games each scroll on their own.
   Games: 14,
   Standings: 12,

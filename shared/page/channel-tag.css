@@ -1,0 +1,27 @@
+/*
+ * The tag beside the app's name on any channel but production, in the Caption role on the raised
+ * fill. Apps link it before their own styles.css, and define --raised, --ink-mid, --radius-chip,
+ * and --channel-tag-lift, how far the tag moves from where its row centers it, so its middle sits
+ * where the app picked against the name's capitals.
+ */
+
+.channel-tag {
+  position: relative;
+  top: var(--channel-tag-lift);
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: var(--radius-chip);
+  background: var(--raised);
+  color: var(--ink-mid);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--leading);
+  white-space: nowrap;
+}
+.channel-tag[hidden] {
+  display: none;
+}
+.channel-tag .sep {
+  margin: 0 4px;
+}

@@ -1,4 +1,5 @@
 import { test, expect, openApp, serveLockedApp } from "./harness.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
@@ -229,7 +230,7 @@ async function openSettingsWithRelease(page) {
   await openApp(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.locator("#versionNote")).toBeVisible();
-  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await waitForTimedAnimations(page);
 }
 
 /** @param {import("@playwright/test").Page} page */

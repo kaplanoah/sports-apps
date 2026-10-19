@@ -1,26 +1,22 @@
 import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
+import { drag } from "../../../../tests/browser/touch.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { findSeasonPart, scrollSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
+import { waitForScrollEnd } from "../../../../tests/browser/scroll-end.mjs";
+import {
+  findDiagnosticsSwitch,
+  turnOnDiagnostics,
+} from "../../../../tests/browser/diagnostics-switch.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
-
-/** @param {import("@playwright/test").Page} page */
-const findSwitch = (page) => page.getByRole("switch", { name: "Diagnostics" });
 
 /**
  * @param {import("@playwright/test").Page} page
  * @param {number} distance
  */
-async function scrollSettings(page, distance) {
-  const settings = page.locator("#settingsDialog");
-  await settings.evaluate((dialog) =>
-    dialog.addEventListener("scrollend", () => dialog.setAttribute("data-scrolled", ""), {
-      once: true,
-    }),
-  );
-  await page.mouse.wheel(0, distance);
-  await expect(settings).toHaveAttribute("data-scrolled");
-  await settings.evaluate((dialog) => dialog.removeAttribute("data-scrolled"));
-}
+const scrollSettings = (page, distance) =>
+  waitForScrollEnd(page.locator("#settingsDialog"), () => page.mouse.wheel(0, distance));
 
 test("on a phone, Diagnostics sit past the copyright, a scroll beyond where settings rest, off, with no note under their name", async ({
   page,
@@ -35,11 +31,11 @@ test("on a phone, Diagnostics sit past the copyright, a scroll beyond where sett
 
   await scrollSettings(page, copyrightBottom - PHONE.height + 40);
   await expect(copyright).toBeInViewport({ ratio: 1 });
-  await expect(findSwitch(page)).not.toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
 
   await scrollSettings(page, 2000);
-  await expect(findSwitch(page)).toBeInViewport();
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "false");
+  await expect(findDiagnosticsSwitch(page)).toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "false");
   await expect(page.locator("#diagnostics")).toBeHidden();
   await expect(page.locator(".diagnostics-area .control-label")).toHaveText("Diagnostics");
 });
@@ -51,12 +47,12 @@ test("on a wide screen, Diagnostics sit under the settings and ranking, a scroll
   await openApp(page);
   await openSettings(page);
   await expect(page.locator(".rank-frame")).toBeInViewport();
-  await expect(findSwitch(page)).not.toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
   await page.mouse.move(LAPTOP.width / 2, LAPTOP.height / 2);
 
   await scrollSettings(page, 600);
 
-  await expect(findSwitch(page)).toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).toBeInViewport();
 });
 
 /** @param {import("@playwright/test").Page} page */
@@ -84,8 +80,8 @@ test.describe("on a phone", () => {
     await stubShare(page);
     await openApp(page);
     await openSettings(page);
-    await findSwitch(page).click();
-    await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
+    await findDiagnosticsSwitch(page).click();
+    await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "true");
 
     const button = findReportButton(page);
     await expect(button).toHaveText("Share report");
@@ -104,11 +100,7 @@ test.describe("on a phone", () => {
 async function openSeasonGamesLogging(page) {
   await page.setViewportSize(PHONE);
   const app = await openApp(page, { isWholeSeason: true });
-  await openSettings(page);
-  await findSwitch(page).click();
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
+  await turnOnDiagnostics(page);
   await page.getByRole("tab", { name: "Games" }).click();
   await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
   return app;
@@ -249,5 +241,50 @@ test("with Diagnostics on, a slide of the strip's dates that leaves the strip sh
   expect(lines).toContain("top day 2026-09-25, slide");
   expect(lines).toContainEqual(
     expect.stringMatching(/^the strip was told to scroll to \d+ but is at 0$/),
+  );
+});
+
+test("with Diagnostics on, each touch on the standings logs how far it moved, whether the page's code took it, and how far the standings scrolled", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await openSeasonPart(page, "Standings");
+  // At its end, the table leaves a swipe left to the pill's next part, the bracket.
+  await page
+    .locator("#standingsWrap .st-scroll")
+    .first()
+    .evaluate((table) => table.scrollTo({ left: table.scrollWidth, behavior: "instant" }));
+  const row = page.locator("#standingsWrap tr[data-team]").first();
+  await expect(row).toBeInViewport();
+  const box = /** @type {{ y: number, height: number }} */ (await row.boundingBox());
+  const from = { x: PHONE.width / 2, y: box.y + box.height / 2 };
+
+  // A drag too short and too slow to bring in the bracket springs back to the standings.
+  await (
+    await drag(page, from, { x: -30, y: 3 }, { durationMs: 1000 })
+  )();
+  await expect(page.locator("#bracketStandingsParts")).not.toHaveAttribute("data-sliding");
+  await expect(
+    page.locator('#bracketStandingsParts > [data-part="standings"]'),
+  ).not.toHaveAttribute("inert");
+  await waitForScrollEnd(findSeasonPart(page, "standings"), async () =>
+    (await drag(page, from, { y: -200 }))(),
+  );
+  // The drag, and the flick it ends in, ride the header and settings' button out of sight.
+  await scrollSeasonPart(page, "standings", 0);
+
+  const lines = await readLog(page, "Standings and bracket");
+  expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on Team details: /));
+  expect(lines).toContainEqual(
+    expect.stringMatching(
+      /^lifted after moving 30 left and 3 down; the page's code took the touch once it had moved \d+ left( and \d down)?; the standings didn't scroll$/,
+    ),
+  );
+  expect(lines).toContainEqual(
+    expect.stringMatching(
+      /^lifted after moving 200 up; the browser kept the touch; the standings scrolled \d+px down$/,
+    ),
   );
 });

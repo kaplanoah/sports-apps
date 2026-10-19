@@ -1,5 +1,6 @@
 import { renderCatchUpLines, startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
+import { startChannelTag } from "#shared/channel-tag.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
 import { setHtml } from "#shared/html.js";
@@ -286,6 +287,7 @@ async function boot() {
   startRosterSection();
   startPlayerSheet();
   startSettingsSheet();
+  startChannelTag();
   startNewsRedraws(findElement("newsList"), drawNews, NEWS_LEAGUE);
   startHomeScreen();
   findSeasonPicker().addEventListener("change", () =>

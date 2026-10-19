@@ -2,6 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { readPillNames } from "../../../../tests/browser/pill-names.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { scrollSeasonPartToEnd } from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { readTokenColor } from "./theme.mjs";
 
@@ -115,7 +116,7 @@ test("a Read button is raised like a card, a button's height, its words a button
   expect(capitals.middle - look.middle).toBeCloseTo(0, 0);
 });
 
-test("a pill's names are buttons, in sentence case in a button's words and height, centered on their capitals, the pill 10px under the header and 9px over what it shows, and its bar held at the top ends in a line, not a fade", async ({
+test("a pill's names are buttons, in sentence case in a button's words and height, centered on their capitals, the pill 10px under the header and 9px over what it shows, and its bar ends in a line, not a fade, once what it shows scrolls under it", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE);
@@ -134,21 +135,20 @@ test("a pill's names are buttons, in sentence case in a button's words and heigh
       /** @type {Element} */ (document.querySelector(selector)).getBoundingClientRect();
     const header = readBox("header.top");
     const pill = readBox("#bracketStandingsPill .pager-tabs");
-    const parts = readBox("#bracketStandingsParts");
-    return { above: pill.top - header.bottom, height: pill.height, below: parts.top - pill.bottom };
+    const standings = readBox("#standingsWrap");
+    return {
+      above: pill.top - header.bottom,
+      height: pill.height,
+      below: standings.top - pill.bottom,
+    };
   });
   expect(room).toEqual({ above: 10, height: 36, below: 9 });
 
-  await page.evaluate(() => scrollTo({ top: 400, behavior: "instant" }));
+  await scrollSeasonPartToEnd(page, "standings");
   const bar = page.locator("#bracketStandingsPill");
-  await expect(bar).toHaveClass(/stuck/);
   const divider = await readTokenColor(page, "--divider");
   await expect(bar).toHaveCSS("box-shadow", `${divider} 0px 1px 0px 0px`);
-  const floor = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  await expect(bar).toHaveCSS(
-    "background-image",
-    `linear-gradient(${floor} 100%, rgba(0, 0, 0, 0))`,
-  );
+  await expect(bar).toHaveCSS("background-image", "none");
 });
 
 /**
