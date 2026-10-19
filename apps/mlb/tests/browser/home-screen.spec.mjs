@@ -236,6 +236,12 @@ test.describe("on a computer", () => {
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeHidden();
     expect(await readSettingsTopLine(page)).toBe("none");
+    const underHeader = await page.locator("#settingsDialog").evaluate((settings) => {
+      const header = settings.querySelector(".sheet-top").getBoundingClientRect();
+      const controls = settings.querySelector(".settings-main > .settings-controls");
+      return controls.getBoundingClientRect().top - header.bottom;
+    });
+    expect(underHeader).toBe(0);
   });
 });
 

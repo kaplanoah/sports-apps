@@ -42,6 +42,9 @@
  *                                              passes once the page catches up, like 0.75
  *   --step-number-lift                         how far a Home Screen step's number rises in its
  *                                              circle, so the app's digits sit in its middle
+ * and on every screen this sets:
+ *   --sheet-side                               a sheet's sides, and settings' on a phone
+ *   --caret-reach                              how far a sheet's caret reaches out past its sides
  * and on phones this sets:
  *   --tab-bar-bottom                           how far the tab bar floats above the screen's bottom
  *   --tab-bar-height                           the tab bar's height
