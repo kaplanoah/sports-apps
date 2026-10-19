@@ -1,32 +1,19 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { listApps } from "../worker/apps.mjs";
 
-const ROOT = new URL("../", import.meta.url);
-const SHARED = new URL("shared/page/", ROOT);
-const APPS = new URL("apps/", ROOT);
+const SHARED = new URL("../shared/page/", import.meta.url);
+const APPS = new URL("../apps/", import.meta.url);
 
 /** The path of each stylesheet the apps' pages share. */
 export const listSharedStylesheets = () =>
   readdirSync(SHARED)
     .filter((name) => name.endsWith(".css"))
-    .map((name) => new URL(name, SHARED).pathname);
+    .map((name) => fileURLToPath(new URL(name, SHARED)));
 
 /** The path of each app's own stylesheet. */
 export const listAppStylesheets = () =>
-  readdirSync(APPS).map((app) => new URL(`${app}/page/styles.css`, APPS).pathname);
-
-/** The path from the repo's root of each script and page in the shared page folder and each app's. */
-export const listPageFiles = () =>
-  ["shared/page", ...readdirSync(APPS).map((app) => `apps/${app}/page`)].flatMap((folder) =>
-    readdirSync(new URL(folder, ROOT), { recursive: true, encoding: "utf8" })
-      .filter((path) => /\.(js|html)$/.test(path))
-      .map((path) => `${folder}/${path}`),
-  );
-
-/**
- * A page file's text, by the path from the repo's root that `listPageFiles` gives.
- * @param {string} path
- */
-export const readPageFile = (path) => readFileSync(new URL(path, ROOT), "utf8");
+  listApps().map((app) => fileURLToPath(new URL(`${app}/page/styles.css`, APPS)));
 
 /** @typedef {{ selectors: string[], property: string, value: string }} Declaration */
 

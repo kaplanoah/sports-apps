@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { IconStyle, icons } from "@phosphor-icons/core";
-import { listPageFiles, readPageFile } from "./css-rules.js";
+import { listPageSources, readPageSource } from "./page-sources.js";
 
 /** @param {string} name @param {string} style */
 function readPhosphorIcon(name, style) {
@@ -61,12 +61,12 @@ const listSvgs = (source) =>
 
 /** @param {string} file */
 const countHandDrawnIcons = (file) =>
-  listSvgs(readPageFile(file)).filter(({ svg }) => !isDrawing(svg) && describeIconProblem(svg))
+  listSvgs(readPageSource(file)).filter(({ svg }) => !isDrawing(svg) && describeIconProblem(svg))
     .length;
 
 test("every icon on the pages is a Phosphor icon, copied path for path, but the named few drawn by hand", () => {
   const counts = Object.fromEntries(
-    listPageFiles()
+    listPageSources([".js", ".html"])
       .map((file) => /** @type {[string, number]} */ ([file, countHandDrawnIcons(file)]))
       .filter(([, count]) => count > 0),
   );
@@ -102,7 +102,7 @@ const isNamedIn = (comment, { name, style }) =>
  * @param {string} file
  */
 function listUnnamedIcons(file) {
-  const source = readPageFile(file);
+  const source = readPageSource(file);
   const comments = listComments(source);
   return listSvgs(source)
     .filter(({ svg }) => !isDrawing(svg) && !describeIconProblem(svg))
@@ -119,10 +119,10 @@ function listUnnamedIcons(file) {
 }
 
 test("every Phosphor icon on the pages follows a comment naming the icon and its weight", () => {
-  assert.deepEqual(listPageFiles().flatMap(listUnnamedIcons), []);
+  assert.deepEqual(listPageSources([".js", ".html"]).flatMap(listUnnamedIcons), []);
 });
 
 test("pull to refresh's spinner has every one of its eight spokes", () => {
-  const [spinner] = readPaths(readPageFile("shared/page/pull-to-refresh.js"));
+  const [spinner] = readPaths(readPageSource("shared/page/pull-to-refresh.js"));
   assert.equal(spinner.match(/[Mm]/g)?.length, 8);
 });

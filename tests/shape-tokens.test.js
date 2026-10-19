@@ -5,12 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   listAppStylesheets,
-  listPageFiles,
   listRootTokens,
   listSharedStylesheets,
   listStrayCorners,
-  readPageFile,
 } from "./css-rules.js";
+import { listPageSources, readPageSource } from "./page-sources.js";
 
 // What the shared stylesheets ask every app's :root for, so each app sets its own shapes, its
 // buttons' size, how a pill shows the list that's chosen, and how a wide screen's tabs show the
@@ -53,8 +52,8 @@ const TYPED_CORNER = /\br[xy]\s*=\s*["']|setAttribute\(\s*["']r[xy]["']/g;
  */
 function countTypedCorners() {
   const counts = new Map();
-  for (const path of listPageFiles()) {
-    const corners = readPageFile(path).match(TYPED_CORNER) ?? [];
+  for (const path of listPageSources([".js", ".html"])) {
+    const corners = readPageSource(path).match(TYPED_CORNER) ?? [];
     if (corners.length) counts.set(path, corners.length);
   }
   return counts;

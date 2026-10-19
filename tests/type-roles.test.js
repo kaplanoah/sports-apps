@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
-import { listRootTokens, readDeclarations, readRule } from "./css-rules.js";
-
-const SHARED = new URL("../shared/page/", import.meta.url);
-const APPS = new URL("../apps/", import.meta.url);
+import {
+  listAppStylesheets,
+  listRootTokens,
+  listSharedStylesheets,
+  readDeclarations,
+  readRule,
+} from "./css-rules.js";
 
 // The page's base size, which every shown text replaces with its role's, a code field sized for its
 // box, a cell whose text never shows, and a game's TBD at its side's size.
@@ -14,14 +16,6 @@ const OWN_SIZES = new Set([
   "table.standings tr.playoff-line td { font-size: 0 }",
   ".game-side .tbd { font-size: inherit }",
 ]);
-
-const listSharedStylesheets = () =>
-  readdirSync(SHARED)
-    .filter((name) => name.endsWith(".css"))
-    .map((name) => new URL(name, SHARED).pathname);
-
-const listAppStylesheets = () =>
-  readdirSync(APPS).map((app) => new URL(`${app}/page/styles.css`, APPS).pathname);
 
 const ROLE_SIZE = /^var\(--type-([a-z-]+)-size\)$/;
 
