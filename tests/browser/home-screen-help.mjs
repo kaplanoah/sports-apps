@@ -1,6 +1,7 @@
-// The ? that ends, on a touch screen, settings' Notifications note where notifications come only
-// from the Home Screen, and the welcome it opens over settings, which rises and closes as a sheet
-// does.
+// The Home Screen welcome and settings' Home Screen help: the selectors other tests find them by,
+// the ? that ends, on a touch screen, settings' Notifications note where notifications come only
+// from the Home Screen, the welcome it opens over settings, which rises and closes as a sheet does,
+// and a first visit's welcome.
 
 import { expect } from "@playwright/test";
 import { takeAwayPush } from "./devices.mjs";
