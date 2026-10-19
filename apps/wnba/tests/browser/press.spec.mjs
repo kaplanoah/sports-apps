@@ -330,6 +330,7 @@ test("a still tap on a team's row in the standings opens the team, and Enter aft
   await expect(sheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
+  await holdClock(page);
 
   await (
     await drag(page, await findMiddle(row), { y: -30 })
