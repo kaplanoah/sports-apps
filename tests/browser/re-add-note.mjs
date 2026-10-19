@@ -174,7 +174,7 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
   await expect(note).toHaveText(NOTE_WORDS);
   const readHeight = () => note.evaluate((element) => element.getBoundingClientRect().height);
   const height = await readHeight();
-  const release = await holdRequests(page, matchPath("/js/app.js"));
+  const release = await holdRequests(page, matchPath("/js/app.js"), { times: 1 });
 
   await page.reload({ waitUntil: "commit" });
 
@@ -190,7 +190,7 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
 
   // The page's code, not the copy put back, decides: a look another tab picked while the page
   // was away takes the note away once the code runs.
-  const releaseAgain = await holdRequests(page, matchPath("/js/app.js"));
+  const releaseAgain = await holdRequests(page, matchPath("/js/app.js"), { times: 1 });
   await page.reload({ waitUntil: "commit" });
   await expect(note).toHaveText(NOTE_WORDS);
   await page.evaluate(() => localStorage.setItem("appearance", JSON.stringify("dark")));
