@@ -918,6 +918,8 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="display: none; opacity: 0.5">',
     '<div style="">',
     '<div data-style="z-index: 2">',
+    '<div style="/* note */ color: red">',
+    '<div style="color: red; /* z-index: 2">',
   ];
   for (const markup of redStyles) {
     assert.equal(
@@ -957,6 +959,11 @@ test("an inline style in a page's markup or a script's template is red only wher
     [
       `${script}:1 adds an inline style that sets z-index: 2: ${wrapInTemplate(redStyles[1]).trim()}`,
     ],
+  );
+  const commented = '<div style="/* lift */ z-index: 2">';
+  assert.deepEqual(
+    findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(commented)] } }),
+    [`${script}:1 adds an inline style that sets z-index: 2: ${wrapInTemplate(commented).trim()}`],
   );
   assert.deepEqual(
     findChangeReasons({ [script]: { before: [], after: ['  // <div style="z-index: 2">'] } }),
@@ -1389,6 +1396,11 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
   assert.deepEqual(findReasons(path, ["  part.style.zIndex = 5;"]), [
     `${path}:1 adds a style property that sets z-index: part.style.zIndex = 5;`,
   ]);
+  for (const line of ['  part.removeAttribute("style");', '  part.style.cssText = "";'])
+    assert.deepEqual(findReasons(path, [line]), [
+      `${path}:1 adds a style that clears every property: ${line.trim()}`,
+    ]);
+  assert.deepEqual(findReasons(path, ['  part.style.cssText = "/* note */ color: red";']), []);
   assert.deepEqual(
     findReasons(path, ['  options.style = "";']),
     [`${path}:1 adds a style that clears every property: options.style = "";`],

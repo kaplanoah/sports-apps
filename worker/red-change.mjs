@@ -370,8 +370,8 @@ function describeStyleProperty(property, value, isWatched) {
 }
 
 /**
- * What a script sets a style's whole text to that a page's stylesheet would be red for, or null
- * when it sets nothing that is.
+ * What a script sets or clears a style's whole text to that a page's stylesheet would be red
+ * for, or null when it sets nothing that is.
  * @param {string} value
  * @param {(property: string) => boolean} isWatched
  */
@@ -398,8 +398,8 @@ function findFirstSetting(text, pattern, describe) {
 }
 
 /**
- * What a line sets by a property's name on a part's style that a page's stylesheet would be red
- * for, or null when it sets nothing that is.
+ * What a line sets or clears by a property's name on a part's style that a page's stylesheet
+ * would be red for, or null when it sets nothing that is.
  * @param {string} text
  * @param {(property: string) => boolean} isWatched
  */
