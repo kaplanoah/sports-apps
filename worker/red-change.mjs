@@ -484,8 +484,8 @@ const findStyleSetting = (text, isWatched) =>
 
 /**
  * What a line of a style's object, or of an animation's keyframes, sets by its keys that a
- * page's stylesheet would be red for, or a custom property a stack declaration reads, or null
- * when it sets neither.
+ * page's stylesheet would be red for, or a transition, whatever it eases, or a custom property a
+ * stack declaration reads, or null when it sets none of those.
  * @param {string} text
  * @param {(key: string) => string | null} readProperty the CSS name a key sets where the line
  *   lies, or null for one that sets no style there
@@ -535,7 +535,8 @@ const readKeyframeProperty = (key) =>
   KEYFRAME_TIMING_KEYS.has(key) ? null : (KEYFRAME_CSS_NAMES.get(key) ?? toKebabCase(key));
 
 /**
- * What an added line sets that makes a layer or that a page's stylesheet would be red for, given
+ * What an added line sets that makes a layer or that a page's stylesheet would be red for, or a
+ * transition, whatever it eases, in its CSS text or keyed in a style's object or keyframes, given
  * whether it lies in a style's object or in keyframes.
  * @param {AddedLine} line
  * @param {StyleObjectLines} objectLines

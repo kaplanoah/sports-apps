@@ -16,7 +16,8 @@ import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
 const SPEC = /^apps\/[^/]+\/tests\/browser\/.+\.spec\.mjs$/;
-const DEPENDENCIES = /^package(-lock)?\.json$/;
+// The dependencies, and the Node version every job runs them on.
+const DEPENDENCIES = /^(?:package(?:-lock)?\.json|\.nvmrc)$/;
 // What a spec tests rather than runs with.
 const TESTED_CODE = /^(?:apps\/[^/]+\/(?:page|worker)|shared\/(?:page|worker))\//;
 // A branch's last thirty completed runs reach past the label changes, cancelled runs, and pushes

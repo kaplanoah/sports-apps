@@ -57,6 +57,7 @@ test("every changed spec burns in with no earlier burn-in, or once what every sp
     "playwright.config.mjs",
     "package.json",
     "package-lock.json",
+    ".nvmrc",
   ])
     assert.deepEqual(listSpecs([SHEETS, PAGE], [shared]), [SHEETS, PAGE], shared);
 });
