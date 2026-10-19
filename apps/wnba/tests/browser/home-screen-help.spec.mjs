@@ -1,9 +1,4 @@
-import {
-  ANDROID_AGENT,
-  IPAD,
-  IPHONE_AGENT,
-  WIDE_IPHONE,
-} from "../../../../tests/browser/devices.mjs";
+import { ANDROID_AGENT, IPAD, IPHONE, WIDE_IPHONE } from "../../../../tests/browser/devices.mjs";
 import {
   checkCaretBeforeCode,
   checkCaretPlace,
@@ -22,7 +17,7 @@ import { PHONE, openSettings } from "./home-screen.mjs";
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 test.describe("on an iPhone, in the browser", () => {
-  test.use({ ...PHONE, userAgent: IPHONE_AGENT });
+  test.use(IPHONE);
 
   test("the Notifications note says why to add the page to the home screen, ending with a ? that opens the welcome over settings, which its caret and Escape close", async ({
     page,

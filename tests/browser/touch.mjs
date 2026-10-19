@@ -14,7 +14,9 @@ export const openFromHomeScreen = (page) =>
  * Starts a touch at `from` and moves it in steps by `by`, returning a way to lift the finger. The
  * moves come as fast as the browser takes them, a flick, unless `durationMs` spreads their times
  * out, as a slow drag that comes to rest before the finger lifts. With `isFrameByFrame`, each move
- * waits for the page's next frame, so the page draws where each one leaves what it moves.
+ * waits for the page's next frame, so the page draws where each one leaves what it moves, which
+ * spaces their times a frame apart too, so a test that checks each frame sets the drag's speed with
+ * `durationMs`.
  * @param {import("@playwright/test").Page} page
  * @param {{ x: number, y: number }} from
  * @param {{ x?: number, y?: number }} by

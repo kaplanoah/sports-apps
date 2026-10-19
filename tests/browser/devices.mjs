@@ -6,12 +6,13 @@ export const IPAD = {
   isMobile: true,
   userAgent: IPHONE_AGENT.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
 };
-// The widest iPhone, as an iPhone 16 or 17 Pro Max's Safari lays its pages out.
-export const WIDE_IPHONE = {
-  viewport: { width: 440, height: 956 },
+export const IPHONE = {
+  viewport: { width: 390, height: 844 },
   hasTouch: true,
   isMobile: true,
   userAgent: IPHONE_AGENT,
 };
+// The widest iPhone, as an iPhone 16 or 17 Pro Max's Safari lays its pages out.
+export const WIDE_IPHONE = { ...IPHONE, viewport: { width: 440, height: 956 } };
 export const ANDROID_AGENT =
   "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
