@@ -21,6 +21,22 @@ test("a refused REST request says GitHub's status, which a caller can tell apart
   assert.match(error.message, /GitHub answered 422 for POST \/pulls\/7\/comments/);
 });
 
+test("a REST request is signed with the token when there is one, and goes unsigned without one", async () => {
+  /** @type {any[]} */
+  const requests = [];
+  /** @type {typeof fetch} */
+  const fetchImpl = async (url, init) => {
+    requests.push({ url, init });
+    return new Response("{}");
+  };
+  await createGitHub({ repository: "o/r", fetchImpl, env })("/pulls/7");
+  await createGitHub({ repository: "o/r", fetchImpl, env: {} })("/pulls/7");
+  assert.equal(requests[0].url, "https://api.github.com/repos/o/r/pulls/7");
+  assert.equal(requests[0].init.headers.authorization, "Bearer t0ken");
+  assert.ok(!("authorization" in requests[1].init.headers));
+  assert.equal(requests[1].init.headers.accept, "application/vnd.github+json");
+});
+
 test("a GraphQL query's status is checked before its answer is read", async () => {
   const callGraphQL = createGraphQL({
     fetchImpl: answerWith(502, "<html>bad gateway</html>"),

@@ -38,12 +38,14 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "apps/mlb/tests/browser/page.spec.mjs",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
+    ".github/workflows/review-area.yml",
     "eslint.config.mjs",
     "worker/post-review.mjs",
     "worker/report-flaky-tests.mjs",
     "worker/review-context.mjs",
     "worker/review-state.mjs",
     "worker/set-app-key.mjs",
+    "worker/wait-for-review.mjs",
   ]);
   assert.equal(decision.isNeeded, false);
   assert.match(

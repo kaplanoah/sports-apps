@@ -6,6 +6,7 @@ import {
   readThreads,
   renderContext,
 } from "../worker/review-context.mjs";
+import { LIST_HEADING } from "../worker/post-review.mjs";
 import { OFF_DIFF_HEADING } from "../worker/review-state.mjs";
 
 const thread = (/** @type {object} */ fields) => ({
@@ -65,6 +66,29 @@ test("the context names each thread's place and state, with every reply, under t
     page,
     /# Findings posted on files the pull request doesn't change\n\nFindings on files this pull request doesn't change:\n\n- `a\.js:3`: \*\*Nit\*\* elsewhere/,
   );
+});
+
+test("a thread that lists a review's Nits shows each of its items, so a later review raises none again", () => {
+  const checklist = [
+    LIST_HEADING,
+    "",
+    "- [ ] `a.js:3`: **Nit** one <!-- claude-finding 0000000000000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->",
+    "- [ ] `b.js`: **Pre-existing** two <!-- claude-finding 1111111111111111 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->",
+  ].join("\n");
+  const page = renderContext({
+    title: "fix: x",
+    description: "",
+    threads: [
+      thread({
+        path: "a.js",
+        line: null,
+        originalLine: null,
+        comments: { nodes: [{ author: { login: "github-actions" }, body: checklist }] },
+      }),
+    ],
+    offDiff: [],
+  });
+  assert.ok(page.includes(`## a.js:file (open)\n\n**github-actions:**\n\n${checklist}\n`));
 });
 
 test("a pull request with no description or threads says so", () => {

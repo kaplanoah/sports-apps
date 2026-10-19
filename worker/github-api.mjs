@@ -17,10 +17,12 @@ export class GitHubError extends Error {
   }
 }
 
+// With no token, as in a cloud session, a read of the public repo goes unsigned, within GitHub's
+// limit for an address.
 /** @param {NodeJS.ProcessEnv} env */
 const writeHeaders = (env) => ({
   accept: "application/vnd.github+json",
-  authorization: `Bearer ${env.GH_TOKEN}`,
+  ...(env.GH_TOKEN ? { authorization: `Bearer ${env.GH_TOKEN}` } : {}),
   "x-github-api-version": "2022-11-28",
 });
 

@@ -657,6 +657,32 @@ test("a review of a push that posted findings isn't due the last read", () => {
   assert.ok(judgeReview({ sha: HEAD, plan, records }).isComplete);
 });
 
+test("the last read's records, which it keeps alongside a push's review, count only once that review posted nothing", () => {
+  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
+  const unfinishedFinal = finishStage("final", AREAS, {
+    "find-final-2-all.json": {
+      stage: "final",
+      area: 2,
+      kind: "all",
+      tries: [],
+      unread: ["first/c.js.diff"],
+      isAnswered: false,
+    },
+    "across-final.json": undefined,
+    "post-final.json": undefined,
+  });
+  const records = new Map([
+    ...finishStage("push", [AREAS[0]], {
+      "post-push.json": { weights: ["Nit"], unjudged: [] },
+    }),
+    ...unfinishedFinal,
+  ]);
+  const { isComplete, body } = judgeReview({ sha: HEAD, plan, records });
+  assert.ok(isComplete);
+  assert.equal(readReviewedHead(body), HEAD);
+  assert.doesNotMatch(body, /once more|last reviewer|c\.js/);
+});
+
 test("a push that changes only what a merge brings in passes and moves the reviewed head on", () => {
   const { isComplete, body } = judgeReview({
     sha: HEAD,

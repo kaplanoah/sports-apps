@@ -16,6 +16,7 @@ const SKIPPED_FILES = new Set([
   ".github/workflows/ci.yml",
   ".github/workflows/conflicts.yml",
   ".github/workflows/flaky.yml",
+  ".github/workflows/review-area.yml",
   ".github/workflows/watch.yml",
   ".gitignore",
   ".prettierignore",
@@ -38,6 +39,7 @@ const SKIPPED_FILES = new Set([
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
   "worker/set-page-host.mjs",
+  "worker/wait-for-review.mjs",
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);

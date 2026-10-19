@@ -943,7 +943,11 @@ test("project settings ask before any deploy but beta's or a key change, and den
   const { permissions } = JSON.parse(
     readFileSync(`${import.meta.dirname}/../.claude/settings.json`, "utf8"),
   );
-  assert.deepEqual(permissions.allow, ["Bash(git push -f origin *:beta)"]);
+  assert.deepEqual(permissions.allow, [
+    "Bash(git push -f origin *:beta)",
+    // A session waits on its pull request's review unattended, so the wait runs without asking.
+    "Bash(npm run wait-for-review -- *)",
+  ]);
   for (const rule of [
     "Bash(npm run deploy)",
     "Bash(npx wrangler *)",

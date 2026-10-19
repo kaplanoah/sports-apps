@@ -13,6 +13,7 @@ import {
   explainUnread,
   findPushedRange,
   findTestedFile,
+  formatJobOutputs,
   grepRepo,
   isReviewedOnBranch,
   listAreas,
@@ -334,18 +335,45 @@ test("a plan reads every file but the unread ones, and names why each goes unrea
 });
 
 test("each area has a reviewer for each kind of problem, two for bugs, and one checker", () => {
-  const { reviewers, checkers } = listJobs([{ area: 1, name: "mlb page", lines: 40 }], KINDS);
+  const areas = [
+    { area: 1, name: "mlb page", lines: 40 },
+    { area: 2, name: "docs", lines: 9 },
+  ];
+  const jobs = listJobs(areas, KINDS);
   assert.deepEqual(
-    reviewers.map((reviewer) => reviewer.kind),
+    jobs.kinds.map((reviewer) => reviewer.kind),
     ["bugs", "bugs-from-end", "rules", "tests"],
   );
-  assert.ok(reviewers.every((reviewer) => reviewer.focus.includes("REVIEW.md")));
-  assert.deepEqual(checkers, [{ area: 1, name: "mlb page", lines: 40 }]);
+  assert.ok(jobs.kinds.every((reviewer) => reviewer.focus.includes("REVIEW.md")));
+  assert.deepEqual(jobs.areas, [
+    { area: 1, name: "mlb page" },
+    { area: 2, name: "docs" },
+  ]);
+  assert.equal(jobs.count, 8);
+  const last = listJobs(areas, [FINAL_KIND]);
   assert.deepEqual(
-    listJobs([{ area: 1, name: "mlb page", lines: 40 }], [FINAL_KIND]).reviewers.map(
-      (reviewer) => reviewer.kind,
-    ),
+    last.kinds.map((reviewer) => reviewer.kind),
     ["all"],
+  );
+  assert.equal(last.count, 2);
+});
+
+test("each stage's matrices are handed to ci.yml under the names its review jobs read", () => {
+  const jobs = listJobs([{ area: 1, name: "mlb page" }], [FINAL_KIND]);
+  assert.equal(
+    formatJobOutputs("final-", jobs),
+    [
+      'final-areas=[{"area":1,"name":"mlb page"}]',
+      "final-area-count=1",
+      `final-kinds=${JSON.stringify([{ kind: "all", focus: FINAL_KIND.focus }])}`,
+      "final-count=1",
+    ].join("\n"),
+  );
+  assert.equal(
+    formatJobOutputs("", listJobs([], KINDS)),
+    "areas=[]\narea-count=0\nkinds=" +
+      JSON.stringify(KINDS.map(({ kind, focus }) => ({ kind, focus }))) +
+      "\ncount=0",
   );
 });
 

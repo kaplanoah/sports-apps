@@ -60,3 +60,13 @@ export const writeFindingMark = (key, head) => `<!-- claude-finding ${key} ${hea
  */
 export const listFindingMarks = (body) =>
   [...(body ?? "").matchAll(FINDING_MARK)].map((match) => ({ key: match[1], head: match[2] }));
+
+/**
+ * A comment's text as it reads, without the marks of the findings it carries.
+ * @param {string} body
+ */
+export const removeFindingMarks = (body) =>
+  body
+    .replace(FINDING_MARK, "")
+    .replace(/[ \t]+$/gm, "")
+    .trim();

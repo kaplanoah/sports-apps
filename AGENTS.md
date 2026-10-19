@@ -782,6 +782,10 @@ Delete it once the app's first PR merges.
   added by the owner after the PR's last push.
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
+    Its PR opens as a draft and stays one while the owner tries its design on beta:
+    CI tests a draft, and beta deploys it, as for any PR, but CI reviews it only once it's ready for review.
+    Once the owner says the design is the one to keep, mark the PR ready for review, which starts its first full review,
+    answer the review, and then deploy its reviewed head to beta for the owner's `phone-ok`.
     When you ask the owner to add `phone-ok`, link the PR in the same message.
     Never add `phone-ok`.
     Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push.
@@ -837,6 +841,8 @@ When a step says to go back to an earlier step, continue in order from there.
    If anything fails, fix it and run it again.
    Repeat until it passes.
    Never push while it fails.
+   - Before each push, have a helper agent review what you changed since the last push, or the whole change before the first,
+     by the root's `REVIEW.md`, and fix what it finds.
    - Before pushing a change to how a page looks, screenshot every view it touches,
      in each of the app's themes, on a phone and a wide screen, and look at each one: a test checks only what it names.
      Look at a view built from a mockup beside the mockup, with the same data,
@@ -850,9 +856,10 @@ When a step says to go back to an earlier step, continue in order from there.
    Then commit, push, and open a PR into `main`, or a stacked PR into the branch it builds on.
    If the PR is already open, the push updates it.
    - If the change is red (`node worker/red-change.mjs` with the branch's diff from `main` on stdin says why),
-     also deploy it to beta once its CI passes (`git push -f origin <branch>:beta`,
+     open its PR as a draft, and deploy it to beta once its CI passes (`git push -f origin <branch>:beta`,
      as "Workflow" says), unless another red change is still on beta or unconfirmed.
-     Then tell the user it's on beta and what to use on the phone, and keep to steps 4 to 7 while the owner tries it.
+     Then tell the user it's on beta and what to use on the phone, and keep to steps 4 to 6 while the owner tries its design.
+     Once the owner says it's the one to keep, mark the PR ready for review, and go on to step 7.
 4. Check whether the PR has merge conflicts with its base branch.
    GitHub runs no CI on a PR with conflicts, so waiting on one would never end.
    A merge to `main` that leaves an open PR in conflict comments on it (`worker/flag-conflicts.mjs`), which wakes a session watching it.
@@ -863,37 +870,47 @@ When a step says to go back to an earlier step, continue in order from there.
    The `check` job is the one that must pass; it fails whenever any other CI job fails.
    Each time you look while waiting, and whenever no CI run has started on the latest commit a few minutes after the push,
    go back to step 4 first: another PR may have merged into `main` and left this one in conflict.
+   To wait on the review, run `npm run wait-for-review -- <PR number>` in the foreground, with a 10-minute timeout, so your turn holds while it waits,
+   and again until it says the review finished: it lists every finding the review posted on the PR's head, from every page of its comments.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
 7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
    It splits the change into areas by what the files are about, each test with its code (`worker/plan-review.mjs`),
-   and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests, and list every case they find.
+   and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests, and list every problem they find, each once with every place it shows.
    A checker for each area confirms each case against the code, merges repeats, and weighs it,
    a check across areas, when there's more than one, names repeats across them and adds what spans them,
-   and a step posts what they confirmed or left unsure, each on the line it concerns.
+   and a step posts what they confirmed or left unsure: each Important or Unsure finding on the line it concerns,
+   and the review's Nits and Pre-existing findings together in one checklist on the file of the first.
+   Each area's reviewers and then its checker run on their own (`.github/workflows/review-area.yml`), so no area waits on another's.
    The first review reads the whole change, and each review after it reads what changed since the last review that finished.
-   A review of a push that finishes and posts nothing new reads the whole change once more, one reviewer an area, and the summary names what that pass found.
+   A review of a push reads the whole change once more alongside, one reviewer an area,
+   and posts what that read found only when the push's review finishes and posts nothing new, and the summary names it then.
    A push that changes only what a merge of its base brings in isn't reviewed again.
    The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
    how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
    and anything it read but couldn't judge (`worker/judge-review.mjs`).
    It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each.
    If the summary names something it couldn't judge, tell the user.
-   Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its comment saying why not.
+   Read every finding `wait-for-review` lists before you answer any.
+   Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its thread saying why you won't fix it.
+   Once the push is up, resolve the thread of each finding you fixed, with no reply, since GitHub marks it outdated once its line changes,
+   and of each you answered.
+   Resolve a review's checklist of Nits once every item in it is fixed or answered in a reply on its thread.
+   `main` merges a PR only once every thread on it is resolved.
    A Nit you fix rides a push the PR needs anyway,
    or, when none is left, one last push just before the merge,
    which on a red change comes before its last deploy to beta,
    and never waits for a later PR or the next change to its file.
    After three reviews in a row with an Important finding, or when a finding you declined comes back, stop and ask the user.
-   - If `review` fails, read its summary and the log of the failed `review-find`, `review-check`, `review-across`, or `review-post` job, or its `review-final-` twin, which shows each try's turns and tool calls.
+   - If `review` fails, read its summary and the log of the failed job, an area's `find` or `check` under `review-area`, or `review-across` or `review-post`, or its `review-final-` twin, which shows each try's turns and tool calls.
      If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
      Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and each checker and the check across areas once.
      Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
      where a review stalled, or a re-run that failed too.
      `check` can't pass until the job does.
 8. Squash-merge the PR once all of these are true:
-   `check` passed on the latest commit, the PR has no merge conflicts, every review finding is answered, and its base is `main`.
+   `check` passed on the latest commit, the PR has no merge conflicts, every review thread is resolved, and its base is `main`.
    If GitHub refuses the merge, go back to step 4.
    - Merge a red PR only once `check` passed with the `phone-ok` label on it, which is the owner's go-ahead to merge: until then, tell the user it's ready and wait.
      An OK in chat never stands in for the label.
