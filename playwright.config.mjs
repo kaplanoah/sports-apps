@@ -1,15 +1,13 @@
 import { existsSync } from "node:fs";
 import { defineConfig, devices, webkit } from "@playwright/test";
-import { listApps } from "./worker/apps.mjs";
+import { listAppsWithBrowserTests } from "./worker/apps.mjs";
 
 // Another checkout's browser tests can run alongside on other ports.
 const FIRST_PORT = Number(process.env.BROWSER_TEST_PORT) || 4173;
 const executablePath = process.env.CHROMIUM_PATH;
 
 // Each app with browser tests gets its own project, served from its own port.
-const appsWithBrowserTests = listApps().filter((app) =>
-  existsSync(new URL(`apps/${app}/tests/browser/`, import.meta.url)),
-);
+const appsWithBrowserTests = listAppsWithBrowserTests();
 const findPort = (index) => FIRST_PORT + index;
 
 // iPhones run the pages in WebKit, so the at-rest specs run there too wherever it's installed.

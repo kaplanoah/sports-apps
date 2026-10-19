@@ -17,6 +17,7 @@ import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { LAPTOP } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -70,6 +71,24 @@ test("standings open on each league's playoff field, and every table lines up", 
   expect(tableHeights).toHaveLength(6);
   expect(new Set(tableHeights).size).toBe(1);
   expect(new Set(await readHeights("#standingsWrap .div-title")).size).toBe(1);
+});
+
+test("on a wide screen, every column of the standings shows inside its table", async ({ page }) => {
+  await page.setViewportSize(LAPTOP);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const tables = page.locator("#standingsWrap table.st");
+  await expect(tables).toHaveCount(8);
+
+  const cellsPastTheirTable = await tables.evaluateAll((all) =>
+    all.flatMap((table) => {
+      const right = table.closest(".st-scroll").getBoundingClientRect().right;
+      return [...table.querySelectorAll("th, td")]
+        .filter((cell) => cell.getBoundingClientRect().right > right + 0.5)
+        .map((cell) => cell.textContent.trim());
+    }),
+  );
+  expect(cellsPastTheirTable).toEqual([]);
 });
 
 test("the standings show each club's game under way, and a delay in gold", async ({ page }) => {

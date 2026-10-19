@@ -4,16 +4,27 @@ import { fileURLToPath } from "node:url";
 
 const APPS_ROOT = new URL("../apps/", import.meta.url);
 
-/** @param {string} app */
-export const findAppRoot = (app) => new URL(`${app}/`, APPS_ROOT);
+/**
+ * @param {string} app
+ * @param {URL} [appsRoot] the folder that holds every app's
+ */
+export const findAppRoot = (app, appsRoot = APPS_ROOT) => new URL(`${app}/`, appsRoot);
 
 // An app is a folder whose Worker has a wrangler.toml.
-export const listApps = () =>
-  readdirSync(APPS_ROOT, { withFileTypes: true })
+/** @param {URL} [appsRoot] the folder that holds every app's */
+export const listApps = (appsRoot = APPS_ROOT) =>
+  readdirSync(appsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .filter((app) => existsSync(new URL("worker/wrangler.toml", findAppRoot(app))))
+    .filter((app) => existsSync(new URL("worker/wrangler.toml", findAppRoot(app, appsRoot))))
     .sort();
+
+// The apps with browser tests, each of which Playwright runs as its own project.
+/** @param {URL} [appsRoot] the folder that holds every app's */
+export const listAppsWithBrowserTests = (appsRoot = APPS_ROOT) =>
+  listApps(appsRoot).filter((app) =>
+    existsSync(new URL("tests/browser/", findAppRoot(app, appsRoot))),
+  );
 
 /**
  * The app a command names, or an error that lists the ones there are.
