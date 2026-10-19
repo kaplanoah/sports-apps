@@ -22,10 +22,11 @@ function findButtonStoodFor(element) {
 }
 
 /**
- * The button a stand-in stands in for, or else the element itself.
- * @param {Element} element
+ * Whether `element` is a stand-in, whose press its button hears as its own (`passPress`).
+ * @param {EventTarget | null} element
  */
-export const findStoodFor = (element) => findButtonStoodFor(element) ?? element;
+export const isStandIn = (element) =>
+  element instanceof HTMLElement && element.classList.contains("rider-tap");
 
 /** @typedef {{ top: number, left: number, width: number, height: number }} Box */
 
@@ -89,13 +90,14 @@ function placeRiderTaps(view, pill) {
   standsFor = listBoxButtons(view);
   const pillBox = pill.getBoundingClientRect();
   const pillTop = parseFloat(view.style.getPropertyValue("--parts-top")) - pill.offsetHeight;
-  for (const taps of listTapHolders(view)) {
-    const partLeft = /** @type {HTMLElement} */ (taps.parentElement).getBoundingClientRect().left;
-    const places = standsFor.map((button) =>
-      placeStandIn(button.getBoundingClientRect(), pillBox, pillTop, partLeft),
-    );
-    drawStandIns(taps, places);
-  }
+  // Every part fills the row that holds them, which holds still while slide-panels.js moves a part
+  // aside, so the row's left edge is where each part starts at rest.
+  const partsRow = /** @type {HTMLElement} */ (view.querySelector(".season-parts"));
+  const partLeft = partsRow.getBoundingClientRect().left;
+  const places = standsFor.map((button) =>
+    placeStandIn(button.getBoundingClientRect(), pillBox, pillTop, partLeft),
+  );
+  for (const taps of listTapHolders(view)) drawStandIns(taps, places);
 }
 
 /** @param {Event} event */

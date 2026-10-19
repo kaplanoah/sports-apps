@@ -128,7 +128,6 @@
   position: absolute;
   inset: 0 auto auto 0;
 }
-.bracket-standings:not([data-follows]) .rider-taps,
 .bracket-standings:has(.pager-bar.held) .rider-taps {
   display: none;
 }

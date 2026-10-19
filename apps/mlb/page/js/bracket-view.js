@@ -13,6 +13,7 @@ import { describeInning, renderOutLights } from "./games-view.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { findOpeningRound, watchOpeningRound } from "#shared/opening-round.js";
 import { markScrolledRound, renderRoundDots } from "#shared/round-dots.js";
+import { findPartHolding } from "#shared/season-part.js";
 import { session } from "./session.js";
 
 const renderSeriesWins = (wins, isWinner = false) =>
@@ -300,7 +301,7 @@ const solveGrowth = (room) =>
 // Solves the stage's height, the sized spaces plus the lines and rows, for the space it has.
 function measureGrowth(wrap) {
   if (!isShown(wrap)) return renderedGrowth || 1;
-  const part = wrap.closest(".season-part");
+  const part = findPartHolding(wrap);
   const fixedHeight = 2 * STACKED.lineHeight + 4 * SERIES_HEIGHT;
   const growth = solveGrowth(findSpaceBottom(part) - measureTopAtRest(wrap) - fixedHeight);
   const bounded = Math.min(STACKED.maxGrowth, Math.max(STACKED.minGrowth, growth));
