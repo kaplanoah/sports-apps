@@ -162,7 +162,8 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
 
 /**
  * A reload with settings open on the note shows the note as it was before the page's code arrives,
- * so nothing under it moves once the code runs.
+ * so nothing under it moves once the code runs, and the code still takes it away once it's no longer
+ * due.
  * @param {App} app
  */
 export async function checkReAddNoteOnReload({ page, openApp, openSettings, looks }) {
@@ -180,12 +181,22 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
   await expect(page.locator("#settingsDialog")).toBeVisible();
   await expect(note).toHaveText(NOTE_WORDS);
   expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
-  expect(await readHeight()).toBe(height);
+  await expect.poll(readHeight).toBe(height);
 
   release();
   await page.waitForLoadState("domcontentloaded");
   await expect(note).toHaveText(NOTE_WORDS);
-  expect(await readHeight()).toBe(height);
+  await expect.poll(readHeight).toBe(height);
+
+  // The page's code, not the copy put back, decides: a look another tab picked while the page
+  // was away takes the note away once the code runs.
+  const releaseAgain = await holdRequests(page, matchPath("/js/app.js"));
+  await page.reload({ waitUntil: "commit" });
+  await expect(note).toHaveText(NOTE_WORDS);
+  await page.evaluate(() => localStorage.setItem("appearance", JSON.stringify("dark")));
+  releaseAgain();
+  await page.waitForLoadState("domcontentloaded");
+  await expect(note).toBeEmpty();
 }
 
 /**
