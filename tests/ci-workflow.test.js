@@ -216,11 +216,12 @@ test("the browser and WebKit jobs run only the apps the change reaches, and chec
 const PHONE_CONTEXT =
   readRepoFile(".github/workflows/ci.yml").match(/^env:\n {2}PHONE_CONTEXT: (\S+)$/m)?.[1] ?? "";
 
-// A held red change waits on the phone status, set on every pull request whose gate ran by a job
-// that runs none of the pull request's code since only it can set a status, and check holds the
-// change itself whenever main's rules don't require that status, from a lookup in the workflow
-// rather than the pull request's code, and never records it as passed for main to deploy at once.
-test("a held red change waits on the phone status, and check holds it whenever main's rules don't", () => {
+// A held red change waits on the phone status, set on every pull request from this repository
+// whose gate ran by a job that runs none of the pull request's code since only it can set a
+// status, and check holds the change itself whenever main's rules don't require that status, from
+// a lookup in the workflow rather than the pull request's code, or the pull request comes from a
+// fork, and never records it as passed for main to deploy at once.
+test("a held red change waits on the phone status, and check holds it whenever main's rules don't, or it comes from a fork", () => {
   assert.equal(PHONE_CONTEXT, "phone");
   assert.match(readJob("gate"), /held: \$\{\{ steps\.hold\.outputs\.held \}\}/);
   assert.match(

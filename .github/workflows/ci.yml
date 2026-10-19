@@ -276,11 +276,11 @@ jobs:
   # (worker/burn-in-specs.mjs), runs ten times over, with no retry, so a test that passes only some
   # of the time fails on the pull request that brings it, rather than on later ones. Only a test
   # the pull request wrote or edited fails it: any other that failed goes to the issue Flaky
-  # browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten runs of every spec
-  # a large pull request changes take longer than one machine's limit, so
-  # they're split across machines too, and a machine whose share holds no test passes. When an
-  # at-rest spec is among them, it installs WebKit too, as the webkit job does, so they repeat in
-  # WebKit, where they've failed most.
+  # browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten runs of every spec a
+  # large pull request changes take longer than one machine's limit, so they're split across
+  # machines too, and a machine whose share holds no test passes. When an at-rest spec is among
+  # them, it installs WebKit too, as the webkit job does, so they repeat in WebKit, where they've
+  # failed most.
   burn-in:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.specs != '' }}

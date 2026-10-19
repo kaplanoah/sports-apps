@@ -88,7 +88,10 @@ const LAYER_SETTINGS = [
     ),
   },
   { name: "an animation", pattern: /\.(animate)\(/ },
-  { name: "a fixed or sticky position", pattern: /\b(position\s*:\s*(?:fixed|sticky))\b/ },
+  {
+    name: "a fixed or sticky position",
+    pattern: /\b(position\s*:\s*(?:-webkit-)?(?:fixed|sticky))\b/,
+  },
 ];
 
 // Where a style's text comes from: markup, a page's or a script's template, decodes entities,
@@ -107,10 +110,12 @@ const STYLE = String.raw`\bstyle`;
 // value it writes starts.
 const STYLE_PROPERTY_ASSIGNMENT = new RegExp(`${STYLE}\\.([A-Za-z]+)${ASSIGNS}(?=(.*))`, "g");
 const STYLE_TEXT_ASSIGNMENT = new RegExp(`\\.style${ASSIGNS}(?=(.*))`, "g");
-const STYLE_ATTRIBUTE_CHANGE = /\.(set|remove)Attribute\(\s*["'`]style["'`]\s*(?:,(?=(.*)))?/g;
+// The attribute's name in any case, as the browser lowercases it.
+const STYLE_ATTRIBUTE_CHANGE = /\.(set|remove)Attribute\(\s*["'`]style["'`]\s*(?:,(?=(.*)))?/gi;
 // A property a style's own methods set or clear, on whatever holds the style, by its CSS name,
-// quoted, with any value where it clears it, or by a name the gate can't read, as a variable
-// holds it or an index into the style names it.
+// quoted, in any case but a custom property's, as the browser lowercases it, with any value where
+// it clears it, or by a name the gate can't read, as a variable holds it or an index into the
+// style names it.
 const STYLE_PROPERTY_CALL =
   /\.(?:set|remove)Property\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(?=(.*)))?/g;
 const STYLE_INDEX = new RegExp(`${STYLE}\\s*\\[`, "g");
@@ -469,7 +474,11 @@ const findStyleTextSetting = (text, isWatched) =>
 const findPropertyCallSetting = (text, isWatched) =>
   findFirstSetting(text, STYLE_PROPERTY_CALL, ([, quote, name, written]) =>
     quote
-      ? describeStyleProperty(name, readScriptValue(written ?? ""), isWatched)
+      ? describeStyleProperty(
+          name.startsWith("--") ? name : name.toLowerCase(),
+          readScriptValue(written ?? ""),
+          isWatched,
+        )
       : UNREADABLE_PROPERTY,
   );
 
