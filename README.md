@@ -251,8 +251,10 @@ layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone` statu
 on its head commit, which stays pending until the owner has used it on the beta
 app and labeled the pull request `phone-ok`. The repo's ruleset for `main`
 (**Settings > Rules > Rulesets**) requires the `check` and `phone` statuses and
-every review thread resolved. Without `phone` in it, `check` holds a red change
-itself. The base branch's copy of the gate's code judges a pull request, so a
+every review thread resolved. Without `phone` in it, or for a pull request from a
+fork, whose token can't post the status, `check` holds a red change itself; a
+fork's pull request gets no `phone` status, so while the ruleset requires it, it
+merges only through the ruleset's bypass. The base branch's copy of the gate's code judges a pull request, so a
 change to that code can't let the pull request's own red change through; a
 change to the workflow's `gate`, `phone`, or `check` job is the review's to
 weigh, which `REVIEW.md` counts as Important when it lets less through.

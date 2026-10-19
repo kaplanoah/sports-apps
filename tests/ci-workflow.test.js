@@ -218,10 +218,19 @@ const PHONE_CONTEXT =
 test("a held red change waits on the phone status, and check holds it whenever main's rules don't", () => {
   assert.equal(PHONE_CONTEXT, "phone");
   assert.match(readJob("gate"), /held: \$\{\{ steps\.hold\.outputs\.held \}\}/);
+  assert.match(
+    readJob("gate"),
+    /forked: \$\{\{ github\.event\.pull_request\.head\.repo\.full_name != github\.repository \}\}/,
+    "the gate says once whether a pull request comes from a fork, for phone and check both",
+  );
+  assert.equal(
+    [...readRepoFile(".github/workflows/ci.yml").matchAll(/head\.repo\.full_name/g)].length,
+    1,
+  );
   const phone = readJob("phone");
   assert.match(
     phone,
-    /needs: gate\n\s+if: \$\{\{ !cancelled\(\) && needs\.gate\.result == 'success' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository \}\}\n/,
+    /needs: gate\n\s+if: \$\{\{ !cancelled\(\) && needs\.gate\.result == 'success' && needs\.gate\.outputs\.forked != 'true' \}\}\n/,
     "phone runs on every pull request from this repository, whose token can post the status",
   );
   assert.match(phone, /permissions:\n\s+statuses: write\n\s+steps:/);
@@ -241,7 +250,7 @@ test("a held red change waits on the phone status, and check holds it whenever m
   );
   assert.match(
     check,
-    /\(needs\.gate\.outputs\.held == 'true' && \(steps\.phone\.outputs\.required != 'true' \|\|\n\s+github\.event\.pull_request\.head\.repo\.full_name != github\.repository\)\)\n\s+run: exit 1/,
+    /\(needs\.gate\.outputs\.held == 'true' && \(steps\.phone\.outputs\.required != 'true' \|\|\n\s+needs\.gate\.outputs\.forked == 'true'\)\)\n\s+run: exit 1/,
     "check holds a red change itself where main's rules don't require phone, or a fork can't post it",
   );
   assert.match(

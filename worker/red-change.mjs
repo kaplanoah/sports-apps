@@ -115,6 +115,8 @@ const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*
 const STYLE_OBJECT = /Object\.assign\(\s*(?:[\w$.]+\.)?style\s*,\s*\{/g;
 const KEYFRAMES = /\.animate\(\s*[[{]/g;
 const KEYFRAME_TIMING_KEYS = new Set(["offset", "easing", "composite"]);
+// A keyframe names the CSS offset property cssOffset, since offset is its place.
+const KEYFRAME_CSS_NAMES = new Map([["cssOffset", "offset"]]);
 // The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
 const KEYFRAMES_NAME = /\.animate\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 const STYLE_KEY = /(?:^|[\s{,])(["']?)(-{0,2}[A-Za-z][\w-]*)\1\s*:(?!:)/g;
@@ -476,12 +478,13 @@ const findStyleSetting = (text, isWatched) =>
  * What a line of a style's object, or of an animation's keyframes, sets by its keys that a
  * page's stylesheet would be red for, or null when it sets nothing that is.
  * @param {string} text
- * @param {Set<string>} skippedKeys the keys that set no style where the line lies
+ * @param {(key: string) => string | null} readProperty the CSS name a key sets where the line
+ *   lies, or null for one that sets no style there
  */
-function findStyleKey(text, skippedKeys) {
+function findStyleKey(text, readProperty) {
   for (const match of text.matchAll(STYLE_KEY)) {
-    if (skippedKeys.has(match[2])) continue;
-    const property = toKebabCase(match[2]);
+    const property = readProperty(match[2]);
+    if (property === null) continue;
     const value = readScriptValue(text.slice((match.index ?? 0) + match[0].length));
     if (isPageLayerDeclaration({ property, value }))
       return `a style property that sets ${property}`;
@@ -501,9 +504,16 @@ function findStyleKey(text, skippedKeys) {
  * @param {StyleObjectLines} objectLines
  */
 function findObjectKeySetting({ number, text }, { styleLines, keyframeLines }) {
-  if (styleLines.has(number)) return findStyleKey(text, new Set());
-  return keyframeLines.has(number) ? findStyleKey(text, KEYFRAME_TIMING_KEYS) : null;
+  if (styleLines.has(number)) return findStyleKey(text, toKebabCase);
+  return keyframeLines.has(number) ? findStyleKey(text, readKeyframeProperty) : null;
 }
+
+/**
+ * The CSS name a keyframe's key sets, or null for one that places the keyframe in its animation.
+ * @param {string} key
+ */
+const readKeyframeProperty = (key) =>
+  KEYFRAME_TIMING_KEYS.has(key) ? null : (KEYFRAME_CSS_NAMES.get(key) ?? toKebabCase(key));
 
 /**
  * What an added line sets that makes a layer or that a page's stylesheet would be red for, given

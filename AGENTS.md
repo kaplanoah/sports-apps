@@ -824,7 +824,8 @@ Delete it once the app's first PR merges.
   added by the owner after the PR's last push,
   which main's rules require for a merge, so `check` passes on the PR's tests and review alone,
   and holds the change itself whenever main's rules don't require that status, which its own step reads from GitHub,
-  or the pull request comes from a fork, whose token can't post it (`.github/workflows/ci.yml`).
+  or the pull request comes from a fork, whose token can't post it,
+  so a fork's pull request has no `phone` status and merges only past main's rules while they require it (`.github/workflows/ci.yml`).
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     When you ask the owner to add `phone-ok`, link the PR in the same message.

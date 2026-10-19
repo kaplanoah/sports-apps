@@ -73,6 +73,8 @@ jobs:
       checks: read
     outputs:
       held: ${{ steps.hold.outputs.held }}
+      # Whether the pull request comes from a fork, whose token can't post the phone status.
+      forked: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -102,10 +104,11 @@ jobs:
 
   # The status a held red change waits on, pending until phone-ok, which main's rules require. It
   # runs none of the pull request's code, since its token can set the status. A fork's pull
-  # request gets a token that can't, so it skips this, and check holds its red change itself.
+  # request gets a token that can't, so it skips this and gets no phone status at all: check holds
+  # its red change itself, and while main's rules require the status, it merges only past them.
   phone:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.gate.outputs.forked != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -973,8 +976,9 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           persist-credentials: false
-      # The phone status holds a merge only while main's rules require it, so check holds a red
-      # change itself whenever they don't. The lookup runs none of the pull request's code.
+      # The phone status holds a merge only while main's rules require it and the pull request can
+      # post it, so check holds a red change itself whenever they don't or it comes from a fork. The
+      # lookup runs none of the pull request's code.
       - name: Tell whether main's rules hold a red change on the phone status
         id: phone
         if: needs.gate.outputs.held == 'true'
@@ -1008,7 +1012,7 @@ jobs:
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
           (github.event_name == 'pull_request' && needs.gate.result != 'success') ||
           (needs.gate.outputs.held == 'true' && (steps.phone.outputs.required != 'true' ||
-          github.event.pull_request.head.repo.full_name != github.repository))
+          needs.gate.outputs.forked == 'true'))
         run: exit 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: github.event_name == 'pull_request' && needs.gate.outputs.held != 'true'

@@ -1359,6 +1359,7 @@ const KEYFRAMES_SCRIPT = [
   "const SHRINK = [",
   "  { scale: 0.9 },",
   "  { opacity: 0.6, offset: 0.4, easing: 'ease-in' },",
+  "  { cssOffset: \"path('M 0 0 L 10 10')\" },",
   "];",
   "const shrink = (part) => part.animate(SHRINK, { duration: 200 });",
   "const sizes = [{ scale: 2 }];",
@@ -1383,9 +1384,12 @@ test("a key of the keyframes a part's animate takes sets that style, a number to
     `${path}:5 adds a style property that sets scale: { scale: 1.1, offset: 0.4 },`,
   ]);
   assert.equal(findLineReasons(12).length, 1, "a keyframe of a named list");
-  for (const quiet of [8, 13, 16])
+  assert.deepEqual(findLineReasons(14), [
+    `${path}:14 adds a style property that sets offset: { cssOffset: "path('M 0 0 L 10 10')" },`,
+  ]);
+  for (const quiet of [8, 13, 17])
     assert.deepEqual(findLineReasons(quiet), [], KEYFRAMES_SCRIPT.split("\n")[quiet - 1]);
-  assert.deepEqual([...findKeyframeLines(KEYFRAMES_SCRIPT)], [3, 4, 5, 6, 7, 11, 12, 13, 14]);
+  assert.deepEqual([...findKeyframeLines(KEYFRAMES_SCRIPT)], [3, 4, 5, 6, 7, 11, 12, 13, 14, 15]);
   assert.deepEqual([...findStyleObjectLines(KEYFRAMES_SCRIPT)], []);
 });
 
