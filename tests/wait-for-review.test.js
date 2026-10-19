@@ -19,7 +19,7 @@ const KEY = "0".repeat(16);
 const BOT = { login: "github-actions[bot]" };
 const MINUTE = 60 * 1000;
 const POLL = 3 * MINUTE;
-const SUITE = 20;
+const HOUR = 60 * MINUTE;
 
 const mark = (/** @type {string} */ head) => writeFindingMark(KEY, head);
 
@@ -42,21 +42,29 @@ const OFF_DIFF = {
   body: `Findings on files this pull request doesn't change:\n\n- \`a.js:3\`: **Unsure** three\n\n${mark(HEAD)}`,
 };
 
+/** @param {number} time */
+const writeTime = (time) => new Date(time).toISOString();
+
 /**
- * A review check run of the head's newest CI run, or of the one whose check suite it names.
+ * A review check run, which started when it says.
  * @param {string} status
  * @param {string | null} [conclusion]
- * @param {number} [suite]
+ * @param {{ id?: number, startedAt?: number }} [run]
  */
-const reviewRun = (status, conclusion = null, suite = SUITE) => ({
-  id: suite,
+const reviewRun = (status, conclusion = null, { id = 2, startedAt = 0 } = {}) => ({
+  id,
   status,
   conclusion,
-  check_suite: { id: suite },
+  started_at: writeTime(startedAt),
 });
 const QUEUED = [reviewRun("queued")];
 const PASSED = [reviewRun("completed", "success")];
-const NEWEST_CI = [{ id: 1, check_suite_id: SUITE }];
+
+/**
+ * The head's CI run, whose current try started when it says.
+ * @param {number} startedAt
+ */
+const ciRun = (startedAt) => ({ id: 1, run_started_at: writeTime(startedAt) });
 
 /**
  * A fetch that answers as GitHub does, and keeps each request. The pull request answers each of
@@ -64,6 +72,7 @@ const NEWEST_CI = [{ id: 1, check_suite_id: SUITE }];
  * CI runs answer for the time on the clock.
  * @param {object} answers
  * @param {{ sha: string, draft?: boolean }[]} [answers.pulls]
+ * @param {number[]} [answers.readyAt] each time the pull request was marked ready for review
  * @param {(time: number) => any[]} [answers.runsAt] the review's check runs
  * @param {(time: number) => any[]} [answers.ciRunsAt] the head's CI runs, newest first
  * @param {any[]} [answers.reviewComments]
@@ -74,8 +83,9 @@ const NEWEST_CI = [{ id: 1, check_suite_id: SUITE }];
  */
 function fakeGitHub({
   pulls = [{ sha: HEAD }],
+  readyAt = [],
   runsAt = () => PASSED,
-  ciRunsAt = () => NEWEST_CI,
+  ciRunsAt = () => [ciRun(0)],
   reviewComments = [],
   issueComments = [],
   refusal,
@@ -84,6 +94,13 @@ function fakeGitHub({
   /** @type {{ url: string, headers: Record<string, string> }[]} */
   const requests = [];
   let pullAsks = 0;
+  const events = [
+    { event: "labeled", created_at: writeTime(0) },
+    ...readyAt.flatMap((time) => [
+      { event: "ready_for_review", created_at: writeTime(time) },
+      { event: "review_requested", created_at: writeTime(time) },
+    ]),
+  ];
   /** @param {any[]} items @param {URL} url */
   const page = (items, url) => {
     const number = Number(url.searchParams.get("page"));
@@ -99,6 +116,7 @@ function fakeGitHub({
     if (url.pathname.endsWith("/check-runs")) return { check_runs: runsAt(now()) };
     if (url.pathname.endsWith("/actions/workflows/ci.yml/runs"))
       return { workflow_runs: ciRunsAt(now()).slice(0, Number(url.searchParams.get("per_page"))) };
+    if (url.pathname.endsWith("/issues/7/events")) return page(events, url);
     if (url.pathname.endsWith("/pulls/7/comments")) return page(reviewComments, url);
     if (url.pathname.endsWith("/issues/7/comments")) return page(issueComments, url);
     return {};
@@ -113,9 +131,12 @@ function fakeGitHub({
   return { requests, readGitHub: createGitHub({ repository: "o/r", fetchImpl, env: {} }) };
 }
 
-/** A clock that a wait moves on, and the waits it was asked for. */
-function fakeClock() {
-  let time = 0;
+/**
+ * A clock that a wait moves on, from the time it starts at, and the waits it was asked for.
+ * @param {number} [start]
+ */
+function fakeClock(start = 0) {
+  let time = start;
   /** @type {number[]} */
   const waits = [];
   return {
@@ -131,9 +152,10 @@ function fakeClock() {
 /**
  * The fake GitHub and clock for a wait, the GitHub answering for the clock's time.
  * @param {Parameters<typeof fakeGitHub>[0]} answers
+ * @param {number} [start] when the wait starts
  */
-function fakeWait(answers) {
-  const clock = fakeClock();
+function fakeWait(answers, start = 0) {
+  const clock = fakeClock(start);
   const github = fakeGitHub({ ...answers, now: clock.now });
   return {
     ...github,
@@ -141,6 +163,13 @@ function fakeWait(answers) {
     options: { readGitHub: github.readGitHub, pullNumber: "7", ...clock },
   };
 }
+
+/**
+ * How many of the requests asked for the head's CI runs.
+ * @param {{ url: string }[]} requests
+ */
+const countCiRunAsks = (requests) =>
+  requests.filter(({ url }) => url.includes("/actions/workflows/ci.yml/runs")).length;
 
 test("it asks every few minutes until the review finishes, then lists every finding it posted on the head in full, from every page", async () => {
   const others = Array.from({ length: 100 }, () => ({ user: { login: "someone" }, body: "ok" }));
@@ -179,23 +208,65 @@ test("it asks every few minutes until the review finishes, then lists every find
     "  - `a.js:3`: **Unsure** three",
   ]);
   assert.ok(requests.some(({ url }) => url.includes("/pulls/7/comments?per_page=100&page=2")));
-  assert.ok(requests[1].url.startsWith(`/repos/o/r/commits/${HEAD}/check-runs?check_name=review`));
+  assert.ok(requests[2].url.startsWith(`/repos/o/r/commits/${HEAD}/check-runs?check_name=review`));
   assert.ok(requests.every(({ headers }) => !("authorization" in headers)));
 });
 
-test("a review from an earlier CI run on the head, like a draft's, counts only once the newest run's has finished", async () => {
-  const draftRun = reviewRun("completed", "success", 10);
-  const { clock, options } = fakeWait({
-    runsAt: (time) =>
-      time < 2 * POLL ? [draftRun] : [reviewRun("completed", "failure"), draftRun],
+test("a draft's run, whose review passed without reviewing, never counts: alone it ends as CI not started, and a run since the PR was marked ready counts once its review finishes", async () => {
+  const start = HOUR;
+  const readyAt = [start - 40 * MINUTE, start - MINUTE];
+  const draftsReview = reviewRun("completed", "success", { id: 1, startedAt: start - 15 * MINUTE });
+  const draftsRun = ciRun(start - 20 * MINUTE);
+  const alone = fakeWait(
+    { readyAt, runsAt: () => [draftsReview], ciRunsAt: () => [draftsRun] },
+    start,
+  );
+  assert.deepEqual(await reportReview(alone.options), {
+    code: EXIT_CODES.unstarted,
+    lines: ["CI hasn't started on aaaaaaa: check the PR for a merge conflict."],
   });
-  assert.deepEqual(await reportReview(options), {
+  assert.equal(alone.clock.now() - start, POLL);
+  const readied = fakeWait(
+    {
+      readyAt,
+      runsAt: (time) =>
+        time < start + 2 * POLL
+          ? [draftsReview]
+          : [reviewRun("completed", "failure", { startedAt: start + 5 * MINUTE }), draftsReview],
+      ciRunsAt: () => [ciRun(start - 30 * 1000), draftsRun],
+    },
+    start,
+  );
+  assert.deepEqual(await reportReview(readied.options), {
     code: EXIT_CODES.failed,
     lines: [
       "The review of aaaaaaa didn't pass (failure): read its summary, and posted 0 findings on it.",
     ],
   });
-  assert.equal(clock.now(), 2 * POLL);
+  assert.equal(readied.clock.now() - start, 2 * POLL);
+  assert.equal(
+    countCiRunAsks(readied.requests),
+    3,
+    "each review judged once, and whether CI started since the PR was marked ready asked once",
+  );
+});
+
+test("a re-run's earlier failed review, in the same CI run, doesn't count, and the wait goes on to the new try's", async () => {
+  const start = HOUR;
+  const earlierTry = reviewRun("completed", "failure", { id: 1, startedAt: start - 20 * MINUTE });
+  const { clock, requests, options } = fakeWait(
+    {
+      runsAt: (time) =>
+        time < start + 3 * POLL
+          ? [earlierTry]
+          : [reviewRun("completed", "success", { startedAt: start + 8 * MINUTE }), earlierTry],
+      ciRunsAt: () => [ciRun(start - 2 * MINUTE)],
+    },
+    start,
+  );
+  assert.equal((await reportReview(options)).code, EXIT_CODES.passed);
+  assert.equal(clock.now() - start, 3 * POLL);
+  assert.equal(countCiRunAsks(requests), 3, "judged once each, and whether CI started once");
 });
 
 test("it stops waiting after about nine minutes, before a session's command times out, saying to run it again", async () => {
@@ -204,14 +275,19 @@ test("it stops waiting after about nine minutes, before a session's command time
   assert.equal(code, EXIT_CODES.going);
   assert.deepEqual(lines, ["The review of aaaaaaa is still going: run this again to wait for it."]);
   assert.equal(clock.now(), 9 * MINUTE);
-  assert.equal(requests.length, 6, "the pull request, four asks, and the pull request again");
+  assert.equal(
+    requests.length,
+    7,
+    "the pull request and its events, four asks, and the pull request again",
+  );
 });
 
 test("an hour of waits back to back stays within GitHub's 60 unsigned requests, and still reads the finished review's comments", async () => {
   const clock = fakeClock();
   const finishesAt = 57 * MINUTE;
   const { requests, readGitHub } = fakeGitHub({
-    runsAt: (time) => (time < finishesAt ? [] : PASSED),
+    runsAt: (time) =>
+      time < finishesAt ? [] : [reviewRun("completed", "success", { startedAt: finishesAt })],
     reviewComments: [INLINE],
     issueComments: [OFF_DIFF],
     now: clock.now,
@@ -250,11 +326,7 @@ test("a head CI hasn't started on a few minutes on says to look for a merge conf
   assert.equal(unstarted.clock.now(), POLL);
   const started = fakeWait({ runsAt: () => [] });
   assert.equal((await reportReview(started.options)).code, EXIT_CODES.going);
-  assert.equal(
-    started.requests.filter(({ url }) => url.includes("/actions/workflows/ci.yml/runs")).length,
-    1,
-    "whether CI started is asked once",
-  );
+  assert.equal(countCiRunAsks(started.requests), 1, "whether CI started is asked once");
 });
 
 test("a draft, at first or once the wait is under way, says it isn't reviewed until it's ready", async () => {
@@ -267,31 +339,32 @@ test("a draft, at first or once the wait is under way, says it isn't reviewed un
   }
 });
 
-test("a used-up limit says which and when it lets requests through, without a stack trace, and any other refusal stops it", async () => {
+test("a used-up limit says which and when it lets requests through, a secondary one says when it names, without a stack trace, and any other refusal stops it", async () => {
   const resetsAt = Date.UTC(2026, 9, 19, 12, 30) / 1000;
   const now = () => (resetsAt - 22.5 * 60) * 1000;
-  for (const [status, remaining] of /** @type {[number, string][]} */ ([
-    [403, "0"],
-    [429, "5"],
+  const limits = { "x-ratelimit-reset": String(resetsAt), "x-ratelimit-limit": "60" };
+  // A wait GitHub names counts from when it answered, the machine's own time.
+  for (const [refusal, clockNow, said] of /** @type {[any, () => number, string][]} */ ([
+    [
+      { status: 403, headers: { ...limits, "x-ratelimit-remaining": "0" } },
+      now,
+      "GitHub's limit of 60 requests an hour is used up: run this again in 23 minutes, once it lets requests through.",
+    ],
+    [
+      { status: 429, headers: { ...limits, "x-ratelimit-remaining": "5" } },
+      now,
+      "GitHub is holding back requests: run this again in a minute.",
+    ],
+    [
+      { status: 403, headers: { ...limits, "x-ratelimit-remaining": "5", "retry-after": "120" } },
+      Date.now,
+      "GitHub is holding back requests: run this again in 2 minutes, once it lets requests through.",
+    ],
   ])) {
-    const { readGitHub } = fakeGitHub({
-      refusal: {
-        status,
-        headers: {
-          "x-ratelimit-reset": String(resetsAt),
-          "x-ratelimit-limit": "60",
-          "x-ratelimit-remaining": remaining,
-        },
-      },
-    });
+    const { readGitHub } = fakeGitHub({ refusal });
     assert.deepEqual(
-      await reportReview({ readGitHub, pullNumber: "7", wait: async () => {}, now }),
-      {
-        code: EXIT_CODES.limited,
-        lines: [
-          "GitHub's limit of 60 requests an hour is used up: run this again in 23 minutes, once it lets requests through.",
-        ],
-      },
+      await reportReview({ readGitHub, pullNumber: "7", wait: async () => {}, now: clockNow }),
+      { code: EXIT_CODES.limited, lines: [said] },
     );
   }
   for (const refusal of [
@@ -306,7 +379,7 @@ test("a used-up limit says which and when it lets requests through, without a st
   }
   assert.equal(
     describeLimit({ limit: null, resetsAt: null }, 0),
-    "GitHub is holding back requests: run this again later.",
+    "GitHub is holding back requests: run this again in a minute.",
   );
 });
 

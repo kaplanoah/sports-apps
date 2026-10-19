@@ -145,9 +145,9 @@ const readExecution = (path) => (path && existsSync(path) ? readJson(path) : [])
 const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.areas);
 
 // Each job's record, by the name it's saved under in the review's folder: its job, then what it
+// covers, so the judge reads back each job's records, and only theirs, by the job alone. An area
 // can be the expression a workflow names it by, so a test can check the workflows' paths against
 // these.
-// can be the expression a workflow names it by, so a test can check the workflows' paths against these.
 const RECORD_JOBS = Object.freeze({
   find: "find",
   candidates: "candidates",

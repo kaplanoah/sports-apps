@@ -101,8 +101,8 @@ and a step posts what they confirmed or left unsure.
   **Pre-existing** for a problem in code the change didn't make worse.
 - An **Important** or **Unsure** finding is posted on its line, a thread of its own, or on its file when GitHub won't take the line.
   A review's **Nit** and **Pre-existing** findings are posted together as a checklist, each item naming its file and line,
-  on the first of their files GitHub takes, and split into more than one only past GitHub's limit on a comment's length,
-  so they're one thread to answer and resolve.
+  in one comment, or in more only past GitHub's limit on a comment's length, each on the first of its items' files GitHub takes.
+  Each checklist comment is one thread to answer and resolve.
   A finding GitHub takes on no file goes in a comment in the pull request's conversation, which has no thread to resolve:
   answer it with a reply in the conversation.
 - The numbered items above are never matters of taste:

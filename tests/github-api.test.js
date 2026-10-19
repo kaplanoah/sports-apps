@@ -41,15 +41,24 @@ test("a refusal counts as a used-up limit only for a 429 or a 403 with none left
     return [error.isLimited, error.limit, error.resetsAt?.toISOString() ?? null];
   };
   const usedUp = [true, 60, "2023-11-14T22:13:20.000Z"];
-  for (const error of await refuseWith(403, { ...reset, "x-ratelimit-remaining": "0" }))
-    assert.deepEqual(describe(error), usedUp);
-  for (const error of await refuseWith(429, reset)) assert.deepEqual(describe(error), usedUp);
+  for (const status of [403, 429])
+    for (const error of await refuseWith(status, { ...reset, "x-ratelimit-remaining": "0" }))
+      assert.deepEqual(describe(error), usedUp, String(status));
+  for (const error of await refuseWith(429, { ...reset, "x-ratelimit-remaining": "5" }))
+    assert.deepEqual(describe(error), [true, null, null], "a secondary limit that names no wait");
   for (const error of await refuseWith(403, { ...reset, "x-ratelimit-remaining": "12" }))
     assert.deepEqual(describe(error), [false, null, null]);
   for (const error of await refuseWith(403, {}))
     assert.deepEqual(describe(error), [false, null, null]);
-  const secondary = new GitHubError(403, "GET /pulls/7", new Headers({ "retry-after": "90" }), 0);
-  assert.deepEqual(describe(secondary), [true, null, "1970-01-01T00:01:30.000Z"]);
+  /** @param {Record<string, string>} headers */
+  const refuseAtZero = (headers) => new GitHubError(403, "GET /pulls/7", new Headers(headers), 0);
+  const secondary = { ...reset, "x-ratelimit-remaining": "5", "retry-after": "90" };
+  assert.deepEqual(describe(refuseAtZero(secondary)), [true, null, "1970-01-01T00:01:30.000Z"]);
+  assert.deepEqual(
+    describe(refuseAtZero({ ...secondary, "x-ratelimit-remaining": "0" })),
+    usedUp,
+    "a wait named beside a used-up hour waits for the hour",
+  );
 });
 
 test("a REST request is signed with the token when there is one, and goes unsigned without one", async () => {

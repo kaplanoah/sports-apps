@@ -3,10 +3,10 @@
 // reviewer for each kind of problem in KINDS read each area in full. The first review reads the
 // whole change. A review after it reads only what the pushes since the last full read changed,
 // and the whole change is read once more alongside it, by FINAL_KIND's reviewer, whose findings
-// are posted only when that review finishes and posts nothing. A push that changes only what a merge of the base brings in is read by no
-// one, and neither is a run on the head the last full read ended on, as a label's is. A test's
-// recorded data, the lockfile, a binary file, and a drawing or minified library a tool wrote go
-// unread, named in the summary instead.
+// are posted only when that review finishes and posts nothing. A push that changes only what a
+// merge of the base brings in is read by no one, and neither is a run on the head the last full
+// read ended on, as a label's is. A test's recorded data, the lockfile, a binary file, and a
+// drawing or minified library a tool wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
 // commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,

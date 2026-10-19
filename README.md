@@ -238,9 +238,10 @@ areas by what the files are about, has four reviewers read each area in full,
 each for one kind of problem (in the last read of the whole change, one reviewer
 an area looks for every kind), checks every problem they list against the code,
 comments on each Important or Unsure finding's line, lists a review's Nits and
-Pre-existing findings together in a checklist on the first of their files GitHub
-takes (in more than one comment only past GitHub's limit on a comment's length),
-puts any finding GitHub takes on no file in a comment in the conversation, and
+Pre-existing findings together in a checklist comment on the first of its items'
+files GitHub takes (in more than one, each its own thread, only past GitHub's
+limit on a comment's length), puts any finding GitHub takes on no file in a
+comment in the conversation, and
 keeps one summary comment up to date. The first review reads the whole change,
 and each review after it reads what changed since the last review that finished.
 The review is one of the checks that must pass, so a review that can't run, that

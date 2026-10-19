@@ -916,8 +916,8 @@ When a step says to go back to an earlier step, continue in order from there.
    A checker for each area confirms each problem against the code, merges repeats, and weighs it,
    a check across areas, when there's more than one, names repeats across them and adds what spans them,
    and a step posts what they confirmed or left unsure: each Important or Unsure finding on the line it concerns, or its file,
-   and the review's Nits and Pre-existing findings together in a checklist on the first of their files GitHub takes,
-   split into more than one only past GitHub's limit on a comment's length,
+   and the review's Nits and Pre-existing findings together in a checklist, in one comment, or in more only past GitHub's limit on a comment's length,
+   each on the first of its items' files GitHub takes and each a thread of its own,
    and any finding GitHub takes on no file in a comment in the PR's conversation.
    Each area's reviewers and then its checker run on their own (`.github/workflows/review-area.yml`), so no area waits on another's.
    The first review reads the whole change, and each review after it reads what changed since the last review that finished.
@@ -935,7 +935,7 @@ When a step says to go back to an earlier step, continue in order from there.
    and name a place outside the change that shows it in a line of the PR's description, rather than widening the PR.
    Once the push is up, resolve the thread of each finding you fixed, with no reply, since GitHub marks it outdated once its line changes,
    and of each you answered.
-   Resolve a review's checklist of Nits once every item in it is fixed or answered in a reply on its thread.
+   Resolve each checklist of Nits once every item in it is fixed or answered in a reply on its thread.
    A finding in the PR's conversation has no thread: answer one you won't fix with a reply in the conversation.
    `main` merges a PR only once every thread on it is resolved.
    A Nit you fix rides a push the PR needs anyway,

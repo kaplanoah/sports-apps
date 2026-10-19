@@ -2,21 +2,23 @@
 // and every finding it posted on that head, in full, from every page of the pull request's
 // comments, so a session reads all of a review's findings before it answers any. A cloud session
 // holds no token, so it reads the public repo unsigned, within GitHub's limit of 60 requests an
-// hour for an address: it asks for the review's check run once every POLL_MS, reads the pull
-// request again only every PULL_EVERY asks, and stops after about nine minutes, before a cloud
-// session's command times out, saying to run it again, so even an hour of waits back to back
-// leaves room to read a finished review's comments. A review counts only from the head's newest CI
-// run, since an earlier one's, like a draft's, which passes without reviewing, can still be on the
-// head. It stops when a newer push replaced the head, since the newer push's run cancels the
-// head's review, or when the pull request is a draft, which CI doesn't review.
+// hour for an address: it reads the pull request's events once, asks for the review's check run
+// once every POLL_MS, reads the pull request again only every PULL_EVERY asks, and stops after
+// about nine minutes, before a cloud session's command times out, saying to run it again, so even
+// an hour of waits back to back leaves room to read a finished review's comments. A review counts
+// only once it started since the pull request was last marked ready and since the head's newest
+// CI run started its current try, since a draft's run, which passes its review without reviewing,
+// and a re-run's earlier try can each still have a finished review check run on the head. It stops
+// when a newer push replaced the head, since the newer push's run cancels the head's review, or
+// when the pull request is a draft, which CI doesn't review.
 // Usage: node worker/wait-for-review.mjs <pull request number>, in a clone of the repo. It exits
 // with EXIT_CODES: 0 once the review passed, 1 once it didn't, 2 while it's still going, 3 when a
-// newer push replaced the head, 4 when CI hasn't started on the head, as on a pull request in
-// conflict, 5 for a draft, 6 once GitHub's limit is used up, and 7 when it isn't handed a pull
-// request's number.
+// newer push replaced the head, 4 when CI hasn't started a run that counts on the head, as on a
+// pull request in conflict, 5 for a draft, 6 once GitHub's limit is used up, and 7 when it isn't
+// handed a pull request's number.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { GitHubError, createGitHub } from "./github-api.mjs";
+import { GitHubError, createGitHub, readAllPages } from "./github-api.mjs";
 import {
   listFindingMarks,
   pluralize,
@@ -32,7 +34,7 @@ const POLL_MS = 3 * 60 * 1000;
 const PULL_EVERY = 3;
 const LONGEST_WAIT_MS = 9 * 60 * 1000;
 // The review's check run starts only once every review job before it has finished, so until
-// then whether CI started at all is told from whether the head has a CI run.
+// then whether CI started at all is told from whether the head has a CI run that counts.
 const START_WAIT_MS = 3 * 60 * 1000;
 
 export const EXIT_CODES = Object.freeze({
@@ -114,13 +116,38 @@ async function readNewestCiRun(readGitHub, sha) {
 }
 
 /**
- * Whether a review check run is the head's newest CI run's, rather than one a newer run replaced.
+ * When the pull request was last marked ready for review, or 0 for one never a draft, from every
+ * page of its events, which list that without the timeline's comments and reviews, so in fewer
+ * pages.
  * @param {ReadGitHub} readGitHub
- * @param {string} sha
- * @param {any} run
+ * @param {string} pullNumber
  */
-const isFromNewestCiRun = async (readGitHub, sha, run) =>
-  (await readNewestCiRun(readGitHub, sha))?.check_suite_id === run.check_suite?.id;
+async function readReadyAt(readGitHub, pullNumber) {
+  const events = await readAllPages(readGitHub, `/issues/${pullNumber}/events`);
+  const ready = events.filter((event) => event.event === "ready_for_review").at(-1);
+  return ready ? Date.parse(ready.created_at) : 0;
+}
+
+/**
+ * Whether a CI run counts for the head: it started since the pull request was last marked ready,
+ * as a draft's run passes its review without reviewing.
+ * @param {any} ciRun as GitHub lists a workflow run
+ * @param {number} readyAt
+ */
+const isCountingCiRun = (ciRun, readyAt) => Date.parse(ciRun.run_started_at) >= readyAt;
+
+/**
+ * Whether a finished review check run counts: it started since the pull request was last marked
+ * ready, and since the head's newest CI run started its current try, so neither a draft's run nor
+ * a re-run's earlier try reads as the review.
+ * @param {ReadGitHub} readGitHub
+ * @param {{ sha: string, readyAt: number, run: any }} review
+ */
+async function isCountingReview(readGitHub, { sha, readyAt, run }) {
+  const ciRun = await readNewestCiRun(readGitHub, sha);
+  const startedAt = Date.parse(run.started_at);
+  return Boolean(ciRun) && startedAt >= readyAt && startedAt >= Date.parse(ciRun.run_started_at);
+}
 
 /**
  * What stops the wait on a head before its review finishes: a newer push, or a draft.
@@ -146,9 +173,9 @@ const describeRun = (run, sha) => ({
 });
 
 /**
- * How the wait for the review of a pull request's head ended: the review of the head's newest CI
- * run finished, a newer push replaced the head, the pull request is a draft, CI hasn't started on
- * the head a few minutes on, or the wait has gone as long as a session's command can.
+ * How the wait for the review of a pull request's head ended: a review that counts finished, a
+ * newer push replaced the head, the pull request is a draft, CI hasn't started a run that counts
+ * on the head a few minutes on, or the wait has gone as long as a session's command can.
  * @param {object} options
  * @param {ReadGitHub} options.readGitHub
  * @param {string} options.pullNumber
@@ -160,23 +187,26 @@ async function waitForReview({ readGitHub, pullNumber, wait, now }) {
   const started = now();
   const { head: sha, isDraft } = await readPull(readGitHub, pullNumber);
   if (isDraft) return { outcome: "draft", sha };
-  /** @type {Set<number>} the check suites of CI runs a newer one replaced */
-  const staleSuites = new Set();
+  const readyAt = await readReadyAt(readGitHub, pullNumber);
+  /** @type {Set<number>} finished review check runs that don't count, which never will */
+  const uncounted = new Set();
   let isStarted = false;
   for (let ask = 1; ; ask += 1) {
     const run = await readReviewRun(readGitHub, sha);
-    isStarted ||= Boolean(run);
-    const isDone = run?.status === "completed" && !staleSuites.has(run.check_suite?.id);
+    const isDone = run?.status === "completed" && !uncounted.has(run.id);
+    // Only a CI run going now has a review check run still going: a draft's and an earlier try's end.
+    isStarted ||= Boolean(run) && run.status !== "completed";
     if (isDone) {
-      if (await isFromNewestCiRun(readGitHub, sha, run))
+      if (await isCountingReview(readGitHub, { sha, readyAt, run }))
         return findStop(await readPull(readGitHub, pullNumber), sha) ?? describeRun(run, sha);
-      staleSuites.add(run.check_suite?.id);
+      uncounted.add(run.id);
     } else if (ask % PULL_EVERY === 0) {
       const stop = findStop(await readPull(readGitHub, pullNumber), sha);
       if (stop) return stop;
     }
     if (!isStarted && now() - started >= START_WAIT_MS) {
-      isStarted = Boolean(await readNewestCiRun(readGitHub, sha));
+      const ciRun = await readNewestCiRun(readGitHub, sha);
+      isStarted = Boolean(ciRun) && isCountingCiRun(ciRun, readyAt);
       if (!isStarted) return { outcome: "unstarted", sha };
     }
     if (now() - started + POLL_MS > LONGEST_WAIT_MS) return { outcome: "going", sha };
@@ -246,7 +276,7 @@ export function describeLimit({ limit, resetsAt }, now) {
   const lead = limit
     ? `GitHub's limit of ${limit} requests an hour is used up`
     : "GitHub is holding back requests";
-  if (!resetsAt) return `${lead}: run this again later.`;
+  if (!resetsAt) return `${lead}: run this again in a minute.`;
   const minutes = Math.max(1, Math.ceil((resetsAt.getTime() - now) / 60000));
   return `${lead}: run this again in ${pluralize(minutes, "minute")}, once it lets requests through.`;
 }

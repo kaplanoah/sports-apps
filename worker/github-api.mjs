@@ -6,32 +6,40 @@ const REQUEST_TIMEOUT_MS = 10000;
 const PAGE_SIZE = 100;
 
 /**
- * Whether GitHub refused an answer for a limit on requests: a 429, or a 403 with none left or a
- * wait to keep, as for a secondary limit, rather than for a permission.
+ * Whether an answer says the hour's requests are all used up, which GitHub names on every answer
+ * with how many are left.
+ * @param {Headers | undefined} headers
+ */
+const isHourUsedUp = (headers) => headers?.get("x-ratelimit-remaining") === "0";
+
+/**
+ * Whether GitHub refused an answer for a limit on requests: a 429, or a 403 with the hour's used
+ * up or a wait to keep, as for a secondary limit, rather than for a permission.
  * @param {number} status
  * @param {Headers | undefined} headers
  */
 const isLimitRefusal = (status, headers) =>
   status === 429 ||
-  (status === 403 &&
-    (headers?.get("x-ratelimit-remaining") === "0" || Boolean(headers?.has("retry-after"))));
+  (status === 403 && (isHourUsedUp(headers) || Boolean(headers?.has("retry-after"))));
 
 /**
- * When a limit GitHub refused an answer for lets requests through again, from the wait it names or
- * the time its limit resets, or null when it names neither.
+ * When a limit GitHub refused an answer for lets requests through again: the hour's reset once
+ * they're all used up, or else the wait a secondary limit names, or null when it names none.
  * @param {Headers | undefined} headers
  * @param {number} now
  */
 function readLimitEnd(headers, now) {
+  if (isHourUsedUp(headers)) {
+    const reset = Number(headers?.get("x-ratelimit-reset"));
+    return reset > 0 ? new Date(reset * 1000) : null;
+  }
   const wait = Number(headers?.get("retry-after"));
-  if (wait > 0) return new Date(now + wait * 1000);
-  const reset = Number(headers?.get("x-ratelimit-reset"));
-  return reset > 0 ? new Date(reset * 1000) : null;
+  return wait > 0 ? new Date(now + wait * 1000) : null;
 }
 
 /**
  * An answer GitHub refused, with the status it answered, and, for one it refused for a limit on
- * requests, the limit and when it lets requests through again.
+ * requests, the hour's limit once it's used up, and when it lets requests through again.
  */
 export class GitHubError extends Error {
   /**
@@ -46,7 +54,7 @@ export class GitHubError extends Error {
     this.isLimited = isLimitRefusal(status, headers);
     const limit = Number(headers?.get("x-ratelimit-limit"));
     /** @type {number | null} requests an hour */
-    this.limit = this.isLimited && limit > 0 ? limit : null;
+    this.limit = this.isLimited && isHourUsedUp(headers) && limit > 0 ? limit : null;
     /** @type {Date | null} */
     this.resetsAt = this.isLimited ? readLimitEnd(headers, now) : null;
   }
