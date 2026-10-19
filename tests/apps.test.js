@@ -19,7 +19,7 @@ test("every app's page has a gate, so any app can be given an access code", () =
 
 const SHARED_LOADS = {
   "index.html":
-    /(?:href|src)="(shared\/[^"]+|styles\.css)"|\b(openLastTab|showLastDrawn|watchSlowLoad)\(\);/g,
+    /(?:href|src)="(shared\/[^"]+|styles\.css)"|\b(openLastTab|showLastDrawn|followSeasonPart|watchSlowLoad)\(\);/g,
   "gate.html": /(?:href|src)="(shared\/[^"]+|styles\.css)"/g,
   "sw.js": /"(shared\/[^"]+)"/g,
 };

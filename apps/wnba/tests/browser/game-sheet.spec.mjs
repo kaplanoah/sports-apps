@@ -8,10 +8,8 @@ import {
   matchPath,
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
-import {
-  recordSheetMotions,
-  waitForTimedMotions,
-} from "../../../../tests/browser/sheet-motions.mjs";
+import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-row.mjs";
 import { comeBackTo, passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 import {
@@ -303,7 +301,7 @@ test.describe("on a phone", () => {
   }) => {
     await openApp(page);
     const sheet = await openGameSheet(page, ACES_AT_FEVER);
-    await waitForTimedMotions(page);
+    await waitForTimedAnimations(page);
     const close = await sheet.getByRole("button", { name: "Close" }).boundingBox();
     expect([Math.round(close.x), close.width]).toEqual([6, 44]);
     expect(await sheet.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
@@ -342,7 +340,7 @@ test.describe("on a phone", () => {
         part: "sheet",
         name: "sheet-rise",
       });
-      await waitForTimedMotions(page);
+      await waitForTimedAnimations(page);
       await readMotions();
       const backdrop = await page
         .locator("#sheetDialog")

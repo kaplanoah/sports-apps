@@ -38,11 +38,16 @@ function describeAnimation(animation) {
 }
 
 /**
- * Every animation on the page that hasn't finished, as one that never moves on leaves what it
- * moves where it started, like a fade-in at nothing.
+ * Every animation on the page that plays over time and hasn't finished, as one that never moves on
+ * leaves what it moves where it started, like a fade-in at nothing. One a scroll drives, like the
+ * season tab's header riding up with its part, moves only as its scroller does.
  */
 export function describeAnimations() {
-  const unfinished = document.getAnimations().filter(({ playState }) => playState !== "finished");
+  const unfinished = document
+    .getAnimations()
+    .filter(
+      ({ timeline, playState }) => timeline === document.timeline && playState !== "finished",
+    );
   return unfinished.length
     ? `Animations: ${unfinished.map(describeAnimation).join("; ")}`
     : "Animations: none";

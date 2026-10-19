@@ -488,6 +488,22 @@ test("Share report notes the page as it is, with the sheets open, and shares it 
   expect(copied).toMatch(/^\+0 Animations: /m);
 });
 
+test("a report on the season tab lists no animation for the header that rides up with its part, which moves only as the part scrolls", async ({
+  page,
+}) => {
+  await stubShare(page);
+  await openApp(page);
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await turnOnDiagnostics(page);
+  await openSettings(page);
+
+  await findReportButton(page).click();
+
+  await expect(findReportButton(page)).toHaveText("Shared");
+  const [{ text: copied }] = await readShares(page);
+  expect(copied).toMatch(/^\+0 Animations: none$/m);
+});
+
 test("each report notes the page as it is only for itself, and keeps every record of an open", async ({
   page,
 }) => {
