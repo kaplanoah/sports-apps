@@ -2,7 +2,7 @@ import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
-import { scrollSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
+import { findSeasonPart, scrollSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
 import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
@@ -277,10 +277,17 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   await expect(
     page.locator('#bracketStandingsParts > [data-part="standings"]'),
   ).not.toHaveAttribute("inert");
+  const standings = findSeasonPart(page, "standings");
+  await standings.evaluate((part) =>
+    part.addEventListener("scrollend", () => part.setAttribute("data-scroll-ended", ""), {
+      once: true,
+    }),
+  );
   await (
     await drag(page, from, { y: -200 })
   )();
-  // The drag rode the header, and settings' button with it, out of sight.
+  // The drag, and the flick it ends in, ride the header and settings' button out of sight.
+  await expect(standings).toHaveAttribute("data-scroll-ended");
   await scrollSeasonPart(page, "standings", 0);
 
   const lines = await readLog(page, "Standings and bracket");
