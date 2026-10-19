@@ -29,6 +29,7 @@ import {
 } from "../../../../tests/browser/season-scroll.mjs";
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
+import { waitForScrollEnd } from "../../../../tests/browser/scroll-end.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -173,12 +174,10 @@ test("on a phone, the World Series card scrolls all the way to the middle of the
   await openBracket(page);
   const scroller = page.locator(".tree-scroll");
   await expect(scroller).toBeVisible();
-  await scroller.evaluate(
-    (element) =>
-      new Promise((resolve) => {
-        element.addEventListener("scrollend", resolve, { once: true });
-        element.scrollLeft = element.scrollWidth;
-      }),
+  await waitForScrollEnd(scroller, () =>
+    scroller.evaluate((element) => {
+      element.scrollLeft = element.scrollWidth;
+    }),
   );
 
   const worldSeries = await page
@@ -597,12 +596,11 @@ test("on a phone, the bracket redraws for a new screen height and keeps its side
   await page.setViewportSize({ width: 390, height: 960 });
   await openBracket(page);
   await expect(page.locator(".bracket-stage")).toBeVisible();
-  await page.locator(".tree-scroll").evaluate(
-    (scroller) =>
-      new Promise((resolve) => {
-        scroller.addEventListener("scrollend", resolve, { once: true });
-        scroller.scrollLeft = 300;
-      }),
+  const scroller = page.locator(".tree-scroll");
+  await waitForScrollEnd(scroller, () =>
+    scroller.evaluate((element) => {
+      element.scrollLeft = 300;
+    }),
   );
   const { scrollLeft } = await readBracketFit(page);
   expect(scrollLeft).toBeGreaterThan(0);

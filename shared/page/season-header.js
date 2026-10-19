@@ -23,8 +23,24 @@ function findPartNamed() {
   return findSeasonParts().find((part) => part.dataset.part === name) ?? findSeasonParts()[0];
 }
 
-/** @param {Element} element */
-const isInFlow = (element) => ["static", "relative"].includes(getComputedStyle(element).position);
+/**
+ * The page's own parts: the body's children, in order, but for its dialogs and scripts. What moves
+ * as the header rides and as a pull to refresh pulls (pull-to-refresh.js) comes from these.
+ */
+function listPageParts() {
+  return /** @type {HTMLElement[]} */ (
+    [...document.body.children].filter((element) => !["DIALOG", "SCRIPT"].includes(element.tagName))
+  );
+}
+
+/**
+ * Whether `element` stands in the page's flow, not placed apart from it, like what stays put on the
+ * screen.
+ * @param {Element} element
+ */
+function isInFlow(element) {
+  return ["static", "relative"].includes(getComputedStyle(element).position);
+}
 
 /**
  * Whether `element` holds a part fixed to the screen, like a phone's tab bar in the row of tabs,
@@ -34,15 +50,11 @@ const isInFlow = (element) => ["static", "relative"].includes(getComputedStyle(e
 const holdsFixedPart = (element) =>
   [...element.querySelectorAll("*")].some((part) => getComputedStyle(part).position === "fixed");
 
-/** What stands above the season tab's view on the page, but for its dialogs and scripts. */
+/** The page's own parts above the season tab's view. */
 function listAboveSeasonView() {
-  const above = [];
-  for (const element of document.body.children) {
-    if (element === findSeasonView()) break;
-    if (!["DIALOG", "SCRIPT"].includes(element.tagName))
-      above.push(/** @type {HTMLElement} */ (element));
-  }
-  return above;
+  const parts = listPageParts();
+  const end = parts.indexOf(/** @type {HTMLElement} */ (findSeasonView()));
+  return end < 0 ? parts : parts.slice(0, end);
 }
 
 /** @type {HTMLElement[] | null} */

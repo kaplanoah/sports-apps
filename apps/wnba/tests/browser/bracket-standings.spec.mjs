@@ -17,6 +17,7 @@ import {
   findTouchTargets,
   holdHeaderStill,
   isPillBandShown,
+  leaveSeasonPartFractionDown,
   readHeaderReach,
   readPillHoldTop,
   readSeasonPartScroll,
@@ -212,19 +213,7 @@ test("a tap on the tab with the standings left a fraction of a pixel down, as a 
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
   await waitForLoadToSettle(page);
-  // Chromium keeps a scroll at whole pixels, so the standings report the fraction a phone's leaves.
-  await findSeasonPart(page, "standings").evaluate((part) => {
-    const scrollTop = /** @type {PropertyDescriptor} */ (
-      Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")
-    );
-    Object.defineProperty(part, "scrollTop", {
-      configurable: true,
-      get: () => 1 / 3,
-      set(top) {
-        scrollTop.set?.call(part, top);
-      },
-    });
-  });
+  await leaveSeasonPartFractionDown(page, "standings");
 
   await findSeasonTab(page).click();
 

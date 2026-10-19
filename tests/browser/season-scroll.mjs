@@ -259,6 +259,26 @@ export const readSeasonPartScroll = (page, part) =>
   findSeasonPart(page, part).evaluate((element) => Math.round(element.scrollTop));
 
 /**
+ * Has a part of the season tab report itself a third of a pixel down, as a phone can leave it,
+ * since Chromium keeps a scroll at whole pixels. A scroll still moves it.
+ * @param {import("@playwright/test").Page} page
+ * @param {SeasonPart} part
+ */
+export const leaveSeasonPartFractionDown = (page, part) =>
+  findSeasonPart(page, part).evaluate((element) => {
+    const scrollTop = /** @type {PropertyDescriptor} */ (
+      Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")
+    );
+    Object.defineProperty(element, "scrollTop", {
+      configurable: true,
+      get: () => 1 / 3,
+      set(top) {
+        scrollTop.set?.call(element, top);
+      },
+    });
+  });
+
+/**
  * Has the page open as in a browser without scroll-driven animations, where the header stays put.
  * Call it before the page loads.
  * @param {import("@playwright/test").Page} page

@@ -1,4 +1,5 @@
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
+import { leaveSeasonPartFractionDown } from "../../../../tests/browser/season-scroll.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { drag, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
@@ -169,6 +170,26 @@ test("on the season tab, a pull holds the standings down with the header", async
 
   await expect(page.locator("header.top")).toHaveCSS("top", "56px");
   await expect.poll(async () => (await standings.boundingBox()).y).toBe(before.y + 56);
+});
+
+test("on the season tab, a pull on the standings left a fraction of a pixel down, as a phone can leave them, still refreshes", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const standings = page.locator("#standingsWrap");
+  await expect(standings.locator("table").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  await leaveSeasonPartFractionDown(page, "standings");
+  await app.holdStore();
+  const box = /** @type {{ x: number, y: number }} */ (await standings.boundingBox());
+
+  const release = await drag(page, { x: box.x + 40, y: box.y + 20 }, { y: 200 });
+  await release();
+
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+  await expect(page.locator("header.top")).toHaveCSS("top", "56px");
 });
 
 test("on a phone, the tab bar stays put while the page is held down", async ({ page }) => {

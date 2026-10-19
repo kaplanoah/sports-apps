@@ -14,6 +14,8 @@ declare const WELCOME_CLOSED_KEY: string;
 declare function readStored(key: string): string | null;
 declare function followSeasonPart(part?: HTMLElement): void;
 declare function listAboveSeasonView(): HTMLElement[];
+declare function listPageParts(): HTMLElement[];
+declare function isInFlow(element: Element): boolean;
 
 // Cloudflare Workers runtime: a Durable Object answers a WebSocket upgrade with one end of a pair.
 declare class WebSocketPair {
