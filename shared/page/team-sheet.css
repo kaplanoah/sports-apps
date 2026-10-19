@@ -1,6 +1,6 @@
 /*
- * A team's sheet, as team-sheet.js opens it, and the buttons on a team's name or dot that open it,
- * which a player's name, opening hers, takes the hover of.
+ * A team's sheet, as team-sheet.js opens it, the buttons on a team's name or dot that open it, and
+ * the button on a player's name that opens the player's sheet.
  * The sheet is sheet.css's: its title, a .team-title, is the team's dot and name over a .team-note
  * of its facts, then titled parts of its season, with its numbers in a grid and its facts in lines
  * after a label.
@@ -14,8 +14,18 @@
  *                          --accent to see
  */
 
-/* The button only clears the browser's own look, so a team's name keeps the type of wherever it
-   sits. */
+/* The buttons only clear the browser's own look, so a team's or a player's name keeps the type of
+   wherever it sits. */
+:where(.player-open) {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
 :where(.team-open) {
   display: inline-flex;
   min-width: 0;
@@ -31,7 +41,7 @@
 [data-team] {
   cursor: pointer;
 }
-body.kbd .team-open:focus {
+body.kbd :is(.team-open, .player-open):focus {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

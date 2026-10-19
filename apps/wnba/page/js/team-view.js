@@ -49,7 +49,7 @@ export const findTeamLeaders = (season, team) =>
 
 // A leader saved without her minutes or shooting shows a dash until the season's next update.
 /** @param {number | null | undefined} value */
-const formatAverage = (value) => (value == null ? "-" : value.toFixed(1));
+export const formatAverage = (value) => (value == null ? "-" : value.toFixed(1));
 
 /** @param {number | null | undefined} share */
 const formatPercentage = (share) => (share == null ? "-" : (share * 100).toFixed(1));

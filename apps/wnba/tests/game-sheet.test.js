@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderBoxScore, renderPendingBoxScore } from "../page/js/box-score-view.js";
-import { isEarlierBoxScore } from "../page/js/game-sheet.js";
+import { isEarlierBoxScore, isSeasonSeriesOver } from "../page/js/game-sheet.js";
 import { listSeasonDays } from "../page/js/games-view.js";
 import { renderPreview } from "../page/js/preview-view.js";
 import { buildSeasonWithLeaders } from "./player-fixtures.js";
@@ -388,4 +388,9 @@ test("a pushed box score with fewer points than the one the sheet shows is from 
   assert.equal(isEarlierBoxScore(scoring(42, 38), scoring(40, 38)), false);
   assert.equal(isEarlierBoxScore(scoring(40, 38), scoring(40, 38)), false);
   assert.equal(isEarlierBoxScore(scoring(40, 38), null), false);
+});
+
+test("a regular season game's preview has its season series still going, and a playoff game's has it over", () => {
+  assert.equal(isSeasonSeriesOver({ round: null }), false);
+  assert.equal(isSeasonSeriesOver({ round: 1 }), true);
 });

@@ -4,6 +4,7 @@ import { html } from "#shared/html.js";
 import { listFoundDays, listSeasonDays as listDayStripDays } from "#shared/season-days.js";
 import { renderAllStarClub, renderClub, renderPlainClub } from "./clubs.js";
 import { readGameDay } from "./days.js";
+import { namePeriod } from "./periods.js";
 import { renderScoreboard } from "./scoreboard.js";
 import { describeSeriesAfterWin } from "#shared/series-text.js";
 import { nameTeam } from "./series.js";
@@ -36,12 +37,6 @@ export function findLoser(game) {
 const findWinningTeam = (game) =>
   game.away.score > game.home.score ? game.away.team : game.home.team;
 
-/** @param {number} period */
-function describePeriod(period) {
-  if (period <= 4) return `Q${period}`;
-  return period === 5 ? "OT" : `${period - 4}OT`;
-}
-
 // Between periods the clock stops at zero, and the league's own status says which break it is.
 /** @param {Pick<Game, "period" | "clock">} game */
 const isClockRunning = (game) => !!(game.clock && game.clock !== "0.0" && game.period);
@@ -53,8 +48,8 @@ const isClockRunning = (game) => !!(game.clock && game.clock !== "0.0" && game.p
  */
 export function describeLiveMoment(game) {
   if (!game.period) return "";
-  if (isClockRunning(game)) return `with ${game.clock} in ${describePeriod(game.period)}`;
-  return game.period === 2 ? "at halftime" : `after ${describePeriod(game.period)}`;
+  if (isClockRunning(game)) return `with ${game.clock} in ${namePeriod(game.period)}`;
+  return game.period === 2 ? "at halftime" : `after ${namePeriod(game.period)}`;
 }
 
 /**
@@ -82,7 +77,7 @@ export function renderHeadline(game) {
  * @param {Game} game
  */
 export const describeLiveClock = (game) =>
-  isClockRunning(game) ? `${describePeriod(game.period ?? 0)} ${game.clock}` : game.status;
+  isClockRunning(game) ? `${namePeriod(game.period ?? 0)} ${game.clock}` : game.status;
 
 /** @param {Game} game */
 export function renderStatus(game) {

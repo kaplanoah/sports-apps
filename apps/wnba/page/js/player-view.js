@@ -13,7 +13,13 @@ import { renderTeamDetail } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
 import { formatMarkColors } from "./sheet-colors.js";
 import { renderSheetMessage } from "./sheet-parts.js";
-import { readTeamPlayoffs, renderChip, renderFinishedGame, renderNextGame } from "./team-view.js";
+import {
+  formatAverage,
+  readTeamPlayoffs,
+  renderChip,
+  renderFinishedGame,
+  renderNextGame,
+} from "./team-view.js";
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
 /** @typedef {import("./roster-view.js").RosterPlayer} RosterPlayer */
@@ -102,9 +108,6 @@ export const describePosition = (position) =>
     .split("-")
     .map((letter) => POSITION_WORDS[/** @type {"G" | "F" | "C"} */ (letter)] ?? letter)
     .join("-");
-
-/** @param {number} value */
-const formatAverage = (value) => value.toFixed(1);
 
 /** @param {number | null} value */
 function formatStat(value, isShare = false) {
@@ -332,13 +335,16 @@ const listUnrankedShares = (season) =>
       isShare && season.stats.some((stat) => stat.key === key && stat.rank == null),
   );
 
+// Who the WNBA ranks in a shooting percentage, worded once for every note that names it.
+const SHOTS_NEEDED = "who've made a certain number of shots";
+
 /**
  * The WNBA's rule for its leaders: enough games or a stat's total for a stat, and enough shots made
  * for a percentage (worker/src/player.js).
  * @param {RegularSeason} season
  */
 const describeRule = (season) =>
-  `WNBA only ranks players who've played ${season.gamesNeeded} games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots`;
+  `WNBA only ranks players who've played ${season.gamesNeeded} games or reached a certain total in a stat, and shooting percentages only for those ${SHOTS_NEEDED}`;
 
 /**
  * Why a stat may have no rank, or why the number ranked varies by stat.
@@ -362,7 +368,7 @@ export function describeRankNote(season, isPastSeason) {
   const shortfall = isPastSeason
     ? `She didn't make enough ${shots} to be ranked in ${shares}.`
     : `She hasn't made enough ${shots} to be ranked in ${shares}.`;
-  return `${shortfall} The WNBA only ranks shooting percentages for players who've made a certain number of shots.`;
+  return `${shortfall} The WNBA only ranks shooting percentages for players ${SHOTS_NEEDED}.`;
 }
 
 /**

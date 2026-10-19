@@ -9,6 +9,7 @@ import {
 } from "#shared/stamp.js";
 import { readGameDay } from "./days.js";
 import { describeLiveMoment, isCalledOff, listSeasonGames } from "./games-view.js";
+import { isPutOff } from "./nearest-games.js";
 import { nameTeam, orderBySeriesWins } from "./series.js";
 
 // The header's lines on the latest score and the next tip-off, or on why the page isn't current.
@@ -96,6 +97,32 @@ const listGamesInState = (games, state) =>
     )
     .sort((first, second) => readStart(first) - readStart(second));
 
+// A day of this many games or fewer names each one under way.
+const FEW_GAMES = 2;
+
+/**
+ * How many games share a game's day.
+ * @param {Game[]} games
+ * @param {Game} game
+ */
+function countDayGames(games, game) {
+  const day = readGameDay(game)?.getTime();
+  return games.filter((each) => hasBothTeams(each) && readGameDay(each)?.getTime() === day).length;
+}
+
+/**
+ * Each game under way on a day of few games, or else the one that tipped off last and how many
+ * the day has, as MLB's header says a full slate.
+ * @param {Game[]} live the games under way, earliest first
+ * @param {Game[]} games
+ */
+function describeLiveGames(live, games) {
+  const lead = /** @type {Game} */ (live.at(-1));
+  const dayGames = countDayGames(games, lead);
+  if (dayGames <= FEW_GAMES) return joinWithSeparator(live.map(describeLiveGame));
+  return `${describeLiveGame(lead)}, slate of ${dayGames} under way`;
+}
+
 /**
  * @param {Game[]} games
  * @param {Map<string, Series>} seriesById
@@ -103,8 +130,7 @@ const listGamesInState = (games, state) =>
  */
 function describeLatest(games, seriesById, now) {
   const live = listGamesInState(games, "live");
-  if (live.length)
-    return html`${renderStampNow()} ${joinWithSeparator(live.map(describeLiveGame))}`;
+  if (live.length) return html`${renderStampNow()} ${describeLiveGames(live, games)}`;
   const latestFinal = listGamesInState(games, "final").at(-1);
   return latestFinal ? describeLatestFinal(latestFinal, seriesById, now) : "";
 }
@@ -114,7 +140,7 @@ function describeLatest(games, seriesById, now) {
  * @param {Map<string, Series>} seriesById
  */
 const findNextGame = (games, seriesById) =>
-  listGamesInState(games, "pre").find((game) => !isCalledOff(game, seriesById));
+  listGamesInState(games, "pre").find((game) => !isCalledOff(game, seriesById) && !isPutOff(game));
 
 /**
  * @param {Game} game

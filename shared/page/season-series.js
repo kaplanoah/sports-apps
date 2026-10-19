@@ -5,6 +5,7 @@
 
 import { formatShortDate } from "./days.js";
 import { html } from "./html.js";
+import { describeSeriesLead } from "./series-text.js";
 import { renderSheetPart } from "./sheet-part.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
@@ -50,10 +51,10 @@ function describeSeasonSeries(meetings, { away, home, isOver, nameTeam }) {
   const countWins = (/** @type {string} */ team) =>
     meetings.filter((meeting) => readResult(meeting).winner.team === team).length;
   const [awayWins, homeWins] = [countWins(away), countWins(home)];
-  const score = `${Math.max(awayWins, homeWins)}-${Math.min(awayWins, homeWins)}`;
-  if (awayWins === homeWins) return `${isOver ? "Split" : "Tied"} ${score}`;
+  const [wins, losses] = [Math.max(awayWins, homeWins), Math.min(awayWins, homeWins)];
   const leader = nameTeam(awayWins > homeWins ? away : home);
-  return `${leader} ${isOver ? "won" : "lead"} ${score}`;
+  if (!isOver) return describeSeriesLead({ leader, wins, losses, isOver });
+  return wins === losses ? `Split ${wins}-${losses}` : `${leader} won ${wins}-${losses}`;
 }
 
 /**

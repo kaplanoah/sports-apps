@@ -1931,23 +1931,6 @@ table.st.line-score td.team .club {
   margin-right: 8px;
   color: var(--ink-dim);
 }
-/* A player's name in a roster, which opens his sheet. The button only clears the browser's own
-   look, so the name keeps the type of the row it sits in. */
-.player-open {
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-  text-align: inherit;
-  cursor: pointer;
-}
-body.kbd .player-open:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
 /* A player's sheet: his facts in a row in the sheet's top, as shared/sheet.css lays them out, then
    his totals in an outlined box over each ranked number, its curve, and its rank. */
 .player-facts-slot {

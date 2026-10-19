@@ -22,7 +22,7 @@
  *   --meeting-result-gap    the room between a meeting's winner and its score
  *   --meeting-score-lift    how far the score sits below its middle, to look level with the name
  *   --numbers               the font the score is set in, the app's face for numbers
- *   --player-fact-room     the room on each side of one of a player's facts
+ *   --player-fact-room      the room on each side of one of a player's facts
  *
  * Its content falls in titled parts, as sheet-part.js builds them, each with an optional note
  * across from its title, which takes the app's --sheet-part-head color. A short status beside a

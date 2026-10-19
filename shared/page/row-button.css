@@ -4,13 +4,14 @@
  * listens for it, so the button reaches over the whole row. Safari never lets a table's row hold
  * what reaches over it, so the cell around the button does: the button reaches past both sides of
  * its .row-button-cell, and the .row-button-clip around the table, as wide as the table, cuts it
- * off at the table's sides. A press tints the row in chrome.css's --ink, and the pointer over a
- * team's row gives its name the page's --ink-hover. Apps link it after team-sheet.css, before their
- * own styles.css.
+ * off at the table's sides. A press tints the row in chrome.css's --ink. Apps link it after
+ * team-sheet.css, before their own styles.css.
  */
 
+/* At least as wide as the table at its narrowest, so a table too wide for the screen scrolls whole.
+   Its widest has no end when its columns are shares of its width. */
 .row-button-clip {
-  min-width: max-content;
+  min-width: min-content;
   overflow-x: clip;
 }
 .row-button-cell {
@@ -31,9 +32,4 @@ tr:has(> .row-button-cell .is-pressed) > td {
   z-index: 1;
   inset-block: 0;
   inset-inline: -100vw;
-}
-@media (hover: hover) {
-  tr[data-team]:has(> .row-button-cell):hover :is(.team-open, .team-name) {
-    color: var(--ink-hover);
-  }
 }

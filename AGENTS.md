@@ -564,11 +564,11 @@
   `sheet.css` a sheet a tap opens, like MLB's pitching matchup,
   with its face-off rows and line of channels, titled parts, status chips,
   and meetings and a player's facts,
-  `team-sheet.css` a team's sheet and the buttons that open it,
+  `team-sheet.css` a team's sheet and the buttons that open a team's or a player's sheet,
   `row-button.css` a table's row that opens wherever it's tapped,
   `game-cards.css` the cards of its nearest games, `updates.css` the Updates box,
   `news.css` the News view's layout, `retry.css` what a sheet shows where a read failed,
-  `highlights.css` a final's Highlights, `rank-curve.css` a rank curve and each player's mark on it,
+  `highlights.css` a final's Highlights, `rank-curve.css` a rank curve, each player's mark on it, and the notes on how a player is ranked,
   `no-field-note.css` the bracket before the playoff field is set,
   `channel-tag.css` the tag beside the app's name on beta,
   and `gate.css` the access code's gate, whose title and button the welcome takes too;

@@ -27,6 +27,7 @@ import {
   renderHeadline,
   renderStatus,
 } from "./games-view.js";
+import { isPutOff } from "./nearest-games.js";
 import { renderPreview } from "./preview-view.js";
 import { describeSeriesStanding } from "./series.js";
 import { session } from "./session.js";
@@ -126,6 +127,13 @@ const renderFaceOff = (game) =>
 const isLoading = (opened) => !opened.details && !opened.error;
 
 /**
+ * Whether two teams' season series is over by a game of theirs: a playoff game comes once the
+ * regular season is, and the Commissioner's Cup final, played in it, has no round.
+ * @param {Pick<Game, "round">} game
+ */
+export const isSeasonSeriesOver = (game) => game.round != null;
+
+/**
  * @param {ShownGame} opened
  * @param {Game} game
  */
@@ -138,7 +146,7 @@ function renderDetails(opened, game) {
       season: session.season,
       meetings,
       isLoading: isLoading(opened),
-      isSeriesOver: game.round != null,
+      isSeriesOver: isSeasonSeriesOver(game),
     });
   }
   if (opened.error?.status === 404)
@@ -173,9 +181,8 @@ function offerHighlights(game) {
   else if (sections?.readShown() === "highlights") sections.showSection("game", true);
 }
 
-// The league marks a game it put off or called off in its status, and keeps it as one to come.
 /** @param {Game} game */
-const isOver = (game) => game.state === "final" || /postpon|ppd|cancel/i.test(game.status);
+const isOver = (game) => game.state === "final" || isPutOff(game);
 
 /** @param {Game} game */
 function noteGame(game) {

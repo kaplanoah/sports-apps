@@ -1301,6 +1301,34 @@ test("while a game is on, the header gives its score and clock, and still the ne
     ]);
   }));
 
+test("on a night of three or more games, the header names the game under way that tipped off last, and how many the night has", () =>
+  inEastern(() => {
+    const dreamAtMystics = SEASON.games.find((game) => game.id === "1042600132");
+    const tipOffs = [
+      { away: "CHI", home: "SEA", start: "2026-09-30T23:30:00Z" },
+      { away: "PHX", home: "LAS", start: "2026-10-01T00:30:00Z" },
+      { away: "CON", home: "DAL", start: "2026-10-01T00:00:00Z" },
+    ];
+    const liveGames = tipOffs.map(({ away, home, start }) => ({
+      ...structuredClone(dreamAtMystics),
+      id: `${away}-${home}`,
+      start,
+      series: undefined,
+      round: undefined,
+      state: "live",
+      status: "Q1 6:00",
+      period: 1,
+      clock: "6:00",
+      away: { team: away, score: 12 },
+      home: { team: home, score: 9 },
+    }));
+    const fullNight = { ...SEASON, games: [...SEASON.games, ...liveGames] };
+    assert.equal(
+      readStampLines(fullNight, NOW)[0],
+      "NOW Mercury @ Sparks 12-9 with 6:00 in Q1, slate of 5 under way",
+    );
+  }));
+
 test("a game whose time isn't set tips off on its day, and one its series no longer needs never does", () =>
   inEastern(() => {
     const finals = ["1042600132", "1042600112", "1042600123"].reduce(
@@ -1323,6 +1351,18 @@ test("a game whose time isn't set tips off on its day, and one its series no lon
       readStampLines(decided, lateThursday)[1],
       "Next tip-off tomorrow - Mystics @ Dream",
     );
+  }));
+
+test("the header never names a game the league put off as the next tip-off", () =>
+  inEastern(() => {
+    const next = SEASON.games.find(
+      (game) => game.state === "pre" && game.away.team === "ATL" && game.home.team === "WAS",
+    );
+    const putOff = changeGame(SEASON, next.id, (game) => {
+      game.status = "Postponed";
+    });
+    assert.equal(readStampLines(SEASON, NOW)[1], "Next tip-off 7:00 PM - Dream @ Mystics");
+    assert.doesNotMatch(readStampLines(putOff, NOW)[1] ?? "", /Dream @ Mystics/);
   }));
 
 test("the header names a problem with the page's server or the league's feeds", () => {

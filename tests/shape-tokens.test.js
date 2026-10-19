@@ -1,8 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   listAppStylesheets,
+  listPageFiles,
   listRootTokens,
   listSharedStylesheets,
   listStrayCorners,
@@ -38,31 +41,36 @@ test("every corner each app's own styles draw comes from its shape tokens", () =
 });
 
 const ROOT = new URL("../", import.meta.url);
-const PAGE_SCRIPT_FOLDERS = [
-  "shared/page/",
-  ...readdirSync(new URL("apps/", ROOT)).map((app) => `apps/${app}/page/js/`),
-];
 
 // MLB's seed lock is an icon drawn for its place, so its corners are its own.
-const OWN_SHAPED_SCRIPTS = new Map([["apps/mlb/page/js/games-view.js", 1]]);
+const OWN_SHAPED_FILES = new Map([["apps/mlb/page/js/games-view.js", 1]]);
 
 /**
- * How many corners each page script types into what it draws, as an SVG shape's rx or ry.
+ * How many corners each page file types into what it draws, as an SVG shape's rx or ry.
  * @returns {Map<string, number>}
  */
-function countScriptCorners() {
+function countTypedCorners() {
   const counts = new Map();
-  for (const folder of PAGE_SCRIPT_FOLDERS)
-    for (const name of readdirSync(new URL(folder, ROOT)).filter((each) => each.endsWith(".js"))) {
-      const path = `${folder}${name}`;
-      const corners = readFileSync(new URL(path, ROOT), "utf8").match(/\br[xy]="/g) ?? [];
-      if (corners.length) counts.set(path, corners.length);
-    }
+  for (const path of listPageFiles()) {
+    const corners = readFileSync(new URL(path, ROOT), "utf8").match(/\br[xy]="/g) ?? [];
+    if (corners.length) counts.set(path, corners.length);
+  }
   return counts;
 }
 
-test("no page script types a corner into an SVG shape, which takes it from the shape tokens in CSS", () => {
-  assert.deepEqual(countScriptCorners(), OWN_SHAPED_SCRIPTS);
+test("no page file types a corner into an SVG shape, which takes it from the shape tokens in CSS", () => {
+  assert.deepEqual(countTypedCorners(), OWN_SHAPED_FILES);
+});
+
+test("a stylesheet's SVG corner counts as stray unless it comes from a shape token", () => {
+  const folder = mkdtempSync(join(tmpdir(), "shape-tokens-"));
+  const path = join(folder, "styles.css");
+  writeFileSync(path, ".typed { rx: 4px; }\n.token { rx: var(--radius-card); }\n");
+  try {
+    assert.deepEqual(listStrayCorners(path), [".typed { rx: 4px }"]);
+  } finally {
+    rmSync(folder, { recursive: true });
+  }
 });
 
 test("every app's styles set each shape, button size, and pill and tab color the shared stylesheets ask for", () => {

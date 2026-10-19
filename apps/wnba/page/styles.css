@@ -1919,7 +1919,8 @@ nav.tabs .search-tab {
   max-width: 560px;
   padding-top: 3.5px;
 }
-/* Each table lays out in a grid, where its clip's max-content fits the table to the list's width.
+/* Each table lays out in a grid, where its clip, at least as wide as the table at its narrowest, fits
+   the table to the list's width.
    A table wider than the room reaches into the gutter and is cut off at the screen's edge, rather
    than scrolling the page sideways. */
 .standings-list {
@@ -2423,21 +2424,9 @@ table.standings tr.playoff-line + tr td {
 /* A player's name, wherever it shows, opens her sheet, and reads as the text around it. */
 .player-open {
   display: inline;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-  text-align: inherit;
-  cursor: pointer;
 }
 table.roster .player-open {
   display: block;
-}
-body.kbd .player-open:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 @media (hover: hover) {
   .player-open:hover :is(.roster-first, .roster-last) {

@@ -6,6 +6,7 @@ import { renderPendingTapeRow, renderTapeRow } from "#shared/tape.js";
 import { renderClub } from "./clubs.js";
 import { findLoser } from "./games-view.js";
 import { measureBiggestLeads, renderLeadChart, renderPendingLeadChart } from "./lead-chart.js";
+import { nameOvertime, REGULATION_PERIODS } from "./periods.js";
 import { renderPlayerButton } from "./player-button.js";
 import {
   findLeader,
@@ -27,7 +28,6 @@ import { nameTeam } from "./series.js";
 
 /** @type {("away" | "home")[]} */
 const SIDES = ["away", "home"];
-const REGULATION_PERIODS = 4;
 const TOP_PERFORMERS = 5;
 // A player fouls out on her sixth, so a fourth while the game is on puts her in trouble.
 const FOUL_TROUBLE = 4;
@@ -46,12 +46,10 @@ const COUNTS = [
   { key: "benchPoints", label: "Bench points" },
 ];
 
+// The line score heads each quarter with its number alone.
 /** @param {number} index */
-function namePeriod(index) {
-  if (index < REGULATION_PERIODS) return String(index + 1);
-  const overtime = index - REGULATION_PERIODS + 1;
-  return overtime === 1 ? "OT" : `${overtime}OT`;
-}
+const nameLineScorePeriod = (index) =>
+  index < REGULATION_PERIODS ? String(index + 1) : nameOvertime(index + 1);
 
 // While the game is on, the quarter under way is marked, and the ones still to come are blank.
 /** @param {BoxScore} box */
@@ -76,7 +74,7 @@ function renderLineScore(box) {
     </tr>`;
   };
   const heads = indexes.map(
-    (index) => html`<th class="${isNow(index) ? "now" : ""}">${namePeriod(index)}</th>`,
+    (index) => html`<th class="${isNow(index) ? "now" : ""}">${nameLineScorePeriod(index)}</th>`,
   );
   return renderLineScoreTable(heads, SIDES.map(renderRow));
 }
@@ -109,7 +107,7 @@ function renderPendingLineScore(teams) {
       <td class="total">${renderPlaceholder("00")}</td>
     </tr>`;
   return renderLineScoreTable(
-    indexes.map((index) => html`<th>${namePeriod(index)}</th>`),
+    indexes.map((index) => html`<th>${nameLineScorePeriod(index)}</th>`),
     SIDES.map(renderRow),
   );
 }

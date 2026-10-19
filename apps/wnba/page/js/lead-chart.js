@@ -1,4 +1,5 @@
 import { capitalize, html } from "#shared/html.js";
+import { namePeriod, REGULATION_PERIODS } from "./periods.js";
 import { nameTeam } from "./series.js";
 
 // The game sheet's chart of the lead through a game: the visitors' lead above the middle line and
@@ -12,7 +13,6 @@ import { nameTeam } from "./series.js";
 
 const QUARTER_SECONDS = 10 * 60;
 const OVERTIME_SECONDS = 5 * 60;
-const REGULATION_PERIODS = 4;
 
 const WIDTH = 320;
 const LEFT = 30;
@@ -38,14 +38,6 @@ const measureGame = (periods) =>
 const measurePeriodStart = (index) =>
   Math.min(index, REGULATION_PERIODS) * QUARTER_SECONDS +
   Math.max(0, index - REGULATION_PERIODS) * OVERTIME_SECONDS;
-
-/** @param {number} index */
-const namePeriod = (index) =>
-  index < REGULATION_PERIODS
-    ? `Q${index + 1}`
-    : index === REGULATION_PERIODS
-      ? "OT"
-      : `${index - REGULATION_PERIODS + 1}OT`;
 
 /** @param {number} value */
 const formatCoordinate = (value) => String(Math.round(value * 10) / 10);
@@ -147,7 +139,7 @@ const renderChartFrame = (teams, plot, periodNames) =>
 function renderPeriodNames(periods, x) {
   return [...Array(periods).keys()].map((index) => {
     const middle = (measurePeriodStart(index) + measurePeriodStart(index + 1)) / 2;
-    return html`<span class="lead-period" style="--x: ${formatAcross(x(middle))}">${namePeriod(index)}</span>`;
+    return html`<span class="lead-period" style="--x: ${formatAcross(x(middle))}">${namePeriod(index + 1)}</span>`;
   });
 }
 

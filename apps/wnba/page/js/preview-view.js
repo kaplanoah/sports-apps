@@ -12,7 +12,12 @@ import {
   renderSheetMessage,
   renderTapeTeams,
 } from "./sheet-parts.js";
-import { findTeamLeaders, formatPointMargin, renderLeaderTable } from "./team-view.js";
+import {
+  findTeamLeaders,
+  formatAverage,
+  formatPointMargin,
+  renderLeaderTable,
+} from "./team-view.js";
 
 // The game sheet's preview for a game that hasn't started: the two teams' season series, from their
 // meetings this regular season, which the Worker reads, then their seasons side by side and each
@@ -70,8 +75,6 @@ const renderPendingMeetings = () =>
       ${Array.from({ length: PENDING_MEETINGS }, renderPendingMeeting)}
     </ul>`,
   );
-
-const formatAverage = (value) => value.toFixed(1);
 
 // The visitors play on the road and the hosts at home, so each is measured where it plays.
 /**

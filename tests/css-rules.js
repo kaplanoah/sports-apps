@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 
-const SHARED = new URL("../shared/page/", import.meta.url);
-const APPS = new URL("../apps/", import.meta.url);
+const ROOT = new URL("../", import.meta.url);
+const SHARED = new URL("shared/page/", ROOT);
+const APPS = new URL("apps/", ROOT);
 
 /** The path of each stylesheet the apps' pages share. */
 export const listSharedStylesheets = () =>
@@ -12,6 +13,14 @@ export const listSharedStylesheets = () =>
 /** The path of each app's own stylesheet. */
 export const listAppStylesheets = () =>
   readdirSync(APPS).map((app) => new URL(`${app}/page/styles.css`, APPS).pathname);
+
+/** The path from the repo's root of each script and page in the shared page folder and each app's. */
+export const listPageFiles = () =>
+  ["shared/page", ...readdirSync(APPS).map((app) => `apps/${app}/page`)].flatMap((folder) =>
+    readdirSync(new URL(folder, ROOT), { recursive: true, encoding: "utf8" })
+      .filter((path) => /\.(js|html)$/.test(path))
+      .map((path) => `${folder}/${path}`),
+  );
 
 /** @typedef {{ selectors: string[], property: string, value: string }} Declaration */
 

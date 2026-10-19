@@ -48,3 +48,11 @@ test("a team's next game is never one left over in a decided series, or one whos
   ]);
   assert.deepEqual(listIds(findTeamNearestGames(playoffs, "ATL", new Set())), ["10", null, "11"]);
 });
+
+test("a team's next game is never one the league put off, whatever words its status uses", () => {
+  for (const status of ["Postponed", "PPD", "Cancelled"]) {
+    const putOff = { ...makeGame("5", "pre", ["MIN", "SEA"]), status };
+    const season = SEASON.map((game) => (game.id === "5" ? putOff : game));
+    assert.deepEqual(listIds(findTeamNearestGames(season, "SEA", new Set())), ["2", "4", "6"]);
+  }
+});
