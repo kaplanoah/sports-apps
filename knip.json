@@ -32,5 +32,6 @@
     "*.mjs",
     ".claude/hooks/*.mjs"
   ],
-  "ignore": ["apps/*/page/js/sortable.min.js"]
+  "ignore": ["apps/*/page/js/sortable.min.js"],
+  "ignoreBinaries": ["jq"]
 }

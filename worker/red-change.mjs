@@ -6,12 +6,12 @@
 // that gives a part a layer of its own, lifts it over others, or decides how it scrolls or takes a
 // touch (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a
 // layer of its own, sets what those stylesheets would be red for or a custom property they stack
-// with, or holds markup that runs or layers the page; a line a page's markup adds or takes out
-// that loads, runs, or layers its parts; and a diff the gate can't read. A red change merges only
-// once the owner has used it on the beta app and labeled it phone-ok. Anyone who can label a pull
-// request could add the label, so the gate reads who last added it and lets the change through
-// only from the repository's owner, and only when the label came after the pull request's head
-// commit reached GitHub, which the owner hasn't used on the phone otherwise.
+// with, or holds or creates markup that runs or layers the page; a line a page's markup adds or
+// takes out that loads, runs, or layers its parts; and a diff the gate can't read. A red change
+// merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone who can
+// label a pull request could add the label, so the gate reads who last added it and lets the
+// change through only from the repository's owner, and only when the label came after the pull
+// request's head commit reached GitHub, which the owner hasn't used on the phone otherwise.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
@@ -61,13 +61,7 @@ const RED_FILES = new Set(
   ].map((file) => `shared/page/${file}`),
 );
 
-const toCamelCase = (property) =>
-  property.replace(/-([a-z])/g, (_dash, letter) => letter.toUpperCase());
 const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
-// After a prefix, as in webkitBackdropFilter, a style property's name starts with a capital.
-const CAMEL_PROPERTY_NAMES = LAYER_PROPERTIES.map(toCamelCase)
-  .flatMap((name) => [name, name[0].toUpperCase() + name.slice(1)])
-  .join("|");
 
 // A property's longhands set it too, as transition-duration and -webkit-mask-image do. A number an
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
@@ -80,22 +74,22 @@ const LAYER_SETTINGS = [
       `(?:^|[\\s{;"'\`])(?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))`,
     ),
   },
-  {
-    name: "a style property",
-    pattern: new RegExp(`\\.(?:webkit|Webkit)?(${CAMEL_PROPERTY_NAMES})(?:[A-Z][a-z]+)*\\s*=(?!=)`),
-  },
   { name: "an animation", pattern: /\.(animate)\(/ },
   { name: "a fixed or sticky position", pattern: /\b(position\s*:\s*(?:fixed|sticky))\b/ },
-  {
-    name: "a fixed or sticky position",
-    pattern: /\b(position\s*=\s*["'`](?:fixed|sticky))\b/,
-  },
 ];
 
-// A part's style a script sets by a property's name in the script, or the whole of its CSS text,
-// and one it sets by a property's CSS name, each with the value the script writes after it.
-const STYLE_ASSIGNMENT = /\.style\.([A-Za-z]+)\s*\+?=(?!=)(.*)/;
-const STYLE_SET_PROPERTY = /setProperty\(\s*(["'`])((?:(?!\1).)*)\1\s*(?:,(.*))?/;
+// An assignment, plain or compound, as `=`, `+=`, or `||=`, but not a comparison.
+const ASSIGNS = String.raw`\s*(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?!=)`;
+// A property a script sets by its name, on a part's style or on what holds it, as
+// `const style = part.style; style.zIndex = 5` does, with the value it writes after it. A style's
+// whole text it sets as cssText, as the style itself, or as the style attribute.
+const PROPERTY_ASSIGNMENT = new RegExp(`\\.([A-Za-z]+)${ASSIGNS}(?=(.*))`, "g");
+const STYLE_TEXT_NAMES = new Set(["cssText", "style"]);
+const STYLE_ATTRIBUTE_SET = /setAttribute\(\s*["'`]style["'`]\s*,(.*)/;
+// A property a script sets by its CSS name, quoted, or by a name the gate can't read, as a
+// variable holds it or an index into a part's style names it.
+const STYLE_SET_PROPERTY = /setProperty\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(.*))?/;
+const STYLE_INDEX_ASSIGNMENT = new RegExp(`\\.style\\s*\\[[^\\]]*\\]${ASSIGNS}`);
 // A value as a script writes it: a string or a number, which ends where its expression does.
 const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*(?:[;,)}\]]|$))/;
 
@@ -107,8 +101,10 @@ const KEYFRAMES_NAME = /\.animate\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 const STYLE_KEY = /(?:^|[\s{,])(["']?)(-{0,2}[A-Za-z][\w-]*)\1\s*:(?!:)/g;
 
 // A line of a page's markup, or of a script's, that runs scripts, in their order, or opens a
-// dialog, a popover, or a style element, each of which can stack its parts.
-const PAGE_MARKUP_LAYER = /<script\b|<style\b|<dialog\b|\bpopover\b/i;
+// dialog, a popover, or a style element, or creates a script, a dialog, or a style element, each
+// of which can stack its parts.
+const PAGE_MARKUP_LAYER =
+  /<script\b|<style\b|<dialog\b|\bpopover\b|createElement\(\s*["'`](?:script|dialog|style)["'`]/i;
 // A style attribute and its value, which is missing where a template fills it in whole.
 const STYLE_ATTRIBUTE = /(?<![\w-])style=(?:"([^"]*)"|'([^']*)')?/gi;
 const INLINE_SCRIPT = /<script\b(?![^>]*(?<![\w-])src=)[^>]*>[\s\S]*?<\/script>/gi;
@@ -367,21 +363,53 @@ function describeStyleProperty(property, value, isWatched) {
 }
 
 /**
- * What a line sets on a part's style, by a property's name or its CSS text, that a page's
- * stylesheet would be red for, or null when it sets nothing that is.
+ * What a script sets a style's whole text to that a page's stylesheet would be red for, or null
+ * when it sets nothing that is.
+ * @param {string} value
+ * @param {(property: string) => boolean} isWatched
+ */
+function describeStyleText(value, isWatched) {
+  const settings = findInlineStyleSettings(value, isWatched);
+  return settings.length ? `a style that sets ${settings.join("; ")}` : null;
+}
+
+const UNREADABLE_PROPERTY = "a style property whose name the gate can't read";
+
+/**
+ * What a line sets by a property's name, on any object, that a page's stylesheet would be red
+ * for, or null when it sets nothing that is.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+function findAssignedSetting(text, isWatched) {
+  for (const [, name, written] of text.matchAll(PROPERTY_ASSIGNMENT)) {
+    const value = readScriptValue(written);
+    const setting = STYLE_TEXT_NAMES.has(name)
+      ? describeStyleText(value, isWatched)
+      : describeStyleProperty(toKebabCase(name), value, isWatched);
+    if (setting) return setting;
+  }
+  return null;
+}
+
+/**
+ * What a line sets on a part's style, by a property's name, its CSS name, or its whole text, that
+ * a page's stylesheet would be red for, or a property whose name the gate can't read, or null when
+ * it sets nothing that is.
  * @param {string} text
  * @param {(property: string) => boolean} isWatched
  */
 function findStyleSetting(text, isWatched) {
-  const assigned = text.match(STYLE_ASSIGNMENT);
-  if (assigned?.[1] === "cssText") {
-    const settings = findInlineStyleSettings(readScriptValue(assigned[2]), isWatched);
-    return settings.length ? `a style that sets ${settings.join("; ")}` : null;
-  }
-  if (assigned)
-    return describeStyleProperty(toKebabCase(assigned[1]), readScriptValue(assigned[2]), isWatched);
+  if (STYLE_INDEX_ASSIGNMENT.test(text)) return UNREADABLE_PROPERTY;
+  const assigned = findAssignedSetting(text, isWatched);
+  if (assigned) return assigned;
+  const attribute = text.match(STYLE_ATTRIBUTE_SET);
+  if (attribute) return describeStyleText(readScriptValue(attribute[1]), isWatched);
   const set = text.match(STYLE_SET_PROPERTY);
-  return set ? describeStyleProperty(set[2], readScriptValue(set[3] ?? ""), isWatched) : null;
+  if (!set) return null;
+  return set[1]
+    ? describeStyleProperty(set[2], readScriptValue(set[3] ?? ""), isWatched)
+    : UNREADABLE_PROPERTY;
 }
 
 /**
@@ -440,7 +468,7 @@ function findMarkupLayer(text, isWatched) {
 /**
  * Why a change to any other script of a page is red: each line it adds that makes a layer, sets
  * what a page's stylesheet would be red for or a custom property a stack declaration reads, or
- * holds markup that runs or layers the page.
+ * holds or creates markup that runs or layers the page.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  * @param {(property: string) => boolean} isWatched
@@ -490,7 +518,8 @@ const listScreenMetas = (markup) => listTags(markup, META_TAG, SCREEN_META_NAME)
  * Why a change to a page's markup is red: each line it adds or takes out that runs the page's
  * scripts, whose order it decides too, or opens a dialog, a popover, or a style element, or holds
  * an inline style that stacks a part, and any change to the stylesheets it links, their order
- * too, to how it fits the screen and colors the phone's bars, or to its inline scripts and styles.
+ * too, to how it fits the screen, opens from the Home Screen without the browser's bars, and
+ * colors the phone's own, or to its inline scripts and styles.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  * @param {(property: string) => boolean} isWatched

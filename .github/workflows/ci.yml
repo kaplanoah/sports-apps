@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# The status a held red change waits on, which the phone job sets and check looks for in main's
+# rules.
+env:
+  PHONE_CONTEXT: phone
+
 # A new push to a pull request stops the checks still running on the one before it. A label
 # change waits for them instead, since it brings no new code and reuses what they find.
 concurrency:
@@ -79,20 +84,10 @@ jobs:
         with:
           node-version-file: ${{ runner.temp }}/base/.nvmrc
       # The gate parses a page's scripts and stylesheets with esbuild, to tell what a change does
-      # from how it's written. Its modules' cache is keyed on the base's lockfile alone, and only
-      # restored here, since a pull request's run could save modules its own workflow changed: only
-      # main's caches job saves it.
-      - name: Name the base's modules
-        id: base-modules-key
-        run: echo "key=gate-modules-${{ runner.os }}-$(git rev-parse HEAD^1:package-lock.json)" >> "$GITHUB_OUTPUT"
-      - id: base-modules
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/base/node_modules
-          key: ${{ steps.base-modules-key.outputs.key }}
-      # No module the base installs runs a script of its own.
+      # from how it's written. Its modules are installed fresh from the base's lockfile, never
+      # restored from a cache, since a pull request's own run can save a cache its later runs
+      # restore first. No module the base installs runs a script of its own.
       - name: Install the base's modules
-        if: steps.base-modules.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}/base
         run: npm ci --ignore-scripts
       - name: Hold a red change for the owner's phone
@@ -122,7 +117,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           STATE: ${{ needs.gate.outputs.held == 'true' && 'pending' || 'success' }}
           DESCRIPTION: ${{ needs.gate.outputs.held == 'true' && 'A red change, waiting for phone-ok from beta' || 'Nothing left for the phone' }}
-        run: gh api --method POST "repos/$REPO/statuses/$HEAD_SHA" -f context=phone -f state="$STATE" -f description="$DESCRIPTION"
+        run: gh api --method POST "repos/$REPO/statuses/$HEAD_SHA" -f context="$PHONE_CONTEXT" -f state="$STATE" -f description="$DESCRIPTION"
 
   # The quick checks share one machine, which leaves more of the account's runners for the browser
   # tests.
@@ -407,27 +402,6 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: *browsers-key
-      # The gate's modules, which a pull request's gate restores for its base, installed from main's
-      # own checkout and lockfile, at the path and under the key the gate reads.
-      - name: Check out main for the gate
-        run: git worktree add "$RUNNER_TEMP/base" HEAD
-      - name: Name the gate's modules
-        id: gate-modules-key
-        run: echo "key=gate-modules-${{ runner.os }}-$(git rev-parse HEAD:package-lock.json)" >> "$GITHUB_OUTPUT"
-      - id: gate-modules
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/base/node_modules
-          key: ${{ steps.gate-modules-key.outputs.key }}
-          lookup-only: true
-      - if: steps.gate-modules.outputs.cache-hit != 'true'
-        working-directory: ${{ runner.temp }}/base
-        run: npm ci --ignore-scripts
-      - if: steps.gate-modules.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/base/node_modules
-          key: ${{ steps.gate-modules-key.outputs.key }}
 
   # Each pull request is reviewed in areas, by what its files are about, each test with its code
   # (worker/plan-review.mjs). In each area a reviewer for each kind of problem in KINDS reads every
@@ -1007,7 +981,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          required=$(gh api "repos/$REPO/rules/branches/main" --jq 'any(.[]; .type == "required_status_checks" and any(.parameters.required_status_checks[]?; .context == "phone"))')
+          required=$(gh api "repos/$REPO/rules/branches/main" --jq 'any(.[]; .type == "required_status_checks" and any(.parameters.required_status_checks[]?; .context == $ENV.PHONE_CONTEXT))')
           echo "Main's rules require the phone status: $required"
           echo "required=$required" >> "$GITHUB_OUTPUT"
       # Records the code this pull request's checks passed on: once every test and the review passed,

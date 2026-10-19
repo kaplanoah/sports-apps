@@ -1315,8 +1315,29 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.cssText = "color: red; z-index: 2";',
     "  part.style.cssText += `position: ${position}`;",
     "  part.style.cssText = styles;",
+    "  style.zIndex = 5;",
+    '  style.touchAction = "none";',
+    '  style.position = "absolute";',
+    '  holder.position = "fixed";',
+    "  part.style.zIndex ||= 5;",
+    '  part.style = "z-index: 2";',
+    '  part.setAttribute("style", "z-index: 2");',
+    "  part.setAttribute('style', `position: ${place}`);",
+    "  part.style.setProperty(property, value);",
+    "  part.style[key] = value;",
+    '  const sheet = document.createElement("dialog");',
+    "  const rules = document.createElement('style');",
+    "  const loader = document.createElement(`script`);",
   ])
     assert.equal(findReasons(path, [line]).length, 1, line);
+  assert.deepEqual(
+    findReasons(path, ["  const style = part.style;", "  style.zIndex = 5;"]),
+    [`${path}:2 adds a style property that sets z-index: style.zIndex = 5;`],
+    "a style a script holds by another name",
+  );
+  assert.deepEqual(findReasons(path, ["  part.style[key] = value;"]), [
+    `${path}:1 adds a style property whose name the gate can't read: part.style[key] = value;`,
+  ]);
   for (const line of [
     '  part.style.position = "relative";',
     '  part.style.overflow = "visible";',
@@ -1327,6 +1348,13 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.setProperty("color", ink);',
     '  part.style.cssText = "color: red";',
     '  if (part.style.zIndex === "2") return;',
+    '  part.style = "color: red";',
+    '  part.setAttribute("style", "color: red");',
+    '  part.setAttribute("class", "z-index-2");',
+    "  const value = part.style[key];",
+    "  if (part.style.zIndex >= 2) return;",
+    '  const cell = document.createElement("div");',
+    "  item.position = 3;",
   ])
     assert.deepEqual(findReasons(path, [line]), [], line);
   assert.deepEqual(findReasons(path, ["  part.style.zIndex = 5;"]), [
@@ -1418,7 +1446,7 @@ test("a red change is held until it has the phone-ok label, and says why", () =>
   assert.match(held.message, /shared\/page\/bracket-standings\.js is shared code/);
   assert.match(
     held.message,
-    /apps\/wnba\/page\/js\/games-view\.js:10 adds a style property that sets willChange/,
+    /apps\/wnba\/page\/js\/games-view\.js:10 adds a style property that sets will-change/,
   );
   assert.match(held.message, /git push -f origin <branch>:beta/);
   assert.match(held.message, /owner adds the phone-ok label after using it on the beta app/);

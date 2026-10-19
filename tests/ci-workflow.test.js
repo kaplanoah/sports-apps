@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import {
   nameAcrossRecord,
@@ -202,11 +203,16 @@ test("the browser and WebKit jobs run only the apps the change reaches, and chec
   );
 });
 
+// The phone status's name, set once for the workflow.
+const PHONE_CONTEXT =
+  readRepoFile(".github/workflows/ci.yml").match(/^env:\n {2}PHONE_CONTEXT: (\S+)$/m)?.[1] ?? "";
+
 // A held red change waits on the phone status, set on every pull request whose gate ran by a job
 // that runs none of the pull request's code since only it can set a status, and check holds the
 // change itself whenever main's rules don't require that status, from a lookup in the workflow
 // rather than the pull request's code, and never records it as passed for main to deploy at once.
 test("a held red change waits on the phone status, and check holds it whenever main's rules don't", () => {
+  assert.equal(PHONE_CONTEXT, "phone");
   assert.match(readJob("gate"), /held: \$\{\{ steps\.hold\.outputs\.held \}\}/);
   const phone = readJob("phone");
   assert.match(
@@ -215,7 +221,7 @@ test("a held red change waits on the phone status, and check holds it whenever m
   );
   assert.match(phone, /permissions:\n\s+statuses: write\n\s+steps:/);
   assert.doesNotMatch(phone, /actions\/checkout|node /);
-  assert.ok(phone.includes("-f context=phone "));
+  assert.ok(phone.includes('-f context="$PHONE_CONTEXT" '));
   assert.match(
     phone,
     /STATE: \$\{\{ needs\.gate\.outputs\.held == 'true' && 'pending' \|\| 'success' \}\}/,
@@ -226,7 +232,7 @@ test("a held red change waits on the phone status, and check holds it whenever m
   assert.doesNotMatch(check, /node worker\//);
   assert.match(
     check,
-    /id: phone\n\s+if: needs\.gate\.outputs\.held == 'true'\n[\s\S]*required=\$\(gh api "repos\/\$REPO\/rules\/branches\/main" --jq 'any\(\.\[\]; \.type == "required_status_checks" and any\(\.parameters\.required_status_checks\[\]\?; \.context == "phone"\)\)'\)\n\s+.*\n\s+echo "required=\$required" >> "\$GITHUB_OUTPUT"/,
+    /id: phone\n\s+if: needs\.gate\.outputs\.held == 'true'\n[\s\S]*required=\$\(gh api "repos\/\$REPO\/rules\/branches\/main" --jq '[^']*\$ENV\.PHONE_CONTEXT[^']*'\)\n\s+.*\n\s+echo "required=\$required" >> "\$GITHUB_OUTPUT"/,
   );
   assert.match(
     check,
@@ -238,9 +244,41 @@ test("a held red change waits on the phone status, and check holds it whenever m
   );
 });
 
+/**
+ * What check's filter of main's rules says of a ruleset, run with jq as gh runs it.
+ * @param {object[]} rules
+ */
+function readPhoneRequired(rules) {
+  const filter = readJob("check").match(/rules\/branches\/main" --jq '([^']*)'/)?.[1] ?? "";
+  const { stdout, status, stderr } = spawnSync("jq", [filter], {
+    input: JSON.stringify(rules),
+    encoding: "utf8",
+    env: { ...process.env, PHONE_CONTEXT },
+  });
+  assert.equal(status, 0, stderr);
+  return stdout.trim();
+}
+
+/** @param {string[]} contexts */
+const requireChecks = (...contexts) => ({
+  type: "required_status_checks",
+  parameters: { required_status_checks: contexts.map((context) => ({ context })) },
+});
+
+test("check's filter of main's rules finds the phone status only where they require it", () => {
+  assert.equal(
+    readPhoneRequired([{ type: "deletion" }, requireChecks("check", PHONE_CONTEXT)]),
+    "true",
+  );
+  assert.equal(readPhoneRequired([requireChecks("check")]), "false");
+  assert.equal(readPhoneRequired([{ type: "required_status_checks", parameters: {} }]), "false");
+  assert.equal(readPhoneRequired([]), "false");
+});
+
 // A pull request that changes the gate's code would otherwise judge its own change, so the base's
 // copy, on the Node and modules the base names, reads the pull request's files from its checkout,
-// from a diff that shows every file's text whatever .gitattributes says.
+// from a diff that shows every file's text whatever .gitattributes says. A pull request's own run
+// can save a cache its later runs restore first, so no job caches the base's modules.
 test("the gate judges a pull request with the base's own gate, Node, and modules", () => {
   const gate = readJob("gate");
   const worktree = gate.indexOf('run: git worktree add "$RUNNER_TEMP/base" HEAD^1\n');
@@ -250,55 +288,23 @@ test("the gate judges a pull request with the base's own gate, Node, and modules
     "Node from the base's .nvmrc, once it's checked out",
   );
   assert.doesNotMatch(gate, /\*setup-node|\*restore-modules|\*install-modules|node worker\//);
-  assert.ok(
-    gate.includes(
-      'run: echo "key=gate-modules-${{ runner.os }}-$(git rev-parse HEAD^1:package-lock.json)" >> "$GITHUB_OUTPUT"\n',
-    ),
-  );
   assert.match(
     gate,
-    /- id: base-modules\n\s+uses: actions\/cache\/restore@[0-9a-f]{40} # .*\n\s+with:\n\s+path: \$\{\{ runner\.temp \}\}\/base\/node_modules\n\s+key: \$\{\{ steps\.base-modules-key\.outputs\.key \}\}\n/,
+    /- name: Install the base's modules\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts\n/,
   );
-  assert.doesNotMatch(gate, /actions\/cache(?:\/save)?@/, "the gate never saves its modules");
-  assert.match(
-    gate,
-    /if: steps\.base-modules\.outputs\.cache-hit != 'true'\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts\n/,
-  );
+  assert.doesNotMatch(gate, /actions\/cache/);
+  for (const workflow of WORKFLOWS)
+    assert.doesNotMatch(
+      readRepoFile(`.github/workflows/${workflow}`),
+      /path: .*base\/node_modules/,
+      workflow,
+    );
   assert.ok(
     gate.includes(
       'run: git diff --text --no-textconv --no-ext-diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"\n',
     ),
   );
   assert.doesNotMatch(gate, /held=false/);
-});
-
-// A pull request's run could save modules its own workflow changed, so only main's run saves the
-// gate's, from main's checkout, at the path and under the key a pull request's gate restores.
-test("only main saves the gate's modules, where and as the gate reads them", () => {
-  const caches = readJob("caches");
-  assert.match(caches, /if: github\.event_name == 'push'\n/);
-  assert.ok(caches.includes('run: git worktree add "$RUNNER_TEMP/base" HEAD\n'));
-  assert.ok(
-    caches.includes(
-      'run: echo "key=gate-modules-${{ runner.os }}-$(git rev-parse HEAD:package-lock.json)" >> "$GITHUB_OUTPUT"\n',
-    ),
-  );
-  assert.match(
-    caches,
-    /- id: gate-modules\n\s+uses: actions\/cache\/restore@[0-9a-f]{40} # .*\n\s+with:\n\s+path: \$\{\{ runner\.temp \}\}\/base\/node_modules\n\s+key: \$\{\{ steps\.gate-modules-key\.outputs\.key \}\}\n\s+lookup-only: true\n/,
-  );
-  assert.match(
-    caches,
-    /- if: steps\.gate-modules\.outputs\.cache-hit != 'true'\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts\n/,
-  );
-  assert.match(
-    caches,
-    /- if: steps\.gate-modules\.outputs\.cache-hit != 'true'\n\s+uses: actions\/cache\/save@[0-9a-f]{40} # .*\n\s+with:\n\s+path: \$\{\{ runner\.temp \}\}\/base\/node_modules\n\s+key: \$\{\{ steps\.gate-modules-key\.outputs\.key \}\}\n/,
-  );
-  const saving = listJobs().filter((job) =>
-    /gate-modules[\s\S]*actions\/cache(?:\/save)?@/.test(readJob(job)),
-  );
-  assert.deepEqual(saving, ["caches"]);
 });
 
 /**
