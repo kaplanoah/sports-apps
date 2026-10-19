@@ -5,6 +5,7 @@ import {
   findSeasonTab,
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
+import { readSeasonPartScroll } from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -88,7 +89,7 @@ test.describe("on a phone, the bracket", () => {
     const app = await openApp(page);
     await app.changeSeason(finishFirstRound);
     await expect(readRoundName(page, 2)).toBeInViewport({ ratio: 1 });
-    expect(await page.evaluate(() => scrollY)).toBe(0);
+    expect(await readSeasonPartScroll(page, "bracket")).toBe(0);
 
     for (const left of [0, Number.MAX_SAFE_INTEGER]) {
       await page.locator(".bracket").evaluate((tree, to) => (tree.scrollLeft = to), left);

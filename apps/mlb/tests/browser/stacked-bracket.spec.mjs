@@ -221,7 +221,7 @@ test("on a phone, a tap on the bracket's tab brings it back to the round still p
   const worldSeries = page.locator('.box[data-round="WS"]');
   await expect(worldSeries).toBeInViewport({ ratio: 1 });
   await expect(findSeasonTab(page)).toHaveAccessibleName("Bracket");
-  expect(await page.evaluate(() => scrollY)).toBe(0);
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(0);
   await page.locator(".tree-scroll").evaluate((element) => (element.scrollLeft = 0));
   await expect(worldSeries).not.toBeInViewport();
 

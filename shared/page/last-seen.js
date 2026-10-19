@@ -6,6 +6,7 @@
 // back what they showed. A sheet left open too long is gone by the time the page shows again
 // (sheet-memory.js).
 
+import { isSeasonPart } from "./season-part.js";
 import { keepImages } from "./service-worker.js";
 import { closeForgottenDialogs, noteShownEndsSeen } from "./sheet-memory.js";
 import { listOpenSheets, reopenSheets } from "./sheet-reopen.js";
@@ -68,20 +69,18 @@ const readScrolls = (part) =>
 // A part that scrolls in a holder of its own, like the standings in theirs (pager.css), keeps the
 // holder's place too. A holder on a tab not shown reads as unscrolled, so it keeps the place it last
 // scrolled to, or the one a load put back that it hasn't shown yet.
-const SCROLL_HOLDER = ".season-part";
 /** @type {WeakMap<Element, number>} */
 const holderTops = new WeakMap();
 
 /** @param {Event} event */
 function noteHolderTop({ target }) {
-  if (target instanceof HTMLElement && target.matches(SCROLL_HOLDER))
-    holderTops.set(target, target.scrollTop);
+  if (isSeasonPart(target)) holderTops.set(target, target.scrollTop);
 }
 
 /** @param {HTMLElement} part */
 function readHolderTop(part) {
   const holder = part.parentElement;
-  if (!holder?.matches(SCROLL_HOLDER)) return undefined;
+  if (!isSeasonPart(holder)) return undefined;
   if (holder.getClientRects().length) return holder.scrollTop;
   return Number(holder.dataset.putBackTop ?? holderTops.get(holder) ?? 0);
 }
