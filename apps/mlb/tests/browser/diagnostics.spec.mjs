@@ -2,6 +2,7 @@ import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { scrollSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
 import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
@@ -279,6 +280,8 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   await (
     await drag(page, from, { y: -200 })
   )();
+  // The drag rode the header, and settings' button with it, out of sight.
+  await scrollSeasonPart(page, "standings", 0);
 
   const lines = await readLog(page, "Standings and bracket");
   expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on Team details: /));
