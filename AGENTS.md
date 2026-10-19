@@ -895,7 +895,8 @@ When a step says to go back to an earlier step, continue in order from there.
    If that brought in anything new, go back to step 2.
    Then commit, push, and open a PR into `main`, or a stacked PR into the branch it builds on.
    If the PR is already open, the push updates it.
-   - If the change is red (`node worker/red-change.mjs` with the branch's diff from `main` on stdin says why),
+   - If the change is red (`node worker/red-change.mjs`,
+     with `git diff --text --no-textconv --no-ext-diff --no-renames origin/main` on stdin, as CI runs it, says why),
      also deploy it to beta once its CI passes (`git push -f origin <branch>:beta`,
      as "Workflow" says), unless another red change is still on beta or unconfirmed.
      Then tell the user it's on beta and what to use on the phone, and keep to steps 4 to 7 while the owner tries it.

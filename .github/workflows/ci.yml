@@ -60,7 +60,7 @@ jobs:
   # through; a change to this job, the phone job, or check is the review's to weigh, as REVIEW.md
   # says. The diff shows every file's text, whatever .gitattributes says of it. It holds the change
   # on the phone job's status rather than by failing, and check holds it whenever main's rules
-  # don't require that status.
+  # don't require that status, or the pull request comes from a fork, whose token can't post it.
   gate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

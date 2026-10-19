@@ -905,6 +905,7 @@ test("an inline style in a page's markup or a script's template is red only wher
     "<div style=${style}>",
     '<div style="color: ${isOn ? "red" : "blue"}">',
     '<div style="/* lift */ z-index: 2">',
+    '<div style="transition: color 0.2s, transform 0.2s">',
     '<div style="/**/pointer-events: none">',
     '<div style="z\\-index: 2">',
     "<div style=\"--icon: '/*'; z-index: 2\">",
@@ -931,6 +932,8 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="">',
     '<div data-style="z-index: 2">',
     '<div style="/* note */ color: red">',
+    '<div style="transition: color 0.2s">',
+    '<div style="transition: background-color 0.15s, box-shadow 0.15s; color: red">',
   ];
   for (const markup of redStyles) {
     assert.equal(
@@ -1440,6 +1443,8 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     "  style.removeProperty(property);",
     '  part.removeAttribute("style");',
     '  part.style.cssText = "/**/z-index: 2";',
+    '  part.style.cssText = "transition: color 0.2s, translate 0.2s";',
+    '  sheet.insertRule(".tip { transition: color 0.2s, transform 0.2s }");',
     '  part.style.position = "f\\69xed";',
     '  part.style.setProperty("position", "\\66ixed");',
     '  part.style.cssText = `color: ${a ? "{" : "b"}; z-index: 2`;',
@@ -1478,6 +1483,9 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.setProperty("overflow", "visible");',
     '  part.style.setProperty("color", ink);',
     '  part.style.cssText = "color: red";',
+    '  part.style.cssText = "transition: background-color 0.15s";',
+    '  part.style.transition = "color 0.2s";',
+    '  part.setAttribute("style", "transition: color 0.2s, box-shadow 0.2s");',
     '  if (part.style.zIndex === "2") return;',
     '  part.style = "color: red";',
     '  part.setAttribute("style", "color: red");',
@@ -1554,7 +1562,9 @@ test("a key of a style's object is red where a page's stylesheet would be", () =
 });
 
 test("a page's script that sets a custom property is red only where a stack declaration reads it, or its name can't be read", () => {
-  const reads = { "shared/page/chrome.css": [".a { transform: var(--lift); }"] };
+  const reads = {
+    "shared/page/chrome.css": [".a { transform: var(--lift); translate: var(--slideX); }"],
+  };
   const path = "apps/wnba/page/js/games-view.js";
   for (const [line, count] of /** @type {[string, number][]} */ ([
     ['  root.style.setProperty("--lift", lift);', 1],
@@ -1565,6 +1575,25 @@ test("a page's script that sets a custom property is red only where a stack decl
       findChangeReasons({ [path]: { before: [], after: [line] } }, reads).length,
       count,
       line,
+    );
+  const pulse = [
+    "const PULSE = [",
+    "  { scale: 1 },",
+    "];",
+    "part.animate(PULSE, { duration: 200 });",
+  ];
+  for (const [key, count] of /** @type {[string, number][]} */ ([
+    ['  { "--lift": "translateZ(0)" },', 1],
+    ['  { "--slideX": "10px" },', 1],
+    ['  { "--team": "red" },', 0],
+  ]))
+    assert.equal(
+      findChangeReasons(
+        { [path]: { before: pulse, after: [...pulse.slice(0, 2), key, ...pulse.slice(2)] } },
+        reads,
+      ).length,
+      count,
+      `a keyframe: ${key}`,
     );
 });
 

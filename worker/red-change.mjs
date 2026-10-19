@@ -71,13 +71,12 @@ const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
 // template ends a declaration with a semicolon or its string's end, unless the object is a
 // style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find.
+// Each match holds the declaration's property, the name of its family, and its value.
+const CSS_DECLARATION = new RegExp(
+  `(?:^|[\\s{;"'\`])((?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*)\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))(?=([^;"'\`}]*))`,
+  "g",
+);
 const LAYER_SETTINGS = [
-  {
-    name: "a CSS declaration",
-    pattern: new RegExp(
-      `(?:^|[\\s{;"'\`])(?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))`,
-    ),
-  },
   { name: "an animation", pattern: /\.(animate)\(/ },
   { name: "a fixed or sticky position", pattern: /\b(position\s*:\s*(?:fixed|sticky))\b/ },
 ];
@@ -241,6 +240,12 @@ function findDiffProblem(diff) {
  * @param {string} text
  */
 function findLayerSetting(text) {
+  const declaration = findFirstSetting(text, CSS_DECLARATION, ([, property, family, value]) =>
+    isPageLayerDeclaration({ property, value: value.trim() })
+      ? `a CSS declaration that sets ${family}`
+      : null,
+  );
+  if (declaration) return declaration;
   for (const { name, pattern } of LAYER_SETTINGS) {
     const match = text.match(pattern);
     if (match) return `${name} that sets ${match[1]}`;
@@ -354,13 +359,15 @@ function listBracketLines(text, opens) {
 
 /**
  * A style property's CSS name, from its name in a script, as -webkit-backdrop-filter's is
- * webkitBackdropFilter.
+ * webkitBackdropFilter, and a custom property's as it is, since its case is its own.
  * @param {string} name
  */
 const toKebabCase = (name) =>
-  name
-    .replace(/^webkit(?=[A-Z])/, "Webkit")
-    .replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+  name.startsWith("--")
+    ? name
+    : name
+        .replace(/^webkit(?=[A-Z])/, "Webkit")
+        .replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
 /**
  * The value a script writes, as its string or number holds it, or as a template's hole for one
@@ -476,18 +483,20 @@ const findStyleSetting = (text, isWatched) =>
 
 /**
  * What a line of a style's object, or of an animation's keyframes, sets by its keys that a
- * page's stylesheet would be red for, or null when it sets nothing that is.
+ * page's stylesheet would be red for, or a custom property a stack declaration reads, or null
+ * when it sets neither.
  * @param {string} text
  * @param {(key: string) => string | null} readProperty the CSS name a key sets where the line
  *   lies, or null for one that sets no style there
+ * @param {(property: string) => boolean} isWatched
  */
-function findStyleKey(text, readProperty) {
+function findStyleKey(text, readProperty, isWatched) {
   for (const match of text.matchAll(STYLE_KEY)) {
     const property = readProperty(match[2]);
     if (property === null) continue;
     const value = readScriptValue(text.slice((match.index ?? 0) + match[0].length));
-    if (isPageLayerDeclaration({ property, value }))
-      return `a style property that sets ${property}`;
+    const setting = describeStyleProperty(property, value, isWatched);
+    if (setting) return setting;
   }
   return null;
 }
@@ -502,10 +511,11 @@ function findStyleKey(text, readProperty) {
  * What a line of a style's object or of keyframes sets by its keys, or null for any other line.
  * @param {AddedLine} line
  * @param {StyleObjectLines} objectLines
+ * @param {(property: string) => boolean} isWatched
  */
-function findObjectKeySetting({ number, text }, { styleLines, keyframeLines }) {
-  if (styleLines.has(number)) return findStyleKey(text, toKebabCase);
-  return keyframeLines.has(number) ? findStyleKey(text, readKeyframeProperty) : null;
+function findObjectKeySetting({ number, text }, { styleLines, keyframeLines }, isWatched) {
+  if (styleLines.has(number)) return findStyleKey(text, toKebabCase, isWatched);
+  return keyframeLines.has(number) ? findStyleKey(text, readKeyframeProperty, isWatched) : null;
 }
 
 /**
@@ -525,7 +535,7 @@ const readKeyframeProperty = (key) =>
 const findAddedSetting = (line, objectLines, isWatched) =>
   findLayerSetting(line.text) ??
   findStyleSetting(line.text, isWatched) ??
-  findObjectKeySetting(line, objectLines);
+  findObjectKeySetting(line, objectLines, isWatched);
 
 /**
  * What each style attribute a line of markup holds sets that a page's stylesheet would be red
