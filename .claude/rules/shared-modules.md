@@ -10,7 +10,7 @@ paths:
 - `shared/page/` holds the page modules every app uses (the `html` template,
   tabs and the tab bar, switching the page's tabs in `page-tabs.js` and reopening the last one before the first paint in `open-last-tab.js`,
   putting back what each part the page draws whole last showed,
-  the switches and choices its settings showed,
+  the switches its settings showed and the look picked,
   and the sheets it had open, before the first paint, hiding again a part marked `data-start-hidden`,
   like the search, after two minutes away, in `show-last-drawn.js`,
   closing, before the page draws as it comes back or loads again,

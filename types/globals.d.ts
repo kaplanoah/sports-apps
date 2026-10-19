@@ -3,7 +3,7 @@ declare const Sortable: {
 };
 
 // The page's plain scripts in its head share these, from shared/page/pick-theme.js,
-// open-last-tab.js, and season-header.js.
+// open-last-tab.js, show-last-drawn.js, and season-header.js.
 declare function isOnHomeScreen(): boolean;
 declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;
@@ -15,6 +15,8 @@ declare function readPhoneLook(): "light" | "dark";
 declare function readHomeScreenIcon(): string | null;
 declare const WELCOME_CLOSED_KEY: string;
 declare function readStored(key: string): string | null;
+declare const LAST_SWITCHED_KEY: string;
+declare const KEPT_SWITCHES: string;
 declare function followSeasonPart(part?: HTMLElement): void;
 declare function listAboveSeasonView(): HTMLElement[];
 declare function listPageParts(): HTMLElement[];

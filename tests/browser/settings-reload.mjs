@@ -44,6 +44,7 @@ export async function checkSettingsOnReload({ page, openSettings, look, switchNa
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await expect(page.locator("#seasonPicker option")).not.toHaveCount(0);
   await expect(page.locator("#seasonRow")).toBeVisible();
+  await expect(page.locator("#notifySwitch")).toBeAttached();
   const shown = await readSettings(page);
   const release = await holdRequests(page, matchPath("/js/app.js"), { times: 1 });
 
@@ -52,7 +53,9 @@ export async function checkSettingsOnReload({ page, openSettings, look, switchNa
   await expect(settings).toBeVisible();
   await expect.poll(() => readSettings(page)).toEqual(shown);
 
+  // The page watches the news right after it fills settings from what the store answered.
+  const watchingNews = page.waitForRequest(matchPath("/store/news/cards"));
   release();
-  await page.waitForLoadState("domcontentloaded");
+  await watchingNews;
   await expect.poll(() => readSettings(page)).toEqual(shown);
 }

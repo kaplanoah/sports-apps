@@ -157,17 +157,24 @@ const readShown = () =>
 
 const findSeasonRow = () => findElement("seasonRow");
 
+/** @type {string[] | null} */
+let keptSeasonYears = null;
+
+// The seasons the store keeps, as it last said where it can't say now, or null where it never has,
+// which leaves the picker as the page drew it before it loaded.
 async function listSeasonYears() {
   try {
-    return await loadSeasonYears();
+    keptSeasonYears = await loadSeasonYears();
   } catch {
-    return [];
+    /* the store's last list stands */
   }
+  return keptSeasonYears;
 }
 
-/** @param {string[]} years */
-const fillSeasonList = (years) =>
-  fillSeasonPicker(findSeasonRow(), years, session.year, LEAGUE_WORDS);
+/** @param {string[] | null} years */
+function fillSeasonList(years) {
+  if (years) fillSeasonPicker(findSeasonRow(), years, session.year, LEAGUE_WORDS);
+}
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 /** @param {number} year */

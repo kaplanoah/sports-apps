@@ -133,3 +133,39 @@ test("a redraw fades in only what's on screen, not the days it adds to a Games l
   );
   expect(await readAnimations()).toEqual([]);
 });
+
+test("a redraw of a part holding a select shows the choice its markup names, whatever was picked in it before", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openApp(page);
+  await page.evaluate(async () => {
+    const { html, setHtml } = await import("#shared/html.js");
+    const part = document.createElement("label");
+    part.id = "choicePart";
+    document.body.prepend(part);
+    /** @type {any} */ (window).drawChoices = (
+      /** @type {string[]} */ years,
+      /** @type {string} */ shown,
+    ) =>
+      setHtml(
+        part,
+        html`<select>
+          ${years.map(
+            (year) =>
+              html`<option value="${year}" ${year === shown ? "selected" : ""}>${year}</option>`,
+          )}
+        </select>`,
+      );
+    /** @type {any} */ (window).drawChoices(["2026", "2025", "2024"], "2026");
+  });
+  const select = page.locator("#choicePart select");
+  await select.selectOption("2024");
+  await select.selectOption("2025");
+
+  await page.evaluate(() =>
+    /** @type {any} */ (window).drawChoices(["2027", "2026", "2025", "2024"], "2025"),
+  );
+
+  await expect(select).toHaveValue("2025");
+});

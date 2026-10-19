@@ -229,7 +229,7 @@ function patchNode(current, next, keyed) {
     return;
   }
   patchAttributes(current, /** @type {Element} */ (next));
-  if (!writtenMarkup.has(current)) patchChildren(current, next, keyed);
+  if (!writtenMarkup.has(current)) patchContent(current, next, keyed);
 }
 
 /**
@@ -269,6 +269,20 @@ function patchChildren(parent, nextParent, keyed) {
   }
 }
 
+// A select's choice is its options' state, not their markup, and an option picked before keeps
+// its choice whatever its markup says, so a select follows the markup's choice as a newly written
+// one would. Patching moves the options it reads from, so it's read first.
+/**
+ * @param {Element} current
+ * @param {Node} next
+ * @param {KeyedItems} keyed
+ */
+function patchContent(current, next, keyed) {
+  const selectedIndex = next instanceof HTMLSelectElement ? next.selectedIndex : -1;
+  patchChildren(current, next, keyed);
+  if (current instanceof HTMLSelectElement) current.selectedIndex = selectedIndex;
+}
+
 /**
  * @param {Element} element
  * @param {string} text
@@ -278,11 +292,7 @@ function patchMarkup(element, text) {
   // an SVG, without running it in the page.
   const next = /** @type {Element} */ (element.cloneNode(false));
   next.innerHTML = text;
-  // A select's choice is its options' state, not their markup, so it follows the markup's as a
-  // newly written select would. Patching moves the options it reads from, so it's read first.
-  const selectedIndex = next instanceof HTMLSelectElement ? next.selectedIndex : -1;
-  patchChildren(element, next, collectKeyed(element));
-  if (element instanceof HTMLSelectElement) element.selectedIndex = selectedIndex;
+  patchContent(element, next, collectKeyed(element));
 }
 
 /**

@@ -5,12 +5,12 @@ import { checkSettingsOnReload } from "../../../../tests/browser/settings-reload
 import { WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
 import {
   checkHandoffRenewal,
+  checkIconKeptOnlyOnOpen,
   checkReAddHandoff,
   checkReAddNote,
   checkReAddNoteDismissal,
   checkReAddNoteEases,
   checkReAddNoteOnReload,
-  checkIconKeptOnlyOnOpen,
   checkSystemInstallIcon,
 } from "../../../../tests/browser/re-add-note.mjs";
 

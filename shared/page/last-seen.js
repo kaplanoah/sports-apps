@@ -1,10 +1,12 @@
 // A page that loads again, after a deploy or after the phone dropped it, would show empty views
 // until the store answers, so it first draws what it showed when it was last on screen: the
-// markup of each part it draws whole, the sheets it showed, and its settings' switches and choices,
+// markup of each part it draws whole, the sheets it showed, and its settings' switches,
 // which show-last-drawn.js puts back before the first paint, with the pictures from other sites in
 // it, which the service worker keeps, and the season, which the page draws from once its modules
 // load, before its sheets take back what they showed. A sheet left open too long is gone by the
 // time the page shows again (sheet-memory.js).
+
+/* global KEPT_SWITCHES, LAST_SWITCHED_KEY -- from show-last-drawn.js */
 
 import { isSeasonPart } from "./season-part.js";
 import { keepImages } from "./service-worker.js";
@@ -14,7 +16,6 @@ import { listOpenSheets, reopenSheets } from "./sheet-reopen.js";
 const LAST_SEEN_KEY = "lastSeen";
 const LAST_DRAWN_KEY = "lastDrawn";
 const OPEN_SHEETS_KEY = "openSheets";
-const LAST_SET_KEY = "lastSet";
 // Another site's picture can count as several megabytes toward the storage the page's copy needs,
 // so only the first ones, which a load opens on, are kept.
 const KEPT_IMAGE_COUNT = 12;
@@ -108,20 +109,13 @@ function readDrawnParts(savedAt) {
   return Object.fromEntries(parts.map((part) => [part.id, readDrawnPart(part, savedAt)]));
 }
 
-// A setting's switches and choices show the device's own, which their modules set only once they
-// load.
-function readSettings() {
-  const switches = [...document.querySelectorAll("[data-setting] [role=switch][id]")];
-  const choices = /** @type {HTMLInputElement[]} */ ([
-    ...document.querySelectorAll("[data-setting] input[type=radio]:checked"),
-  ]);
-  return {
-    switches: Object.fromEntries(
-      switches.map((each) => [each.id, each.getAttribute("aria-checked")]),
-    ),
-    choices: Object.fromEntries(choices.map((each) => [each.name, each.value])),
-  };
-}
+const readSwitches = () =>
+  Object.fromEntries(
+    [...document.querySelectorAll(KEPT_SWITCHES)].map((each) => [
+      each.id,
+      each.getAttribute("aria-checked"),
+    ]),
+  );
 
 /** @param {HTMLImageElement} image */
 function isShownOtherSiteImage(image) {
@@ -172,7 +166,7 @@ function saveLastSeen(readShown, savedAt) {
   saveItem(LAST_SEEN_KEY, shown);
   saveItem(LAST_DRAWN_KEY, readDrawnParts(savedAt));
   saveItem(OPEN_SHEETS_KEY, listOpenSheets(savedAt));
-  saveItem(LAST_SET_KEY, readSettings());
+  saveItem(LAST_SWITCHED_KEY, readSwitches());
   keepImages(listDrawnImages());
 }
 

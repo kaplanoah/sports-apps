@@ -1,7 +1,8 @@
 // Modules run only once all of them have loaded, and the browser can paint before then, so a page
 // left to them would first show empty views. The page saves what each part it draws whole showed
-// as it leaves the screen (last-seen.js), with the sheets it showed, and this plain script, loaded
-// in the head, puts it back: the page calls showLastDrawn() right after its views, its sheets, and
+// as it leaves the screen (last-seen.js), with the sheets it showed and its settings' switches, and
+// this plain script, loaded in the head, puts it back, with the look picked that settings shows:
+// the page calls showLastDrawn() right after its views, its sheets, and
 // openLastTab(), before anything is painted, since a part on a hidden tab can't take back where it
 // was scrolled.
 
@@ -198,23 +199,31 @@ function showLastSheets() {
     if (!sheets.some(({ saved }) => isForgotten(saved))) showLastDialog(dialog, sheets);
 }
 
-/** @param {any} saved */
-const readEntries = (saved) => Object.entries(saved && typeof saved === "object" ? saved : {});
+/* global readPickedAppearance -- from pick-theme.js */
 
-// A setting's switches and choices show the device's own, as their modules set them once they load.
-function showLastSettings() {
-  const saved = readSaved("lastSet");
-  for (const [id, isOn] of readEntries(saved?.switches)) {
+// Settings' switches show the device's own choices, which their modules set only once they load,
+// so the page saves each as it leaves the screen (last-seen.js), but for one inside a part drawn
+// whole, which that part's markup holds.
+const LAST_SWITCHED_KEY = "lastSwitched";
+const KEPT_SWITCHES = "[data-setting] [role=switch][id]:not([data-last-drawn] *)";
+
+function showLastSwitches() {
+  const saved = readSaved(LAST_SWITCHED_KEY);
+  if (!saved || typeof saved !== "object") return;
+  for (const [id, isOn] of Object.entries(saved)) {
     const element = document.getElementById(id);
-    if (element?.matches("[data-setting] [role=switch]") && (isOn === "true" || isOn === "false"))
+    if (element?.matches(KEPT_SWITCHES) && (isOn === "true" || isOn === "false"))
       element.setAttribute("aria-checked", isOn);
   }
-  for (const [name, value] of readEntries(saved?.choices)) {
-    const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
-      document.querySelectorAll(`[data-setting] input[type=radio][name="${CSS.escape(name)}"]`)
-    );
-    for (const choice of choices) choice.checked = choice.value === value;
-  }
+}
+
+// The look picked is the one pick-theme.js shows, read from where the page keeps it.
+function showPickedAppearance() {
+  const picked = readPickedAppearance();
+  const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
+    document.querySelectorAll("[data-setting] input[name=appearance]")
+  );
+  for (const choice of choices) choice.checked = choice.value === picked;
 }
 
 // What the page last showed is a drawing of its own, so the note that its views are still empty
@@ -223,6 +232,7 @@ function showLastDrawn() {
   const parts = Object.entries(readLastDrawn()).filter(([id, part]) => isDrawnPart(id, part));
   for (const [id, part] of parts) showPart(id, part);
   if (parts.length) document.getElementById("loadNote")?.remove();
-  showLastSettings();
+  showLastSwitches();
+  showPickedAppearance();
   showLastSheets();
 }

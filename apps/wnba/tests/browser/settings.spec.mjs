@@ -1,4 +1,4 @@
-import { test, expect, openApp, serveLockedApp } from "./harness.mjs";
+import { test, expect, matchPath, openApp, serveLockedApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -7,15 +7,16 @@ import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { checkSettingsOnReload } from "../../../../tests/browser/settings-reload.mjs";
 import {
   checkHandoffRenewal,
+  checkIconKeptOnlyOnOpen,
   checkReAddHandoff,
   checkReAddNote,
   checkReAddNoteDismissal,
   checkReAddNoteEases,
   checkReAddNoteOnReload,
-  checkIconKeptOnlyOnOpen,
   checkSystemInstallIcon,
 } from "../../../../tests/browser/re-add-note.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
+import { ONE_PAST_SEASON } from "./past-season.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -74,13 +75,31 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
 test("a reload with settings open shows its seasons, switches, and look picked before the page's code arrives", async ({
   page,
 }) => {
-  await openApp(page, { pastSeasons: { 2025: (season) => season } });
+  await openApp(page, ONE_PAST_SEASON);
   await checkSettingsOnReload({
     page,
     openSettings: (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click(),
     look: "Walnut",
     switchName: "Include content from The Athletic",
   });
+});
+
+test("a reload with settings open keeps the Season picker as it was while the store can't list its seasons", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const row = page.locator("#seasonRow");
+  await expect(row.locator("option")).toHaveText(["2026", "2025"]);
+  await page.route(matchPath("/store/seasons"), (route) => route.abort());
+  // The page watches the news right after it fills the picker from what the store answered.
+  const watchingNews = page.waitForRequest(matchPath("/store/news/cards"));
+
+  await page.reload();
+
+  await watchingNews;
+  await expect(row).toBeVisible();
+  await expect(row.locator("option")).toHaveText(["2026", "2025"]);
 });
 
 test("settings list Notifications, the News switches, and Appearance, with lines only between the three", async ({
