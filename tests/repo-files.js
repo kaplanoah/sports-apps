@@ -18,18 +18,18 @@ export const listTrackedFiles = () =>
  */
 export const readRepoFile = (path) => readFileSync(new URL(path, REPO_ROOT), "utf8");
 
-// Git's own test for a binary file, like a font or an image: a NUL byte in its first 8000.
-const isBinary = (/** @type {Buffer} */ bytes) => bytes.subarray(0, 8000).includes(0);
+// Only the PNG images and fonts the repo holds on purpose go unread, so the secrets check reads a
+// binary of any other kind, and the plain-ASCII check fails on one outside the tests' folders.
+const BINARY_FILES = /\.(?:png|woff2)$/;
 
 /**
- * Every tracked file that isn't binary, with its text.
+ * Every tracked file but the repo's PNG images and fonts, with its text.
  * @returns {{ path: string, text: string }[]}
  */
 export const readTextFiles = () =>
-  listTrackedFiles().flatMap((path) => {
-    const bytes = readFileSync(new URL(path, REPO_ROOT));
-    return isBinary(bytes) ? [] : [{ path, text: bytes.toString("utf8") }];
-  });
+  listTrackedFiles()
+    .filter((path) => !BINARY_FILES.test(path))
+    .map((path) => ({ path, text: readRepoFile(path) }));
 
 /**
  * The name of the skill a path holds, or none when it holds no skill.
