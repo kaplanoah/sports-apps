@@ -73,6 +73,57 @@ test("a finger that starts a scroll on a row never tints it", async ({ page }) =
   expect(await readPresses(page)).toEqual([]);
 });
 
+/**
+ * Clicks a team's button in the standings, as iOS can after a finger left it, and says whether
+ * the team's sheet opened.
+ * @param {import("@playwright/test").Locator} button
+ */
+const clickAndReadSheetOpen = (button) =>
+  button.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    return document.querySelector("dialog[open] #teamSheet:not([hidden])") !== null;
+  });
+
+test("a finger that drags a team's row in the standings never opens the team, even when iOS still sends the tap", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const row = page.locator('#standings-league tr[data-team="LVA"]');
+  await expect(row).toBeVisible();
+
+  await (
+    await drag(page, await findMiddle(row), { y: -30 })
+  )();
+
+  expect(await clickAndReadSheetOpen(row.locator(".team-open"))).toBe(false);
+});
+
+test("a still tap on a team's row in the standings opens the team, and Enter after a drag does too", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const row = page.locator('#standings-league tr[data-team="LVA"]');
+  await expect(row).toBeVisible();
+  const sheet = page.locator("#teamSheet");
+
+  await (
+    await drag(page, await findMiddle(row), {})
+  )();
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  await (
+    await drag(page, await findMiddle(row), { y: -30 })
+  )();
+  await row.locator(".team-open").focus();
+  await page.keyboard.press("Enter");
+  await expect(sheet).toBeVisible();
+});
+
 test("a quick tap on a suggestion tints it before its search replaces the list", async ({
   page,
 }) => {
