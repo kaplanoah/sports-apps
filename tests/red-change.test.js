@@ -1622,6 +1622,16 @@ test("a page's script that sets a custom property is red only where a stack decl
     [],
     "a style's object sets no custom property, which only setProperty sets",
   );
+  assert.equal(
+    findChangeReasons({
+      [path]: {
+        before: [],
+        after: ["Object.assign(part.style, {", '  transition: "color 0.2s",', "});"],
+      },
+    }).length,
+    1,
+    "a transition keyed in a script's object counts whatever it eases",
+  );
 });
 
 test("tests, docs, and the Worker's code are never red", () => {

@@ -71,8 +71,9 @@ const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
 // template ends a declaration with a semicolon or its string's end, unless the object is a
 // style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find. A
-// transition in a script's CSS text counts whatever it eases, since the script can add to the
-// text past where the gate reads it.
+// transition in a script's CSS text, or keyed in its object, counts whatever it eases, since the
+// script can add to the text past where the gate reads it, and an object it keys can become a
+// style's later.
 const LAYER_SETTINGS = [
   {
     name: "a CSS declaration",
