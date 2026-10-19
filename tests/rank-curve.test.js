@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
-import { readDeclarations, readRule } from "./css-rules.js";
+import { fileURLToPath } from "node:url";
+import { listAppStylesheets, readDeclarations, readRule } from "./css-rules.js";
 import {
   drawSpread,
   isNearlyRanked,
@@ -45,7 +45,7 @@ test("a mark for a number past either end of the curve stops at that end, on the
   );
 });
 
-const CURVE_STYLES = new URL("../shared/page/rank-curve.css", import.meta.url).pathname;
+const CURVE_STYLES = fileURLToPath(new URL("../shared/page/rank-curve.css", import.meta.url));
 
 /** @param {import("./css-rules.js").Declaration[]} declarations */
 const findLineRules = (declarations) =>
@@ -67,9 +67,7 @@ test("a curve's lines are borders, which Safari keeps a whole number of screen p
 });
 
 test("no app sizes or fills a curve's lines itself, only their color through --rank-mark", () => {
-  const apps = new URL("../apps/", import.meta.url);
-  for (const app of readdirSync(apps)) {
-    const path = new URL(`${app}/page/styles.css`, apps).pathname;
+  for (const path of listAppStylesheets()) {
     assert.deepEqual(
       findLineRules(readDeclarations(path))
         .map(({ property }) => property)

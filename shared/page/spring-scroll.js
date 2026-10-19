@@ -1,4 +1,4 @@
-const isReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+import { prefersReducedMotion } from "./reduced-motion.js";
 
 // Like UIKit's scroll to top, a scroll this page makes takes off at once and eases into place on a
 // critically damped spring, so the trip takes about the same time from any distance.
@@ -86,7 +86,7 @@ export const isAsFarAs = (scrollTop, top) => top - scrollTop < ARRIVED_WITHIN_PX
 export function scrollWithSpring(scroller, top) {
   stopSpring(scroller);
   if (!isAwayFrom(scroller, top)) return;
-  if (isReducedMotion()) {
+  if (prefersReducedMotion()) {
     jumpTo(scroller, top);
     return;
   }

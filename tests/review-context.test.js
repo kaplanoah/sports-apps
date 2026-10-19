@@ -6,6 +6,7 @@ import {
   readThreads,
   renderContext,
 } from "../worker/review-context.mjs";
+import { LIST_HEADING } from "../worker/post-review.mjs";
 import { OFF_DIFF_HEADING } from "../worker/review-state.mjs";
 
 const thread = (/** @type {object} */ fields) => ({
@@ -49,6 +50,35 @@ test("every thread is read, page after page, until GitHub says there are no more
   );
 });
 
+test("a thread past the comments read keeps its first, which holds what it raised, and a short one holds each once", async () => {
+  const comment = (/** @type {string} */ body) => ({ author: { login: "kaplanoah" }, body });
+  const root = comment("the checklist");
+  const last = Array.from({ length: 49 }, (_, index) => comment(`reply ${index + 12}`));
+  const short = [root, comment("reply 1")];
+  /** @type {string[]} */
+  const queries = [];
+  const callGraphQL = async (/** @type {string} */ query) => {
+    queries.push(query);
+    const nodes = [
+      { ...thread({}), first: { nodes: [root] }, comments: { totalCount: 60, nodes: last } },
+      { ...thread({}), first: { nodes: [root] }, comments: { totalCount: 2, nodes: short } },
+    ];
+    return {
+      repository: {
+        pullRequest: {
+          reviewThreads: { nodes, pageInfo: { hasNextPage: false, endCursor: null } },
+        },
+      },
+    };
+  };
+  const [long, brief] = await readThreads(callGraphQL, { owner: "o", name: "n", number: 7 });
+  assert.match(queries[0], /first: comments\(first: 1\)/);
+  assert.match(queries[0], /comments\(last: 49\) \{ totalCount /);
+  assert.deepEqual(long.comments.nodes, [root, ...last]);
+  assert.deepEqual(brief.comments.nodes, short);
+  assert.ok(!("first" in long));
+});
+
 test("the context names each thread's place and state, with every reply, under the description", () => {
   const page = renderContext({
     title: "fix: Hold the sheet's title",
@@ -65,6 +95,29 @@ test("the context names each thread's place and state, with every reply, under t
     page,
     /# Findings posted on files the pull request doesn't change\n\nFindings on files this pull request doesn't change:\n\n- `a\.js:3`: \*\*Nit\*\* elsewhere/,
   );
+});
+
+test("a thread that lists a review's Nits shows each of its items, so a later review raises none again", () => {
+  const checklist = [
+    LIST_HEADING,
+    "",
+    "- [ ] `a.js:3`: **Nit** one <!-- claude-finding 0000000000000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->",
+    "- [ ] `b.js`: **Pre-existing** two <!-- claude-finding 1111111111111111 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->",
+  ].join("\n");
+  const page = renderContext({
+    title: "fix: x",
+    description: "",
+    threads: [
+      thread({
+        path: "a.js",
+        line: null,
+        originalLine: null,
+        comments: { nodes: [{ author: { login: "github-actions" }, body: checklist }] },
+      }),
+    ],
+    offDiff: [],
+  });
+  assert.ok(page.includes(`## a.js:file (open)\n\n**github-actions:**\n\n${checklist}\n`));
 });
 
 test("a pull request with no description or threads says so", () => {

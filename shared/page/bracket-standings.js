@@ -4,8 +4,9 @@ import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
 import { startRiderTaps } from "./rider-taps.js";
 import { holdRoundDots } from "./round-dots.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 import { findPartHolding } from "./season-part.js";
-import { createSlidePanels, prefersReducedMotion } from "./slide-panels.js";
+import { createSlidePanels } from "./slide-panels.js";
 import { isAsFarAs, isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 

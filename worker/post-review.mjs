@@ -1,11 +1,16 @@
-// Posts what a stage of CI's checkers confirmed or left unsure, each finding on the line it's
-// about, so no reviewer or checker holds a token that writes to the pull request. The check across
-// areas names only the repeats to merge and what it adds, so no finding a checker kept can drop
-// out of its answer. A finding on a line the diff doesn't show goes on its file, and one on a
-// file the diff doesn't show goes in one comment on the pull request. Each finding's comment
-// carries a mark, so a finding already posted in any form, as by an earlier try of this step, isn't
-// posted again. A finding counts as posted when this head's review posted it, in this try or an
-// earlier one, and as already on the pull request when an earlier head's review did.
+// Posts what a stage of CI's checkers confirmed or left unsure, so no reviewer or checker holds a
+// token that writes to the pull request: each Important or Unsure finding on the line it's about,
+// a thread of its own, and the stage's Nits and Pre-existing findings together in a checklist, one
+// comment, or more only past GitHub's limit for one, each on the first of its items' files GitHub
+// takes and each a thread of its own.
+// The check across areas names only the repeats to merge, with the words that name each place
+// they show, and what it adds, so no finding a checker kept can drop out of its answer. A finding
+// on a line the diff doesn't show goes on its file, and one on a file the diff doesn't show, or a
+// checklist's comment GitHub takes on none of its files, goes in a comment on the pull request,
+// where it's no thread to resolve. Each finding carries a mark, so a finding already posted in any
+// form, as by an earlier try of this step, isn't posted again. A finding counts as posted when this
+// head's review posted it, in this try or an earlier one, and as already on the pull request when
+// an earlier head's review did.
 // Usage: node worker/post-review.mjs list <folder> <stage>, with AREAS set, after the stage's
 // checkers, writes what they confirmed or left unsure for the check across areas. node
 // worker/post-review.mjs across <folder> <stage>, with STRUCTURED_OUTPUT from that check, keeps its
@@ -15,7 +20,7 @@ import { createHash } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createGitHub, readAllPages } from "./github-api.mjs";
+import { createGitHub } from "./github-api.mjs";
 import {
   nameAcrossRecord,
   nameCheckRecord,
@@ -26,10 +31,10 @@ import {
 } from "./judge-review.mjs";
 import {
   OFF_DIFF_HEADING,
-  REVIEWER,
   UNSURE,
   WEIGHTS,
   listFindingMarks,
+  readReviewComments,
   writeFindingMark,
 } from "./review-state.mjs";
 
@@ -38,11 +43,25 @@ import {
  */
 
 /**
+ * @typedef {{ refs: string[], body: string }} Repeats findings that are one problem, by their refs,
+ *   and what the one posted for them says, naming each place, or "" to keep the first's own words
+ */
+
+/**
  * @typedef {object} Across
- * @property {string[][]} duplicates
+ * @property {Repeats[]} duplicates
  * @property {Finding[]} added
  * @property {{ file: string, why: string }[]} unjudged
  */
+
+/** @typedef {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} CallGitHub */
+
+// The weights posted together in one comment, rather than a thread each.
+const LISTED_WEIGHTS = new Set(["Nit", "Pre-existing"]);
+export const LIST_HEADING =
+  "Nits and Pre-existing findings, each to fix, or to answer in a reply on this thread:";
+// GitHub refuses a comment longer than 65,536 characters, so a long list goes in several.
+const LONGEST_COMMENT = 60000;
 
 /**
  * What each area's checker confirmed or left unsure, in area order, each with the ref the check
@@ -104,12 +123,13 @@ function pickGroupWeight(weights) {
 }
 
 /**
- * The checkers' refs the check across areas named as repeats of another, and the weight each kept
- * ref takes. Each group keeps its first known ref that no earlier group dropped, and drops its
- * other known refs but any an earlier group kept, so a ref it got wrong, repeated, or crossed with
- * another group never drops a finding that nothing else stands in for. A kept ref takes the
- * heaviest settled weight of the refs it stands in for.
- * @param {string[][]} groups
+ * The checkers' refs the check across areas named as repeats of another, and the weight and words
+ * each kept ref takes. Each group keeps its first known ref that no earlier group dropped, and
+ * drops its other known refs but any an earlier group kept, so a ref it got wrong, repeated, or
+ * crossed with another group never drops a finding that nothing else stands in for. A kept ref
+ * takes the heaviest settled weight of the refs it stands in for, and the words of the last group
+ * it leads that gave any.
+ * @param {Repeats[]} groups
  * @param {Map<string, string>} weightByRef the weight of each of the checkers' findings, by ref
  */
 function listRepeats(groups, weightByRef) {
@@ -119,8 +139,10 @@ function listRepeats(groups, weightByRef) {
   const dropped = new Set();
   /** @type {Map<string, string>} */
   const leadWeights = new Map();
-  for (const group of groups) {
-    const [lead, ...rest] = group.filter((ref) => weightByRef.has(ref) && !dropped.has(ref));
+  /** @type {Map<string, string>} */
+  const leadBodies = new Map();
+  for (const { refs, body } of groups) {
+    const [lead, ...rest] = refs.filter((ref) => weightByRef.has(ref) && !dropped.has(ref));
     if (!lead) continue;
     kept.add(lead);
     const absorbed = rest.filter((ref) => !kept.has(ref));
@@ -129,16 +151,17 @@ function listRepeats(groups, weightByRef) {
       absorbed.map((ref) => weightByRef.get(ref) ?? ""),
     );
     leadWeights.set(lead, pickGroupWeight(weights));
+    if (body) leadBodies.set(lead, body);
   }
-  return { dropped, leadWeights };
+  return { dropped, leadWeights, leadBodies };
 }
 
 /**
  * What a stage posts: every postable finding its checkers kept but the repeats the check across
- * areas named, each at the heaviest settled weight of those it stands in for, with what it added,
- * weightiest first. A finding that can't be posted neither leads nor joins a group of repeats,
- * and one said word for word in the same file more than once is listed once, at the heaviest
- * weight a checker settled among its copies.
+ * areas named, each at the heaviest settled weight of those it stands in for and in the words that
+ * name each of their places, with what it added, weightiest first. A finding that can't be posted
+ * neither leads nor joins a group of repeats, and one said word for word in the same file more
+ * than once is listed once, at the heaviest weight a checker settled among its copies.
  * @param {(Finding & { ref?: string })[]} checked
  * @param {Across | null} across
  * @returns {Finding[]}
@@ -148,12 +171,13 @@ export function listToPost(checked, across) {
   const weightByRef = new Map(
     postable.flatMap((finding) => (finding.ref ? [[finding.ref, finding.weight]] : [])),
   );
-  const { dropped, leadWeights } = listRepeats(across?.duplicates ?? [], weightByRef);
+  const { dropped, leadWeights, leadBodies } = listRepeats(across?.duplicates ?? [], weightByRef);
   const kept = postable
     .filter((finding) => !dropped.has(finding.ref ?? ""))
     .map((finding) => ({
       ...finding,
       weight: leadWeights.get(finding.ref ?? "") ?? finding.weight,
+      body: leadBodies.get(finding.ref ?? "") ?? finding.body,
     }));
   return mergeSameFindings([...kept, ...(across?.added ?? []).filter(isPostable)])
     .toSorted((one, other) => compareWeights(one.weight, other.weight))
@@ -195,33 +219,64 @@ export const nameFinding = ({ path, body }) =>
 const writeBody = (finding, head, shown = finding.body) =>
   `**${finding.weight}** ${shown}\n\n${writeFindingMark(nameFinding(finding), head)}`;
 
+/**
+ * A finding as an item of the checklist of a review's Nits, naming where it is, each line after
+ * its first but a blank one indented to stay in the item, as a code block in it must.
+ * @param {Finding} finding
+ * @param {string} head
+ */
+const writeItem = (finding, head) =>
+  [
+    `- [ ] \`${nameSpot(finding)}\`: **${finding.weight}** ${finding.body}`,
+    writeFindingMark(nameFinding(finding), head),
+  ]
+    .join("\n")
+    .replace(/\n(?=.)/g, "\n  ");
+
+/**
+ * A finding as an entry of the comment that lists the findings on files the diff doesn't show.
+ * @param {Finding} finding
+ * @param {string} head
+ */
+const writeOffDiffEntry = (finding, head) =>
+  `- \`${nameSpot(finding)}\`: ${writeBody(finding, head)}`;
+
+/**
+ * Findings in order, gathered under a heading into as few comments as keep each under GitHub's
+ * limit, a finding too long for one alone in its own.
+ * @param {string} heading
+ * @param {Finding[]} findings
+ * @param {(finding: Finding) => string} writeEntry
+ * @returns {{ findings: Finding[], body: string }[]}
+ */
+function splitIntoComments(heading, findings, writeEntry) {
+  /** @type {{ findings: Finding[], body: string }[]} */
+  const comments = [];
+  for (const finding of findings) {
+    const entry = writeEntry(finding);
+    const last = comments.at(-1);
+    if (last && last.body.length + entry.length + 1 <= LONGEST_COMMENT) {
+      last.findings.push(finding);
+      last.body += `\n${entry}`;
+    } else {
+      comments.push({ findings: [finding], body: `${heading}\n\n${entry}` });
+    }
+  }
+  return comments;
+}
+
 /** @param {unknown} error */
 const isRefusedLine = (error) => /** @type {{ status?: number }} */ (error)?.status === 422;
 
 /**
- * Posts a finding on its line, or on its file when it names no line or GitHub won't take it, and
- * returns false when GitHub won't take the file either.
- * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
- * @param {{ pullNumber: string, sha: string, finding: Finding }} post
+ * Posts a comment on a file, and returns false when GitHub won't take it there, as for a file the
+ * diff doesn't show.
+ * @param {CallGitHub} callGitHub
+ * @param {{ pullNumber: string, sha: string, path: string, body: string }} post
  */
-async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
-  const comments = `/pulls/${pullNumber}/comments`;
-  const { path, line } = finding;
-  if (hasLine(finding)) {
-    try {
-      await callGitHub(comments, {
-        method: "POST",
-        body: { body: writeBody(finding, sha), commit_id: sha, path, line, side: "RIGHT" },
-      });
-      return true;
-    } catch (error) {
-      if (!isRefusedLine(error)) throw error;
-    }
-  }
+async function postOnFile(callGitHub, { pullNumber, sha, path, body }) {
   try {
-    const shown = hasLine(finding) ? `(about line ${line}) ${finding.body}` : finding.body;
-    const body = writeBody(finding, sha, shown);
-    await callGitHub(comments, {
+    await callGitHub(`/pulls/${pullNumber}/comments`, {
       method: "POST",
       body: { body, commit_id: sha, path, subject_type: "file" },
     });
@@ -233,9 +288,62 @@ async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
 }
 
 /**
- * Posts each finding not already on the pull request, and returns the weight of each this head's
- * review posted, an earlier try's too, and how many an earlier head's review had posted.
- * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
+ * Posts a finding on its line, or on its file when it names no line or GitHub won't take it, and
+ * returns false when GitHub won't take the file either.
+ * @param {CallGitHub} callGitHub
+ * @param {{ pullNumber: string, sha: string, finding: Finding }} post
+ */
+async function postOnDiff(callGitHub, { pullNumber, sha, finding }) {
+  const { path, line } = finding;
+  if (hasLine(finding)) {
+    try {
+      await callGitHub(`/pulls/${pullNumber}/comments`, {
+        method: "POST",
+        body: { body: writeBody(finding, sha), commit_id: sha, path, line, side: "RIGHT" },
+      });
+      return true;
+    } catch (error) {
+      if (!isRefusedLine(error)) throw error;
+    }
+  }
+  const shown = hasLine(finding) ? `(about line ${line}) ${finding.body}` : finding.body;
+  return postOnFile(callGitHub, { pullNumber, sha, path, body: writeBody(finding, sha, shown) });
+}
+
+/**
+ * Posts a comment on the first of these files GitHub takes it on, and returns false when it takes
+ * it on none.
+ * @param {CallGitHub} callGitHub
+ * @param {{ pullNumber: string, sha: string, paths: Iterable<string>, body: string }} post
+ */
+async function postOnFirstFile(callGitHub, { pullNumber, sha, paths, body }) {
+  for (const path of paths)
+    if (await postOnFile(callGitHub, { pullNumber, sha, path, body })) return true;
+  return false;
+}
+
+/**
+ * Posts findings as a checklist, in as few comments as GitHub's limit allows, each on the first of
+ * its findings' files GitHub takes, and returns the findings of those it took on none.
+ * @param {CallGitHub} callGitHub
+ * @param {{ pullNumber: string, sha: string, findings: Finding[] }} post
+ */
+async function postLists(callGitHub, { pullNumber, sha, findings }) {
+  /** @type {Finding[]} */
+  const unposted = [];
+  for (const list of splitIntoComments(LIST_HEADING, findings, (each) => writeItem(each, sha))) {
+    const paths = new Set(list.findings.map((finding) => finding.path));
+    const isPosted = await postOnFirstFile(callGitHub, { pullNumber, sha, paths, body: list.body });
+    if (!isPosted) unposted.push(...list.findings);
+  }
+  return unposted;
+}
+
+/**
+ * Posts each finding not already on the pull request, the Nits and Pre-existing ones as a
+ * checklist, and returns the weight of each this head's review posted, an earlier try's too, and
+ * how many an earlier head's review had posted.
+ * @param {CallGitHub} callGitHub
  * @param {object} review
  * @param {string} review.pullNumber
  * @param {string} review.sha
@@ -249,20 +357,21 @@ export async function postFindings(callGitHub, { pullNumber, sha, findings, post
     return Boolean(heads) && !heads?.has(sha);
   };
   const fresh = findings.filter((finding) => !posted.has(nameFinding(finding)));
+  /** @param {Finding} finding */
+  const isListed = (finding) => LISTED_WEIGHTS.has(finding.weight);
+  const listed = fresh.filter(isListed);
   /** @type {Finding[]} */
   const offDiff = [];
-  for (const finding of fresh) {
+  for (const finding of fresh.filter((each) => !isListed(each))) {
     const isOnDiff = await postOnDiff(callGitHub, { pullNumber, sha, finding });
     if (!isOnDiff) offDiff.push(finding);
   }
-  if (offDiff.length) {
-    const body = [
-      OFF_DIFF_HEADING,
-      "",
-      ...offDiff.map((finding) => `- \`${nameSpot(finding)}\`: ${writeBody(finding, sha)}`),
-    ].join("\n");
+  offDiff.push(...(await postLists(callGitHub, { pullNumber, sha, findings: listed })));
+  const offDiffComments = splitIntoComments(OFF_DIFF_HEADING, offDiff, (each) =>
+    writeOffDiffEntry(each, sha),
+  );
+  for (const { body } of offDiffComments)
     await callGitHub(`/issues/${pullNumber}/comments`, { method: "POST", body: { body } });
-  }
   const repeated = findings.filter(isFromEarlierHead);
   return {
     weights: findings
@@ -274,15 +383,13 @@ export async function postFindings(callGitHub, { pullNumber, sha, findings, post
 
 /**
  * The findings the review already posted, in any form, each with the heads it was posted on.
- * @param {any[]} comments the pull request's review comments and issue comments
+ * @param {any[]} comments the review's own, as readReviewComments reads them
  * @returns {Map<string, Set<string>>}
  */
 export function listPosted(comments) {
   /** @type {Map<string, Set<string>>} */
   const posted = new Map();
-  const marks = comments
-    .filter((comment) => comment.user?.login === REVIEWER)
-    .flatMap((comment) => listFindingMarks(comment.body));
+  const marks = comments.flatMap((comment) => listFindingMarks(comment.body));
   for (const { key, head } of marks) posted.set(key, new Set([...(posted.get(key) ?? []), head]));
   return posted;
 }
@@ -295,10 +402,15 @@ export function listPosted(comments) {
 export function readAcross(structuredOutput) {
   const answer = readAnswer(structuredOutput, ["duplicates", "added"]);
   if (!answer) return null;
-  const isGroup = (/** @type {unknown} */ group) =>
-    Array.isArray(group) && group.every((ref) => typeof ref === "string");
+  // readAnswer keeps only the entries that are objects, so reading refs never meets a null.
+  const isGroup = (/** @type {any} */ group) =>
+    Array.isArray(group.refs) &&
+    group.refs.every((/** @type {unknown} */ ref) => typeof ref === "string");
   return {
-    duplicates: answer.duplicates.filter(isGroup),
+    duplicates: answer.duplicates.filter(isGroup).map(({ refs, body }) => ({
+      refs,
+      body: typeof body === "string" ? body : "",
+    })),
     added: answer.added,
     unjudged: answer.unjudged,
   };
@@ -332,9 +444,9 @@ export const readChecks = (folder, stage, areaCount) =>
 /**
  * What a stage's posting step reads: what its checkers confirmed or left unsure, less the repeats
  * the check across areas named, and every finding already on the pull request, in a review
- * comment or in the one comment for files it doesn't change. A stage of more than one area posts
- * nothing until the check across areas has left its answer.
- * @param {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} callGitHub
+ * comment, a checklist, or a comment for files it doesn't change. A stage of more than one area
+ * posts nothing until the check across areas has left its answer.
+ * @param {CallGitHub} callGitHub
  * @param {{ folder: string, stage: string, areaCount: number, pullNumber: string }} options
  */
 export async function readPostInputs(callGitHub, { folder, stage, areaCount, pullNumber }) {
@@ -343,13 +455,9 @@ export async function readPostInputs(callGitHub, { folder, stage, areaCount, pul
   const across = existsSync(acrossPath) ? readJson(acrossPath) : null;
   if (areaCount > 1 && !across)
     throw new Error("The check across areas didn't leave its answer, so nothing was posted.");
-  const comments = [
-    ...(await readAllPages(callGitHub, `/pulls/${pullNumber}/comments`)),
-    ...(await readAllPages(callGitHub, `/issues/${pullNumber}/comments`)),
-  ];
   return {
     findings: listToPost(listCheckedFindings(readChecks(folder, stage, areaCount)), across),
-    posted: listPosted(comments),
+    posted: listPosted(await readReviewComments(callGitHub, pullNumber)),
     across,
   };
 }

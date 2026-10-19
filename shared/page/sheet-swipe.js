@@ -2,12 +2,8 @@
 // down whichever way it closes. Each slide writes where it ends into the sheet's style and leaves
 // no animation behind once it ends.
 
-import {
-  SHEET_EASING,
-  SHEET_MOTION_MS,
-  prefersReducedMotion,
-  settleAfter,
-} from "./slide-panels.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
+import { SHEET_EASING, SHEET_MOTION_MS, settleAfter } from "./slide-panels.js";
 
 // Matches chrome.css's phone layout, where dialogs are sheets.
 const SHEET_MEDIA = "(max-width: 779px)";

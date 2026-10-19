@@ -1,5 +1,6 @@
 import { isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 import { reloadIfReplaced } from "./resume.js";
 import { isPageOffTop, isPast } from "./spring-scroll.js";
 
@@ -60,8 +61,6 @@ function isPullable(target) {
   if (target.closest("dialog")) return false;
   return !isScrolledInside(target);
 }
-
-const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function createSpinner() {
   const spinner = document.createElement("div");
