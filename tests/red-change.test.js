@@ -1,11 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   decideGate,
   findLabeling,
   findRedReasons,
   findStyleObjectLines,
+  listPageStylesheets,
   readDiff,
   readPushTime,
   readTimeline,
@@ -74,12 +79,26 @@ test("a diff lists each file with its added lines, numbered as the new file has 
   ]);
 });
 
-test("a moved file is listed under both its paths", () => {
-  const diff = "diff --git a/shared/page/sheet.js b/shared/page/sheets.js\n";
+test("a diff's header names its one path twice, however many \" b/\" it holds, and any other header can't be read", () => {
+  const spaced = "apps/wnba/page/a b/c.js";
+  const files = readDiff(createDiff(spaced, ["  transform: none;"]));
   assert.deepEqual(
-    readDiff(diff).map(({ path }) => path),
-    ["shared/page/sheets.js", "shared/page/sheet.js"],
+    files.map(({ path }) => path),
+    [spaced],
   );
+  assert.equal(findRedReasons(files, readPlainScript, listNoStylesheets).length, 1);
+  const moved = "diff --git a/shared/page/sheet.js b/shared/page/sheets.js\n@@ -1 +1 @@\n+x\n";
+  assert.deepEqual(readDiff(moved), []);
+  assert.deepEqual(
+    readDiff(`${createDiff("apps/wnba/page/js/a.js", ["const a = 1;"])}${moved}`).map(
+      ({ path, addedLines }) => [path, addedLines.length],
+    ),
+    [["apps/wnba/page/js/a.js", 1]],
+    "a header it can't read ends the file before it",
+  );
+  const { isHeld, message } = decideGate(moved, { labels: [] });
+  assert.equal(isHeld, true);
+  assert.match(message, /The gate can't read the diff, so it may change anything/);
 });
 
 test("any change to the shared code that moves, layers, or draws the page is red, and so is moving or deleting one of its stylesheets", () => {
@@ -474,9 +493,21 @@ test("a shared stylesheet's declaration of a property that decides how parts lay
       "  offset-path: path('M 0 0');",
       "  view-transition-name: sheet;",
       "  -webkit-box-reflect: below;",
+      "  overflow-anchor: none;",
+      "  -webkit-touch-callout: none;",
+      "  touch-callout: none;",
+      "  user-select: none;",
+      "  -webkit-user-select: none;",
+      "  scroll-behavior: smooth;",
+      "  scroll-padding-top: 64px;",
+      "  scroll-padding: 8px;",
+      "  scroll-margin-inline: 12px;",
+      "  scroll-margin-top: 4px;",
+      "  zoom: 1.1;",
     ],
     { count: 1 },
   );
+  assertRuleReasons(SHARED_STYLESHEETS, ["  overflow-wrap: anywhere;"], { count: 0 });
   assert.deepEqual(
     findRuleChangeReasons("shared/page/pager.css", { added: ["  overflow-x: clip;"] }),
     [
@@ -569,6 +600,16 @@ test("a page's other stylesheets are red where they add what can give a part a l
       "  offset-path: path('M 0 0');",
       "  view-transition-name: sheet;",
       "  -webkit-box-reflect: below;",
+      "  -webkit-touch-callout: none;",
+      "  touch-callout: none;",
+      "  user-select: none;",
+      "  -webkit-user-select: none;",
+      "  scroll-behavior: smooth;",
+      "  scroll-padding-top: 64px;",
+      "  scroll-padding: 8px;",
+      "  scroll-margin-inline: 12px;",
+      "  scroll-margin-top: 4px;",
+      "  zoom: 1.1;",
     ],
     { count: 1, isRemovalRed: false },
   );
@@ -966,6 +1007,121 @@ test("a page file whose diff hides its content, as a binary one does, is red", (
   }
 });
 
+test("an empty page file created or deleted hides nothing, so it's red only as a shared file that moves the page", () => {
+  for (const path of ["shared/page/stamp.js", "apps/wnba/page/extra.css", INDEX_HTML])
+    for (const mode of ["new file mode 100644", "deleted file mode 100644"])
+      assert.deepEqual(
+        findRedReasons(
+          readDiff(createHiddenDiff(path, [mode, "index 0000000..e69de29"])),
+          () => "",
+          listNoStylesheets,
+        ),
+        [],
+        `${path}: ${mode}`,
+      );
+  assert.deepEqual(
+    findRedReasons(
+      readDiff(createHiddenDiff(SHARED_STYLESHEET, ["deleted file mode 100644"])),
+      () => "",
+      listNoStylesheets,
+    ),
+    [`${SHARED_STYLESHEET} is shared code that moves, layers, or draws the page`],
+  );
+});
+
+/**
+ * Why a change to the WNBA's index.html is red, from one hunk at its first line, with the page as
+ * the change leaves it.
+ * @param {string[]} lines the hunk's, as a diff shows them
+ * @param {string[]} after
+ */
+const findMarkupHunkReasons = (lines, after) =>
+  findRedReasons(
+    readDiff(
+      [`diff --git a/${INDEX_HTML} b/${INDEX_HTML}`, "@@ -1,2 +1,2 @@", ...lines, ""].join("\n"),
+    ),
+    () => after.join("\n"),
+    listNoStylesheets,
+  );
+
+test("a page's markup is red only for the lines a change adds or takes out, not those it keeps", () => {
+  const script = '  <script src="shared/slow-load.js"></script>';
+  assert.deepEqual(
+    findMarkupHunkReasons(
+      [` ${script}`, "-  <h2>Standings</h2>", "+  <h2>Table</h2>"],
+      [script, "  <h2>Table</h2>"],
+    ),
+    [],
+  );
+});
+
+test("a page's markup that the change's hunks don't fit is red", () => {
+  assert.deepEqual(
+    findMarkupHunkReasons(
+      [" <main>", "-  <h2>Standings</h2>", "+  <h2>Table</h2>"],
+      ["<body>", "  <h2>Table</h2>"],
+    ),
+    [`${INDEX_HTML} changes in a way the gate can't read, so it may change anything`],
+  );
+});
+
+test("a page's markup is red where it changes whether the Home Screen app opens without the browser's bars", () => {
+  for (const name of ["apple-mobile-web-app-capable", "mobile-web-app-capable"])
+    assert.deepEqual(
+      findChangeReasons({
+        [INDEX_HTML]: {
+          before: [`  <meta name="${name}" content="yes" />`],
+          after: [`  <meta name="${name}" content="no" />`],
+        },
+      }),
+      [`${INDEX_HTML} changes how it fits the screen or its bars`],
+      name,
+    );
+});
+
+test("the page stylesheets the gate reads beside a change are every page's, and only those", () => {
+  const stylesheets = listPageStylesheets();
+  assert.ok(stylesheets.includes("shared/page/sheet.css"));
+  assert.ok(stylesheets.includes("apps/wnba/page/styles.css"));
+  assert.ok(
+    stylesheets.every((path) => /^(?:shared\/page|apps\/[^/]+\/page)\/.+\.css$/.test(path)),
+  );
+});
+
+const GATE = fileURLToPath(new URL("../worker/red-change.mjs", import.meta.url));
+
+/**
+ * The gate's command line run on a diff with no labels, as CI's gate job runs it, with what it
+ * wrote to its output file.
+ * @param {string} diff
+ */
+function runGate(diff) {
+  const folder = mkdtempSync(join(tmpdir(), "gate-"));
+  const output = join(folder, "output");
+  writeFileSync(output, "");
+  try {
+    const result = spawnSync(process.execPath, [GATE, "[]"], {
+      input: diff,
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_OUTPUT: output },
+    });
+    return { ...result, written: readFileSync(output, "utf8") };
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+}
+
+test("the gate's command line writes whether the change is held, and passes either way", () => {
+  const red = runGate(createDiff("apps/wnba/page/js/new-view.js", ["  part.style.zIndex = 5;"]));
+  assert.equal(red.status, 0);
+  assert.equal(red.written, "held=true\n");
+  assert.match(red.stdout, /^::notice::A red change/);
+  const plain = runGate(createDiff("README.md", ["More words."]));
+  assert.equal(plain.status, 0);
+  assert.equal(plain.written, "held=false\n");
+  assert.equal(plain.stdout, "Not a red change.\n");
+});
+
 test("a diff the gate can't read is red", () => {
   for (const diff of [
     'diff --git "a/apps/wnba/page/odd name.css" "b/apps/wnba/page/odd name.css"\n',
@@ -1020,8 +1176,7 @@ test("an added line that makes a layer is red in any page's JavaScript", () => {
     "  element.style.backfaceVisibility = 'hidden';",
     "  element.style.webkitBackfaceVisibility = 'hidden';",
     '  element.style.setProperty("translate", value);',
-    '  root.style.setProperty("--thumb-left", `${left}px`);',
-    "  root.style.setProperty('--lift', lift);",
+    "  root.style.setProperty(`--${name}`, value);",
     "  const sheet = html`<dialog open>${body}</dialog>`;",
     "  const tip = html`<div popover>${words}</div>`;",
     '  const dot = html`<span style="${style}"></span>`;',
@@ -1140,6 +1295,89 @@ test("a page's script lines that only read or name those properties aren't red",
   ];
   for (const line of quietLines)
     assert.deepEqual(findReasons("apps/wnba/page/js/games-view.js", [line]), [], line);
+});
+
+test("a page's script that sets a part's style is red where a page's stylesheet would be, however it sets it", () => {
+  const path = "apps/wnba/page/js/games-view.js";
+  for (const line of [
+    "  part.style.zIndex = 5;",
+    '  part.style.touchAction = "none";',
+    '  part.style.position = "absolute";',
+    '  part.style.position = isFloating ? "absolute" : "";',
+    '  part.style.position = "relative" + placeSuffix;',
+    '  part.style.overflowY = "auto";',
+    '  part.style.webkitUserSelect = "none";',
+    '  part.style.scrollPaddingTop = "64px";',
+    '  part.style.zoom = "1.1";',
+    '  part.style.setProperty("overflow", "auto");',
+    "  part.style.setProperty('pointer-events', 'none');",
+    '  part.style.setProperty("-webkit-touch-callout", "none");',
+    '  part.style.cssText = "color: red; z-index: 2";',
+    "  part.style.cssText += `position: ${position}`;",
+    "  part.style.cssText = styles;",
+  ])
+    assert.equal(findReasons(path, [line]).length, 1, line);
+  for (const line of [
+    '  part.style.position = "relative";',
+    '  part.style.overflow = "visible";',
+    '  part.style.opacity = "0";',
+    '  part.style.display = "none";',
+    "  part.style.left = `${left}px`;",
+    '  part.style.setProperty("overflow", "visible");',
+    '  part.style.setProperty("color", ink);',
+    '  part.style.cssText = "color: red";',
+    '  if (part.style.zIndex === "2") return;',
+  ])
+    assert.deepEqual(findReasons(path, [line]), [], line);
+  assert.deepEqual(findReasons(path, ["  part.style.zIndex = 5;"]), [
+    `${path}:1 adds a style property that sets z-index: part.style.zIndex = 5;`,
+  ]);
+});
+
+test("a key of a style's object is red where a page's stylesheet would be", () => {
+  const path = "apps/wnba/page/js/tip.js";
+  const script = [
+    "Object.assign(tip.style, {",
+    '  pointerEvents: "none",',
+    '  position: "absolute",',
+    '  "z-index": 3,',
+    '  position: "relative",',
+    "  left: `${left}px`,",
+    "  opacity: 0,",
+    "});",
+  ];
+  const reasons = findRedReasons(
+    [
+      {
+        path,
+        addedLines: script.map((text, index) => ({ number: index + 1, text })),
+        hunks: [],
+        hunkStarts: [],
+      },
+    ],
+    () => script.join("\n"),
+    listNoStylesheets,
+  );
+  assert.deepEqual(reasons, [
+    `${path}:2 adds a style property that sets pointer-events: pointerEvents: "none",`,
+    `${path}:3 adds a style property that sets position: position: "absolute",`,
+    `${path}:4 adds a style property that sets z-index: "z-index": 3,`,
+  ]);
+});
+
+test("a page's script that sets a custom property is red only where a stack declaration reads it, or its name can't be read", () => {
+  const reads = { "shared/page/chrome.css": [".a { transform: var(--lift); }"] };
+  const path = "apps/wnba/page/js/games-view.js";
+  for (const [line, count] of /** @type {[string, number][]} */ ([
+    ['  root.style.setProperty("--lift", lift);', 1],
+    ["  root.style.setProperty(`--${name}`, value);", 1],
+    ['  root.style.setProperty("--team", color);', 0],
+  ]))
+    assert.equal(
+      findChangeReasons({ [path]: { before: [], after: [line] } }, reads).length,
+      count,
+      line,
+    );
 });
 
 test("tests, docs, and the Worker's code are never red", () => {

@@ -52,9 +52,10 @@ jobs:
   # after phone-ok holds the pull request again. The merge commit's first parent is the base branch,
   # whose copy of the gate's code, run on the Node and modules the base names, judges the pull
   # request's files, so a change to the gate's code can't let the pull request's own red change
-  # through; a change to this job or the phone job is the review's to weigh. The diff shows every
-  # file's text, whatever .gitattributes says of it. It holds the change on the phone job's status
-  # rather than by failing (worker/phone-status.mjs).
+  # through; a change to this job, the phone job, or check is the review's to weigh, as REVIEW.md
+  # says. The diff shows every file's text, whatever .gitattributes says of it. It holds the change
+  # on the phone job's status rather than by failing, and check holds it whenever main's rules
+  # don't require that status.
   gate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -78,13 +79,14 @@ jobs:
         with:
           node-version-file: ${{ runner.temp }}/base/.nvmrc
       # The gate parses a page's scripts and stylesheets with esbuild, to tell what a change does
-      # from how it's written. Its modules' cache is keyed on the base's lockfile alone, since the
-      # checks job's cache, under the pull request's lockfile, is one its own code could write.
+      # from how it's written. Its modules' cache is keyed on the base's lockfile alone, and only
+      # restored here, since a pull request's run could save modules its own workflow changed: only
+      # main's caches job saves it.
       - name: Name the base's modules
         id: base-modules-key
         run: echo "key=gate-modules-${{ runner.os }}-$(git rev-parse HEAD^1:package-lock.json)" >> "$GITHUB_OUTPUT"
       - id: base-modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/base/node_modules
           key: ${{ steps.base-modules-key.outputs.key }}
@@ -271,11 +273,13 @@ jobs:
             playwright-report/
             test-results/
 
-  # A browser spec a pull request adds or changes runs ten times over, with no retry, so a test
-  # that passes only some of the time fails on the pull request that brings it, rather than on
-  # later ones. Only a test the pull request wrote or edited fails it: any other that failed goes
-  # to the issue Flaky browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten
-  # runs of every spec a large pull request changes take longer than one machine's limit, so
+  # Each browser spec scope lists, the ones a pull request adds or changes but for one that passed
+  # burn-in on an earlier push and hasn't changed since, with what it runs with unchanged too
+  # (worker/burn-in-specs.mjs), runs ten times over, with no retry, so a test that passes only some
+  # of the time fails on the pull request that brings it, rather than on later ones. Only a test
+  # the pull request wrote or edited fails it: any other that failed goes to the issue Flaky
+  # browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten runs of every spec
+  # a large pull request changes take longer than one machine's limit, so
   # they're split across machines too, and a machine whose share holds no test passes. When an
   # at-rest spec is among them, it installs WebKit too, as the webkit job does, so they repeat in
   # WebKit, where they've failed most.
@@ -308,7 +312,7 @@ jobs:
         run: npx playwright install --with-deps webkit
       # Every test runs all ten times, however many fail, and the next step decides which
       # failures fail the pull request, so a failed test doesn't fail this one.
-      - name: Repeat each browser spec this pull request changes
+      - name: Repeat each browser spec scope lists
         shell: bash
         env:
           SPECS: ${{ needs.scope.outputs.specs }}
@@ -403,6 +407,27 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: *browsers-key
+      # The gate's modules, which a pull request's gate restores for its base, installed from main's
+      # own checkout and lockfile, at the path and under the key the gate reads.
+      - name: Check out main for the gate
+        run: git worktree add "$RUNNER_TEMP/base" HEAD
+      - name: Name the gate's modules
+        id: gate-modules-key
+        run: echo "key=gate-modules-${{ runner.os }}-$(git rev-parse HEAD:package-lock.json)" >> "$GITHUB_OUTPUT"
+      - id: gate-modules
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/base/node_modules
+          key: ${{ steps.gate-modules-key.outputs.key }}
+          lookup-only: true
+      - if: steps.gate-modules.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}/base
+        run: npm ci --ignore-scripts
+      - if: steps.gate-modules.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/base/node_modules
+          key: ${{ steps.gate-modules-key.outputs.key }}
 
   # Each pull request is reviewed in areas, by what its files are about, each test with its code
   # (worker/plan-review.mjs). In each area a reviewer for each kind of problem in KINDS reads every
@@ -973,16 +998,18 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           persist-credentials: false
-      - if: needs.gate.outputs.held == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version-file: .nvmrc
+      # The phone status holds a merge only while main's rules require it, so check holds a red
+      # change itself whenever they don't. The lookup runs none of the pull request's code.
       - name: Tell whether main's rules hold a red change on the phone status
         id: phone
         if: needs.gate.outputs.held == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node worker/phone-status.mjs
+          REPO: ${{ github.repository }}
+        run: |
+          required=$(gh api "repos/$REPO/rules/branches/main" --jq 'any(.[]; .type == "required_status_checks" and any(.parameters.required_status_checks[]?; .context == "phone"))')
+          echo "Main's rules require the phone status: $required"
+          echo "required=$required" >> "$GITHUB_OUTPUT"
       # Records the code this pull request's checks passed on: once every test and the review passed,
       # so a label change runs only the gate again, and once the gate let it through too, so that once
       # it merges, main deploys at once if it has exactly that code (worker/find-passed-ci.mjs).

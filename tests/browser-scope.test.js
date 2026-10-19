@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listReachedFiles, listTestedApps, resolveImport } from "../worker/browser-scope.mjs";
+import {
+  listBrowserTestReach,
+  listReachedFiles,
+  listTestedApps,
+  resolveImport,
+} from "../worker/browser-scope.mjs";
 
 const APPS = ["mlb", "wnba"];
 const REACHED = new Set(["worker/check-page.mjs", "tests/durable-object-context.js"]);
@@ -30,6 +35,7 @@ test("a change in one app's folder runs that app's browser tests", () => {
     ["wnba"],
   );
   assert.deepEqual(listApps(["apps/mlb/tests/fixtures/2026-10-13-player-index.json"]), ["mlb"]);
+  assert.deepEqual(listApps(["apps/nhl/page/styles.css"]), [], "an app with no browser tests yet");
 });
 
 test("shared code, CI's own workflow, the dependencies, and an unknown file run every app's", () => {
@@ -63,16 +69,18 @@ test("imports resolve from the importer, through the import map's names, and lea
     "apps/mlb/worker/page-files.mjs",
   );
   assert.equal(resolveImport("@playwright/test", "tests/browser/harness.mjs"), null);
+  assert.equal(resolveImport("#unmapped/x.js", "tests/browser/harness.mjs"), null);
 });
 
 test("the reached files follow every import from the entries, static and dynamic", () => {
   const files = {
     "apps/mlb/tests/browser/a.spec.mjs":
-      'import { b } from "./harness.mjs";\nawait import("#shared/c.js");',
+      'import { b } from "./harness.mjs";\nawait import("#shared/c.js");\nimport "../../../../worker/side.mjs";',
     "apps/mlb/tests/browser/harness.mjs": 'export { d } from "../../worker/page-files.mjs";',
     "apps/mlb/worker/page-files.mjs":
       'import { readPageFiles } from "../../../worker/page-files.mjs";',
     "worker/page-files.mjs": 'import { readFileSync } from "node:fs";',
+    "worker/side.mjs": "",
     "shared/page/c.js": "",
     "worker/unreached.mjs": "",
   };
@@ -85,5 +93,20 @@ test("the reached files follow every import from the entries, static and dynamic
     "apps/mlb/worker/page-files.mjs",
     "shared/page/c.js",
     "worker/page-files.mjs",
+    "worker/side.mjs",
   ]);
+});
+
+test("the repo's browser tests reach the tooling and helpers they import, through every helper", () => {
+  const reached = listBrowserTestReach();
+  for (const path of [
+    "playwright.config.mjs",
+    "worker/apps.mjs",
+    "worker/build.mjs",
+    "worker/check-page.mjs",
+    "tests/browser/harness.mjs",
+    "apps/wnba/tests/player-fixtures.js",
+  ])
+    assert.ok(reached.has(path), path);
+  assert.ok(!reached.has("worker/plan-review.mjs"));
 });

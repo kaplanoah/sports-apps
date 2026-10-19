@@ -7,22 +7,27 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const SKIPPED_FILES = new Set([
+// What only configures the repository's checks, or what nothing runs, like the license, which
+// neither a deploy nor a browser test needs (worker/browser-scope.mjs).
+export const CONFIG_ONLY_FILES = new Set([
   "LICENSE",
+  ".git-blame-ignore-revs",
+  ".gitignore",
+  ".prettierignore",
+  "eslint.config.mjs",
+  "knip.json",
+  "tsconfig.json",
+]);
+const SKIPPED_FILES = new Set([
+  ...CONFIG_ONLY_FILES,
   ".claude/hooks/one-command.mjs",
   ".claude/settings.json",
-  ".git-blame-ignore-revs",
   ".github/dependabot.yml",
   ".github/workflows/ci.yml",
   ".github/workflows/conflicts.yml",
   ".github/workflows/flaky.yml",
   ".github/workflows/watch.yml",
-  ".gitignore",
-  ".prettierignore",
-  "eslint.config.mjs",
-  "knip.json",
   "playwright.config.mjs",
-  "tsconfig.json",
   "types/globals.d.ts",
   "worker/browser-scope.mjs",
   "worker/burn-in-specs.mjs",
@@ -30,7 +35,7 @@ const SKIPPED_FILES = new Set([
   "worker/flag-conflicts.mjs",
   "worker/judge-burn-in.mjs",
   "worker/judge-review.mjs",
-  "worker/phone-status.mjs",
+  "worker/package-imports.mjs",
   "worker/plan-review.mjs",
   "worker/post-review.mjs",
   "worker/red-change.mjs",
@@ -53,9 +58,20 @@ const TEST_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
  */
 export const isTestPath = (path) => TEST_FOLDERS.some((folder) => folder.test(path));
 
-const isSkipped = (path) => path.endsWith(".md") || SKIPPED_FILES.has(path) || isTestPath(path);
+/**
+ * Whether a path is a document, which nothing runs.
+ * @param {string} path
+ */
+export const isDocument = (path) => path.endsWith(".md");
 
-const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
+/** @param {string} path */
+const isSkipped = (path) => isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path);
+
+/**
+ * The app whose folder a path is in, or null for a path outside every app's.
+ * @param {string} path
+ */
+export const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
 
 /**
  * @param {string} path

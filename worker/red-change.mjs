@@ -3,14 +3,15 @@
 // before. That's any change to the code, not the comments, blank lines, or formatting, of the
 // shared JavaScript that moves and draws the page; a change to its shared stylesheets in what
 // decides how parts layer, stack, scroll, and show, and anything a page's other stylesheets add
-// that gives a part a layer of its own, lifts it over others, or makes it scroll
-// (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a layer
-// of its own; a line a page's markup adds or takes out that loads, runs, or layers its parts; and
-// a diff the gate can't read. A red change merges only once the owner has used it on the beta app
-// and labeled it phone-ok. Anyone who can label a pull request could add the label, so the gate
-// reads who last added it and lets the change through only from the repository's owner, and only
-// when the label came after the pull request's head commit reached GitHub, which the owner hasn't
-// used on the phone otherwise.
+// that gives a part a layer of its own, lifts it over others, or decides how it scrolls or takes a
+// touch (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a
+// layer of its own, sets what those stylesheets would be red for or a custom property they stack
+// with, or holds markup that runs or layers the page; a line a page's markup adds or takes out
+// that loads, runs, or layers its parts; and a diff the gate can't read. A red change merges only
+// once the owner has used it on the beta app and labeled it phone-ok. Anyone who can label a pull
+// request could add the label, so the gate reads who last added it and lets the change through
+// only from the repository's owner, and only when the label came after the pull request's head
+// commit reached GitHub, which the owner hasn't used on the phone otherwise.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
@@ -21,7 +22,6 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { transformSync } from "esbuild";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import {
   LAYER_PROPERTIES,
@@ -29,6 +29,8 @@ import {
   describeUnreadable,
   findInlineStyleSettings,
   findStyleReasons,
+  isPageLayerDeclaration,
+  readMinifiedCode,
 } from "./red-change-styles.mjs";
 
 export const PHONE_OK_LABEL = "phone-ok";
@@ -68,9 +70,9 @@ const CAMEL_PROPERTY_NAMES = LAYER_PROPERTIES.map(toCamelCase)
   .join("|");
 
 // A property's longhands set it too, as transition-duration and -webkit-mask-image do. A number an
-// object keys by one of their names, as in { scale: 1.2 }, sets no style, since Prettier ends each
-// of a stylesheet's declarations with a semicolon, unless the object is a style's or an
-// animation's keyframes, which findStyleObjectLines finds.
+// object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
+// template ends a declaration with a semicolon or its string's end, unless the object is a
+// style's or an animation's keyframes, which findStyleObjectLines finds.
 const LAYER_SETTINGS = [
   {
     name: "a CSS declaration",
@@ -82,31 +84,27 @@ const LAYER_SETTINGS = [
     name: "a style property",
     pattern: new RegExp(`\\.(?:webkit|Webkit)?(${CAMEL_PROPERTY_NAMES})(?:[A-Z][a-z]+)*\\s*=(?!=)`),
   },
-  {
-    name: "a style property",
-    pattern: new RegExp(`setProperty\\(\\s*["'](?:-webkit-)?(${PROPERTY_NAMES})\\b`),
-  },
   { name: "an animation", pattern: /\.(animate)\(/ },
   { name: "a fixed or sticky position", pattern: /\b(position\s*:\s*(?:fixed|sticky))\b/ },
   {
     name: "a fixed or sticky position",
     pattern: /\b(position\s*=\s*["'`](?:fixed|sticky))\b/,
   },
-  {
-    name: "a fixed or sticky position",
-    pattern: /(setProperty\(\s*["']position["']\s*,\s*["'`](?:fixed|sticky))\b/,
-  },
-  { name: "a style property", pattern: /setProperty\(\s*["'`](--[\w-]*)/ },
 ];
+
+// A part's style a script sets by a property's name in the script, or the whole of its CSS text,
+// and one it sets by a property's CSS name, each with the value the script writes after it.
+const STYLE_ASSIGNMENT = /\.style\.([A-Za-z]+)\s*\+?=(?!=)(.*)/;
+const STYLE_SET_PROPERTY = /setProperty\(\s*(["'`])((?:(?!\1).)*)\1\s*(?:,(.*))?/;
+// A value as a script writes it: a string or a number, which ends where its expression does.
+const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*(?:[;,)}\]]|$))/;
 
 // Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) hands a
 // part's style, and in the keyframes <part>.animate([ ... ]) or <part>.animate({ ... }) takes.
 const STYLE_OBJECTS = [/Object\.assign\(\s*[\w$.]+\.style\s*,\s*\{/g, /\.animate\(\s*[[{]/g];
 // The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
 const KEYFRAMES_NAME = /\.animate\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
-const STYLE_KEY = new RegExp(
-  `(?:^|[\\s{,])["']?(?:-webkit-|webkit|Webkit)?(${PROPERTY_NAMES}|${CAMEL_PROPERTY_NAMES})(?:-[a-z]+|[A-Z][a-z]+)*["']?\\s*:`,
-);
+const STYLE_KEY = /(?:^|[\s{,])(["']?)(-{0,2}[A-Za-z][\w-]*)\1\s*:(?!:)/g;
 
 // A line of a page's markup, or of a script's, that runs scripts, in their order, or opens a
 // dialog, a popover, or a style element, each of which can stack its parts.
@@ -115,16 +113,19 @@ const PAGE_MARKUP_LAYER = /<script\b|<style\b|<dialog\b|\bpopover\b/i;
 const STYLE_ATTRIBUTE = /(?<![\w-])style=(?:"([^"]*)"|'([^']*)')?/gi;
 const INLINE_SCRIPT = /<script\b(?![^>]*(?<![\w-])src=)[^>]*>[\s\S]*?<\/script>/gi;
 const INLINE_STYLE = /<style\b[^>]*>[\s\S]*?<\/style>/gi;
-// How the page fits the screen and colors the phone's own bars, which no CI browser draws.
+// How the page fits the screen, opens from the Home Screen without the browser's bars, and colors
+// the phone's own, which no CI browser draws.
 const META_TAG = /<meta\b[^>]*>/gi;
 const SCREEN_META_NAME =
-  /\bname\s*=\s*["']?(?:viewport|apple-mobile-web-app-status-bar-style)(?![\w-])/i;
+  /\bname\s*=\s*["']?(?:viewport|apple-mobile-web-app-status-bar-style|(?:apple-)?mobile-web-app-capable)(?![\w-])/i;
 // A link, its attributes on as many lines as it takes, and whether it links a stylesheet, whose
 // order sets the cascade, rather than a preload or an icon, which sets nothing.
 const LINK_TAG = /<link\b[^>]*>/gi;
 const STYLESHEET_REL =
   /\brel\s*=\s*(?:"[^"]*\bstylesheet\b[^"]*"|'[^']*\bstylesheet\b[^']*'|stylesheet\b)/i;
-const DIFF_HEADER = /^diff --git a\/(.+) b\/(.+)$/;
+// The gate reads a diff without renames, whose header names one path twice, however many " b/"
+// it holds.
+const DIFF_HEADER = /^diff --git a\/(.+) b\/\1$/;
 
 // Tests live outside every page's folder, so they're never red.
 const isPageCode = (path) => /^(?:shared\/page|apps\/[^/]+\/page)\/.+\.(?:css|js)$/.test(path);
@@ -141,14 +142,14 @@ const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
  * @property {HunkLine[][]} hunks
  * @property {number[]} hunkStarts the line, from 1, each hunk starts at in the new file
  * @property {boolean} [isUnreadable] whether the diff hides how its content changed, as it does
- *   for a file it takes as binary, or one it shows no hunks for whose mode didn't change
+ *   for a file it takes as binary, or one it shows no hunks for that it neither creates, deletes,
+ *   nor changes the mode of, as it does for an empty file
  */
 /** @typedef {(path: string) => string} ReadPageFile a page's file as the change leaves it */
 
 /**
- * The files a unified diff changes, each with the lines it adds, numbered as the new file has
- * them, and each of its hunks, with where it starts. A file moved or deleted is listed under each
- * path it had.
+ * The files a unified diff without renames changes, each with the lines it adds, numbered as the
+ * new file has them, and each of its hunks, with where it starts.
  * @param {string} diff
  * @returns {ChangedFile[]}
  */
@@ -163,17 +164,15 @@ export function readDiff(diff) {
   const modeChanges = new Set();
   const binaries = new Set();
   for (const line of diff.split("\n")) {
-    const header = line.match(DIFF_HEADER);
-    if (header) {
-      const [, oldPath, newPath] = header;
-      current = { path: newPath, addedLines: [], hunks: [], hunkStarts: [] };
+    if (line.startsWith("diff --git ")) {
+      const path = line.match(DIFF_HEADER)?.[1];
+      current = path ? { path, addedLines: [], hunks: [], hunkStarts: [] } : null;
       hunk = null;
-      files.push(current);
-      if (oldPath !== newPath)
-        files.push({ path: oldPath, addedLines: [], hunks: [], hunkStarts: [] });
+      if (current) files.push(current);
       continue;
     }
-    if (current && !hunk && /^(?:old|new) mode /.test(line)) modeChanges.add(current);
+    if (current && !hunk && /^(?:old|new|new file|deleted file) mode /.test(line))
+      modeChanges.add(current);
     if (current && !hunk && /^(?:Binary files |GIT binary patch)/.test(line)) binaries.add(current);
     const hunkHeader = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
     if (hunkHeader && current) {
@@ -203,8 +202,8 @@ export function readDiff(diff) {
 }
 
 /**
- * Why the gate can't read a diff, as with a file whose header it can't tell the paths of, or a
- * diff that names no file at all, or null when it can.
+ * Why the gate can't read a diff, as with a file whose header doesn't name one path twice, as a
+ * rename's or a quoted path's doesn't, or a diff that names no file at all, or null when it can.
  * @param {string} diff
  */
 function findDiffProblem(diff) {
@@ -220,7 +219,6 @@ function findDiffProblem(diff) {
  * @param {string} text
  */
 function findLayerSetting(text) {
-  if (isComment(text)) return null;
   for (const { name, pattern } of LAYER_SETTINGS) {
     const match = text.match(pattern);
     if (match) return `${name} that sets ${match[1]}`;
@@ -254,20 +252,6 @@ function readFileBefore(after, { hunks, hunkStarts }) {
 }
 
 /**
- * A script's code with its comments, blank lines, and formatting taken out, as esbuild parses it,
- * or null when it doesn't parse.
- * @param {string} script
- */
-function readScriptCode(script) {
-  try {
-    return transformSync(script, { loader: "js", legalComments: "none", minifyWhitespace: true })
-      .code;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Whether a change to a script changes its code, rather than only its comments, blank lines, or
  * formatting, which draw nothing. A script that's gone, or that the change's hunks don't fit,
  * counts as changed.
@@ -278,8 +262,8 @@ function changesScriptCode(file, readPageFile) {
   const after = readPageFile(file.path);
   const before = after ? readFileBefore(after, file) : null;
   if (before === null) return true;
-  const code = readScriptCode(after);
-  return code === null || code !== readScriptCode(before);
+  const code = readMinifiedCode(after, "js");
+  return code === null || code !== readMinifiedCode(before, "js");
 }
 
 /** @param {ChangedFile} file */
@@ -348,16 +332,84 @@ export function findStyleObjectLines(text) {
 }
 
 /**
- * What an added line sets that makes a layer, given whether it lies in a style's object.
+ * A style property's CSS name, from its name in a script, as -webkit-backdrop-filter's is
+ * webkitBackdropFilter.
+ * @param {string} name
+ */
+const toKebabCase = (name) =>
+  name
+    .replace(/^webkit(?=[A-Z])/, "Webkit")
+    .replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+
+/**
+ * The value a script writes, as its string or number holds it, or as a template's hole for one
+ * it works out, which can hold any value.
+ * @param {string} text from where the value starts
+ */
+function readScriptValue(text) {
+  const literal = text.match(SCRIPT_LITERAL);
+  return literal ? (literal[2] ?? literal[3]) : `\${${text.trim()}}`;
+}
+
+/**
+ * What a script sets a style property to that a page's stylesheet would be red for, or a custom
+ * property a stack declaration reads, or one whose name the gate can't read, or null when it
+ * sets neither.
+ * @param {string} property its CSS name
+ * @param {string} value
+ * @param {(property: string) => boolean} isWatched
+ */
+function describeStyleProperty(property, value, isWatched) {
+  const counts =
+    property.includes("${") ||
+    (property.startsWith("--") ? isWatched(property) : isPageLayerDeclaration({ property, value }));
+  return counts ? `a style property that sets ${property}` : null;
+}
+
+/**
+ * What a line sets on a part's style, by a property's name or its CSS text, that a page's
+ * stylesheet would be red for, or null when it sets nothing that is.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+function findStyleSetting(text, isWatched) {
+  const assigned = text.match(STYLE_ASSIGNMENT);
+  if (assigned?.[1] === "cssText") {
+    const settings = findInlineStyleSettings(readScriptValue(assigned[2]), isWatched);
+    return settings.length ? `a style that sets ${settings.join("; ")}` : null;
+  }
+  if (assigned)
+    return describeStyleProperty(toKebabCase(assigned[1]), readScriptValue(assigned[2]), isWatched);
+  const set = text.match(STYLE_SET_PROPERTY);
+  return set ? describeStyleProperty(set[2], readScriptValue(set[3] ?? ""), isWatched) : null;
+}
+
+/**
+ * What a line of a style's object, or of an animation's keyframes, sets by its keys that a
+ * page's stylesheet would be red for, or null when it sets nothing that is.
+ * @param {string} text
+ */
+function findStyleKey(text) {
+  for (const match of text.matchAll(STYLE_KEY)) {
+    const property = toKebabCase(match[2]);
+    const value = readScriptValue(text.slice((match.index ?? 0) + match[0].length));
+    if (isPageLayerDeclaration({ property, value }))
+      return `a style property that sets ${property}`;
+  }
+  return null;
+}
+
+/**
+ * What an added line sets that makes a layer or that a page's stylesheet would be red for, given
+ * whether it lies in a style's object.
  * @param {AddedLine} line
  * @param {Set<number>} styleLines
+ * @param {(property: string) => boolean} isWatched
  */
-function findAddedSetting({ number, text }, styleLines) {
-  const setting = findLayerSetting(text);
-  if (setting || isComment(text) || !styleLines.has(number)) return setting;
-  const key = text.match(STYLE_KEY);
-  return key ? `a style property that sets ${key[1]}` : null;
-}
+const findAddedSetting = ({ number, text }, styleLines, isWatched) =>
+  findLayerSetting(text) ??
+  findStyleSetting(text, isWatched) ??
+  (styleLines.has(number) ? findStyleKey(text) : null);
 
 /**
  * What each style attribute a line of markup holds sets that a page's stylesheet would be red
@@ -387,7 +439,8 @@ function findMarkupLayer(text, isWatched) {
 
 /**
  * Why a change to any other script of a page is red: each line it adds that makes a layer, sets
- * a custom property, or holds markup that runs or layers the page.
+ * what a page's stylesheet would be red for or a custom property a stack declaration reads, or
+ * holds markup that runs or layers the page.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  * @param {(property: string) => boolean} isWatched
@@ -395,9 +448,9 @@ function findMarkupLayer(text, isWatched) {
 function findPageScriptReasons({ path, addedLines }, readPageFile, isWatched) {
   const styleLines = findStyleObjectLines(readPageFile(path));
   return addedLines.flatMap((line) => {
+    if (isComment(line.text)) return [];
     const setting =
-      findAddedSetting(line, styleLines) ??
-      (isComment(line.text) ? null : findMarkupLayer(line.text, isWatched));
+      findAddedSetting(line, styleLines, isWatched) ?? findMarkupLayer(line.text, isWatched);
     return setting ? [`${path}:${line.number} adds ${setting}: ${line.text.trim()}`] : [];
   });
 }
@@ -475,7 +528,7 @@ function readChangedFile(path) {
 }
 
 /** Every stylesheet of a page that git tracks, from the repository's root. */
-const listPageStylesheets = () =>
+export const listPageStylesheets = () =>
   execFileSync("git", ["ls-files", "--", "shared/page", "apps"], { encoding: "utf8" })
     .split("\n")
     .filter(isPageStylesheet);

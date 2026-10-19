@@ -3,6 +3,20 @@
 // and formatting, before and after the change.
 import { transformSync } from "esbuild";
 
+/**
+ * A script's or stylesheet's code with its comments, blank lines, and formatting taken out, as
+ * esbuild parses it, or null when it doesn't parse.
+ * @param {string} text
+ * @param {"js" | "css"} loader
+ */
+export function readMinifiedCode(text, loader) {
+  try {
+    return transformSync(text, { loader, legalComments: "none", minifyWhitespace: true }).code;
+  } catch {
+    return null;
+  }
+}
+
 export const LAYER_PROPERTIES = [
   "transform",
   "translate",
@@ -23,17 +37,23 @@ export const LAYER_PROPERTIES = [
 ];
 
 // Beside the layers, what decides how iOS stacks, scrolls, and shows the page's parts: where a
-// part sits over others, what scrolls and takes a touch, whether a part draws at all, and a
-// container, whose containment stacks and holds what it contains. Each names its longhands and
-// -webkit- copies too, as overflow-x and -webkit-overflow-scrolling are overflow's. Their fonts,
-// colors, spacing, and sizes CI checks as an iPhone shows them.
+// part sits over others, what scrolls, how and where a scroll comes to rest, what takes a touch
+// and what a long press does, whether a part draws at all, how much it's zoomed, and a container,
+// whose containment stacks and holds what it contains. Each names its longhands and -webkit-
+// copies too, as overflow-x and -webkit-overflow-scrolling are overflow's. Their fonts, colors,
+// spacing, and sizes CI checks as an iPhone shows them.
 const STACK_PROPERTIES = [
   ...LAYER_PROPERTIES,
   "position",
   "overflow",
   "overscroll-behavior",
   "scroll-snap",
+  "scroll-behavior",
+  "scroll-padding",
+  "scroll-margin",
   "touch-action",
+  "touch-callout",
+  "user-select",
   "pointer-events",
   "z-index",
   "opacity",
@@ -45,7 +65,10 @@ const STACK_PROPERTIES = [
   "offset",
   "view-transition-name",
   "box-reflect",
+  "zoom",
 ];
+// A name in one of those families that only wraps text.
+const TEXT_ONLY_PROPERTIES = new Set(["overflow-wrap"]);
 
 // What a page's other stylesheets may set without the phone, since none of them can give a part
 // a layer of its own, lift it over others, or make it scroll.
@@ -151,16 +174,8 @@ function createStyleRule(context, declarations) {
  * @returns {StyleItem[] | null}
  */
 function readStyleSheet(sheet) {
-  let code;
-  try {
-    code = transformSync(sheet, {
-      loader: "css",
-      legalComments: "none",
-      minifyWhitespace: true,
-    }).code;
-  } catch {
-    return null;
-  }
+  const code = readMinifiedCode(sheet, "css");
+  if (code === null) return null;
   /** @type {StyleItem[]} */
   const items = [];
   /** @type {string[]} */
@@ -246,16 +261,18 @@ function isPaintOnlyTransition(declaration) {
  * @param {Declaration} declaration
  */
 const isStackDeclaration = (declaration) =>
-  isInFamily(declaration.property, STACK_PROPERTIES) && !isPaintOnlyTransition(declaration);
+  isInFamily(declaration.property, STACK_PROPERTIES) &&
+  !TEXT_ONLY_PROPERTIES.has(readBareName(declaration.property)) &&
+  !isPaintOnlyTransition(declaration);
 
 /**
- * Whether a declaration in any other stylesheet of a page can give a part a layer of its own, lift
- * it over others, or make it scroll: a stack property but opacity, visibility, and display, with a
- * position only out of the flow and an overflow only when it isn't visible, unless it reads a
- * custom property.
+ * Whether a declaration in any other stylesheet of a page, or one a page's script sets, can give a
+ * part a layer of its own, lift it over others, or decide how it scrolls or takes a touch: a stack
+ * property but opacity, visibility, and display, with a position only out of the flow and an
+ * overflow only when it isn't visible, unless it reads a custom property or what a script fills in.
  * @param {Declaration} declaration
  */
-function isPageLayerDeclaration(declaration) {
+export function isPageLayerDeclaration(declaration) {
   const name = readBareName(declaration.property);
   if (!isStackDeclaration(declaration) || isInFamily(name, PAGE_QUIET_PROPERTIES)) return false;
   if (hasVariable(declaration)) return true;

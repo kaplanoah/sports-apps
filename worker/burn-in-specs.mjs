@@ -1,40 +1,48 @@
 // Lists the browser specs burn-in repeats: each one a pull request adds or changes, but for one
-// that has passed burn-in on an earlier push and hasn't changed since. A helper the specs import
-// or the config they run with that changed since then burns them all in again. A change to the
-// page alone doesn't, since the spec already ran ten times as it is, and the browser job and the
-// nightly run catch a test the page made flaky.
+// that has passed burn-in on an earlier push and hasn't changed since. A file the specs reach by
+// import, or the dependencies they run with, that changed since then, on the pull request's side
+// or its base's, burns them all in again. A change to the page or the Worker alone doesn't, since
+// the spec already ran ten times as it is, and the browser job and the nightly run catch a test
+// the page made flaky.
 // Usage: node worker/burn-in-specs.mjs, in a full checkout of the pull request's merge commit,
 // with GH_TOKEN, GITHUB_REPOSITORY, BRANCH (the pull request's head branch), and HEAD_SHA set. It
 // writes the specs to $GITHUB_OUTPUT as specs=<spec> <spec>.
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isPullRequestRun } from "./find-passed-ci.mjs";
-import { createGitHub } from "./github-api.mjs";
+import { listBrowserTestReach } from "./browser-scope.mjs";
+import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
+import { createGitHub, readAllPages } from "./github-api.mjs";
 
 const SPECS = "apps/*/tests/browser/*.spec.mjs";
 const SPEC = /^apps\/[^/]+\/tests\/browser\/[^/]+\.spec\.mjs$/;
-const SHARED_BY_SPECS = [
-  /^tests\/browser\//,
-  /^apps\/[^/]+\/tests\/browser\//,
-  /^playwright\.config\.mjs$/,
-  /^package(-lock)?\.json$/,
-];
-// A pull request's last few runs hold its last burn-in, and an older one would burn in as much.
-const RUNS_READ = 10;
-const JOBS_PAGE = 100;
+const DEPENDENCIES = /^package(-lock)?\.json$/;
+// What a spec tests rather than runs with.
+const TESTED_CODE = /^(?:apps\/[^/]+\/(?:page|worker)|shared\/(?:page|worker))\//;
+// A branch's last thirty completed runs reach past the label changes, cancelled runs, and pushes
+// that burned nothing in since its last burn-in. Past those, every changed spec burns in again,
+// which costs only time.
+const RUNS_READ = 30;
 
-/** @param {string} path */
-const isSharedBySpecs = (path) =>
-  !SPEC.test(path) && SHARED_BY_SPECS.some((pattern) => pattern.test(path));
+/**
+ * Whether a changed file is one every spec runs with: a helper or config the specs reach, or a
+ * dependency.
+ * @param {string} path
+ * @param {Set<string>} reached every file the browser specs, their helpers, and the config reach
+ */
+const isSharedBySpecs = (path, reached) =>
+  !SPEC.test(path) && (DEPENDENCIES.test(path) || (reached.has(path) && !TESTED_CODE.test(path)));
 
 /**
  * @param {string[]} changedSpecs the specs the pull request adds or changes
  * @param {string[] | null} sinceBurnedIn the files changed since the last head that passed burn-in,
  *   or null with no such head
+ * @param {Set<string>} reached every file the browser specs, their helpers, and the config reach
  */
-export function listSpecsToBurnIn(changedSpecs, sinceBurnedIn) {
-  if (sinceBurnedIn === null || sinceBurnedIn.some(isSharedBySpecs)) return changedSpecs;
+export function listSpecsToBurnIn(changedSpecs, sinceBurnedIn, reached) {
+  if (sinceBurnedIn === null || sinceBurnedIn.some((path) => isSharedBySpecs(path, reached)))
+    return changedSpecs;
   return changedSpecs.filter((spec) => sinceBurnedIn.includes(spec));
 }
 
@@ -48,30 +56,35 @@ export const isBurnedIn = (jobs) => {
 };
 
 /**
- * @param {(path: string) => Promise<any>} readJson
- * @param {number} runId
- */
-async function readJobs(readJson, runId) {
-  const jobs = [];
-  for (let page = 1; ; page += 1) {
-    const batch = await readJson(`/actions/runs/${runId}/jobs?per_page=${JOBS_PAGE}&page=${page}`);
-    jobs.push(...batch.jobs);
-    if (batch.jobs.length < JOBS_PAGE) return jobs;
-  }
-}
-
-/**
- * The newest head of the branch, before this one, on which burn-in passed.
- * @param {{ readJson: (path: string) => Promise<any>, branch: string, headSha: string }} options
+ * The newest head of the branch, before this one, on which burn-in passed, or null when there's
+ * none or GitHub couldn't say, which burns every changed spec in.
+ * @param {object} options
+ * @param {(path: string) => Promise<any>} options.readJson
+ * @param {string} options.branch
+ * @param {string} options.headSha
+ * @param {(message: string) => void} [options.log]
  * @returns {Promise<string | null>}
  */
-export async function findBurnedInHead({ readJson, branch, headSha }) {
-  const { workflow_runs: runs } = await readJson(
-    `/actions/workflows/ci.yml/runs?event=pull_request&status=completed&branch=${encodeURIComponent(branch)}&per_page=${RUNS_READ}`,
-  );
-  for (const run of runs.filter((each) => isPullRequestRun(each) && each.head_sha !== headSha))
-    if (isBurnedIn(await readJobs(readJson, run.id))) return run.head_sha;
-  return null;
+export async function findBurnedInHead({ readJson, branch, headSha, log = console.log }) {
+  try {
+    const { workflow_runs: runs } = await readJson(
+      `/actions/workflows/${posix.basename(CI_WORKFLOW)}/runs?event=pull_request&status=completed&branch=${encodeURIComponent(branch)}&per_page=${RUNS_READ}`,
+    );
+    for (const run of runs.filter((each) => isPullRequestRun(each) && each.head_sha !== headSha)) {
+      const jobs = await readAllPages(
+        readJson,
+        `/actions/runs/${run.id}/jobs`,
+        (answer) => answer.jobs,
+      );
+      if (isBurnedIn(jobs)) return run.head_sha;
+    }
+    return null;
+  } catch (error) {
+    log(
+      `::warning::Couldn't read the branch's earlier burn-ins, so every changed spec burns in: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
 }
 
 /** @param {string[]} args */
@@ -81,13 +94,21 @@ const runGit = (args) => execFileSync("git", args, { encoding: "utf8" });
 const listLines = (output) => output.split("\n").filter(Boolean);
 
 /**
- * The files changed from a commit to the pull request's head, or null for a commit the checkout
- * doesn't hold, as after a force push.
+ * The files changed from a commit to the pull request's head, and those its base changed since
+ * that commit's base, since the merge commit burn-in runs on holds both, or null for a commit the
+ * checkout doesn't hold, as after a force push.
  * @param {string} since
+ * @param {(args: string[]) => string} [git]
  */
-function listChangedSince(since) {
+export function listChangedSince(since, git = runGit) {
   try {
-    return listLines(runGit(["diff", "--name-only", "--no-renames", since, "HEAD^2"]));
+    const sinceBase = git(["merge-base", since, "HEAD^1"]).trim();
+    return [
+      ...new Set([
+        ...listLines(git(["diff", "--name-only", "--no-renames", since, "HEAD^2"])),
+        ...listLines(git(["diff", "--name-only", "--no-renames", sinceBase, "HEAD^1"])),
+      ]),
+    ];
   } catch {
     return null;
   }
@@ -118,7 +139,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         headSha: String(process.env.HEAD_SHA),
       })
     : null;
-  const specs = listSpecsToBurnIn(changedSpecs, burnedIn && listChangedSince(burnedIn));
+  const specs = listSpecsToBurnIn(
+    changedSpecs,
+    burnedIn && listChangedSince(burnedIn),
+    listBrowserTestReach(),
+  );
   const passed = changedSpecs.filter((spec) => !specs.includes(spec));
   console.log(
     passed.length

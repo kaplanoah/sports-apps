@@ -1,16 +1,44 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   checkAppName,
   findPageRoot,
   listApps,
   listAppsOrExit,
+  listAppsWithBrowserTests,
   listNamedApps,
 } from "../worker/apps.mjs";
 
 test("an app is a folder under apps/ whose Worker has a wrangler.toml", () => {
   assert.ok(listApps().includes("mlb"));
+});
+
+// Playwright makes a project for each, and CI's browser jobs name the ones a change reaches.
+test("the apps with browser tests are the apps with a tests/browser folder", () => {
+  const root = mkdtempSync(join(tmpdir(), "apps-"));
+  try {
+    for (const [app, folders] of /** @type {[string, string[]][]} */ ([
+      ["nba", ["worker", "tests/browser"]],
+      ["nhl", ["worker"]],
+      ["notes", ["tests/browser"]],
+    ])) {
+      for (const folder of folders) mkdirSync(join(root, app, folder), { recursive: true });
+      if (folders.includes("worker")) writeFileSync(join(root, app, "worker/wrangler.toml"), "");
+    }
+    const appsRoot = pathToFileURL(`${root}/`);
+    assert.deepEqual(listApps(appsRoot), ["nba", "nhl"]);
+    assert.deepEqual(listAppsWithBrowserTests(appsRoot), ["nba"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+  assert.match(
+    readFileSync(new URL("../playwright.config.mjs", import.meta.url), "utf8"),
+    /const appsWithBrowserTests = listAppsWithBrowserTests\(\);/,
+  );
 });
 
 test("every app's page has a gate, so any app can be given an access code", () => {
