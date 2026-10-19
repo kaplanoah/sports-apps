@@ -10,6 +10,14 @@ export const RULES_FOLDER = ".claude/rules/";
 export const isRuleFile = (path) => path.startsWith(RULES_FOLDER) && path.endsWith(".md");
 
 /**
+ * Each rule file among the repo's files, with its text.
+ * @param {string[]} repoFiles
+ * @param {(path: string) => string} readFile
+ */
+export const readRuleFiles = (repoFiles, readFile) =>
+  repoFiles.filter(isRuleFile).map((path) => ({ path, text: readFile(path) }));
+
+/**
  * The `paths` globs a rule file's frontmatter lists, each an item of its own, quoted or not, or
  * none when it has no frontmatter.
  * @param {string} text
@@ -20,8 +28,11 @@ export function readRulePaths(text) {
   return [...frontmatter.matchAll(/^\s+-\s+(["']?)(.+?)\1\s*$/gm)].map((match) => match[2]);
 }
 
-/** @param {string} text */
-const escapeText = (text) => text.replace(/[.+?^$()|[\]\\]/g, "\\$&");
+/**
+ * Text made safe to match word for word in a regular expression.
+ * @param {string} text
+ */
+export const escapePattern = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * A glob as a regular expression: `**` matches across folders, and a `**` followed by a slash
@@ -30,6 +41,7 @@ const escapeText = (text) => text.replace(/[.+?^$()|[\]\\]/g, "\\$&");
  */
 function readGlob(glob) {
   let pattern = "";
+  let depth = 0;
   for (let index = 0; index < glob.length; index += 1) {
     const char = glob[index];
     if (glob.startsWith("**/", index)) {
@@ -39,11 +51,16 @@ function readGlob(glob) {
       pattern += ".*";
       index += 1;
     } else if (char === "*") pattern += "[^/]*";
-    else if (char === "{") pattern += "(?:";
-    else if (char === "}") pattern += ")";
-    else if (char === ",") pattern += "|";
-    else pattern += escapeText(char);
+    else if (char === "{") {
+      pattern += "(?:";
+      depth += 1;
+    } else if (char === "}" && depth > 0) {
+      pattern += ")";
+      depth -= 1;
+    } else if (char === "," && depth > 0) pattern += "|";
+    else pattern += escapePattern(char);
   }
+  if (depth > 0) throw new Error(`The glob ${glob} opens a brace it never closes.`);
   return new RegExp(`^${pattern}$`);
 }
 

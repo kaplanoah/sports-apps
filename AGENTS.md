@@ -48,7 +48,7 @@
 
 - Apps: one per league, each in `apps/<app>/` with its own `page/`,
   `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`.
-  Paths here, in the rule files, and in the skills are inside an app's folder, except `shared/` and the ones named as the root's.
+  Paths here, in the rule files, and in the skills are inside an app's folder, except `shared/`, `.github/`, `.claude/`, and the ones named as the root's.
 - Page:
   `page/`.
   `page/js/app.js` is the entry module; shared page data lives in `page/js/session.js`.

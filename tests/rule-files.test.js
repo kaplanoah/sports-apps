@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isRuleFile, listRulesFor, matchesGlob, readRulePaths } from "../worker/rule-files.mjs";
+import {
+  isRuleFile,
+  listRulesFor,
+  matchesGlob,
+  readRuleFiles,
+  readRulePaths,
+} from "../worker/rule-files.mjs";
 import { listTrackedFiles } from "./tracked-files.js";
 
 const ROOT = new URL("../", import.meta.url);
@@ -67,6 +73,17 @@ test("a glob's ** matches across folders, or none before a slash, its * within o
   assert.ok(matchesGlob("playwright.config.mjs", "playwright.config.mjs"));
   assert.ok(!matchesGlob("playwrightXconfig.mjs", "playwright.config.mjs"));
   assert.ok(matchesGlob(".github/workflows/ci.yml", ".github/**"));
+  assert.ok(matchesGlob("a,b.md", "a,b.md"));
+  assert.ok(!matchesGlob("a/x.md", "a,b.md"));
+  assert.throws(() => matchesGlob("a.js", "a.{js"), /opens a brace it never closes/);
+});
+
+test("the repo's rule files are read with their text, and no other file is", () => {
+  const files = [".claude/rules/page.md", "AGENTS.md", ".claude/skills/x/SKILL.md"];
+  assert.deepEqual(
+    readRuleFiles(files, (path) => `text of ${path}`),
+    [{ path: ".claude/rules/page.md", text: "text of .claude/rules/page.md" }],
+  );
 });
 
 test("an area's rules are those whose paths match any of its files", () => {

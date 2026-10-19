@@ -21,21 +21,21 @@ paths:
   and stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`),
   and GitHub's reporter marks each one that passed only on its retry on the pull request's checks,
   the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
-  and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
+  and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (the root's `worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config,
   so a change to the docs, the other workflows, the files that only configure the checks,
   or tooling or Node tests no browser test imports, runs none,
-  and runs every app's for shared code, CI's own workflow, the dependencies, or a kind of file it doesn't know (`worker/browser-scope.mjs`).
+  and runs every app's for shared code, CI's own workflow, the dependencies, or a kind of file it doesn't know (the root's `worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   but for one that passed burn-in in an earlier run, on this push or one before it, and hasn't changed since,
-  with every helper and config the specs reach by import, and the dependencies, the Node version, and CI's own workflow, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
+  with every helper and config the specs reach by import, and the dependencies, the Node version, and CI's own workflow, unchanged too, on the pull request's side and its base's (the root's `worker/burn-in-specs.mjs`),
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
   where a change in a spec outside every test, like an import or a helper,
-  edits them all, and the next nightly run adds any other test that failed to the table in the issue Flaky browser tests (`worker/judge-burn-in.mjs`),
-  and each night main's browser tests run three times over with no retry and add each test that failed to the table in the open issue Flaky browser tests (`.github/workflows/flaky.yml` and `worker/report-flaky-tests.mjs`),
+  edits them all, and the next nightly run adds any other test that failed to the table in the issue Flaky browser tests (the root's `worker/judge-burn-in.mjs`),
+  and each night main's browser tests run three times over with no retry and add each test that failed to the table in the open issue Flaky browser tests (`.github/workflows/flaky.yml` and the root's `worker/report-flaky-tests.mjs`),
   which comments on each test new to it and starts the routine that fixes the table's top test,
   through its API trigger, from the `FLAKY_ROUTINE_URL` and `FLAKY_ROUTINE_TOKEN` secrets,
   drops a test once it hasn't failed for a week, and closes once none is left.

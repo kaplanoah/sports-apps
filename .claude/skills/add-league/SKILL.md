@@ -21,14 +21,14 @@ with its tests and its places in search.
 
 While a league is being built, a sandbox Worker may try its feeds from Cloudflare,
 since a league can answer Cloudflare differently than it answers a cloud session.
-Name it `<app>-sandbox`, upload it from a scratch folder outside git with Cloudflare's API, as `worker/deploy.mjs` does,
+Name it `<app>-sandbox`, upload it from a scratch folder outside git with Cloudflare's API, as the root's `worker/deploy.mjs` does,
 and give it no page, store, key, or secret.
 Delete it once the app's first PR merges.
 
 1. **Worker config.** `apps/<app>/worker/wrangler.toml` names the Worker `<app>-app`,
    binds the store and the gate's rate limit, and names the beta channel's Worker `<app>-app-beta` under `[env.beta]`,
    as the WNBA's does, which the root's `tests/deploy.test.js` checks for every app.
-   The tooling finds apps by this file, and `package.json`'s `#page-files/*` import,
+   The tooling finds apps by this file, and the root's `package.json`'s `#page-files/*` import,
    the lint, type, and dead code globs, and Playwright's projects all pick the new folder up from `apps/*`.
    Add `worker/page-files.mjs`, a one-line call to the root's `readPageFiles`.
 2. **The league's data.** `page/js/snapshot.js` names the league's feeds and turns their answers into one snapshot:

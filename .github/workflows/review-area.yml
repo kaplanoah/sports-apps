@@ -33,11 +33,12 @@ env:
   AREA: ${{ inputs.area }}
 
 jobs:
-  # A reviewer is told to read every line of its area's diffs, which a step then checks from the
-  # reads it actually made, and a second try reads what the first left unread, or judges the whole
-  # area again when the first gave no answer. The token is the run's own rather than Claude's
-  # app's, which works only while this file is as the default branch has it, so a change to the
-  # review is reviewed by its own jobs, and the guide has them flag one that lets less through.
+  # A reviewer is told to read every line of its area's diffs and rule files, which a step then
+  # checks from the reads it actually made, and a second try reads what the first left unread, or
+  # judges the whole area again when the first gave no answer. The token is the run's own rather
+  # than Claude's app's, which works only while this file is as the default branch has it, so a
+  # change to the review is reviewed by its own jobs, and the guide has them flag one that lets
+  # less through.
   find:
     name: find (${{ matrix.kind }})
     runs-on: ubuntu-latest

@@ -160,7 +160,7 @@ paths:
   and moving on to the next season when the store does, in `season-reader.js`,
   the News tab, its cards and the outlets each device reads, and its switches,
   from the cards a league's news job keeps,
-  in `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through `package.json`'s imports.
+  in `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through the root's `package.json`'s imports.
   Its `type.css` lists the type roles, `chrome.css` styles the tab bar,
   settings sheet and its Diagnostics, round dots, Home Screen welcome and box,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,

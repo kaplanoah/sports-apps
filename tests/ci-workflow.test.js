@@ -10,11 +10,8 @@ import {
   nameFindRecord,
   namePostRecord,
 } from "../worker/judge-review.mjs";
-import {
-  escapePattern,
-  formatJobOutputs,
-  listJobs as listPlanJobs,
-} from "../worker/plan-review.mjs";
+import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
+import { escapePattern } from "../worker/rule-files.mjs";
 
 /** @param {string} path from the repo's root */
 const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -463,6 +460,12 @@ test("the review reads every area in full, checks before it posts, and fails on 
       "${{ steps.first.outputs.answered == 'true' && 'Its answer is kept, so judge only what those files change.' || 'It gave no answer, so judge your whole area again.' }}",
     ),
     "a retry judges its whole area again only when the first try gave no answer",
+  );
+  assert.ok(
+    find.includes(
+      "judge your area's whole diff against each rule file the earlier try left unread",
+    ),
+    "a retry judges the whole area against a rule file the first try skipped",
   );
   const check = readJob("check", AREA_WORKFLOW);
   assert.match(check, /needs: find\n\s+if: \$\{\{ !cancelled\(\) \}\}\n/);

@@ -21,7 +21,13 @@ import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 import { findSummary, readReviewedHead } from "./review-state.mjs";
-import { RULES_FOLDER, isRuleFile, listRulesFor, readRulePaths } from "./rule-files.mjs";
+import {
+  RULES_FOLDER,
+  escapePattern,
+  listRulesFor,
+  readRuleFiles,
+  readRulePaths,
+} from "./rule-files.mjs";
 
 const AREA_LINES = 2000;
 // A smaller area shares its reviewers with the other small ones.
@@ -395,12 +401,6 @@ export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
 // each place its first characters only, enough to show how it names what was removed.
 const MOST_STALE_HITS = 15;
 const HIT_LENGTH = 220;
-
-/**
- * Text made safe to match word for word in a regular expression.
- * @param {string} text
- */
-export const escapePattern = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * The first places in the repo that still name each function, constant, or file the change
@@ -919,7 +919,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         (pattern, isWord) => grepRepo(pattern, isWord, tryGit),
         listDeletedFiles(runGit),
       ),
-    rules: repoFiles.filter(isRuleFile).map((path) => ({ path, text: readFileSync(path, "utf8") })),
+    rules: readRuleFiles(repoFiles, (path) => readFileSync(path, "utf8")),
   });
   console.log(`stage=${plan.stage}`);
   console.log(formatJobOutputs("", listJobs(plan.areas, listStageKinds(plan.stage))));
