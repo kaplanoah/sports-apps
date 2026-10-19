@@ -1948,7 +1948,8 @@ nav.tabs .search-tab {
   max-width: 560px;
   padding-top: 3.5px;
 }
-/* Each table lays out in a grid, where its clip's max-content fits the table to the list's width.
+/* Each table lays out in a grid, where its clip, at least as wide as the table at its narrowest, fits
+   the table to the list's width.
    A table wider than the room reaches into the gutter and is cut off at the screen's edge, rather
    than scrolling the page sideways. */
 .standings-list {

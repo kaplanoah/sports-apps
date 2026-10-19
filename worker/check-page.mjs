@@ -6,7 +6,7 @@ const DRAW_TIMEOUT_MS = 30 * 1000;
 const RELEASE_FOLDER = /\/release\/([^/]+)\//;
 
 /**
- * @typedef {{ status: "drawn" }
+ * @typedef {{ status: "drawn", note?: string }
  *   | { status: "broken", reason: string }
  *   | { status: "unchecked", reason: string }} PageCheck
  */
@@ -64,6 +64,10 @@ const sendAccessCode = (page, pageUrl, accessCode) =>
     { address: new URL("access", pageUrl).href, code: accessCode },
   );
 
+// A Worker that asks for no code answers its code's route 404, and its page opens as it is.
+const NO_CODE_ASKED = 404;
+const NO_CODE_NOTE = "the page asks for no code, so its access code secret isn't needed";
+
 /**
  * A refused code means the secret is out of date, not that the page is broken.
  * @param {number} status
@@ -74,6 +78,22 @@ function judgeSignIn(status) {
   if (status === 401) return markUnchecked("the Worker refused the access code");
   if (status === 429) return markUnchecked("the Worker had too many tries at the access code");
   return markBroken(`the access code's route answered ${status}`);
+}
+
+/**
+ * Signs the page in with its code and opens it again, or says why it couldn't.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} pageUrl
+ * @param {string} accessCode
+ * @returns {Promise<{ problem?: PageCheck, note?: string }>}
+ */
+async function signInWithCode(page, pageUrl, accessCode) {
+  const status = await sendAccessCode(page, pageUrl, accessCode);
+  if (status === NO_CODE_ASKED) return { note: NO_CODE_NOTE };
+  const problem = judgeSignIn(status);
+  if (problem) return { problem };
+  await page.goto(pageUrl);
+  return {};
 }
 
 /**
@@ -153,14 +173,12 @@ export async function checkPage(
   page.on("pageerror", (error) => errors.push(error.message));
   const response = await page.goto(pageUrl);
   if (!response?.ok()) return markBroken(`the page answered ${response?.status()}`);
-  if (accessCode) {
-    const signInProblem = judgeSignIn(await sendAccessCode(page, pageUrl, accessCode));
-    if (signInProblem) return signInProblem;
-    await page.goto(pageUrl);
-  }
+  const signIn = accessCode ? await signInWithCode(page, pageUrl, accessCode) : {};
+  if (signIn.problem) return signIn.problem;
   if (commit && !isFromRelease(await listScriptSources(page), commit))
     return markBroken("the page is still the version before");
-  if (await waitForDrawing(page, timeoutMs)) return { status: "drawn" };
+  if (await waitForDrawing(page, timeoutMs))
+    return signIn.note ? { status: "drawn", note: signIn.note } : { status: "drawn" };
   if (errors.length) return markBroken(`the page threw: ${errors[0]}`);
   const serverProblem = await readServerProblem(page);
   if (serverProblem) return markBroken(`the page says "${serverProblem}"`);

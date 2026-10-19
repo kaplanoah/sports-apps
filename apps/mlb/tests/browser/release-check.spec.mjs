@@ -1,5 +1,9 @@
 import { checkPage } from "../../../../worker/check-page.mjs";
-import { test, expect, matchPath, serveLockedApp, LOCKED_PAGE_PATH } from "./harness.mjs";
+import {
+  BROKEN_CHECK_TIMEOUT_MS,
+  serveUnreachableStore,
+} from "../../../../tests/browser/page-check.mjs";
+import { test, expect, serveLockedApp, LOCKED_PAGE_PATH } from "./harness.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -18,18 +22,12 @@ test("a page that draws its season passes, signed in with its code", async ({ pa
 
 test("a page whose store doesn't answer is broken", async ({ page, baseURL }) => {
   await serveLockedApp(page, { accessCode: ACCESS_CODE });
-  await page.route(matchPath(`${LOCKED_PAGE_PATH}store/`), (route) =>
-    route.fulfill({ status: 503 }),
-  );
-  await page.routeWebSocket(
-    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
-    (socket) => socket.close(),
-  );
+  await serveUnreachableStore(page);
 
   const check = await checkPage(page, {
     pageUrl: findPageUrl(baseURL),
     accessCode: ACCESS_CODE,
-    timeoutMs: 3000,
+    timeoutMs: BROKEN_CHECK_TIMEOUT_MS,
   });
 
   expect(check).toEqual({
