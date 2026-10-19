@@ -61,10 +61,12 @@
   and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config,
-  so a change to the docs or the tooling alone runs none (`worker/browser-scope.mjs`).
+  so a change to the docs, the other workflows, the files that only configure the checks,
+  or tooling or Node tests no browser test imports, runs none,
+  and runs every app's for shared code, CI's own workflow, the dependencies, or a kind of file it doesn't know (`worker/browser-scope.mjs`).
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
-  but for one that passed burn-in on an earlier push and hasn't changed since,
-  with every helper and config the specs reach by import, and the dependencies, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
+  but for one that passed burn-in in an earlier run, on this push or one before it, and hasn't changed since,
+  with every helper and config the specs reach by import, and the dependencies, the Node version, and CI's own workflow, unchanged too, on the pull request's side and its base's (`worker/burn-in-specs.mjs`),
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
@@ -311,7 +313,7 @@
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pill, and `--radius-sheet` for a sheet on a wide screen,
-  with `--held-bar-fade` and `--held-bar-line` under a bar held at the top.
+  with `--held-bar-line` under a bar held at the top once something scrolls under it.
   A dot is round, a switch is round like the phone's own, an app icon keeps its own shape,
   and the floating tab bar, tinted in the app's own color, stays a capsule like the phone's own;
   any other corner typed as a number fails the root's `tests/shape-tokens.test.js`.
@@ -438,7 +440,7 @@
   any day that changes height as it's drawn whole or as a stand-in,
   and a strip that doesn't scroll where it's told, in `day-strip-log.js`,
   and each touch on a season's standings and bracket, how far it moved,
-  whether the page's code took it from the browser, and how far the page scrolled,
+  whether the page's code took it from the browser, and how far the part under it scrolled,
   and each click on them, in `bracket-standings-log.js`,
   and each error the page's code doesn't catch, in `error-log.js`,
   each a log made with `step-log.js`, the welcome over the whole screen that a phone's or tablet's browser opens on,
@@ -456,6 +458,11 @@
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
   with the one it opens on first in the pill over them, side by side, which a tap on a name or a swipe slides between,
   a swipe on the bracket scrolling it to its end first, as a team's Roster does, in `bracket-standings.js`,
+  each scrolling on its own with the header riding up over the one shown until the pill holds at the top,
+  as a profile's tabs do in a phone's apps, in `season-header.js`,
+  with a stand-in under each of the Updates box's buttons in each part's empty top,
+  so a tap on one opens what it does and a finger that drags from it scrolls the part, as a button inside a list does,
+  in `rider-taps.js`,
   the accent block under a pill's shown name, which never travels between names but hands off from one to the next once a tap or a finger's lift sets what's under it off,
   in `pill-thumb.js`, a season's games as one list of its game days under a strip of every day,
   whose chosen day is the one at the list's top, its box holding still while the list's scroll slides the dates behind it on a spring (`strip-slide.js`),
@@ -597,9 +604,10 @@
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`),
   which each deploy does for its new version, putting the one before back when it doesn't,
   and which the `Watch apps` workflow does every 15 minutes,
-  keeping one open issue for each app that isn't opening, which closes once it opens again (`watch-apps.mjs`),
+  keeping one open issue for each app that isn't opening, which closes once it opens again,
+  and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`),
   both from each page's address and code in the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
-  with `_BETA` after the app's name for its beta channel.
+  and a beta deploy from the `beta` environment's, with `_BETA` after the app's name.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" below.
 - Commands:
@@ -671,8 +679,9 @@ Delete it once the app's first PR merges.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
    around its own `styles.css`, which sets every token their top comments list,
-   and calls `openLastTab()`, `showLastDrawn()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
-   in that order, so a part on the shown tab can take back its sideways scroll, and the welcome opens over any sheet put back.
+   and calls `openLastTab()`, `showLastDrawn()`, `followSeasonPart()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
+   in that order, so a part on the shown tab can take back its sideways scroll, the header rides as far as the season's part put back,
+   and the welcome opens over any sheet put back.
    Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
    load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
    It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
@@ -709,12 +718,15 @@ Delete it once the app's first PR merges.
 8. **Ship it.** Open it as a `feat:` PR, which starts the app at version 1.0.0.
    Its page adds lines that give parts layers of their own, so it's a red change,
    tried on the owner's phone from beta before it merges, as "Workflow" says.
-   Once its CI passes, push it to `beta`, whose deploy creates `<app>-app-beta`,
+   Each channel's token can edit only the Workers it names, so before the first deploy of each channel,
+   the owner creates its Worker in Cloudflare's dashboard and adds it to that environment's token:
+   `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
+   Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`,
    which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
    Give the owner that address, and ask them to set its code with `npm run set-access-code -- <app> <code> --channel beta`,
-   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `production` environment's secrets,
+   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `beta` environment's secrets,
    add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
-   The merge's deploy then creates `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
+   The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
    and the owner adds its address and code as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
 
@@ -770,7 +782,8 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `day-strip.js`, `strip-slide.js`, `pull-to-refresh.js`, and `spring-scroll.js` in `shared/page/`),
+  `show-last-drawn.js`, `season-header.js`, `rider-taps.js`, `held-bar.js`,
+  `day-strip.js`, `strip-slide.js`, `pull-to-refresh.js`, and `spring-scroll.js` in `shared/page/`),
   but not to its comments, blank lines, or formatting, which draw nothing;
   a change to the sequence of its shared stylesheets' (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) top-level statements,
@@ -792,9 +805,12 @@ Delete it once the app's first PR merges.
   and any top-level statement it adds or takes out;
   a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another,
   and the `@property` rule that registers one;
-  a line a page's other JavaScript adds that sets one of those layer properties, a fixed or sticky `position`,
-  what those other stylesheets would be red to add, on a part's `style` by name, with `setProperty`, in a style's object, or in its `cssText`,
-  or a custom property those declarations read, or one whose name the gate can't read, or that holds the markup below;
+  a line a page's other JavaScript adds that writes one of those layer properties or a fixed or sticky `position` as CSS, or starts an animation,
+  that sets or clears what those other stylesheets would be red to add, by a property's name on a part's style or on one a script holds as `style`, as `style.zIndex = 5` does,
+  with `setProperty` or `removeProperty`, in a style's object,
+  or in a style's whole text, through its `cssText`, the `style` itself, or `setAttribute("style", ...)` and `removeAttribute("style")`,
+  or a custom property those declarations read, or a style property whose name a template, a variable in `setProperty` or `removeProperty`, or an index into `style` holds,
+  that creates a `dialog`, `style`, or `script` element, or that holds the markup below;
   a line an app's `page/*.html` adds or takes out that holds `<script`, `<style`, `<dialog`, or `popover`,
   or a `style=` that sets what one of those other stylesheets would be red to add, or a custom property those declarations read,
   or whose value the gate can't read, as where a template fills it in whole,
@@ -802,11 +818,17 @@ Delete it once the app's first PR merges.
   to its `viewport`, `apple-mobile-web-app-capable`, `mobile-web-app-capable`, and `apple-mobile-web-app-status-bar-style` metas,
   which fit it to the screen, open it from the Home Screen without the browser's bars, and color the phone's own,
   or to its inline scripts and styles, which take effect in the order the page holds them;
+  a change to the `display`, `display_override`, `orientation`, or `scope` an app's `page/*.webmanifest` gives,
+  which open its Home Screen app without the browser's bars, turn it, and say which pages keep it so,
+  or to a manifest the gate can't read;
   and a diff the gate can't read.
   In a stylesheet, a `style=`, or a script, a declaration that reads a custom property, or a value a template or the script fills in, counts as if it held any value,
   and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,
   `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
-  so `none`, `all`, one that names none, or a keyword like `inherit` counts.
+  so `none`, `all`, one that names none, or a keyword like `inherit` counts,
+  but for one in a script's CSS text, as in its template or a string, or keyed in a style's object or keyframes,
+  however its key is written, which counts whatever it eases,
+  since the script can add to it past where the gate reads it.
   A script, stylesheet, or page the gate can't read is red, and so is one whose diff hides its content, as a binary one's does, from a diff that shows every file's text whatever `.gitattributes` says.
   By design it can't see what a page's other stylesheets take out, or their `display` and `opacity` overriding a shared rule,
   nor a class that markup or a script adds that a shared stacking rule then reaches.
@@ -817,7 +839,9 @@ Delete it once the app's first PR merges.
   The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
   added by the owner after the PR's last push,
   which main's rules require for a merge, so `check` passes on the PR's tests and review alone,
-  and holds the change itself whenever main's rules don't require that status, which its own step reads from GitHub (`.github/workflows/ci.yml`).
+  and holds the change itself whenever main's rules don't require that status, which its own step reads from GitHub,
+  or the pull request comes from a fork, whose token can't post it,
+  so a fork's pull request has no `phone` status and merges only past main's rules while they require it (`.github/workflows/ci.yml`).
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     Its PR opens as a draft and stays one while the owner tries its design on beta:
@@ -857,8 +881,9 @@ Delete it once the app's first PR merges.
   Nor does a Diagnostics report, which a viewer shares wherever they like:
   each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
   Reviewing a change, check what it commits, logs, and posts for any of these.
-- The Cloudflare token lives only in the cloud environment's API credentials and the repo's `production` GitHub environment.
-  Never ask for it in chat or put it in environment variables, code, or commits.
+- The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
+  each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
+  Never ask for one in chat or put one in environment variables, code, or commits.
 - Keep scratch work (design playgrounds, test harnesses) out of git, and never point tests at the real page.
 - When unsure, do what best serves the intent of the work, and confirm with the user.
   If you genuinely need a decision from the user, give all the context concisely, list the pros and cons of each option, and make a recommendation.
@@ -893,7 +918,8 @@ When a step says to go back to an earlier step, continue in order from there.
    If that brought in anything new, go back to step 2.
    Then commit, push, and open a PR into `main`, or a stacked PR into the branch it builds on.
    If the PR is already open, the push updates it.
-   - If the change is red (`node worker/red-change.mjs` with the branch's diff from `main` on stdin says why),
+   - If the change is red (`node worker/red-change.mjs`,
+     with `git diff --text --no-textconv --no-ext-diff --no-renames origin/main` on stdin, as CI runs it, says why),
      open its PR as a draft, and deploy it to beta once its CI passes (`git push -f origin <branch>:beta`,
      as "Workflow" says), unless another red change is still on beta or unconfirmed.
      Then tell the user it's on beta and what to use on the phone, and keep to steps 4 to 6 while the owner tries its design.
@@ -976,7 +1002,8 @@ When a step says to go back to an earlier step, continue in order from there.
       Read the next Deploy run's log.
     - It says `worker check: ok`: the new version is live.
       Tell the user.
-      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date:
+      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date,
+      and one saying `page check: ok, but` a page that opened without the code its environment holds:
       tell the user that too.
     - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
       Tell the user which.
@@ -989,7 +1016,7 @@ When a step says to go back to an earlier step, continue in order from there.
     - The run was skipped:
       CI failed on `main`.
       Read the CI log, fix the failure in a new PR, and start again at step 1.
-    - It says "nothing was deployed": the `production` environment has no Cloudflare token.
+    - It says "nothing was deployed": the channel's environment has no Cloudflare token.
       Tell the user.
     - The run failed: read the log.
       If it says "the earlier version is live again", the Worker rolled back and is unchanged.

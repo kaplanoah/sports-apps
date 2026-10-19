@@ -57,6 +57,12 @@ In order of what has mattered here.
    `worker/red-change.mjs`, or `worker/red-change-styles.mjs`,
    naming what it no longer holds for the owner's phone,
    since the pull request's own copy of those jobs runs.
+   So is a change to which tests a pull request runs, or which of their failures fail it,
+   that runs or fails fewer: its `scope` and `burn-in` jobs in `.github/workflows/ci.yml`,
+   `worker/browser-scope.mjs`, `worker/burn-in-specs.mjs`, and the modules they import to decide,
+   like `worker/deploy-scope.mjs` and `worker/package-imports.mjs`, and `worker/judge-burn-in.mjs`,
+   naming which browser tests or burn-in specs no longer run or fail,
+   since the pull request's own copy of them picks its own tests.
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
    that `worker/red-change-styles.mjs` doesn't list yet.

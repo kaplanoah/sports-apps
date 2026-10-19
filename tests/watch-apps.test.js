@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nameOutageIssue, watchApps } from "../worker/watch-apps.mjs";
+import { nameNoCodeIssue, nameOutageIssue, watchApps } from "../worker/watch-apps.mjs";
 
 const REPOSITORY = "owner/sports-apps";
 const RUN_URL = "https://github.com/owner/sports-apps/actions/runs/1";
@@ -100,6 +100,60 @@ test("an app that can't be checked warns in the run and touches no issue", async
 
   assert.deepEqual(writes, []);
   assert.deepEqual(lines, ["::warning::mlb: not checked, the Worker refused the access code"]);
+});
+
+/** @type {import("../worker/check-page.mjs").PageCheck} */
+const OPEN_WITHOUT_CODE = {
+  status: "drawn",
+  note: "the page asks for no code, so its access code secret isn't needed",
+};
+
+test("an app that opens without asking for its code gets an issue of its own, and warns in the run", async () => {
+  const { lines, writes } = await watch({ mlb: OPEN_WITHOUT_CODE });
+
+  assert.deepEqual(writes, [
+    {
+      method: "POST",
+      path: "/issues",
+      body: {
+        title: "The MLB app asks for no code",
+        body: `The page opened without asking for its access code, so anyone with its address can open it. Give it its code again with \`npm run set-access-code -- mlb <code>\`, or, if it's meant to be open, remove its code from the \`production\` environment's secrets.\n\nSee [the check's run](${RUN_URL}). This issue closes itself once the app asks for its code again, or no code is held for it.`,
+      },
+    },
+  ]);
+  assert.deepEqual(lines, ["mlb: opens", "::warning::mlb: opens without its code; opened #7"]);
+});
+
+test("an app that opens again without asking for its code closes its outage and keeps warning", async () => {
+  const outage = { number: 3, title: nameOutageIssue("mlb") };
+  const noCode = { number: 4, title: nameNoCodeIssue("mlb") };
+
+  const { lines, writes } = await watch({ mlb: OPEN_WITHOUT_CODE }, [outage, noCode]);
+
+  assert.deepEqual(
+    writes.map(({ method, path }) => `${method} ${path}`),
+    ["POST /issues/3/comments", "PATCH /issues/3"],
+  );
+  assert.deepEqual(lines, [
+    "mlb: opens again, so #3 is closed",
+    "::warning::mlb: opens without its code; #4 is open",
+  ]);
+});
+
+test("an app that asks for its code again closes its no-code issue", async () => {
+  const noCode = { number: 4, title: nameNoCodeIssue("mlb") };
+
+  const { lines, writes } = await watch({ mlb: { status: "drawn" } }, [noCode]);
+
+  assert.deepEqual(writes, [
+    {
+      method: "POST",
+      path: "/issues/4/comments",
+      body: { body: `The app asks for its code again, as of [this run](${RUN_URL}).` },
+    },
+    { method: "PATCH", path: "/issues/4", body: { state: "closed", state_reason: "completed" } },
+  ]);
+  assert.deepEqual(lines, ["mlb: opens", "mlb: asks for its code again, so #4 is closed"]);
 });
 
 test("a check that can't open a browser fails the watch's run, rather than passing it unchecked", async () => {

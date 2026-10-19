@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 // What only configures the repository's checks, or what nothing runs, like the license, which
-// neither a deploy nor a browser test needs (worker/browser-scope.mjs).
+// neither a deploy nor a browser test needs.
 export const CONFIG_ONLY_FILES = new Set([
   "LICENSE",
   ".git-blame-ignore-revs",

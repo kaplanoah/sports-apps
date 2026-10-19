@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   decideGate,
   findLabeling,
+  findKeyframeLines,
   findRedReasons,
   findStyleObjectLines,
   listPageStylesheets,
@@ -116,6 +117,9 @@ test("any change to the shared code that moves, layers, or draws the page is red
     "tab-bar.js",
     "eased-redraw.js",
     "show-last-drawn.js",
+    "season-header.js",
+    "rider-taps.js",
+    "held-bar.js",
     "day-strip.js",
     "strip-slide.js",
     "pull-to-refresh.js",
@@ -903,15 +907,34 @@ test("an inline style in a page's markup or a script's template is red only wher
     '<div style="${style}">',
     "<div style=${style}>",
     '<div style="color: ${isOn ? "red" : "blue"}">',
+    '<div style="/* lift */ z-index: 2">',
+    '<div style="transition: color 0.2s, transform 0.2s">',
+    '<div style="/**/pointer-events: none">',
+    '<div style="z\\-index: 2">',
+    "<div style=\"--icon: '/*'; z-index: 2\">",
+    '<div style="position: f\\69xed">',
+    '<div style="position: &#102;ixed">',
+    '<div style="position: f&#x69;xed">',
+    '<div style="position: &#102ixed">',
+    "<div style=\"color: ${open ? '{' : 'b'}; z-index: 2\">",
+    "<div style=\"color: ${shut ? '}' : 'b'}; z-index: 2\">",
+    '<div style="/* don\'t lift */ color: red; z-index: 2">',
+    '<div style="color: red /* ( */; z-index: 2">',
+    '<div style="color: red} .other {z-index: 2">',
   ];
   const quietStyles = [
     '<div style="--team-stat-columns: ${columns}">',
+    '<div style="--team-stat-columns: ${isWide && columns}">',
+    '<div style="--team-stat-columns: ${count({ wide: 1 })}">',
+    "<div style=\"--team-stat-columns: ${isOpen ? '}' : '1'}\">",
+    "<div style=\"--team-stat-columns: ${isOpen ? 'a\\'}' : '1'}\">",
     '<div style="--team: #f60">',
     '<div style="color: var(--ink)">',
     '<div style="position: relative; overflow: visible">',
     '<div style="display: none; opacity: 0.5">',
     '<div style="">',
     '<div data-style="z-index: 2">',
+    '<div style="/* note */ color: red">',
   ];
   for (const markup of redStyles) {
     assert.equal(
@@ -938,6 +961,22 @@ test("an inline style in a page's markup or a script's template is red only wher
       `${script}: ${markup}`,
     );
   }
+  for (const markup of [
+    '<div style="transition: color 0.2s" class="tip">',
+    '<div style="transition: background-color 0.15s, box-shadow 0.15s; color: red">',
+  ]) {
+    assert.deepEqual(
+      findChangeReasons({ [INDEX_HTML]: { before: [], after: [`  ${markup}`] } }, reads),
+      [],
+      `a transition that only repaints, in ${INDEX_HTML}: ${markup}`,
+    );
+    assert.equal(
+      findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }, reads)
+        .length,
+      1,
+      `a transition in a script's CSS text, whatever it eases: ${markup}`,
+    );
+  }
   assert.deepEqual(
     findChangeReasons({
       [INDEX_HTML]: { before: ['  <div style="position: absolute">'], after: [] },
@@ -952,6 +991,21 @@ test("an inline style in a page's markup or a script's template is red only wher
       `${script}:1 adds an inline style that sets z-index: 2: ${wrapInTemplate(redStyles[1]).trim()}`,
     ],
   );
+  const commented = '<div style="/* lift */ z-index: 2">';
+  assert.deepEqual(
+    findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(commented)] } }),
+    [`${script}:1 adds an inline style that sets z-index: 2: ${wrapInTemplate(commented).trim()}`],
+  );
+  for (const [markup, setting] of [
+    ['<div style="top: ${top}px; position: ${position}">', "position: ${position}"],
+    ["<div style=\"position: ${x ? '$&' : ''}\">", "position: ${x ? '$&' : ''}"],
+    ['<div style="color: red; /* note">', "color: red; /* note"],
+  ])
+    assert.deepEqual(
+      findChangeReasons({ [script]: { before: [], after: [wrapInTemplate(markup)] } }),
+      [`${script}:1 adds an inline style that sets ${setting}: ${wrapInTemplate(markup).trim()}`],
+      markup,
+    );
   assert.deepEqual(
     findChangeReasons({ [script]: { before: [], after: ['  // <div style="z-index: 2">'] } }),
     [],
@@ -977,6 +1031,7 @@ test("a page file whose diff hides its content, as a binary one does, is red", (
     "shared/page/sheet.css",
     "shared/page/stamp.js",
     INDEX_HTML,
+    "apps/wnba/page/manifest.webmanifest",
   ]) {
     for (const lines of [
       ["index 1111111..2222222 100644", "Binary files a/<path> and b/<path> differ"],
@@ -1077,6 +1132,59 @@ test("a page's markup is red where it changes whether the Home Screen app opens 
       [`${INDEX_HTML} changes how it fits the screen or its bars`],
       name,
     );
+});
+
+test("an app's manifest is red where it changes how the Home Screen app opens, or can't be read", () => {
+  const manifest = "apps/wnba/page/manifest.webmanifest";
+  /** @param {string[]} lines */
+  const wrap = (lines) => ["{", ...lines, '  "name": "WNBA"', "}"];
+  /** @param {string[]} before @param {string[]} after */
+  const findManifestChange = (before, after) =>
+    findChangeReasons({ [manifest]: { before: wrap(before), after: wrap(after) } });
+  for (const [before, after] of [
+    [['  "display": "standalone",'], ['  "display": "browser",']],
+    [['  "display": "standalone",'], []],
+    [[], ['  "orientation": "portrait",']],
+    [[], ['  "display_override": ["fullscreen"],']],
+    [['  "scope": "./",'], ['  "scope": "./games/",']],
+  ])
+    assert.deepEqual(
+      findManifestChange(before, after),
+      [`${manifest} changes how the Home Screen app opens`],
+      `${before.join()} to ${after.join()}`,
+    );
+  for (const { key, before, after } of [
+    { key: "theme_color", before: "#000", after: "#111" },
+    { key: "start_url", before: "./", after: "./?from=home" },
+  ])
+    assert.deepEqual(
+      findManifestChange([`  "${key}": "${before}",`], [`  "${key}": "${after}",`]),
+      [],
+      `${key}, which Safari's Home Screen app doesn't open by`,
+    );
+  assert.deepEqual(
+    findManifestChange(['  "theme_color": "#000",'], ['  "theme_color": "#111"']),
+    [`${manifest} changes in a way the gate can't read, so it may change anything`],
+    "a manifest that isn't JSON",
+  );
+  assert.deepEqual(
+    findRedReasons(
+      readDiff(
+        [
+          `diff --git a/${manifest} b/${manifest}`,
+          "@@ -1,2 +1,2 @@",
+          " {",
+          '-  "display": "standalone",',
+          '+  "display": "browser",',
+          "",
+        ].join("\n"),
+      ),
+      () => ["{", '  "name": "WNBA",', '  "display": "browser"', "}"].join("\n"),
+      listNoStylesheets,
+    ),
+    [`${manifest} changes in a way the gate can't read, so it may change anything`],
+    "a manifest the change's hunks don't fit",
+  );
 });
 
 test("the page stylesheets the gate reads beside a change are every page's, and only those", () => {
@@ -1232,6 +1340,28 @@ test("a key of the object Object.assign hands a part's style sets that style, a 
 test("the lines of each object Object.assign hands a part's style are found, and no others", () => {
   assert.deepEqual([...findStyleObjectLines(STYLE_SCRIPT)], [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   assert.deepEqual([...findStyleObjectLines("Object.assign(session, { scale: 1 });")], []);
+  assert.deepEqual(
+    [...findStyleObjectLines("Object.assign(style, {\n  zIndex: 5,\n});")],
+    [1, 2, 3],
+  );
+  assert.deepEqual([...findStyleObjectLines("Object.assign(mystyle, { scale: 1 });")], []);
+  for (const comment of ["// don't lift it", "/* don't lift it */"]) {
+    const commented = [
+      "Object.assign(tip.style, {",
+      `  ${comment}`,
+      "  content: '}',",
+      "  zIndex: 5,",
+      "});",
+      "const after = { offset: 1 };",
+    ].join("\n");
+    assert.deepEqual([...findStyleObjectLines(commented)], [1, 2, 3, 4, 5], comment);
+  }
+  for (const comment of ["/* open", "// open"])
+    assert.deepEqual(
+      [...findStyleObjectLines(`Object.assign(tip.style, {\n  zIndex: 5, ${comment}`)],
+      [1, 2],
+      comment,
+    );
 });
 
 // As a page pulses a part, with the call above what a hunk shows of its keyframes.
@@ -1248,6 +1378,8 @@ const KEYFRAMES_SCRIPT = [
   "}",
   "const SHRINK = [",
   "  { scale: 0.9 },",
+  "  { opacity: 0.6, offset: 0.4, easing: 'ease-in' },",
+  "  { cssOffset: \"path('M 0 0 L 10 10')\" },",
   "];",
   "const shrink = (part) => part.animate(SHRINK, { duration: 200 });",
   "const sizes = [{ scale: 2 }];",
@@ -1272,9 +1404,13 @@ test("a key of the keyframes a part's animate takes sets that style, a number to
     `${path}:5 adds a style property that sets scale: { scale: 1.1, offset: 0.4 },`,
   ]);
   assert.equal(findLineReasons(12).length, 1, "a keyframe of a named list");
-  for (const quiet of [8, 15])
+  assert.deepEqual(findLineReasons(14), [
+    `${path}:14 adds a style property that sets offset: { cssOffset: "path('M 0 0 L 10 10')" },`,
+  ]);
+  for (const quiet of [8, 13, 17])
     assert.deepEqual(findLineReasons(quiet), [], KEYFRAMES_SCRIPT.split("\n")[quiet - 1]);
-  assert.deepEqual([...findStyleObjectLines(KEYFRAMES_SCRIPT)], [3, 4, 5, 6, 7, 11, 12, 13]);
+  assert.deepEqual([...findKeyframeLines(KEYFRAMES_SCRIPT)], [3, 4, 5, 6, 7, 11, 12, 13, 14, 15]);
+  assert.deepEqual([...findStyleObjectLines(KEYFRAMES_SCRIPT)], []);
 });
 
 test("a page's script lines that only read or name those properties aren't red", () => {
@@ -1315,8 +1451,56 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.cssText = "color: red; z-index: 2";',
     "  part.style.cssText += `position: ${position}`;",
     "  part.style.cssText = styles;",
+    "  style.zIndex = 5;",
+    '  style.touchAction = "none";',
+    '  style.position = "absolute";',
+    "  part.style.zIndex ||= 5;",
+    "  style[key] = value;",
+    '  part.style.removeProperty("z-index");',
+    "  style.removeProperty(property);",
+    '  part.removeAttribute("style");',
+    '  part.style.cssText = "/**/z-index: 2";',
+    '  part.style.cssText = "transition: color 0.2s, translate 0.2s";',
+    '  sheet.insertRule(".tip { transition: color 0.2s, transform 0.2s }");',
+    '  sheet.insertRule(".tip { transition: color 0.2s }");',
+    '  sheet.insertRule(".tip { transition: color 0.2s" + eased + " }");',
+    '  sheet.insertRule(".bar { position: -webkit-sticky; top: 0 }");',
+    '  part.style.setProperty("Z-Index", "2");',
+    '  part.setAttribute("Style", "z-index: 2");',
+    '  part.style.transition = "";',
+    '  const MOTION = { transition: "transform 0.2s" };',
+    '  part.style.position = "f\\69xed";',
+    '  part.style.setProperty("position", "\\66ixed");',
+    '  part.style.cssText = `color: ${a ? "{" : "b"}; z-index: 2`;',
+    '  part.style.cssText = `color: ${a ? "}" : "b"}; z-index: 2`;',
+    '  part.style.setProperty("\\u007a-index", "2");',
+    '  part.style.cssText = "";',
+    '  part.style = "";',
+    '  part.setAttribute("style", "");',
+    '  part.style.removeProperty("color"), part.style.removeProperty("z-index");',
+    '  a.setAttribute("style", "color: red"), b.setAttribute("style", "z-index: 2");',
+    '  a.style = "color: red", b.style = "z-index: 2";',
+    '  part.style = "z-index: 2";',
+    '  part.setAttribute("style", "z-index: 2");',
+    "  part.setAttribute('style', `position: ${place}`);",
+    "  part.style.setProperty(property, value);",
+    "  part.style[key] = value;",
+    "  part.style[names[0]] = value;",
+    '  part.style[map["z-index"]] = 5;',
+    `  part.style[name.replace(/'/g, "")] = 5;`,
+    '  const sheet = document.createElement("dialog");',
+    "  const rules = document.createElement('style');",
+    "  const loader = document.createElement(`script`);",
   ])
     assert.equal(findReasons(path, [line]).length, 1, line);
+  assert.deepEqual(
+    findReasons(path, ["  const style = part.style;", "  style.zIndex = 5;"]),
+    [`${path}:2 adds a style property that sets z-index: style.zIndex = 5;`],
+    "a style a script holds by another name",
+  );
+  assert.deepEqual(findReasons(path, ["  part.style[key] = value;"]), [
+    `${path}:1 adds a style property whose name the gate can't read: part.style[key] = value;`,
+  ]);
   for (const line of [
     '  part.style.position = "relative";',
     '  part.style.overflow = "visible";',
@@ -1326,11 +1510,48 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.setProperty("overflow", "visible");',
     '  part.style.setProperty("color", ink);',
     '  part.style.cssText = "color: red";',
+    '  part.style.transition = "color 0.2s";',
+    '  part.style.setProperty("transition", "background-color 0.15s, box-shadow 0.15s");',
     '  if (part.style.zIndex === "2") return;',
+    '  part.style = "color: red";',
+    '  part.setAttribute("style", "color: red");',
+    '  part.setAttribute("class", "z-index-2");',
+    "  const value = part.style[key];",
+    "  const value = part.style[names[0]];",
+    "  if (part.style.zIndex >= 2) return;",
+    '  const cell = document.createElement("div");',
+    "  item.position = 3;",
+    "  item.position = index;",
+    '  holder.position = "fixed";',
+    "  this.container = root;",
+    "  drag.offsetX = event.clientX;",
+    "  view.zoom = 2;",
+    '  options.style = "percent";',
+    '  part.style.removeProperty("color");',
+    '  part.removeAttribute("class");',
   ])
     assert.deepEqual(findReasons(path, [line]), [], line);
   assert.deepEqual(findReasons(path, ["  part.style.zIndex = 5;"]), [
     `${path}:1 adds a style property that sets z-index: part.style.zIndex = 5;`,
+  ]);
+  for (const line of ['  part.removeAttribute("style");', '  part.style.cssText = "";'])
+    assert.deepEqual(findReasons(path, [line]), [
+      `${path}:1 adds a style that clears every property: ${line.trim()}`,
+    ]);
+  for (const line of [
+    '  part.style.cssText = "/* note */ color: red";',
+    "  part.style.cssText = `color: ${isOn && ink}`;",
+    '  part.style.cssText = "background: url(a?x=1&y=2)";',
+    '  part.setAttribute("style", "background: url(a?x=1&y=2)");',
+  ])
+    assert.deepEqual(findReasons(path, [line]), [], line);
+  assert.deepEqual(
+    findReasons(path, ['  options.style = "";']),
+    [`${path}:1 adds a style that clears every property: options.style = "";`],
+    "a style emptied on what may not be a part's is held, since part.style = '' clears one",
+  );
+  assert.deepEqual(findReasons(path, ["  part.style.left = part.style.zIndex = 5;"]), [
+    `${path}:1 adds a style property that sets z-index: part.style.left = part.style.zIndex = 5;`,
   ]);
 });
 
@@ -1344,6 +1565,7 @@ test("a key of a style's object is red where a page's stylesheet would be", () =
     '  position: "relative",',
     "  left: `${left}px`,",
     "  opacity: 0,",
+    "  offset: \"path('M 0 0')\",",
     "});",
   ];
   const reasons = findRedReasons(
@@ -1362,11 +1584,51 @@ test("a key of a style's object is red where a page's stylesheet would be", () =
     `${path}:2 adds a style property that sets pointer-events: pointerEvents: "none",`,
     `${path}:3 adds a style property that sets position: position: "absolute",`,
     `${path}:4 adds a style property that sets z-index: "z-index": 3,`,
+    `${path}:8 adds a style property that sets offset: offset: "path('M 0 0')",`,
+  ]);
+});
+
+test("a transition keyed in a style's object or keyframes is red whatever it eases, however its key is written", () => {
+  const path = "apps/wnba/page/js/tip.js";
+  const script = [
+    "Object.assign(tip.style, {",
+    '  transition: "color 0.2s",',
+    '  "transition": "color 0.2s",',
+    '  transitionProperty: "color",',
+    '  webkitTransition: "color 0.2s",',
+    "});",
+    "tip.animate([",
+    '  { transition: "color 0.2s" },',
+    '  { "transition-property": "color" },',
+    "]);",
+  ];
+  const keyedLines = [2, 3, 4, 5, 8, 9];
+  const reasons = findRedReasons(
+    [
+      {
+        path,
+        addedLines: keyedLines.map((number) => ({ number, text: script[number - 1] })),
+        hunks: [],
+        hunkStarts: [],
+      },
+    ],
+    () => script.join("\n"),
+    listNoStylesheets,
+  );
+  assert.deepEqual(reasons, [
+    `${path}:2 adds a CSS declaration that sets transition: transition: "color 0.2s",`,
+    `${path}:3 adds a style property that sets transition: "transition": "color 0.2s",`,
+    `${path}:4 adds a style property that sets transition-property: transitionProperty: "color",`,
+    `${path}:5 adds a style property that sets -webkit-transition: webkitTransition: "color 0.2s",`,
+    `${path}:8 adds a CSS declaration that sets transition: { transition: "color 0.2s" },`,
+    `${path}:9 adds a style property that sets transition-property: { "transition-property": "color" },`,
   ]);
 });
 
 test("a page's script that sets a custom property is red only where a stack declaration reads it, or its name can't be read", () => {
-  const reads = { "shared/page/chrome.css": [".a { transform: var(--lift); }"] };
+  const reads = {
+    "shared/page/chrome.css": [".a { transform: var(--lift); translate: var(--slideX); }"],
+  };
   const path = "apps/wnba/page/js/games-view.js";
   for (const [line, count] of /** @type {[string, number][]} */ ([
     ['  root.style.setProperty("--lift", lift);', 1],
@@ -1378,6 +1640,35 @@ test("a page's script that sets a custom property is red only where a stack decl
       count,
       line,
     );
+  const pulse = [
+    "const PULSE = [",
+    "  { scale: 1 },",
+    "];",
+    "part.animate(PULSE, { duration: 200 });",
+  ];
+  for (const [key, count] of /** @type {[string, number][]} */ ([
+    ['  { "--lift": "translateZ(0)" },', 1],
+    ['  { "--slideX": "10px" },', 1],
+    ['  { "--team": "red" },', 0],
+  ]))
+    assert.equal(
+      findChangeReasons(
+        { [path]: { before: pulse, after: [...pulse.slice(0, 2), key, ...pulse.slice(2)] } },
+        reads,
+      ).length,
+      count,
+      `a keyframe: ${key}`,
+    );
+  assert.deepEqual(
+    findChangeReasons(
+      {
+        [path]: { before: [], after: ["Object.assign(part.style, {", '  "--lift": lift,', "});"] },
+      },
+      reads,
+    ),
+    [],
+    "a style's object sets no custom property, which only setProperty sets",
+  );
 });
 
 test("tests, docs, and the Worker's code are never red", () => {
@@ -1418,7 +1709,7 @@ test("a red change is held until it has the phone-ok label, and says why", () =>
   assert.match(held.message, /shared\/page\/bracket-standings\.js is shared code/);
   assert.match(
     held.message,
-    /apps\/wnba\/page\/js\/games-view\.js:10 adds a style property that sets willChange/,
+    /apps\/wnba\/page\/js\/games-view\.js:10 adds a style property that sets will-change/,
   );
   assert.match(held.message, /git push -f origin <branch>:beta/);
   assert.match(held.message, /owner adds the phone-ok label after using it on the beta app/);

@@ -2,7 +2,7 @@
 // resolve it.
 import { readFileSync } from "node:fs";
 
-/** @type {Record<string, string>} */
+/** @type {Record<string, string>} each a `#name/*` pattern and where it leads */
 const IMPORTS = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ).imports;
@@ -10,13 +10,12 @@ const IMPORTS = JSON.parse(
 /**
  * The file an import names, from the repo's root, or null for a name package.json doesn't map.
  * @param {string} specifier
- * @param {Record<string, string>} [imports] package.json's, by default
  */
-export function resolvePackageImport(specifier, imports = IMPORTS) {
-  for (const [name, target] of Object.entries(imports)) {
-    const prefix = name.replace(/\*$/, "");
-    const isMatch = name.endsWith("*") ? specifier.startsWith(prefix) : specifier === name;
-    if (isMatch) return target.replace(/^\.\//, "").replace("*", specifier.slice(prefix.length));
+export function resolvePackageImport(specifier) {
+  for (const [pattern, target] of Object.entries(IMPORTS)) {
+    const prefix = pattern.replace(/\*$/, "");
+    if (specifier.startsWith(prefix))
+      return target.replace(/^\.\//, "").replace("*", specifier.slice(prefix.length));
   }
   return null;
 }

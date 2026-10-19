@@ -50,9 +50,9 @@ import { fillRoster, readShownRoster, reopenRoster, startRosterSection } from ".
 import { renderTeamSheet } from "./team-view.js";
 import { TEAMS } from "./teams.js";
 import { renderStamp } from "./stamp-view.js";
-import { listSearchPages } from "./search-pages.js";
+import { PLAYOFF_FIELDS, listSearchPages } from "./search-pages.js";
 import { createSearchTerms, readSearchGames } from "./search-terms.js";
-import { showStandingsPart } from "./standings.js";
+import { showLeagueStandings } from "./standings.js";
 import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
@@ -136,9 +136,10 @@ function openSearchPlace(key) {
       isInstant: true,
     });
   } else if (place === "standings") {
+    // The playoff fields lead the standings, so their row shows the standings from the top.
     openPageTab("bracket-standings");
     showSeasonPart("standings", { isInstant: true });
-    showStandingsPart(detail);
+    if (detail !== PLAYOFF_FIELDS) showLeagueStandings(detail);
   } else if (place === "highlights" || place === "matchup") openGameSection(detail, place);
   else openSettings(key);
 }

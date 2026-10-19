@@ -11,6 +11,8 @@ import {
   ROSTER_DOCS,
   readColor,
 } from "./harness.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
@@ -23,12 +25,25 @@ import {
   listTapsOffButtons,
   listTouchHoverRules,
 } from "../../../../tests/browser/tap-states.mjs";
-import { PHONE } from "./screen-sizes.mjs";
+import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 import {
   findSeasonPill,
   findSeasonTab,
   openSeasonPart,
+  scrollTabsIntoView,
 } from "../../../../tests/browser/season-tab.mjs";
+import {
+  findCenter,
+  findSeasonPart,
+  findTouchTargets,
+  holdHeaderStill,
+  readPillHoldTop,
+  readSeasonPartScroll,
+  readSeasonRide,
+  scrollSeasonPart,
+  scrollSeasonPartToEnd,
+  wheelPastSeasonPartEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -98,27 +113,30 @@ test("on a phone, even a page shorter than the screen can scroll", async ({ page
   expect(scrollHeight).toBeGreaterThan(clientHeight);
 });
 
-test("on a phone, tapping the tab that's showing scrolls back to the top, and then takes it back to the part it's named for", async ({
+test("on a phone, tapping the tab that's showing scrolls its part back to the top, and then takes it back to the part it's named for", async ({
   page,
 }) => {
-  await page.setViewportSize(PHONE);
+  // A screen short enough for the bracket to scroll.
+  await page.setViewportSize({ width: PHONE.width, height: 500 });
   await openApp(page);
   await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
   await openSeasonPart(page, "Bracket");
   await expect(page.locator("#bracketWrap")).toBeVisible();
+  await waitForLoadToSettle(page);
+  await page.mouse.move(PHONE.width / 2, 300);
   await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBeGreaterThan(0);
 
   await findSeasonTab(page).click();
 
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBe(0);
   await expect(page.locator("#bracketWrap")).toBeVisible();
 
   await findSeasonTab(page).click();
 
   await expect(page.locator("#standingsWrap")).toBeVisible();
   await expect(page.locator("#bracketWrap")).toBeHidden();
-  expect(await page.evaluate(() => scrollY)).toBe(0);
+  expect(await readSeasonPartScroll(page, "standings")).toBe(0);
 });
 
 test("on a phone, each tab comes back where it was left, and a tab not shown yet opens at its top", async ({
@@ -128,19 +146,162 @@ test("on a phone, each tab comes back where it was left, and a tab not shown yet
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
-  const left = await page.evaluate(() => {
-    scrollTo({ top: 400, behavior: "instant" });
-    return scrollY;
-  });
-  expect(left).toBe(400);
+  await waitForLoadToSettle(page);
+  await scrollSeasonPartToEnd(page, "standings");
+  const left = await readSeasonPartScroll(page, "standings");
+  expect(left).toBeGreaterThan(0);
 
   await page.getByRole("tab", { name: "News" }).click();
   expect(await page.evaluate(() => scrollY)).toBe(0);
   await page.getByRole("tab", { name: "Games" }).click();
   await findSeasonTab(page).click();
 
-  expect(await page.evaluate(() => scrollY)).toBe(left);
   await expect(page.locator("#standingsWrap")).toBeVisible();
+  expect(await readSeasonPartScroll(page, "standings")).toBe(left);
+});
+
+test("on a phone, the header and the pill ride up as far as the standings scroll, the page holding still", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  const before = await readSeasonRide(page);
+
+  await scrollSeasonPart(page, "standings", 40);
+
+  await expect
+    .poll(() => readSeasonRide(page))
+    .toEqual({ ...before, headerTop: before.headerTop - 40, pillTop: before.pillTop - 40 });
+  await expect(page.locator("#bracketStandingsPill")).toHaveCSS("box-shadow", "none");
+});
+
+test("on a phone, once the header is gone, the pill holds at the top and ends in a line as the standings scroll under it, even past their end", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  const pill = page.locator("#bracketStandingsPill");
+
+  await scrollSeasonPartToEnd(page, "standings");
+  await page.mouse.move(PHONE.width / 2, 500);
+
+  expect(await wheelPastSeasonPartEnd(page, "standings")).toBe(0);
+  expect(await readSeasonRide(page)).toMatchObject({
+    pillTop: await readPillHoldTop(page),
+    pageScroll: 0,
+  });
+  const header = await page.locator("header.top").boundingBox();
+  expect(header.y + header.height).toBeLessThanOrEqual(await readPillHoldTop(page));
+  await expect(pill).toHaveCSS(
+    "box-shadow",
+    `${await readColor(page, "--divider")} 0px 1px 0px 0px`,
+  );
+  await expect(pill).toHaveCSS("background-image", "none");
+});
+
+test("on a phone, a touch on the header lands on the part under it, so a drag there scrolls it, while the header's button still takes its tap", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
+  const header = await page.locator("header.top").boundingBox();
+
+  const found = await findTouchTargets(page, {
+    onHeader: { x: header.x + 40, y: header.y + header.height / 2 },
+    onSettings: findCenter(await page.locator("#settingsBtn").boundingBox()),
+  });
+
+  expect(found).toEqual({ onHeader: "standings", onSettings: "settingsBtn" });
+});
+
+test("on a wide screen, where the tabs ride with the header, a touch on their track between the tabs lands on the part under it, while each tab still takes its tap", async ({
+  page,
+}) => {
+  await page.setViewportSize(WIDE_SCREEN);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
+  const track = await page.locator("nav.tabs").boundingBox();
+
+  const found = await findTouchTargets(page, {
+    onTrack: { x: track.x + 1, y: track.y + track.height / 2 },
+    onTab: findCenter(await page.getByRole("tab", { name: "Games" }).boundingBox()),
+  });
+
+  expect(found).toEqual({ onTrack: "standings", onTab: "tab-games" });
+});
+
+test("a screen that narrows to a phone's on the season tab keeps the bottom fade fixed to the screen rather than riding with the header", async ({
+  page,
+}) => {
+  await page.setViewportSize(WIDE_SCREEN);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const fade = page.locator(".edge-fade");
+
+  await page.setViewportSize(PHONE);
+
+  await expect(page.locator("nav.tabs")).not.toHaveAttribute("data-rides");
+  await expect(fade).not.toHaveAttribute("data-rides");
+  await expect(fade).toHaveCSS("position", "fixed");
+});
+
+test("a screen that widens from a phone's on the season tab has the tabs ride with the header", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("nav.tabs")).not.toHaveAttribute("data-rides");
+
+  await page.setViewportSize(WIDE_SCREEN);
+
+  await expect(page.locator("nav.tabs")).toHaveAttribute("data-rides");
+});
+
+test("on a phone where the browser has no scroll-driven animations, the header stays put and the parts scroll under the pill", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await holdHeaderStill(page);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  const before = await readSeasonRide(page);
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  expect(await readSeasonRide(page)).toEqual(before);
+  const pill = await page.locator("#bracketStandingsPill").boundingBox();
+  const partTop = await findSeasonPart(page, "standings").evaluate(
+    (part) => part.getBoundingClientRect().top,
+  );
+  expect(partTop).toBeCloseTo(pill.y + pill.height, 0);
+});
+
+test("on a phone, the standings' last row ends above the tab bar once they're scrolled to their end", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  const lastRow = await page.locator("#standingsWrap tbody tr").last().boundingBox();
+  const tabBar = await page.locator("#tabBar").boundingBox();
+  expect(lastRow.y + lastRow.height).toBeLessThanOrEqual(tabBar.y);
 });
 
 test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing animates", async ({
@@ -168,23 +329,25 @@ test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing a
   await expect
     .poll(readPillTransitions)
     .toEqual(["transitionrun transform", "transitionend transform"]);
-  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await waitForTimedAnimations(page);
   const pillBox = await pill.boundingBox();
   const tabBox = await page.getByRole("tab", { name: "Games" }).boundingBox();
   expect(pillBox.x + pillBox.width / 2).toBeCloseTo(tabBox.x + tabBox.width / 2, 0);
   expect(pillBox.height).toBeCloseTo(tabBox.height, 0);
 });
 
-test("clicking the tab that's showing scrolls back to the top", async ({ page }) => {
+test("clicking the tab that's showing scrolls its part back to the top", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 500 });
   await openApp(page);
   await expect(page.locator("#bracketWrap")).toContainText("Dodgers");
+  await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
+  await page.mouse.move(640, 400);
   await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBeGreaterThan(0);
 
   await findSeasonTab(page).dispatchEvent("click");
 
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(0);
 });
 
 test("the page reopens on the tab it was last on, showing the part of it last chosen", async ({
@@ -456,6 +619,7 @@ for (const { screen, viewport } of [
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator("#teamSheet")).toBeHidden();
+      await scrollTabsIntoView(page);
       await page.getByRole("tab", { name: "News" }).click();
       await expect(page.locator(".news-more-title")).toBeVisible();
       expect(await listTextOffRoles(page)).toEqual([]);
@@ -514,6 +678,7 @@ for (const { screen, viewport } of [
       expect(await listTapsOffButtons(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator("#teamSheet")).toBeHidden();
+      await scrollTabsIntoView(page);
       await page.getByRole("tab", { name: "News" }).click();
       await expect(page.locator(".news-more-title")).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);

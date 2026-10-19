@@ -5,13 +5,17 @@
 // decides how parts layer, stack, scroll, and show, and anything a page's other stylesheets add
 // that gives a part a layer of its own, lifts it over others, or decides how it scrolls or takes a
 // touch (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a
-// layer of its own, sets what those stylesheets would be red for or a custom property they stack
-// with, or holds markup that runs or layers the page; a line a page's markup adds or takes out
-// that loads, runs, or layers its parts; and a diff the gate can't read. A red change merges only
-// once the owner has used it on the beta app and labeled it phone-ok. Anyone who can label a pull
-// request could add the label, so the gate reads who last added it and lets the change through
-// only from the repository's owner, and only when the label came after the pull request's head
-// commit reached GitHub, which the owner hasn't used on the phone otherwise.
+// layer of its own, sets or clears what those stylesheets would be red for or a custom property
+// they stack with, or holds or creates markup that runs or layers the page; a line a page's markup
+// adds or takes out that loads, runs, or layers its parts, and any change to the stylesheets it
+// links or their order, to how it fits the screen, opens from the Home Screen without the browser's
+// bars, and colors the phone's own, or to its inline scripts and styles; a change to how an app's
+// manifest opens its Home Screen app, or to a manifest the gate can't read; and a diff the gate
+// can't read. A red change merges only once the owner has used it on the beta app and labeled it
+// phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
+// added it and lets the change through only from the repository's owner, and only when the label
+// came after the pull request's head commit reached GitHub, which the owner hasn't used on the
+// phone otherwise.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
@@ -27,9 +31,13 @@ import {
   LAYER_PROPERTIES,
   createWatchCheck,
   describeUnreadable,
+  findClosingBracket,
   findInlineStyleSettings,
   findStyleReasons,
+  isEncoded,
+  isEncodedOutsideHoles,
   isPageLayerDeclaration,
+  isTransition,
   readMinifiedCode,
 } from "./red-change-styles.mjs";
 
@@ -50,6 +58,9 @@ const RED_FILES = new Set(
     "tab-bar.js",
     "eased-redraw.js",
     "show-last-drawn.js",
+    "season-header.js",
+    "rider-taps.js",
+    "held-bar.js",
     "day-strip.js",
     "strip-slide.js",
     "pull-to-refresh.js",
@@ -61,18 +72,14 @@ const RED_FILES = new Set(
   ].map((file) => `shared/page/${file}`),
 );
 
-const toCamelCase = (property) =>
-  property.replace(/-([a-z])/g, (_dash, letter) => letter.toUpperCase());
 const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
-// After a prefix, as in webkitBackdropFilter, a style property's name starts with a capital.
-const CAMEL_PROPERTY_NAMES = LAYER_PROPERTIES.map(toCamelCase)
-  .flatMap((name) => [name, name[0].toUpperCase() + name.slice(1)])
-  .join("|");
 
 // A property's longhands set it too, as transition-duration and -webkit-mask-image do. A number an
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
 // template ends a declaration with a semicolon or its string's end, unless the object is a
-// style's or an animation's keyframes, which findStyleObjectLines finds.
+// style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find. A
+// transition in a script's CSS text, or keyed in a style's object or keyframes, counts whatever it
+// eases, since the script can add to it past where the gate reads it.
 const LAYER_SETTINGS = [
   {
     name: "a CSS declaration",
@@ -80,35 +87,60 @@ const LAYER_SETTINGS = [
       `(?:^|[\\s{;"'\`])(?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))`,
     ),
   },
-  {
-    name: "a style property",
-    pattern: new RegExp(`\\.(?:webkit|Webkit)?(${CAMEL_PROPERTY_NAMES})(?:[A-Z][a-z]+)*\\s*=(?!=)`),
-  },
   { name: "an animation", pattern: /\.(animate)\(/ },
-  { name: "a fixed or sticky position", pattern: /\b(position\s*:\s*(?:fixed|sticky))\b/ },
   {
     name: "a fixed or sticky position",
-    pattern: /\b(position\s*=\s*["'`](?:fixed|sticky))\b/,
+    pattern: /\b(position\s*:\s*(?:-webkit-)?(?:fixed|sticky))\b/,
   },
 ];
 
-// A part's style a script sets by a property's name in the script, or the whole of its CSS text,
-// and one it sets by a property's CSS name, each with the value the script writes after it.
-const STYLE_ASSIGNMENT = /\.style\.([A-Za-z]+)\s*\+?=(?!=)(.*)/;
-const STYLE_SET_PROPERTY = /setProperty\(\s*(["'`])((?:(?!\1).)*)\1\s*(?:,(.*))?/;
+// Where a style's text comes from: markup, a page's or a script's template, decodes entities,
+// while what a script writes into a style reaches it as it is.
+const IN_MARKUP = { isMarkup: true };
+const IN_SCRIPT = { isMarkup: false };
+
+// An assignment, plain or compound, as `=`, `+=`, or `||=`, but not a comparison.
+const ASSIGNS = String.raw`\s*(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?!=)`;
+// A part's style, as `part.style`, or as a script holds it by that name, as
+// `const style = part.style` does, since a property's name, like position or container, names
+// other things too.
+const STYLE = String.raw`\bstyle`;
+// A property a script sets by its name on a part's style, and the style's whole text, as its
+// cssText, as the style itself, or as its attribute, each with the rest of the line, where the
+// value it writes starts.
+const STYLE_PROPERTY_ASSIGNMENT = new RegExp(`${STYLE}\\.([A-Za-z]+)${ASSIGNS}(?=(.*))`, "g");
+const STYLE_TEXT_ASSIGNMENT = new RegExp(`\\.style${ASSIGNS}(?=(.*))`, "g");
+// The attribute's name in any case, as the browser lowercases it.
+const STYLE_ATTRIBUTE_CHANGE = /\.(set|remove)Attribute\(\s*["'`]style["'`]\s*(?:,(?=(.*)))?/gi;
+// A property a style's own methods set or clear, on whatever holds the style, by its CSS name,
+// quoted, in any case but a custom property's, as the browser lowercases it, with any value where
+// it clears it, or by a name the gate can't read, as a variable holds it or an index into the
+// style names it.
+const STYLE_PROPERTY_CALL =
+  /\.(?:set|remove)Property\(\s*(?:(["'`])((?:(?!\1).)*)\1)?\s*(?:,(?=(.*)))?/g;
+const STYLE_INDEX = new RegExp(`${STYLE}\\s*\\[`, "g");
+const STARTS_ASSIGNMENT = new RegExp(`^${ASSIGNS}`);
 // A value as a script writes it: a string or a number, which ends where its expression does.
 const SCRIPT_LITERAL = /^\s*(?:(["'`])((?:\\.|(?!\1)[^\\])*)\1|(-?[\d.]+))(?=\s*(?:[;,)}\]]|$))/;
 
-// Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) hands a
-// part's style, and in the keyframes <part>.animate([ ... ]) or <part>.animate({ ... }) takes.
-const STYLE_OBJECTS = [/Object\.assign\(\s*[\w$.]+\.style\s*,\s*\{/g, /\.animate\(\s*[[{]/g];
+// Each key sets a style, a number too, in the object Object.assign(<part>.style, { ... }) or
+// Object.assign(style, { ... }) hands a part's style, and in the keyframes
+// <part>.animate([ ... ]) or <part>.animate({ ... }) takes, but for a keyframe's own keys, which
+// place it in the animation rather than style the part.
+const STYLE_OBJECT = /Object\.assign\(\s*(?:[\w$.]+\.)?style\s*,\s*\{/g;
+const KEYFRAMES = /\.animate\(\s*[[{]/g;
+const KEYFRAME_TIMING_KEYS = new Set(["offset", "easing", "composite"]);
+// A keyframe names the CSS offset property cssOffset, since offset is its place.
+const KEYFRAME_CSS_NAMES = new Map([["cssOffset", "offset"]]);
 // The keyframes <part>.animate(<name>, ...) takes, from where the script names them.
 const KEYFRAMES_NAME = /\.animate\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 const STYLE_KEY = /(?:^|[\s{,])(["']?)(-{0,2}[A-Za-z][\w-]*)\1\s*:(?!:)/g;
 
 // A line of a page's markup, or of a script's, that runs scripts, in their order, or opens a
-// dialog, a popover, or a style element, each of which can stack its parts.
-const PAGE_MARKUP_LAYER = /<script\b|<style\b|<dialog\b|\bpopover\b/i;
+// dialog, a popover, or a style element, or creates a script, a dialog, or a style element, each
+// of which can stack its parts.
+const PAGE_MARKUP_LAYER =
+  /<script\b|<style\b|<dialog\b|\bpopover\b|createElement\(\s*["'`](?:script|dialog|style)["'`]/i;
 // A style attribute and its value, which is missing where a template fills it in whole.
 const STYLE_ATTRIBUTE = /(?<![\w-])style=(?:"([^"]*)"|'([^']*)')?/gi;
 const INLINE_SCRIPT = /<script\b(?![^>]*(?<![\w-])src=)[^>]*>[\s\S]*?<\/script>/gi;
@@ -131,6 +163,11 @@ const DIFF_HEADER = /^diff --git a\/(.+) b\/\1$/;
 const isPageCode = (path) => /^(?:shared\/page|apps\/[^/]+\/page)\/.+\.(?:css|js)$/.test(path);
 const isPageStylesheet = (path) => isPageCode(path) && path.endsWith(".css");
 const isPageMarkup = (path) => /^apps\/[^/]+\/page\/[^/]+\.html$/.test(path);
+const isPageManifest = (path) => /^apps\/[^/]+\/page\/[^/]+\.webmanifest$/.test(path);
+// What a Home Screen app takes from its manifest on how it opens: without the browser's bars,
+// which way it turns, and which pages it keeps without them, which no CI browser draws. Its
+// start_url isn't one, since the Worker leaves it out of the manifest it hands Safari.
+const MANIFEST_SCREEN_KEYS = ["display", "display_override", "orientation", "scope"];
 const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
 
 /** @typedef {{ number: number, text: string }} AddedLine */
@@ -270,26 +307,6 @@ function changesScriptCode(file, readPageFile) {
 const describeSharedCode = ({ path }) =>
   `${path} is shared code that moves, layers, or draws the page`;
 
-const CLOSING_BRACKETS = { "{": "}", "[": "]" };
-
-/**
- * The index of the brace or bracket that closes the one at `open`, or the text's end when none
- * does.
- * @param {string} text
- * @param {number} open
- */
-function findClosingBracket(text, open) {
-  const opening = text[open];
-  const closing = CLOSING_BRACKETS[/** @type {"{" | "["} */ (opening)];
-  let depth = 0;
-  for (let at = open; at < text.length; at += 1) {
-    if (text[at] === opening) depth += 1;
-    if (text[at] === closing) depth -= 1;
-    if (depth === 0) return at;
-  }
-  return text.length;
-}
-
 /**
  * @param {string} text
  * @param {number} index
@@ -312,17 +329,36 @@ function findNamedKeyframes(text) {
 }
 
 /**
- * The line numbers, from 1, that lie in a style's object or an animation's keyframes, whose keys
- * a hunk's lines can't show as styles when the call sits above them.
+ * Where each bracket opens that ends a match of `pattern`.
+ * @param {string} text
+ * @param {RegExp} pattern global
+ */
+const findOpenings = (text, pattern) =>
+  [...text.matchAll(pattern)].map((match) => (match.index ?? 0) + match[0].length - 1);
+
+/**
+ * The line numbers, from 1, that lie in a style's object, whose keys a hunk's lines can't show as
+ * styles when the call sits above them.
  * @param {string} text a script as the change leaves it
  */
-export function findStyleObjectLines(text) {
-  const opens = [
-    ...STYLE_OBJECTS.flatMap((pattern) =>
-      [...text.matchAll(pattern)].map((match) => (match.index ?? 0) + match[0].length - 1),
-    ),
-    ...findNamedKeyframes(text),
-  ];
+export const findStyleObjectLines = (text) =>
+  listBracketLines(text, findOpenings(text, STYLE_OBJECT));
+
+/**
+ * The line numbers, from 1, that lie in an animation's keyframes, inline or named, whose keys a
+ * hunk's lines can't show as styles when the call sits above them.
+ * @param {string} text a script as the change leaves it
+ */
+export const findKeyframeLines = (text) =>
+  listBracketLines(text, [...findOpenings(text, KEYFRAMES), ...findNamedKeyframes(text)]);
+
+/**
+ * The line numbers, from 1, from each opening bracket to the one that closes it.
+ * @param {string} text
+ * @param {number[]} opens
+ */
+function listBracketLines(text, opens) {
+  /** @type {Set<number>} */
   const lines = new Set();
   for (const open of opens) {
     const last = findLineNumber(text, findClosingBracket(text, open));
@@ -333,22 +369,28 @@ export function findStyleObjectLines(text) {
 
 /**
  * A style property's CSS name, from its name in a script, as -webkit-backdrop-filter's is
- * webkitBackdropFilter.
+ * webkitBackdropFilter, and a custom property's as it is, since its case is its own.
  * @param {string} name
  */
 const toKebabCase = (name) =>
-  name
-    .replace(/^webkit(?=[A-Z])/, "Webkit")
-    .replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+  name.startsWith("--")
+    ? name
+    : name
+        .replace(/^webkit(?=[A-Z])/, "Webkit")
+        .replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
 /**
  * The value a script writes, as its string or number holds it, or as a template's hole for one
- * it works out, which can hold any value.
+ * it works out or one whose escapes, outside the holes its own template fills in, the gate
+ * doesn't decode, either of which can hold any value.
  * @param {string} text from where the value starts
  */
 function readScriptValue(text) {
   const literal = text.match(SCRIPT_LITERAL);
-  return literal ? (literal[2] ?? literal[3]) : `\${${text.trim()}}`;
+  const value = literal?.[2] ?? literal?.[3];
+  return value === undefined || isEncodedOutsideHoles(value, IN_SCRIPT)
+    ? `\${${text.trim()}}`
+    : value;
 }
 
 /**
@@ -362,54 +404,173 @@ function readScriptValue(text) {
 function describeStyleProperty(property, value, isWatched) {
   const counts =
     property.includes("${") ||
+    isEncoded(property, IN_SCRIPT) ||
     (property.startsWith("--") ? isWatched(property) : isPageLayerDeclaration({ property, value }));
   return counts ? `a style property that sets ${property}` : null;
 }
 
 /**
- * What a line sets on a part's style, by a property's name or its CSS text, that a page's
- * stylesheet would be red for, or null when it sets nothing that is.
- * @param {string} text
+ * What a script sets or clears a style's whole text to that a page's stylesheet would be red
+ * for, or null when it sets nothing that is.
+ * @param {string} value
  * @param {(property: string) => boolean} isWatched
  */
-function findStyleSetting(text, isWatched) {
-  const assigned = text.match(STYLE_ASSIGNMENT);
-  if (assigned?.[1] === "cssText") {
-    const settings = findInlineStyleSettings(readScriptValue(assigned[2]), isWatched);
-    return settings.length ? `a style that sets ${settings.join("; ")}` : null;
-  }
-  if (assigned)
-    return describeStyleProperty(toKebabCase(assigned[1]), readScriptValue(assigned[2]), isWatched);
-  const set = text.match(STYLE_SET_PROPERTY);
-  return set ? describeStyleProperty(set[2], readScriptValue(set[3] ?? ""), isWatched) : null;
+function describeStyleText(value, isWatched) {
+  if (!value.trim()) return "a style that clears every property";
+  const settings = findInlineStyleSettings(value, isWatched, IN_SCRIPT);
+  return settings.length ? `a style that sets ${settings.join("; ")}` : null;
 }
 
+const UNREADABLE_PROPERTY = "a style property whose name the gate can't read";
+
 /**
- * What a line of a style's object, or of an animation's keyframes, sets by its keys that a
- * page's stylesheet would be red for, or null when it sets nothing that is.
+ * The first of a line's writes that sets something red, past any that don't.
  * @param {string} text
+ * @param {RegExp} pattern global, one match for each write
+ * @param {(match: RegExpMatchArray) => string | null} describe
  */
-function findStyleKey(text) {
-  for (const match of text.matchAll(STYLE_KEY)) {
-    const property = toKebabCase(match[2]);
-    const value = readScriptValue(text.slice((match.index ?? 0) + match[0].length));
-    if (isPageLayerDeclaration({ property, value }))
-      return `a style property that sets ${property}`;
+function findFirstSetting(text, pattern, describe) {
+  for (const match of text.matchAll(pattern)) {
+    const setting = describe(match);
+    if (setting) return setting;
   }
   return null;
 }
 
 /**
- * What an added line sets that makes a layer or that a page's stylesheet would be red for, given
- * whether it lies in a style's object.
- * @param {AddedLine} line
- * @param {Set<number>} styleLines
+ * What a line sets or clears by a property's name on a part's style that a page's stylesheet
+ * would be red for, or null when it sets nothing that is.
+ * @param {string} text
  * @param {(property: string) => boolean} isWatched
  */
-const findAddedSetting = ({ number, text }, styleLines, isWatched) =>
-  findLayerSetting(text) ??
-  findStyleSetting(text, isWatched) ??
-  (styleLines.has(number) ? findStyleKey(text) : null);
+const findAssignedSetting = (text, isWatched) =>
+  findFirstSetting(text, STYLE_PROPERTY_ASSIGNMENT, ([, name, written]) => {
+    const value = readScriptValue(written);
+    return name === "cssText"
+      ? describeStyleText(value, isWatched)
+      : describeStyleProperty(toKebabCase(name), value, isWatched);
+  });
+
+/**
+ * What a line sets or clears a part's whole style to, as the style itself or its attribute, that a
+ * page's stylesheet would be red for, or null when it sets nothing that is.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+const findStyleTextSetting = (text, isWatched) =>
+  findFirstSetting(text, STYLE_TEXT_ASSIGNMENT, ([, written]) =>
+    describeStyleText(readScriptValue(written), isWatched),
+  ) ??
+  findFirstSetting(text, STYLE_ATTRIBUTE_CHANGE, ([, change, written]) =>
+    describeStyleText(change === "remove" ? "" : readScriptValue(written ?? ""), isWatched),
+  );
+
+/**
+ * What a line sets or clears with a style's own methods that a page's stylesheet would be red
+ * for, or a property whose name the gate can't read, or null when it sets nothing that is.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+const findPropertyCallSetting = (text, isWatched) =>
+  findFirstSetting(text, STYLE_PROPERTY_CALL, ([, quote, name, written]) =>
+    quote
+      ? describeStyleProperty(
+          name.startsWith("--") ? name : name.toLowerCase(),
+          readScriptValue(written ?? ""),
+          isWatched,
+        )
+      : UNREADABLE_PROPERTY,
+  );
+
+/**
+ * Whether a line writes through an index into a style, as `style[key] = value` does, up to the
+ * index's own closing bracket, however many it holds, or holds an index the gate can't find the
+ * end of, as where a quote in it never closes.
+ * @param {string} text
+ */
+const isStyleIndexAssignment = (text) =>
+  [...text.matchAll(STYLE_INDEX)].some((match) => {
+    const close = findClosingBracket(text, match.index + match[0].length - 1);
+    return close === text.length || STARTS_ASSIGNMENT.test(text.slice(close + 1));
+  });
+
+/**
+ * What a line sets or clears on a part's style, by a property's name, its CSS name, or its whole
+ * text, that a page's stylesheet would be red for, or a property whose name the gate can't read,
+ * or null when it sets nothing that is.
+ * @param {string} text
+ * @param {(property: string) => boolean} isWatched
+ */
+const findStyleSetting = (text, isWatched) =>
+  (isStyleIndexAssignment(text) ? UNREADABLE_PROPERTY : null) ??
+  findAssignedSetting(text, isWatched) ??
+  findStyleTextSetting(text, isWatched) ??
+  findPropertyCallSetting(text, isWatched);
+
+/**
+ * What a line of a style's object, or of an animation's keyframes, sets by its keys that a
+ * page's stylesheet would be red for, or a transition, whatever it eases, or a custom property a
+ * stack declaration reads, or null when it sets none of those.
+ * @param {string} text
+ * @param {(key: string) => string | null} readProperty the CSS name a key sets where the line
+ *   lies, or null for one that sets no style there
+ * @param {(property: string) => boolean} isWatched
+ */
+function findStyleKey(text, readProperty, isWatched) {
+  for (const match of text.matchAll(STYLE_KEY)) {
+    const property = readProperty(match[2]);
+    if (property === null) continue;
+    if (isTransition(property)) return `a style property that sets ${property}`;
+    const value = readScriptValue(text.slice((match.index ?? 0) + match[0].length));
+    const setting = describeStyleProperty(property, value, isWatched);
+    if (setting) return setting;
+  }
+  return null;
+}
+
+/**
+ * The lines of a script that lie in a style's object, and those that lie in an animation's
+ * keyframes.
+ * @typedef {{ styleLines: Set<number>, keyframeLines: Set<number> }} StyleObjectLines
+ */
+
+/**
+ * What a line of a style's object or of keyframes sets by its keys, or null for any other line.
+ * @param {AddedLine} line
+ * @param {StyleObjectLines} objectLines
+ * @param {(property: string) => boolean} isWatched
+ */
+function findObjectKeySetting({ number, text }, { styleLines, keyframeLines }, isWatched) {
+  if (styleLines.has(number)) return findStyleKey(text, readStyleObjectProperty, isWatched);
+  return keyframeLines.has(number) ? findStyleKey(text, readKeyframeProperty, isWatched) : null;
+}
+
+/**
+ * The CSS name a key of a style's object sets, or null for a custom property's, which a style sets
+ * only through its setProperty.
+ * @param {string} key
+ */
+const readStyleObjectProperty = (key) => (key.startsWith("--") ? null : toKebabCase(key));
+
+/**
+ * The CSS name a keyframe's key sets, or null for one that places the keyframe in its animation.
+ * @param {string} key
+ */
+const readKeyframeProperty = (key) =>
+  KEYFRAME_TIMING_KEYS.has(key) ? null : (KEYFRAME_CSS_NAMES.get(key) ?? toKebabCase(key));
+
+/**
+ * What an added line sets that makes a layer, or sets or clears that a page's stylesheet would be
+ * red for, or a transition, whatever it eases, in its CSS text or keyed in a style's object or
+ * keyframes, given whether it lies in a style's object or in keyframes.
+ * @param {AddedLine} line
+ * @param {StyleObjectLines} objectLines
+ * @param {(property: string) => boolean} isWatched
+ */
+const findAddedSetting = (line, objectLines, isWatched) =>
+  findLayerSetting(line.text) ??
+  findStyleSetting(line.text, isWatched) ??
+  findObjectKeySetting(line, objectLines, isWatched);
 
 /**
  * What each style attribute a line of markup holds sets that a page's stylesheet would be red
@@ -422,7 +583,7 @@ const findAttributeSettings = (text, isWatched) =>
   [...text.matchAll(STYLE_ATTRIBUTE)].flatMap((match) => {
     const style = match[1] ?? match[2];
     if (style === undefined || /\$\{[^}]*$/.test(style)) return [match[0]];
-    return findInlineStyleSettings(style, isWatched);
+    return findInlineStyleSettings(style, isWatched, IN_MARKUP);
   });
 
 /**
@@ -439,18 +600,22 @@ function findMarkupLayer(text, isWatched) {
 
 /**
  * Why a change to any other script of a page is red: each line it adds that makes a layer, sets
- * what a page's stylesheet would be red for or a custom property a stack declaration reads, or
- * holds markup that runs or layers the page.
+ * or clears what a page's stylesheet would be red for or a custom property a stack declaration
+ * reads, or holds or creates markup that runs or layers the page.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  * @param {(property: string) => boolean} isWatched
  */
 function findPageScriptReasons({ path, addedLines }, readPageFile, isWatched) {
-  const styleLines = findStyleObjectLines(readPageFile(path));
+  const script = readPageFile(path);
+  const objectLines = {
+    styleLines: findStyleObjectLines(script),
+    keyframeLines: findKeyframeLines(script),
+  };
   return addedLines.flatMap((line) => {
     if (isComment(line.text)) return [];
     const setting =
-      findAddedSetting(line, styleLines, isWatched) ?? findMarkupLayer(line.text, isWatched);
+      findAddedSetting(line, objectLines, isWatched) ?? findMarkupLayer(line.text, isWatched);
     return setting ? [`${path}:${line.number} adds ${setting}: ${line.text.trim()}`] : [];
   });
 }
@@ -490,7 +655,8 @@ const listScreenMetas = (markup) => listTags(markup, META_TAG, SCREEN_META_NAME)
  * Why a change to a page's markup is red: each line it adds or takes out that runs the page's
  * scripts, whose order it decides too, or opens a dialog, a popover, or a style element, or holds
  * an inline style that stacks a part, and any change to the stylesheets it links, their order
- * too, to how it fits the screen and colors the phone's bars, or to its inline scripts and styles.
+ * too, to how it fits the screen, opens from the Home Screen without the browser's bars, and
+ * colors the phone's own, or to its inline scripts and styles.
  * @param {ChangedFile} file
  * @param {ReadPageFile} readPageFile
  * @param {(property: string) => boolean} isWatched
@@ -513,6 +679,36 @@ function findPageMarkupReasons(file, readPageFile, isWatched) {
     ...(isKept(listInlineScripts) ? [] : [`${file.path} changes what its inline scripts run`]),
     ...(isKept(listInlineStyles) ? [] : [`${file.path} changes its inline styles`]),
   ];
+}
+
+/**
+ * What a manifest says about how its Home Screen app opens, as one text to compare, or null when
+ * it isn't JSON.
+ * @param {string} text the manifest, or nothing for one that's gone
+ */
+function readManifestScreen(text) {
+  try {
+    const manifest = JSON.parse(text || "{}");
+    return JSON.stringify(MANIFEST_SCREEN_KEYS.map((key) => manifest[key] ?? null));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Why a change to an app's manifest is red: it changes how the Home Screen app opens, or the gate
+ * can't read the manifest before or after it.
+ * @param {ChangedFile} file
+ * @param {ReadPageFile} readPageFile
+ */
+function findManifestReasons(file, readPageFile) {
+  const after = readPageFile(file.path);
+  const before = readFileBefore(after, file);
+  const [screenBefore, screenAfter] = [before, after].map((text) =>
+    text === null ? null : readManifestScreen(text),
+  );
+  if (screenBefore === null || screenAfter === null) return [describeUnreadable(file.path)];
+  return screenBefore === screenAfter ? [] : [`${file.path} changes how the Home Screen app opens`];
 }
 
 /**
@@ -559,8 +755,7 @@ function readStylesheets(files, readPageFile, listStylesheets) {
 }
 
 /**
- * A read that runs only once it's first asked for, and only once, as the page's stylesheets are
- * read only for a change that touches one or sets a custom property in an inline style.
+ * A read that runs only once it's first asked for, and only once.
  * @template T
  * @param {() => T} read
  * @returns {() => T}
@@ -588,8 +783,9 @@ function readWhenAsked(read) {
  */
 function findFileReasons(file, { readPageFile, styleReasons, isWatched }) {
   const { path } = file;
-  if (file.isUnreadable && (isPageCode(path) || isPageMarkup(path)))
+  if (file.isUnreadable && (isPageCode(path) || isPageMarkup(path) || isPageManifest(path)))
     return [describeUnreadable(path)];
+  if (isPageManifest(path)) return findManifestReasons(file, readPageFile);
   if (RED_FILES.has(path) && !file.hunks.length) return [describeSharedCode(file)];
   if (isPageStylesheet(path)) return styleReasons.get(path) ?? [];
   if (RED_FILES.has(path))

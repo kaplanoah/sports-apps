@@ -76,6 +76,16 @@ const PAGE_QUIET_PROPERTIES = ["opacity", "visibility", "display"];
 const OUT_OF_FLOW_POSITION = /^(?:absolute|fixed|sticky|-webkit-sticky)$/i;
 const SCROLLING_OVERFLOW = /^overflow(?:-x|-y|-inline|-block|-scrolling)?$/;
 
+// Any backslash, which can start a CSS escape or a script's string escape, and in markup any
+// ampersand too, which can start an HTML entity, with or without its semicolon, each of which a
+// browser decodes into what the gate would read past, and a property's name, which a template's
+// hole in it isn't.
+const SCRIPT_ENCODED_TEXT = /\\/;
+const MARKUP_ENCODED_TEXT = /\\|&/;
+const PROPERTY_NAME = /^-{0,2}[a-z][\w-]*$/i;
+// What stands in for each hole a script's template fills in, which reads as any value.
+const HOLE_NAME = "--template-hole-";
+
 // The properties a transition can ease that only repaint a part, never layer or move it.
 const PAINT_ONLY_PROPERTY =
   /^(?:color|background|background-color|border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?-color|outline-color|box-shadow|text-decoration-color|fill|stroke|caret-color)$/;
@@ -242,17 +252,25 @@ const readTransitionedProperty = (item) =>
   splitTopLevel(item, " ").find((part) => !TRANSITION_TIMING.test(part)) ?? "all";
 
 /**
- * Whether a declaration is a transition, or the list of what transitions ease, that names only
- * properties that repaint a part.
+ * Whether a property is a transition, or the list of what transitions ease.
+ * @param {string} property
+ */
+export const isTransition = (property) =>
+  ["transition", "transition-property"].includes(readBareName(property));
+
+/**
+ * Whether a declaration is a transition, or the list of what transitions ease, that names
+ * properties, and only ones that repaint a part.
  * @param {Declaration} declaration
  */
 function isPaintOnlyTransition(declaration) {
+  if (!isTransition(declaration.property) || hasVariable(declaration)) return false;
   const name = readBareName(declaration.property);
-  if (!["transition", "transition-property"].includes(name) || hasVariable(declaration))
-    return false;
   const items = splitTopLevel(declaration.value, ",");
   const eased = name === "transition" ? items.map(readTransitionedProperty) : items;
-  return eased.every((property) => PAINT_ONLY_PROPERTY.test(property.toLowerCase()));
+  return (
+    eased.length > 0 && eased.every((property) => PAINT_ONLY_PROPERTY.test(property.toLowerCase()))
+  );
 }
 
 /**
@@ -417,19 +435,154 @@ export function createWatchCheck({ changed, unchanged }) {
   return (property) => property.startsWith("--") && (readNames === null || readNames.has(property));
 }
 
+/** @typedef {{ isMarkup: boolean }} TextSource whether text is markup, which decodes entities */
+
+/**
+ * Whether text holds any backslash, or in markup any ampersand, either of which can start an
+ * escape or an entity that a browser decodes into what the gate can't read. A script's own text
+ * takes no entity: what it writes reaches the style as it is.
+ * @param {string} text
+ * @param {TextSource} source
+ */
+export const isEncoded = (text, { isMarkup }) =>
+  (isMarkup ? MARKUP_ENCODED_TEXT : SCRIPT_ENCODED_TEXT).test(text);
+
+const CLOSING_BRACKETS = { "{": "}", "[": "]" };
+
+/**
+ * The index of the last character of a script's string or comment that starts at `at`, a line
+ * comment running through the newline that ends it, or `at` when none starts there, or the
+ * text's end when it never ends.
+ * @param {string} text
+ * @param {number} at
+ */
+function findStringOrCommentEnd(text, at) {
+  const character = text[at];
+  if (`"'\``.includes(character)) {
+    for (let end = at + 1; end < text.length; end += 1) {
+      if (text[end] === "\\") end += 1;
+      else if (text[end] === character) return end;
+    }
+    return text.length;
+  }
+  if (text.startsWith("//", at)) {
+    const end = text.indexOf("\n", at);
+    return end === -1 ? text.length : end;
+  }
+  if (text.startsWith("/*", at)) {
+    const end = text.indexOf("*/", at + 2);
+    return end === -1 ? text.length : end + 1;
+  }
+  return at;
+}
+
+/**
+ * The index of the brace or bracket that closes the one at `open`, past any in a script's
+ * strings and comments, or the text's end when none does.
+ * @param {string} text
+ * @param {number} open
+ */
+export function findClosingBracket(text, open) {
+  const opening = text[open];
+  const closing = CLOSING_BRACKETS[/** @type {"{" | "["} */ (opening)];
+  let depth = 0;
+  for (let at = open; at < text.length; at += 1) {
+    const skipped = findStringOrCommentEnd(text, at);
+    if (skipped !== at) at = skipped;
+    else if (text[at] === opening) depth += 1;
+    else if (text[at] === closing) depth -= 1;
+    if (depth === 0) return at;
+  }
+  return text.length;
+}
+
+/**
+ * Each hole a script's template fills in, as `${...}`, from its start to the brace that closes
+ * it, or null when one never closes, as where a string or brace in it is left open.
+ * @param {string} text
+ * @returns {string[] | null}
+ */
+function findTemplateHoles(text) {
+  const holes = [];
+  for (let start = text.indexOf("${"); start !== -1;) {
+    const end = findClosingBracket(text, start + 1);
+    if (end === text.length) return null;
+    holes.push(text.slice(start, end + 1));
+    start = text.indexOf("${", end + 1);
+  }
+  return holes;
+}
+
+/**
+ * Whether text, outside the holes its template fills in, holds what can start an escape or an
+ * entity, as text with a hole that never closes counts too.
+ * @param {string} text
+ * @param {TextSource} source
+ */
+export function isEncodedOutsideHoles(text, source) {
+  const holes = findTemplateHoles(text);
+  if (holes === null) return true;
+  return isEncoded(
+    holes.reduce((outside, hole) => outside.replace(hole, ""), text),
+    source,
+  );
+}
+
+/**
+ * The declarations of an inline style as a browser reads them, past its comments and with its
+ * strings whole, each hole a template fills in read as a custom property, which can hold any
+ * value, or null when it can't be read as one style, as when a brace in it closes the style or a
+ * hole never closes, or when what the template doesn't fill in holds an escape or an entity.
+ * @param {string} style
+ * @param {TextSource} source
+ * @returns {Declaration[] | null}
+ */
+function readInlineStyle(style, source) {
+  if (isEncodedOutsideHoles(style, source)) return null;
+  const holes = /** @type {string[]} */ (findTemplateHoles(style));
+  const filled = holes.reduce(
+    (text, hole, index) => text.replace(hole, `var(${HOLE_NAME}${index})`),
+    style,
+  );
+  const items = readStyleSheet(`a{${filled}}`);
+  if (items === null) return null;
+  if (!items.length) return [];
+  const [rule] = items;
+  if (items.length > 1 || !isStyleRule(rule) || rule.reaches.join() !== "a") return null;
+  /** @param {string} text */
+  const restoreHoles = (text) =>
+    holes.reduce(
+      (restored, hole, index) => restored.replace(`var(${HOLE_NAME}${index})`, () => hole),
+      text,
+    );
+  return rule.declarations.map(({ property, value }) => ({
+    property: restoreHoles(property),
+    value: restoreHoles(value),
+  }));
+}
+
 /**
  * Each declaration of an inline style, as a style attribute holds it, that a page's other
- * stylesheets would be red to add, or that sets a watched custom property, and each part of it
- * the gate can't read as a declaration, as one a script's template fills in whole.
+ * stylesheets would be red to add, or that sets a watched custom property, and each the gate
+ * can't read as one, as where a script's template fills in its name, or the whole style where it
+ * holds an escape or an entity or can't be read as one style.
  * @param {string} style
  * @param {(property: string) => boolean} isWatched
+ * @param {TextSource} source
+ * @returns {string[]}
  */
-export const findInlineStyleSettings = (style, isWatched) =>
-  splitTopLevel(style, ";").filter((text) => {
-    if (!/^-{0,2}[a-z][\w-]*\s*:/i.test(text)) return true;
-    const declaration = readDeclaration(text);
-    return isPageLayerDeclaration(declaration) || isWatched(declaration.property);
-  });
+export function findInlineStyleSettings(style, isWatched, source) {
+  const declarations = readInlineStyle(style, source);
+  if (declarations === null) return [style];
+  return declarations
+    .filter(
+      (declaration) =>
+        !PROPERTY_NAME.test(declaration.property) ||
+        isPageLayerDeclaration(declaration) ||
+        isWatched(declaration.property),
+    )
+    .map(({ property, value }) => (value ? `${property}: ${value}` : property));
+}
 
 /**
  * Why each changed stylesheet of a page is red.

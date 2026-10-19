@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { listApps } from "../worker/apps.mjs";
 
 const loadDeployModule = () => import("../worker/deploy.mjs");
-const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123" };
+const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
 
 const API = "https://api.cloudflare.com/client/v4";
 const WORKER_URL = "https://mlb-app.example-subdomain.workers.dev/";
@@ -40,7 +40,9 @@ function createFakeCloudflare({
     calls.push({ url, init });
     if (!url.startsWith(API)) return answerWorker();
     const isDeployments = url.endsWith("/deployments");
+    // A token limited to its channel's Workers is refused the account's workers.dev subdomain.
     const isRefused =
+      url.endsWith("/workers/subdomain") ||
       (refuse && url.includes(refuse)) ||
       (refuseRollback && isDeployments && init.method === "POST");
     if (isRefused) {
@@ -62,7 +64,6 @@ function createFakeCloudflare({
       );
     }
     let result = {};
-    if (url.endsWith("/workers/subdomain")) result = { subdomain: "example-subdomain" };
     if (url.endsWith("/workers/scripts"))
       result = isNew ? [] : [{ id: "mlb-app", migration_tag: migrationTag }];
     if (isDeployments && init.method === "GET") result = { deployments: LIVE_DEPLOYMENTS };
@@ -145,7 +146,6 @@ test("upload, route, and the Worker URL", async () => {
     "GET /accounts/acct123/workers/scripts",
     "PUT /accounts/acct123/workers/scripts/mlb-app",
     "POST /accounts/acct123/workers/scripts/mlb-app/subdomain",
-    "GET /accounts/acct123/workers/subdomain",
     `GET ${ROBOTS_URL}`,
   ]);
 
@@ -346,6 +346,41 @@ test("a refusal names the step and Cloudflare's reason; no account ID is caught 
     }),
     /CLOUDFLARE_ACCOUNT_ID/,
   );
+});
+
+test("the workers.dev subdomain comes from its secret, checked before anything is sent", async () => {
+  const { deploy } = await loadDeployModule();
+  const cloudflare = createFakeCloudflare();
+  const missing = /Set CLOUDFLARE_WORKERS_SUBDOMAIN/;
+  const tooMuch = /just the part before \.workers\.dev/;
+  for (const { subdomain, reason } of [
+    { subdomain: undefined, reason: missing },
+    { subdomain: "", reason: missing },
+    { subdomain: "example-subdomain.workers.dev", reason: tooMuch },
+    { subdomain: "https://example-subdomain", reason: tooMuch },
+  ]) {
+    const failure = await deploy({
+      app: "mlb",
+      fetchImpl: cloudflare.fetchImpl,
+      env: { ...ENV, CLOUDFLARE_WORKERS_SUBDOMAIN: subdomain },
+      script: "",
+      log: () => {},
+      pause: skipPause,
+    }).catch((error) => error);
+    assert.match(failure.message, reason);
+    assert.doesNotMatch(failure.message, /example-subdomain/);
+  }
+  assert.deepEqual(cloudflare.calls, []);
+});
+
+test("the deploy step passes each Cloudflare secret the deploy reads", () => {
+  const workflow = readFileSync(`${import.meta.dirname}/../.github/workflows/deploy.yml`, "utf8");
+  for (const secret of [
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_WORKERS_SUBDOMAIN",
+  ])
+    assert.ok(workflow.includes(`${secret}: \${{ secrets.${secret} }}`), secret);
 });
 
 test("a refusal that isn't Cloudflare's shows its status, server, and raw body", async () => {
@@ -704,6 +739,10 @@ test("a new version passes once its Worker answers and its page draws, or has no
   for (const [check, line] of [
     [{ status: "drawn" }, "page check: ok"],
     [
+      { status: "drawn", note: "the page asks for no code" },
+      "::notice::page check: ok, but the page asks for no code",
+    ],
+    [
       { status: "unchecked", reason: "no MLB_PAGE_URL secret" },
       "::notice::page check: skipped, no MLB_PAGE_URL secret",
     ],
@@ -921,6 +960,12 @@ test("a push to beta deploys the beta channel, and main still waits for its CI",
     /CHANNEL: \$\{\{ github\.ref_name == 'beta' && 'beta' \|\| 'production' \}\}/,
   );
   assert.match(workflow, /group: deploy-\$\{\{ github\.ref_name \}\}/);
+  // A push to beta runs that branch's own scripts, so it gets beta's environment and token.
+  assert.match(
+    workflow,
+    /environment: \$\{\{ github\.ref_name == 'beta' && 'beta' \|\| 'production' \}\}/,
+  );
+  assert.match(workflow, /No CLOUDFLARE_API_TOKEN in the \$CHANNEL environment/);
   assert.match(workflow, /if: github\.event_name == 'push' && env\.CHANNEL == 'production'\n/);
 });
 

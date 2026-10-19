@@ -24,6 +24,7 @@ test("a change to the docs, the other workflows, or the tooling no browser test 
       "tests/plan-review.test.js",
       "apps/wnba/tests/search.test.js",
       "knip.json",
+      "types/globals.d.ts",
     ]),
     [],
   );

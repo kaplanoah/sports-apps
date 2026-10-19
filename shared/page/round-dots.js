@@ -10,15 +10,17 @@ export const renderRoundDots = (rounds) =>
   </div>`;
 
 /**
- * Notes on the part the dots are in how far below its top the tab bar starts, while it slides
- * sideways. A part that moves is where what's fixed inside it is placed from, so chrome.css places
- * the dots from the part's top while it slides, which keeps them over the tab bar however tall the
- * part grows. The note goes on the part, which a redraw of the bracket's markup leaves as it is.
+ * Notes on the part the dots are in how far below the top of what it scrolls the tab bar starts,
+ * while it slides sideways. A part that moves is where what's fixed inside it is placed from, so
+ * chrome.css places the dots from the top of what the part scrolls while it slides, which keeps
+ * them over the tab bar wherever the part is scrolled. The note goes on the part, which a redraw of
+ * the bracket's markup leaves as it is.
  * @param {HTMLElement} part
  */
 export function holdRoundDots(part) {
   const tabBar = /** @type {HTMLElement} */ (document.getElementById("tabBar"));
-  const tabBarTop = tabBar.getBoundingClientRect().top - part.getBoundingClientRect().top;
+  const tabBarTop =
+    tabBar.getBoundingClientRect().top - part.getBoundingClientRect().top + part.scrollTop;
   part.style.setProperty("--tab-bar-top-in-part", `${tabBarTop}px`);
 }
 
