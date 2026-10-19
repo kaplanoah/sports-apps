@@ -287,28 +287,55 @@ export async function checkCaretBeforeCode({ page, openApp }) {
 }
 
 /**
- * The welcome's caret, opened from the ?, sits over settings' own caret, 14px over the welcome's
- * room and 14px over its heading.
+ * Where the welcome's caret sits, opened from the ?: how far over the welcome's room, out past its
+ * words, from settings' own caret, and over its heading.
  * @param {App} app
  */
-export async function checkCaretPlace(app) {
-  const { page } = app;
+async function measureWelcomeCaret(app) {
   await openWelcomeFromHelp(app);
-  const caret = await page.locator(WELCOME).evaluate((welcome) => {
-    const roomTop =
-      welcome.getBoundingClientRect().top + parseFloat(getComputedStyle(welcome).paddingTop);
+  return app.page.locator(WELCOME).evaluate((welcome) => {
+    const style = getComputedStyle(welcome);
+    const room = welcome.getBoundingClientRect();
     const close = welcome.querySelector(".welcome-close").getBoundingClientRect();
     const heading = welcome.querySelector(".welcome-title").getBoundingClientRect();
     const settingsClose = document
       .querySelector("#settingsDialog .sheet-close")
       .getBoundingClientRect();
     return {
-      overRoom: roomTop - close.top,
+      overRoom: room.top + parseFloat(style.paddingTop) - close.top,
+      pastWords: room.left + parseFloat(style.paddingLeft) - close.left,
       besideSettingsCaret: close.left - settingsClose.left,
       overHeading: heading.top - close.bottom,
     };
   });
-  expect(caret).toEqual({ overRoom: 14, besideSettingsCaret: 0, overHeading: 14 });
+}
+
+/**
+ * On a phone, the welcome's caret, opened from the ?, sits over settings' own caret, 14px over the
+ * welcome's room and 14px over its heading.
+ * @param {App} app
+ */
+export async function checkCaretPlace(app) {
+  const { overRoom, besideSettingsCaret, overHeading } = await measureWelcomeCaret(app);
+  expect({ overRoom, besideSettingsCaret, overHeading }).toEqual({
+    overRoom: 14,
+    besideSettingsCaret: 0,
+    overHeading: 14,
+  });
+}
+
+/**
+ * On a tablet, where the welcome keeps to a column in the middle, its caret reaches 12px out past
+ * its words, as a sheet's does, 14px over the welcome's room and 14px over its heading.
+ * @param {App} app
+ */
+export async function checkCaretPlaceOnTablet(app) {
+  const { overRoom, pastWords, overHeading } = await measureWelcomeCaret(app);
+  expect({ overRoom, pastWords, overHeading }).toEqual({
+    overRoom: 14,
+    pastWords: 12,
+    overHeading: 14,
+  });
 }
 
 /**

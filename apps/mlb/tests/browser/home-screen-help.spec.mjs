@@ -7,6 +7,7 @@ import {
 import {
   checkCaretBeforeCode,
   checkCaretPlace,
+  checkCaretPlaceOnTablet,
   checkHelpOpensWelcome,
   checkMenuDots,
   checkNoHelpWithoutTouch,
@@ -80,6 +81,12 @@ test.describe("on an iPad, in the browser", () => {
 
   test("the Notifications note and its ? are the iPhone's", async ({ page }) => {
     await checkHelpOpensWelcome({ page, openApp, openSettings });
+  });
+
+  test("the welcome's caret from the ? reaches out past its words as a sheet's does, 14px over the heading", async ({
+    page,
+  }) => {
+    await checkCaretPlaceOnTablet({ page, openApp, openSettings });
   });
 });
 
