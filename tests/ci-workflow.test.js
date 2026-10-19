@@ -171,6 +171,11 @@ test("burn-in runs only when a pull request has a browser spec to repeat, and ch
   assert.match(scope, /fetch-depth: 0/);
   assert.match(scope, /actions: read/);
   assert.match(scope, /BRANCH: \$\{\{ github\.event\.pull_request\.head\.ref \}\}/);
+  assert.doesNotMatch(
+    scope,
+    /HEAD_SHA/,
+    "an earlier run's burn-in on this same head counts, so the head isn't handed in to skip",
+  );
   const burnIn = readJob("burn-in");
   assert.match(burnIn, /needs: scope/);
   assert.match(
