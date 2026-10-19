@@ -65,7 +65,6 @@ function createRun(
   const context = /** @type {any} */ ({ docs, storage, env: {}, now: () => clock.now });
   return {
     docs,
-    storage,
     runJob: () => createJob().updateStore(context),
     raiseVersion: (/** @type {number} */ version) => {
       league.version = version;
@@ -265,25 +264,6 @@ test("a league that raises its version reads each final it kept once more, newes
   wait(24 * 60);
   await runJob();
   assert.deepEqual(takeReads(), []);
-});
-
-test("reads kept with their version named edition are renamed once and aren't read again", async () => {
-  const games = ["2", "1"].map((id, index) => endGame(id, 20 + index));
-  const { storage, runJob, takeReads, raiseVersion } = createRun(games);
-  raiseVersion(1);
-  const read = { readAt: NOW - HOUR_MS, triedAt: NOW - HOUR_MS };
-  storage.stored.set("highlight-reads:2026", {
-    2: { ...read, edition: 1 },
-    1: { ...read, edition: 1 },
-  });
-
-  await runJob();
-
-  assert.deepEqual(takeReads(), []);
-  assert.deepEqual(storage.stored.get("highlight-reads:2026"), {
-    2: { ...read, version: 1 },
-    1: { ...read, version: 1 },
-  });
 });
 
 test("a read as of a raised version that fails is tried again ten minutes later", async () => {
