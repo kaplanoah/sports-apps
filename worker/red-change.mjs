@@ -1,15 +1,16 @@
 // Says whether a pull request is a red change: one whose bugs no CI browser would show, since none
 // touches, scrolls, layers, and draws as an iPhone does, or that touches what iOS has drawn wrong
-// before. That's a change to the code of the shared JavaScript that moves and draws the page,
-// beyond its comments and formatting and the declarations it moves unchanged among those scripts
-// (worker/red-change-scripts.mjs); a change to its shared stylesheets in what decides how parts
-// layer, stack, scroll, and show, and anything any other stylesheet of a page adds that gives a
-// part a layer of its own, lifts it over others, or makes it scroll (worker/red-change-styles.mjs);
-// and a line a page's other scripts add that draws a part on a layer of its own. A red change
-// merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone who can
-// label a pull request could add the label, so the gate reads who last added it and lets the
-// change through only from the repository's owner, and only when the label came after the pull
-// request's head commit reached GitHub, which the owner hasn't used on the phone otherwise.
+// before. That's any change to the code, not the comments, blank lines, or formatting, of the
+// shared JavaScript that moves and draws the page; a change to its shared stylesheets in what
+// decides how parts layer, stack, scroll, and show, and anything a page's other stylesheets add
+// that gives a part a layer of its own, lifts it over others, or makes it scroll
+// (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a layer
+// of its own; a line a page's markup adds or takes out that loads, runs, or layers its parts; and
+// a diff the gate can't read. A red change merges only once the owner has used it on the beta app
+// and labeled it phone-ok. Anyone who can label a pull request could add the label, so the gate
+// reads who last added it and lets the change through only from the repository's owner, and only
+// when the label came after the pull request's head commit reached GitHub, which the owner hasn't
+// used on the phone otherwise.
 // Usage: git diff --no-renames <base> | node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
 // the last two. The diff ends at the files on disk, as CI's `<base> HEAD` in a clean checkout
@@ -18,10 +19,9 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { readDiff } from "./changed-files.mjs";
+import { transformSync } from "esbuild";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { findRedSharedScripts } from "./red-change-scripts.mjs";
-import { LAYER_PROPERTIES, findStyleReasons } from "./red-change-styles.mjs";
+import { LAYER_PROPERTIES, describeUnreadable, findStyleReasons } from "./red-change-styles.mjs";
 
 export const PHONE_OK_LABEL = "phone-ok";
 
@@ -42,6 +42,8 @@ const RED_FILES = new Set(
     "show-last-drawn.js",
     "day-strip.js",
     "strip-slide.js",
+    "pull-to-refresh.js",
+    "spring-scroll.js",
     "chrome.css",
     "team-sheet.css",
     "game-cards.css",
@@ -97,14 +99,91 @@ const STYLE_KEY = new RegExp(
   `(?:^|[\\s{,])["']?(?:-webkit-|webkit|Webkit)?(${PROPERTY_NAMES}|${CAMEL_PROPERTY_NAMES})(?:-[a-z]+|[A-Z][a-z]+)*["']?\\s*:`,
 );
 
+// A line of a page's markup that loads or runs its files, in their order, or opens a dialog, a
+// popover, or a style of its own, each of which can stack its parts.
+const PAGE_MARKUP_LAYER = /<link\b|<script\b|<dialog\b|\bpopover\b|\bstyle=/i;
+const INLINE_SCRIPT = /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi;
+const DIFF_HEADER = /^diff --git a\/(.+) b\/(.+)$/;
+
 // Tests live outside every page's folder, so they're never red.
 const isPageCode = (path) => /^(?:shared\/page|apps\/[^/]+\/page)\/.+\.(?:css|js)$/.test(path);
 const isPageStylesheet = (path) => isPageCode(path) && path.endsWith(".css");
+const isPageMarkup = (path) => /^apps\/[^/]+\/page\/[^/]+\.html$/.test(path);
 const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
 
-/** @typedef {import("./changed-files.mjs").AddedLine} AddedLine */
-/** @typedef {import("./changed-files.mjs").ChangedFile} ChangedFile */
-/** @typedef {import("./changed-files.mjs").ReadPageFile} ReadPageFile */
+/** @typedef {{ number: number, text: string }} AddedLine */
+/** @typedef {{ kind: "kept" | "added" | "removed", text: string }} HunkLine */
+/**
+ * @typedef {object} ChangedFile
+ * @property {string} path
+ * @property {AddedLine[]} addedLines
+ * @property {HunkLine[][]} hunks
+ * @property {number[]} hunkStarts the line, from 1, each hunk starts at in the new file
+ */
+/** @typedef {(path: string) => string} ReadPageFile a page's file as the change leaves it */
+
+/**
+ * The files a unified diff changes, each with the lines it adds, numbered as the new file has
+ * them, and each of its hunks, with where it starts. A file moved or deleted is listed under each
+ * path it had.
+ * @param {string} diff
+ * @returns {ChangedFile[]}
+ */
+export function readDiff(diff) {
+  /** @type {ChangedFile[]} */
+  const files = [];
+  /** @type {ChangedFile | null} */
+  let current = null;
+  /** @type {HunkLine[] | null} */
+  let hunk = null;
+  let lineNumber = 0;
+  for (const line of diff.split("\n")) {
+    const header = line.match(DIFF_HEADER);
+    if (header) {
+      const [, oldPath, newPath] = header;
+      current = { path: newPath, addedLines: [], hunks: [], hunkStarts: [] };
+      hunk = null;
+      files.push(current);
+      if (oldPath !== newPath)
+        files.push({ path: oldPath, addedLines: [], hunks: [], hunkStarts: [] });
+      continue;
+    }
+    const hunkHeader = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+    if (hunkHeader && current) {
+      lineNumber = Number(hunkHeader[1]);
+      hunk = [];
+      current.hunks.push(hunk);
+      // A hunk that leaves no line in the new file names the line before it.
+      current.hunkStarts.push(hunkHeader[2] === "0" ? lineNumber + 1 : lineNumber);
+      continue;
+    }
+    if (!current || !hunk || line.startsWith("\\")) continue;
+    if (line.startsWith("+")) {
+      current.addedLines.push({ number: lineNumber, text: line.slice(1) });
+      hunk.push({ kind: "added", text: line.slice(1) });
+      lineNumber += 1;
+    } else if (line.startsWith("-")) {
+      hunk.push({ kind: "removed", text: line.slice(1) });
+    } else if (line.startsWith(" ")) {
+      hunk.push({ kind: "kept", text: line.slice(1) });
+      lineNumber += 1;
+    }
+  }
+  return files;
+}
+
+/**
+ * Why the gate can't read a diff, as with a file whose header it can't tell the paths of, or a
+ * diff that names no file at all, or null when it can.
+ * @param {string} diff
+ */
+function findDiffProblem(diff) {
+  const headers = diff.split("\n").filter((line) => line.startsWith("diff --git "));
+  const isUnreadable = headers.some((line) => !DIFF_HEADER.test(line));
+  if (isUnreadable || (diff.trim() && !headers.length))
+    return "The gate can't read the diff, so it may change anything";
+  return null;
+}
 
 /**
  * What a line sets that makes a layer, or null when it sets nothing that does.
@@ -118,6 +197,64 @@ function findLayerSetting(text) {
   }
   return null;
 }
+
+/**
+ * A file as it was before a change, from the file as the change leaves it and the change's hunks,
+ * or null when the hunks don't fit the file.
+ * @param {string} after
+ * @param {ChangedFile} file
+ */
+function readFileBefore(after, { hunks, hunkStarts }) {
+  const afterLines = after.split("\n");
+  /** @type {string[]} */
+  const before = [];
+  let next = 0;
+  for (const [index, hunk] of hunks.entries()) {
+    const start = hunkStarts[index] - 1;
+    before.push(...afterLines.slice(next, start));
+    next = start;
+    for (const { kind, text } of hunk) {
+      if (kind !== "added") before.push(text);
+      if (kind === "removed") continue;
+      if (afterLines[next] !== text) return null;
+      next += 1;
+    }
+  }
+  return [...before, ...afterLines.slice(next)].join("\n");
+}
+
+/**
+ * A script's code with its comments, blank lines, and formatting taken out, as esbuild parses it,
+ * or null when it doesn't parse.
+ * @param {string} script
+ */
+function readScriptCode(script) {
+  try {
+    return transformSync(script, { loader: "js", legalComments: "none", minifyWhitespace: true })
+      .code;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a change to a script changes its code, rather than only its comments, blank lines, or
+ * formatting, which draw nothing. A script that's gone, or that the change's hunks don't fit,
+ * counts as changed.
+ * @param {ChangedFile} file
+ * @param {ReadPageFile} readPageFile
+ */
+function changesScriptCode(file, readPageFile) {
+  const after = readPageFile(file.path);
+  const before = after ? readFileBefore(after, file) : null;
+  if (before === null) return true;
+  const code = readScriptCode(after);
+  return code === null || code !== readScriptCode(before);
+}
+
+/** @param {ChangedFile} file */
+const describeSharedCode = ({ path }) =>
+  `${path} is shared code that moves, layers, or draws the page`;
 
 const CLOSING_BRACKETS = { "{": "}", "[": "]" };
 
@@ -206,6 +343,37 @@ function findPageScriptReasons({ path, addedLines }, readPageFile) {
 }
 
 /**
+ * The inline scripts of a page's markup, as it holds them, which run as the page loads, in its
+ * order.
+ * @param {string} markup
+ */
+const listInlineScripts = (markup) => markup.match(INLINE_SCRIPT) ?? [];
+
+/**
+ * Why a change to a page's markup is red: each line it adds or takes out that loads or runs the
+ * page's files, whose order it decides too, or opens a dialog, a popover, or a style of its own,
+ * and any change to what its inline scripts run.
+ * @param {ChangedFile} file
+ * @param {ReadPageFile} readPageFile
+ */
+function findPageMarkupReasons(file, readPageFile) {
+  const lineReasons = file.hunks
+    .flat()
+    .filter(({ kind, text }) => kind !== "kept" && PAGE_MARKUP_LAYER.test(text))
+    .map(
+      ({ kind, text }) =>
+        `${file.path} ${kind === "added" ? "adds" : "takes out"} a line that loads, runs, or layers the page: ${text.trim()}`,
+    );
+  const after = readPageFile(file.path);
+  const before = readFileBefore(after, file);
+  if (before === null) return [...lineReasons, describeUnreadable(file.path)];
+  const isScriptKept = listInlineScripts(before).join("\n") === listInlineScripts(after).join("\n");
+  return isScriptKept
+    ? lineReasons
+    : [...lineReasons, `${file.path} changes what its inline scripts run`];
+}
+
+/**
  * The file a path names as the change leaves it, or nothing when there's none to read.
  * @param {string} path from the repository's root
  */
@@ -223,24 +391,46 @@ const listPageStylesheets = () =>
     .split("\n")
     .filter(isPageStylesheet);
 
-/** @param {ChangedFile} file */
-const describeSharedCode = ({ path }) =>
-  `${path} is shared code that moves, layers, or draws the page`;
+/**
+ * Why each page stylesheet the change touches is red, by its path, judged with every other page
+ * stylesheet as the change leaves it.
+ * @param {ChangedFile[]} files
+ * @param {ReadPageFile} readPageFile
+ * @param {() => string[]} listStylesheets
+ */
+function findChangedStyleReasons(files, readPageFile, listStylesheets) {
+  const stylesheets = files.filter(({ path }) => isPageStylesheet(path));
+  if (!stylesheets.length) return new Map();
+  const changedPaths = new Set(stylesheets.map(({ path }) => path));
+  const changed = stylesheets.map((file) => {
+    const after = readPageFile(file.path);
+    const before = readFileBefore(after, file);
+    return {
+      path: file.path,
+      isShared: RED_FILES.has(file.path),
+      sides: before === null ? null : { before, after },
+    };
+  });
+  const unchanged = listStylesheets()
+    .filter((path) => !changedPaths.has(path))
+    .map(readPageFile);
+  return findStyleReasons(changed, unchanged);
+}
 
 /**
  * @param {ChangedFile} file
- * @param {object} verdicts
- * @param {Set<ChangedFile>} verdicts.redScripts the shared scripts that move and draw the page
- *   whose change is red
- * @param {Map<ChangedFile, string[]>} verdicts.styleReasons why each page stylesheet is red
+ * @param {Map<string, string[]>} styleReasons why each page stylesheet is red, by its path
  * @param {ReadPageFile} readPageFile
  * @returns {string[]}
  */
-function findFileReasons(file, { redScripts, styleReasons }, readPageFile) {
-  if (redScripts.has(file)) return [describeSharedCode(file)];
-  if (isPageStylesheet(file.path)) return styleReasons.get(file) ?? [];
-  if (RED_FILES.has(file.path) || !isPageCode(file.path)) return [];
-  return findPageScriptReasons(file, readPageFile);
+function findFileReasons(file, styleReasons, readPageFile) {
+  const { path } = file;
+  if (RED_FILES.has(path) && !file.hunks.length) return [describeSharedCode(file)];
+  if (isPageStylesheet(path)) return styleReasons.get(path) ?? [];
+  if (RED_FILES.has(path))
+    return changesScriptCode(file, readPageFile) ? [describeSharedCode(file)] : [];
+  if (isPageMarkup(path)) return findPageMarkupReasons(file, readPageFile);
+  return isPageCode(path) ? findPageScriptReasons(file, readPageFile) : [];
 }
 
 /**
@@ -254,17 +444,8 @@ export function findRedReasons(
   readPageFile = readChangedFile,
   listStylesheets = listPageStylesheets,
 ) {
-  const verdicts = {
-    redScripts: findRedSharedScripts(
-      files.filter(({ path }) => RED_FILES.has(path) && path.endsWith(".js")),
-      readPageFile,
-    ),
-    styleReasons: findStyleReasons(
-      files.filter(({ path }) => isPageStylesheet(path)),
-      { isShared: (path) => RED_FILES.has(path), readPageFile, listStylesheets },
-    ),
-  };
-  return files.flatMap((file) => findFileReasons(file, verdicts, readPageFile));
+  const styleReasons = findChangedStyleReasons(files, readPageFile, listStylesheets);
+  return files.flatMap((file) => findFileReasons(file, styleReasons, readPageFile));
 }
 
 /**
@@ -364,7 +545,8 @@ export function decideGate(
   diff,
   { labels, labeling = { labeler: null, isAfterLastPush: false }, owner = "" },
 ) {
-  const reasons = findRedReasons(readDiff(diff));
+  const diffProblem = findDiffProblem(diff);
+  const reasons = [...(diffProblem ? [diffProblem] : []), ...findRedReasons(readDiff(diff))];
   if (!reasons.length) return { isHeld: false, message: "Not a red change." };
   const listed = reasons.map((reason) => `- ${reason}`).join("\n");
   if (!labels.includes(PHONE_OK_LABEL))

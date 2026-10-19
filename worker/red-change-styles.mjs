@@ -1,12 +1,7 @@
 // What a change to a page's stylesheets does to how iOS layers, stacks, scrolls, and shows its
-// parts, for worker/red-change.mjs. Each stylesheet is read with esbuild before and after the
-// change, and a declaration's verdict can hang on what every page stylesheet sets for the same
-// part, like a transition in one rule that moves the transform another sets.
+// parts, for worker/red-change.mjs, from each stylesheet as esbuild reads it, without its comments
+// and formatting, before and after the change.
 import { transformSync } from "esbuild";
-import { isSharedOrderKept, readBothSides, subtractEach } from "./changed-files.mjs";
-
-/** @typedef {import("./changed-files.mjs").ChangedFile} ChangedFile */
-/** @typedef {import("./changed-files.mjs").ReadPageFile} ReadPageFile */
 
 export const LAYER_PROPERTIES = [
   "transform",
@@ -27,10 +22,11 @@ export const LAYER_PROPERTIES = [
   "content-visibility",
 ];
 
-// Beside the layers, what in the shared stylesheets decides how iOS stacks, scrolls, and shows
-// the page's parts: where a part sits over others, what scrolls and takes a touch, whether a part
-// draws at all, and a container's containment, which stacks and holds what it contains. Their
-// fonts, colors, spacing, and sizes CI checks as an iPhone shows them.
+// Beside the layers, what decides how iOS stacks, scrolls, and shows the page's parts: where a
+// part sits over others, what scrolls and takes a touch, whether a part draws at all, and a
+// container, whose containment stacks and holds what it contains. Each names its longhands and
+// -webkit- copies too, as overflow-x and -webkit-overflow-scrolling are overflow's. Their fonts,
+// colors, spacing, and sizes CI checks as an iPhone shows them.
 const STACK_PROPERTIES = [
   ...LAYER_PROPERTIES,
   "position",
@@ -46,54 +42,43 @@ const STACK_PROPERTIES = [
   "isolation",
   "mix-blend-mode",
   "container",
+  "offset",
+  "view-transition-name",
+  "box-reflect",
 ];
 
-const OVERFLOW_AXES = /^overflow(?:-x|-y|-inline|-block)?$/;
-const HIDING_DISPLAY = /^(?:none|contents)$/i;
-const IN_FLOW_POSITION = /^(?:relative|static)$/i;
-const CSS_WIDE_KEYWORD = /^(?:inherit|initial|unset|revert|revert-layer)$/i;
+// What a page's other stylesheets may set without the phone, since none of them can give a part
+// a layer of its own, lift it over others, or make it scroll.
+const PAGE_QUIET_PROPERTIES = ["opacity", "visibility", "display"];
+const OUT_OF_FLOW_POSITION = /^(?:absolute|fixed|sticky|-webkit-sticky)$/i;
+const SCROLLING_OVERFLOW = /^overflow(?:-x|-y|-inline|-block|-scrolling)?$/;
 
+// The properties a transition can ease that only repaint a part, never layer or move it.
+const PAINT_ONLY_PROPERTY =
+  /^(?:color|background-color|border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?-color|outline-color|box-shadow|text-decoration-color|fill|stroke|caret-color)$/;
 // What a transition's list holds beside the property it eases: its times, its easing, and how it
 // treats a property that can't ease.
 const TRANSITION_TIMING =
   /^(?:-?[\d.]+m?s|ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end|normal|allow-discrete)$|\(/i;
-
-// The transform functions, and the most values each transform property holds, that stay in two
-// dimensions, which WebKit paints with the rest of the page unless something moves them.
-const FLAT_TRANSFORM_FUNCTION = /^(?:translate[xy]?|rotate|scale[xy]?)\(/i;
-const FLAT_TRANSFORM_VALUES = new Map([
-  ["translate", 2],
-  ["rotate", 1],
-  ["scale", 2],
-]);
 
 /** @typedef {{ property: string, value: string }} Declaration */
 /**
  * @typedef {object} StyleRule
  * @property {string[]} reaches each selector the rule reaches, after the at-rules and selectors
  *   around it
- * @property {string[][]} subjects the simple selectors of the part each selector styles, none
- *   where they can't be told
  * @property {Declaration[]} declarations
- * @property {boolean} isKeyframe whether it's a step of an animation's keyframes
  */
 /** @typedef {{ statement: string }} StyleStatement a top-level statement, like `@layer a,b` */
 /** @typedef {StyleRule | StyleStatement} StyleItem */
 /**
- * @typedef {object} IndexedRule what a rule of a page stylesheet does to the parts it styles
- * @property {string[][]} subjects
- * @property {boolean} isMoving whether it animates, eases, or names a will-change
- * @property {boolean} isStacking whether it sets a z-index or takes a part out of the flow
- * @property {boolean} hidesDisplay whether its display hides a part or its box
+ * @typedef {object} ChangedStylesheet
+ * @property {string} path
+ * @property {boolean} isShared whether it's one of the shared stylesheets that move and draw the
+ *   page
+ * @property {{ before: string, after: string } | null} sides the stylesheet before the change and
+ *   after it, or null when the change can't be fitted to it
  */
-/**
- * @typedef {object} StyleIndex what every page stylesheet sets, before the change and after it
- * @property {IndexedRule[]} rules
- * @property {boolean} isComplete whether every page stylesheet could be read, without which any
- *   part might be set anywhere
- * @property {Set<string>} readNames each custom property a declaration that stacks a part reads,
- *   itself or through another custom property
- */
+/** @typedef {{ text: string, isWatched: boolean }} StyleEntry */
 
 /**
  * The indexes of each of `marks` in CSS that lie outside its strings, parentheses, and brackets.
@@ -130,41 +115,6 @@ function splitTopLevel(text, separator) {
     .filter(Boolean);
 }
 
-/**
- * The simple selectors of the part a selector styles: its last compound, without its attribute
- * selectors, pseudo-classes, and pseudo-elements, with whether it's nested on its parent's.
- * @param {string} selector
- */
-function readSubject(selector) {
-  const last = selector.slice((findTopLevelMarks(selector, " >+~").at(-1) ?? -1) + 1);
-  let compound = last.replace(/\[[^\]]*\]/g, "");
-  for (let previous = ""; previous !== compound;) {
-    previous = compound;
-    compound = compound.replace(/::?[\w-]+\([^()]*\)/g, "");
-  }
-  compound = compound.replace(/::?[\w-]+/g, "");
-  return { simple: compound.match(/[.#]?-?[_a-zA-Z][\w-]*/g) ?? [], isNested: last.includes("&") };
-}
-
-/**
- * The simple selectors of the part each selector of the innermost rule in `context` styles, with
- * a nested selector's parts taken from its parent's.
- * @param {string[]} context the at-rules and selectors around the rule, from the outside in
- */
-function listSubjects(context) {
-  /** @type {string[][] | null} */
-  let subjects = null;
-  for (const prelude of context.filter((rule) => !rule.startsWith("@"))) {
-    const parents = subjects;
-    subjects = splitTopLevel(prelude, ",").flatMap((selector) => {
-      const { simple, isNested } = readSubject(selector);
-      if (!isNested || !parents) return [simple];
-      return parents.map((parent) => (parent.length ? [...parent, ...simple] : []));
-    });
-  }
-  return subjects ?? [[]];
-}
-
 /** @param {string} text */
 function readDeclaration(text) {
   const [property, ...value] = text.split(":");
@@ -184,18 +134,13 @@ function createStyleRule(context, declarations) {
   const prelude = context.at(-1) ?? "";
   const around = context.slice(0, -1);
   const selectors = prelude.startsWith("@") ? [prelude] : splitTopLevel(prelude, ",");
-  return {
-    reaches: selectors.map((selector) => [...around, selector].join(" ")),
-    subjects: listSubjects(context),
-    declarations,
-    isKeyframe: around.some((rule) => /^@(?:-webkit-)?keyframes\b/i.test(rule)),
-  };
+  return { reaches: selectors.map((selector) => [...around, selector].join(" ")), declarations };
 }
 
 /**
- * A stylesheet's top-level statements and rules, as esbuild reads it without its comments and
- * formatting, in its order but with each rule placed where its block closes, so a nested rule comes
- * before the one around it, or null when it can't be read, as with a brace that closes nothing.
+ * A stylesheet's top-level statements and rules, as esbuild reads it, in its order but with each
+ * rule placed where its block closes, so a nested rule comes before the one around it, or null
+ * when it can't be read, as with a brace that closes nothing.
  * @param {string} sheet
  * @returns {StyleItem[] | null}
  */
@@ -247,8 +192,8 @@ const isStyleRule = (item) => !("statement" in item);
 const readBareName = (property) => property.replace(/^-webkit-/, "");
 
 /**
- * Whether a property is one of `families` or one of their longhands, as overflow-x is overflow's,
- * with or without the -webkit- prefix.
+ * Whether a property is one of `families` or one of their longhands, with or without the -webkit-
+ * prefix.
  * @param {string} property
  * @param {string[]} families
  */
@@ -256,9 +201,6 @@ function isInFamily(property, families) {
   const name = readBareName(property);
   return families.some((family) => name === family || name.startsWith(`${family}-`));
 }
-
-/** @param {Declaration} declaration */
-const readValue = ({ value }) => value.replace(/\s*!important$/i, "");
 
 /**
  * Whether a declaration's value reads a custom property, which can hold any value at all.
@@ -278,85 +220,52 @@ const readTransitionedProperty = (item) =>
   splitTopLevel(item, " ").find((part) => !TRANSITION_TIMING.test(part)) ?? "all";
 
 /**
- * The properties a rule's transitions ease, which are all of them when it times a transition
- * without naming what it eases.
- * @param {Declaration[]} declarations
+ * Whether a declaration is a transition, or the list of what transitions ease, that names only
+ * properties that repaint a part.
+ * @param {Declaration} declaration
  */
-function listTransitioned(declarations) {
-  const named = declarations.flatMap(({ property, value }) => {
-    const name = readBareName(property);
-    if (name === "transition") return splitTopLevel(value, ",").map(readTransitionedProperty);
-    return name === "transition-property" ? splitTopLevel(value, ",") : [];
-  });
-  const isTimed = declarations.some(({ property }) => isInFamily(property, ["transition"]));
-  return named.length || !isTimed ? named : ["all"];
+function isPaintOnlyTransition(declaration) {
+  const name = readBareName(declaration.property);
+  if (!["transition", "transition-property"].includes(name) || hasVariable(declaration))
+    return false;
+  const items = splitTopLevel(declaration.value, ",");
+  const eased = name === "transition" ? items.map(readTransitionedProperty) : items;
+  return eased.every((property) => PAINT_ONLY_PROPERTY.test(property.toLowerCase()));
 }
 
 /**
- * Whether a transition that eases `name` can move, fade, or show a part: all of them, one that
- * stacks a part, or a keyword that takes the transition from somewhere else.
- * @param {string} name
+ * Whether a declaration in a shared stylesheet decides how parts layer, stack, scroll, or show,
+ * whatever its value, but for a transition of colors and shadows alone.
+ * @param {Declaration} declaration
  */
-const isMovingName = (name) =>
-  /^all$/i.test(name) ||
-  CSS_WIDE_KEYWORD.test(name) ||
-  isInFamily(name.toLowerCase(), STACK_PROPERTIES);
+const isStackDeclaration = (declaration) =>
+  isInFamily(declaration.property, STACK_PROPERTIES) && !isPaintOnlyTransition(declaration);
 
 /**
- * Whether a rule's transitions move, fade, or show a part, rather than only recolor it.
- * @param {Declaration[]} declarations
+ * Whether a declaration in any other stylesheet of a page can give a part a layer of its own, lift
+ * it over others, or make it scroll: a stack property but opacity, visibility, and display, with a
+ * position only out of the flow and an overflow only when it isn't visible, unless it reads a
+ * custom property.
+ * @param {Declaration} declaration
  */
-const isTransitionMoving = (declarations) =>
-  declarations.some(
-    (declaration) => isInFamily(declaration.property, ["transition"]) && hasVariable(declaration),
-  ) || listTransitioned(declarations).some(isMovingName);
+function isPageLayerDeclaration(declaration) {
+  const name = readBareName(declaration.property);
+  if (!isStackDeclaration(declaration) || isInFamily(name, PAGE_QUIET_PROPERTIES)) return false;
+  if (hasVariable(declaration)) return true;
+  const value = declaration.value.replace(/\s*!important$/i, "");
+  if (name === "position") return OUT_OF_FLOW_POSITION.test(value);
+  if (name.startsWith("overflow"))
+    return SCROLLING_OVERFLOW.test(name) && !/^visible$/i.test(value);
+  return true;
+}
 
 /**
- * Whether a rule moves what it reaches: a step of keyframes, an animation, a will-change, or a
- * transition that moves.
- * @param {StyleRule} rule
- */
-const isMovingRule = ({ declarations, isKeyframe }) =>
-  isKeyframe ||
-  declarations.some(({ property }) => isInFamily(property, ["animation", "will-change"])) ||
-  isTransitionMoving(declarations);
-
-/**
- * Whether a rule hides a part with its display, or might.
- * @param {StyleRule} rule
- */
-const isHidingRule = ({ declarations }) =>
-  declarations.some(
-    (declaration) =>
-      readBareName(declaration.property) === "display" &&
-      (hasVariable(declaration) || HIDING_DISPLAY.test(readValue(declaration))),
-  );
-
-/**
- * Whether a rule stacks a part: a z-index, or a position that takes it out of the flow, or might.
- * @param {StyleRule} rule
- */
-const isStackingRule = ({ declarations }) =>
-  declarations.some((declaration) => {
-    const name = readBareName(declaration.property);
-    if (name === "z-index") return true;
-    return (
-      name === "position" &&
-      (hasVariable(declaration) || !IN_FLOW_POSITION.test(readValue(declaration)))
-    );
-  });
-
-/**
- * Each custom property the declarations that stack a part read, and each one those read in turn.
+ * Each custom property the stack declarations of `rules` read, and each one those read in turn.
  * @param {StyleRule[]} rules
  */
 function listReadNames(rules) {
   const declarations = rules.flatMap((rule) => rule.declarations);
-  const names = new Set(
-    declarations
-      .filter(({ property }) => isInFamily(property, STACK_PROPERTIES))
-      .flatMap(listVariables),
-  );
+  const names = new Set(declarations.filter(isStackDeclaration).flatMap(listVariables));
   for (let size = -1; size !== names.size;) {
     size = names.size;
     for (const declaration of declarations)
@@ -367,328 +276,130 @@ function listReadNames(rules) {
 }
 
 /**
- * What every page stylesheet sets for each part, from the stylesheets as `sheets` has them, with
- * null for one that can't be read.
- * @param {(StyleItem[] | null)[]} sheets
- * @returns {StyleIndex}
- */
-function createStyleIndex(sheets) {
-  const rules = sheets.flatMap((sheet) => sheet ?? []).filter(isStyleRule);
-  return {
-    rules: rules
-      .filter((rule) => !rule.isKeyframe)
-      .map((rule) => ({
-        subjects: rule.subjects,
-        isMoving: isMovingRule(rule),
-        isStacking: isStackingRule(rule),
-        hidesDisplay: isHidingRule(rule),
-      })),
-    readNames: listReadNames(rules),
-    isComplete: !sheets.includes(null),
-  };
-}
-
-/**
- * Whether the simple selectors of two parts could be one part's: one holds all of the other's.
- * @param {string[]} first
- * @param {string[]} second
- */
-const isSameSubject = (first, second) =>
-  first.every((simple) => second.includes(simple)) ||
-  second.every((simple) => first.includes(simple));
-
-/**
- * Whether any page stylesheet's rule for the part `rule` styles is `flagged`, which an unknown
- * part, or any part while a stylesheet can't be read, always is.
- * @param {StyleIndex} index
- * @param {StyleRule} rule
- * @param {"isMoving" | "isStacking" | "hidesDisplay"} flagged
- */
-const isSetForSubject = (index, rule, flagged) =>
-  !index.isComplete ||
-  rule.subjects.some(
-    (subject) =>
-      !subject.length ||
-      index.rules.some(
-        (other) =>
-          other[flagged] &&
-          other.subjects.some((part) => part.length && isSameSubject(subject, part)),
-      ),
-  );
-
-/**
- * Whether a transform, translate, rotate, or scale declaration stays in two dimensions.
- * @param {Declaration} declaration
- */
-function isFlatTransform(declaration) {
-  if (hasVariable(declaration)) return false;
-  const name = readBareName(declaration.property);
-  const value = readValue(declaration);
-  const parts = splitTopLevel(value, " ");
-  if (name === "transform")
-    return (
-      value.toLowerCase() === "none" || parts.every((part) => FLAT_TRANSFORM_FUNCTION.test(part))
-    );
-  const most = FLAT_TRANSFORM_VALUES.get(name);
-  return most !== undefined && parts.length <= most;
-}
-
-/**
- * Whether a declaration gives a part a layer of its own: any of the layer properties, but a
- * transition only when it moves something, and a transform in two dimensions only where its
- * own rule, or any page stylesheet's rule for the same part, moves it, since WebKit composites
- * only a transform in three dimensions or on the move.
- * @param {Declaration} declaration
- * @param {StyleRule} rule
- * @param {StyleIndex} index
- */
-function isLayerDeclaration(declaration, rule, index) {
-  const name = readBareName(declaration.property);
-  if (isInFamily(name, ["transition"])) return isTransitionMoving(rule.declarations);
-  if (name === "transform" || FLAT_TRANSFORM_VALUES.has(name))
-    return (
-      !isFlatTransform(declaration) ||
-      isMovingRule(rule) ||
-      isSetForSubject(index, rule, "isMoving")
-    );
-  return isInFamily(name, LAYER_PROPERTIES);
-}
-
-/**
- * Whether a declaration in a shared stylesheet decides how iOS layers, stacks, scrolls, or shows a
- * part: any of the stack properties, and any that reads a custom property, but a display only
- * where it or a rule for the same part hides it, and a relative or static position only where a
- * rule for the same part sets a z-index or takes it out of the flow, which it stacks or undoes.
- * @param {Declaration} declaration
- * @param {StyleRule} rule
- * @param {StyleIndex} index
- */
-function isStackDeclaration(declaration, rule, index) {
-  if (!isInFamily(declaration.property, STACK_PROPERTIES)) return false;
-  if (hasVariable(declaration)) return true;
-  const name = readBareName(declaration.property);
-  const value = readValue(declaration);
-  if (name === "display")
-    return HIDING_DISPLAY.test(value) || isSetForSubject(index, rule, "hidesDisplay");
-  if (name === "position")
-    return !IN_FLOW_POSITION.test(value) || isSetForSubject(index, rule, "isStacking");
-  return !isInFamily(name, LAYER_PROPERTIES) || isLayerDeclaration(declaration, rule, index);
-}
-
-/**
- * Whether a property in any other stylesheet of a page can give a part a layer of its own, lift
- * it over others, or make it scroll.
- * @param {string} property
- */
-const isPageLayerProperty = (property) => {
-  const name = readBareName(property);
-  return (
-    ["position", "z-index", "overflow-scrolling"].includes(name) ||
-    OVERFLOW_AXES.test(name) ||
-    isInFamily(name, LAYER_PROPERTIES)
-  );
-};
-
-/**
- * Whether a declaration in any other stylesheet of a page gives a part a layer of its own, lifts
- * it over others, or makes it scroll: a fixed, sticky, or absolute position, a z-index, an
- * overflow that isn't visible, touch scrolling, or one that reads a custom property.
- * @param {Declaration} declaration
- * @param {StyleRule} rule
- * @param {StyleIndex} index
- */
-function isPageLayerDeclaration(declaration, rule, index) {
-  if (!isPageLayerProperty(declaration.property)) return false;
-  if (hasVariable(declaration)) return true;
-  const name = readBareName(declaration.property);
-  const value = readValue(declaration);
-  if (name === "position") return /^(?:fixed|sticky|-webkit-sticky|absolute)$/i.test(value);
-  if (OVERFLOW_AXES.test(name)) return !/^visible$/i.test(value);
-  return (
-    name === "z-index" ||
-    name === "overflow-scrolling" ||
-    isLayerDeclaration(declaration, rule, index)
-  );
-}
-
-/**
  * @param {string} reach
  * @param {Declaration} declaration
  */
 const describeDeclaration = (reach, { property, value }) => `${reach} { ${property}: ${value} }`;
 
 /**
- * A shared stylesheet's top-level statements and the declarations that decide how parts layer,
- * stack, scroll, or show, with the custom properties those read, in the order readStyleSheet
- * reads them, under each selector they reach, as `@media (min-width:780px) .tabs { position: sticky }`.
+ * Each top-level statement of a stylesheet, and each of its declarations that `isKept` keeps,
+ * under each selector it reaches, as `@media (min-width:780px) .tabs { position: sticky }`, in the
+ * order readStyleSheet reads them, with whether it's a statement or a watched custom property,
+ * which any change to makes red.
  * @param {StyleItem[]} items
- * @param {StyleIndex} index
+ * @param {(declaration: Declaration) => boolean} isKept
+ * @param {(property: string) => boolean} isWatched
+ * @returns {StyleEntry[]}
  */
-const listStackEntries = (items, index) =>
+const listEntries = (items, isKept, isWatched) =>
   items.flatMap((item) => {
-    if (!isStyleRule(item)) return [item.statement];
+    if (!isStyleRule(item)) return [{ text: item.statement, isWatched: true }];
     const kept = item.declarations.filter(
-      (declaration) =>
-        isStackDeclaration(declaration, item, index) || index.readNames.has(declaration.property),
+      (declaration) => isKept(declaration) || isWatched(declaration.property),
     );
     return item.reaches.flatMap((reach) =>
-      kept.map((declaration) => describeDeclaration(reach, declaration)),
+      kept.map((declaration) => ({
+        text: describeDeclaration(reach, declaration),
+        isWatched: isWatched(declaration.property),
+      })),
     );
   });
 
 /**
- * @typedef {object} PageEntry
- * @property {string} text
- * @property {boolean} makesLayer whether adding it gives a part a layer, a stack, or a scroll
- * @property {boolean} isWatched whether any change to it is red: a top-level statement, or a
- *   custom property a declaration that stacks a part reads
- * @property {string} property the property it sets, or nothing for a statement
- * @property {string[][]} subjects
+ * The texts of `entries` that `taken` doesn't account for, each of `taken` taking one copy away.
+ * @param {StyleEntry[]} entries
+ * @param {StyleEntry[]} taken
  */
-
-/**
- * Any other page stylesheet's top-level statements, its declarations of the properties that can
- * give a part a layer, a stack, or a scroll, whatever their values, and the custom properties
- * those read, in the order readStyleSheet reads them.
- * @param {StyleItem[]} items
- * @param {StyleIndex} index
- * @returns {PageEntry[]}
- */
-const listPageEntries = (items, index) =>
-  items.flatMap((item) => {
-    if (!isStyleRule(item))
-      return [
-        { text: item.statement, makesLayer: true, isWatched: true, property: "", subjects: [] },
-      ];
-    return item.reaches.flatMap((reach) =>
-      item.declarations
-        .filter(({ property }) => isPageLayerProperty(property) || index.readNames.has(property))
-        .map((declaration) => {
-          const isWatched = index.readNames.has(declaration.property);
-          return {
-            text: describeDeclaration(reach, declaration),
-            makesLayer: isWatched || isPageLayerDeclaration(declaration, item, index),
-            isWatched,
-            property: readBareName(declaration.property),
-            subjects: item.subjects,
-          };
-        }),
-    );
+function subtractEach(entries, taken) {
+  const counts = new Map();
+  for (const { text } of taken) counts.set(text, (counts.get(text) ?? 0) + 1);
+  return entries.filter(({ text }) => {
+    const count = counts.get(text) ?? 0;
+    counts.set(text, count - 1);
+    return count <= 0;
   });
+}
 
 /**
- * Whether two properties set the same thing, as a property and its longhand do.
- * @param {string} first
- * @param {string} second
+ * Why a changed file the gate can't read before the change and after it is red.
+ * @param {string} path
  */
-const isSameProperty = (first, second) =>
-  first === second || first.startsWith(`${second}-`) || second.startsWith(`${first}-`);
-
-/** @param {string} path */
-const describeUnreadable = (path) =>
+export const describeUnreadable = (path) =>
   `${path} changes in a way the gate can't read, so it may change anything`;
 
 /**
- * Why a change to a shared stylesheet is red: each statement, and each declaration that decides
- * how parts layer, stack, scroll, or show, that a selector gains, loses, or reads in another
- * order. Only a change that leaves that sequence as it was isn't red, like a selector renamed that
- * sets none of them, or a selector list split into rules in its order, with nothing that counts
- * between them.
+ * Why a change to a shared stylesheet that moves and draws the page is red: each statement, each
+ * declaration that decides how parts layer, stack, scroll, or show, and each custom property one
+ * of those reads, that a selector gains, loses, or holds in another order. A selector renamed, or a
+ * rule split or merged, that sets none of them leaves that sequence as it was, and so does a
+ * selector list split into a rule for each selector in its order, so neither is red.
  * @param {string} path
- * @param {{ before: StyleItem[], after: StyleItem[] } | null} sides
- * @param {StyleIndex} index
+ * @param {{ before: StyleItem[], after: StyleItem[] }} sheets
+ * @param {(property: string) => boolean} isWatched
  */
-function findSharedStyleReasons(path, sides, index) {
-  if (!sides) return [describeUnreadable(path)];
-  const before = listStackEntries(sides.before, index);
-  const after = listStackEntries(sides.after, index);
+function findSharedStyleReasons(path, sheets, isWatched) {
+  const before = listEntries(sheets.before, isStackDeclaration, isWatched);
+  const after = listEntries(sheets.after, isStackDeclaration, isWatched);
   const changes = `${path} changes how parts layer, stack, scroll, or show:`;
   const reasons = [
-    ...subtractEach(after, before).map((entry) => `${changes} adds ${entry}`),
-    ...subtractEach(before, after).map((entry) => `${changes} drops ${entry}`),
+    ...subtractEach(after, before).map(({ text }) => `${changes} adds ${text}`),
+    ...subtractEach(before, after).map(({ text }) => `${changes} drops ${text}`),
   ];
-  if (reasons.length || isSharedOrderKept(before, after)) return reasons;
-  return [`${changes} reorders ${after.find((entry, at) => entry !== before[at])}`];
+  const reordered = after.find((entry, at) => entry.text !== before[at]?.text);
+  if (reasons.length || !reordered) return reasons;
+  return [`${changes} reorders ${reordered.text}`];
 }
 
 /**
- * Why a change to any other stylesheet of a page is red: an entry it adds that gives a part a
- * layer, a stack, or a scroll; one it takes out that's watched, or that sets a property an entry
- * it leaves for the same part, or a part that can't be told, also sets, which it may have
- * overridden; and entries it keeps but reads in another order.
+ * Why a change to any other stylesheet of a page is red: each declaration it adds that gives a
+ * part a layer of its own, lifts it over others, or makes it scroll, and each top-level statement
+ * or watched custom property it adds, takes out, or changes.
  * @param {string} path
- * @param {{ before: StyleItem[], after: StyleItem[] } | null} sides
- * @param {StyleIndex} index
+ * @param {{ before: StyleItem[], after: StyleItem[] }} sheets
+ * @param {(property: string) => boolean} isWatched
  */
-function findPageStyleReasons(path, sides, index) {
-  if (!sides) return [describeUnreadable(path)];
-  const before = listPageEntries(sides.before, index);
-  const after = listPageEntries(sides.after, index);
-  /** @param {PageEntry} entry */
-  const readText = (entry) => entry.text;
-  const layersLeft = after.filter((entry) => entry.makesLayer);
-  /** @param {PageEntry} entry */
-  const isOverride = (entry) =>
-    layersLeft.some(
-      (layer) =>
-        isSameProperty(entry.property, layer.property) &&
-        entry.subjects.some((subject) =>
-          layer.subjects.some(
-            (part) => !subject.length || !part.length || isSameSubject(subject, part),
-          ),
-        ),
-    );
-  const reasons = [
-    ...subtractEach(after, before, readText)
-      .filter((entry) => entry.makesLayer)
-      .map(({ text }) => `${path} adds a layer, a stack, or a scroll: ${text}`),
-    ...subtractEach(before, after, readText)
-      .filter((entry) => entry.isWatched || isOverride(entry))
+function findPageStyleReasons(path, sheets, isWatched) {
+  const before = listEntries(sheets.before, isPageLayerDeclaration, isWatched);
+  const after = listEntries(sheets.after, isPageLayerDeclaration, isWatched);
+  return [
+    ...subtractEach(after, before).map(
+      ({ text }) => `${path} adds a layer, a stack, or a scroll: ${text}`,
+    ),
+    ...subtractEach(before, after)
+      .filter((entry) => entry.isWatched)
       .map(({ text }) => `${path} drops what decides a layer, a stack, or a scroll: ${text}`),
   ];
-  if (isSharedOrderKept(before, after, readText)) return reasons;
-  return [...reasons, `${path} reorders what decides a layer, a stack, or a scroll`];
 }
 
 /**
- * A changed stylesheet before the change and after it, or null when either can't be read.
- * @param {ChangedFile} file
- * @param {ReadPageFile} readPageFile
+ * Why each changed stylesheet of a page is red, with the custom properties that every page
+ * stylesheet's stack declarations read watched, before the change and after it, or every one of
+ * them when a stylesheet can't be read.
+ * @param {ChangedStylesheet[]} changed
+ * @param {string[]} unchanged every other stylesheet of a page
+ * @returns {Map<string, string[]>} the reasons, by each changed stylesheet's path
  */
-function readStyleSides(file, readPageFile) {
-  const sides = readBothSides(file, readPageFile);
-  const before = sides && readStyleSheet(sides.before);
-  const after = sides && readStyleSheet(sides.after);
-  return before && after ? { before, after } : null;
-}
-
-/**
- * Why each changed stylesheet of a page is red, judged against what every page stylesheet sets:
- * those the change leaves as they are, and each changed one before the change and after it.
- * @param {ChangedFile[]} stylesheets the page stylesheets the change touches
- * @param {object} options
- * @param {(path: string) => boolean} options.isShared whether a stylesheet moves and draws the page
- * @param {ReadPageFile} options.readPageFile
- * @param {() => string[]} options.listStylesheets every page stylesheet
- * @returns {Map<ChangedFile, string[]>}
- */
-export function findStyleReasons(stylesheets, { isShared, readPageFile, listStylesheets }) {
-  if (!stylesheets.length) return new Map();
-  const sides = new Map(stylesheets.map((file) => [file, readStyleSides(file, readPageFile)]));
-  const changedPaths = new Set(stylesheets.map(({ path }) => path));
-  const unchanged = listStylesheets()
-    .filter((path) => !changedPaths.has(path))
-    .map((path) => readStyleSheet(readPageFile(path)));
-  const changed = [...sides.values()].flatMap((side) =>
-    side ? [side.before, side.after] : [null],
-  );
-  const index = createStyleIndex([...unchanged, ...changed]);
+export function findStyleReasons(changed, unchanged) {
+  const read = changed.map(({ path, isShared, sides }) => {
+    const before = sides && readStyleSheet(sides.before);
+    const after = sides && readStyleSheet(sides.after);
+    return { path, isShared, sheets: before && after ? { before, after } : null };
+  });
+  const sheets = [
+    ...unchanged.map(readStyleSheet),
+    ...read.flatMap(({ sheets: both }) => (both ? [both.before, both.after] : [null])),
+  ];
+  const readNames = sheets.includes(null)
+    ? null
+    : listReadNames(sheets.flatMap((items) => items ?? []).filter(isStyleRule));
+  /** @param {string} property */
+  const isWatched = (property) =>
+    property.startsWith("--") && (readNames === null || readNames.has(property));
   return new Map(
-    stylesheets.map((file) => {
-      if (!isShared(file.path))
-        return [file, findPageStyleReasons(file.path, sides.get(file), index)];
-      const side = file.hunks.length ? sides.get(file) : null;
-      return [file, findSharedStyleReasons(file.path, side, index)];
+    read.map(({ path, isShared, sheets: both }) => {
+      if (!both) return [path, [describeUnreadable(path)]];
+      const findReasons = isShared ? findSharedStyleReasons : findPageStyleReasons;
+      return [path, findReasons(path, both, isWatched)];
     }),
   );
 }

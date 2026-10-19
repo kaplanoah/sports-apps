@@ -766,40 +766,37 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
-  but not to its comments, blank lines, or formatting, which draw nothing,
-  nor a declaration it moves unchanged to another of those scripts, with the imports and exports that follow it,
-  when the declaration runs nothing as it's declared and reads no name the top level of either script binds,
-  though its statements in another order count, but for function declarations, which hoist,
-  and so does any other change to its imports and exports, their names, sources, and order;
+  `show-last-drawn.js`, `day-strip.js`, `strip-slide.js`, `pull-to-refresh.js`, and `spring-scroll.js` in `shared/page/`),
+  but not to its comments, blank lines, or formatting, which draw nothing;
   a change to the sequence of its shared stylesheets' (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`) top-level statements,
   like `@layer` and `@import`, and declarations, under each selector and its at-rules,
   of a property that decides how parts layer, stack, scroll,
-  take a touch, or show (any below, any `position`, `overflow`,
+  take a touch, or show, whatever its value (any below, any `position`, `overflow`,
   `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
-  `opacity`, `visibility`, `display`, `isolation`, `mix-blend-mode`, or `container`), or of a custom property one of those reads,
-  where a `relative` or `static` `position` counts only where a rule in any page stylesheet for the same part sets a `z-index` or takes it out of the flow,
-  and a `display` only where it, or a rule for the same part, is `none` or `contents`,
-  but not in their fonts, colors, spacing, or sizes, which CI checks;
+  `opacity`, `visibility`, `display`, `isolation`, `mix-blend-mode`, `container`, `offset`,
+  `view-transition-name`, or `-webkit-box-reflect`),
+  but not in their fonts, colors, spacing, or sizes, which CI checks,
+  so a rule renamed, split, or merged that sets none of those isn't red;
   what any other stylesheet of a page adds that gives a part a layer of its own (`transform`,
   `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`),
-  or lifts it over others or makes it scroll (an absolute `position`, a `z-index`, an `overflow` but `visible`, or `-webkit-overflow-scrolling`),
-  any change to its top-level statements or to a custom property one of those reads,
-  what it takes out that may have overridden what it leaves of the same property for the same part,
-  and those it keeps in another order;
-  or a line a page's other JavaScript adds that sets one of those layer properties or a fixed or sticky `position`.
-  In a stylesheet, a declaration that reads a custom property counts whatever it holds,
-  a `transition` counts only when it eases one of these properties, all of them, or a keyword like `inherit`, not when it only recolors,
-  and a `translate`, `rotate`, or `scale` in two dimensions only in keyframes,
-  where a rule in any page stylesheet for the same part has an `animation`, a `will-change`, or a `transition` that counts,
-  or where the part can't be told,
-  since WebKit gives a layer of its own only to a transform in three dimensions or on the move.
-  A rule's part is the last compound of its selector without its attributes, pseudo-classes, and pseudo-elements, a nested one's with its parent's,
-  and two rules style the same part when one's part holds all of the other's.
-  A script or stylesheet the gate can't read is red.
+  or lifts it over others, makes it scroll, or decides how it takes a touch (any of those but `opacity`, `visibility`, and `display`,
+  with a `position` only `absolute`, `fixed`, or sticky, and an `overflow` only when it isn't `visible`),
+  and any top-level statement it adds or takes out;
+  a custom property any stylesheet of a page changes, adds, or takes out that one of those declarations reads, itself or through another;
+  a line a page's other JavaScript adds that sets one of those layer properties or a fixed or sticky `position`;
+  a line an app's `page/*.html` adds or takes out that holds `<link`, `<script`, `<dialog`, `popover`, or `style=`,
+  or any change to its inline scripts, which run in the order the page holds them;
+  and a diff the gate can't read.
+  In a stylesheet, a declaration that reads a custom property counts as if it held any value,
+  and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background-color`,
+  `border-color` and each side's, `outline-color`, `box-shadow`, `text-decoration-color`, `fill`, `stroke`, or `caret-color`),
+  so `none`, `all`, one that names none, or a keyword like `inherit` counts.
+  A script, stylesheet, or page the gate can't read is red.
+  The gate that judges a pull request is its base's, run with the base's own modules against the pull request's files,
+  so a pull request that changes the gate can't let its own red change through.
   Tests are never red.
   The owner's phone is a red change's test, and CI's `gate` holds one on its head's `phone` status, pending until its PR has the `phone-ok` label,
   added by the owner after the PR's last push,

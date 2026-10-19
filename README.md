@@ -251,7 +251,8 @@ on its head commit, which stays pending until the owner has used it on the beta
 app and labeled the pull request `phone-ok`. The repo's ruleset for `main`
 (**Settings > Rules > Rulesets**) requires the `check` and `phone` statuses and
 every review thread resolved. Without `phone` in it, `check` holds a red change
-itself.
+itself. The gate that judges a pull request is the base branch's own copy, so a
+pull request that changes the gate can't let its own red change through.
 
 A pull request from a fork runs without the repo's secrets, so Claude can't review
 it, and it runs the fork's own copy of the workflows, which its author can change

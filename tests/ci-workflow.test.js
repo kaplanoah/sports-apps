@@ -234,6 +234,22 @@ test("a held red change waits on the phone status, and check holds it whenever m
   );
 });
 
+// A pull request that changes the gate would otherwise judge its own change, so the base's gate,
+// with the modules the base's lockfile names, reads the pull request's files from its checkout.
+test("the gate judges a pull request with the base's own gate and modules", () => {
+  const gate = readJob("gate");
+  assert.match(gate, /run: git worktree add "\$RUNNER_TEMP\/base" HEAD\^1\n/);
+  assert.match(
+    gate,
+    /working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts\n/,
+  );
+  assert.match(
+    gate,
+    /\n {10}git diff --no-renames HEAD\^1 HEAD \| node "\$RUNNER_TEMP\/base\/worker\/red-change\.mjs" "\$LABELS"\n {10}grep -q '\^held=' "\$GITHUB_OUTPUT" \|\| echo "held=false" >> "\$GITHUB_OUTPUT"\n/,
+  );
+  assert.doesNotMatch(gate, /node worker\/|\*restore-modules|\*install-modules/);
+});
+
 /**
  * A job's condition, the anchored one it names when it names one.
  * @param {string} condition
