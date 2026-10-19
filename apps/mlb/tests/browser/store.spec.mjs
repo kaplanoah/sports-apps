@@ -3,11 +3,13 @@ import {
   expect,
   EVENING_FIXTURE,
   ON_A_PHONE,
+  keepUpdatesFromEarlierVisit,
   openApp,
   openSettings,
   readKept,
 } from "./harness.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 const listShownRanking = (page) =>
   page
@@ -49,6 +51,7 @@ test("a store answer the page can't read says the page's server can't be reached
 
 test.describe("on a phone", () => {
   test.use(ON_A_PHONE);
+  test.beforeEach(({ page }) => keepUpdatesFromEarlierVisit(page));
 
   test("each device keeps its own ranking and Updates dismissal, and the store keeps neither", async ({
     page,
@@ -59,7 +62,7 @@ test.describe("on a phone", () => {
         storeWrites.push(request.url());
     });
     const app = await openApp(page, { store: { "seasons/2026": SEASON_WITH_AN_UPDATE } });
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
     await expect(page.locator("#updates")).toBeHidden();
     await openSettings(page);
     await expect(page.locator("#rankList .rank-item")).toHaveCount(12);

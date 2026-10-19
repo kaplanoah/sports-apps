@@ -1,4 +1,5 @@
-/** @typedef {{ version: string | null, commit: string, builtAt: string | null }} Release */
+// A release's label names its channel, like beta, and is null on production.
+/** @typedef {{ version: string | null, commit: string, builtAt: string | null, label: string | null }} Release */
 
 // A phone waking a page can hold its first requests until they time out, so a read gives up
 // rather than keep every later check waiting on it.

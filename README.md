@@ -55,9 +55,9 @@ of the lead through the game, the two
 teams' stats side by side, and each team's top scorers; before it does, the two
 teams' meetings this season, how their seasons compare, and each team's leading
 scorers. On a phone or tablet, an Updates box under the tabs lists each playoff
-game that ended since you last dismissed it, and where its series stands, and
-under New in the app, any feature worth a note; each device keeps its own
-dismissal. It follows the phone's dark or light setting, or
+game that went final since you first opened the app or last dismissed the box, and where its series stands, and
+under New in the app, any feature worth a note; each device keeps when its box counts from,
+its first open or its last dismissal. It follows the phone's dark or light setting, or
 the one you pick in its settings. Added to the home screen, it keeps
 the icon of the look it had then.
 
@@ -353,7 +353,8 @@ are.
 
 Each app also has a beta Worker, `<app>-app-beta`, named in the `[env.beta]` of
 its `wrangler.toml`, with its own store, key, and address. Its page names itself
-"beta" on the Home Screen and in its settings' version line, so it can sit beside
+"beta" on the Home Screen, in its settings' version line, and in a tag beside its
+name with the commit it runs and how long ago that went live, so it can sit beside
 the real one. To use a pull request's change on the phone before it merges:
 
 1. Reset `beta` to the pull request's branch and push it:

@@ -5,6 +5,15 @@ import {
   listResizeLoops,
   waitForLoadToSettle,
 } from "../../../../tests/browser/at-rest.mjs";
+import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import {
+  isPillBandShown,
+  readHeaderReach,
+  readPillHoldTop,
+  readSeasonPartScroll,
+  readSeasonRide,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 
 // In full motion, every slide ends, and then nothing moves or asks for a frame. Each test counts
 // ResizeObserver loops from its first gesture, since what the page does as it loads isn't theirs.
@@ -36,6 +45,28 @@ test("a tab tap, a tap on a day, and a tap on Today each leave the page at rest,
   await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
   await expectAtRest(page);
 
+  expect(await readResizeLoops()).toEqual([]);
+});
+
+test("a tap on the pill from far down the standings brings the bracket in with the header still gone, and leaves the page at rest", async ({
+  page,
+}) => {
+  const readResizeLoops = await listResizeLoops(page);
+  await openApp(page);
+  await waitForLoadToSettle(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeInViewport();
+  await expectAtRest(page);
+  await forgetResizeLoops(page);
+  await scrollSeasonPartToEnd(page, "standings");
+
+  await findSeasonPill(page).getByRole("tab", { name: "Bracket" }).click();
+  await expect(page.locator("#bracketWrap .bracket-stage")).toBeInViewport();
+  await expectAtRest(page);
+
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(await readHeaderReach(page));
+  expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
+  expect(await isPillBandShown(page)).toBe(true);
   expect(await readResizeLoops()).toEqual([]);
 });
 

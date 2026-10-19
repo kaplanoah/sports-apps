@@ -12,6 +12,7 @@ import {
   nameSummaryRequest,
   readEndTime,
 } from "../worker/src/lead.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 // Valkyries at Wings, Game 2, which the Wings won 108-100 in overtime.
 const LEAD = JSON.parse(
@@ -95,10 +96,10 @@ test("the Worker answers a game's lead, says when ESPN has no such game, and tur
   );
 
   const missing = await askForLead(ESPN_ANSWERS, { ...GAME, away: "IND", home: "LVA" });
-  assert.equal(missing.status, 404);
+  await assertErrorAnswer(missing, 404, "not_found");
 
   const refused = await askForLead({}, GAME);
-  assert.equal(refused.status, 502);
+  assert.match(await assertErrorAnswer(refused, 502, "upstream_error"), /^Couldn't read ESPN: /);
 
   for (const params of [
     { ...TEAMS, id: GAME.id },
@@ -106,7 +107,7 @@ test("the Worker answers a game's lead, says when ESPN has no such game, and tur
     { ...GAME, id: "../x" },
     { ...GAME, home: "GSV" },
   ]) {
-    assert.equal((await askForLead(ESPN_ANSWERS, params)).status, 400);
+    await assertErrorAnswer(await askForLead(ESPN_ANSWERS, params), 400, "invalid_argument");
   }
 });
 

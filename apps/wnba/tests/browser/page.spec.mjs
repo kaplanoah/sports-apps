@@ -17,6 +17,10 @@ import {
   findSeasonTab,
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
+import {
+  readSeasonPartScroll,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -208,7 +212,7 @@ test.describe("on a phone, the text", () => {
   test("keeps to its type roles in the header, the Updates box, the games, the standings, a team's sheet, and settings", async ({
     page,
   }) => {
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     await expect(page.locator("#updates .what").first()).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
@@ -257,7 +261,7 @@ test.describe("on a phone, the text", () => {
   test("of the Updates box reads as sentences, its days as details, and its count as a label, and a series' standing stays on one line", async ({
     page,
   }) => {
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates.locator(".what").first()).toBeVisible();
     const [body, detail, label] = await Promise.all(
@@ -376,19 +380,20 @@ test("clicking the tab that's showing scrolls back to the top, and then takes it
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league tbody tr").first()).toBeVisible();
+  await page.mouse.move(640, 300);
   await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBeGreaterThan(0);
 
   await findSeasonTab(page).dispatchEvent("click");
 
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(0);
   await expect(page.locator("#standings-league")).toBeVisible();
 
   await findSeasonTab(page).dispatchEvent("click");
 
   await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
   await expect(page.locator("#standingsWrap")).toBeHidden();
-  expect(await page.evaluate(() => scrollY)).toBe(0);
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(0);
 });
 
 test("on a phone, each tab comes back where it was left, and a tab not shown yet opens at its top", async ({
@@ -398,19 +403,18 @@ test("on a phone, each tab comes back where it was left, and a tab not shown yet
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league tbody tr").first()).toBeVisible();
-  const left = await page.evaluate(() => {
-    scrollTo({ top: 400, behavior: "instant" });
-    return scrollY;
-  });
-  expect(left).toBe(400);
+  await scrollSeasonPartToEnd(page, "standings");
+  const left = await readSeasonPartScroll(page, "standings");
+  expect(left).toBeGreaterThan(0);
 
   await page.getByRole("tab", { name: "News" }).click();
   expect(await page.evaluate(() => scrollY)).toBe(0);
   await page.getByRole("tab", { name: "Games" }).click();
   await findSeasonTab(page).click();
 
-  expect(await page.evaluate(() => scrollY)).toBe(left);
   await expect(page.locator("#standings-league")).toBeVisible();
+  expect(await readSeasonPartScroll(page, "standings")).toBe(left);
+  await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
 });
 
 test("the page reopens on the tab it was last on, showing the part of it last shown", async ({

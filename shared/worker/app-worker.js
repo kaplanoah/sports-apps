@@ -66,7 +66,7 @@ const REPLACED_RELEASE_PATH = /^release\/([^/]+)\/version\.json$/;
 
 /** @param {string} commit */
 const serveReplacedRelease = (commit) =>
-  new Response(JSON.stringify({ version: null, commit, builtAt: null }), {
+  new Response(JSON.stringify({ version: null, commit, builtAt: null, label: null }), {
     headers: { "content-type": "application/json", ...PAGE_HEADERS, "cache-control": "no-store" },
   });
 

@@ -14,7 +14,7 @@ import {
 // and its last stills swapped over the runs after. A game from a season before is read on a tap.
 
 // How MLB's highlights are read; raising it reads each kept final once more (highlights-job.js).
-const EDITION = 1;
+const HIGHLIGHTS_VERSION = 1;
 // A game MLB hasn't timed yet ends about three hours after it starts.
 const GAME_LENGTH_MS = 3 * 60 * 60 * 1000;
 
@@ -44,5 +44,5 @@ export const createHighlightsUpdater = () =>
     gameLengthMs: GAME_LENGTH_MS,
     readHighlights,
     nameKey: nameHighlightsKey,
-    edition: EDITION,
+    version: HIGHLIGHTS_VERSION,
   });

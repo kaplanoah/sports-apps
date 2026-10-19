@@ -47,6 +47,7 @@ import {
 } from "../../../../tests/browser/harness.mjs";
 import { holdStore } from "../../../../tests/browser/hold-store.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 
 const loadFixture = (name) =>
   JSON.parse(readFileSync(new URL(`../fixtures/${name}.json`, import.meta.url), "utf8"));
@@ -318,7 +319,7 @@ export function buildSnapshotWithStarters() {
   return buildFixtureSnapshot(fixture);
 }
 
-export { test, expect, matchPath, LOCKED_PAGE_PATH };
+export { test, expect, matchPath, openSettings, LOCKED_PAGE_PATH };
 
 // A phone's screen and touch, where the Updates box shows.
 export const ON_A_PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
@@ -498,13 +499,24 @@ export async function openBracket(page, options) {
  * @param {string} key
  * @param {unknown} value
  */
-export const keepFromEarlierVisit = (page, key, value) =>
+const keepFromEarlierVisit = (page, key, value) =>
   page.addInitScript(
     ([storedKey, text]) => {
       if (localStorage.getItem(storedKey) === null) localStorage.setItem(storedKey, text);
     },
     [key, JSON.stringify(value)],
   );
+
+/**
+ * A phone that has used the app before, last dismissing the Updates box the afternoon before the
+ * evening's updates, and having kept none of its release notes' times yet, so each note out starts
+ * showing.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function keepUpdatesFromEarlierVisit(page) {
+  await keepFromEarlierVisit(page, "updatesSeenAt", { 2026: Date.parse("2026-09-24T20:00:00Z") });
+  await keepFromEarlierVisit(page, "releaseNotesShownUntil", {});
+}
 
 /**
  * Reads the color a token of the page's theme names, as the page draws it.
@@ -566,9 +578,6 @@ export const swipeSheetDown = (page, { target, distance, steps, stepMs, isCancel
       },
       { distance, steps, stepMs, isCancelled },
     );
-
-export const openSettings = (page) =>
-  page.getByRole("button", { name: "Settings", exact: true }).click();
 
 /**
  * Picks a season in the settings panel, then closes it.

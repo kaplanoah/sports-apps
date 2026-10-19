@@ -74,7 +74,7 @@ const OTHER_PLACES = [
           body: 'import { html } from "#shared/html.js";\nexport const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: html`Tap a game, then <b>Channels</b>.` }];',
         }),
       );
-      return openApp(page, { isShowingUpdates: true });
+      return openApp(page, { updatesBox: "shown" });
     },
     shown: (page) => page.locator("#updates .updates-notes b"),
   },

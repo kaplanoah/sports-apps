@@ -1,24 +1,15 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createViewerChoice, listViewerChoices } from "../shared/page/device-storage.js";
+import {
+  dropSavedStorage,
+  useDeniedStorage,
+  useFullStorage,
+  useSavedStorage,
+} from "./saved-storage.js";
 
 const otherTabs = new EventTarget();
 Object.assign(globalThis, { addEventListener: otherTabs.addEventListener.bind(otherTabs) });
-
-/** @param {Partial<Storage>} storage */
-const useStorage = (storage) =>
-  Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
-
-/** @param {Map<string, string>} saved */
-const useSavedStorage = (saved) =>
-  useStorage({
-    getItem: (key) => saved.get(key) ?? null,
-    setItem: (key, value) => saved.set(key, value),
-  });
-
-const refuseAccess = () => {
-  throw new Error("Access denied");
-};
 
 /** @param {string | null} key */
 const changeInOtherTab = (key) =>
@@ -27,9 +18,7 @@ const changeInOtherTab = (key) =>
 /** @param {unknown} stored */
 const readAsIs = (stored) => stored;
 
-afterEach(() => {
-  delete (/** @type {any} */ (globalThis).localStorage);
-});
+afterEach(dropSavedStorage);
 
 test("a choice is kept as JSON under its key", () => {
   const saved = new Map();
@@ -101,11 +90,51 @@ test("every choice the page makes is listed by its key", () => {
 });
 
 test("a device whose storage refuses access keeps a choice until the page reloads", () => {
-  useStorage({ getItem: refuseAccess, setItem: refuseAccess });
+  useDeniedStorage();
   const choice = createViewerChoice("refused", readAsIs);
 
   assert.equal(choice.read(), null);
   choice.keep({ "https://example.com/story": 1 });
 
   assert.deepEqual(choice.read(), { "https://example.com/story": 1 });
+});
+
+test("a device whose storage is full reads the choice it couldn't keep, not the older one stored", () => {
+  const saved = new Map([["full", "1"]]);
+  useFullStorage(saved);
+  const choice = createViewerChoice("full", readAsIs);
+
+  choice.keep(2);
+
+  assert.equal(choice.read(), 2);
+});
+
+test("a choice storage couldn't keep gives way to another tab's newer one", () => {
+  const saved = new Map([["fullThenSaved", "1"]]);
+  useFullStorage(saved);
+  const choice = createViewerChoice("fullThenSaved", readAsIs);
+  /** @type {unknown[]} */
+  const reads = [];
+  choice.watch(() => reads.push(choice.read()));
+  choice.keep(2);
+
+  saved.set("fullThenSaved", "3");
+  changeInOtherTab("fullThenSaved");
+
+  assert.deepEqual(reads, [3]);
+});
+
+test("a choice storage couldn't keep gives way to another tab clearing storage", () => {
+  const saved = new Map([["fullThenCleared", "1"]]);
+  useFullStorage(saved);
+  const choice = createViewerChoice("fullThenCleared", readAsIs);
+  /** @type {unknown[]} */
+  const reads = [];
+  choice.watch(() => reads.push(choice.read()));
+  choice.keep(2);
+
+  saved.clear();
+  changeInOtherTab(null);
+
+  assert.deepEqual(reads, [null]);
 });
