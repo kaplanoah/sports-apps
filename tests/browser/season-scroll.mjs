@@ -229,8 +229,17 @@ export const readPillHoldTop = (page) =>
   );
 
 /**
- * How far a part of the season tab scrolls before the pill holds at the top, rounded as a part's
- * scroll reads.
+ * Whether the band above the pill shows, which covers what rides up under the status bar once the
+ * pill holds.
+ * @param {import("@playwright/test").Page} page
+ */
+export const isPillBandShown = (page) =>
+  page
+    .locator("#bracketStandingsPill")
+    .evaluate((pill) => getComputedStyle(pill, "::before").visibility === "visible");
+
+/**
+ * How far a part of the season tab scrolls before the pill holds at the top.
  * @param {import("@playwright/test").Page} page
  */
 export const readHeaderReach = (page) =>

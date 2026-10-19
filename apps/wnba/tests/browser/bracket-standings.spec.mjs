@@ -15,6 +15,7 @@ import {
   findSeasonPart,
   findTouchTargets,
   holdHeaderStill,
+  isPillBandShown,
   readHeaderReach,
   readPillHoldTop,
   readSeasonPartScroll,
@@ -250,7 +251,7 @@ test("once the header is gone, the pill holds at the top and ends in its line as
   );
 });
 
-test("with the header just gone, the pill ends in its line only once a row scrolls under it", async ({
+test("with the header just gone, the band above the pill covers it, and the pill ends in its line only once a row scrolls under it", async ({
   page,
 }) => {
   await openApp(page);
@@ -258,12 +259,17 @@ test("with the header just gone, the pill ends in its line only once a row scrol
   const pill = page.locator("#bracketStandingsPill");
   const reach = await readHeaderReach(page);
 
+  await scrollSeasonPart(page, "standings", reach - 1);
+
+  expect(await isPillBandShown(page)).toBe(false);
+
   await scrollSeasonPart(page, "standings", reach);
 
   await expect
     .poll(() => readSeasonRide(page))
     .toMatchObject({ pillTop: await readPillHoldTop(page) });
   await expect(pill).not.toHaveClass(/\bstuck\b/);
+  expect(await isPillBandShown(page)).toBe(true);
 
   await scrollSeasonPart(page, "standings", reach + 1);
 
@@ -303,6 +309,7 @@ test("each part keeps its own place: the bracket chosen far down the standings s
     .poll(() => readSeasonRide(page))
     .toMatchObject({ pillTop: await readPillHoldTop(page) });
   await expect(page.locator("#bracketStandingsPill")).not.toHaveClass(/\bstuck\b/);
+  expect(await isPillBandShown(page)).toBe(true);
 
   await pill.getByRole("tab", { name: "Standings" }).click();
 

@@ -66,9 +66,8 @@
 
 /* While the header rides up with the part shown (season-header.js), the parts are placed from the
    tab's view and reach up to the page's top, as tall as the page, each padded down to start under
-   the pill, with room to scroll at least as far as the header rides. The room is a float, which
-   Safari counts in a part's scroll in full, as it does not a box placed outside the flow. The
-   view's padding box starts at the body's gutter, a pixel left of its content. */
+   the pill, with room to scroll at least as far as the header rides. The view's padding box starts
+   at the body's gutter, a pixel left of its content. */
 .bracket-standings[data-follows] {
   position: relative;
 }
@@ -83,9 +82,11 @@
 }
 .bracket-standings[data-follows] .season-part::before {
   content: "";
-  float: left;
-  width: 0;
+  position: absolute;
+  top: 0;
+  width: 1px;
   height: calc(100% + var(--header-reach));
+  visibility: hidden;
 }
 /* What rides above the pill (season-header.js marks it) draws over all the parts hold, just under
    the pill, since a browser takes whatever draws over a moving part as overlapping it and gives it
@@ -104,8 +105,8 @@
   pointer-events: auto;
 }
 /* The pill holds with its bar at the top of the screen and a band above it under the status bar,
-   both in the page's color, so what scrolls under them stays out of sight, and its bar too lets a
-   drag through to the part. */
+   both in the page's color, so the header ridden up and what scrolls under them stay out of sight,
+   and its bar too lets a drag through to the part. */
 .bracket-standings[data-follows] .pager-bar {
   background: var(--bg);
   pointer-events: none;
@@ -118,7 +119,7 @@
   background: var(--bg);
   visibility: hidden;
 }
-.bracket-standings[data-follows] .pager-bar.stuck::before {
+.bracket-standings[data-follows] .pager-bar.held::before {
   visibility: visible;
 }
 /*

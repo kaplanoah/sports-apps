@@ -1,4 +1,4 @@
-import { markBarStuck } from "./held-bar.js";
+import { markBarHeld, markBarStuck } from "./held-bar.js";
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
@@ -64,7 +64,14 @@ const holdBracketDotsWhileSliding = () => {
  */
 const readHeaderReach = () => parseFloat(findView().style.getPropertyValue("--header-reach")) || 0;
 
-const markStuck = () => markBarStuck(findPill(), findPart(readShownPart()), readHeaderReach());
+// The pill holds once the part shown has scrolled as far as the header rides, and ends in its line
+// once the part scrolls on under it.
+function markPillHeld() {
+  const part = findPart(readShownPart());
+  const reach = readHeaderReach();
+  markBarHeld(findPill(), part, reach);
+  markBarStuck(findPill(), part, reach);
+}
 
 /**
  * Where a part a switch brings in starts, so the header rides over it as it does over the part
@@ -108,7 +115,7 @@ function showOn(index, isSliding) {
   if (isSliding && !findParts().hasAttribute("data-sliding")) placeComingPart(part);
   followSeasonPart(part);
   showPillName(findTabList(), readOrder()[index], { isHandoff: isSliding });
-  markStuck();
+  markPillHeld();
 }
 
 /** @param {Element} element */
@@ -217,8 +224,8 @@ export function startBracketStandings() {
   wireTabList(findPill(), (part) => showSeasonPart(/** @type {SeasonPart} */ (part)));
   setTabStart("bracket-standings", returnToStart);
   for (const part of readOrder().map(findPart))
-    part.addEventListener("scroll", markStuck, { passive: true });
-  findView().addEventListener("headerride", markStuck);
+    part.addEventListener("scroll", markPillHeld, { passive: true });
+  findView().addEventListener("headerride", markPillHeld);
   findPart("bracket").addEventListener("scroll", holdBracketDotsWhileSliding, { passive: true });
   addEventListener("resize", holdBracketDotsWhileSliding);
 }

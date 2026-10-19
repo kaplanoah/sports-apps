@@ -72,6 +72,13 @@ export const isAwayFrom = (scroller, top) =>
 export const isPast = (scroller, top) => scroller.scrollTop - top >= ARRIVED_WITHIN_PX;
 
 /**
+ * Whether `scroller` has scrolled as far as `top`, but for a fraction of a pixel.
+ * @param {Element} scroller
+ * @param {number} top
+ */
+export const hasReached = (scroller, top) => top - scroller.scrollTop < ARRIVED_WITHIN_PX;
+
+/**
  * Scrolls `scroller` to `top` on the spring, or at once for someone who asks for less motion.
  * @param {Element} scroller
  * @param {number} top

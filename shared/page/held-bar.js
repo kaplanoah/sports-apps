@@ -1,4 +1,14 @@
-import { isPast } from "./spring-scroll.js";
+import { hasReached, isPast } from "./spring-scroll.js";
+
+/**
+ * Marks a bar held at the top once the list under it has scrolled as far as `heldAt`, how far the
+ * list scrolls before the bar holds.
+ * @param {Element} bar
+ * @param {Element} list
+ * @param {number} heldAt
+ */
+export const markBarHeld = (bar, list, heldAt) =>
+  bar.classList.toggle("held", hasReached(list, heldAt));
 
 /**
  * Ends a bar held over a list in a line once the list has scrolled under it, past `heldAt`, how far

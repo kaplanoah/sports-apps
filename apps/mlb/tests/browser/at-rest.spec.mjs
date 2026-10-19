@@ -7,6 +7,7 @@ import {
 } from "../../../../tests/browser/at-rest.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import {
+  isPillBandShown,
   readHeaderReach,
   readPillHoldTop,
   readSeasonPartScroll,
@@ -65,6 +66,7 @@ test("a tap on the pill from far down the standings brings the bracket in with t
 
   expect(await readSeasonPartScroll(page, "bracket")).toBe(await readHeaderReach(page));
   expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
+  expect(await isPillBandShown(page)).toBe(true);
   expect(await readResizeLoops()).toEqual([]);
 });
 
