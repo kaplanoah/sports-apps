@@ -5,9 +5,9 @@ import { isStandIn } from "./rider-taps.js";
 // still shows, and the tint fades as it lets go. A mouse's shows at once. The page marks the
 // pressed row's button with .is-pressed, and each row's stylesheet tints the row it covers. A
 // stand-in under a row's button (rider-taps.js) hands its press to the button, which presses it.
-// As on an iPhone, a finger that drifts or that the browser takes for a scroll is never a tap on
-// the button or link it landed on, though iOS sometimes still sends a click for it, as when the
-// finger stops a list still gliding.
+// As on an iPhone, a touch the browser takes for a scroll is never a tap, though iOS sometimes
+// still sends a click for it, as when the finger stops a list still gliding, so the page drops
+// that click. A finger that drifts on a control without scrolling anything still taps it.
 
 // How long a finger rests before its press shows, and how long a quick tap's press stays.
 const TOUCH_SETTLE_MS = 60;
@@ -27,14 +27,14 @@ const SHARED_ROW_BUTTONS = [
   ".search-games-line",
   ".row-button-cell button",
 ];
-// What a finger taps, whether or not a row of it tints.
-const TAPPABLE = "button, a";
+// What an iPhone hands a tap to, whatever listens for it.
+export const TAPPABLE = "button, a[href], label, summary, select, input, textarea";
 
 /** @type {{ button: Element, x: number, y: number, timer: number | null } | null} */
 let press = null;
-// The last finger on a button or link, until its click, whether it's still a tap, and when it
+// The last finger down, until its click: whether the browser took it for a scroll, and when it
 // lifted.
-/** @type {{ x: number, y: number, isTap: boolean, liftedAt: number | null } | null} */
+/** @type {{ isScroll: boolean, liftedAt: number | null } | null} */
 let touch = null;
 
 /** @param {Element} button */
@@ -55,36 +55,31 @@ function startPress(event, rowButtons) {
   if (isStandIn(event.target)) return;
   letGo();
   if (!event.isPrimary || event.button !== 0) return;
-  const target = /** @type {Element} */ (event.target);
-  const { clientX: x, clientY: y } = event;
-  const isFinger = event.pointerType === "touch";
-  touch = isFinger && target.closest(TAPPABLE) ? { x, y, isTap: true, liftedAt: null } : null;
-  const button = target.closest(rowButtons);
+  const button = /** @type {Element} */ (event.target).closest(rowButtons);
   if (!button) return;
-  press = { button, x, y, timer: null };
-  if (isFinger) press.timer = window.setTimeout(() => markPressed(button), TOUCH_SETTLE_MS);
+  press = { button, x: event.clientX, y: event.clientY, timer: null };
+  if (event.pointerType === "touch")
+    press.timer = window.setTimeout(() => markPressed(button), TOUCH_SETTLE_MS);
   else markPressed(button);
 }
 
-/**
- * @param {PointerEvent} event
- * @param {{ x: number, y: number }} start
- */
-const hasDrifted = (event, start) =>
-  Math.hypot(event.clientX - start.x, event.clientY - start.y) > DRIFT_PX;
+/** @param {PointerEvent} event */
+function startTouch(event) {
+  if (!event.isPrimary) return;
+  touch = event.pointerType === "touch" ? { isScroll: false, liftedAt: null } : null;
+}
 
 /** @param {PointerEvent} event */
 function followDrift(event) {
-  if (!event.isPrimary) return;
-  if (touch && hasDrifted(event, touch)) touch.isTap = false;
-  if (press && hasDrifted(event, press)) letGo();
+  if (!press || !event.isPrimary) return;
+  if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRIFT_PX) letGo();
 }
 
 // The browser cancels a finger's pointer once it takes the touch for a scroll, well before the
 // finger lifts.
 function cancelPress() {
   letGo();
-  if (touch) touch.isTap = false;
+  if (touch) touch.isScroll = true;
 }
 
 function noteLift() {
@@ -101,14 +96,14 @@ const isJustLifted = ({ liftedAt }) =>
   liftedAt !== null && performance.now() - liftedAt < LIFT_CLICK_MS;
 
 /**
- * Drops the click iOS sends for a finger that drifted or scrolled, on whatever button or link it
- * lands, before anything it opens hears of it.
+ * Drops the click iOS sends for a touch the browser took for a scroll, on whatever it lands that
+ * takes a tap, before anything it opens hears of it.
  * @param {MouseEvent} event
  */
 function dropClickAfterScroll(event) {
   const last = touch;
   touch = null;
-  if (!last || last.isTap || !isJustLifted(last)) return;
+  if (!last?.isScroll || !isJustLifted(last)) return;
   if (!(event.target instanceof Element) || !event.target.closest(TAPPABLE)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -136,11 +131,12 @@ export function runAfterPress(row, action) {
 
 /**
  * Tints each row the page shares, and any the app adds by its buttons' selectors, while pressed,
- * and drops the click iOS sends for a finger that drifted or scrolled, on any button or link.
+ * and drops the click iOS sends for a touch the browser took for a scroll.
  * @param {string[]} [appRowButtons] the buttons of the app's own rows, like a bracket's team lines
  */
 export function watchPresses(appRowButtons = []) {
   const rowButtons = [...SHARED_ROW_BUTTONS, ...appRowButtons].join(", ");
+  document.addEventListener("pointerdown", startTouch, { capture: true, passive: true });
   document.addEventListener("pointerdown", (event) => startPress(event, rowButtons), {
     passive: true,
   });
@@ -150,6 +146,7 @@ export function watchPresses(appRowButtons = []) {
   document.addEventListener("touchend", noteLift, { passive: true });
   document.addEventListener("touchcancel", noteLift, { passive: true });
   document.addEventListener("scroll", letGo, { capture: true, passive: true });
-  document.addEventListener("click", dropClickAfterScroll, { capture: true });
+  // On the window, so it hears the click before anything else on the page does.
+  addEventListener("click", dropClickAfterScroll, { capture: true });
   document.addEventListener("keydown", forgetTouch, { capture: true, passive: true });
 }

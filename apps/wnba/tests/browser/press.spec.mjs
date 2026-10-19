@@ -2,9 +2,11 @@ import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { findCenter } from "../../../../tests/browser/season-scroll.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { holdClock, sendClick, sendFinger } from "../../../../tests/browser/stray-click.mjs";
 
-// A row that opens something tints while it's pressed, and a finger that drifts or that the
-// browser takes for a scroll never taps a button or link, as on an iPhone (press.js).
+// A row that opens something tints while it's pressed, and a touch the browser takes for a scroll
+// never taps what it landed on, as on an iPhone (press.js).
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -71,57 +73,6 @@ test("a finger that starts a scroll on a row never tints it", async ({ page }) =
 });
 
 /**
- * Clicks a button or link, as iOS can after a finger left it, and says whether the click went
- * through.
- * @param {import("@playwright/test").Locator} target
- */
-const sendClick = (target) =>
-  target.evaluate((element) =>
-    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
-  );
-
-/**
- * Sends a finger's pointer on a button or link as the browser does: down at its middle, each move
- * down the screen by `moves`, then up, or cancelled once the browser takes the touch for a scroll,
- * and the touch's end, a lift or, as iOS ends some, a cancel.
- * @param {import("@playwright/test").Locator} target
- * @param {{ moves: number[], isCancelled?: boolean, isTouchCancelled?: boolean }} finger
- */
-const sendFinger = (target, { moves, isCancelled = false, isTouchCancelled = false }) =>
-  target.evaluate(
-    (element, finger) => {
-      const box = element.getBoundingClientRect();
-      /**
-       * @param {string} type
-       * @param {number} down
-       */
-      const send = (type, down) =>
-        element.dispatchEvent(
-          new PointerEvent(type, {
-            bubbles: true,
-            pointerType: "touch",
-            isPrimary: true,
-            clientX: box.left + box.width / 2,
-            clientY: box.top + box.height / 2 + down,
-          }),
-        );
-      send("pointerdown", 0);
-      for (const down of finger.moves) send("pointermove", down);
-      send(finger.isCancelled ? "pointercancel" : "pointerup", finger.moves.at(-1) ?? 0);
-      const end = finger.isTouchCancelled ? "touchcancel" : "touchend";
-      element.dispatchEvent(new TouchEvent(end, { bubbles: true }));
-    },
-    { moves, isCancelled, isTouchCancelled },
-  );
-
-/**
- * Holds the page's clock still, so a click sent after a finger comes as soon after its lift as
- * iOS sends it, however slow the machine.
- * @param {import("@playwright/test").Page} page
- */
-const holdClock = async (page) => page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
-
-/**
  * @param {import("@playwright/test").Page} page
  * @param {string} sheetId
  */
@@ -165,13 +116,13 @@ test("a finger the browser takes for a scroll before it drifts never opens the t
   expect(await sendClick(button)).toBe(false);
 });
 
-test("a finger that drifts past 10px never opens a team, even one the click lands on beside it", async ({
+test("a finger the browser takes for a scroll never opens a team, even one the click lands on beside it", async ({
   page,
 }) => {
   const { button } = await openStandings(page);
   await holdClock(page);
 
-  await sendFinger(button, { moves: [6, 12] });
+  await sendFinger(button, { moves: [6, 12], isCancelled: true });
 
   const beside = page
     .locator('#standings-league tr[data-team]:not([data-team="LVA"]) .team-open')
@@ -180,7 +131,7 @@ test("a finger that drifts past 10px never opens a team, even one the click land
   expect(await isSheetOpen(page, "teamSheet")).toBe(false);
 });
 
-test("a finger that drifts and that iOS ends with a cancel never opens the team", async ({
+test("a finger the browser takes for a scroll and that iOS ends with a cancel never opens the team", async ({
   page,
 }) => {
   const { button } = await openStandings(page);
@@ -191,12 +142,24 @@ test("a finger that drifts and that iOS ends with a cancel never opens the team"
   expect(await sendClick(button)).toBe(false);
 });
 
-test("a second finger landing after the first drifted doesn't let the first one's click through", async ({
+test("a finger that drifts on a team's row without the browser taking it for a scroll still opens the team, as a sloppy tap does", async ({
   page,
 }) => {
   const { button } = await openStandings(page);
   await holdClock(page);
-  await sendFinger(button, { moves: [12] });
+
+  await sendFinger(button, { moves: [6, 14] });
+
+  expect(await sendClick(button)).toBe(true);
+  expect(await isSheetOpen(page, "teamSheet")).toBe(true);
+});
+
+test("a second finger landing after the browser took the first for a scroll doesn't let the first one's click through", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await sendFinger(button, { moves: [12], isCancelled: true });
 
   await button.evaluate((element) =>
     element.dispatchEvent(
@@ -207,12 +170,12 @@ test("a second finger landing after the first drifted doesn't let the first one'
   expect(await sendClick(button)).toBe(false);
 });
 
-test("a still tap right after a finger drifted, like one on the pill's Bracket, works", async ({
+test("a still tap right after a scroll, like one on the pill's Bracket, works", async ({
   page,
 }) => {
   const { button } = await openStandings(page);
   await holdClock(page);
-  await sendFinger(button, { moves: [12] });
+  await sendFinger(button, { moves: [12], isCancelled: true });
   const bracket = findSeasonPill(page).getByRole("tab", { name: "Bracket", exact: true });
 
   await sendFinger(bracket, { moves: [] });
@@ -221,12 +184,12 @@ test("a still tap right after a finger drifted, like one on the pill's Bracket, 
   await expect(bracket).toHaveAttribute("aria-selected", "true");
 });
 
-test("a click a second after a finger drifted, like a screen reader's, still opens the team", async ({
+test("a click a second after a scroll, like a screen reader's, still opens the team", async ({
   page,
 }) => {
   const { button } = await openStandings(page);
   await holdClock(page);
-  await sendFinger(button, { moves: [12] });
+  await sendFinger(button, { moves: [12], isCancelled: true });
 
   await page.clock.runFor(1000);
 
@@ -234,7 +197,22 @@ test("a click a second after a finger drifted, like a screen reader's, still ope
   expect(await isSheetOpen(page, "teamSheet")).toBe(true);
 });
 
-test("a finger that drifts on a player's name in a roster never opens her", async ({ page }) => {
+test("a click right after a scroll on what takes no tap, like a sheet's backdrop, still does its job", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await button.click();
+  await expect(page.locator("#teamSheet")).toBeVisible();
+  await holdClock(page);
+  await sendFinger(page.locator("#teamTitle"), { moves: [12], isCancelled: true });
+
+  expect(await sendClick(page.locator("dialog:has(#teamSheet)"))).toBe(true);
+  await expect(page.locator("#teamSheet")).toBeHidden();
+});
+
+test("a finger the browser takes for a scroll on a player's name in a roster never opens her", async ({
+  page,
+}) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
@@ -243,13 +221,15 @@ test("a finger that drifts on a player's name in a roster never opens her", asyn
   await expect(name).toBeVisible();
   await holdClock(page);
 
-  await sendFinger(name, { moves: [12] });
+  await sendFinger(name, { moves: [12], isCancelled: true });
 
   expect(await sendClick(name)).toBe(false);
   expect(await isSheetOpen(page, "playerSheet")).toBe(false);
 });
 
-test("a finger that drifts on a story in the News never opens it", async ({ page }) => {
+test("a finger the browser takes for a scroll on a story in the News never opens it", async ({
+  page,
+}) => {
   const app = await openApp(page);
   await page.getByRole("tab", { name: "News" }).click();
   await expect(page.locator("#newsList")).toHaveText("No news yet");
@@ -275,9 +255,26 @@ test("a finger that drifts on a story in the News never opens it", async ({ page
   await expect(headline).toBeVisible();
   await holdClock(page);
 
-  await sendFinger(headline, { moves: [12] });
+  await sendFinger(headline, { moves: [12], isCancelled: true });
 
   expect(await sendClick(headline)).toBe(false);
+});
+
+test("a finger the browser takes for a scroll on an Appearance choice in settings never picks it", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSettings(page);
+  const maple = page.locator("#settingsDialog label.appearance-choice", { hasText: "Maple" });
+  await expect(maple).toBeVisible();
+  const theme = await page.evaluate(() => document.documentElement.dataset.theme);
+  await holdClock(page);
+
+  await sendFinger(maple, { moves: [12], isCancelled: true });
+
+  expect(await sendClick(maple)).toBe(false);
+  await expect(maple.locator("input")).not.toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
 });
 
 test("a still tap on a team's row in the standings opens the team, and Enter after a drag does too", async ({
