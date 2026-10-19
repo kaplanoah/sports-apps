@@ -1010,6 +1010,7 @@ test("a page file whose diff hides its content, as a binary one does, is red", (
     "shared/page/sheet.css",
     "shared/page/stamp.js",
     INDEX_HTML,
+    "apps/wnba/page/manifest.webmanifest",
   ]) {
     for (const lines of [
       ["index 1111111..2222222 100644", "Binary files a/<path> and b/<path> differ"],
@@ -1124,6 +1125,8 @@ test("an app's manifest is red where it changes how the Home Screen app opens, o
     [['  "display": "standalone",'], []],
     [[], ['  "orientation": "portrait",']],
     [[], ['  "display_override": ["fullscreen"],']],
+    [['  "scope": "./",'], ['  "scope": "./games/",']],
+    [['  "start_url": "./",'], ['  "start_url": "./?from=home",']],
   ])
     assert.deepEqual(
       findManifestChange(before, after),
@@ -1142,6 +1145,24 @@ test("an app's manifest is red where it changes how the Home Screen app opens, o
     findManifestChange(['  "theme_color": "#000",'], ['  "theme_color": "#111"']),
     [`${manifest} changes in a way the gate can't read, so it may change anything`],
     "a manifest that isn't JSON",
+  );
+  assert.deepEqual(
+    findRedReasons(
+      readDiff(
+        [
+          `diff --git a/${manifest} b/${manifest}`,
+          "@@ -1,2 +1,2 @@",
+          " {",
+          '-  "display": "standalone",',
+          '+  "display": "browser",',
+          "",
+        ].join("\n"),
+      ),
+      () => ["{", '  "name": "WNBA",', '  "display": "browser"', "}"].join("\n"),
+      listNoStylesheets,
+    ),
+    [`${manifest} changes in a way the gate can't read, so it may change anything`],
+    "a manifest the change's hunks don't fit",
   );
 });
 

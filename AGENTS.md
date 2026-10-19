@@ -805,8 +805,9 @@ Delete it once the app's first PR merges.
   to its `viewport`, `apple-mobile-web-app-capable`, `mobile-web-app-capable`, and `apple-mobile-web-app-status-bar-style` metas,
   which fit it to the screen, open it from the Home Screen without the browser's bars, and color the phone's own,
   or to its inline scripts and styles, which take effect in the order the page holds them;
-  a change to the `display`, `display_override`, or `orientation` an app's `page/*.webmanifest` gives,
-  which open its Home Screen app without the browser's bars and turn it, or to a manifest the gate can't read;
+  a change to the `display`, `display_override`, `orientation`, `scope`, or `start_url` an app's `page/*.webmanifest` gives,
+  which open its Home Screen app without the browser's bars, turn it, and say where it starts and which pages keep it so,
+  or to a manifest the gate can't read;
   and a diff the gate can't read.
   In a stylesheet, a `style=`, or a script, a declaration that reads a custom property, or a value a template or the script fills in, counts as if it held any value,
   and a `transition`, or a `transition-property`, counts unless every property it names only repaints a part (`color`, `background`, `background-color`,

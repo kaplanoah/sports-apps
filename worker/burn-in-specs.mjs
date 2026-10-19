@@ -15,7 +15,7 @@ import { listBrowserTestReach } from "./browser-scope.mjs";
 import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
-const SPEC = /^apps\/[^/]+\/tests\/browser\/[^/]+\.spec\.mjs$/;
+const SPEC = /^apps\/[^/]+\/tests\/browser\/.+\.spec\.mjs$/;
 const DEPENDENCIES = /^package(-lock)?\.json$/;
 // What a spec tests rather than runs with.
 const TESTED_CODE = /^(?:apps\/[^/]+\/(?:page|worker)|shared\/(?:page|worker))\//;
@@ -34,8 +34,8 @@ const isSharedBySpecs = (path, reached) =>
   !SPEC.test(path) && (DEPENDENCIES.test(path) || (reached.has(path) && !TESTED_CODE.test(path)));
 
 /**
- * The browser specs among the files a pull request adds or changes, by the one rule for what a
- * spec is, which a helper in a folder under tests/browser/ isn't.
+ * The browser specs among the files a pull request adds or changes, at any depth under an app's
+ * tests/browser/, as Playwright runs them and as judge-burn-in's diff names them.
  * @param {string[]} paths
  */
 export const listBrowserSpecs = (paths) => paths.filter((path) => SPEC.test(path));

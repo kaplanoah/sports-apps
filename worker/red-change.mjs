@@ -7,7 +7,8 @@
 // touch (worker/red-change-styles.mjs); a line a page's other scripts add that draws a part on a
 // layer of its own, sets or clears what those stylesheets would be red for or a custom property
 // they stack with, or holds or creates markup that runs or layers the page; a line a page's markup
-// adds or takes out that loads, runs, or layers its parts; and a diff the gate can't read. A red
+// adds or takes out that loads, runs, or layers its parts; a change to how an app's manifest opens
+// its Home Screen app, or to a manifest the gate can't read; and a diff the gate can't read. A red
 // change merges only once the owner has used it on the beta app and labeled it phone-ok. Anyone
 // who can label a pull request could add the label, so the gate reads who last added it and lets
 // the change through only from the repository's owner, and only when the label came after the
@@ -143,9 +144,10 @@ const isPageCode = (path) => /^(?:shared\/page|apps\/[^/]+\/page)\/.+\.(?:css|js
 const isPageStylesheet = (path) => isPageCode(path) && path.endsWith(".css");
 const isPageMarkup = (path) => /^apps\/[^/]+\/page\/[^/]+\.html$/.test(path);
 const isPageManifest = (path) => /^apps\/[^/]+\/page\/[^/]+\.webmanifest$/.test(path);
-// What a Home Screen app takes from its manifest on how it opens: without the browser's bars, and
-// which way it turns, which no CI browser draws.
-const MANIFEST_SCREEN_KEYS = ["display", "display_override", "orientation"];
+// What a Home Screen app takes from its manifest on how it opens: without the browser's bars,
+// which way it turns, and where it starts and which pages it keeps without the bars, which no CI
+// browser draws.
+const MANIFEST_SCREEN_KEYS = ["display", "display_override", "orientation", "scope", "start_url"];
 const isComment = (text) => /^\s*(?:\/\/|\/\*|\*)/.test(text);
 
 /** @typedef {{ number: number, text: string }} AddedLine */

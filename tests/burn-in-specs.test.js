@@ -20,16 +20,17 @@ const REACHED = listBrowserTestReach();
 const listSpecs = (changedSpecs, sinceBurnedIn) =>
   listSpecsToBurnIn(changedSpecs, sinceBurnedIn, REACHED);
 
-test("the specs a change touches are an app's browser specs, and not a helper in a folder under them", () => {
+test("the specs a change touches are an app's browser specs at any depth, as Playwright runs them", () => {
+  const nested = "apps/wnba/tests/browser/sheets/drag.spec.mjs";
   assert.deepEqual(
     listBrowserSpecs([
       SHEETS,
-      "apps/wnba/tests/browser/helpers/drag.spec.mjs",
+      nested,
       "apps/wnba/tests/browser/harness.mjs",
       "apps/wnba/tests/page.test.js",
       PAGE,
     ]),
-    [SHEETS, PAGE],
+    [SHEETS, nested, PAGE],
   );
 });
 
