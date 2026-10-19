@@ -187,7 +187,7 @@ In this file, the rule files in `.claude/rules/`, the skills, and `REVIEW.md`,
 start each sentence on a line of its own, and break a long one after its commas,
 so two changes to one bullet touch different lines and rarely conflict.
 Keep each sentence to 60 words or fewer, and write a long catalog as a list.
-The root's `tests/agents-lines.test.js` checks both.
+The root's `tests/agents-lines.test.js` checks the lines and the cap.
 Each rule file lists the `paths` it loads for, each matching a file in the repo, which the root's `tests/rule-files.test.js` checks.
 This file stays at 200 lines or fewer, since every session reads all of it,
 so a rule only some work needs goes in the rule file or skill for that work (the root's `tests/agents-lines.test.js`).

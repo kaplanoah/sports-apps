@@ -18,7 +18,7 @@ paths:
   - its postseason's as dots against the playoff field's
 - A club's leaders, on its sheet (`page/js/leaders-view.js`):
   - its leaders in MLB's headline numbers, from its roster
-  - AVG, OPS, and ERA among qualified players only
+  - AVG, OPS, and ERA count only qualified players
 - A club's roster, under its sheet's Roster pill
   (`page/js/roster-section.js`, `roster-view.js`, `worker/src/rosters.js`, and `roster-updater.js`):
   - its active players and injured list, each with his regular season
@@ -43,15 +43,15 @@ paths:
   - The box doesn't show when the box score that opened him shows him playing in a game under way or ended today,
     which the report hasn't caught up with (the shared `playing-now.js`).
 - A game's sheet, which opens from the game's row (`page/js/game-sheet.js`, `matchup.js`, and `box-score-view.js`):
-  - Its Game section shows the game.
-  - Its starters are on a line that slides to its Matchup.
-  - Before first pitch, it shows its clubs' season series (`page/js/season-series.js`).
-  - It shows its box score, or each club's lineup before first pitch.
+  - Its Game section shows the game:
+    - its starters, on a line that slides to its Matchup
+    - before first pitch, its clubs' season series (`page/js/season-series.js`)
+    - its box score, or each club's lineup before first pitch
 - The Runs, over the box score (`page/js/runs-view.js`):
   - A game under way has its Runs so far, and a final its Runs.
   - Each half inning that scored is under its heading,
     with a line for each change of the score with the score after it.
-  - The runners who got on since the last one are on a lighter line above the play that scored.
+  - The runners who got on since the last change of the score are on a lighter line above the play that scored.
   - A pinch runner who scored is named with whom he ran for.
   - These come from each play in MLB's live feed.
   - While a half inning is under way, it shows who's pinch running for whom
@@ -95,7 +95,8 @@ paths:
   - Each game has its ballpark,
     and a game away from its home club's own one says where in its label.
 - The slate (`page/js/slate.js`):
-  - The header, the Updates box, and the store follow the slate, apart from the season's whole schedule.
+  - The slate, each club's last, today's, and next games kept apart from the season's whole schedule,
+    is what the header, the Updates box, and the store follow.
   - Each device keeps the slate's ranking for itself, in name order until its first drag (`page/js/kept-on-device.js`).
   - Each device also keeps when its Updates box counts from, its first look or last dismissal (`page/js/kept-on-device.js`).
   - Only phones and tablets show the Updates box (`page/js/updates.js`).

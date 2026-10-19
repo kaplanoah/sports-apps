@@ -30,7 +30,7 @@ paths:
       `touch-action`, `-webkit-touch-callout`, `user-select`, `pointer-events`, `z-index`,
       `opacity`, `visibility`, `display`, `isolation`, `mix-blend-mode`, `container`, `offset`,
       `view-transition-name`, `-webkit-box-reflect`, or `zoom`.
-    - A change in their fonts, colors, spacing, or sizes isn't red, since CI checks those,
+    - A change in the shared stylesheets' fonts, colors, spacing, or sizes isn't red, since CI checks those,
       so a rule renamed, split, or merged that sets none of those properties isn't red.
   - What other stylesheets add: what any other stylesheet of a page adds that gives a part a layer of its own,
     or lifts it over others, or decides how it scrolls or takes a touch,

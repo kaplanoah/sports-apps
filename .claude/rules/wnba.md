@@ -31,6 +31,7 @@ paths:
 - The roster (`worker/src/roster.js`, `season-averages.js`, `page/js/roster-section.js`, and `roster-view.js`):
   - Each team's roster for any season comes from the league's roster of that season and its list of every player it has had.
   - It shows each player's averages.
+  - With ESPN's injury report, it marks each player who is out, only while the team still plays (see Injuries below).
   - The store keeps the averages apart from the season,
     worked out once for the Roster, the leaders, and her sheet.
 - Each player's sheet (`worker/src/player.js`, `page/js/player-sheet.js`, and `player-view.js`):
@@ -48,7 +49,6 @@ paths:
 ## Injuries
 
 - ESPN's injury report, read once for the whole league, says who is out and why (`worker/src/injuries.js`).
-- It shows only while the team still plays.
 - On her sheet, while a player is out, the box saying why carries RotoWire's sentence on it.
 - The box doesn't show when the box score that opened her shows her playing in a game under way or ended today,
   which the injury report hasn't caught up with (the shared `playing-now.js`).
@@ -102,10 +102,10 @@ paths:
 - Beside the season's updates, the Worker:
   - reads the news from the outlets' feeds (`worker/src/news-feeds.js`)
   - drops what the shared rules can tell isn't news (`shared/worker/news-rules.js`)
-  - has Claude judge the rest against the cards it has so far, at a higher bar for each story the card has:
+  - has Claude judge the rest against the cards it has so far:
     - a story with news of its own leads a card
     - one that tells a card's news better or brings a new development in its story takes it over
-    - one that adds to it goes under its lead
+    - one that adds to it goes under its lead, at a higher bar for each story the card has
   - has Claude judge every story again when its prompt changes (`news-prompts.js`, built with the shared `composeLabelPrompt`)
   - saves the cards in `news/cards` (the shared `news-updater.js`, which `worker/src/news-updater.js` hands its outlets, prompt, and teams)
   - saves with each card its photo's size and, for one taller than 3:2, where Claude says its subject is,
@@ -124,9 +124,9 @@ paths:
   and `pick-theme.js`, which the browser's address names it in for the Home Screen app).
 - It uses its own self-hosted fonts.
 
-## Notifications
+## The Updates box
 
 - The Updates box (`page/js/updates.js`):
   - The page lists each playoff final in an Updates box only on phones and tablets, and only for the current season.
-  - Each device keeps when its box counts from, its first look or last dismissal.
-  - It lists the finals by when the Worker first found each final.
+  - Each device keeps when its box counts from, its first look or last dismissal,
+    and a final counts as new by when the Worker first found it.

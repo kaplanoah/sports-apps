@@ -78,7 +78,7 @@ paths:
       where Safari reloads the page after a pick,
       since it takes the Home Screen app's address and its own bars' color from the page as it loaded,
       and which the Home Screen app keeps on its first open.
-      An iPhone's app, which keeps the icon it was added with, hands Safari with a link to add the site again,
+      An iPhone's app, which keeps the icon it was added with, hands Safari a link to add the site again,
       opening Safari's page on that theme and the welcome.
   - Standings and bracket:
     - `bracket-standings.js`: one tab for a season's standings and its bracket,
@@ -242,7 +242,7 @@ paths:
   - `no-field-note.css` styles the bracket before the playoff field is set
   - `channel-tag.css` styles the tag beside the app's name on beta
   - `gate.css` styles the access code's gate, whose title and button the welcome takes too
-- The Worker serves all of `shared/page/`'s modules and stylesheets under `shared/`.
+- The Worker serves every file in `shared/page/`, its `networks/` logos too, under `shared/`.
 - `shared/worker/` holds the Worker's modules:
   - `app-worker.js`: the Worker's routing under the key
   - `season-store.js`: the store's Durable Object,

@@ -19,10 +19,9 @@ paths:
 - A browser test that passes only some of the time has a bug to find and fix, in the page or the test, in its own PR.
   CI retries a failed browser test once, so it can't fail a pull request it has nothing to do with.
   CI stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`).
+  Every failed try keeps its trace, with each step but not the page at each step, which only burn-in and the nightly run record.
   For each test that passed only on its retry:
   - GitHub's reporter marks it on the pull request's checks.
-  - The run keeps its failed try's trace, with each step but not the page at each step.
-    Only burn-in and the nightly run record the page at each step.
   - The next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (the root's `worker/report-flaky-tests.mjs`),
     unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
 - CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config.
@@ -40,9 +39,9 @@ paths:
   - The next nightly run adds any other test that failed to the table in the issue Flaky browser tests (the root's `worker/judge-burn-in.mjs`).
 - Each night, main's browser tests run three times over with no retry,
   and add each test that failed to the table in the open issue Flaky browser tests (`.github/workflows/flaky.yml` and the root's `worker/report-flaky-tests.mjs`).
-  The issue comments on each test new to it and starts the routine that fixes the table's top test,
+  The nightly run comments on the issue for each test new to it and starts the routine that fixes the table's top test,
   through its API trigger, from the `FLAKY_ROUTINE_URL` and `FLAKY_ROUTINE_TOKEN` secrets.
-  The issue drops a test once it hasn't failed for a week, and closes once none is left.
+  It drops a test once it hasn't failed for a week, and closes the issue once none is left.
   To reproduce a flaky test, or to show a fix holds, run that workflow by hand with the tests,
   the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have.
   After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
