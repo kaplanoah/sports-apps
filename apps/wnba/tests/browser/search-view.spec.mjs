@@ -11,7 +11,7 @@ import {
   tapSearch,
 } from "./search-page.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
-import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
+import { leavePagePixelDown, scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -81,8 +81,7 @@ test("Search tapped again with the page scrolled under a tall Updates box takes 
   await tapSearch(page);
   await sendSearch(page, "Liberty");
   await showTallUpdatesBox(page, 600);
-  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(1);
+  await scrollPageToEnd(page);
 
   await tapSearch(page);
 

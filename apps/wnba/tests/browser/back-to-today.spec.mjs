@@ -1,5 +1,5 @@
 import { test, expect, expectDayAtTop } from "./harness.mjs";
-import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
+import { leavePagePixelDown, scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 import { findCell, findDay, findList, openSeasonGames } from "./season-games.mjs";
 
@@ -55,8 +55,7 @@ test.describe("with reduced motion", () => {
     await findCell(page, "2026-09-20").click();
     await expectDayAtTop(page, "2026-09-20");
     await showTallUpdatesBox(page, 600);
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    expect(await page.evaluate(() => scrollY)).toBeGreaterThan(1);
+    await scrollPageToEnd(page);
 
     await page.getByRole("tab", { name: "Games" }).click();
 

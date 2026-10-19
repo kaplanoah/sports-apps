@@ -4,6 +4,7 @@ import {
   readSeasonPartScroll,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 // How the bracket's first-round cards spread on a phone to reach the round dots pinned above the
@@ -165,8 +166,7 @@ test.describe("on a phone, the bracket", () => {
       .toBeLessThan(Math.floor(1.45 * TIGHTEST_CARD_GAP));
     const atTop = await readCardGaps(page);
     expect(atTop.between[0]).toBeGreaterThan(TIGHTEST_CARD_GAP);
-    await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-    expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+    await scrollPageToEnd(page);
 
     await page.evaluate(() => dispatchEvent(new Event("resize")));
 

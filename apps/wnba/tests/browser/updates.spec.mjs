@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import {
   holdHeaderStill,
   readPillHoldTop,
@@ -405,7 +406,7 @@ test.describe("on a phone, with a release note out", () => {
       expect(await view.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(
         Math.floor(568 * 0.6),
       );
-      await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
+      await scrollPageToEnd(page);
       expect(
         await view.evaluate((element) => Math.round(element.getBoundingClientRect().bottom)),
       ).toBeLessThanOrEqual(568);

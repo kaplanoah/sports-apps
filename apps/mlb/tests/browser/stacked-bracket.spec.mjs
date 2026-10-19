@@ -27,6 +27,7 @@ import {
   scrollSeasonPartToEnd,
   trackSeasonFrames,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -428,8 +429,7 @@ test("on a laptop where the header stays put, the stacked bracket keeps filling 
     header.after(box);
   });
   await expect.poll(() => isFilling(page)).toBe(true);
-  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await scrollPageToEnd(page);
 
   await page.evaluate(() => dispatchEvent(new Event("resize")));
 
@@ -563,8 +563,7 @@ test("on a phone where the header stays put, the bracket keeps its spaces when i
     .poll(async () => (await readBracketFit(page)).stageBottom)
     .toBeLessThan(await page.evaluate(() => innerHeight + scrollY));
   const atTop = await readInnerSpaces(page);
-  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await scrollPageToEnd(page);
 
   await page.evaluate(() => dispatchEvent(new Event("resize")));
 

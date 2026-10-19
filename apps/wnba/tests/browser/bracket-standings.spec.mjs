@@ -24,7 +24,7 @@ import {
   wheelPastSeasonPartEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 import { showTallUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
-import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
+import { leavePagePixelDown, scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import { findRows, sendSearch, tapSearch } from "./search-page.mjs";
 
 test.use({
@@ -156,8 +156,7 @@ test("where the header stays put, a tap on the tab with the page scrolled under 
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league")).toBeVisible();
   await showTallUpdatesBox(page, 600);
-  await page.evaluate(() => scrollTo({ top: document.body.scrollHeight, behavior: "instant" }));
-  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await scrollPageToEnd(page);
 
   await findSeasonTab(page).click();
 
