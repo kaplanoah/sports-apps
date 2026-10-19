@@ -1,22 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
+  RULES_FOLDER,
   isRuleFile,
   listRulesFor,
   matchesGlob,
   readRuleFiles,
   readRulePaths,
 } from "../worker/rule-files.mjs";
-import { listTrackedFiles } from "./tracked-files.js";
-
-const ROOT = new URL("../", import.meta.url);
+import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
 
 const repoFiles = listTrackedFiles();
 const ruleFiles = repoFiles.filter(isRuleFile);
-
-/** @param {string} path */
-const readRule = (path) => readFileSync(new URL(path, ROOT), "utf8");
 
 test("the repo holds rule files", () => {
   assert.ok(ruleFiles.length > 0);
@@ -24,7 +19,7 @@ test("the repo holds rule files", () => {
 
 // A rule file with no paths loads into every session, which AGENTS.md is for.
 test("each rule file lists the paths it loads for", () => {
-  const unscoped = ruleFiles.filter((path) => !readRulePaths(readRule(path)).length);
+  const unscoped = ruleFiles.filter((path) => !readRulePaths(readRepoFile(path)).length);
   assert.deepEqual(unscoped, []);
 });
 
@@ -32,9 +27,9 @@ test("each rule file lists the paths it loads for", () => {
 // Code loads it for them.
 test("each item a rule file's frontmatter lists is read as a path", () => {
   const unread = ruleFiles.filter((path) => {
-    const frontmatter = readRule(path).split("\n---\n")[0];
+    const frontmatter = readRepoFile(path).split("\n---\n")[0];
     const items = frontmatter.split("\n").filter((line) => /^\s+-/.test(line));
-    return items.length !== readRulePaths(readRule(path)).length;
+    return items.length !== readRulePaths(readRepoFile(path)).length;
   });
   assert.deepEqual(unread, []);
 });
@@ -42,11 +37,22 @@ test("each item a rule file's frontmatter lists is read as a path", () => {
 // A glob that matches no file never loads its rules, as one left behind by a moved folder.
 test("each rule file's paths each match a file in the repo", () => {
   const stale = ruleFiles.flatMap((path) =>
-    readRulePaths(readRule(path))
+    readRulePaths(readRepoFile(path))
       .filter((glob) => !repoFiles.some((file) => matchesGlob(file, glob)))
       .map((glob) => `${path}: ${glob}`),
   );
   assert.deepEqual(stale, []);
+});
+
+// A session learns from AGENTS.md where the rest of the guidance is before it opens a file.
+test("AGENTS.md names each rule file and skill", () => {
+  const agents = readRepoFile("AGENTS.md");
+  const skills = repoFiles.flatMap((path) => readSkillName(path) ?? []);
+  const unnamed = [
+    ...ruleFiles.filter((path) => !agents.includes(`\`${path.slice(RULES_FOLDER.length)}\``)),
+    ...skills.filter((name) => !agents.includes(`\`${name}\` skill`)),
+  ];
+  assert.deepEqual(unnamed, []);
 });
 
 test("a rule file's paths are the items its frontmatter lists, quoted or not", () => {

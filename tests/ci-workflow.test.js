@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import {
   nameAcrossRecord,
   nameCandidatesRecord,
@@ -11,12 +11,10 @@ import {
   namePostRecord,
 } from "../worker/judge-review.mjs";
 import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
-import { escapePattern } from "../worker/rule-files.mjs";
+import { escapePattern } from "../shared/page/escape-pattern.js";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
-/** @param {string} path from the repo's root */
-const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-
-const WORKFLOWS = readdirSync(new URL("../.github/workflows/", import.meta.url)).filter((name) =>
+const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
 );
 
