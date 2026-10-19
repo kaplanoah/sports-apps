@@ -16,6 +16,7 @@ import {
   renderTapeTeams,
 } from "./sheet-parts.js";
 import { nameTeam } from "./series.js";
+import { formatPercentage } from "./team-view.js";
 
 // The game sheet's box score for a game that has started: points by quarter, the lead through the
 // game, the teams' stats side by side, and each team's top scorers. Until each loads, it holds its
@@ -124,7 +125,7 @@ function describeShooting(box, { key, label }) {
     const [made, attempted] = shots[index];
     const share = shares[index];
     return {
-      value: share == null ? "-" : `${(share * 100).toFixed(1)}%`,
+      value: share == null ? "-" : `${formatPercentage(share)}%`,
       detail: `${made}-${attempted}`,
       bar: share == null ? null : Math.round(share * 100),
     };

@@ -145,7 +145,7 @@ export function describeUpNextGame(slate, context) {
       tbd: !!game.tbd,
       text:
         !hasBegun && isFullSlate(games.length)
-          ? `${matchup}, starts slate of ${games.length}`
+          ? `${matchup}, ${describeSlate(games.length, "starts")}`
           : matchup,
     };
   }

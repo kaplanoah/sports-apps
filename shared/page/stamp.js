@@ -59,11 +59,13 @@ export const renderStampTime = (date, day = "") =>
 export const isFullSlate = (count) => count > 2;
 
 /**
- * A full day's games, as the header counts them after the one it names: "slate of 5 under way".
+ * A full day's games, as the header counts them after the one it names: "slate of 5 under way",
+ * or, before any has begun, "starts slate of 5".
  * @param {number} count
- * @param {"under way" | "over"} stage
+ * @param {"starts" | "under way" | "over"} stage
  */
-export const describeSlate = (count, stage) => `slate of ${count} ${stage}`;
+export const describeSlate = (count, stage) =>
+  stage === "starts" ? `starts slate of ${count}` : `slate of ${count} ${stage}`;
 
 /** Leads a line about the games under way, set apart as a time is. */
 export const renderStampNow = () => html`<b class="now">NOW</b>`;
