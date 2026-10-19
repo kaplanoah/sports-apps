@@ -17,6 +17,7 @@ import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { LAPTOP } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -73,6 +74,7 @@ test("standings open on each league's playoff field, and every table lines up", 
 });
 
 test("on a wide screen, every column of the standings shows inside its table", async ({ page }) => {
+  await page.setViewportSize(LAPTOP);
   await openApp(page);
   await openSeasonPart(page, "Standings");
   const tables = page.locator("#standingsWrap table.st");
