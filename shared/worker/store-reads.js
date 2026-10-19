@@ -16,7 +16,7 @@ import { describeError } from "./responses.js";
  * @param {string[]} keys
  * @returns {Promise<any[] | null>}
  */
-export async function readKeptDocs(readDoc, keys) {
+async function readKeptDocs(readDoc, keys) {
   if (!readDoc) return null;
   try {
     return await Promise.all(keys.map((key) => readDoc(key)));
@@ -34,6 +34,22 @@ export async function readKeptDocs(readDoc, keys) {
  */
 export const readKeptDoc = async (readDoc, key) =>
   (await readKeptDocs(readDoc, [key]))?.[0] ?? null;
+
+/**
+ * The documents the store keeps at `keys` for `season`, as `readKeptDocs` reads them, and whether
+ * `season` is the store's current one. Only the current season's reads of the league are counted,
+ * since the store keeps it as it goes, while a season it never kept is read from the league by
+ * design.
+ * @param {ReadDoc | undefined} readDoc
+ * @param {number} season
+ * @param {string[]} keys
+ * @returns {Promise<{ docs: any[] | null, isCurrentSeason: boolean }>}
+ */
+export async function readSeasonDocs(readDoc, season, keys) {
+  const kept = await readKeptDocs(readDoc, [...keys, "live/current"]);
+  if (!kept) return { docs: null, isCurrentSeason: false };
+  return { docs: kept.slice(0, -1), isCurrentSeason: season === kept.at(-1)?.season };
+}
 
 /**
  * Counts a read of the league the store should have spared, which never holds up the sheet.

@@ -4,7 +4,7 @@ import {
   openApp,
   openLockedApp,
   buildFixtureSnapshot,
-  keepFromEarlierVisit,
+  keepUpdatesFromEarlierVisit,
   EVENING_FIXTURE,
   ON_A_PHONE,
 } from "./harness.mjs";
@@ -107,9 +107,7 @@ const OTHER_PLACES = [
           body: 'import { html } from "#shared/html.js";\nexport const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: html`Tap a game, then <b>Matchup</b>.` }];',
         }),
       );
-      await keepFromEarlierVisit(page, "updatesSeenAt", {
-        2026: Date.parse("2026-09-24T20:00:00Z"),
-      });
+      await keepUpdatesFromEarlierVisit(page);
       return openApp(page, {
         liveAvailable: false,
         store: { "seasons/2026": SEASON_WITH_A_CLUB_OUT },

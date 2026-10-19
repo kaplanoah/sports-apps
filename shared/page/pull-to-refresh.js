@@ -2,6 +2,7 @@ import { isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { reloadIfReplaced } from "./resume.js";
+import { isPageOffTop, isPast } from "./spring-scroll.js";
 
 // A phone gives a page on the Home Screen no pull to refresh, so the page draws its own, as an
 // iPhone list does: pulled down from the top, the page follows the finger as spokes appear one by
@@ -27,20 +28,14 @@ const SPOKES = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="
 
 /** @typedef {{ waitForCatchUp: () => Promise<boolean> }} RefreshStore */
 
+/* global listPageParts, isInFlow -- from season-header.js */
+
 // What the pull moves: the page's own parts in its flow, not what stays put on the screen, like the
 // edge fade, or what opens over it. They move by a relative offset rather than a transform, which
 // would carry what's fixed inside them, like the tab bar, along.
-/** @param {Element} element */
-const isInFlow = (element) => ["static", "relative"].includes(getComputedStyle(element).position);
-
 /** @param {HTMLElement} spinner */
 const listMovedParts = (spinner) =>
-  /** @type {HTMLElement[]} */ (
-    [...document.body.children].filter(
-      (element) =>
-        element !== spinner && !["DIALOG", "SCRIPT"].includes(element.tagName) && isInFlow(element),
-    )
-  );
+  listPageParts().filter((element) => element !== spinner && isInFlow(element));
 
 /** @param {HTMLElement[]} parts */
 function releaseParts(parts) {
@@ -54,7 +49,7 @@ function releaseParts(parts) {
 /** @param {Element} target */
 function isScrolledInside(target) {
   for (let element = target; element && element !== document.body; element = element.parentElement)
-    if (element.scrollTop > 0) return true;
+    if (isPast(element, 0)) return true;
   return false;
 }
 
@@ -62,7 +57,7 @@ function isScrolledInside(target) {
 /** @param {EventTarget | null} target */
 function isPullable(target) {
   if (!(target instanceof Element)) return false;
-  if ((document.scrollingElement?.scrollTop ?? 0) > 0) return false;
+  if (isPageOffTop()) return false;
   if (target.closest("dialog")) return false;
   return !isScrolledInside(target);
 }

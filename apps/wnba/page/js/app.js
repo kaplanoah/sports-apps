@@ -1,5 +1,6 @@
 import { renderCatchUpLines, startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
+import { startChannelTag } from "#shared/channel-tag.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
 import { setHtml } from "#shared/html.js";
@@ -59,7 +60,7 @@ import { listSearchPages } from "./search-pages.js";
 import { createSearchTerms, readSearchGame } from "./search-terms.js";
 import { renderTeamSheet } from "./team-view.js";
 import { TEAMS } from "./teams.js";
-import { drawUpdates, watchDismissals } from "./updates.js";
+import { drawUpdates, watchUpdatesSeen } from "./updates.js";
 
 const CLOCK_REFRESH_MS = 60 * 1000;
 
@@ -286,6 +287,7 @@ async function boot() {
   startRosterSection();
   startPlayerSheet();
   startSettingsSheet();
+  startChannelTag();
   startNewsRedraws(findElement("newsList"), drawNews, NEWS_LEAGUE);
   startHomeScreen();
   findSeasonPicker().addEventListener("change", () =>
@@ -315,7 +317,7 @@ async function boot() {
     redrawEased(drawNews);
     refreshGameSearch();
   });
-  watchDismissals(() => redrawEased(drawUpdates));
+  watchUpdatesSeen(() => redrawEased(drawUpdates));
   refreshClockEveryMinute();
   startServiceWorker();
   startNotifications({ about: "Final scores" });

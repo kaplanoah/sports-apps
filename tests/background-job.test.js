@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   createPerStoreJob,
   createSavedDocs,
+  createVersionForgetter,
   listPastSeasons,
+  nameVersionedKey,
 } from "../shared/worker/background-job.js";
 
 const MINUTE_MS = 60 * 1000;
@@ -94,4 +96,23 @@ test("the past seasons are the store's seasons before the current one, newest fi
 
   assert.deepEqual(await listPastSeasons(docs, 2026), [2025, 2024, 2023]);
   assert.deepEqual(await listPastSeasons(docs, 2023), []);
+});
+
+test("a version forgetter deletes each earlier version's key once while the store stays in memory, and never the current one's", async () => {
+  /** @type {string[]} */
+  const deleted = [];
+  const storage = /** @type {any} */ ({
+    delete: async (/** @type {string} */ key) => {
+      deleted.push(key);
+      return true;
+    },
+  });
+  /** @param {number} version */
+  const nameKey = (version) => nameVersionedKey("game-logs:2026", version);
+  const forgetEarlierVersions = createVersionForgetter();
+
+  await forgetEarlierVersions(storage, nameKey, 3);
+  await forgetEarlierVersions(storage, nameKey, 3);
+
+  assert.deepEqual(deleted, ["game-logs:2026", "game-logs:2026:v2"]);
 });

@@ -3,9 +3,12 @@ import { respondError, respondJson } from "./responses.js";
 
 // Push subscriptions and the key that signs messages for them. Both are kept under keys the
 // store's own paths can't name, so the page's store never hands them out. The store keeps a hundred
-// devices at most, since anyone with the page's address can subscribe one, and forgets a device
-// its push service says is gone, or that has failed every message for a week, long enough for a
-// fault of the store's own to be fixed first.
+// devices at most, since anyone with the page's address can subscribe one. Once full, it makes room
+// for a new one only by forgetting the one saved longest ago that hasn't been saved for a month,
+// since each visit saves its device again, and turns the new one away otherwise, so a flood of
+// subscriptions never pushes out a phone opened that month. It also forgets a device its push
+// service says is gone, or that has failed every message for a week, long enough for a fault of the
+// store's own to be fixed first.
 
 const SIGNING_KEY = "push:signing-key";
 const SUBSCRIPTION_PREFIX = "push:subscription:";
@@ -13,6 +16,7 @@ const MAX_BODY_BYTES = 4 * 1024;
 const GONE_STATUSES = new Set([404, 410]);
 const MAX_SUBSCRIPTIONS = 100;
 const FAILING_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+const UNSAVED_FOR_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Only real push services, so a stored address can't point the Worker anywhere else.
 const PUSH_SERVICE_HOSTS = [
@@ -51,6 +55,9 @@ function hasKeyLength(text, length) {
   }
 }
 
+const isSameSubscription = (stored, sent) =>
+  stored.keys.p256dh === sent.keys.p256dh && stored.keys.auth === sent.keys.auth;
+
 const isSubscription = (value) =>
   !!value &&
   isPushServiceUrl(value.endpoint) &&
@@ -65,6 +72,20 @@ async function readBody(request) {
   } catch {
     return null;
   }
+}
+
+/**
+ * The device a full store forgets to make room for another, the one saved longest ago once that's
+ * a month ago, or undefined when every device was saved since. A device kept without the time it
+ * was saved counts as saved longest ago.
+ * @param {Map<string, { savedAt?: number }>} stored
+ * @param {number} now
+ */
+function findForgettable(stored, now) {
+  const [oldest] = [...stored]
+    .map(([key, device]) => ({ key, savedAt: device.savedAt ?? 0 }))
+    .sort((first, second) => first.savedAt - second.savedAt);
+  return oldest && now - oldest.savedAt >= UNSAVED_FOR_MS ? oldest.key : undefined;
 }
 
 async function findSubscriptionKey(endpoint) {
@@ -101,13 +122,16 @@ export function createPushService({ storage, now, fetchImpl }) {
 
   /**
    * Keeps when the device's messages started failing, and forgets it once they have failed long
-   * enough. A message that goes through clears it. Answers the device as it's now kept, or null
-   * once it's forgotten.
+   * enough. A message that goes through clears it. A device removed or subscribed again while the
+   * message was out keeps what that did. Answers the device as it's now kept, or null once it's
+   * forgotten.
    * @param {string} key
-   * @param {any} subscription
+   * @param {any} sent the device as the message went out to it
    * @param {boolean} wentThrough
    */
-  async function noteDelivery(key, subscription, wentThrough) {
+  async function noteDelivery(key, sent, wentThrough) {
+    const subscription = await storage.get(key);
+    if (!subscription || !isSameSubscription(subscription, sent)) return subscription ?? null;
     const { failingSince, ...kept } = subscription;
     if (wentThrough) {
       if (failingSince !== undefined) await storage.put(key, kept);
@@ -163,11 +187,26 @@ export function createPushService({ storage, now, fetchImpl }) {
       return respondError(400, "invalid_argument", "That isn't a push subscription.");
     const { endpoint, keys } = body;
     const key = await findSubscriptionKey(endpoint);
-    if (!(await storage.get(key)) && (await countSubscriptions()) >= MAX_SUBSCRIPTIONS)
+    if (!(await makeRoomFor(key)))
       return respondError(429, "too_many_devices", "Too many devices get notifications already.");
     const subject = new URL(request.url).origin;
-    await storage.put(key, { endpoint, keys, subject });
+    await storage.put(key, { endpoint, keys, subject, savedAt: now() });
     return new Response(null, { status: 204 });
+  }
+
+  /**
+   * Makes room for the device when the store is full and holds one it can forget, and answers
+   * whether the device has room.
+   * @param {string} key
+   */
+  async function makeRoomFor(key) {
+    if (await storage.get(key)) return true;
+    const stored = await listSubscriptions();
+    if (stored.size < MAX_SUBSCRIPTIONS) return true;
+    const forgettable = findForgettable(stored, now());
+    if (forgettable === undefined) return false;
+    await storage.delete(forgettable);
+    return true;
   }
 
   async function readSubscriptionFor(request) {
@@ -217,8 +256,6 @@ export function createPushService({ storage, now, fetchImpl }) {
   }
 
   const listSubscriptions = () => storage.list({ prefix: SUBSCRIPTION_PREFIX });
-
-  const countSubscriptions = async () => (await listSubscriptions()).size;
 
   async function sendToAll(messages) {
     const stored = await listSubscriptions();

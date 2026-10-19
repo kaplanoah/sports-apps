@@ -3,6 +3,7 @@ import { renderBracket, watchBracketSpace } from "./bracket-view.js";
 import { listRankedOrder, renderTeamDot } from "./clubs.js";
 import { startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
+import { startChannelTag } from "#shared/channel-tag.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
@@ -49,9 +50,9 @@ import { fillRoster, readShownRoster, reopenRoster, startRosterSection } from ".
 import { renderTeamSheet } from "./team-view.js";
 import { TEAMS } from "./teams.js";
 import { renderStamp } from "./stamp-view.js";
-import { listSearchPages } from "./search-pages.js";
+import { PLAYOFF_FIELDS, listSearchPages } from "./search-pages.js";
 import { createSearchTerms, readSearchGames } from "./search-terms.js";
-import { showStandingsPart } from "./standings.js";
+import { showLeagueStandings } from "./standings.js";
 import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
@@ -135,9 +136,10 @@ function openSearchPlace(key) {
       isInstant: true,
     });
   } else if (place === "standings") {
+    // The playoff fields lead the standings, so their row shows the standings from the top.
     openPageTab("bracket-standings");
     showSeasonPart("standings", { isInstant: true });
-    showStandingsPart(detail);
+    if (detail !== PLAYOFF_FIELDS) showLeagueStandings(detail);
   } else if (place === "highlights" || place === "matchup") openGameSection(detail, place);
   else openSettings(key);
 }
@@ -200,6 +202,7 @@ function wireControls() {
   startRosterSection({ showChange: refreshTeamSheet });
   startPlayerSheet();
   startSettings();
+  startChannelTag();
   startAppearance(LOOKS);
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);
   startHomeScreen();
