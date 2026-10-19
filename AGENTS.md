@@ -894,6 +894,8 @@ When a step says to go back to an earlier step, continue in order from there.
    If the summary names something it couldn't judge, tell the user.
    Read every finding `wait-for-review` lists before you answer any.
    Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its thread saying why you won't fix it.
+   Fix a finding in every place the PR's own change shows the same problem, not only on its line,
+   and name a place outside the change that shows it in a line of the PR's description, rather than widening the PR.
    Once the push is up, resolve the thread of each finding you fixed, with no reply, since GitHub marks it outdated once its line changes,
    and of each you answered.
    Resolve a review's checklist of Nits once every item in it is fixed or answered in a reply on its thread.
