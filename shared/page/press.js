@@ -77,9 +77,10 @@ function followDrift(event) {
 
 // The browser cancels a finger's pointer once it takes the touch for a scroll, well before the
 // finger lifts.
-function cancelPress() {
+/** @param {PointerEvent} event */
+function cancelPress(event) {
   letGo();
-  if (touch) touch.isScroll = true;
+  if (touch && event.isPrimary) touch.isScroll = true;
 }
 
 function noteLift() {

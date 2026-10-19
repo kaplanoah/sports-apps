@@ -3,6 +3,7 @@ import { drag } from "../../../../tests/browser/touch.mjs";
 import { findCenter } from "../../../../tests/browser/season-scroll.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { holdClock, sendClick, sendFinger } from "../../../../tests/browser/stray-click.mjs";
 
 // A row that opens something tints while it's pressed, and a touch the browser takes for a scroll
@@ -103,17 +104,6 @@ test("a finger that drags a team's row in the standings never opens the team, ev
 
   expect(await sendClick(button)).toBe(false);
   expect(await isSheetOpen(page, "teamSheet")).toBe(false);
-});
-
-test("a finger the browser takes for a scroll before it drifts never opens the team", async ({
-  page,
-}) => {
-  const { button } = await openStandings(page);
-  await holdClock(page);
-
-  await sendFinger(button, { moves: [4], isCancelled: true });
-
-  expect(await sendClick(button)).toBe(false);
 });
 
 test("a finger the browser takes for a scroll never opens a team, even one the click lands on beside it", async ({
@@ -275,6 +265,56 @@ test("a finger the browser takes for a scroll on an Appearance choice in setting
   expect(await sendClick(maple)).toBe(false);
   await expect(maple.locator("input")).not.toBeChecked();
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
+});
+
+test("a finger the browser takes for a scroll on a Diagnostics section's name never opens or closes it", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await openSettings(page);
+  const record = page.locator("#settingsDialog details.diagnostics-record").first();
+  await expect(record).toBeAttached();
+  const isOpen = await record.evaluate(
+    (details) => /** @type {HTMLDetailsElement} */ (details).open,
+  );
+  await holdClock(page);
+
+  await sendFinger(record.locator("summary"), { moves: [12], isCancelled: true });
+
+  expect(await sendClick(record.locator("summary"))).toBe(false);
+  expect(await record.evaluate((details) => /** @type {HTMLDetailsElement} */ (details).open)).toBe(
+    isOpen,
+  );
+});
+
+test("a finger the browser takes for a scroll on a part of a row that takes no tap never opens the team the click lands on", async ({
+  page,
+}) => {
+  const { row, button } = await openStandings(page);
+  await holdClock(page);
+
+  await sendFinger(row, { moves: [12], isCancelled: true });
+
+  expect(await sendClick(button)).toBe(false);
+  expect(await isSheetOpen(page, "teamSheet")).toBe(false);
+});
+
+test("a second finger the browser cancels while the first taps a team's row doesn't stop the tap", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await sendFinger(button, { moves: [] });
+
+  await button.evaluate((element) =>
+    element.dispatchEvent(
+      new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch", isPrimary: false }),
+    ),
+  );
+
+  expect(await sendClick(button)).toBe(true);
+  expect(await isSheetOpen(page, "teamSheet")).toBe(true);
 });
 
 test("a still tap on a team's row in the standings opens the team, and Enter after a drag does too", async ({
