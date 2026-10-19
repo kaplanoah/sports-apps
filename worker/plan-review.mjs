@@ -642,8 +642,8 @@ export function listStageKinds(stage) {
 }
 
 /**
- * A stage's matrices: its areas, each of which ci.yml reviews and then checks on its own, the
- * kinds of reviewer each area has, and how many reviewers that makes.
+ * A stage's matrices: its areas, each of which review-area.yml reviews and then checks on its own,
+ * the kinds of reviewer each area has, and how many reviewers that makes.
  * @param {{ area: number, name: string }[]} areas
  * @param {{ kind: string, focus: string }[]} kinds
  */

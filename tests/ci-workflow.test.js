@@ -477,7 +477,11 @@ test("the review reads every area in full, checks before it posts, and fails on 
     check,
     /id: keep\n\s+if: steps\.check\.outcome == 'success' \|\| steps\.gather\.outputs\.count == '0'/,
   );
-  assert.match(check, /if: steps\.keep\.outputs\.unchecked != '0'\n\s+run: \|\n.*\n\s+exit 1/);
+  assert.match(
+    check,
+    /if: steps\.keep\.outcome != 'success' \|\| steps\.keep\.outputs\.unchecked != '0'\n\s+run: \|\n.*\n\s+exit 1/,
+    "a checker that didn't finish fails its job, though the answer it never kept sets no count",
+  );
   assert.match(
     readRepoFile(`.github/workflows/${AREA_WORKFLOW}`),
     /\nenv:\n {2}STAGE: \$\{\{ inputs\.stage \}\}\n {2}AREA: \$\{\{ inputs\.area \}\}\n/,
@@ -610,8 +614,9 @@ test("the last read of the whole change reads alongside a push's review, and pos
   );
   assert.ok(
     readJob("review-final-due").includes(
-      "if: ${{ !cancelled() && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-final-area.result == 'success' }}",
+      "if: ${{ !cancelled() && needs.review-area.result == 'success' && needs.review-post.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-final-area.result == 'success' }}",
     ),
+    "a posting step that didn't finish never counts as having posted nothing",
   );
   assert.match(readJob("review-final-due"), /\n {4}steps:\n {6}- run: echo .*\n+$/);
   assert.ok(

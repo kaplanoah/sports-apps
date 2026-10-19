@@ -583,7 +583,7 @@ jobs:
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
             2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files, and `.review/checked-${{ env.STAGE }}.json`.
-            3. Name each group of findings that are the same problem, in different areas or in different places, by their refs, the one on its first place first, with the body that one is posted with: what is wrong, when it goes wrong, and how to fix it, naming every place the group's findings name. Only the first of each group is posted, on its line, at the heaviest weight a checker settled in its group.
+            3. Name each group of findings that are the same problem, in different areas or in different places, by their refs, the one on its first place first, with the body that one is posted with, without its weight: what is wrong, when it goes wrong, and how to fix it, naming every place the group's findings name. Only the first of each group is posted, on its line, at the heaviest weight a checker settled in its group.
             4. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each against the code as a checker does, with Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects. Add each you confirm that no listed finding already says, one for each problem, naming every place it shows, on the line the diff changes nearest its first place, weighed as the guide says, its body saying what is wrong, when it goes wrong, and how to fix it, without its weight.
             5. Post nothing. End with your answer: the groups of repeats, the findings you add, and anything you couldn't judge from the code, and why.
       - name: Keep the check's answer
@@ -673,7 +673,7 @@ jobs:
   # summary says what they found. Both of those jobs wait on this one, so the rule is in one place.
   review-final-due:
     needs: [review-plan, review-area, review-post, review-final-area]
-    if: ${{ !cancelled() && needs.review-area.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-final-area.result == 'success' }}
+    if: ${{ !cancelled() && needs.review-area.result == 'success' && needs.review-post.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-final-area.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

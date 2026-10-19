@@ -141,7 +141,7 @@ jobs:
           echo "::error::This reviewer didn't read every line of its area's diffs, or gave no answer."
           exit 1
 
-  # The area's checker confirms its reviewers' cases against the code, merges repeats, and weighs
+  # The area's checker confirms its reviewers' problems against the code, merges repeats, and weighs
   # each, before anything is posted.
   check:
     needs: find
@@ -207,10 +207,10 @@ jobs:
             .review/candidates-${{ env.STAGE }}-${{ env.AREA }}.json
           retention-days: 14
           overwrite: true
-      # So that re-running the failed jobs checks this area again. A check that didn't finish leaves
-      # unchecked unset, so it fails here as one that left cases unchecked does.
+      # So that re-running the failed jobs checks this area again. A check that didn't finish keeps
+      # no answer, whose unchecked GitHub would compare as 0, so it fails here on that alone.
       - name: Fail when the check didn't finish
-        if: steps.keep.outputs.unchecked != '0'
+        if: steps.keep.outcome != 'success' || steps.keep.outputs.unchecked != '0'
         run: |
-          echo "::error::This area's checker didn't finish, or left cases unchecked."
+          echo "::error::This area's checker didn't finish, or left problems unchecked."
           exit 1
