@@ -71,9 +71,10 @@ const PROPERTY_NAMES = LAYER_PROPERTIES.join("|");
 // object keys by one of their names, as in { scale: 1.2 }, sets no style, since CSS in a script's
 // template ends a declaration with a semicolon or its string's end, unless the object is a
 // style's or an animation's keyframes, which findStyleObjectLines and findKeyframeLines find.
-// Each match holds the declaration's property, the name of its family, and its value.
+// Each match holds the declaration's property, the name of its family, its value, and what ends
+// the value: a semicolon or a brace, or a quote, with a plus where the script adds more to it.
 const CSS_DECLARATION = new RegExp(
-  `(?:^|[\\s{;"'\`])((?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*)\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))(?=([^;"'\`}]*))`,
+  `(?:^|[\\s{;"'\`])((?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*)\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))(?=([^;"'\`}]*)(?:([;}])|(["'\`])\\s*(\\+)?)?)`,
   "g",
 );
 const LAYER_SETTINGS = [
@@ -236,13 +237,26 @@ function findDiffProblem(diff) {
 }
 
 /**
+ * A CSS declaration's value as a line of a script holds it, or a template's hole for one the line
+ * doesn't hold whole, as where it's left empty, ends in a comma, runs on past the line, or has
+ * more added to it, which can hold any value.
+ * @param {RegExpMatchArray} match a match of CSS_DECLARATION
+ */
+function readDeclarationValue([, , , text, terminator, quote, addition]) {
+  const value = text.trim();
+  const isWhole =
+    value !== "" && !value.endsWith(",") && Boolean(terminator || (quote && !addition));
+  return isWhole ? value : `\${${value}}`;
+}
+
+/**
  * What a line sets that makes a layer, or null when it sets nothing that does.
  * @param {string} text
  */
 function findLayerSetting(text) {
-  const declaration = findFirstSetting(text, CSS_DECLARATION, ([, property, family, value]) =>
-    isPageLayerDeclaration({ property, value: value.trim() })
-      ? `a CSS declaration that sets ${family}`
+  const declaration = findFirstSetting(text, CSS_DECLARATION, (match) =>
+    isPageLayerDeclaration({ property: match[1], value: readDeclarationValue(match) })
+      ? `a CSS declaration that sets ${match[2]}`
       : null,
   );
   if (declaration) return declaration;
@@ -514,9 +528,16 @@ function findStyleKey(text, readProperty, isWatched) {
  * @param {(property: string) => boolean} isWatched
  */
 function findObjectKeySetting({ number, text }, { styleLines, keyframeLines }, isWatched) {
-  if (styleLines.has(number)) return findStyleKey(text, toKebabCase, isWatched);
+  if (styleLines.has(number)) return findStyleKey(text, readStyleObjectProperty, isWatched);
   return keyframeLines.has(number) ? findStyleKey(text, readKeyframeProperty, isWatched) : null;
 }
+
+/**
+ * The CSS name a key of a style's object sets, or null for a custom property's, which a style sets
+ * only through its setProperty.
+ * @param {string} key
+ */
+const readStyleObjectProperty = (key) => (key.startsWith("--") ? null : toKebabCase(key));
 
 /**
  * The CSS name a keyframe's key sets, or null for one that places the keyframe in its animation.

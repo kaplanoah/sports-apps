@@ -1445,6 +1445,14 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  part.style.cssText = "/**/z-index: 2";',
     '  part.style.cssText = "transition: color 0.2s, translate 0.2s";',
     '  sheet.insertRule(".tip { transition: color 0.2s, transform 0.2s }");',
+    '  sheet.insertRule(".tip { transition: " + eased + " }");',
+    '  part.style.transition = "";',
+    '  const MOTION = { transition: "transform 0.2s" };',
+    '  part.style.cssText = "transition: color 0.2s, " + eased;',
+    '  part.style.cssText = "transition: color 0.2s" + eased;',
+    "    transition: color 0.2s,",
+    "    transition: color 0.2s",
+    "    transition:",
     '  part.style.position = "f\\69xed";',
     '  part.style.setProperty("position", "\\66ixed");',
     '  part.style.cssText = `color: ${a ? "{" : "b"}; z-index: 2`;',
@@ -1595,6 +1603,16 @@ test("a page's script that sets a custom property is red only where a stack decl
       count,
       `a keyframe: ${key}`,
     );
+  assert.deepEqual(
+    findChangeReasons(
+      {
+        [path]: { before: [], after: ["Object.assign(part.style, {", '  "--lift": lift,', "});"] },
+      },
+      reads,
+    ),
+    [],
+    "a style's object sets no custom property, which only setProperty sets",
+  );
 });
 
 test("tests, docs, and the Worker's code are never red", () => {
