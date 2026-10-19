@@ -56,7 +56,7 @@ import { showLeagueStandings } from "./standings.js";
 import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
-import { fillSeasonPicker } from "#shared/season-picker.js";
+import { fillSeasonPicker, watchSeasonPicks } from "#shared/season-picker.js";
 import { startAppearance } from "#shared/appearance.js";
 import { showSeasonPart, startBracketStandings } from "#shared/bracket-standings.js";
 import { LOOKS } from "./looks.js";
@@ -71,7 +71,7 @@ function drawNews() {
   if (session.news !== undefined) drawNewsList(findNewsList(), session.news, NEWS_LEAGUE);
 }
 
-const findYearPicker = () => /** @type {HTMLSelectElement} */ (document.getElementById("yearSel"));
+const findSeasonRow = () => /** @type {HTMLElement} */ (document.getElementById("seasonRow"));
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 async function switchYear(year) {
@@ -92,7 +92,7 @@ async function listYears() {
 
 /** @param {string[]} years */
 const fillYearPicker = (years) =>
-  fillSeasonPicker(findYearPicker(), years, session.activeYear, LEAGUE_WORDS);
+  fillSeasonPicker(findSeasonRow(), years, session.activeYear, LEAGUE_WORDS);
 
 // A new current season changes what the stamp says, and the picker lists it.
 async function showNewCurrentYear() {
@@ -206,8 +206,7 @@ function wireControls() {
   startAppearance(LOOKS);
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);
   startHomeScreen();
-  const picker = findYearPicker();
-  picker.addEventListener("change", () => switchYear(Number(picker.value)));
+  watchSeasonPicks(findSeasonRow(), switchYear);
   document
     .getElementById("rankList")
     .addEventListener(REORDER_EVENT, (event) =>

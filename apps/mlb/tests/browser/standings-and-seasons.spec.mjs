@@ -309,7 +309,7 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
   page,
 }) => {
   await openApp(page);
-  const picker = page.locator("#yearSel");
+  const picker = page.locator("#seasonPicker");
   await expect(picker).toHaveCSS("font-size", "16px");
   const widths = await measureFieldFace(picker, "--type-detail-size", "var(--numbers)");
   expect(widths.field).toBeCloseTo(widths.role, 0);
@@ -325,7 +325,7 @@ test("the page shows the season the store says is current", async ({ page }) => 
     snapshots: { 2027: buildEmptySeasonSnapshot(2027, "2027-02-19") },
   });
 
-  await expect(page.locator("#yearSel")).toHaveValue("2027");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2027");
   await expect(page.getByRole("heading", { name: "No playoff field yet" })).toBeVisible();
 });
 
@@ -336,12 +336,12 @@ test("a page left open turns over when the store moves on to a new season", asyn
     snapshots: { 2027: buildEmptySeasonSnapshot(2027, "2027-02-19") },
   });
   await expect.poll(() => app.countOpenSockets()).toBe(1);
-  await expect(page.locator("#yearSel")).toHaveValue("2026");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2026");
 
   // What the Worker's update saves once spring training has started.
   await app.writeFromWorker("live/current", { season: 2027 });
 
-  await expect(page.locator("#yearSel")).toHaveValue("2027");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2027");
   await expect(page.getByRole("heading", { name: "No playoff field yet" })).toBeVisible();
 });
 
@@ -353,10 +353,10 @@ test("while the store says last year's season is current, the page shows it and 
     store: { "live/current": { season: 2026 } },
     snapshots: { 2027: buildEmptySeasonSnapshot(2027, "2027-02-19") },
   });
-  await expect(page.locator("#yearSel")).toHaveValue("2026");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2026");
 
   await page.clock.fastForward("02:00:00");
 
-  await expect(page.locator("#yearSel")).toHaveValue("2026");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2026");
   expect(app.listStoreReads().filter((path) => path.includes("2027"))).toEqual([]);
 });

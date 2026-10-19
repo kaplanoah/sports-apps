@@ -4,6 +4,7 @@ import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { checkSettingsOnReload } from "../../../../tests/browser/settings-reload.mjs";
 import {
   checkHandoffRenewal,
   checkReAddHandoff,
@@ -67,6 +68,18 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
   await expect(picker).toHaveCSS("font-size", "16px");
   const widths = await measureFieldFace(picker, "--type-detail-size");
   expect(widths.field).toBeCloseTo(widths.role, 0);
+});
+
+test("a reload with settings open shows its seasons, switches, and look picked before the page's code arrives", async ({
+  page,
+}) => {
+  await openApp(page, { pastSeasons: { 2025: (season) => season } });
+  await checkSettingsOnReload({
+    page,
+    openSettings: (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click(),
+    look: "Walnut",
+    switchName: "Include content from The Athletic",
+  });
 });
 
 test("settings list Notifications, the News switches, and Appearance, with lines only between the three", async ({

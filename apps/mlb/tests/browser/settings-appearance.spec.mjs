@@ -1,6 +1,8 @@
 import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { checkSettingsOnReload } from "../../../../tests/browser/settings-reload.mjs";
+import { WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
 import {
   checkHandoffRenewal,
   checkReAddHandoff,
@@ -138,6 +140,18 @@ test.describe("in an iPhone's Home Screen app", () => {
     page,
   }) => {
     await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });
+  });
+});
+
+test("a reload with settings open shows its seasons, switches, and look picked before the page's code arrives", async ({
+  page,
+}) => {
+  await openApp(page, WITH_A_PAST_SEASON);
+  await checkSettingsOnReload({
+    page,
+    openSettings,
+    look: "Night Game",
+    switchName: "Include content from The Athletic",
   });
 });
 

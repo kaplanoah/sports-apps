@@ -2,7 +2,8 @@ import { html, setHtml } from "./html.js";
 import { nameSeason } from "./league-words.js";
 
 // The settings' Season picker: the seasons the store keeps, newest first, with the shown one always
-// among them. It shows only once there's another season to pick.
+// among them. It shows only once there's another season to pick. Its row is drawn whole, so a
+// reload shows it as it was before the page's code arrives.
 
 /**
  * The years of the seasons the store keeps, newest first.
@@ -31,17 +32,34 @@ export function listSeasonOptions(years, shownYear, words) {
 }
 
 /**
- * @param {HTMLSelectElement} picker
+ * @param {HTMLElement} row the picker's row, `#seasonRow`, whose select is `#seasonPicker`
  * @param {string[]} years
  * @param {number} shownYear
  * @param {Pick<import("./league-words.js").LeagueWords, "seasonSpansYears">} words
  */
-export function fillSeasonPicker(picker, years, shownYear, words) {
+export function fillSeasonPicker(row, years, shownYear, words) {
   const listed = listSeasonOptions(years, shownYear, words);
   const options = listed.map(
     ({ year, name, isShown }) =>
       html`<option value="${year}" ${isShown ? "selected" : ""}>${name}</option>`,
   );
-  setHtml(picker, html`${options}`);
-  /** @type {HTMLElement} */ (picker.closest(".control-row")).hidden = listed.length < 2;
+  setHtml(
+    row,
+    html`<span>Season</span>
+      <select id="seasonPicker" class="select-field" aria-label="Season">
+        ${options}
+      </select>`,
+  );
+  row.hidden = listed.length < 2;
+}
+
+/**
+ * Calls `pick` with each season picked, from the picker the row draws now or later.
+ * @param {HTMLElement} row
+ * @param {(year: number) => void} pick
+ */
+export function watchSeasonPicks(row, pick) {
+  row.addEventListener("change", (event) =>
+    pick(Number(/** @type {HTMLSelectElement} */ (event.target).value)),
+  );
 }

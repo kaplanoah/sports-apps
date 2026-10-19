@@ -198,11 +198,31 @@ function showLastSheets() {
     if (!sheets.some(({ saved }) => isForgotten(saved))) showLastDialog(dialog, sheets);
 }
 
+/** @param {any} saved */
+const readEntries = (saved) => Object.entries(saved && typeof saved === "object" ? saved : {});
+
+// A setting's switches and choices show the device's own, as their modules set them once they load.
+function showLastSettings() {
+  const saved = readSaved("lastSet");
+  for (const [id, isOn] of readEntries(saved?.switches)) {
+    const element = document.getElementById(id);
+    if (element?.matches("[data-setting] [role=switch]") && (isOn === "true" || isOn === "false"))
+      element.setAttribute("aria-checked", isOn);
+  }
+  for (const [name, value] of readEntries(saved?.choices)) {
+    const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
+      document.querySelectorAll(`[data-setting] input[type=radio][name="${CSS.escape(name)}"]`)
+    );
+    for (const choice of choices) choice.checked = choice.value === value;
+  }
+}
+
 // What the page last showed is a drawing of its own, so the note that its views are still empty
 // goes with it.
 function showLastDrawn() {
   const parts = Object.entries(readLastDrawn()).filter(([id, part]) => isDrawnPart(id, part));
   for (const [id, part] of parts) showPart(id, part);
   if (parts.length) document.getElementById("loadNote")?.remove();
+  showLastSettings();
   showLastSheets();
 }

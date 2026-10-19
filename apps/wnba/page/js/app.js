@@ -25,7 +25,7 @@ import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
-import { fillSeasonPicker } from "#shared/season-picker.js";
+import { fillSeasonPicker, watchSeasonPicks } from "#shared/season-picker.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { startServiceWorker } from "#shared/service-worker.js";
 import { isSettingShown, openSettings, startSettingsSheet } from "#shared/settings-sheet.js";
@@ -155,7 +155,7 @@ const readShown = () =>
     news: session.news,
   };
 
-const findSeasonPicker = () => /** @type {HTMLSelectElement} */ (findElement("seasonPicker"));
+const findSeasonRow = () => findElement("seasonRow");
 
 async function listSeasonYears() {
   try {
@@ -167,7 +167,7 @@ async function listSeasonYears() {
 
 /** @param {string[]} years */
 const fillSeasonList = (years) =>
-  fillSeasonPicker(findSeasonPicker(), years, session.year, LEAGUE_WORDS);
+  fillSeasonPicker(findSeasonRow(), years, session.year, LEAGUE_WORDS);
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 /** @param {number} year */
@@ -290,9 +290,7 @@ async function boot() {
   startChannelTag();
   startNewsRedraws(findElement("newsList"), drawNews, NEWS_LEAGUE);
   startHomeScreen();
-  findSeasonPicker().addEventListener("change", () =>
-    switchSeason(Number(findSeasonPicker().value)),
-  );
+  watchSeasonPicks(findSeasonRow(), switchSeason);
   startBracket();
   startBracketStandings();
   session.db = createWorkerStore();
