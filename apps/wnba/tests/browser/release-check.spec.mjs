@@ -1,12 +1,14 @@
 import { test as base } from "@playwright/test";
 import { checkPage } from "../../../../worker/check-page.mjs";
+import {
+  BROKEN_CHECK_TIMEOUT_MS,
+  serveUnreachableStore,
+} from "../../../../tests/browser/page-check.mjs";
 import { test, expect, matchPath, serveLockedApp, LOCKED_PAGE_PATH } from "./harness.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const ACCESS_CODE = "FASTBREAK";
-// A broken page draws nothing, so a check of one waits only this long rather than a deploy's.
-const BROKEN_TIMEOUT_MS = 3000;
 
 /** @param {string | undefined} baseURL */
 const findPageUrl = (baseURL) => new URL(LOCKED_PAGE_PATH, baseURL).href;
@@ -30,20 +32,46 @@ test("a code the Worker refuses leaves the page unchecked, not broken", async ({
   expect(check).toEqual({ status: "unchecked", reason: "the Worker refused the access code" });
 });
 
-test("a page whose store doesn't answer is broken", async ({ page, baseURL }) => {
-  await serveLockedApp(page, { accessCode: ACCESS_CODE });
-  await page.route(matchPath(`${LOCKED_PAGE_PATH}store/`), (route) =>
-    route.fulfill({ status: 503 }),
-  );
-  await page.routeWebSocket(
-    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
-    (socket) => socket.close(),
-  );
+test("a page that asks for no code passes once it draws, saying its code isn't needed", async ({
+  page,
+  baseURL,
+}) => {
+  const { changeAccessCode } = await serveLockedApp(page, { accessCode: ACCESS_CODE });
+  changeAccessCode("");
+
+  const check = await checkPage(page, { pageUrl: findPageUrl(baseURL), accessCode: ACCESS_CODE });
+
+  expect(check).toEqual({
+    status: "drawn",
+    note: "the page asks for no code, so its access code secret isn't needed",
+  });
+});
+
+test("a page that asks for no code and draws nothing is broken", async ({ page, baseURL }) => {
+  const { changeAccessCode } = await serveLockedApp(page, { accessCode: ACCESS_CODE });
+  changeAccessCode("");
+  await serveUnreachableStore(page);
 
   const check = await checkPage(page, {
     pageUrl: findPageUrl(baseURL),
     accessCode: ACCESS_CODE,
-    timeoutMs: BROKEN_TIMEOUT_MS,
+    timeoutMs: BROKEN_CHECK_TIMEOUT_MS,
+  });
+
+  expect(check).toEqual({
+    status: "broken",
+    reason: `the page says "Can't reach the page's server right now"`,
+  });
+});
+
+test("a page whose store doesn't answer is broken", async ({ page, baseURL }) => {
+  await serveLockedApp(page, { accessCode: ACCESS_CODE });
+  await serveUnreachableStore(page);
+
+  const check = await checkPage(page, {
+    pageUrl: findPageUrl(baseURL),
+    accessCode: ACCESS_CODE,
+    timeoutMs: BROKEN_CHECK_TIMEOUT_MS,
   });
 
   expect(check).toEqual({
@@ -65,7 +93,7 @@ base("a page whose code throws is broken, and says what it threw", async ({ page
   const check = await checkPage(page, {
     pageUrl: findPageUrl(baseURL),
     accessCode: ACCESS_CODE,
-    timeoutMs: BROKEN_TIMEOUT_MS,
+    timeoutMs: BROKEN_CHECK_TIMEOUT_MS,
   });
 
   expect(check).toEqual({ status: "broken", reason: "the page threw: The release is broken" });

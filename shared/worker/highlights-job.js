@@ -105,14 +105,6 @@ function isDue(end, read, { now, version }) {
 const stampVersion = (read, version) => (version ? { ...read, version } : read);
 
 /**
- * A read that keeps its version as `edition` takes it as `version`, so it isn't due again.
- * @param {HighlightsRead & { edition?: number }} read
- * @returns {HighlightsRead}
- */
-const renameEdition = ({ edition, ...read }) =>
-  edition === undefined ? read : { ...read, version: edition };
-
-/**
  * Reads a game's highlights and saves them when they changed. A read that fails keeps what was
  * saved, and one with misses saves what it brought, and either is tried again later; one that
  * brought what it could so far is finished next run.
@@ -156,9 +148,7 @@ export function createHighlightsJob(league) {
     /** @type {Record<string, HighlightsRead>} */
     const stored = (await context.storage.get(readsKey)) ?? {};
     const reads = Object.fromEntries(
-      finals.games
-        .filter((game) => stored[game.id])
-        .map((game) => [game.id, renameEdition(stored[game.id])]),
+      finals.games.filter((game) => stored[game.id]).map((game) => [game.id, stored[game.id]]),
     );
     const when = { now: context.now(), version: league.version ?? 0 };
     const due = finals.games
