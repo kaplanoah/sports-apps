@@ -125,7 +125,7 @@ function describeShooting(box, { key, label }) {
     const [made, attempted] = shots[index];
     const share = shares[index];
     return {
-      value: share == null ? "-" : `${formatPercentage(share)}%`,
+      value: `${formatPercentage(share)}${share == null ? "" : "%"}`,
       detail: `${made}-${attempted}`,
       bar: share == null ? null : Math.round(share * 100),
     };
