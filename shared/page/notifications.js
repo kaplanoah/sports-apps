@@ -1,11 +1,11 @@
 // The settings panel's notifications switch: subscribes this device to the Worker's pushes. The
 // note under it says what the app's notifications tell, or why the switch can't do its job, and,
-// where they come only from the Home Screen, ends, on a touch screen, with a ? that opens the
-// welcome's steps.
+// where they come only from the Home Screen, ends, wherever the page asks to be added there, with a
+// ? that opens the welcome's steps.
 import { reloadWhenSignedOut } from "./access.js";
 
-import { isIos, isOnHomeScreen, isTouchDevice } from "./device.js";
-import { openWelcome } from "./home-screen.js";
+import { isIos, isOnHomeScreen } from "./device.js";
+import { isAskingToAdd, openWelcome } from "./home-screen.js";
 import { html, setHtml } from "./html.js";
 import {
   CHANGE_FAILED,
@@ -39,7 +39,7 @@ function renderNote() {
   const device = {
     isIos: isIos(),
     isOnHomeScreen: isOnHomeScreen(),
-    isTouchDevice: isTouchDevice(),
+    canOpenWelcome: isAskingToAdd(),
   };
   const { text, hasHelp } = chooseNotifyNote({ status, message: note, about, device });
   if (!hasHelp) return text;

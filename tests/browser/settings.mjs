@@ -1,3 +1,5 @@
+export const SETTINGS = "#settingsDialog";
+
 /**
  * Opens settings from its button, which every app's page has.
  * @param {import("@playwright/test").Page} page

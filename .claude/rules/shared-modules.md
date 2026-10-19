@@ -50,7 +50,7 @@ paths:
   and the box at the top of settings that keeps the steps, both drawn before the first paint in `draw-home-screen-asks.js`,
   so the welcome never arrives over the page and its pick and close work at once, with Chrome's Install in `home-screen.js`,
   which opens the welcome again from the ? that ends settings' Notifications note where only the Home Screen gets notifications,
-  on a touch screen,
+  wherever the page asks to be added there,
   rising and closing as settings does,
   the theme picked, shown before the first paint and named in the browser's address,
   where Safari reloads the page after a pick, since it takes the Home Screen app's address and its own bars' color from the page as it loaded,

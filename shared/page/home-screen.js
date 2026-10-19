@@ -26,17 +26,17 @@ let isInstalled = false;
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const findWelcome = () => /** @type {HTMLDialogElement} */ (findElement("homeScreenWelcome"));
 
-const isAsking = () => isTouchDevice() && !isOnHomeScreen() && !isInstalled;
+export const isAskingToAdd = () => isTouchDevice() && !isOnHomeScreen() && !isInstalled;
 
 // Each ask shows Chrome's Install while it's to hand, and the browser's own steps otherwise.
 /** @param {HTMLElement} part */
 const isPartShown = (part) => (part.dataset.ask === "install") === !!installPrompt;
 
 function showAsks() {
-  findElement("homeScreenTip").hidden = !isAsking();
+  findElement("homeScreenTip").hidden = !isAskingToAdd();
   const parts = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-ask]"));
   for (const part of parts) part.hidden = !isPartShown(part);
-  if (!isAsking() && findWelcome().open) findWelcome().close();
+  if (!isAskingToAdd() && findWelcome().open) findWelcome().close();
 }
 
 // Chrome's dialog can be shown only once, so the steps come back if it's turned down or fails.

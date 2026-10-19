@@ -1,7 +1,8 @@
 import { expect } from "@playwright/test";
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
 import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
-import { SETTINGS, WELCOME } from "./home-screen-help.mjs";
+import { WELCOME } from "./home-screen-help.mjs";
+import { SETTINGS } from "./settings.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
 

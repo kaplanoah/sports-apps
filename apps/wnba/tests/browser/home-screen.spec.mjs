@@ -1,8 +1,9 @@
-import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { IPHONE } from "../../../../tests/browser/devices.mjs";
+import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp } from "./harness.mjs";
-import { PHONE, WELCOME, CONTINUE, openSettings } from "./home-screen.mjs";
+import { PHONE, CONTINUE, openSettings } from "./home-screen.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -40,7 +41,7 @@ const listWelcomeSteps = (page) => page.locator(`${WELCOME} .welcome-steps > li:
 const PICK_STEP = "Pick your theme You can change it later in Settings System Maple Walnut";
 
 test.describe("on an iPhone, in the browser", () => {
-  test.use({ ...PHONE, userAgent: IPHONE_AGENT });
+  test.use(IPHONE);
 
   test("the page opens on the welcome, which picks a theme and says how to add the page to the Home Screen", async ({
     page,

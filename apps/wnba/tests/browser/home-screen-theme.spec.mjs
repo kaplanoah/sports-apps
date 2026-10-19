@@ -1,6 +1,7 @@
-import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { IPHONE } from "../../../../tests/browser/devices.mjs";
+import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
 import { test, expect, openApp, serveLockedApp, LOCKED_PAGE_PATH } from "./harness.mjs";
-import { PHONE, WELCOME, CONTINUE, openSettings } from "./home-screen.mjs";
+import { CONTINUE, openSettings } from "./home-screen.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -13,7 +14,7 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 const pickReloadingTheme = (choices, name) => choices.getByRole("radio", { name }).click();
 
 test.describe("on an iPhone, in the browser", () => {
-  test.use({ ...PHONE, userAgent: IPHONE_AGENT });
+  test.use(IPHONE);
 
   test("a theme picked in the browser rides in the page's address, which keeps it through a reload, and System takes it out", async ({
     page,

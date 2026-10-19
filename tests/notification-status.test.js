@@ -31,10 +31,10 @@ test("a visit's save that fails once the browser no longer holds the subscriptio
   });
 });
 
-const IPHONE_SAFARI = { isIos: true, isOnHomeScreen: false, isTouchDevice: true };
-const IPHONE_APP = { isIos: true, isOnHomeScreen: true, isTouchDevice: true };
-const IPAD_WITH_TRACKPAD = { isIos: true, isOnHomeScreen: false, isTouchDevice: false };
-const COMPUTER = { isIos: false, isOnHomeScreen: false, isTouchDevice: false };
+const IPHONE_SAFARI = { isIos: true, isOnHomeScreen: false, canOpenWelcome: true };
+const IPHONE_APP = { isIos: true, isOnHomeScreen: true, canOpenWelcome: false };
+const IPAD_WITH_TRACKPAD = { isIos: true, isOnHomeScreen: false, canOpenWelcome: false };
+const COMPUTER = { isIos: false, isOnHomeScreen: false, canOpenWelcome: false };
 const ABOUT = "Final scores";
 
 /**
@@ -45,7 +45,7 @@ const ABOUT = "Final scores";
 const readNote = (status, device, message = "") =>
   chooseNotifyNote({ status, message, about: ABOUT, device });
 
-test("Safari outside the Home Screen says why notifications need it, ending with a ? on a touch screen", () => {
+test("Safari outside the Home Screen says why notifications need it, ending with a ? wherever the welcome can open", () => {
   const text =
     "Apple only supports notifications from sites saved to your home screen. To configure notifications, add this site to your home screen.";
   assert.deepEqual(readNote("homeScreen", IPHONE_SAFARI), { text, hasHelp: true });

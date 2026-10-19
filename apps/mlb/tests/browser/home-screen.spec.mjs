@@ -1,6 +1,7 @@
-import { IPAD, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { IPAD, IPHONE } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
-import { SETTINGS, WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
+import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp, openSettings, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
@@ -47,12 +48,7 @@ const measureTip = (page) =>
   }, SETTINGS);
 
 test.describe("on an iPhone, in the browser", () => {
-  test.use({
-    viewport: { width: 390, height: 844 },
-    hasTouch: true,
-    isMobile: true,
-    userAgent: IPHONE_AGENT,
-  });
+  test.use(IPHONE);
 
   test("the page opens on the welcome, in MLB's name and its themes, as the WNBA's does", async ({
     page,

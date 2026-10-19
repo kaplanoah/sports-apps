@@ -18,7 +18,7 @@ const NOTES = {
 };
 
 /**
- * @typedef {{ isIos: boolean, isOnHomeScreen: boolean, isTouchDevice: boolean }} NoteDevice
+ * @typedef {{ isIos: boolean, isOnHomeScreen: boolean, canOpenWelcome: boolean }} NoteDevice
  */
 
 // iOS keeps a Home Screen page's permission in its Settings app; other browsers keep it per site.
@@ -38,13 +38,13 @@ function describeStatus(status, device) {
 /**
  * The note under the switch: a message the switch was given, else what its status says, else what
  * the app's notifications tell. Where they come only from the Home Screen, it ends with a ? that
- * opens the welcome's steps, on a touch screen, the only one the welcome is drawn on.
+ * opens the welcome's steps, wherever the welcome can open.
  * @param {{ status: string, message: string, about: string, device: NoteDevice }} state
  * @returns {{ text: string, hasHelp: boolean }}
  */
 export const chooseNotifyNote = ({ status, message, about, device }) => ({
   text: message || describeStatus(status, device) || about,
-  hasHelp: status === "homeScreen" && device.isTouchDevice,
+  hasHelp: status === "homeScreen" && device.canOpenWelcome,
 });
 
 /**

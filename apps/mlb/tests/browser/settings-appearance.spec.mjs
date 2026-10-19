@@ -1,7 +1,7 @@
 import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
-import { SETTINGS } from "../../../../tests/browser/home-screen-help.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import {
   checkHandoffRenewal,
