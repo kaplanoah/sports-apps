@@ -1,6 +1,7 @@
 import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { SETTINGS } from "../../../../tests/browser/home-screen-help.mjs";
 import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import {
   checkHandoffRenewal,
@@ -121,7 +122,7 @@ test("Appearance sits under Notifications, above the News switches, each choice 
 }) => {
   await openApp(page);
   await openSettings(page);
-  const appearance = page.locator("#settingsDialog .appearance-row");
+  const appearance = page.locator(`${SETTINGS} .appearance-row`);
   const news = page.getByRole("group", { name: "News" });
   const [appearanceBox, newsBox] = await Promise.all([
     appearance.boundingBox(),
@@ -150,7 +151,7 @@ test.describe("on an iPhone's Home Screen app, which has no Home Screen box", ()
   test("a line ends the settings above News and the News switches, over the ranking, and none sits under News's label or between its switches, each switch's row right under the one before", async ({
     page,
   }) => {
-    const settingsAbove = page.locator("#settingsDialog .settings-main > .settings-controls");
+    const settingsAbove = page.locator(`${SETTINGS} .settings-main > .settings-controls`);
     expect(
       await settingsAbove.evaluate((controls) => getComputedStyle(controls).borderBottomStyle),
     ).toBe("solid");
@@ -184,7 +185,7 @@ test.describe("on an iPhone's Home Screen app, which has no Home Screen box", ()
 
   test("the first setting sits 38px under the settings title", async ({ page }) => {
     const [title, controls] = await Promise.all(
-      ["#settingsTitle", "#settingsDialog .settings-main > .settings-controls"].map((selector) =>
+      ["#settingsTitle", `${SETTINGS} .settings-main > .settings-controls`].map((selector) =>
         page.locator(selector).evaluate((part) => part.getBoundingClientRect().toJSON()),
       ),
     );

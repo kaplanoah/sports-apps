@@ -1,6 +1,6 @@
 import { IPAD, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
-import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
+import { SETTINGS, WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp, openSettings, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
@@ -28,10 +28,10 @@ const PAGE_FOLDER = new URL("../../page/", import.meta.url);
  * @param {import("@playwright/test").Page} page
  */
 const measureTip = (page) =>
-  page.locator("#homeScreenTip").evaluate((tip) => {
+  page.locator("#homeScreenTip").evaluate((tip, settingsSelector) => {
     const readBox = (selector) => document.querySelector(selector).getBoundingClientRect();
     const box = tip.getBoundingClientRect();
-    const header = readBox("#settingsDialog .sheet-top");
+    const header = readBox(`${settingsSelector} .sheet-top`);
     const settings = readBox(".settings-controls");
     const ranking = readBox("#rankingTitle");
     const rankingHeading = document.querySelector(".ranking-heading");
@@ -44,7 +44,7 @@ const measureTip = (page) =>
       besideRanking: ranking.left - box.right,
       levelWithRanking: Math.round(box.top - headingWordsTop),
     };
-  });
+  }, SETTINGS);
 
 test.describe("on an iPhone, in the browser", () => {
   test.use({
@@ -92,7 +92,7 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await listIconSteps(WELCOME)).toEqual([0, 82, 82]);
     await page.locator(WELCOME).getByRole("button", { name: "Continue in browser" }).click();
     await openSettings(page);
-    expect(await listIconSteps("#settingsDialog")).toEqual([0, 78, 78]);
+    expect(await listIconSteps(SETTINGS)).toEqual([0, 78, 78]);
   });
 
   test("each step's number sits in the middle of its circle", async ({ page }) => {
@@ -209,7 +209,7 @@ test.describe("on an iPhone, in the browser", () => {
         (file) => drawIcon(PAGE_FOLDER, file) === image,
       ) ?? image;
     const choiceIcons = await page
-      .locator("#settingsDialog .appearance-icon")
+      .locator(`${SETTINGS} .appearance-icon`)
       .evaluateAll((icons) =>
         icons.map((choiceIcon) => [
           getComputedStyle(choiceIcon).backgroundImage,
@@ -234,7 +234,7 @@ test.describe("on a computer", () => {
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeHidden();
     expect(await readSettingsTopLine(page)).toBe("none");
-    const underHeader = await page.locator("#settingsDialog").evaluate((settings) => {
+    const underHeader = await page.locator(SETTINGS).evaluate((settings) => {
       const header = settings.querySelector(".sheet-top").getBoundingClientRect();
       const controls = settings.querySelector(".settings-main > .settings-controls");
       return controls.getBoundingClientRect().top - header.bottom;
