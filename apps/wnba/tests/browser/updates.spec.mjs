@@ -472,7 +472,9 @@ test.describe("on a phone, in full motion", () => {
     // The release note leaves with the finals it was dismissed with, so the box's own parts
     // change as it grows back.
     await app.changeSeason(finishDreamAtMystics);
-    await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
+    // The box keeps the release note's heading while it's held shrinking, until the new final
+    // redraws it without one.
+    await expect(updates.locator(".updates-count")).toHaveText(["1 update since earlier today"]);
     const reopening = await readLastOfBox();
     expect(reopening.direction).toBe("normal");
     expect(reopening.first).toMatchObject({

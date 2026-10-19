@@ -46,6 +46,8 @@
  * and this sets:
  *   --view-end-room                            the room at the end of the page, or of a view that
  *                                              scrolls in itself, past the tab bar on a phone
+ *   --box-pad-start, --box-pad-end,            a dismissible box's padding, which the X in its
+ *   --box-pad-block                            corner reaches into
  * and on phones:
  *   --tab-bar-bottom                           how far the tab bar floats above the screen's bottom
  *   --tab-bar-height                           the tab bar's height

@@ -282,7 +282,7 @@ function listenForDismiss(panel) {
 }
 
 // A box that appears with new data grows open, pushing what's under it down smoothly, and one
-// that fills again as it shrinks away stays open.
+// that fills again as it shrinks away grows back open from wherever it had shrunk to.
 /**
  * @param {HTMLElement} panel
  * @param {Markup} markup
