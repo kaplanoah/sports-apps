@@ -602,9 +602,10 @@
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`),
   which each deploy does for its new version, putting the one before back when it doesn't,
   and which the `Watch apps` workflow does every 15 minutes,
-  keeping one open issue for each app that isn't opening, which closes once it opens again (`watch-apps.mjs`),
+  keeping one open issue for each app that isn't opening, which closes once it opens again,
+  and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`),
   both from each page's address and code in the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
-  with `_BETA` after the app's name for its beta channel.
+  and a beta deploy from the `beta` environment's, with `_BETA` after the app's name.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" below.
 - Commands:
@@ -715,12 +716,15 @@ Delete it once the app's first PR merges.
 8. **Ship it.** Open it as a `feat:` PR, which starts the app at version 1.0.0.
    Its page adds lines that give parts layers of their own, so it's a red change,
    tried on the owner's phone from beta before it merges, as "Workflow" says.
-   Once its CI passes, push it to `beta`, whose deploy creates `<app>-app-beta`,
+   Each channel's token can edit only the Workers it names, so before the first deploy of each channel,
+   the owner creates its Worker in Cloudflare's dashboard and adds it to that environment's token:
+   `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
+   Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`,
    which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
    Give the owner that address, and ask them to set its code with `npm run set-access-code -- <app> <code> --channel beta`,
-   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `production` environment's secrets,
+   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `beta` environment's secrets,
    add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
-   The merge's deploy then creates `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
+   The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
    and the owner adds its address and code as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
 
@@ -871,8 +875,9 @@ Delete it once the app's first PR merges.
   Nor does a Diagnostics report, which a viewer shares wherever they like:
   each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
   Reviewing a change, check what it commits, logs, and posts for any of these.
-- The Cloudflare token lives only in the cloud environment's API credentials and the repo's `production` GitHub environment.
-  Never ask for it in chat or put it in environment variables, code, or commits.
+- The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
+  each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
+  Never ask for one in chat or put one in environment variables, code, or commits.
 - Keep scratch work (design playgrounds, test harnesses) out of git, and never point tests at the real page.
 - When unsure, do what best serves the intent of the work, and confirm with the user.
   If you genuinely need a decision from the user, give all the context concisely, list the pros and cons of each option, and make a recommendation.
@@ -971,7 +976,8 @@ When a step says to go back to an earlier step, continue in order from there.
       Read the next Deploy run's log.
     - It says `worker check: ok`: the new version is live.
       Tell the user.
-      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date:
+      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date,
+      and one saying `page check: ok, but` a page that opened without the code its environment holds:
       tell the user that too.
     - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
       Tell the user which.
@@ -984,7 +990,7 @@ When a step says to go back to an earlier step, continue in order from there.
     - The run was skipped:
       CI failed on `main`.
       Read the CI log, fix the failure in a new PR, and start again at step 1.
-    - It says "nothing was deployed": the `production` environment has no Cloudflare token.
+    - It says "nothing was deployed": the channel's environment has no Cloudflare token.
       Tell the user.
     - The run failed: read the log.
       If it says "the earlier version is live again", the Worker rolled back and is unchanged.
