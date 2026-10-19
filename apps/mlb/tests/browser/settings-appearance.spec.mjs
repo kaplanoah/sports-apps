@@ -140,13 +140,16 @@ test("Appearance sits under Notifications, above the News switches, each choice 
 test.describe("on an iPhone's Home Screen app, which has no Home Screen box", () => {
   test.use({ ...ON_A_PHONE, userAgent: IPHONE_AGENT });
 
-  test("a line ends the settings above News and the News switches, over the ranking, and none sits under News's label or between its switches, each switch's row right under the one before", async ({
-    page,
-  }) => {
+  test.beforeEach(async ({ page }) => {
     await openFromHomeScreen(page);
     await openApp(page);
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeHidden();
+  });
+
+  test("a line ends the settings above News and the News switches, over the ranking, and none sits under News's label or between its switches, each switch's row right under the one before", async ({
+    page,
+  }) => {
     const settingsAbove = page.locator("#settingsDialog .settings-main > .settings-controls");
     expect(
       await settingsAbove.evaluate((controls) => getComputedStyle(controls).borderBottomStyle),
@@ -180,10 +183,6 @@ test.describe("on an iPhone's Home Screen app, which has no Home Screen box", ()
   });
 
   test("the first setting sits 38px under the settings title", async ({ page }) => {
-    await openFromHomeScreen(page);
-    await openApp(page);
-    await openSettings(page);
-    await expect(page.locator("#homeScreenTip")).toBeHidden();
     const [title, controls] = await Promise.all(
       ["#settingsTitle", "#settingsDialog .settings-main > .settings-controls"].map((selector) =>
         page.locator(selector).evaluate((part) => part.getBoundingClientRect().toJSON()),
