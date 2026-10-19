@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { listTrackedFiles, readRepoFile } from "./tracked-files.js";
+import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 
 const isDeployCode = (/** @type {string} */ path) =>
   /^worker\/[^/]+\.mjs$/.test(path) || path === ".github/workflows/deploy.yml";
@@ -30,8 +30,8 @@ function listQuotedLines(text, heading) {
 const countShown = (text, phrase) => text.split(phrase).length - 1;
 
 // CI's review never reads the skills, so a change to what a deploy prints would leave the skill
-// sending a session after a line the log no longer holds, or one another message holds too.
-test("each line the ship skill reads in a deploy's log is one only one message prints", () => {
+// sending a session after a line the log no longer holds, or one the code holds in more than one place.
+test("each phrase the ship skill reads in a deploy's log shows once in the deploy's code", () => {
   const deployCode = listTrackedFiles()
     .filter(isDeployCode)
     .map((path) => dropComments(readRepoFile(path)))

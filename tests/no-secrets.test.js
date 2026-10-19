@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listTrackedFiles } from "./tracked-files.js";
+import { listTrackedFiles } from "./repo-files.js";
 import { readFileSync } from "node:fs";
 
 // The repo is public, so nothing in it may name a real Worker, a page's key, the Cloudflare

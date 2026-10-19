@@ -2,7 +2,6 @@
 paths:
   - "apps/**"
   - "shared/**"
-  - "tests/time-zone.js"
 ---
 
 # The current season and the store

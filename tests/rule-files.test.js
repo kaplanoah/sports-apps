@@ -8,7 +8,7 @@ import {
   readRuleFiles,
   readRulePaths,
 } from "../worker/rule-files.mjs";
-import { listTrackedFiles, readRepoFile, readSkillName } from "./tracked-files.js";
+import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
 
 const repoFiles = listTrackedFiles();
 const ruleFiles = repoFiles.filter(isRuleFile);

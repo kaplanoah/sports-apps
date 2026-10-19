@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { decideDeploy, findDeployedChanges, listChangedFiles } from "../worker/deploy-scope.mjs";
-import { readRepoFile } from "./tracked-files.js";
+import { readRepoFile } from "./repo-files.js";
 
 /**
  * The root worker/ modules a script imports, and the ones they import, with the script.

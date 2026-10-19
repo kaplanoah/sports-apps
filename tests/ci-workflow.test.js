@@ -12,7 +12,7 @@ import {
 } from "../worker/judge-review.mjs";
 import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
-import { readRepoFile } from "./tracked-files.js";
+import { readRepoFile } from "./repo-files.js";
 
 const WORKFLOWS = readdirSync(new URL("../.github/workflows/", import.meta.url)).filter((name) =>
   name.endsWith(".yml"),

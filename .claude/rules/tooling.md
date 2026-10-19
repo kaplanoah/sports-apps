@@ -35,7 +35,7 @@ paths:
   so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
   The address with the key keeps working as it was, and phones stay signed in there.
   Keep the host out of the repo, as the Worker's own address is.
-- Mask what AGENTS.md's public-repo bullet keeps out of the repo in anything a workflow logs or posts,
+- Mask, in anything a workflow logs or posts, what AGENTS.md's public-repo bullet keeps out of the repo,
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.
 - An app's deploy is skipped when nothing but docs, tests, tooling,
   and other apps' folders changed since its live version's commit; the root's `worker/deploy-scope.mjs` lists those files.

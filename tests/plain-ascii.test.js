@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { listTrackedFiles } from "./tracked-files.js";
+import { listTrackedFiles } from "./repo-files.js";
 
 const ROOT = new URL("../", import.meta.url);
 

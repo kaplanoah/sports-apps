@@ -116,7 +116,7 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 - The run was skipped:
   CI failed on `main`.
   Read the CI log, fix the failure in a new PR, and start again at step 1.
-- It says "No CLOUDFLARE_API_TOKEN in the": the channel's environment has no Cloudflare token, so nothing was deployed.
+- It says "No CLOUDFLARE_API_TOKEN": the channel's environment has no Cloudflare token, so nothing was deployed.
   Tell the user.
 - The run failed: read the log.
   If it says "the earlier version is live again", the Worker rolled back and is unchanged.

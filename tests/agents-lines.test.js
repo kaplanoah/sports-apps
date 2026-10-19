@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isRuleFile } from "../worker/rule-files.mjs";
-import { listTrackedFiles, readRepoFile, readSkillName } from "./tracked-files.js";
+import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
 
 // Two changes to a guidance file conflict only when they touch the same or neighboring lines, so
 // each sentence starts a line of its own and a long one breaks after its commas.
