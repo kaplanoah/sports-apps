@@ -44,6 +44,7 @@ const SKIPPED_FILES = new Set([
   "worker/review-context.mjs",
   "worker/review-state.mjs",
   "worker/rollback.mjs",
+  "worker/rule-files.mjs",
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
   "worker/set-page-host.mjs",

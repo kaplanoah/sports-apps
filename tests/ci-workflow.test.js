@@ -457,7 +457,7 @@ test("the review reads every area in full, checks before it posts, and fails on 
   assert.match(across, /if: steps\.across\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
   const post = readJob("review-post");
   assert.match(post, /node worker\/post-review\.mjs post \.review "\$STAGE" >> "\$GITHUB_OUTPUT"/);
-  const [stage, area, kind] = ["${{ env.STAGE }}", "${{ matrix.area }}", "${{ matrix.kind }}"];
+  const [stage, area, kind] = ["${{ env.STAGE }}", "${{ env.AREA }}", "${{ matrix.kind }}"];
   const records = [
     ["review-find", nameFindRecord(stage, area, kind)],
     ["review-check", nameCandidatesRecord(stage, area)],
@@ -494,6 +494,32 @@ test("the review reads every area in full, checks before it posts, and fails on 
   );
   assert.match(review, /run: node worker\/judge-review\.mjs summary \.review/);
   assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+});
+
+// GitHub can't fill a skipped job's name from its matrix, so a name typed with matrix values shows
+// them unfilled; a job left unnamed is named by its matrix when it runs and by its key when skipped.
+test("each review job with a matrix is named by GitHub, and looks up its area and focus", () => {
+  /** @type {[string, string, boolean][]} */
+  const lookups = [
+    ["review-find", "area-numbers", true],
+    ["review-check", "area-numbers", false],
+    ["review-final-find", "final-area-numbers", true],
+    ["review-final-check", "final-area-numbers", false],
+  ];
+  for (const [job, numbers, hasFocus] of lookups) {
+    const text = readJob(job);
+    assert.doesNotMatch(text, /^ {4}name:/m, job);
+    assert.ok(
+      text.includes(`AREA: \${{ fromJSON(needs.review-plan.outputs.${numbers})[matrix.name] }}`),
+      job,
+    );
+    assert.equal(
+      text.includes("FOCUS: ${{ fromJSON(needs.review-plan.outputs.focus)[matrix.kind] }}"),
+      hasFocus,
+      job,
+    );
+  }
+  assert.doesNotMatch(readRepoFile(".github/workflows/ci.yml"), /matrix\.(area|focus|lines)/);
 });
 
 // Only the posting and summary steps hold a token that writes to the pull request; no job that runs

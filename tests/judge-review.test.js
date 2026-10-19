@@ -156,8 +156,9 @@ const diffOf = (paths) =>
 /**
  * A folder holding a first review's plan of these files, which share one area.
  * @param {string[]} paths
+ * @param {{ path: string, text: string }[]} [rules]
  */
-function planFirstReview(paths) {
+function planFirstReview(paths, rules = []) {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   writeReview(folder, {
     choice: { stage: "first" },
@@ -169,6 +170,7 @@ function planFirstReview(paths) {
     }),
     repoFiles: [],
     listStale: () => [],
+    rules,
   });
   return folder;
 }
@@ -194,6 +196,24 @@ test("a reviewer's tries are kept, and only the parts no try read stay unread", 
   const record = JSON.parse(readFileSync(join(folder, "find-first-1-rules.json"), "utf8"));
   assert.equal(record.tries.length, 2);
   assert.deepEqual(record.tries[0].answer.items, [candidate]);
+});
+
+test("a reviewer that read its diffs but not its area's rule file leaves the rule file unread", () => {
+  const rule = { path: ".claude/rules/page.md", text: '---\npaths:\n  - "shared/page/**"\n---\n' };
+  const folder = planFirstReview(["shared/page/a.js"], [rule]);
+  const execution = join(folder, "execution.json");
+  const reader = { stage: "first", area: 1, kind: "rules" };
+  const answer = JSON.stringify({ candidates: [], unjudged: [] });
+  const readOnly = (/** @type {string[]} */ parts) => {
+    const reads = parts.map((part) => ({ file_path: resolve(folder, part) }));
+    writeFileSync(execution, JSON.stringify(runReading(reads)));
+    return recordFindTry(folder, reader, { EXECUTION_FILE: execution, STRUCTURED_OUTPUT: answer });
+  };
+  assert.deepEqual(readOnly(["first/shared/page/a.js.diff"]), {
+    unread: ["rules/page.md"],
+    isAnswered: true,
+  });
+  assert.deepEqual(readOnly(["rules/page.md"]), { unread: [], isAnswered: true });
 });
 
 test("a reviewer whose last try read everything but gave no answer hasn't finished", () => {
@@ -384,6 +404,7 @@ const AREAS = [
     files: ["a.js"],
     lines: 4,
     partsByFile: { "a.js": ["first/a.js.diff"] },
+    rules: [],
   },
   {
     area: 2,
@@ -394,6 +415,7 @@ const AREAS = [
       "b.js": ["first/b.js.part-1.diff", "first/b.js.part-2.diff"],
       "c.js": ["first/c.js.diff"],
     },
+    rules: ["rules/page-look.md"],
   },
 ];
 
@@ -435,6 +457,24 @@ function finishStage(stage, areas, changes = {}) {
   const merged = { ...records, ...changes };
   return new Map(Object.entries(merged).filter(([, record]) => record !== undefined));
 }
+
+test("a reviewer that left its area's rule file unread hasn't finished", () => {
+  const record = {
+    stage: "first",
+    area: 2,
+    kind: "rules",
+    tries: [{ reads: [], answer: { items: [], unjudged: [] } }],
+    unread: ["rules/page-look.md"],
+    isAnswered: true,
+  };
+  const records = finishStage("first", AREAS, { "find-first-2-rules.json": record });
+  const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
+  assert.ok(!isComplete);
+  assert.match(
+    body,
+    /- the rules reviewer of shared page, which left rules\/page-look\.md unread\n/,
+  );
+});
 
 test("a stage of more than one area isn't finished until the check across them is", () => {
   const records = finishStage("first", AREAS, { "across-first.json": undefined });

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   FINAL_KIND,
+  FOCUSES,
   KINDS,
   PART_BYTES,
   PART_LINES,
@@ -177,6 +178,8 @@ test("each file of code belongs to the area of what it's about", () => {
   assert.equal(nameCodeArea("shared/page/sheet.css"), "shared page");
   assert.equal(nameCodeArea("shared/worker/push.js"), "shared Worker");
   assert.equal(nameCodeArea("AGENTS.md"), "docs");
+  assert.equal(nameCodeArea(".claude/rules/page-look.md"), "docs");
+  assert.equal(nameCodeArea(".claude/skills/add-league/SKILL.md"), "docs");
   assert.equal(nameCodeArea(".github/workflows/ci.yml"), "tooling");
   assert.equal(nameCodeArea("worker/deploy.mjs"), "tooling");
 });
@@ -334,19 +337,33 @@ test("a plan reads every file but the unread ones, and names why each goes unrea
 });
 
 test("each area has a reviewer for each kind of problem, two for bugs, and one checker", () => {
-  const { reviewers, checkers } = listJobs([{ area: 1, name: "mlb page", lines: 40 }], KINDS);
+  const areas = [
+    { area: 1, name: "mlb page", lines: 40 },
+    { area: 2, name: "tooling", lines: 9 },
+  ];
+  const { reviewers, checkers, areaNumbers } = listJobs(areas, KINDS);
   assert.deepEqual(
-    reviewers.map((reviewer) => reviewer.kind),
+    reviewers.filter((reviewer) => reviewer.name === "mlb page").map((reviewer) => reviewer.kind),
     ["bugs", "bugs-from-end", "rules", "tests"],
   );
-  assert.ok(reviewers.every((reviewer) => reviewer.focus.includes("REVIEW.md")));
-  assert.deepEqual(checkers, [{ area: 1, name: "mlb page", lines: 40 }]);
+  assert.deepEqual(checkers, [{ name: "mlb page" }, { name: "tooling" }]);
+  assert.deepEqual(areaNumbers, { "mlb page": 1, tooling: 2 });
   assert.deepEqual(
-    listJobs([{ area: 1, name: "mlb page", lines: 40 }], [FINAL_KIND]).reviewers.map(
-      (reviewer) => reviewer.kind,
-    ),
-    ["all"],
+    listJobs(areas, [FINAL_KIND]).reviewers.map((reviewer) => reviewer.kind),
+    ["all", "all"],
   );
+  assert.ok(Object.values(FOCUSES).every((focus) => focus.includes("REVIEW.md")));
+  assert.deepEqual(
+    Object.keys(FOCUSES),
+    [...KINDS, FINAL_KIND].map(({ kind }) => kind),
+  );
+});
+
+// GitHub names a matrix's job by every value in it, and a skipped one by the job alone.
+test("each matrix holds only what names its job", () => {
+  const { reviewers, checkers } = listJobs([{ area: 1, name: "mlb page" }], KINDS);
+  assert.ok(reviewers.every((reviewer) => Object.keys(reviewer).join() === "name,kind"));
+  assert.ok(checkers.every((checker) => Object.keys(checker).join() === "name"));
 });
 
 test("a change reads the same wherever a merge of the base moved it, but not once a block moves within it", () => {
@@ -619,6 +636,7 @@ test("a changed file the diff has no part for stops the review rather than count
         numstat: "1\t0\tmissing.js\n",
         diff: diffFile("other.js", [1]),
         repoFiles: [],
+        rules: [],
       }),
     /The diff has no part for missing\.js/,
   );
@@ -630,6 +648,7 @@ test("a stage is written as each file's parts under the stage's folder, with its
     numstat: "1200\t0\tshared/page/sheet.js\n2\t0\tshared/page/tabs.js\n-\t-\ticon.png\n",
     diff: diffFile("shared/page/sheet.js", [600, 600]) + diffFile("shared/page/tabs.js", [2]),
     repoFiles: [],
+    rules: [],
   });
   assert.deepEqual(areas[0].partsByFile, {
     "shared/page/sheet.js": [
@@ -663,6 +682,7 @@ test("a review of a push reads what it changed, and keeps the whole change for t
     readDiff,
     repoFiles: [],
     listStale: () => [],
+    rules: [],
   });
   assert.deepEqual(ranges, [
     ["merged-tree", "HEAD", "shared/page/sheet.js"],
@@ -700,6 +720,7 @@ test("a push whose merge of the base git can't set apart says its diffs may hold
     }),
     repoFiles: [],
     listStale: () => [],
+    rules: [],
   });
   assert.match(
     readFileSync(join(folder, "push.md"), "utf8"),
@@ -724,6 +745,7 @@ test("the first review reads the whole change and keeps nothing for a last read"
     },
     repoFiles: [],
     listStale: () => [],
+    rules: [],
   });
   assert.deepEqual(ranges, [["HEAD^1", "HEAD"]]);
   assert.deepEqual(
@@ -749,7 +771,9 @@ test("a review with no reviewers reads nothing, and keeps the head the last full
       readDiff: () => assert.fail("nothing is read"),
       repoFiles: [],
       listStale: () => assert.fail("no reviewer reads the stale names"),
+      rules: [{ path: ".claude/rules/page.md", text: '---\npaths:\n  - "shared/**"\n---\n' }],
     });
+    assert.ok(!existsSync(join(folder, "rules")), "no rule file is copied");
     assert.deepEqual(plan, {
       stage,
       since: "b".repeat(40),
@@ -945,11 +969,47 @@ test("the stale names are written for the rules reviewer, each with where the re
     }),
     repoFiles: [],
     listStale: () => [{ name: "serveSnapshot", hits: ["AGENTS.md:351: the live snapshot"] }],
+    rules: [],
   });
   assert.match(
     readFileSync(join(folder, "stale-names.md"), "utf8"),
     /## serveSnapshot\n\n- AGENTS\.md:351: the live snapshot/,
   );
+});
+
+test("each area's index names the rule files whose paths match its files, each copied for its reviewers", () => {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  const pageRule = '---\npaths:\n  - "apps/*/page/**"\n  - "shared/page/**"\n---\n\n# Pages\n';
+  const workerRule = '---\npaths:\n  - "shared/worker/**"\n---\n\n# Workers\n';
+  const plan = writeReview(folder, {
+    choice: { stage: "first" },
+    since: null,
+    pushed: null,
+    readDiff: () => ({
+      numstat: "200\t0\tapps/mlb/page/js/app.js\n200\t0\tworker/deploy.mjs\n",
+      diff: diffFile("apps/mlb/page/js/app.js", [200]) + diffFile("worker/deploy.mjs", [200]),
+    }),
+    repoFiles: [],
+    listStale: () => [],
+    rules: [
+      { path: ".claude/rules/page.md", text: pageRule },
+      { path: ".claude/rules/worker.md", text: workerRule },
+    ],
+  });
+  assert.deepEqual(
+    plan.areas.map(({ name, rules }) => [name, rules]),
+    [
+      ["mlb page", ["rules/page.md"]],
+      ["tooling", []],
+    ],
+  );
+  assert.equal(readFileSync(join(folder, "rules/page.md"), "utf8"), pageRule);
+  const index = readFileSync(join(folder, "first.md"), "utf8");
+  assert.match(
+    index,
+    /## Area 1: mlb page\n\n- apps\/mlb\/page\/js\/app\.js: .*\n\nRule files: rules\/page\.md\n/,
+  );
+  assert.doesNotMatch(index.split("## Area 2")[1], /Rule files/);
 });
 
 test("a stage's index names each file left unread and why", () => {
@@ -964,6 +1024,7 @@ test("a stage's index names each file left unread and why", () => {
     }),
     repoFiles: [],
     listStale: () => [],
+    rules: [],
   });
   assert.match(
     readFileSync(join(folder, "first.md"), "utf8"),

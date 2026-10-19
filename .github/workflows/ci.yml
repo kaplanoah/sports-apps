@@ -431,13 +431,16 @@ jobs:
     outputs:
       stage: ${{ steps.plan.outputs.stage }}
       reviewers: ${{ steps.plan.outputs.reviewers }}
+      area-numbers: ${{ steps.plan.outputs.area-numbers }}
       checkers: ${{ steps.plan.outputs.checkers }}
       areas: ${{ steps.plan.outputs.areas }}
       count: ${{ steps.plan.outputs.count }}
       final-reviewers: ${{ steps.plan.outputs.final-reviewers }}
+      final-area-numbers: ${{ steps.plan.outputs.final-area-numbers }}
       final-checkers: ${{ steps.plan.outputs.final-checkers }}
       final-areas: ${{ steps.plan.outputs.final-areas }}
       final-count: ${{ steps.plan.outputs.final-count }}
+      focus: ${{ steps.plan.outputs.focus }}
     steps:
       - name: Decide whether to review
         id: decision
@@ -509,7 +512,6 @@ jobs:
   # app's, which works only while this file is as the default branch has it, so a change to the
   # review is reviewed by its own jobs, and the guide has them flag one that lets less through.
   review-find:
-    name: review-find (${{ matrix.name }}, ${{ matrix.kind }})
     needs: review-plan
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
     runs-on: ubuntu-latest
@@ -523,6 +525,8 @@ jobs:
         include: ${{ fromJSON(needs.review-plan.outputs.reviewers || '[]') }}
     env:
       STAGE: ${{ needs.review-plan.outputs.stage }}
+      AREA: ${{ fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name] }}
+      FOCUS: ${{ fromJSON(needs.review-plan.outputs.focus)[matrix.kind] }}
     steps: &find-steps
       - &review-checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -552,11 +556,11 @@ jobs:
             --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
             --json-schema '{"type":"object","properties":{"candidates":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"confidence":{"type":"string","enum":["high","medium","low"]},"claim":{"type":"string"},"when":{"type":"string"},"fix":{"type":"string"}},"required":["path","line","weight","confidence","claim","when","fix"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["candidates","unjudged"]}'
           prompt: |
-            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. Its change is split into areas by what the files are about, and each area's reviewers each look for one kind of problem. You review area ${{ matrix.area }}, "${{ matrix.name }}", and look only for this: ${{ matrix.focus }}
+            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. Its change is split into areas by what the files are about, and each area's reviewers each look for one kind of problem. You review area ${{ env.AREA }}, "${{ matrix.name }}", and look only for this: ${{ env.FOCUS }}
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps.
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md and the rule files your area lists hold the rules the code keeps.
             2. Read `.review/pull-request.md`: the pull request's title and description, and every review thread on it so far, with its replies and whether it's resolved.
-            3. Read `.review/${{ env.STAGE }}.md`, which lists each area's files and the diff files that hold their change. Read every diff file listed under Area ${{ matrix.area }}, each whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of your area's diffs you didn't read.
+            3. Read `.review/${{ env.STAGE }}.md`, which lists each area's files, the diff files that hold their change, and the rule files for them. Read every diff file and rule file listed under Area ${{ env.AREA }}, each whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of your area's diffs or rule files you didn't read.
             4. Read what else you need to judge them: the files as the pull request leaves them, other areas' diffs, callers, and copies, with Read, Grep, and Glob, and history with git log, git show, git diff, and git blame, whose base is HEAD^1 and whose whole history is here. Run each command on its own, with no pipes or redirects.
             5. List every case of your kind of problem you find, not a sample, and each place it shows. Include a case you're unsure of, with your confidence: a checker confirms each against the code before anything is posted. Leave out a case a thread already raised, unless its reply is wrong or a fix it claims didn't hold, and then say so.
             6. Post nothing. End with your answer: each case, on a line the diff changes, nearest the one it's about, naming that one if it's another; and each file of your area you read but couldn't judge from the code, and why.
@@ -566,7 +570,6 @@ jobs:
         env:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
-          AREA: ${{ matrix.area }}
           KIND: ${{ matrix.kind }}
         run: node worker/judge-review.mjs find .review "$STAGE" "$AREA" "$KIND" >> "$GITHUB_OUTPUT"
       - name: Review what's left
@@ -583,10 +586,10 @@ jobs:
           settings: *review-settings
           claude_args: *find-args
           prompt: |
-            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ matrix.area }}, "${{ matrix.name }}", and look only for this: ${{ matrix.focus }} An earlier try didn't finish. Diff files it left unread: ${{ steps.first.outputs.unread || 'none' }}. ${{ steps.first.outputs.answered == 'true' && 'Its answer is kept, so judge only what those files change.' || 'It gave no answer, so judge your whole area again.' }}
+            You are a reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. You review area ${{ env.AREA }}, "${{ matrix.name }}", and look only for this: ${{ env.FOCUS }} An earlier try didn't finish. Files it left unread: ${{ steps.first.outputs.unread || 'none' }}. ${{ steps.first.outputs.answered == 'true' && 'Its answer is kept, so judge only what those files change.' || 'It gave no answer, so judge your whole area again.' }}
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md holds the rules the code keeps. `.review/pull-request.md` holds the pull request's description and every review thread on it.
-            2. Read each diff file the earlier try left unread, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read. `.review/${{ env.STAGE }}.md` lists your area's diff files, to read as you need.
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and follow it. AGENTS.md and the rule files your area lists hold the rules the code keeps. `.review/pull-request.md` holds the pull request's description and every review thread on it.
+            2. Read each file the earlier try left unread, under `.review/`, whole, with Read and no offset or limit, or, should Read say one is too big, in pieces with offset and limit that cover all of it. A step after you checks your reads, and the review fails on any line of them you didn't read. `.review/${{ env.STAGE }}.md` lists your area's diff files and rule files, to read as you need.
             3. Read what else you need, with Read, Grep, Glob, git log, git show, git diff, and git blame, whose base is HEAD^1. Run each command on its own, with no pipes or redirects.
             4. List every case of your kind of problem you find in what you judge, unsure ones too, with your confidence. Leave out a case a thread already raised, unless its reply is wrong or a fix it claims didn't hold.
             5. Post nothing. End with your answer: each case, on a line the diff changes, and each file you read but couldn't judge from the code, and why.
@@ -596,14 +599,13 @@ jobs:
         env:
           EXECUTION_FILE: ${{ steps.again.outputs.execution_file }}
           STRUCTURED_OUTPUT: ${{ steps.again.outputs.structured_output }}
-          AREA: ${{ matrix.area }}
           KIND: ${{ matrix.kind }}
         run: node worker/judge-review.mjs find .review "$STAGE" "$AREA" "$KIND" >> "$GITHUB_OUTPUT"
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: review-find-${{ env.STAGE }}-${{ matrix.area }}-${{ matrix.kind }}
-          path: .review/find-${{ env.STAGE }}-${{ matrix.area }}-${{ matrix.kind }}.json
+          name: review-find-${{ env.STAGE }}-${{ env.AREA }}-${{ matrix.kind }}
+          path: .review/find-${{ env.STAGE }}-${{ env.AREA }}-${{ matrix.kind }}.json
           retention-days: 14
           # A re-run of the job uploads its record again.
           overwrite: true
@@ -611,13 +613,12 @@ jobs:
       - name: Fail when parts are still unread or the reviewer gave no answer
         if: ${{ !cancelled() && (steps.last.outputs.unread != '' || steps.last.outputs.answered == 'false') }}
         run: |
-          echo "::error::This reviewer didn't read every line of its area's diffs, or gave no answer."
+          echo "::error::This reviewer didn't read every line of its area's diffs and rule files, or gave no answer."
           exit 1
 
   # Each area's checker confirms its reviewers' cases against the code, merges repeats, and weighs
   # each, before anything is posted.
   review-check:
-    name: review-check (${{ matrix.name }})
     needs: [review-plan, review-find]
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
     runs-on: ubuntu-latest
@@ -631,19 +632,18 @@ jobs:
         include: ${{ fromJSON(needs.review-plan.outputs.checkers || '[]') }}
     env:
       STAGE: ${{ needs.review-plan.outputs.stage }}
+      AREA: ${{ fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name] }}
     steps: &check-steps
       - *review-checkout
       - *setup-node
       - *download-plan
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: review-find-${{ env.STAGE }}-${{ matrix.area }}-*
+          pattern: review-find-${{ env.STAGE }}-${{ env.AREA }}-*
           path: .review/
           merge-multiple: true
       - name: Gather the area's candidates
         id: gather
-        env:
-          AREA: ${{ matrix.area }}
         run: node worker/judge-review.mjs candidates .review "$STAGE" "$AREA" >> "$GITHUB_OUTPUT"
       # An area whose reviewers found nothing has nothing to check.
       - name: Check the candidates
@@ -664,9 +664,9 @@ jobs:
             --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
             --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}},"verdict":{"type":"string","enum":["confirmed","rejected","unsure"]},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"why":{"type":"string"}},"required":["ids","verdict","weight","path","line","body","why"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["findings","unjudged"]}'
           prompt: |
-            You check what the reviewers of one area of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, before anything is posted. Your area is ${{ matrix.area }}, "${{ matrix.name }}". Its reviewers each looked for one kind of problem and listed every case, unsure ones included. Their candidates are in `.review/candidates-${{ env.STAGE }}-${{ matrix.area }}.json`.
+            You check what the reviewers of one area of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, before anything is posted. Your area is ${{ env.AREA }}, "${{ matrix.name }}". Its reviewers each looked for one kind of problem and listed every case, unsure ones included. Their candidates are in `.review/candidates-${{ env.STAGE }}-${{ env.AREA }}.json`.
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md and the rule files `.review/${{ env.STAGE }}.md` lists for your area hold the rules the code keeps.
             2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, and `.review/${{ env.STAGE }}.md`, which lists your area's diff files, and read those as you need.
             3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with git show HEAD^1:<path>. Use Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects.
             4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
@@ -679,15 +679,14 @@ jobs:
         if: steps.check.outcome == 'success' || steps.gather.outputs.count == '0'
         env:
           STRUCTURED_OUTPUT: ${{ steps.check.outputs.structured_output }}
-          AREA: ${{ matrix.area }}
         run: node worker/judge-review.mjs check .review "$STAGE" "$AREA" >> "$GITHUB_OUTPUT"
       - if: steps.keep.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: review-check-${{ env.STAGE }}-${{ matrix.area }}
+          name: review-check-${{ env.STAGE }}-${{ env.AREA }}
           path: |
-            .review/check-${{ env.STAGE }}-${{ matrix.area }}.json
-            .review/candidates-${{ env.STAGE }}-${{ matrix.area }}.json
+            .review/check-${{ env.STAGE }}-${{ env.AREA }}.json
+            .review/candidates-${{ env.STAGE }}-${{ env.AREA }}.json
           retention-days: 14
           overwrite: true
       # So that re-running the failed jobs checks this area again. A check that didn't finish leaves
@@ -744,7 +743,7 @@ jobs:
           prompt: |
             You make the last check of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}'s review before its findings are posted. Its change is split into ${{ env.AREAS }} areas, and each area's checker checked what its reviewers found. Every finding they confirmed or left unsure is in `.review/checked-${{ env.STAGE }}.json`, each with a ref, and all of them are posted unless you name them as repeats.
 
-            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md holds the rules the code keeps.
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md and the rule files `.review/${{ env.STAGE }}.md` lists for each area hold the rules the code keeps.
             2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files, and `.review/checked-${{ env.STAGE }}.json`.
             3. Name each group of findings from different areas that are the same problem, by their refs, the one that best shows it first: only the first of each group is posted, at the heaviest weight a checker settled in its group.
             4. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each against the code as a checker does, with Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects. Add each you confirm that no listed finding already says, on a line the diff changes, weighed as the guide says, its body saying what is wrong, when it goes wrong, and how to fix it, without its weight.
@@ -812,7 +811,6 @@ jobs:
   # change is read once more, by FINAL_KIND's reviewer in each area, to find what the earlier
   # reads missed, and the summary says what it found.
   review-final-find:
-    name: review-final-find (${{ matrix.name }}, ${{ matrix.kind }})
     needs: [review-plan, review-find, review-check, review-post]
     if: &final-due ${{ !cancelled() && needs.review-plan.outputs.stage == 'push' && needs.review-find.result == 'success' && needs.review-check.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-plan.outputs.final-count > 0 }}
     runs-on: ubuntu-latest
@@ -826,10 +824,11 @@ jobs:
         include: ${{ fromJSON(needs.review-plan.outputs.final-reviewers || '[]') }}
     env:
       STAGE: final
+      AREA: ${{ fromJSON(needs.review-plan.outputs.final-area-numbers)[matrix.name] }}
+      FOCUS: ${{ fromJSON(needs.review-plan.outputs.focus)[matrix.kind] }}
     steps: *find-steps
 
   review-final-check:
-    name: review-final-check (${{ matrix.name }})
     needs: [review-plan, review-find, review-check, review-post, review-final-find]
     if: *final-due
     runs-on: ubuntu-latest
@@ -843,6 +842,7 @@ jobs:
         include: ${{ fromJSON(needs.review-plan.outputs.final-checkers || '[]') }}
     env:
       STAGE: final
+      AREA: ${{ fromJSON(needs.review-plan.outputs.final-area-numbers)[matrix.name] }}
     steps: *check-steps
 
   review-final-across:
