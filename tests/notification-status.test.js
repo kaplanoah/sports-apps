@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CHANGE_FAILED,
   chooseFailedSyncStatus,
   chooseNotifyNote,
   splitAtLastWord,
@@ -65,6 +66,10 @@ test("a browser that can't show notifications says what to try, and a Home Scree
 test("blocked notifications point to Settings on iOS and to the site's settings elsewhere", () => {
   assert.match(readNote("blocked", IPHONE_APP).text, /Settings > Notifications/);
   assert.match(readNote("blocked", COMPUTER).text, /browser's site settings/);
+});
+
+test("a switch that couldn't turn on says to try again", () => {
+  assert.deepEqual(readNote("failed", COMPUTER), { text: CHANGE_FAILED, hasHelp: false });
 });
 
 test("a message the switch was given wins, and a switch that works says what the notifications tell", () => {
