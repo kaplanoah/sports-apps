@@ -1,3 +1,5 @@
+import { WELCOME } from "./home-screen-help.mjs";
+
 // Machines measure a font's ink a fraction of a pixel apart, so a number this near the middle is
 // in it.
 export const MIDDLE_ALLOWANCE = 0.75;
@@ -9,7 +11,7 @@ export const MIDDLE_ALLOWANCE = 0.75;
  */
 export async function measureStepNumbers(page) {
   await page.evaluate(() => document.fonts.ready);
-  return page.locator("#homeScreenWelcome .welcome-steps > li:visible").evaluateAll((steps) => {
+  return page.locator(`${WELCOME} .welcome-steps > li:visible`).evaluateAll((steps) => {
     const circle = getComputedStyle(steps[0], "::before");
     const context = document.createElement("canvas").getContext("2d");
     context.font = `${circle.fontWeight} ${circle.fontSize} ${circle.fontFamily}`;

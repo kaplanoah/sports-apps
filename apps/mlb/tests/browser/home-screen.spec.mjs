@@ -1,5 +1,6 @@
 import { IPAD, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
+import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp, openSettings, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
@@ -58,7 +59,7 @@ test.describe("on an iPhone, in the browser", () => {
   }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await openApp(page, { isShowingWelcome: true });
-    const welcome = page.locator("#homeScreenWelcome");
+    const welcome = page.locator(WELCOME);
     await expect(welcome.getByRole("heading")).toHaveText("Add MLB to your home screen");
     await expect(welcome.locator(".welcome-steps > li:visible")).toHaveText([
       "Pick your theme You can change it later in Settings System Ball Night Game",
@@ -88,11 +89,8 @@ test.describe("on an iPhone, in the browser", () => {
         return lefts.slice(1).map((left, index) => left - lefts[index]);
       });
     await openApp(page, { isShowingWelcome: true });
-    expect(await listIconSteps("#homeScreenWelcome")).toEqual([0, 82, 82]);
-    await page
-      .locator("#homeScreenWelcome")
-      .getByRole("button", { name: "Continue in browser" })
-      .click();
+    expect(await listIconSteps(WELCOME)).toEqual([0, 82, 82]);
+    await page.locator(WELCOME).getByRole("button", { name: "Continue in browser" }).click();
     await openSettings(page);
     expect(await listIconSteps("#settingsDialog")).toEqual([0, 78, 78]);
   });
@@ -105,7 +103,7 @@ test.describe("on an iPhone, in the browser", () => {
   test("each step's circle sits a pixel under the middle of its words", async ({ page }) => {
     await openApp(page, { isShowingWelcome: true });
     const offsets = await page
-      .locator("#homeScreenWelcome .welcome-steps > li:visible")
+      .locator(`${WELCOME} .welcome-steps > li:visible`)
       .evaluateAll((steps) =>
         steps.map((step) => {
           const circle = getComputedStyle(step, "::before");
@@ -124,7 +122,7 @@ test.describe("on an iPhone, in the browser", () => {
     page,
   }) => {
     await openApp(page, { isShowingWelcome: true });
-    await expect(page.locator("#homeScreenWelcome")).toBeVisible();
+    await expect(page.locator(WELCOME)).toBeVisible();
     expect(await listThemeLayoutChanges(page)).toEqual([]);
   });
 
@@ -174,7 +172,7 @@ test.describe("on an iPhone, in the browser", () => {
     page,
   }) => {
     await openApp(page, { isShowingWelcome: true });
-    const welcome = page.locator("#homeScreenWelcome");
+    const welcome = page.locator(WELCOME);
     await expect(welcome.locator(".welcome-step svg")).toHaveCSS("top", "-1.5px");
     await welcome.getByRole("button", { name: "Continue in browser" }).click();
     await openSettings(page);
@@ -264,7 +262,7 @@ test.describe("on a tablet, in the browser", () => {
     page,
   }) => {
     await openApp(page, { isShowingWelcome: true });
-    const column = await page.locator("#homeScreenWelcome .welcome-steps").evaluate((steps) => {
+    const column = await page.locator(`${WELCOME} .welcome-steps`).evaluate((steps) => {
       const box = steps.getBoundingClientRect();
       return { width: box.width, leftOfRight: box.left - (innerWidth - box.right) };
     });
