@@ -56,13 +56,36 @@ function stepScroll(scroller, time) {
 }
 
 /**
+ * Whether `scroller` is far enough from `top` for a scroll to take it there, rather than already
+ * there within a fraction of a pixel, as a phone can leave it.
+ * @param {Element} scroller
+ * @param {number} top
+ */
+export const isAwayFrom = (scroller, top) =>
+  Math.abs(scroller.scrollTop - top) >= ARRIVED_WITHIN_PX;
+
+/**
+ * Whether `scroller` has scrolled past `top`, by more than a fraction of a pixel.
+ * @param {Element} scroller
+ * @param {number} top
+ */
+export const isPast = (scroller, top) => scroller.scrollTop - top >= ARRIVED_WITHIN_PX;
+
+/**
+ * Whether a scroll at `scrollTop` is as far as `top`, but for a fraction of a pixel.
+ * @param {number} scrollTop
+ * @param {number} top
+ */
+export const isAsFarAs = (scrollTop, top) => top - scrollTop < ARRIVED_WITHIN_PX;
+
+/**
  * Scrolls `scroller` to `top` on the spring, or at once for someone who asks for less motion.
  * @param {Element} scroller
  * @param {number} top
  */
 export function scrollWithSpring(scroller, top) {
   stopSpring(scroller);
-  if (Math.abs(scroller.scrollTop - top) < ARRIVED_WITHIN_PX) return;
+  if (!isAwayFrom(scroller, top)) return;
   if (isReducedMotion()) {
     jumpTo(scroller, top);
     return;
@@ -76,6 +99,9 @@ export function scrollWithSpring(scroller, top) {
     frame: requestAnimationFrame((time) => stepScroll(scroller, time)),
   });
 }
+
+/** Whether the page has scrolled past its top, by more than a fraction of a pixel. */
+export const isPageOffTop = () => isPast(/** @type {Element} */ (document.scrollingElement), 0);
 
 export const scrollToTop = () =>
   scrollWithSpring(/** @type {Element} */ (document.scrollingElement), 0);

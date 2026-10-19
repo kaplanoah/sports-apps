@@ -262,7 +262,6 @@
   --strip-edge-inset: 2px;
   --day-gap: 8px;
   --date-one-shift: 0.065em;
-  --held-bar-fade: 0px;
   --held-bar-line: var(--divider);
   --updates-head: var(--structure);
   --sheet-part-head: var(--structure);
@@ -331,7 +330,7 @@ body {
   font-size: 16px;
   /* Insets are zero except in the home-screen app, which draws under the status bar and notch. */
   padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
-  padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
+  padding-block: calc(17px + env(safe-area-inset-top)) var(--view-end-room);
 }
 h1,
 h2,
@@ -1915,10 +1914,8 @@ th[aria-sort="ascending"] .roster-caret {
   font-weight: calc(var(--type-body-weight) + 200);
 }
 
-/* The pill sits a little closer under the header than a view's first card, as the control it is,
-   with the bar's reach up under the status bar kept inside it. */
+/* The pill sits a little closer under the header than a view's first card, as the control it is. */
 section.bracket-standings.active {
-  display: flow-root;
   margin-top: calc(10px - var(--header-gap));
 }
 .pager-bar {
@@ -2437,9 +2434,6 @@ table.standings tr.playoff-line + tr td {
 }
 
 @media (max-width: 779px) {
-  body {
-    padding-bottom: var(--tab-bar-clearance);
-  }
   header.top {
     flex-wrap: wrap;
     row-gap: 8px;

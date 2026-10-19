@@ -188,8 +188,7 @@
   --tabs-chosen: var(--card);
   --tabs-chosen-edge: var(--card-border);
   --tabs-chosen-ink: var(--ink);
-  --held-bar-fade: 18px;
-  --held-bar-line: transparent;
+  --held-bar-line: var(--divider);
   --pager-label: var(--ink-dim);
   --updates-head: var(--highlight);
   --sheet-part-head: var(--highlight);
@@ -293,7 +292,7 @@ body {
   font-size: 16px;
   /* Insets are zero except in the home-screen app, which draws under the status bar and notch. */
   padding-inline: max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right));
-  padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
+  padding-block: calc(17px + env(safe-area-inset-top)) var(--view-end-room);
   /* WIDE_STAGE_WIDTH in bracket-view.js, plus .tree-scroll's 18px each side. */
   max-width: 1793px;
   margin: 0 auto;
@@ -2635,11 +2634,8 @@ body.kbd .player-open:focus {
     gap: 3px;
   }
 
-  body {
-    padding-bottom: var(--tab-bar-clearance);
-  }
-  /* The body's bottom padding already holds the round dots, so a bracket that fills the screen
-     leaves the page nothing to scroll. */
+  /* The bracket's part's bottom padding (pager.css) already holds the round dots, so a bracket that
+     fills the screen ends where its part's room does. */
   .tree-scroll.stacked {
     padding-bottom: 0;
   }

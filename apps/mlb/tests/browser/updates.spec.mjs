@@ -14,6 +14,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -166,7 +167,7 @@ test.describe("on a phone that has used the app before", () => {
     await expect(updates.locator(".updates-count")).toHaveText("New in the app");
     await expect(updates.locator(".what")).toHaveText("Something new.");
 
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
     await expect(updates).toBeHidden();
     expect(await readKept(page, "updatesSeenAt")).toEqual({
       2026: Date.parse("2026-09-24T20:00:00Z"),
@@ -196,7 +197,7 @@ test.describe("on a phone that has used the app before", () => {
       store: { "seasons/2026": SEASON_WITH_TWO_UPDATES },
     });
 
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
     await expect(page.locator("#updates")).toBeHidden();
     expect(await readKept(page, "updatesSeenAt")).toEqual({
       2026: Date.parse("2026-09-25T00:40:00Z"),

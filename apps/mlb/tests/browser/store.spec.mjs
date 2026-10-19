@@ -9,6 +9,7 @@ import {
   readKept,
 } from "./harness.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 
 const listShownRanking = (page) =>
   page
@@ -61,7 +62,7 @@ test.describe("on a phone", () => {
         storeWrites.push(request.url());
     });
     const app = await openApp(page, { store: { "seasons/2026": SEASON_WITH_AN_UPDATE } });
-    await page.getByRole("button", { name: "Dismiss updates" }).click();
+    await dismissUpdatesBox(page);
     await expect(page.locator("#updates")).toBeHidden();
     await openSettings(page);
     await expect(page.locator("#rankList .rank-item")).toHaveCount(12);
