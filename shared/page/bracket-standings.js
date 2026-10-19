@@ -193,6 +193,7 @@ export function showSeasonPhase(isFieldSet) {
   if (order.join() === readOrder().join()) return;
   const tabs = new Map(findPillTabs().map((tab) => [tab.dataset.tab, tab]));
   findTabList().append(...order.map((part) => /** @type {HTMLButtonElement} */ (tabs.get(part))));
+  placeComingPart(findPart(order[0]));
   panels?.jumpTo(0);
 }
 

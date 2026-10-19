@@ -70,6 +70,7 @@ test.describe("on a phone, the bracket", () => {
   }) => {
     await page.setViewportSize({ width: PHONE.width, height: 816 });
     await openApp(page);
+    await waitForLoadToSettle(page);
     const spread = await readCardGaps(page);
 
     await page.locator("header").evaluate((header) => {

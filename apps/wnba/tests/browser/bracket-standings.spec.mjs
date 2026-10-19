@@ -86,6 +86,23 @@ test("until the playoff field is set, the tab is named Standings and opens on th
   await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
+test("once the playoff field is set while the standings show far down, the bracket comes in scrolled as far as the header then rode, rather than at its top", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await waitForLoadToSettle(page);
+  const setField = await unsetField(app);
+  await expect(page.locator("#standings-league")).toBeVisible();
+  await scrollSeasonPartToEnd(page, "standings");
+  const reach = await readHeaderReach(page);
+
+  await setField();
+
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(reach);
+});
+
 test("a tap on the pill switches between the bracket and the standings, leaving the tab's name and the pill's order", async ({
   page,
 }) => {
