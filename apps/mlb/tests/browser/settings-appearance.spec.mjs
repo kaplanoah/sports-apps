@@ -1,5 +1,11 @@
-import { test, expect, openApp, openSettings } from "./harness.mjs";
+import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import {
+  checkHandoffRenewal,
+  checkReAddHandoff,
+  checkReAddNote,
+} from "../../../../tests/browser/re-add-note.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -83,14 +89,30 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Night Game" })).toBeChecked();
 });
 
-test("changing the appearance says how to match the home-screen icon", async ({ page }) => {
-  await openApp(page);
-  await openSettings(page);
-  const note = page.locator("#appearanceNote");
-  await expect(note).toBeHidden();
-  await page.getByRole("radio", { name: "Night Game" }).check();
-  await expect(note).toBeVisible();
-  await expect(note).toHaveText(/Apple sets a home-screen icon only when the page is added/);
+test.describe("in an iPhone's Home Screen app", () => {
+  test.use({ userAgent: IPHONE_AGENT });
+  const looks = { light: "Ball", dark: "Night Game" };
+
+  test("changing the appearance says how to update the icon, under the icons, linking to Safari on the theme picked, which the browser and Android leave out", async ({
+    page,
+    context,
+    browser,
+  }) => {
+    await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+  });
+
+  test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
+    page,
+    browser,
+  }) => {
+    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
+  });
+
+  test("the link's handoff follows the last pick, renews halfway through and on coming back once that's due, tries again after a failure, and stops once settings closes", async ({
+    page,
+  }) => {
+    await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });
+  });
 });
 
 test("Appearance sits under Notifications, above the News switches, each choice showing the icon it offers", async ({
@@ -99,7 +121,7 @@ test("Appearance sits under Notifications, above the News switches, each choice 
   await openApp(page);
   await openSettings(page);
   const appearance = page.locator("#settingsDialog .appearance-row");
-  const news = page.locator("#settingsDialog .settings-news");
+  const news = page.getByRole("group", { name: "News" });
   const [appearanceBox, newsBox] = await Promise.all([
     appearance.boundingBox(),
     news.boundingBox(),
@@ -112,4 +134,31 @@ test("Appearance sits under Notifications, above the News switches, each choice 
   ]);
   for (const icon of await appearance.locator(".appearance-icon").all())
     expect(await icon.boundingBox()).toMatchObject({ width: 60, height: 60 });
+});
+
+test("a line ends the settings above News, and none sits under its label, between its switches, or under them, each switch's row right under the one before", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSettings(page);
+  const settingsAbove = page.locator("#settingsDialog .settings-main > .settings-controls");
+  expect(
+    await settingsAbove.evaluate((controls) => getComputedStyle(controls).borderBottomStyle),
+  ).toBe("solid");
+  const news = page.getByRole("group", { name: "News" });
+  const newsLines = await news.evaluate((group) =>
+    [group, ...group.children, ...group.querySelectorAll(".control-row")].flatMap((part) => {
+      const style = getComputedStyle(part);
+      return [style.borderTopStyle, style.borderBottomStyle].filter((line) => line !== "none");
+    }),
+  );
+  expect(newsLines).toEqual([]);
+  const rowEdges = await news.locator(".control-row").evaluateAll((rows) =>
+    rows.map((row) => {
+      const box = row.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom };
+    }),
+  );
+  const gaps = rowEdges.slice(1).map((row, index) => row.top - rowEdges[index].bottom);
+  expect(gaps).toEqual([0, 0]);
 });

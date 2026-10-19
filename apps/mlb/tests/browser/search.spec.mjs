@@ -14,6 +14,8 @@ import { listTextOffRoles, measureFieldFace } from "../../../../tests/browser/ty
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { readSeasonPartScroll } from "../../../../tests/browser/season-scroll.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 // Search, the round button beside the tab bar, over MLB's whole 2026 season and its players, on a
 // phone. Today is Thursday, September 24, the last week of the regular season.
@@ -108,16 +110,6 @@ const readTopDay = (page) =>
         ?.getAttribute("data-day") ?? null
     );
   });
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} hidden
- */
-const setHidden = (page, hidden) =>
-  page.evaluate((isHidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, hidden);
 
 /** @param {import("@playwright/test").Page} page */
 async function leaveForTwoMinutes(page) {
@@ -262,7 +254,7 @@ test("while words are typed, two whole searches, then the club's pages in place 
   await expect(findRows(page)).toHaveText([
     "Mets next game",
     "Mets at home",
-    "New York Mets",
+    "New York Mets73-86",
     "RosterNew York Mets",
   ]);
   await expect(findGamesLine(page)).toHaveText("Mets\u2022162 games");
@@ -296,7 +288,7 @@ test("a sent club shows its pages over its games from today, soonest first, or, 
 
   await sendSearch(page, "Mets");
 
-  await expect(findRows(page)).toHaveText(["New York Mets", "RosterNew York Mets"]);
+  await expect(findRows(page)).toHaveText(["New York Mets73-86", "RosterNew York Mets"]);
   await expect(findGamesLine(page)).toHaveText("Mets\u2022162 games");
   await expect(findListedDays(page).first()).toHaveAttribute("data-day", "2026-09-24");
 
@@ -367,7 +359,9 @@ test("a club's row opens its sheet, and its Roster row the sheet on its Roster",
   await tapSearch(page);
   await sendSearch(page, "Dodgers");
 
-  await findSearch(page).getByRole("button", { name: "Los Angeles Dodgers", exact: true }).tap();
+  await findSearch(page)
+    .getByRole("button", { name: "Los Angeles Dodgers 97-61", exact: true })
+    .tap();
 
   await expect(page.locator("#teamTitle")).toContainText("Dodgers");
   await expectShown(page.locator("#teamSection"));
@@ -447,7 +441,7 @@ test("standings words find the playoff fields and each league's divisions, and a
   await findRows(page).filter({ hasText: "Playoffs" }).tap();
 
   await expect(page.locator("#standingsWrap")).toBeVisible();
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(0);
 });
 
 test("a club's matchup finds its next game, marked with a baseball, and its row opens that game's sheet on its Matchup", async ({
@@ -598,7 +592,7 @@ test("while typing, a place's half-typed word lists it first, beside a player it
     await expect(athletic).toHaveText("SettingsInclude content from The Athletic");
     await expect(athletic).toBeInViewport();
   }
-  await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*$/ })).toHaveCount(1);
+  await expect(findRows(page).filter({ hasText: /^\s*Athletics\s*63-95\s*$/ })).toHaveCount(1);
 
   await findInput(page).fill("");
   await findInput(page).pressSequentially("los");

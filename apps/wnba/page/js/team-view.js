@@ -1,4 +1,4 @@
-import { describeDay, formatClockTime, formatShortDate } from "#shared/days.js";
+import { describeDay, formatClockTime, formatShortDate, isStillToComeToday } from "#shared/days.js";
 import { renderGameCards } from "#shared/game-cards.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
@@ -12,7 +12,7 @@ import {
 } from "#shared/team-numbers.js";
 import { renderTitles } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
-import { isGameToday, readGameDay } from "./days.js";
+import { readGameDay } from "./days.js";
 import { describeLiveClock, describeStartTime } from "./games-view.js";
 import { findTeamNearestGames } from "./nearest-games.js";
 import { nameTeam, readPlayoffRuns } from "./series.js";
@@ -387,7 +387,9 @@ const NEXT_GAME_ICON = html`<svg class="next-game-icon" viewBox="0 0 256 256" fi
  * @param {number} now
  */
 export function renderNextGame(game, team, now) {
-  const isSoon = game.state === "live" || isGameToday(game, now);
+  const isSoon =
+    game.state === "live" ||
+    isStillToComeToday({ state: game.state, day: readGameDay(game) }, new Date(now));
   return html`<div class="team-game next${isSoon ? " soon" : ""}">
     <span class="team-game-number">G${game.number}</span>
     <span class="team-result" aria-hidden="true">${NEXT_GAME_ICON}</span>
@@ -450,15 +452,12 @@ function describeGameCard(game, team) {
   const place = findPlace(game, team) ?? "home";
   const other = game[OTHER_PLACE[place]];
   const own = game[place].score;
-  const day = describeCardDay(game);
   return {
     id: game.id,
-    label: `${nameTeam(game.away.team)} at ${nameTeam(game.home.team)}, ${day}`,
+    label: `${nameTeam(game.away.team)} at ${nameTeam(game.home.team)}, ${describeCardDay(game)}`,
     state: /** @type {"final" | "live" | "pre"} */ (game.state),
-    when:
-      game.state === "live"
-        ? html`<span class="game-card-clock">${describeLiveClock(game)}</span>`
-        : day,
+    day: readGameDay(game),
+    clock: game.state === "live" ? describeLiveClock(game) : "",
     score: own == null || other.score == null ? null : { own, theirs: other.score },
     time: describeStartTime(game),
     isHome: place === "home",
@@ -470,11 +469,15 @@ function describeGameCard(game, team) {
 /**
  * @param {Season} season
  * @param {string} team
+ * @param {number} now
  */
-function renderNearestGames(season, team) {
-  const { last, now, next } = readNearestGames(season, team);
-  const games = [last, now, next].filter((game) => game !== null);
-  return renderGameCards(games.map((game) => describeGameCard(game, team)));
+function renderNearestGames(season, team, now) {
+  const nearest = readNearestGames(season, team);
+  const games = [nearest.last, nearest.now, nearest.next].filter((game) => game !== null);
+  return renderGameCards(
+    games.map((game) => describeGameCard(game, team)),
+    new Date(now),
+  );
 }
 
 /**
@@ -516,7 +519,7 @@ export function renderTeamSheet(season, code, { year, now }) {
   return {
     heading: renderTeamHeading(code),
     note: joinWithSeparator(listFacts(row, run)),
-    body: html`${renderNearestGames(season ?? {}, code)}
+    body: html`${renderNearestGames(season ?? {}, code, now)}
     ${run ? html`${playoffs}${regularSeason}` : html`${regularSeason}${playoffs}`}
     ${renderTitles(listTitleYears(code, titles))}`,
   };

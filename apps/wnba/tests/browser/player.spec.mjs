@@ -355,7 +355,8 @@ test("her sheet that didn't load says so over Try again, which holds its shape a
   await openApp(page);
   const roster = await openLibertyRoster(page);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 502, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 502, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(matchPath("/player"), refuse);
   await roster.getByRole("button", { name: "Breanna Stewart" }).click();
   const sheet = page.locator("#playerSheet");

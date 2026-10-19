@@ -58,14 +58,14 @@
   and stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`),
   and GitHub's reporter marks each one that passed only on its retry on the pull request's checks,
   the run keeps its failed try's trace, with each step but not the page at each step, which only burn-in and the nightly run record,
-  and the `check` job adds it to the table in the issue Flaky browser tests,
+  and the next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (`worker/report-flaky-tests.mjs`),
   unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
   CI's `burn-in` runs each browser spec a pull request adds or changes ten times with no retry,
   in WebKit too for the at-rest specs, so a spec holds 30 tests at most,
   split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks,
   and fails the pull request only on a test it wrote or edited,
   where a change in a spec outside every test, like an import or a helper,
-  edits them all, and adds any other test that failed to the table in the issue Flaky browser tests (`worker/judge-burn-in.mjs`),
+  edits them all, and the next nightly run adds any other test that failed to the table in the issue Flaky browser tests (`worker/judge-burn-in.mjs`),
   and each night main's browser tests run three times over with no retry and add each test that failed to the table in the open issue Flaky browser tests (`.github/workflows/flaky.yml` and `worker/report-flaky-tests.mjs`),
   which comments on each test new to it and starts the routine that fixes the table's top test,
   through its API trigger, from the `FLAKY_ROUTINE_URL` and `FLAKY_ROUTINE_TOKEN` secrets,
@@ -160,7 +160,9 @@
   each still showing the moment, never a headline: the recap's a frame from its video,
   and a play's MLB's own unless Claude Haiku finds a headline laid over it,
   as the store asks once for each still, a few a run,
-  since Cloudflare caps a run's requests, then a frame from the play's video or,
+  since Cloudflare caps a run's requests,
+  and asks again a few times about one Claude doesn't answer, which shows as MLB's own meanwhile and then counts as clean,
+  then a frame from the play's video or,
   for a clip without frames, MLB.com's photo of the game (`worker/src/headline-stills.js`),
   which the store keeps for every finished game of each season it keeps,
   the slate's first, then the rest of the current season's and each past season's,
@@ -186,7 +188,7 @@
   the standings' playoff fields and each league's divisions, and settings and each setting (`page/js/search-pages.js`),
   apart from the slate the header, the Updates box, and the store follow (`page/js/slate.js`),
   whose ranking each device keeps for itself, in name order until its first drag,
-  with its dismissal of the Updates box (`page/js/kept-on-device.js`),
+  with when its Updates box counts from, its first look or last dismissal (`page/js/kept-on-device.js`),
   which only phones and tablets show (`page/js/updates.js`), and which also serves each starting pitcher's matchup numbers,
   ranked among MLB's qualified starters (`worker/src/pitchers.js`),
   and, for a club yet to name one, its last starters and their rest (`worker/src/rotations.js`),
@@ -194,7 +196,7 @@
   reading MLB as a game ends and only the pitchers who pitched in it,
   so a sheet reads only the store (`worker/src/pitcher-updater.js`),
   and which fills in each past season's record once, with its standings,
-  from MLB (`worker/src/past-seasons.js`), and removes the live scores and standings the store once kept apart from each season's record (`worker/src/old-records.js`),
+  from MLB (`worker/src/past-seasons.js`),
   and whose News tab shows the news as the WNBA's does, from MLB's outlets and the Mets' own,
   which the same shared news job keeps by MLB's prompt: anything about the Mets,
   and another club's news only when it matters across baseball,
@@ -210,13 +212,13 @@
   keeps each finished game's for good, read as it ends and once more after the league and ESPN catch up,
   and a few at a time back through each season it keeps (`worker/src/game-details-updater.js`),
   and keeps each upcoming game's meetings from the schedule each update reads,
-  so the sheet's routes read the league only for what the store doesn't keep (`worker/src/store-docs.js`),
+  so the sheet's routes read the league only for what the store doesn't keep (the shared `store-reads.js`),
   and, from ESPN's game summary, the score through each game for the sheet's lead chart (`worker/src/lead.js` and `page/js/lead-chart.js`) and when each game it saw live ended (`worker/src/game-ends.js`),
   and each team's roster for any season, from the league's roster of that season and its list of every player it has had,
   with ESPN's injury report, read once for the whole league, saying who is out and why (`worker/src/injuries.js`),
   which shows only while the team still plays, which the team's sheet shows under its Roster pill,
   beside its stats under its Team pill, with each player's averages,
-  which the store keeps apart from the season (`worker/src/roster.js`,
+  which the store keeps apart from the season, worked out once for the Roster, the leaders, and her sheet (`worker/src/roster.js`, `season-averages.js`,
   `page/js/roster-section.js`, and `roster-view.js`), and each player's sheet,
   which a tap on her name in a roster, a box score, or a list of leaders opens over the sheet it's in,
   with her facts from that roster, then, while she is out, a box saying why,
@@ -266,8 +268,10 @@
   the latest final's Highlights, the bracket and the News tab, the standings' lists,
   and settings and each setting (`page/js/search-pages.js`), whose settings pick any season the store keeps once it keeps more than one,
   whose page saves nothing to the store, lists each playoff final in an Updates box only on phones and tablets,
-  and only for the current season, each keeping its own dismissal (`page/js/updates.js`),
-  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings (the shared `appearance.js`, kept per device), in its own self-hosted fonts.
+  and only for the current season, each keeping when its box counts from, its first look or last dismissal,
+  by when the Worker first found each final (`page/js/updates.js`),
+  and follows the phone's dark (Walnut) or light (Maple) setting unless the viewer picks one in settings or the Home Screen welcome (the shared `appearance.js`, kept per device,
+  and `pick-theme.js`, which the browser's address names it in for the Home Screen app), in its own self-hosted fonts.
   Paths below are inside an app's folder, except `shared/` and the ones named as the root's.
 - Page:
   `page/`.
@@ -303,7 +307,7 @@
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
   `--radius-card`, `--radius-chip`, `--radius-control` for buttons and fields,
   like each name in a pill, and `--radius-sheet` for a sheet on a wide screen,
-  with `--held-bar-fade` and `--held-bar-line` under a bar held at the top.
+  with `--held-bar-line` under a bar held at the top once something scrolls under it.
   A dot is round, a switch is round like the phone's own, an app icon keeps its own shape,
   and the floating tab bar, tinted in the app's own color, stays a capsule like the phone's own;
   any other corner typed as a number fails the root's `tests/shape-tokens.test.js`.
@@ -325,7 +329,7 @@
   Light for the page's controls, like the tab bar and close buttons,
   and Regular in a line of text, and name the icon and weight in a comment where the code holds it, as `team-view.js` does for its caret-right.
   Never draw an icon by hand or take one from another set, but for the four drawn for their place: the Home Screen steps' Share and menu glyphs,
-  which copy the browser's own buttons so people find them (`shared/page/home-screen.js`),
+  which copy the browser's own buttons so people find them (`shared/page/draw-home-screen-asks.js`),
   MLB's seed lock (`games-view.js`), and the catching-up ring,
   Phosphor's circle-notch at its Light weight with a 55-degree gap, set in a line of text (`shared/page/catch-up-note.js`).
   The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four,
@@ -348,7 +352,7 @@
   and colors from its `page/styles.css` instead of inventing new ones.
 - Worker:
   `worker/src/`.
-  It serves the page, its store, and the live snapshot, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key,
+  It serves the page, its store, and its sheets' reads, only under `/<APP_KEY>/`; everything but `robots.txt` and `health` is a 404 without the key,
   but at the address its `PAGE_HOST` secret names, where it serves them without the key, behind the access code alone,
   and so only while it has one (`findAppPrefix` in `shared/worker/app-worker.js`).
   `health` says whether the Worker and its store answer, 200 or 503 with the release's commit,
@@ -359,6 +363,12 @@
   built from the shared `gate.js` and `gate.css`, and the season's data answers 401 until the phone sends that code,
   which the Worker keeps in a cookie signed over the code with the `ACCESS_SIGNING_KEY` secret,
   never the page's key, which every link shows (`shared/worker/access-gate.js`); a 401 reloads the page (`shared/page/access.js`).
+  The Home Screen app's link to add the site again, whose browser keeps its cookies apart from the app's,
+  signs the browser in with a handoff the Worker makes for a phone signed in,
+  good for ten minutes under the code it was made under,
+  which the app asks for again halfway through while settings stays open,
+  or as it comes back once that's past, since a phone freezes its timers while it's away (`shared/page/appearance.js`),
+  and opens the page at its own address without it (`serveHandoff` in `shared/worker/access-gate.js`).
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,
   `shared/worker/push.js` and `web-push.js`, and `page/sw.js`);
   the Durable Object makes and keeps the signing key itself, under a key the store's paths can't name.
@@ -423,19 +433,37 @@
   what each fill draws and where it leaves the list, each new day at its top and whether the strip's dates slide to it,
   any day that changes height as it's drawn whole or as a stand-in,
   and a strip that doesn't scroll where it's told, in `day-strip-log.js`,
+  and each touch on a season's standings and bracket, how far it moved,
+  whether the page's code took it from the browser, and how far the part under it scrolled,
+  and each click on them, in `bracket-standings-log.js`,
   and each error the page's code doesn't catch, in `error-log.js`,
-  each a log made with `step-log.js`, the bar across the top and the box at the bottom of settings that ask a phone's browser to add the page to the Home Screen in `home-screen.js`,
+  each a log made with `step-log.js`, the welcome over the whole screen that a phone's or tablet's browser opens on,
+  whose numbered steps pick the theme the Home Screen icon takes and say how to add the page there,
+  until the page is added or the viewer goes on in the browser, which keeps it closed on that device,
+  and the box at the bottom of settings that keeps the steps, both drawn before the first paint in `draw-home-screen-asks.js`,
+  so the welcome never arrives over the page and its pick and close work at once, with Chrome's Install in `home-screen.js`,
+  the theme picked, shown before the first paint and named in the browser's address,
+  where Safari reloads the page after a pick, since it takes the Home Screen app's address and its own bars' color from the page as it loaded,
+  and which the Home Screen app keeps on its first open,
+  and an iPhone's app, which keeps the icon it was added with, hands Safari with a link to add the site again,
+  opening Safari's page on that theme and the welcome, in `pick-theme.js`,
   telling a phone or tablet from a computer, and the Home Screen from the browser,
   in `device.js`, one tab for a season's standings and its bracket,
   named Standings and opening on them until the playoff field is set, and Bracket from then on,
   with the one it opens on first in the pill over them, side by side, which a tap on a name or a swipe slides between,
   a swipe on the bracket scrolling it to its end first, as a team's Roster does, in `bracket-standings.js`,
+  each scrolling on its own with the header riding up over the one shown until the pill holds at the top,
+  as a profile's tabs do in a phone's apps, in `season-header.js`,
+  with a stand-in under each of the Updates box's buttons in each part's empty top,
+  so a tap on one opens what it does and a finger that drags from it scrolls the part, as a button inside a list does,
+  in `rider-taps.js`,
   the accent block under a pill's shown name, which never travels between names but hands off from one to the next once a tap or a finger's lift sets what's under it off,
   in `pill-thumb.js`, a season's games as one list of its game days under a strip of every day,
   whose chosen day is the one at the list's top, its box holding still while the list's scroll slides the dates behind it on a spring (`strip-slide.js`),
   today's named Today, which a tap on a day or on Today brings to the top,
   a day's gap under the bar, a tap on a date without games bringing in its No games row until it's out of sight,
-  and a tap on Today already there pulsing the date, whose month follows the strip as a finger moves it,
+  and a tap on Today with the list already there bringing the date back to the strip's middle after a finger moved the strip,
+  or, with the strip there too, pulsing the date, whose month follows the strip as a finger moves it,
   going back to today after two minutes away (`long-away.js`),
   and, for a league of many games a day, drawing whole only the days within a few screens of what shows and the rest as stand-ins as tall as their games,
   which days those are in `near-days.js`, as the search's list of games draws them too,
@@ -448,13 +476,15 @@
   rounds, a conference's own rounds, kinds of game, doubleheaders,
   and starters, finding the games, and saying in a line under the field what it read,
   with suggestions and examples, in `game-search-view.js`, from `search-words.js`,
-  `search-dates.js`, `game-search.js`, and `search-suggestions.js`,
+  `search-dates.js`, `game-search.js`, which reads what's typed in `game-search-read.js` with the words in `game-search-dictionary.js`,
+  finds the games in `game-search-match.js`, and says what it read in `game-search-describe.js`, and `search-suggestions.js`,
   what it shows for words as they're typed, a name half typed read as the name the first suggestion finishes once three letters of it are,
   or five with one wrong, in `search-reading.js`,
   which each app's `tests/search-typing.test.js` types a key at a time, as fans do, and with a letter wrong each way a thumb gets one wrong,
   with the root's `tests/search-sweep.js`,
   and reading the same words into the pages they name, a team's,
-  its section's, a player's, even with a letter wrong, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
+  its section's, a player's, even with a letter wrong, or by a team's name and the number a player wears,
+  or while it's typed each number it starts, over the suggestions, a place's, or a game's part's, like a final's Highlights or the next game's Matchup,
   from the list of a season's players the store keeps for it, in `page-search.js`,
   each game day under a label, the WNBA's date beside its games as a wall calendar shows it and MLB's heading over them,
   with a No games row for today between game days, in `season-days.js`,
@@ -499,7 +529,7 @@
   the season series of a game's two teams before it starts, each meeting first to last under who leads or won it,
   in `season-series.js`,
   reading what a sheet shows from the app's own Worker, sharing a recent read of it,
-  in `worker-fetch.js`, the face-off rows of a sheet a tap opens in `tape.js`,
+  in `worker-fetch.js`, reading the Worker's error answers in `worker-error.js`, the face-off rows of a sheet a tap opens in `tape.js`,
   the placeholders that hold a sheet's shape while it loads in `placeholder.js`,
   what a sheet shows where a read of its Worker failed, a centered block for a whole sheet or section and a note for one part,
   each with a Try again button, which, like the phone coming back online or the page coming back,
@@ -513,7 +543,7 @@
   the header's lines on the latest score and the next game, in words like "last night",
   in `stamp.js`, the release check and catching up on return in `resume.js`,
   the access code's gate in `gate.js`, what the page last showed,
-  drawn first on its next load, in `last-seen.js`, the box under the tabs that lists what's new since it was last dismissed,
+  drawn first on its next load, in `last-seen.js`, the box under the tabs that lists what's new since the device first opened the app or last dismissed it,
   with each app's release notes under New in the app, in `updates.js`,
   the settings' Season picker in `season-picker.js`, the year in the title,
   lighter, whenever the season shown isn't being played, an earlier one or the current one once its last game is final,
@@ -527,7 +557,7 @@
   from the cards a league's news job keeps,
   in `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`, the store client, notifications), which pages import as `#shared/<module>.js` through their import map and Node through `package.json`'s imports.
   Its `type.css` lists the type roles, `chrome.css` styles the tab bar,
-  settings sheet and its Diagnostics, round dots, Home Screen bar and box,
+  settings sheet and its Diagnostics, round dots, Home Screen welcome and box,
   the catching-up line and the sweep once caught up, and pull to refresh's spokes,
   `pager.css` a pill's names and the standings and bracket under one, `day-strip.css` a season's list of days and its strip,
   `game-search.css` the search's view, `game-row.css` lays out a game row and colors an All-Star team's star,
@@ -540,7 +570,9 @@
   `news.css` the News view's layout, `retry.css` what a sheet shows where a read failed,
   `highlights.css` a final's Highlights, `rank-curve.css` a rank curve and each player's mark on it,
   `no-field-note.css` the bracket before the playoff field is set,
-  and `gate.css` the access code's gate; pages link them before their own `styles.css` and theme them with the tokens their top comments list.
+  `channel-tag.css` the tag beside the app's name on beta,
+  and `gate.css` the access code's gate, whose title and button the welcome takes too;
+  pages link them before their own `styles.css` and theme them with the tokens their top comments list.
   The Worker serves all of it under `shared/`.
   `shared/worker/` holds the Worker's routing under the key (`app-worker.js`),
   the store's Durable Object (`season-store.js`, which each app's `worker/src/store.js` hands its league: how it loads and saves a snapshot,
@@ -550,10 +582,11 @@
   reading a league's feeds and reusing a recent load in `upstream.js`,
   reading a league's slower feeds again only when they may have changed in `feed-keeper.js`,
   keeping each final's highlights, read over the hours after it ends,
-  in `highlights-job.js`, a story's first lines as plain text in `story-lead.js`,
+  in `highlights-job.js`, keeping each finished game's details, a few at a time, in `game-details-job.js`,
+  reading the documents the store keeps for a sheet in `store-reads.js`, a story's first lines as plain text in `story-lead.js`,
   keeping a league's news from its outlets' feeds, judged by Claude with the prompt the league hands it,
   in `news-updater.js`, `news-feeds.js`, `news-parse.js`, `news-rules.js`,
-  `news-prompts.js`, and `news-claude.js`, the season a request names and serving its snapshot in `seasons.js`,
+  `news-prompts.js`, and `news-claude.js`, the season a request names in `seasons.js`,
   capping a night's notifications in `notifications.js`, push, and responses.
   A change there reaches every app, so shared code never imports an app's modules: an app hands it what it needs, as `watchReturns({ isBusy, catchUp })` does.
   Logic or a view that more than one app needs lives there once,
@@ -568,9 +601,10 @@
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`),
   which each deploy does for its new version, putting the one before back when it doesn't,
   and which the `Watch apps` workflow does every 15 minutes,
-  keeping one open issue for each app that isn't opening, which closes once it opens again (`watch-apps.mjs`),
+  keeping one open issue for each app that isn't opening, which closes once it opens again,
+  and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`),
   both from each page's address and code in the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
-  with `_BETA` after the app's name for its beta channel.
+  and a beta deploy from the `beta` environment's, with `_BETA` after the app's name.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" below.
 - Commands:
@@ -590,10 +624,12 @@
   The page writes nothing to the store; everything in it is written by the Worker.
   What a viewer chooses, like MLB's ranking, a dismissal of the Updates box,
   or the WNBA's theme, stays on their own device, since nobody signs in and people share a page's address.
+  The theme also rides in the browser's address, as `?theme=`, since a Home Screen app keeps its storage apart from the browser's and opens at the address it was added from,
+  and a shared link's theme is swapped for the viewer's own (`shared/page/pick-theme.js`).
   Each is a choice made with `createViewerChoice` in `shared/page/device-storage.js`,
   which keeps it as JSON under its key, lists it, and tells the page when another tab changes it, so each tab redraws what it shows.
   A new choice that a viewer would want on their other devices is made the same way;
-  what belongs to one device or browser, like the last tab, the Home Screen bar's dismissal,
+  what belongs to one device or browser, like the last tab, the Home Screen welcome's dismissal,
   or the Diagnostics, isn't a viewer choice and stays out of that list.
 
 ## Adding a league
@@ -629,7 +665,7 @@ Delete it once the app's first PR merges.
    series, and standings and a `missing` list of feeds that didn't answer,
    and `choosePollDelay(snapshot, now)`, which hands the shared one in `shared/page/poll-schedule.js` whether a game is live, the starts still to come, and the league's live pace.
    It runs in both the page and the Worker, so it uses no DOM and no globals.
-3. **Reading the feeds.** `worker/src/snapshot.js` fetches them with `createSnapshotServer()`,
+3. **Reading the feeds.** `worker/src/snapshot.js` fetches them with `createSnapshotLoader()`,
    reading each slow feed again only as a game ends or once it's old,
    and keeping its last good answer for when a read fails, with the shared `createFeedKeeper` in `shared/worker/feed-keeper.js`.
 4. **Keeping the season.** `worker/src/season-updater.js` saves each snapshot into the store,
@@ -640,8 +676,9 @@ Delete it once the app's first PR merges.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
    around its own `styles.css`, which sets every token their top comments list,
-   and calls `openLastTab()`, `showLastDrawn()`, and `watchSlowLoad()` right after its views and sheets,
-   in that order, so a part on the shown tab can take back its sideways scroll.
+   and calls `openLastTab()`, `showLastDrawn()`, `followSeasonPart()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
+   in that order, so a part on the shown tab can take back its sideways scroll, the header rides as far as the season's part put back,
+   and the welcome opens over any sheet put back.
    Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
    load the same shared files as the WNBA's too, which the root's `tests/apps.test.js` checks.
    It marks each element its code draws whole, like `#bracketWrap` and `#stamp`,
@@ -678,12 +715,15 @@ Delete it once the app's first PR merges.
 8. **Ship it.** Open it as a `feat:` PR, which starts the app at version 1.0.0.
    Its page adds lines that give parts layers of their own, so it's a red change,
    tried on the owner's phone from beta before it merges, as "Workflow" says.
-   Once its CI passes, push it to `beta`, whose deploy creates `<app>-app-beta`,
+   Each channel's token can edit only the Workers it names, so before the first deploy of each channel,
+   the owner creates its Worker in Cloudflare's dashboard and adds it to that environment's token:
+   `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
+   Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`,
    which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
    Give the owner that address, and ask them to set its code with `npm run set-access-code -- <app> <code> --channel beta`,
-   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `production` environment's secrets,
+   add both as `<APP>_BETA_PAGE_URL` and `<APP>_BETA_ACCESS_CODE` in the `beta` environment's secrets,
    add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
-   The merge's deploy then creates `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
+   The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
    and the owner adds its address and code as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
 
@@ -694,8 +734,9 @@ Delete it once the app's first PR merges.
 - Never push to another session's branch.
 - Run each command so it needs no approval: one command per call, from the repo's root, where every session starts.
   Never start with `cd`, never join `cd` to a `git` command, and never pipe or chain after a command `.claude/settings.json` allows, like the beta force-push.
-  A hook in `.claude/settings.json` blocks a call that starts with `cd` or joins commands with `&&`,
-  `||`, `;`, or a line break (`.claude/hooks/one-command.mjs`).
+  A hook in `.claude/settings.json` blocks a call that starts with `cd`, a subshell's `(cd` too,
+  or joins commands with `&&`, `||`, `;`, a lone `&` that runs one in the background, or a line break,
+  in the call itself or in a script it hands a shell as a string, as `bash -c "a; b"` does (`.claude/hooks/one-command.mjs`).
   When a command still asks, add it to that allow list in the same PR if it's safe for any session to run, or say why it asks.
 - Don't spend time curating commit history.
   Squash merges make it irrelevant.
@@ -718,14 +759,16 @@ Delete it once the app's first PR merges.
   which its Updates box shows under New in the app, the newest three and how many more,
   until it's dismissed or two weeks after the device first showed it,
   so a viewer back from time away still sees what they missed,
-  but on a device's first look, two weeks from each note's `at`,
-  with a note out by the box's last dismissal dismissed (`listNotesToShow` in `shared/page/updates.js`).
+  but a device's first look counts every note already out as shown,
+  and starts its games' updates after every one already out,
+  so a new phone opens with no box (`listNotesToShow` and `readOrStartSeenAt` in `shared/page/updates.js`).
   Add a note only when the user asks for one, whatever the PR's type, in the words they approve, with an `at` just before the PR merges.
   A word that should stand out, like a button's name, goes in `<b>`,
   in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.
 - Each app has a beta channel: a second Worker, `<app>-app-beta`,
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
-  key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`).
+  key, and address, whose page says beta on the Home Screen and in settings' version line (`worker/build.mjs`),
+  and in a tag beside the app's name, with the commit it runs and how long ago that went live (`shared/page/channel-tag.js`).
   A push to the `beta` branch deploys it at once, with the same checks and rollback as `main`'s deploy.
   To use a PR's change on the owner's phone before it merges, reset `beta` to the PR's branch and push (`git push -f origin <branch>:beta`),
   wait for that push's Deploy run to say `worker check: ok` for each app, and tell the user to use the beta app on the Home Screen.
@@ -736,25 +779,31 @@ Delete it once the app's first PR merges.
   `worker/red-change.mjs` finds it: any change to the shared JavaScript that moves and draws the page (`sheet.js`,
   `sheet-reopen.js`, `slide-panels.js`, `sheet-swipe.js`, `sheet-sections.js`,
   `side-swipe.js`, `bracket-standings.js`, `pill-thumb.js`, `tab-bar.js`, `eased-redraw.js`,
-  `show-last-drawn.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`);
+  `show-last-drawn.js`, `season-header.js`, `rider-taps.js`, `held-bar.js`, `day-strip.js`, and `strip-slide.js` in `shared/page/`),
+  but not to its comments, blank lines, or formatting, which draw nothing;
   a change to its shared stylesheets (`sheet.css`, `pager.css`,
   `chrome.css`, `team-sheet.css`, `game-cards.css`, and `day-strip.css`),
   added or removed, in a selector or at-rule, which says which parts a rule reaches,
   or in a property that decides how parts layer, stack, scroll,
   take a touch, or show (any below, any `position`, `overflow`,
-  `overscroll-behavior`, `scroll-snap`, `touch-action`, `z-index`,
+  `overscroll-behavior`, `scroll-snap`, `touch-action`, `pointer-events`, `z-index`,
   `opacity`, `visibility`, `display`, `isolation`, or `mix-blend-mode`),
   but not in their fonts, colors, spacing, or sizes, which CI checks;
   or an added line in a page's CSS or JavaScript that sets a property that gives a part a layer of its own (`transform`,
+  `translate`, `rotate`, `scale`, `perspective`, `backface-visibility`,
   `filter`, `backdrop-filter`, `mask`, `clip-path`, `will-change`,
   `animation`, `transition`, `contain`, `content-visibility`, or a fixed or sticky `position`).
   Tests are never red.
-  The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label.
+  The owner's phone is a red change's test, and CI's `gate` job fails on one until its PR has the `phone-ok` label,
+  added by the owner after the PR's last push.
   - Take a red change to its branch and PR, deploy it to beta as the bullet above says,
     and stop there: tell the user what to use on the phone, and wait, doing only what CI and the review ask of the PR meanwhile.
     When you ask the owner to add `phone-ok`, link the PR in the same message.
     Never add `phone-ok`.
     Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push.
+    A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
+    so deploy it to beta and ask.
+    Merge `main` into the branch just before each deploy to beta, so the commit the owner labels is the one that merges, since a PR merges while behind `main` as long as it has no conflicts.
     Merge a red PR once `check` passes with `phone-ok` on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again.
     An OK in chat never stands in for the label.
     Merge it yourself: the owner doesn't.
@@ -782,8 +831,9 @@ Delete it once the app's first PR merges.
   Nor does a Diagnostics report, which a viewer shares wherever they like:
   each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
   Reviewing a change, check what it commits, logs, and posts for any of these.
-- The Cloudflare token lives only in the cloud environment's API credentials and the repo's `production` GitHub environment.
-  Never ask for it in chat or put it in environment variables, code, or commits.
+- The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
+  each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
+  Never ask for one in chat or put one in environment variables, code, or commits.
 - Keep scratch work (design playgrounds, test harnesses) out of git, and never point tests at the real page.
 - When unsure, do what best serves the intent of the work, and confirm with the user.
   If you genuinely need a decision from the user, give all the context concisely, list the pros and cons of each option, and make a recommendation.
@@ -833,20 +883,29 @@ When a step says to go back to an earlier step, continue in order from there.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
-7. CI's review reads each push to the PR in full, by the root's `REVIEW.md` as `main` has it:
-   it splits the change into shares small enough for one reviewer to read every line of (`worker/plan-review.mjs`),
-   has Claude review every share at once in `review-share`, and then, for more than one share, across them in `review-across`,
-   each posting its findings as comments on the lines they concern.
+7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
+   It splits the change into areas by what the files are about, each test with its code (`worker/plan-review.mjs`),
+   and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests, and list every case they find.
+   A checker for each area confirms each case against the code, merges repeats, and weighs it,
+   a check across areas, when there's more than one, names repeats across them and adds what spans them,
+   and a step posts what they confirmed or left unsure, each on the line it concerns.
+   The first review reads the whole change, and each review after it reads what changed since the last review that finished.
+   A review of a push that finishes and posts nothing new reads the whole change once more, one reviewer an area, and the summary names what that pass found.
+   A push that changes only what a merge of its base brings in isn't reviewed again.
    The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
    how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
    and anything it read but couldn't judge (`worker/judge-review.mjs`).
-   It fails when any changed file went unread, naming each.
+   It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each.
    If the summary names something it couldn't judge, tell the user.
-   Answer every finding: either fix it and go back to step 2, or reply on the comment saying why not.
-   The push with a fix is reviewed again.
-   - If `review` fails, read its summary and the log of the failed `review-share` or `review-across` job, which shows each try's turns and tool calls.
+   Answer all of a review's findings in one push: fix each and go back to step 2, or reply on its comment saying why not.
+   A Nit you fix rides a push the PR needs anyway,
+   or, when none is left, one last push just before the merge,
+   which on a red change comes before its last deploy to beta,
+   and never waits for a later PR or the next change to its file.
+   After three reviews in a row with an Important finding, or when a finding you declined comes back, stop and ask the user.
+   - If `review` fails, read its summary and the log of the failed `review-find`, `review-check`, `review-across`, or `review-post` job, or its `review-final-` twin, which shows each try's turns and tool calls.
      If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
-     Otherwise don't reproduce it locally or re-run it: each share already tried twice, and the check across them once.
+     Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and each checker and the check across areas once.
      Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
      where a review stalled, or a re-run that failed too.
      `check` can't pass until the job does.
@@ -872,16 +931,21 @@ When a step says to go back to an earlier step, continue in order from there.
       Read the next Deploy run's log.
     - It says `worker check: ok`: the new version is live.
       Tell the user.
-      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date:
+      A line before it saying `page check: skipped` names a page the deploy couldn't open, like one whose secrets are missing or out of date,
+      and one saying `page check: ok, but` a page that opened without the code its environment holds:
       tell the user that too.
     - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
       Tell the user which.
-    - It says "has moved on": another merge landed first, and its Deploy run covers this one.
+    - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
+      Read that run's log instead.
+      Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.
+      Saying "couldn't be asked", it deploys this merge because GitHub couldn't say how CI went on the newer one, so read on in this run's log too.
+    - It says "already has": a newer merge's deploy went live first, and covers this one.
       Read that run's log instead.
     - The run was skipped:
       CI failed on `main`.
       Read the CI log, fix the failure in a new PR, and start again at step 1.
-    - It says "nothing was deployed": the `production` environment has no Cloudflare token.
+    - It says "nothing was deployed": the channel's environment has no Cloudflare token.
       Tell the user.
     - The run failed: read the log.
       If it says "the earlier version is live again", the Worker rolled back and is unchanged.
@@ -964,7 +1028,8 @@ The root's `tests/agents-lines.test.js` checks it.
 
 On the pages, text of one sentence or less, like a label, an empty view's note,
 or a setting's note, ends without a period; text of two or more sentences,
-like a release note or a message that says what to do, ends with one.
+like a release note or a message that says what to do, ends with one,
+but for text that ends in a link, which ends without one, as the Home Screen app's note does.
 An outlet's own words keep their punctuation, in an element marked `data-quoted`.
 The root's `tests/browser/stray-periods.mjs` lists any shown text that breaks this,
 and each app's browser tests check every view with it, wherever they check the type roles.

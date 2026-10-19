@@ -10,8 +10,10 @@ import {
   openSettings,
   EVENING_FIXTURE,
   ON_A_PHONE,
+  keepUpdatesFromEarlierVisit,
   matchPath,
 } from "./harness.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
 
@@ -82,16 +84,6 @@ async function lockBracketWhileAway(app) {
   await expect.poll(() => app.countOpenSockets()).toBeGreaterThan(0);
   await app.lockBracketWhileAway();
 }
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} hidden
- */
-const setHidden = (page, hidden) =>
-  page.evaluate((isHidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, hidden);
 
 /** @param {import("@playwright/test").Page} page */
 async function hideAndShow(page) {
@@ -265,6 +257,7 @@ test("a page coming back to nothing new lets a faded band pass through the heade
 
 test.describe("on a phone", () => {
   test.use(ON_A_PHONE);
+  test.beforeEach(({ page }) => keepUpdatesFromEarlierVisit(page));
 
   test("a page asleep half an hour reads what it missed when it wakes, without reloading", async ({
     page,

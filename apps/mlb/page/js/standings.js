@@ -4,15 +4,17 @@ import { scrollUnderPill } from "#shared/bracket-standings.js";
 import { formatClockTimeWithoutMeridiem, formatShortWeekday, nameDay } from "#shared/days.js";
 import { html, setHtml } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
+import {
+  DIVISION_ELIMINATION_TITLE,
+  MAGIC_NUMBER_TITLE,
+  WILD_CARD_ELIMINATION_TITLE,
+  describeRaceNumber,
+  readMagicNumber,
+} from "./race-numbers.js";
+import { findGameUnderWay, findNextGame, isNextShown } from "./next-game.js";
 import { session } from "./session.js";
 
 const DIVISION_ORDER = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"];
-const DIVISION_ELIMINATION_TITLE =
-  "Division elimination number: combined wins by the division leader and losses by this team that would end its division chances. A dash means clinched, E means out.";
-const MAGIC_NUMBER_TITLE =
-  "Division magic number: combined wins by this team and losses by the club closest behind it that would clinch the division. A dash means clinched.";
-const WILD_CARD_ELIMINATION_TITLE =
-  "Wild card elimination number: combined wins by the team holding the last spot and losses by this team that would end its wild card chances. A dash means clinched, E means out.";
 
 // Shared column classes, sized in styles.css, line the columns up across every table.
 const COLUMNS = html`<colgroup><col class="c-rank"><col class="c-seed"><col class="c-team"><col class="c-w"><col class="c-l"><col class="c-pct"><col class="c-gb"><col class="c-e"><col></colgroup>`;
@@ -28,36 +30,9 @@ function renderGamesBackCell(value) {
 }
 
 function renderEliminationCell(value) {
-  if (value === "E") return html`<td class="elim-num mid">E</td>`;
-  if (value == null || value === "-") return html`<td class="elim-num clinched mid">&mdash;</td>`;
-  return html`<td class="elim-num live tabular mid">${value}</td>`;
-}
-
-const hasStarted = (game, now) => game && game.at && !game.tbd && Date.parse(game.at) <= now;
-
-// A game that has started isn't next, even before the standings refresh.
-function findNextGame(row, now) {
-  if (!hasStarted(row.next, now)) return row.next;
-  return hasStarted(row.then, now) ? null : row.then;
-}
-
-// A club out of the table's race still shows a postseason game, since it only has one while alive.
-const isNextShown = (next, isOut) => next && next.at && (!isOut || next.postseason);
-
-const isPlayedBy = (game, id) => game.away === id || game.home === id;
-const hasPassedStart = (game, now) => !game.tbd && Date.parse(game.start) <= now;
-// MLB can call a start delayed before its scheduled time.
-const isAboutToStart = (game, now) =>
-  game.state === "pre" && (!!game.delay || hasPassedStart(game, now));
-
-// A club's standings row lists only games still to come, so its game under way comes from the slate.
-function findGameUnderWay(id, now) {
-  const games = (session.state?.slate?.today?.games || []).filter((game) => isPlayedBy(game, id));
-  return (
-    games.find((game) => game.state === "live") ||
-    games.find((game) => isAboutToStart(game, now)) ||
-    null
-  );
+  const { text, state } = describeRaceNumber(value);
+  const classes = ["elim-num", state, state === "live" && "tabular", "mid"].filter(Boolean);
+  return html`<td class="${classes.join(" ")}">${text}</td>`;
 }
 
 const describeOpponent = (game, id) => (game.home === id ? `vs ${game.away}` : `@ ${game.home}`);
@@ -101,7 +76,7 @@ function describeComingGame(next, now) {
  * @returns {{ text: import("#shared/html.js").Markup | string, classes: string[] } | null}
  */
 function describeNextGame(row, { isOut = false, now = Date.now() } = {}) {
-  const gameUnderWay = findGameUnderWay(row.id, now);
+  const gameUnderWay = findGameUnderWay(session.state?.slate?.today?.games ?? [], row.id, now);
   if (gameUnderWay && (!isOut || gameUnderWay.postseason))
     return describeGameUnderWayWithDelay(gameUnderWay, row.id);
   const next = findNextGame(row, now);
@@ -151,10 +126,9 @@ function renderHeader(gamesBackLabel, eliminationLabel, eliminationTitle) {
 }
 
 function renderDivisionTag(leader) {
-  if (leader.clinched) return html`<span class="clinch-tag">clinched</span>`;
-  if (/^\d+$/.test(leader.magic || ""))
-    return html`<span class="magic-tag">magic ${leader.magic}</span>`;
-  return html``;
+  const magic = readMagicNumber(leader);
+  if (magic === "-") return html`<span class="clinch-tag">clinched</span>`;
+  return magic ? html`<span class="magic-tag">magic ${magic}</span>` : html``;
 }
 
 function renderRaceCells(row, gamesBack, eliminationNumber, isOut) {
@@ -229,9 +203,8 @@ export function describeDivisionLead(leader, divisions) {
 }
 
 function renderMagicCell(leader) {
-  if (leader.clinched) return renderEliminationCell("-");
-  if (/^\d+$/.test(leader.magic || "")) return renderEliminationCell(leader.magic);
-  return html`<td class="elim-num mid"></td>`;
+  const magic = readMagicNumber(leader);
+  return magic ? renderEliminationCell(magic) : html`<td class="elim-num mid"></td>`;
 }
 
 function renderFieldHead() {
@@ -297,12 +270,10 @@ export function renderStandings() {
 }
 
 /**
- * Shows one of the standings' parts, as a search's row for it asks: the playoff fields, which lead
- * them, at their top, or a league's divisions, from its first, just under the pill.
- * @param {string} key "playoffs", or the league, as "AL"
+ * Shows a league's divisions, from its first, just under the pill, as a search's row for them asks.
+ * @param {string} league as "AL"
  */
-export function showStandingsPart(key) {
-  const firstDivision = document.querySelector(`[data-standings="${CSS.escape(key)}"]`);
+export function showLeagueStandings(league) {
+  const firstDivision = document.querySelector(`[data-standings="${CSS.escape(league)}"]`);
   if (firstDivision) scrollUnderPill(firstDivision);
-  else scrollTo({ top: 0 });
 }

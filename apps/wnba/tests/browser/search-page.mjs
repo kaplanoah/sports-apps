@@ -14,9 +14,31 @@ export const PLAYER_INDEX = {
 };
 
 /** @param {import("@playwright/test").Page} page */
+export const findSearch = (page) => page.locator("#gameSearch");
+/** @param {import("@playwright/test").Page} page */
 export const findInput = (page) => page.locator("#gameSearch .search-input");
 /** @param {import("@playwright/test").Page} page */
 export const findRows = (page) => page.locator("#gameSearch .search-suggestion");
+/** @param {import("@playwright/test").Page} page */
+export const findLine = (page) => page.locator("#gameSearch .search-read");
+/** @param {import("@playwright/test").Page} page */
+export const findGamesLine = (page) => page.locator("#gameSearch .search-games-line");
+
+/**
+ * The day at the top of the search's list, where a finger just under its top lands.
+ * @param {import("@playwright/test").Page} page
+ */
+export const readTopDay = (page) =>
+  page.evaluate(() => {
+    const list = /** @type {Element} */ (document.querySelector("#gameSearch .search-list"));
+    const { top, left, width } = list.getBoundingClientRect();
+    return (
+      document
+        .elementFromPoint(left + width / 2, top + 20)
+        ?.closest(".listed-day")
+        ?.getAttribute("data-day") ?? null
+    );
+  });
 
 /**
  * Opens the whole season, with its list of players, on the Games tab.

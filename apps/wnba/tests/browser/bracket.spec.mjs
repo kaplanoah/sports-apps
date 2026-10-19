@@ -1,6 +1,11 @@
 import { TEAMS } from "../../page/js/teams.js";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
-import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import {
+  findSeasonPill,
+  findSeasonTab,
+  openSeasonPart,
+} from "../../../../tests/browser/season-tab.mjs";
+import { readSeasonPartScroll } from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -53,28 +58,6 @@ function finishSemifinals(season) {
 
 const readRoundName = (page, round) => page.locator(`.round-name[data-round="${round}"]`);
 
-const TIGHTEST_CARD_GAP = 32;
-
-/**
- * The room above the first round's cards, between them, and from the last one's note to the round
- * dots, once the cards have spread.
- * @param {import("@playwright/test").Page} page
- */
-async function readCardGaps(page) {
-  await expect(page.locator('[data-series="1-2"] .card-note')).toBeVisible();
-  await page.evaluate(() => document.fonts.ready);
-  return page.evaluate(() => {
-    const readBox = (selector) =>
-      /** @type {Element} */ (document.querySelector(selector)).getBoundingClientRect();
-    const cards = ["1-0", "1-3", "1-1", "1-2"].map((id) => readBox(`[data-series="${id}"]`));
-    return {
-      aboveCards: cards[0].top - readBox(".round-name").bottom,
-      between: cards.slice(1).map((card, index) => card.top - cards[index].bottom),
-      lastNoteToDots: readBox(".round-dots").top - readBox('[data-series="1-2"] .card-note').bottom,
-    };
-  });
-}
-
 test.describe("on a phone, the bracket", () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
@@ -98,6 +81,66 @@ test.describe("on a phone, the bracket", () => {
     await page.getByRole("tab", { name: "Games" }).click();
     await openSeasonPart(page, "Bracket");
     await expect(readRoundName(page, 2)).toBeInViewport({ ratio: 1 });
+  });
+
+  test("comes back to the round still playing with a tap on its tab, from a round before or after it, or from the standings", async ({
+    page,
+  }) => {
+    const app = await openApp(page);
+    await app.changeSeason(finishFirstRound);
+    await expect(readRoundName(page, 2)).toBeInViewport({ ratio: 1 });
+    expect(await readSeasonPartScroll(page, "bracket")).toBe(0);
+
+    for (const left of [0, Number.MAX_SAFE_INTEGER]) {
+      await page.locator(".bracket").evaluate((tree, to) => (tree.scrollLeft = to), left);
+      await expect(readRoundName(page, 2)).not.toBeInViewport({ ratio: 1 });
+
+      await findSeasonTab(page).click();
+
+      await expect(readRoundName(page, 2)).toBeInViewport({ ratio: 1 });
+    }
+
+    await page.locator(".bracket").evaluate((tree) => (tree.scrollLeft = 0));
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
+    await expect(page.locator("#standings-league")).toBeVisible();
+
+    await findSeasonTab(page).click();
+
+    await expect(readRoundName(page, 2)).toBeInViewport({ ratio: 1 });
+    await expect(readRoundName(page, 1)).not.toBeInViewport();
+  });
+
+  test.describe("in full motion", () => {
+    test.use({ contextOptions: { reducedMotion: "no-preference" } });
+
+    test("glides back to the round still playing with a tap on its tab, never stepping back", async ({
+      page,
+    }) => {
+      const app = await openApp(page);
+      await app.changeSeason(finishFirstRound);
+      await expect(readRoundName(page, 2)).toBeInViewport({ ratio: 1 });
+      const tree = page.locator(".bracket");
+      const opening = await tree.evaluate((element) => element.scrollLeft);
+      await tree.evaluate((element) => (element.scrollLeft = 0));
+      await expect(readRoundName(page, 1)).toBeInViewport({ ratio: 1 });
+      const lefts = tree.evaluate(
+        (element) =>
+          new Promise((resolve) => {
+            const seen = /** @type {number[]} */ ([]);
+            element.addEventListener("scroll", () => seen.push(element.scrollLeft));
+            element.addEventListener("scrollend", () => resolve(seen), { once: true });
+          }),
+      );
+
+      await findSeasonTab(page).click();
+
+      const seen = /** @type {number[]} */ (await lefts);
+      expect(new Set(seen).size).toBeGreaterThan(2);
+      for (let index = 1; index < seen.length; index += 1)
+        expect(seen[index]).toBeGreaterThanOrEqual(seen[index - 1]);
+      expect(seen.at(-1)).toBeCloseTo(opening, 0);
+      await expect(readRoundName(page, 2)).toBeInViewport({ ratio: 1 });
+    });
   });
 
   test("centers the Finals on the screen, opening on them or swiped to them", async ({ page }) => {
@@ -139,37 +182,6 @@ test.describe("on a phone, the bracket", () => {
       .locator(".bracket")
       .evaluate((tree) => tree.scrollTo({ left: tree.scrollWidth, behavior: "instant" }));
     await expect(dots.locator('[data-round="3"]')).toHaveClass("on");
-  });
-
-  test("spreads its cards alike to reach the round dots, with each round's name just above them", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: PHONE.width, height: 860 });
-    await openApp(page);
-    const gaps = await readCardGaps(page);
-    expect(gaps.aboveCards).toBeCloseTo(16, 0);
-    expect(gaps.between[0]).toBeGreaterThan(TIGHTEST_CARD_GAP);
-    for (const gap of gaps.between) expect(gap).toBeCloseTo(gaps.between[0], 0);
-    expect(gaps.lastNoteToDots).toBeGreaterThanOrEqual(12);
-    expect(gaps.lastNoteToDots).toBeLessThan(12 + 4);
-  });
-
-  test("spreads its cards no more than 1.45 times their tightest gap on a taller screen", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: PHONE.width, height: 2000 });
-    await openApp(page);
-    const gaps = await readCardGaps(page);
-    for (const gap of gaps.between)
-      expect(gap).toBeCloseTo(Math.floor(1.45 * TIGHTEST_CARD_GAP), 0);
-    expect(gaps.lastNoteToDots).toBeGreaterThan(100);
-  });
-
-  test("keeps its tightest gaps on a short screen, where the page scrolls", async ({ page }) => {
-    await page.setViewportSize({ width: PHONE.width, height: 568 });
-    await openApp(page);
-    const gaps = await readCardGaps(page);
-    for (const gap of gaps.between) expect(gap).toBeCloseTo(TIGHTEST_CARD_GAP, 0);
   });
 
   test("on the Semifinals, the first round's lines run off the screen's edge without turning at it", async ({

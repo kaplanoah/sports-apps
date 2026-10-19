@@ -55,9 +55,9 @@ of the lead through the game, the two
 teams' stats side by side, and each team's top scorers; before it does, the two
 teams' meetings this season, how their seasons compare, and each team's leading
 scorers. On a phone or tablet, an Updates box under the tabs lists each playoff
-game that ended since you last dismissed it, and where its series stands, and
-under New in the app, any feature worth a note; each device keeps its own
-dismissal. It follows the phone's dark or light setting, or
+game that went final since you first opened the app or last dismissed the box, and where its series stands, and
+under New in the app, any feature worth a note; each device keeps when its box counts from,
+its first open or its last dismissal. It follows the phone's dark or light setting, or
 the one you pick in its settings. Added to the home screen, it keeps
 the icon of the look it had then.
 
@@ -113,8 +113,8 @@ Set up the app they asked for, by its folder under `apps/`: `mlb` for the MLB
 tracker, `wnba` for the WNBA tracker. Below, `<app>` is that folder, and `<worker>` is the `name`
 in its `apps/<app>/worker/wrangler.toml`.
 
-**1. Get this session ready to deploy.** If `CLOUDFLARE_ACCOUNT_ID` is set
-and
+**1. Get this session ready to deploy.** If `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_WORKERS_SUBDOMAIN` are set and
 `curl -s https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain`
 returns `"success":true`, go to step 2. Otherwise start with something like:
 "I'll walk you through adding a few things to this cloud environment so I can
@@ -130,15 +130,17 @@ themselves, see "If they deploy it themselves" below.
    Skip IP filtering because cloud sessions don't have a fixed address. A
    one-week expiry is enough. They copy the token but don't paste it into the
    chat.
-3. Have them find their **Account ID** in the right-hand column of the
-   Workers & Pages overview.
+3. Have them find their **Account ID** and workers.dev **Subdomain** in the
+   right-hand column of the Workers & Pages overview.
 4. In Claude Code, have them open this session's cloud environment (the
    environment menu in the title bar > **Edit**) and set:
    - **API credentials > Add credential**: type Bearer, allowed website
      `api.cloudflare.com`, header `Authorization`, prefix `Bearer`, and the
      token as the value. Then **Connect**. Sessions can use it but can't see
      it.
-   - **Environment variables**: `CLOUDFLARE_ACCOUNT_ID=<their account id>`.
+   - **Environment variables**: `CLOUDFLARE_ACCOUNT_ID=<their account id>`
+     and `CLOUDFLARE_WORKERS_SUBDOMAIN=<their subdomain>`, the part before
+     `.workers.dev`.
    - **Network access**: Custom. Add `<worker>.<their-subdomain>.workers.dev`
      and keep the default package managers.
 
@@ -192,8 +194,9 @@ says why the Worker couldn't read the league, and `write` names the save that fa
 **5. Save it to the home screen.** On an iPhone, have them open the address
 in Safari and choose **Share > Add to Home Screen**. It then opens full
 screen with its own icon. On a phone, the page shows these steps itself, in a
-bar across the top until it's closed and at the bottom of settings, and on
-Android its **Install** button opens Chrome's own install dialog.
+welcome over the whole screen until the page is added or the viewer goes on in
+the browser, and at the bottom of settings, and on Android its **Install**
+button opens Chrome's own install dialog.
 
 **6. Turn on notifications.** From the home screen icon, have them tap the
 sliders at the top right to open settings, turn on **Notifications**, and allow
@@ -232,12 +235,27 @@ something doesn't match, point them to Cloudflare's
 runs the tests, in Node and in a browser, on every pull request, so merge once
 those pass and the pull request has no conflicts with `main`. If the repo has a
 `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret, Claude also reviews
-every push to a pull request in full, as [REVIEW.md](REVIEW.md) says: it splits
-the change into shares one reviewer can read every line of, reviews them all at
-once and then across them, comments on each finding's line, and keeps one
-summary comment up to date. The review is one of the checks that must pass, so
-a review that can't run, or that left a changed file unread, blocks the merge.
-Its findings don't fail the check; answer each one by fixing it or replying. To run the
+each pull request, as [REVIEW.md](REVIEW.md) says: it splits the change into
+areas by what the files are about, has four reviewers read each area in full,
+each for one kind of problem (in the last read of the whole change, one reviewer
+an area looks for every kind), checks every case they list against the code,
+comments on each finding's line, and keeps one summary comment up to date. The
+first review reads the whole change, and each review after it reads what changed
+since the last review that finished. The review is one of the checks that must
+pass, so a review that can't run, that left a changed file unread, or whose
+reviewers, checkers, check across areas, or posting step didn't finish, blocks
+the merge. Its findings don't fail the check; answer all of a review's findings
+in one push, by fixing each or replying.
+
+A pull request from a fork runs without the repo's secrets, so Claude can't review
+it, and it runs the fork's own copy of the workflows, which its author can change
+to pass. The repo's **Settings > Actions > General**, under **Approval for
+running fork pull request workflows from contributors**, is set to **Require
+approval for first-time contributors**. GitHub counts anyone without a commit
+merged into the repo as a first-time contributor, and only the owner merges, so
+nothing a fork sends runs until the owner has read it and approved its run.
+
+To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,
 then `npm run check`. `npm run format` fixes formatting.
 
@@ -285,29 +303,46 @@ GitHub can deploy each app's Worker, page included, after each merge: at once
 when the pull request's checks passed on exactly the code `main` now has, which
 is when it was up to date with `main` as it merged, and otherwise once the
 checks pass on `main`. In the repo's **Settings > Environments**, create an
-environment named `production`, limit its deployment branches to `main` and
-`beta` (see "Trying a change on the phone" below), and add:
+environment named `production`, limit its deployment branches to `main`, and
+add:
 
-- a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare token made from the **Edit
-  Cloudflare Workers** template, with no IP filtering and a long expiry;
+- a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare account token with the
+  **Workers Scripts** permission at **Edit**, limited to each app's live
+  Worker, `<app>-app`, with no IP filtering and a long expiry;
 - a secret `CLOUDFLARE_ACCOUNT_ID`, so it stays out of the public deploy logs;
+- a secret `CLOUDFLARE_WORKERS_SUBDOMAIN`: the account's workers.dev
+  subdomain, the part before `.workers.dev`, which a token limited to its
+  Workers can't read, and which the deploy builds each Worker's address from;
 - for each app, a secret `<APP>_PAGE_URL` with its page's address, key and all,
   like `WNBA_PAGE_URL`, and `<APP>_ACCESS_CODE` with its code if it asks for
-  one, and the same with `_BETA` after the app's name for its beta page, like
-  `WNBA_BETA_PAGE_URL`.
+  one.
+
+The beta channel (see "Trying a change on the phone" below) deploys from an
+environment of its own, named `beta`, limited to the `beta` branch, with the
+same secrets: a token limited to each app's beta Worker,
+`<app>-app-beta`, the account ID and subdomain, and each page's address and code with
+`_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
+change only its own channel's Workers, a branch pushed to `beta` can never
+reach the live apps.
 
 Each deploy opens its new version's page as a phone does, signed in with its
 code, and puts the version before back when the page doesn't draw what its store
 sends. Every 15 minutes, the **Watch apps** workflow opens each app's page the
 same way and keeps one open issue for each app that isn't opening, which closes
 itself once the app opens again. An app without its page's secrets isn't
-opened, and the deploy log and the workflow say so.
+opened, and the deploy log and the workflow say so. A page that asks for no code
+while its environment holds one opens without it, and they say that too. The
+workflow also keeps one open issue for each live app that opens without asking
+for its code, which closes itself once the app asks again or no code is held
+for it.
 
 Each deploy records its commit on the Worker's version. A merge skips an app's
 deploy when nothing but docs, tests, tooling, and other apps' folders changed
 since its live version's commit, since its Worker would be the same;
-`worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too, since
-the newer merge's deploy covers it. Without the token, merges deploy nothing.
+`worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too
+once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
+CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
+always deploys. Without the token, merges deploy nothing.
 Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <app>` for
 one app. `npm run rollback -- <app>` puts the app's previous version back at all
 of its traffic and prints which commit was live and which is now; it refuses
@@ -318,7 +353,8 @@ are.
 
 Each app also has a beta Worker, `<app>-app-beta`, named in the `[env.beta]` of
 its `wrangler.toml`, with its own store, key, and address. Its page names itself
-"beta" on the Home Screen and in its settings' version line, so it can sit beside
+"beta" on the Home Screen, in its settings' version line, and in a tag beside its
+name with the commit it runs and how long ago that went live, so it can sit beside
 the real one. To use a pull request's change on the phone before it merges:
 
 1. Reset `beta` to the pull request's branch and push it:
@@ -327,12 +363,14 @@ the real one. To use a pull request's change on the phone before it merges:
    at once, with the same checks and rollback as `main`'s deploy.
 3. Open the beta app from the Home Screen and use the change.
 
-Before the first beta deploy, allow the `beta` branch in the `production`
-environment's deployment branches. After the first one, give each beta Worker
-its key with `npm run set-app-key -- <app> --channel beta`, which prints its
-address, and, if the real page asks for a code, set one with
-`npm run set-access-code -- <app> <code> --channel beta`. Add the page to the
-Home Screen from that address. `npm run deploy:api -- <app> --channel beta`
+Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`,
+in Cloudflare's dashboard, since the `beta` token can change only the Workers it
+names, then create the `beta` environment as "Deploying on merge" says, with its
+token limited to them. After the first one, give each beta Worker its key with
+`npm run set-app-key -- <app> --channel beta`, which prints its address, and,
+if the real page asks for a code, set one with
+`npm run set-access-code -- <app> <code> --channel beta`. Add both to the `beta`
+environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <app> --channel beta`
 deploys beta by hand, from a checkout of `origin/beta`, and
 `npm run rollback -- <app> --channel beta` rolls it back.
 

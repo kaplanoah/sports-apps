@@ -29,13 +29,13 @@ function readBranchBase(git) {
 
 /**
  * Names the commit being built and the app's version, for the page's settings, with the channel's
- * label on the version of any but production. Only deploys go live, so the build time is the
- * deploy time.
+ * label on the version of any but production, and the label itself for the page's channel tag.
+ * Only deploys go live, so the build time is the deploy time.
  * @param {string} app
  * @param {(args: string[]) => string} [git]
  * @param {Date} [now]
  * @param {string} [channel]
- * @returns {{ version: string | null, commit: string, builtAt: string } | null}
+ * @returns {{ version: string | null, commit: string, builtAt: string, label: string | null } | null}
  */
 export function readRelease(app, git = runGit, now = new Date(), channel = "production") {
   let commit;
@@ -46,10 +46,10 @@ export function readRelease(app, git = runGit, now = new Date(), channel = "prod
   }
   const builtAt = now.toISOString();
   const { label } = findChannel(channel);
-  if (!label) return { version: readVersion(app, git), commit, builtAt };
+  if (!label) return { version: readVersion(app, git), commit, builtAt, label };
   const base = readBranchBase(git);
   const version = base && readVersion(app, git, base);
-  return { version: `${version ?? commit}-${label}`, commit, builtAt };
+  return { version: `${version ?? commit}-${label}`, commit, builtAt, label };
 }
 
 const HOME_SCREEN_TITLE = /(<meta name="apple-mobile-web-app-title" content=")([^"]+)(")/;

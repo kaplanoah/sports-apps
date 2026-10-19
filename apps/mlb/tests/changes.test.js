@@ -49,7 +49,14 @@ const TEAMS = {
   BOS: { league: "AL", seed: 5 },
   CWS: { league: "AL", seed: 6 },
 };
-const createFinal = (away, home, score) => ({ away, home, state: "final", score });
+// A final with an id of its own, as MLB's gamePk is, so a doubleheader's two games are kept apart.
+const createFinal = (away, home, score, id = `${away}@${home}`) => ({
+  id,
+  away,
+  home,
+  state: "final",
+  score,
+});
 
 const createReading = (rows, teams, games = [], projected = true) =>
   Readings.createReading({
@@ -140,8 +147,16 @@ test("a doubleheader's change is explained by the game that made it, game 2 here
   const before = updateRow(updateRow(BEFORE, "SEA", { elim: "E" }), "TEX", { elim: "1" });
   const after = updateRow(before, "TEX", { elim: "E" });
   const games = [
-    { ...createFinal("TEX", "MIN", [6, 4]), start: "2026-09-24T17:05:00Z", doubleheader: 1 },
-    { ...createFinal("TEX", "MIN", [4, 6]), start: "2026-09-24T22:05:00Z", doubleheader: 2 },
+    {
+      ...createFinal("TEX", "MIN", [6, 4], "TEX@MIN-1"),
+      start: "2026-09-24T17:05:00Z",
+      doubleheader: 1,
+    },
+    {
+      ...createFinal("TEX", "MIN", [4, 6], "TEX@MIN-2"),
+      start: "2026-09-24T22:05:00Z",
+      doubleheader: 2,
+    },
   ];
   const rangersLoss = { team: "TEX", won: false, opp: "MIN", score: [4, 6] };
   const clinch = {
@@ -184,6 +199,12 @@ test("an elimination names the race and the most wins the club can reach", () =>
     decider: "CWS",
     via: [ORIOLES_LOSS, WHITE_SOX_WIN],
   });
+});
+
+test("an elimination counts the most wins from the club's own games, one fewer for a rainout never made up", () => {
+  const before = updateRow(updateRow(CHASE, "BAL", { l: 79 }), "BAL", { scheduled: 161 });
+  const after = updateRow(before, "CWS", { w: 86 });
+  assert.equal(findChaseElimination(before, after).most, 82);
 });
 
 test("of a loss and the chaser's win, the one the standings took in last decided it", () => {

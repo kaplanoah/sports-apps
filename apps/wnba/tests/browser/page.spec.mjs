@@ -11,14 +11,28 @@ import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
-import { chooseAppearance, readTokenColor } from "./theme.mjs";
+import { chooseAppearance, readColor, readTokenColor } from "./theme.mjs";
 import {
   findSeasonPill,
   findSeasonTab,
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
+import {
+  readSeasonPartScroll,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
+
+/**
+ * Waits for the page to draw the season the store sent, which names the season's tab Bracket and
+ * adds the header's lines over the tabs, moving them.
+ * @param {import("@playwright/test").Page} page
+ */
+async function expectFirstDrawing(page) {
+  await expect(page.locator("#bracketFace")).toBeVisible();
+  await expect(page.locator("#stamp")).toBeVisible();
+}
 
 test("the page opens on the bracket the Worker saved, and each tab shows its view", async ({
   page,
@@ -198,7 +212,7 @@ test.describe("on a phone, the text", () => {
   test("keeps to its type roles in the header, the Updates box, the games, the standings, a team's sheet, and settings", async ({
     page,
   }) => {
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     await expect(page.locator("#updates .what").first()).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
@@ -247,7 +261,7 @@ test.describe("on a phone, the text", () => {
   test("of the Updates box reads as sentences, its days as details, and its count as a label, and a series' standing stays on one line", async ({
     page,
   }) => {
-    await openApp(page, { isShowingUpdates: true });
+    await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates.locator(".what").first()).toBeVisible();
     const [body, detail, label] = await Promise.all(
@@ -359,17 +373,48 @@ test("on a wide screen, the standings keep to one phone's width, under the pill'
   }
 });
 
-test("clicking the tab that's showing scrolls back to the top", async ({ page }) => {
+test("clicking the tab that's showing scrolls back to the top, and then takes it back to the part it's named for", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 400 });
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league tbody tr").first()).toBeVisible();
+  await page.mouse.move(640, 300);
   await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBeGreaterThan(0);
 
   await findSeasonTab(page).dispatchEvent("click");
 
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(0);
+  await expect(page.locator("#standings-league")).toBeVisible();
+
+  await findSeasonTab(page).dispatchEvent("click");
+
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeHidden();
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(0);
+});
+
+test("on a phone, each tab comes back where it was left, and a tab not shown yet opens at its top", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-league tbody tr").first()).toBeVisible();
+  await scrollSeasonPartToEnd(page, "standings");
+  const left = await readSeasonPartScroll(page, "standings");
+  expect(left).toBeGreaterThan(0);
+
+  await page.getByRole("tab", { name: "News" }).click();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await findSeasonTab(page).click();
+
+  await expect(page.locator("#standings-league")).toBeVisible();
+  expect(await readSeasonPartScroll(page, "standings")).toBe(left);
+  await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
 });
 
 test("the page reopens on the tab it was last on, showing the part of it last shown", async ({
@@ -414,6 +459,7 @@ test.describe("on a phone", () => {
   }) => {
     // The tab bar's pill would ease to each tab, which this test doesn't need to wait out.
     await openApp(page);
+    await expectFirstDrawing(page);
     const bar = await page.locator("#tabBar").boundingBox();
     expect(bar.y + bar.height).toBeGreaterThan(844 - 40);
     const headerBottom = await page
@@ -533,11 +579,12 @@ test("the page shows the tab it was last on before its modules have loaded", asy
   await expect(page.locator("#view-bracket-standings")).toHaveCSS("display", "none");
 });
 
-test("on a wide screen, the tabs are one segmented control, each as tall as a pill's names in a track of the divider's color just around them, the open one filled orange and the rest in ink, and neither a theme nor a tap moves them", async ({
+test("on a wide screen, the tabs are one segmented control, each as tall as a pill's names in a track of the divider's color faded into the floor just around them, the open one filled orange and the rest in ink, and neither a theme nor a tap moves them", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openApp(page);
+  await expectFirstDrawing(page);
   const track = page.locator("nav.tabs");
   const tabs = track.getByRole("tab");
   const readBoxes = () =>
@@ -560,7 +607,10 @@ test("on a wide screen, the tabs are one segmented control, each as tall as a pi
   for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
-    await expect(track).toHaveCSS("background-color", await readTokenColor(page, "--divider"));
+    await expect(track).toHaveCSS(
+      "background-color",
+      await readColor(page, "color-mix(in oklab, var(--divider) 45%, var(--bg))"),
+    );
     const chosen = page.locator("nav.tabs [role=tab][aria-selected=true]");
     await expect(chosen).toHaveCSS("background-color", await readTokenColor(page, "--orange"));
     await expect(chosen).toHaveCSS("color", await readTokenColor(page, "--orange-ink"));

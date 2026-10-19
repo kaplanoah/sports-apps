@@ -1,5 +1,6 @@
 import { readCalendarDate } from "#shared/days.js";
 import { readMlbDay } from "../page/js/dates.js";
+import { dropSavedStorage, useKeptChoices } from "../../../tests/saved-storage.js";
 import { session } from "../page/js/session.js";
 import { listUpdates } from "../page/js/updates.js";
 import { renderUpdates } from "../../../shared/page/updates.js";
@@ -22,14 +23,17 @@ export const TWO_UPDATES = [
 const READ_AT = Date.parse("2026-09-25T00:44:00Z");
 
 /**
- * The Updates box's count, and each update's time and text, for a season with this log.
+ * The Updates box's count, and each update's time and text, for a season with this log, on a
+ * device that has used the app before.
  * @param {object[]} log
+ * @param {number} [seenAt] when the device last dismissed the season's box, or 0 for never
  */
-export function readUpdateBox(log) {
+export function readUpdateBox(log, seenAt = 0) {
+  useKeptChoices([["updatesSeenAt", { [session.activeYear]: seenAt }]]);
   session.state = { teams: {}, series: {}, log };
-  const box = normalizeSpaces(
-    renderUpdates(listUpdates(), [], readCalendarDate(readMlbDay(READ_AT))),
-  );
+  const updates = listUpdates();
+  dropSavedStorage();
+  const box = normalizeSpaces(renderUpdates(updates, [], readCalendarDate(readMlbDay(READ_AT))));
   const items = [
     ...box.matchAll(
       /<li><span class="when">([^<]*)<\/span><span class="what">([\s\S]*?)<\/span><\/li>/g,

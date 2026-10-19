@@ -12,6 +12,7 @@ import {
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
 import { STILLS_PER_READ } from "../worker/src/headline-stills.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // MLB's content and plays for two Division Series games of Oct 7, as it had them the next day.
@@ -261,12 +262,19 @@ test("the route reads MLB for a game the store doesn't keep, in two requests", a
   assert.equal(mlb.requests.length, 2);
 });
 
-test("the route turns away an id that isn't MLB's", async () => {
-  const server = createHighlightsServer({ fetchImpl: createMlbFetch().fetchImpl });
+test("the route turns away an id that isn't MLB's, and says when MLB doesn't answer", async () => {
+  const mlb = createMlbFetch();
+  const server = createHighlightsServer({ fetchImpl: mlb.fetchImpl });
 
   const response = await server.serveHighlights(new URL("https://app.test/highlights?id=x"));
+  await assertErrorAnswer(response, 400, "invalid_argument");
+  assert.deepEqual(mlb.requests, []);
 
-  assert.equal(response.status, 400);
+  const unknown = await server.serveHighlights(
+    new URL("https://app.test/highlights?id=1"),
+    async () => null,
+  );
+  assert.match(await assertErrorAnswer(unknown, 502, "upstream_error"), /^Couldn't read MLB: /);
 });
 
 /**
@@ -292,6 +300,7 @@ function createJobRun(mlb, env) {
   const job = createHighlightsUpdater();
   return {
     stored: docs.stored,
+    storage: storage.stored,
     runJob: () => job.updateStore(context),
     forgetReads: () => {
       for (const key of storage.stored.keys()) {
@@ -303,6 +312,21 @@ function createJobRun(mlb, env) {
     },
   };
 }
+
+test("the store's job keeps the current season's stills whichever finals it lists, and forgets the season before's", async () => {
+  const { storage, runJob } = createJobRun(createMlbFetch(), {});
+  const answers = { "https://img.mlbstatic.com/still.jpg": true };
+  storage.set("headline-stills:999999", answers);
+  storage.set("headline-stills:2026:999998", answers);
+  storage.set("headline-stills:2025:776001", answers);
+
+  await runJob();
+
+  assert.deepEqual(storage.get("headline-stills:2026:999999"), answers);
+  assert.deepEqual(storage.get("headline-stills:2026:999998"), answers);
+  assert.equal(storage.has("headline-stills:999999"), false);
+  assert.equal(storage.has("headline-stills:2025:776001"), false);
+});
 
 test("the store's job reads each of the slate's finals in two requests, and saves its highlights", async () => {
   const mlb = createMlbFetch();
@@ -370,22 +394,30 @@ test("the store's job asks Claude about a few stills a run, saving the game's hi
   assert.equal(mlb.stillsAsked.length, stills.length);
 });
 
-test("a game whose stills Claude didn't answer for saves nothing, and is read again ten minutes later", async () => {
-  const contreras = findRecordedClip(BREWERS_AT_PADRES, "William Contreras' solo home run");
+test("a game whose stills Claude didn't answer for saves its highlights with MLB's own stills, and has the moment once Claude answers ten minutes later", async () => {
+  const title = "William Contreras' solo home run";
+  const contreras = findRecordedClip(BREWERS_AT_PADRES, title);
   const mlb = createMlbFetch(new Set([contreras.still]));
   const run = createJobRun(mlb, { ANTHROPIC_API_KEY: "key" });
   const { stored, wait } = run;
   mlb.claude.isDown = true;
 
   await run.runJob();
-  assert.equal(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), undefined);
+  assert.match(
+    stored.get("highlights/status").lastFailure.message,
+    /Asking Claude about \d+ of game 849826's stills failed: Claude answered 529/,
+  );
+  await runUntilChecked(run, mlb);
+  assert.deepEqual(
+    stored.get(nameHighlightsKey(BREWERS_AT_PADRES)),
+    describeRecorded(BREWERS_AT_PADRES),
+  );
 
   mlb.claude.isDown = false;
   wait(10);
   await runUntilChecked(run, mlb);
   assert.equal(
-    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), "William Contreras' solo home run")
-      .still,
+    findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), title).still,
     contreras.frames?.replace("%", "0000003"),
   );
 });

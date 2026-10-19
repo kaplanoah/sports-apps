@@ -50,6 +50,12 @@ const OTHER_PLACES = [
     shown: (page) => page.getByRole("heading", { name: "Enter your access code" }),
   },
   {
+    name: "the Home Screen welcome",
+    device: ON_A_PHONE,
+    open: (page) => openApp(page, { isShowingWelcome: true }),
+    shown: (page) => page.getByRole("heading", { name: "Add WNBA to your Home Screen" }),
+  },
+  {
     name: "the bracket before the playoff field is set",
     open: async (page) => {
       const app = await openApp(page);
@@ -68,7 +74,7 @@ const OTHER_PLACES = [
           body: 'import { html } from "#shared/html.js";\nexport const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: html`Tap a game, then <b>Channels</b>.` }];',
         }),
       );
-      return openApp(page, { isShowingUpdates: true });
+      return openApp(page, { updatesBox: "shown" });
     },
     shown: (page) => page.locator("#updates .updates-notes b"),
   },

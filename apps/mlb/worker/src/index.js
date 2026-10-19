@@ -5,7 +5,6 @@ import { createHighlightsServer } from "./highlights.js";
 import { LEAGUE_READS_COUNT, PITCHER_JOB } from "./pitcher-updater.js";
 import { createPitcherServer } from "./pitchers.js";
 import { createRotationServer } from "./rotations.js";
-import { createSnapshotServer } from "./snapshot.js";
 import {
   SeasonStore,
   addToJobCount,
@@ -16,7 +15,6 @@ import {
 
 const boxScores = createBoxScoreServer();
 const highlights = createHighlightsServer();
-const snapshots = createSnapshotServer();
 const pitchers = createPitcherServer();
 const rotations = createRotationServer();
 
@@ -25,7 +23,6 @@ const createLeagueReadCounter = (env) => () => addToJobCount(env, PITCHER_JOB, L
 
 export default createAppWorker({
   pageFiles: PAGE_FILES,
-  serveSnapshot: (url) => snapshots.serveSnapshot(url),
   forwardToStore,
   isStoreAnswering,
   reads: {

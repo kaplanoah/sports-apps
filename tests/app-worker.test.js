@@ -2,15 +2,21 @@ import test from "node:test";
 import { createHmac } from "node:crypto";
 import assert from "node:assert/strict";
 import { createAppWorker } from "../shared/worker/app-worker.js";
+import { ANDROID_AGENT, IPHONE_AGENT } from "./browser/devices.mjs";
 
 const answerNothing = () => new Response(null, { status: 500 });
 const storeAnswers = async () => true;
+const RELEASE = {
+  version: "1.2.3",
+  commit: "abc1234",
+  builtAt: "2026-10-01T20:00:00Z",
+  label: null,
+};
 
 /** @param {Record<string, { contentType: string, text?: string }>} pageFiles */
 const createPageWorker = (pageFiles) =>
   createAppWorker({
     pageFiles,
-    serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
     isStoreAnswering: storeAnswers,
   });
@@ -20,9 +26,8 @@ const requestRobots = (pageFiles) =>
   createPageWorker(pageFiles).fetch(new Request("https://worker.example/robots.txt"), {});
 
 test("robots.txt names the commit the Worker was built from, and none when the build named none", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
   const built = await requestRobots({
-    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
   });
   assert.equal(built.headers.get("x-release-commit"), "abc1234");
   assert.equal(await built.text(), "User-agent: *\nDisallow: /\n");
@@ -32,9 +37,8 @@ test("robots.txt names the commit the Worker was built from, and none when the b
 });
 
 test("health answers without the key, saying whether the store answers and which release this is", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
   const pageFiles = {
-    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
   };
   const env = { APP_KEY: "key", STORE: "the store" };
 
@@ -48,7 +52,6 @@ test("health answers without the key, saying whether the store answers and which
 
   const unhealthy = await createAppWorker({
     pageFiles,
-    serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
     isStoreAnswering: async () => false,
   }).fetch(new Request("https://worker.example/health"), env);
@@ -64,9 +67,8 @@ const requestPageFile = (worker, path) =>
   worker.fetch(new Request(`https://worker.example/key/${path}`), { APP_KEY: "key" });
 
 test("a release's own folder serves its files for good, and another release's folder serves nothing", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
   const worker = createPageWorker({
-    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
     "styles.css": { contentType: "text/css; charset=utf-8", text: "body {}" },
   });
 
@@ -85,18 +87,22 @@ test("a release's own folder serves its files for good, and another release's fo
 });
 
 test("another release's version file names that release, so a page still running it reloads", async () => {
-  const release = { version: "1.2.3", commit: "abc1234", builtAt: "2026-10-01T20:00:00Z" };
   const worker = createPageWorker({
-    "version.json": { contentType: "application/json", text: JSON.stringify(release) },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
   });
 
   const replaced = await requestPageFile(worker, "release/def5678/version.json");
   assert.equal(replaced.status, 200);
-  assert.deepEqual(await replaced.json(), { version: null, commit: "def5678", builtAt: null });
+  assert.deepEqual(await replaced.json(), {
+    version: null,
+    commit: "def5678",
+    builtAt: null,
+    label: null,
+  });
   assert.equal(replaced.headers.get("cache-control"), "no-store");
 
   const own = await requestPageFile(worker, "release/abc1234/version.json");
-  assert.deepEqual(await own.json(), release);
+  assert.deepEqual(await own.json(), RELEASE);
 });
 
 test("a Worker built without a release has no release folder", async () => {
@@ -118,7 +124,6 @@ const answerOk = () => new Response("data");
 function createLockedWorker() {
   return createAppWorker({
     pageFiles: PAGE_FILES,
-    serveSnapshot: answerOk,
     forwardToStore: answerOk,
     isStoreAnswering: storeAnswers,
     reads: { "/box-score": answerOk },
@@ -156,7 +161,6 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
   const handed = [];
   const worker = createAppWorker({
     pageFiles: PAGE_FILES,
-    serveSnapshot: answerNothing,
     forwardToStore: answerNothing,
     isStoreAnswering: storeAnswers,
     reads: {
@@ -177,7 +181,7 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
   assert.deepEqual(handed, [["NYL", "the store"]]);
 });
 
-const DATA_PATHS = ["/snapshot", "/box-score", "/store/seasons/2026", "/watch", "/push/key"];
+const DATA_PATHS = ["/box-score", "/store/seasons/2026", "/watch", "/push/key"];
 
 test("without an access code, the page and its data open as they always have", async () => {
   const env = { APP_KEY: "key" };
@@ -202,6 +206,31 @@ test("until the code is sent, the page's address shows the gate and its data sta
     assert.equal((await locked.json()).error.code, "access_required");
   }
   assert.deepEqual(await (await requestLocked("/access")).json(), { isChanged: false });
+});
+
+test("the page's address in its release's folder shows the gate too, until the code is sent", async () => {
+  const worker = createAppWorker({
+    pageFiles: {
+      ...PAGE_FILES,
+      "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
+    },
+    forwardToStore: answerOk,
+    isStoreAnswering: storeAnswers,
+  });
+  const request = () =>
+    new Request("https://worker.example/key/release/abc1234/index.html", {
+      headers: { "cf-connecting-ip": "203.0.113.7" },
+    });
+
+  const gate = await worker.fetch(request(), LOCKED_ENV);
+  assert.equal(await gate.text(), "the gate");
+  assert.equal(gate.headers.get("cache-control"), "no-store");
+  const open = await worker.fetch(request(), { APP_KEY: "key" });
+  assert.equal(await open.text(), "the app");
+});
+
+test("the Worker has no route of its own that reads the league for the page", async () => {
+  assert.equal((await requestLocked("/snapshot", { env: { APP_KEY: "key" } })).status, 404);
 });
 
 test("the right code, however it's typed, signs the phone in with a cookie for the page", async () => {
@@ -234,14 +263,14 @@ test("a wrong code, or none, signs nothing in", async () => {
   const empty = await requestLocked("/access", { method: "POST", body: {} });
   assert.equal(empty.status, 400);
   assert.equal((await requestLocked("/", { cookie: "access=made-up" })).status, 200);
-  assert.equal((await requestLocked("/snapshot", { cookie: "access=made-up" })).status, 401);
+  assert.equal((await requestLocked("/box-score", { cookie: "access=made-up" })).status, 401);
 });
 
 test("a new code signs every phone out, and the gate can say so", async () => {
   const cookie = await signIn();
   const env = { ...LOCKED_ENV, ACCESS_CODE: "LAYUP" };
   assert.equal(await (await requestLocked("/", { cookie, env })).text(), "the gate");
-  assert.equal((await requestLocked("/snapshot", { cookie, env })).status, 401);
+  assert.equal((await requestLocked("/box-score", { cookie, env })).status, 401);
   assert.deepEqual(await (await requestLocked("/access", { cookie, env })).json(), {
     isChanged: true,
   });
@@ -251,7 +280,7 @@ test("a cookie anyone with the link could make from its key and a guessed code o
   const guessed = createHmac("sha256", "key").update("FASTBREAK").digest("base64url");
   const cookie = `access=${guessed}`;
   assert.equal(await (await requestLocked("/", { cookie })).text(), "the gate");
-  assert.equal((await requestLocked("/snapshot", { cookie })).status, 401);
+  assert.equal((await requestLocked("/box-score", { cookie })).status, 401);
 });
 
 test("a code without a key to sign with keeps the page locked and signs no one in", async () => {
@@ -292,6 +321,86 @@ test("a page served over plain http, as on a laptop, gets a cookie it can keep",
   assert.ok(!response.headers.get("set-cookie").includes("Secure"));
 });
 
+/**
+ * @param {string} cookie
+ * @param {object} [env]
+ */
+async function requestHandoff(cookie, env = LOCKED_ENV) {
+  const response = await requestLocked("/access/handoff", { method: "POST", cookie, env });
+  return response.json();
+}
+
+/**
+ * @param {string} address
+ * @param {object} [env]
+ */
+const openHandoff = (address, env = LOCKED_ENV) =>
+  createLockedWorker().fetch(new Request(address), env);
+
+test("a phone signed in gets a handoff that signs a browser in and opens the page at its own address", async () => {
+  const cookie = await signIn();
+  const address = new URL((await requestHandoff(cookie)).address);
+  assert.equal(`${address.origin}${address.pathname}`, "https://worker.example/key/access/handoff");
+  address.searchParams.set("app-theme", "dark");
+
+  const opened = await openHandoff(address.href);
+  assert.equal(opened.status, 302);
+  assert.equal(opened.headers.get("location"), "https://worker.example/key/?app-theme=dark");
+  assert.equal(opened.headers.get("cache-control"), "no-store");
+  assert.equal(readCookie(opened), cookie);
+  assert.ok(opened.headers.get("set-cookie").includes("Path=/key/"));
+  const page = await requestLocked("/", { cookie: readCookie(opened) });
+  assert.equal(await page.text(), "the app");
+});
+
+test("a handoff is made only for a phone signed in, and only while the page asks for a code", async () => {
+  const signedOut = await requestLocked("/access/handoff", { method: "POST" });
+  assert.equal(signedOut.status, 401);
+  const noCode = await requestLocked("/access/handoff", {
+    method: "POST",
+    env: { APP_KEY: "key" },
+  });
+  assert.equal(noCode.status, 404);
+  const deleted = await requestLocked("/access/handoff", { method: "DELETE" });
+  assert.equal(deleted.status, 405);
+});
+
+/**
+ * @param {string} address
+ * @param {object} env
+ */
+async function assertOpensWithoutSigningIn(address, env) {
+  const opened = await openHandoff(address, env);
+  assert.equal(opened.status, 302, address);
+  assert.equal(opened.headers.get("location"), "https://worker.example/key/", address);
+  assert.equal(opened.headers.get("set-cookie"), null, address);
+}
+
+test("a handoff under an old code, made up, or on a Worker that can't sign one opens the page without signing in", async () => {
+  const cookie = await signIn();
+  const { address } = await requestHandoff(cookie);
+  const signature = cookie.split("=")[1];
+  const farOff = Date.parse("2027-01-01T00:00:00Z") / 1000;
+  await assertOpensWithoutSigningIn(address, { ...LOCKED_ENV, ACCESS_CODE: "LAYUP" });
+  await assertOpensWithoutSigningIn(address, { APP_KEY: "key" });
+  await assertOpensWithoutSigningIn(address, { APP_KEY: "key", ACCESS_CODE: "fast break" });
+  for (const madeUp of ["?token=made-up", "", `?token=${farOff}.${signature}`])
+    await assertOpensWithoutSigningIn(
+      `https://worker.example/key/access/handoff${madeUp}`,
+      LOCKED_ENV,
+    );
+});
+
+test("a handoff opens the page signed in for the ten minutes it says it lasts, and only for them", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-17T20:00:00Z") });
+  const { address, expiresInMs } = await requestHandoff(await signIn());
+  assert.equal(expiresInMs, 10 * 60 * 1000);
+  t.mock.timers.tick(expiresInMs);
+  assert.ok(readCookie(await openHandoff(address)));
+  t.mock.timers.tick(1000);
+  await assertOpensWithoutSigningIn(address, LOCKED_ENV);
+});
+
 const PAGE_HOST = "mlb.sports.example";
 const PAGE_HOST_ENV = { ...LOCKED_ENV, PAGE_HOST };
 
@@ -323,6 +432,20 @@ test("at the page's own address, the page and its data answer without the key, b
     assert.equal((await requestAtPageHost(path, { cookie })).status, 200, path);
 });
 
+test("at the page's own address, a handoff opens the page there", async () => {
+  const signedIn = await requestAtPageHost("/access", {
+    method: "POST",
+    body: { code: "FASTBREAK" },
+  });
+  const cookie = readCookie(signedIn);
+  const handoff = await requestAtPageHost("/access/handoff", { method: "POST", cookie });
+  const address = (await handoff.json()).address;
+  assert.ok(address.startsWith(`https://${PAGE_HOST}/access/handoff?token=`));
+  const opened = await openHandoff(address, PAGE_HOST_ENV);
+  assert.equal(opened.headers.get("location"), `https://${PAGE_HOST}/`);
+  assert.equal(opened.headers.get("set-cookie").split("; ")[1], "Path=/");
+});
+
 test("the page's own address answers nothing while the Worker has no code", async () => {
   const env = { APP_KEY: "key", PAGE_HOST };
   for (const path of ["/", "/index.html", "/styles.css", "/access", ...DATA_PATHS])
@@ -342,4 +465,40 @@ test("with an address of its own, the page still answers under its key, and only
   );
   assert.equal(keyless.status, 404);
   assert.equal((await requestAtPageHost("/key/", { cookie })).status, 404);
+});
+
+const AGENTS = {
+  iPhone: IPHONE_AGENT,
+  iPad: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+  android: ANDROID_AGENT,
+  macChrome:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+};
+
+test("Safari's manifest leaves out start_url, so a Home Screen app opens at the address it was added from, and Chrome's keeps it", async () => {
+  const manifest = { name: "WNBA", start_url: "./", scope: "./" };
+  const worker = createPageWorker({
+    "manifest.webmanifest": {
+      contentType: "application/manifest+json",
+      text: JSON.stringify(manifest),
+    },
+  });
+  /** @param {string} agent */
+  const requestManifest = (agent) =>
+    worker.fetch(
+      new Request("https://worker.example/key/manifest.webmanifest", {
+        headers: { "user-agent": agent },
+      }),
+      { APP_KEY: "key" },
+    );
+
+  const { start_url: _startUrl, ...withoutStartUrl } = manifest;
+  for (const agent of [AGENTS.iPhone, AGENTS.iPad])
+    assert.deepEqual(await (await requestManifest(agent)).json(), withoutStartUrl);
+  for (const agent of [AGENTS.android, AGENTS.macChrome])
+    assert.deepEqual(await (await requestManifest(agent)).json(), manifest);
+  const safari = await requestManifest(AGENTS.iPhone);
+  const chrome = await requestManifest(AGENTS.android);
+  assert.notEqual(safari.headers.get("etag"), chrome.headers.get("etag"));
+  assert.equal(safari.headers.get("vary"), "user-agent");
 });

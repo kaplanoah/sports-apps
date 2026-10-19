@@ -8,6 +8,7 @@ import {
   describeRotationPitcher,
   listScheduleRequest,
 } from "../worker/src/rotations.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 const PHILLIES = 143;
 const BRAVES = 144;
@@ -81,6 +82,7 @@ const describePhilliesStarts = (from) =>
   describeClubStarts({
     club: "PHI",
     from,
+    through: "2026-10-11",
     schedule: SCHEDULE,
     pitchers: new Map(
       GAME_LOGS.people.map((person) => [person.id, describeRotationPitcher(person)]),
@@ -185,7 +187,7 @@ test("a club or day that isn't one is refused before anything is fetched", async
     "?club=PHI&date=10/01/2026",
     "?club=PHI&date=1800-10-01",
   ]) {
-    assert.equal((await requestRotation(query)).status, 400, query);
+    await assertErrorAnswer(await requestRotation(query), 400, "invalid_argument");
   }
   assert.equal(mlb.calls.length, 0);
 });
@@ -193,6 +195,8 @@ test("a club or day that isn't one is refused before anything is fetched", async
 test("MLB failing is reported", async () => {
   const { requestRotation } = createTestServer({ status: 503 });
   const response = await requestRotation("?club=PHI&date=2026-10-01");
-  assert.equal(response.status, 502);
-  assert.match((await response.json()).error, /MLB Stats API answered 503/);
+  assert.match(
+    await assertErrorAnswer(response, 502, "upstream_error"),
+    /MLB Stats API answered 503/,
+  );
 });

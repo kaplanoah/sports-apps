@@ -203,7 +203,7 @@ const LIVE_BOX_SCORES = { 823493: { ...LIVE_BOX_SCORE, id: "823493" } };
 
 /**
  * Opens the page in Ball with news, a club's roster and players, a live game's box score, a
- * final's highlights, and the season's whole schedule.
+ * final's highlights, and the season's whole schedule, once it has drawn the schedule's first day.
  * @param {import("@playwright/test").Page} page
  */
 export async function openWithEverything(page) {
@@ -216,6 +216,11 @@ export async function openWithEverything(page) {
     boxScores: LIVE_BOX_SCORES,
     isWholeSeason: true,
   });
+  // The schedule draws the Games strip's dates again, which would move a date out from under a tap.
+  await expect(page.locator("#seasonGames .listed-day").first()).toHaveAttribute(
+    "data-day",
+    "2026-03-25",
+  );
 }
 
 /**

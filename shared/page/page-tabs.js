@@ -1,5 +1,5 @@
 import { readTabBeforeLast, saveLastTab } from "./last-tab.js";
-import { scrollToTop } from "./spring-scroll.js";
+import { isPageOffTop, scrollToTop } from "./spring-scroll.js";
 import { moveTabSelection } from "./tab-bar.js";
 import { readSelectedTab, selectTab, wireTabs } from "./tabs.js";
 
@@ -21,11 +21,19 @@ function showTab(tab) {
 /** @type {string | null} */
 let tabBefore = null;
 
+// As on iPhone, each tab keeps the page where it was left, and a tab not shown yet opens at its top.
+/** @type {Map<string, number>} */
+const tabScrolls = new Map();
+
 /** @param {string} tab */
 function switchTab(tab) {
   const before = readSelectedTab(findTabButtons());
-  if (before && before !== tab) tabBefore = before;
+  if (before && before !== tab) {
+    tabBefore = before;
+    tabScrolls.set(before, scrollY);
+  }
   showTab(tab);
+  if (before !== tab) scrollTo({ top: tabScrolls.get(tab) ?? 0, behavior: "instant" });
   moveTabSelection(tab);
   saveLastTab(tab, before);
 }
@@ -42,26 +50,43 @@ export const readTabBefore = () => tabBefore ?? readTabBeforeLast();
  */
 export const openPageTab = (tab) => switchTab(tab);
 
-// What choosing a tab that's already showing does instead of scrolling to the top, for a tab whose
-// start isn't its top, like a Games view's today.
-/** @type {Map<string, () => boolean>} */
+// What choosing a tab that's already showing does besides scrolling the page to its top, for a view
+// that scrolls in itself, like a Games view going back to today or the bracket and standings
+// going back to their top and then to the part the tab is named for.
+/** @type {Map<string, () => void>} */
 const startReturns = new Map();
 
 /**
- * Has choosing `tab` while it's showing call `returnToStart`, which says whether it moved the tab,
- * as when the tab wasn't already at its start.
+ * Has choosing `tab` while it's showing call `returnToStart`, in the same tap that scrolls the
+ * page to its top, since a view that scrolls in itself can still leave the page a pixel or two from
+ * it, or on the next tap where the page scrolls the view.
  * @param {string} tab
- * @param {() => boolean} returnToStart
+ * @param {() => void} returnToStart
  */
 export function setTabStart(tab, returnToStart) {
   startReturns.set(tab, returnToStart);
 }
 
-// As on iPhone, choosing the tab that's already showing takes it back to where it starts, and then
-// to the top.
+/**
+ * Whether the page scrolls `tab`'s view, as it does a view that scrolls in itself once a tall
+ * Updates box over it holds it at its least height (chrome.css).
+ * @param {string} tab
+ */
+function isViewScrolledByPage(tab) {
+  const view = document.getElementById(`view-${tab}`);
+  if (!view) return false;
+  const leastHeight = parseFloat(getComputedStyle(view).minHeight);
+  return leastHeight > 0 && view.offsetHeight <= Math.ceil(leastHeight);
+}
+
+// Choosing the tab that's already showing scrolls the page to its top and takes the tab back to
+// where it starts, the start waiting for a second tap where the page scrolls the view.
 /** @param {string} tab */
 function returnToStart(tab) {
-  if (!startReturns.get(tab)?.()) scrollToTop();
+  const isScrolled = isPageOffTop();
+  const isWaitingForTop = isScrolled && isViewScrolledByPage(tab);
+  if (isScrolled) scrollToTop();
+  if (!isWaitingForTop) startReturns.get(tab)?.();
 }
 
 // What choosing a tab does as it opens, from the tap, like bringing up the keyboard in a search.

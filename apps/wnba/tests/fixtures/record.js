@@ -38,16 +38,15 @@ const trimSchedule = ({ leagueSchedule }) => ({
 
 async function recordFixture(season, name, gameIds) {
   const now = Date.now();
-  const [schedule, standings, players, ...boxScores] = await Promise.all([
+  const [schedule, standings, ...boxScores] = await Promise.all([
     fetchJson(REQUESTS.schedule),
     fetchJson(REQUESTS.standings(season)),
-    fetchJson(REQUESTS.players(season)),
     ...gameIds.map((id) => fetchJson(nameBoxScoreRequest(id))),
   ]);
   const fixture = {
     season,
     now: new Date(now).toISOString(),
-    preview: { schedule: trimSchedule(schedule), standings, players },
+    preview: { schedule: trimSchedule(schedule), standings },
     boxScores: Object.fromEntries(gameIds.map((id, index) => [id, boxScores[index]])),
   };
   const file = path.join(import.meta.dirname, `${name}.json`);

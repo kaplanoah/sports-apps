@@ -12,7 +12,7 @@ import { countWinsNeeded, isCupFinal, ROUNDS } from "./snapshot.js";
 
 /** @typedef {import("./series.js").Series} Series */
 /** @typedef {{ team: string | null, seed: number | null, score: number | null, isInBonus: boolean }} GameSide */
-/** @typedef {{ id: string, round: number | null, series: string | null, number: number | null, start: string | null, state: string, status: string, isTimeSet: boolean, period: number | null, clock: string | null, isIfNeeded: boolean, away: GameSide, home: GameSide, end?: string, networks?: string[], allStar?: { away: string, home: string }, arena?: { name: string, city: string, state: string }, isNeutral?: boolean }} Game */
+/** @typedef {{ id: string, round: number | null, series: string | null, number: number | null, start: string | null, state: string, status: string, isTimeSet: boolean, period: number | null, clock: string | null, isIfNeeded: boolean, away: GameSide, home: GameSide, end?: string, finalAt?: string, networks?: string[], allStar?: { away: string, home: string }, arena?: { name: string, city: string, state: string }, isNeutral?: boolean }} Game */
 
 // Once a series is decided, the games it no longer needs never happen.
 /**

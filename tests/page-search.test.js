@@ -98,6 +98,7 @@ const PAGES = {
     { key: "matchup", name: "Matchup", words: ["matchup", "probables"], game: "next" },
   ],
   examples: [],
+  isOutKnown: true,
 };
 
 const DICTIONARY = createSearchDictionary(TERMS);

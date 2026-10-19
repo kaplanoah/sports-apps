@@ -2,8 +2,8 @@
 // games, then once the field is set how far it has gone in the postseason, its race this season,
 // and every World Series it won.
 
-import { formatShortDate, readCalendarDate } from "#shared/days.js";
 import { renderGameCards } from "#shared/game-cards.js";
+import { isPlayedBy } from "#shared/game-clubs.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { findNearestGames } from "#shared/nearest-games.js";
 import { formatOrdinal } from "#shared/ordinal.js";
@@ -27,33 +27,30 @@ import {
   renderStatusChip,
   renderTeamDot,
 } from "./clubs.js";
-import {
-  describeGameLabel,
-  describeInning,
-  describeStart,
-  listSeasonGames,
-  nameGameKey,
-} from "./games-view.js";
+import { readSlateGameDay } from "./dates.js";
+import { describeGameLabel, describeInning, describeStart } from "./games-view.js";
 import { renderLeaders } from "./leaders-view.js";
+import {
+  DIVISION_ELIMINATION_TITLE,
+  MAGIC_NUMBER_TITLE,
+  WILD_CARD_ELIMINATION_TITLE,
+  describeRaceNumber,
+  readMagicNumber,
+} from "./race-numbers.js";
 import { countClubGames } from "./qualifying.js";
 import { findClubRoster } from "./roster-section.js";
+import { sortInScheduleOrder } from "./schedule-order.js";
+import { listCountedGames, listSeasonGames, nameGameKey } from "./season-games.js";
 import { nameRound } from "./series-games.js";
 import { isFieldSet, session } from "./session.js";
 import { listSlateGames } from "./slate.js";
-import { SEASON_GAMES } from "./snapshot.js";
+import { countSeasonGames } from "./snapshot.js";
 import { describeDivisionLead } from "./standings.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
 /** @typedef {import("#shared/team-numbers.js").PhaseStats} PhaseStats */
 /** @typedef {import("#shared/team-numbers.js").Measure} Measure */
-
-const MAGIC_NUMBER_TITLE =
-  "Division magic number: combined wins by this team and losses by the club closest behind it that would clinch the division. A dash means clinched.";
-const DIVISION_ELIMINATION_TITLE =
-  "Division elimination number: combined wins by the division leader and losses by this team that would end its division chances. A dash means clinched, E means out.";
-const WILD_CARD_ELIMINATION_TITLE =
-  "Wild card elimination number: combined wins by the team holding the last spot and losses by this team that would end its wild card chances. A dash means clinched, E means out.";
 
 /** @param {string} id */
 function findDivision(id) {
@@ -66,7 +63,7 @@ function findDivision(id) {
   return { name, place, row: rows[place - 1], divisions };
 }
 
-const countGamesLeft = (row) => SEASON_GAMES - row.w - row.l;
+const countGamesLeft = (row) => countSeasonGames(row) - row.w - row.l;
 
 const isInSetField = (id) => isFieldSet() && !!session.state.teams?.[id];
 
@@ -74,17 +71,16 @@ const renderGamesBack = (value) => (value === "-" ? html`&mdash;` : value || nul
 
 /** @param {string | null | undefined} value an elimination or magic number, a dash, or E */
 function renderRaceNumber(value) {
-  if (value === "E") return html`<span class="elim-num">E</span>`;
-  if (value == null || value === "-") return html`<span class="elim-num clinched">&mdash;</span>`;
-  return html`<span class="elim-num live">${value}</span>`;
+  const { text, state } = describeRaceNumber(value);
+  return html`<span class="${["elim-num", state].filter(Boolean).join(" ")}">${text}</span>`;
 }
 
 /** @param {string} label @param {string} title */
 const renderTitledLabel = (label, title) => html`<span title="${title}">${label}</span>`;
 
 function renderMagicNumber(row) {
-  if (row.clinched) return renderRaceNumber("-");
-  return /^\d+$/.test(row.magic || "") ? renderRaceNumber(row.magic) : null;
+  const magic = readMagicNumber(row);
+  return magic ? renderRaceNumber(magic) : null;
 }
 
 // Each race's row starts with the club's place in it: a division leader has only its division's
@@ -107,8 +103,8 @@ function listStats({ name, place, row, divisions }) {
   ];
 }
 
-// A game rained out late in the season and never made up still counts as one left until the field
-// is set, which ends the regular season for every club.
+// A game rained out late in the season counts as one left until MLB cancels it or the field is set,
+// which ends the regular season for every club.
 /** @param {ReturnType<typeof findDivision>} division */
 function renderGamesLeft(division) {
   if (isFieldSet() || !division?.row) return false;
@@ -215,7 +211,7 @@ function listTeamSeries(id) {
 const hasBye = (id) => (session.state.teams[id]?.seed ?? 99) <= 2;
 
 const listPostseasonFinals = () =>
-  listSeasonGames(session.state?.slate, session.schedule).filter(
+  listCountedGames(listSeasonGames(session.state?.slate, session.schedule)).filter(
     (game) => game.postseason && game.state === "final" && game.score,
   );
 
@@ -262,14 +258,6 @@ function renderPlayoffs(id) {
   );
 }
 
-const isPlayedBy = (game, id) => game.away === id || game.home === id;
-
-// A doubleheader's games go in game order, since MLB can list game 2 with the earlier start.
-const compareGames = (first, second) =>
-  first.date.localeCompare(second.date) ||
-  (first.doubleheader || 0) - (second.doubleheader || 0) ||
-  Date.parse(first.start) - Date.parse(second.start);
-
 // A postseason game whose other club isn't known yet may never be played.
 const hasBothClubs = (game) => Boolean(game.away && game.home);
 
@@ -277,7 +265,7 @@ const hasBothClubs = (game) => Boolean(game.away && game.home);
 function findClubNearestGames(id) {
   const slate = session.state?.slate;
   const games = slate ? listSlateGames(slate).filter((game) => isPlayedBy(game, id)) : [];
-  return findNearestGames(games.sort(compareGames), hasBothClubs);
+  return findNearestGames(sortInScheduleOrder(games), hasBothClubs);
 }
 
 function describeScore(game, isHome) {
@@ -294,15 +282,12 @@ function describeScore(game, isHome) {
 function describeGameCard(game, id) {
   const isHome = game.home === id;
   const other = isHome ? game.away : game.home;
-  const day = formatShortDate(readCalendarDate(game.date));
   return {
     id: nameGameKey(game),
     label: describeGameLabel(game),
     state: game.state,
-    when:
-      game.state === "live"
-        ? html`<span class="game-card-clock">${describeInning(game)}</span>`
-        : day,
+    day: readSlateGameDay(game),
+    clock: game.state === "live" ? describeInning(game) : "",
     score: describeScore(game, isHome),
     time: describeStart(game),
     isHome,
@@ -313,11 +298,17 @@ function describeGameCard(game, id) {
   };
 }
 
-/** @param {string} id */
-function renderNearestGames(id) {
-  const { last, now, next } = findClubNearestGames(id);
-  const games = [last, now, next].filter((game) => game !== null);
-  return renderGameCards(games.map((game) => describeGameCard(game, id)));
+/**
+ * @param {string} id
+ * @param {number} now
+ */
+function renderNearestGames(id, now) {
+  const nearest = findClubNearestGames(id);
+  const games = [nearest.last, nearest.now, nearest.next].filter((game) => game !== null);
+  return renderGameCards(
+    games.map((game) => describeGameCard(game, id)),
+    new Date(now),
+  );
 }
 
 /** @param {string} id @param {ReturnType<typeof findDivision>} division */
@@ -347,13 +338,14 @@ function renderClubLeaders(id) {
  * winning percentage, then the cards of its nearest games, once the field is set its postseason,
  * then its season, its leaders, and its titles.
  * @param {string} id
+ * @param {{ now?: number }} [options]
  */
-export function renderTeamSheet(id) {
+export function renderTeamSheet(id, { now = Date.now() } = {}) {
   const division = findDivision(id);
   return {
     heading: html`${renderTeamDot(id)}<span>${nameClubFully(id)}</span>`,
     note: joinWithSeparator(listFacts(id, division)),
-    body: html`${renderNearestGames(id)}${isInSetField(id) && renderPlayoffs(id)}
+    body: html`${renderNearestGames(id, now)}${isInSetField(id) && renderPlayoffs(id)}
       ${renderSeason(division)}${renderClubLeaders(id)}
       ${renderTitles(listTitles(id), html`<span class="tabular">${describeDrought(id)}</span>`)}`,
   };

@@ -47,6 +47,7 @@ import {
 } from "../../../../tests/browser/harness.mjs";
 import { holdStore } from "../../../../tests/browser/hold-store.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 
 const loadFixture = (name) =>
   JSON.parse(readFileSync(new URL(`../fixtures/${name}.json`, import.meta.url), "utf8"));
@@ -311,19 +312,14 @@ export function buildSnapshotWithStarters() {
     .find((candidate) => candidate.gamePk === 824950);
   game.teams.away.probablePitcher = { id: 1 };
   game.teams.home.probablePitcher = { id: 2 };
-  const describePerson = (id, useLastName, code, era) => ({
-    id,
-    useLastName,
-    pitchHand: { code },
-    stats: [{ splits: [{ stat: { era } }] }],
-  });
+  const describePerson = (id, useLastName, code) => ({ id, useLastName, pitchHand: { code } });
   fixture.responses.pitchers = {
-    people: [describePerson(1, "Blubaugh", "R", "3.66"), describePerson(2, "Springs", "L", "4.02")],
+    people: [describePerson(1, "Blubaugh", "R"), describePerson(2, "Springs", "L")],
   };
   return buildFixtureSnapshot(fixture);
 }
 
-export { test, expect, matchPath, LOCKED_PAGE_PATH };
+export { test, expect, matchPath, openSettings, LOCKED_PAGE_PATH };
 
 // A phone's screen and touch, where the Updates box shows.
 export const ON_A_PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
@@ -333,7 +329,7 @@ const isWriteRequest = (request) => request.method() !== "GET";
 /**
  * The page as the Worker serves it, with the Worker's store behind it. The store starts with the
  * current season's record, as the Worker's last update saved it, under any fields `store` gives
- * it, unless MLB isn't available, when the Worker's snapshot can't be read either.
+ * it, unless MLB isn't available.
  * @param {import("@playwright/test").Page} page
  * @param {object} [options]
  * @param {Record<string, object>} [options.store] documents by path
@@ -349,6 +345,8 @@ const isWriteRequest = (request) => request.method() !== "GET";
  *   game id, MLB's recorded ones unless a test says otherwise, and for any other game none
  * @param {boolean} [options.isWholeSeason] whether the store keeps the season's whole schedule,
  *   which most tests can do without
+ * @param {boolean} [options.isShowingWelcome] whether a phone's browser opens on the welcome,
+ *   which starts closed unless a test is about it
  */
 export async function openApp(
   page,
@@ -363,6 +361,7 @@ export async function openApp(
     boxScores = {},
     highlights = RECORDED_HIGHLIGHTS,
     isWholeSeason = false,
+    isShowingWelcome = false,
   } = {},
 ) {
   const snapshotsBySeason = {
@@ -371,7 +370,6 @@ export async function openApp(
     ...snapshots,
   };
   const harness = {
-    snapshotRequests: 0,
     storeReads: [],
     transformSnapshot: (snapshot) => snapshot,
   };
@@ -394,29 +392,31 @@ export async function openApp(
   const { context, store: seasonStore } = testStore;
 
   const openSockets = await connectToStore(page, testStore);
-  await page.route(matchPath("/snapshot"), (route) => {
-    harness.snapshotRequests++;
-    const season = new URL(route.request().url()).searchParams.get("season");
-    const snapshot = snapshotsBySeason[season];
-    if (!liveAvailable || !snapshot)
-      return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
-    return route.fulfill({ json: harness.transformSnapshot(structuredClone(snapshot)) });
-  });
   await page.route(matchPath("/pitcher"), (route) => {
     const pitcher = pitchers[Number(new URL(route.request().url()).searchParams.get("id"))];
-    if (!pitcher) return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+    if (!pitcher)
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: pitcher });
   });
   await page.route(matchPath("/rotation"), (route) => {
     const rotation = rotations[new URL(route.request().url()).searchParams.get("club")];
     if (!rotation)
-      return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: rotation });
   });
   await page.route(matchPath("/box-score"), (route) => {
     const boxScore = boxScores[new URL(route.request().url()).searchParams.get("id") ?? ""];
     if (!boxScore)
-      return route.fulfill({ status: 502, json: { error: "Couldn't read MLB: test" } });
+      return route.fulfill({
+        status: 502,
+        json: { error: { code: "upstream_error", message: "Couldn't read MLB: test" } },
+      });
     return route.fulfill({ json: boxScore });
   });
   await page.route(matchPath("/highlights"), (route) => {
@@ -433,7 +433,7 @@ export async function openApp(
       return route.fulfill({ contentType: "text/html", body: "<h1>Sign in to Wi-Fi</h1>" });
     return route.fallback();
   });
-  await loadPageAt(page, now);
+  await loadPageAt(page, now, { isShowingWelcome });
 
   const readDocument = async (path) => (await context.ctx.storage.get(path)) ?? null;
   // The Worker finding the official bracket set, which the Updates box lists.
@@ -463,7 +463,6 @@ export async function openApp(
     holdStore: () => holdStore(page),
     // What the Worker's alarm does on its own schedule.
     updateFromWorker: () => testStore.fireAlarm(),
-    countSnapshotRequests: () => harness.snapshotRequests,
     countSeasonReads: () =>
       harness.storeReads.filter((path) => path === `/store/${currentPath}`).length,
     listStoreReads: () => [...harness.storeReads],
@@ -500,13 +499,24 @@ export async function openBracket(page, options) {
  * @param {string} key
  * @param {unknown} value
  */
-export const keepFromEarlierVisit = (page, key, value) =>
+const keepFromEarlierVisit = (page, key, value) =>
   page.addInitScript(
     ([storedKey, text]) => {
       if (localStorage.getItem(storedKey) === null) localStorage.setItem(storedKey, text);
     },
     [key, JSON.stringify(value)],
   );
+
+/**
+ * A phone that has used the app before, last dismissing the Updates box the afternoon before the
+ * evening's updates, and having kept none of its release notes' times yet, so each note out starts
+ * showing.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function keepUpdatesFromEarlierVisit(page) {
+  await keepFromEarlierVisit(page, "updatesSeenAt", { 2026: Date.parse("2026-09-24T20:00:00Z") });
+  await keepFromEarlierVisit(page, "releaseNotesShownUntil", {});
+}
 
 /**
  * Reads the color a token of the page's theme names, as the page draws it.
@@ -569,9 +579,6 @@ export const swipeSheetDown = (page, { target, distance, steps, stepMs, isCancel
       { distance, steps, stepMs, isCancelled },
     );
 
-export const openSettings = (page) =>
-  page.getByRole("button", { name: "Settings", exact: true }).click();
-
 /**
  * Picks a season in the settings panel, then closes it.
  * @param {import("@playwright/test").Page} page
@@ -595,7 +602,6 @@ export function serveLockedApp(page, { accessCode }) {
   const testStore = createTestStore(SeasonStore, { loadSnapshot, now: EVENING_FIXTURE.now });
   const worker = createAppWorker({
     pageFiles: PAGE_FILES,
-    serveSnapshot: () => Response.json(snapshot),
     forwardToStore,
     isStoreAnswering: async () => true,
   });

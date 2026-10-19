@@ -15,6 +15,7 @@ import {
   listLowContrastText,
   listLowContrastTextAsShown,
 } from "../../../../tests/browser/contrast.mjs";
+import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
 import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -242,6 +243,22 @@ test("tapping the Games tab while it shows goes back to today", async ({ page })
   );
 });
 
+test("tapping the Games tab brings back today at once, even with the page left a pixel from its top", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await page.locator('#seasonGames .day-cell[data-day="2026-06-10"]').click();
+  await expect(page.locator('#seasonGames .listed-day[data-day="2026-06-10"]')).toBeInViewport();
+  expect(await leavePagePixelDown(page)).toBe(1);
+
+  await page.getByRole("tab", { name: "Games" }).click();
+
+  await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
+    "data-day",
+    "2026-09-24",
+  );
+});
+
 test("after a tap on the Games tab while the list is already on today, the strip follows a scroll that no finger or wheel makes, as a keyboard's does", async ({
   page,
 }) => {
@@ -291,7 +308,13 @@ test("a game still to come shows its start time centered in its row", async ({ p
 const openPostseasonDay = async (page, games, earlierGames) => {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   /** @param {string} start */
-  const describeGame = (start) => (game) => ({ state: "pre", start, postseason: true, ...game });
+  const describeGame = (start) => (game) => ({
+    id: `${game.away}-${game.home}-${game.date ?? start}`,
+    state: "pre",
+    start,
+    postseason: true,
+    ...game,
+  });
   snapshot.slate.today.games = games.map(describeGame("2026-09-24T18:08:00Z"));
   snapshot.slate.previous = earlierGames.map((game) => ({
     date: "2026-09-23",
@@ -644,4 +667,27 @@ test("on a wide screen, the strip, its line, and a held day's line stop at the c
   expect(edges.lastDayRight).toBeCloseTo(edges.strip.right, 0);
   expect(edges.monthLeft - edges.column.left).toBeCloseTo(0.5, 1);
   expect(edges.column.right - edges.todayRight).toBeCloseTo(0.5, 1);
+});
+
+test("on a phone, the Games strip and the Search bar each end in the divider's line once their list scrolls under them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  const line = `${await readColor(page, "--divider")} 0px 1px 0px 0px`;
+  const strip = page.locator("#seasonGames .day-bar");
+  await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 400 }));
+  await expect(strip).toHaveCSS("box-shadow", line);
+  await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 0 }));
+  await expect(strip).toHaveCSS("box-shadow", "none");
+
+  await page.locator("#tab-search").click();
+  await page.locator("#gameSearch .search-input").fill("games");
+  await page.locator("#gameSearch .search-input").press("Enter");
+  await expect(page.locator("#gameSearch .listed-day").first()).toBeAttached();
+  const bar = page.locator("#gameSearch .search-bar");
+  const list = page.locator("#gameSearch .search-list");
+  await list.evaluate((element) => element.scrollTo({ top: 400 }));
+  await expect(bar).toHaveCSS("box-shadow", line);
+  await list.evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(bar).toHaveCSS("box-shadow", "none");
 });

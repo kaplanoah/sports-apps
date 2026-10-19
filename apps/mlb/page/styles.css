@@ -127,6 +127,7 @@
   --ink: #1e1b18;
   --ink-dim: #625a52;
   --catch-up-fade: 0.75;
+  --step-number-lift: 0px;
   --ink-mid: color-mix(in srgb, var(--ink-dim) 55%, var(--ink));
   --ink-hover: color-mix(in srgb, var(--ink) 75%, var(--accent));
   --divider: #ebe4d6;
@@ -150,14 +151,21 @@
   --all-star-light: rgba(255, 255, 255, 0.4);
   --all-star-shift: -3px;
   --out: #6b645c;
-  /* A source's credit under what it said, as pale as WCAG's AA level lets text be on a card. */
-  --credit-ink: color-mix(in srgb, var(--ink-dim) 84%, var(--card));
+  /* Text that steps back from the words beside it, like a source's credit under what it said or
+     the Home Screen box's steps around its buttons' names. Ball's dim ink alone sets it apart
+     less than in Night Game, so it's paler, still at WCAG's AA level on the Home Screen box, half
+     card and half page. */
+  --receding-ink: color-mix(in srgb, var(--ink-dim) 86.4%, var(--card));
   /* Runs set the plays that changed the score apart from the runners who got on before them. */
-  --runs-setup-ink: var(--credit-ink);
+  --runs-setup-ink: var(--receding-ink);
   /* A final's losing score, a step lighter in Ball, where its dim ink alone sets it apart from the
      winner less than in Night Game. Chivo Mono draws every weight at the same width, so both
      themes still lay out the same. */
   --lost-score-weight: calc(var(--type-stat-large-weight) - 100);
+  /* A series score is sunk a little into the card, and the winner's deeper into its red. */
+  --won-chip-shade: rgba(0, 0, 0, 0.44);
+  --score-chip: color-mix(in srgb, var(--divider) 12%, var(--card));
+  --score-chip-shade: rgba(0, 0, 0, 0.18);
   --focus-ring: var(--now);
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
@@ -166,6 +174,8 @@
   --radius-control: 6px;
   --radius-tabs: 8px;
   --radius-sheet: 12px;
+  /* Puts the channel tag's middle half a pixel above the middle of the name's capitals. */
+  --channel-tag-lift: -0.85px;
   --control-height: 36px;
   --control-room: 14px;
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23625a52' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -184,8 +194,7 @@
   --tabs-chosen: var(--card);
   --tabs-chosen-edge: var(--card-border);
   --tabs-chosen-ink: var(--ink);
-  --held-bar-fade: 18px;
-  --held-bar-line: transparent;
+  --held-bar-line: var(--divider);
   --pager-label: var(--ink-dim);
   --updates-head: var(--highlight);
   --sheet-part-head: var(--highlight);
@@ -195,7 +204,7 @@
   --logos-for-light: inline;
   --logos-for-dark: none;
   --game-card-edge: var(--card-border);
-  --game-card-live: var(--now);
+  --game-card-now: var(--now);
   --game-card-won: var(--highlight);
   --game-card-team-font: inherit;
   --game-row-height: 82.5px;
@@ -260,8 +269,10 @@
   --all-star-shadow: rgba(0, 0, 0, 0.138);
   --all-star-light: rgba(241, 234, 212, 0.13);
   --out: #998b7d;
-  --credit-ink: var(--ink-dim);
+  --receding-ink: var(--ink-dim);
   --lost-score-weight: var(--type-stat-large-weight);
+  --score-chip: var(--divider);
+  --score-chip-shade: var(--won-chip-shade);
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-ink: #fff;
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
@@ -287,7 +298,7 @@ body {
   font-size: 16px;
   /* Insets are zero except in the home-screen app, which draws under the status bar and notch. */
   padding-inline: max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right));
-  padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
+  padding-block: calc(17px + env(safe-area-inset-top)) var(--view-end-room);
   /* WIDE_STAGE_WIDTH in bracket-view.js, plus .tree-scroll's 18px each side. */
   max-width: 1793px;
   margin: 0 auto;
@@ -340,6 +351,9 @@ header.top h1 {
   color: var(--ink);
   text-transform: uppercase;
   letter-spacing: var(--title-tracking);
+  /* A space in Chivo Mono is as wide as a digit, so the season's year would sit 14.5px from the
+     name at the title's 22.5px; it sits 9px from it. */
+  word-spacing: -0.2444em;
 }
 /* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
    spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */
@@ -363,6 +377,7 @@ header.top h1 .title-letter:nth-child(2) {
 /* The season's year recedes a step beside the app's name. */
 .season-year {
   font-weight: calc(var(--type-title-weight) - 50);
+  letter-spacing: 0.02em;
   color: var(--ink-dim);
 }
 .stamp {
@@ -1169,7 +1184,7 @@ table.st td.team .team-name {
 }
 /* Each chip sits a little above its row's middle, and its digit a little below the chip's, by as
    much as its colors need to look centered, set by eye in each theme: the inset shadow darkens the
-   top of a gray or green chip more than a red or gold one. A margin of twice the lift moves the
+   top of a cream or green chip more than a red or gold one. A margin of twice the lift moves the
    chip, and the split of its padding moves the digit. */
 .nscore {
   min-width: 1.5em;
@@ -1178,10 +1193,10 @@ table.st td.team .team-name {
   font-size: var(--type-score-size);
   padding: 3px 6px 1px;
   border-radius: var(--radius-chip);
-  background: var(--divider);
+  background: var(--score-chip);
   margin-bottom: 0.5px;
   box-shadow:
-    inset 0 2px 3px rgba(0, 0, 0, 0.44),
+    inset 0 2px 3px var(--score-chip-shade),
     0 1px 0 rgba(241, 234, 212, 0.13);
 }
 /* An empty score keeps the height it has with a digit in it. */
@@ -1194,6 +1209,7 @@ table.st td.team .team-name {
   margin-bottom: 0;
   background: var(--accent);
   color: var(--accent-ink);
+  --score-chip-shade: var(--won-chip-shade);
 }
 :root[data-theme="dark"] .nscore:not(.lead) {
   padding-top: 3.5px;
@@ -1407,15 +1423,23 @@ body.kbd .rank-item .grip:focus {
   background: var(--accent);
   color: var(--accent-ink);
 }
-.home-screen-icon {
-  background-image: url(icon-180.png);
+.home-screen-steps {
+  color: var(--receding-ink);
 }
-/* The Home Screen bar and box and Diagnostics, each a step from its role of MLB's own. */
+/* The Home Screen steps' Share icon, raised to sit with Libre Franklin's words, as set by eye. */
+.welcome-step .share-glyph {
+  position: relative;
+  top: -1.5px;
+}
+.home-screen-steps .share-glyph {
+  vertical-align: -1px;
+}
+/* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
 .home-screen-title {
   font-weight: calc(var(--type-detail-weight) + 100);
 }
 .home-screen-steps b {
-  font-weight: calc(var(--type-caption-weight) + 100);
+  font-weight: calc(var(--type-caption-weight) + 75);
 }
 .home-screen-install {
   font-weight: calc(var(--type-label-weight) - 50);
@@ -1979,7 +2003,7 @@ body.kbd .player-open:focus {
   margin: 4.5px 0 0;
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
-  color: var(--credit-ink);
+  color: var(--receding-ink);
 }
 .player-ranks {
   display: grid;
@@ -2532,11 +2556,8 @@ body.kbd .player-open:focus {
     gap: 3px;
   }
 
-  body {
-    padding-bottom: var(--tab-bar-clearance);
-  }
-  /* The body's bottom padding already holds the round dots, so a bracket that fills the screen
-     leaves the page nothing to scroll. */
+  /* The bracket's part's bottom padding (pager.css) already holds the round dots, so a bracket that
+     fills the screen ends where its part's room does. */
   .tree-scroll.stacked {
     padding-bottom: 0;
   }
@@ -2612,12 +2633,6 @@ body.kbd .player-open:focus {
   height: 14px;
   color: var(--highlight);
 }
-/* The News switches sit in a group under their own label, apart from the settings above them. */
-.settings-news {
-  display: grid;
-  gap: 6px;
-}
-
 /* Try again, outlined like Read, and filled gold where it stands alone in place of what didn't
    load. */
 .retry-button {

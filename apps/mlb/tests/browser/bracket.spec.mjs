@@ -122,6 +122,42 @@ for (const { colorScheme, theme, winner, loser } of /** @type {const} */ ([
   });
 }
 
+for (const { colorScheme, theme, plain } of /** @type {const} */ ([
+  { colorScheme: "light", theme: "Ball", plain: { fill: [253, 250, 244], shade: 0.18 } },
+  { colorScheme: "dark", theme: "Night Game", plain: { fill: [30, 58, 43], shade: 0.44 } },
+])) {
+  test(`in ${theme}, a score chip that isn't the series winner's is filled and shaded as chosen, and the winner's keeps its deep shade`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await openApp(page, {
+      store: { "seasons/2025": SEASON_2025 },
+    });
+    await chooseSeason(page, "2025");
+    const wildCard = page.locator("#bracketWrap .series").filter({ hasText: "Reds" });
+    const readChip = (club) =>
+      wildCard
+        .locator(".matchup-row")
+        .filter({ hasText: club })
+        .locator(".nscore")
+        .evaluate((chip) => {
+          const style = getComputedStyle(chip);
+          const context = document.createElement("canvas").getContext("2d");
+          context.fillStyle = style.backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          const shade = style.boxShadow.match(/^rgba\(0, 0, 0, ([\d.]+)\)/);
+          return {
+            fill: [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)],
+            shade: Number(shade[1]),
+          };
+        });
+
+    const [winner, other] = await Promise.all([readChip("Dodgers"), readChip("Reds")]);
+    expect(other).toEqual(plain);
+    expect(winner.shade).toBe(0.44);
+  });
+}
+
 test("on a wide screen, the whole bracket shows without round dots", async ({ page }) => {
   await page.setViewportSize(WIDE_SCREEN);
   await openApp(page);
@@ -161,6 +197,7 @@ test("under a card whose game is under way, the score, inning, and outs show ins
     snapshot.series[seriesId].next = { at: start, date: "2026-09-24", tbd: false, game: 1 };
   snapshot.slate.today.games.push(
     {
+      id: "NYY-BOS",
       away: "NYY",
       home: "BOS",
       state: "live",
@@ -170,8 +207,18 @@ test("under a card whose game is under way, the score, inning, and outs show ins
       half: "top",
       outs: 1,
     },
-    { away: "PHI", home: "ATL", state: "live", start, score: [4, 1], inning: 5, half: "middle" },
     {
+      id: "PHI-ATL",
+      away: "PHI",
+      home: "ATL",
+      state: "live",
+      start,
+      score: [4, 1],
+      inning: 5,
+      half: "middle",
+    },
+    {
+      id: "SD-CHC",
       away: "SD",
       home: "CHC",
       state: "live",
@@ -218,7 +265,14 @@ const buildFirstPitchSnapshot = (start, slateGame = {}) => {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   for (const seriesId of WILD_CARD_SERIES)
     snapshot.series[seriesId].next = { at: start, date: "2026-09-24", tbd: false, game: 1 };
-  snapshot.slate.today.games.push({ away: "NYY", home: "BOS", state: "pre", start, ...slateGame });
+  snapshot.slate.today.games.push({
+    id: "NYY-BOS",
+    away: "NYY",
+    home: "BOS",
+    state: "pre",
+    start,
+    ...slateGame,
+  });
   return snapshot;
 };
 

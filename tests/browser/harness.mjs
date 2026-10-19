@@ -40,7 +40,7 @@ export function createTestStore(
     context.ctx,
     {},
     {
-      loadSnapshot,
+      createLoadSnapshot: () => loadSnapshot,
       now: () => clock.now,
       fetchImpl,
     },
@@ -157,11 +157,15 @@ export async function connectToStore(page, { context, store }) {
 }
 
 /**
- * Loads the page with its clock set to `now`.
+ * Loads the page with its clock set to `now`. A phone's browser opens on the welcome until it's
+ * closed, so a page not about it starts with it closed.
  * @param {import("@playwright/test").Page} page
  * @param {string} now
+ * @param {{ isShowingWelcome?: boolean }} [options]
  */
-export async function loadPageAt(page, now) {
+export async function loadPageAt(page, now, { isShowingWelcome = false } = {}) {
+  if (!isShowingWelcome)
+    await page.addInitScript(() => localStorage.setItem("homeScreenWelcomeClosed", "closed"));
   await page.clock.install({ time: new Date(now) });
   await page.goto("/");
 }
@@ -192,6 +196,9 @@ async function answerThroughWorker(route, worker, env) {
 
 export const LOCKED_PAGE_PATH = `/${PAGE_KEY}/`;
 
+/** @param {URL} url */
+export const isLockedWatchSocket = (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`;
+
 /**
  * Serves the page at its key's address behind an access code, with every request under the key
  * answered by `worker` in front of `testStore`, with the page's clock at `now`.
@@ -213,9 +220,8 @@ export async function serveLockedPage(page, { worker, testStore, accessCode, now
   };
   await blockOtherHosts(page);
   await page.route(matchPath(LOCKED_PAGE_PATH), (route) => answerThroughWorker(route, worker, env));
-  await page.routeWebSocket(
-    (url) => url.pathname === `${LOCKED_PAGE_PATH}watch`,
-    (socket) => testStore.context.ctx.acceptWebSocket({ send: (message) => socket.send(message) }),
+  await page.routeWebSocket(isLockedWatchSocket, (socket) =>
+    testStore.context.ctx.acceptWebSocket({ send: (message) => socket.send(message) }),
   );
   await page.clock.install({ time: new Date(now) });
 

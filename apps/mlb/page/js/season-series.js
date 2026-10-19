@@ -4,6 +4,8 @@
 import { readCalendarDate } from "#shared/days.js";
 import { renderSeasonSeries as renderSeries } from "#shared/season-series.js";
 import { nameTeam, renderClub } from "./clubs.js";
+import { sortInScheduleOrder } from "./schedule-order.js";
+import { listCountedGames } from "./season-games.js";
 
 /** @type {import("#shared/season-series.js").TeamLooks} */
 const LOOKS = { renderWinner: renderClub, renderLoser: nameTeam, nameTeam };
@@ -17,28 +19,27 @@ const isMeetingOf = (game, first, second) =>
   (game.away === first && game.home === second) || (game.away === second && game.home === first);
 
 /**
- * The two clubs' finished regular season games.
+ * The two clubs' finished regular season games, each once, in schedule order.
  * @param {any[]} games every game of the season
  * @param {string} away
  * @param {string} home
  * @returns {import("#shared/season-series.js").Meeting[]}
  */
 const listMeetings = (games, away, home) =>
-  games
-    .filter(
+  sortInScheduleOrder(
+    listCountedGames(games).filter(
       (game) =>
         !game.postseason &&
         !game.allStar &&
         game.state === "final" &&
         game.score &&
         isMeetingOf(game, away, home),
-    )
-    .map((game) => ({
-      start: Date.parse(game.start),
-      day: readCalendarDate(game.date),
-      away: { team: game.away, score: game.score[0] },
-      home: { team: game.home, score: game.score[1] },
-    }));
+    ),
+  ).map((game) => ({
+    day: readCalendarDate(game.date),
+    away: { team: game.away, score: game.score[0] },
+    home: { team: game.home, score: game.score[1] },
+  }));
 
 /**
  * The season series of a game still to be played, or nothing for one under way or over, one whose

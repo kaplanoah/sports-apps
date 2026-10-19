@@ -7,10 +7,9 @@
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createGitHub } from "./github-api.mjs";
 
-const API = "https://api.github.com";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
-const REQUEST_TIMEOUT_MS = 10000;
 
 /** @param {string} tree */
 export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
@@ -18,8 +17,9 @@ export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
 /** @param {string} tree */
 export const nameTestedArtifact = (tree) => `ci-tested-${tree}`;
 
-// Only CI as main's own workflow ran it, on a branch of this repository: a fork's pull request
-// runs its own copy of the workflow, which could record a tree it never tested.
+// Only a pull request's run of the CI workflow's path, from a branch of this repository. A branch's
+// run uses the branch's own copy of the workflow, which only someone who can push here could
+// change, while a fork's could be anyone's, and could record a tree it never tested.
 const isPullRequestRun = (run) =>
   run.path === CI_WORKFLOW &&
   run.event === "pull_request" &&
@@ -47,18 +47,7 @@ async function findRecordingRun({
   fetchImpl = fetch,
   env = process.env,
 }) {
-  const readJson = async (path) => {
-    const response = await fetchImpl(`${API}/repos/${repository}${path}`, {
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${env.GH_TOKEN}`,
-        "x-github-api-version": "2022-11-28",
-      },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) throw new Error(`GitHub answered ${response.status} for ${path}`);
-    return response.json();
-  };
+  const readJson = createGitHub({ repository, fetchImpl, env });
   const { artifacts } = await readJson(`/actions/artifacts?name=${artifact}&per_page=100`);
   for (const { expired, workflow_run } of artifacts) {
     if (expired) continue;

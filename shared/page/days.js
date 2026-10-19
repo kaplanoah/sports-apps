@@ -170,6 +170,14 @@ export const countDaysBetween = (earlier, later) =>
   Math.round((readStartOfDay(later).getTime() - readStartOfDay(earlier).getTime()) / MS_PER_DAY);
 
 /**
+ * Whether a game is still to come today, which a page sets apart as it does one being played.
+ * @param {{ state: string, day: Date | null }} game
+ * @param {Date} now
+ */
+export const isStillToComeToday = ({ state, day }, now) =>
+  state === "pre" && day !== null && countDaysBetween(now, day) === 0;
+
+/**
  * Midnight on the viewer's calendar of the day a game is played, or null without a start or a
  * league's day. Until its time is set, a game's start is a placeholder that can fall on another
  * day where the viewer is, so the league's day stands in for it.

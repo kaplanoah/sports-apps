@@ -10,7 +10,7 @@
  * Beside chrome.css's --ink, --ink-dim, --ink-hover, --focus-ring, and --radius-card, and sheet.css's
  * --sheet-part-head, an app's :root defines these tokens:
  *   --game-card-edge         a card's border
- *   --game-card-live         the clock of a game being played
+ *   --game-card-now          the clock of a game being played, and the day of one later today
  *   --game-card-won          a win's W
  *   --game-card-team-font    the other team's name, in the face team names take
  */
@@ -80,8 +80,8 @@
   white-space: nowrap;
   color: var(--ink-dim);
 }
-.game-card-clock {
-  color: var(--game-card-live);
+.game-card-now {
+  color: var(--game-card-now);
 }
 .game-card-line {
   display: flex;

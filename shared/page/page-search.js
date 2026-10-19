@@ -6,14 +6,17 @@
 // words find, or the season's: the latest final for a final's part, or the next game for one before
 // it. A player's name lists her sheet, even with one letter wrong in a name of five letters or
 // more, and finds no games, since nobody knows yet which games she'll play, unless a search of games
-// knows the name, as MLB's knows a starter's, finding his starts. Words like "out" or "injured" list
-// who is out, alone, on a team beside its name, or the player they name, saying whether she is. A
-// team's name beside the News tab's words lists the tab and the newest stories about the team. A
-// place's words list it, and leave the games to any of them that a search of games reads, as "East"
-// finds the East's standings and its games. Words that ask for anything else, like a second team, a
-// day, or "at", ask for games, and list no page. A league hands it its teams, players, and places,
-// and the search's dictionary, so a team is named here by the same words it is in a search of
-// games. Runs in the page and in Node, so it uses no DOM.
+// knows the name, as MLB's knows a starter's, finding his starts. A team's name beside a number
+// some player of its wears, as "Valkyries 2" or "Valkyries #2", lists the sheet of each who wears
+// it, over the team's games, since a fan asking for an hour writes it as one, as "2pm", "2 pm", or
+// "at 2" are. Words like "out" or "injured" list who is out, alone, on a team beside its name, or
+// the player they name, saying whether she is. A team's name beside the News tab's words lists the
+// tab and the newest stories about the team. A place's words list it, and leave the games to any of
+// them that a search of games reads, as "East" finds the East's standings and its games. Words that
+// ask for anything else, like a second team, a day, or "at", ask for games, and list no page. A
+// league hands it its teams, players, and places, and the search's dictionary, so a team is named
+// here by the same words it is in a search of games. Runs in the page and in Node, so it uses no
+// DOM.
 
 import { describeCount } from "./game-search.js";
 import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.js";
@@ -23,7 +26,7 @@ import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.
  * Why a player is out, while she is: what the injury report says, and whether for the season.
  * @typedef {{ reason: string | null, isForSeason: boolean }} PlayerOut
  */
-/** @typedef {{ id: string, team: string, firstName: string, lastName: string, number: string, out?: PlayerOut | null }} PagePlayer */
+/** @typedef {{ id: string, team: string, firstName: string, lastName: string, number: string | null, out?: PlayerOut | null }} PagePlayer */
 /**
  * A place in the app a search can open, the words of its row, the words that find it, and the
  * icon of the button it's otherwise opened from.
@@ -45,6 +48,8 @@ import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.
  * @property {PagePlace[]} places
  * @property {GamePart[]} gameParts
  * @property {string[]} examples
+ * @property {boolean} isOutKnown whether its players say who is out, or the words that ask find
+ *   their pages without saying
  * @property {{ place: PagePlace, stories: import("./news-picks.js").NewsStory[] }} [news] the News
  *   tab, and the stories it shows, newest first, so a team's news lists the newest about it
  */
@@ -59,8 +64,9 @@ import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.
 /**
  * What a search's words find: the pages they list, the words left for a search of games, or null
  * when they ask for none, and, for an answer like who is out, the line that says over its rows what
- * they are, as the games line does: its lead, then its facts.
- * @typedef {{ rows: PageRow[], gameText: string | null, read?: { lead: string, facts: string[] } }} FoundPages
+ * they are, as the games line does: its lead, then its facts, and whether its rows show over the
+ * suggestions, as the players a team's number names do, since the words name them as typed.
+ * @typedef {{ rows: PageRow[], gameText: string | null, read?: { lead: string, facts: string[] }, isFirst?: boolean }} FoundPages
  */
 
 /**
@@ -87,6 +93,13 @@ export const describePlayerIndex = (season, players) => ({
   season,
   players: players.toSorted(compareNames),
 });
+
+/**
+ * The list of a season's players the store keeps beside its rosters, or null for one the page
+ * can't read.
+ * @param {any} index
+ */
+export const readPlayerIndex = (index) => (Array.isArray(index?.players) ? index : null);
 
 // A word this short only finds a team, a name, or a place once it's whole, or it would find too
 // many.
@@ -289,18 +302,63 @@ function leaveGameText(tokens, taken) {
     : null;
 }
 
+// The words a fan may put before a player's number, as in "No. 2" or "number 2".
+const NUMBER_WORDS = ["number", "no"];
+
 /**
- * The rows for a team named alone, or with its section's name.
+ * The player's number the words name, as "2", "#2", "No. 2", or "number 2", or null.
+ * @param {string[]} typed
+ */
+function readPlayerNumber(typed) {
+  const number = typed.at(-1) ?? "";
+  const before = typed.slice(0, -1);
+  const isLedRight =
+    before.length === 0 || (before.length === 1 && isEveryWordOf(before, NUMBER_WORDS));
+  return /^\d{1,2}$/.test(number) && isLedRight ? number : null;
+}
+
+/**
+ * Orders numbers as a roster does, shortest first, then by value, so "2" comes before "22".
+ * @param {string} first
+ * @param {string} second
+ */
+const compareNumbers = (first, second) =>
+  first.length - second.length || Number(first) - Number(second);
+
+/**
+ * The rows of a team's players who wear a number, or, while it may be the start of one, each
+ * number it starts, the number itself first.
  * @param {PageTeam} team
- * @param {string[]} typed the words beside the team's name
+ * @param {string} number
+ * @param {boolean} isPartial
  * @param {SearchPages} pages
  * @returns {PageRow[]}
  */
-function listTeamRows(team, typed, pages) {
+const listNumberRows = (team, number, isPartial, pages) =>
+  pages.players
+    .filter(
+      (player) =>
+        player.team === team.code &&
+        (player.number === number || (isPartial && !!player.number?.startsWith(number))),
+    )
+    .toSorted((first, second) => compareNumbers(first.number, second.number))
+    .map((player) => ({ kind: "player", team, player }));
+
+/**
+ * The rows for a team named alone, with its section's name, or with a player's number, which may
+ * be the start of one while it's the last word typed.
+ * @param {PageTeam} team
+ * @param {string[]} typed the words beside the team's name
+ * @param {{ pages: SearchPages, isNumberPartial: boolean }} search
+ * @returns {PageRow[]}
+ */
+function listTeamRows(team, typed, { pages, isNumberPartial }) {
   const section = pages.section;
   /** @type {PageRow[]} */
   const sectionRow = section ? [{ kind: "section", team }] : [];
   if (!typed.length) return [{ kind: "team", team }, ...sectionRow];
+  const number = readPlayerNumber(typed);
+  if (number !== null) return listNumberRows(team, number, isNumberPartial, pages);
   const sectionWords = section ? splitWords(section.name) : [];
   const isSection = typed.every((word) => sectionWords.some((part) => isWordOf(word, part, true)));
   return isSection ? sectionRow : [];
@@ -397,6 +455,7 @@ export function findPages(text, search) {
   return {
     rows: [...places.map((place) => /** @type {PageRow} */ ({ kind: "place", place })), ...rest],
     gameText: found.gameText,
+    isFirst: found.isFirst,
   };
 }
 
@@ -422,7 +481,10 @@ function findAskedPages(text, { dictionary, pages, isTyping }) {
   if (pages.news && isEveryWordOf(otherWords, pages.news.place.words))
     return findTeamNews(team, pages.news);
   if (isEveryWordOf(otherWords, RECORD_WORDS))
-    return { rows: listTeamRows(team, [], pages), gameText: leaveGameText(tokens, otherTokens) };
+    return {
+      rows: listTeamRows(team, [], { pages, isNumberPartial: false }),
+      gameText: leaveGameText(tokens, otherTokens),
+    };
   return null;
 }
 
@@ -460,7 +522,8 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
     const gameText = leaveGameText(tokens, found.named);
     return { rows: [{ kind: "game-part", part: found.part, gameText }], gameText: null };
   }
-  if (teamTokens.length) return findTeamPages(teamTokens, otherTokens, { text, tokens, pages });
+  if (teamTokens.length)
+    return findTeamPages(teamTokens, otherTokens, { text, tokens, pages, isTyping });
   if (!otherWords.length) return findPassedOverPlaces(tokens, text, pages);
   const teams = new Map(pages.teams.map((team) => [team.code, team]));
   const players = findPlayers(otherTokens, pages.players, isTyping).flatMap((player) => {
@@ -481,14 +544,15 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
 
 /**
  * Who is out, when the words ask with no name, or the players they name, each saying whether
- * she's out, or no page when they name no one.
+ * she's out, or no page when they name no one. A league whose players don't say who is out lists
+ * no one for the words alone, and the players named without a word on it.
  * @param {import("./search-words.js").Token[]} rest the tokens besides those that ask who is out
  * @param {{ text: string, pages: SearchPages, isTyping: boolean }} search
  * @returns {FoundPages}
  */
 function findOutPages(rest, { text, pages, isTyping }) {
   if (!rest.length) {
-    const rows = listOutRows(pages.players, pages);
+    const rows = pages.isOutKnown ? listOutRows(pages.players, pages) : [];
     if (!rows.length) return { rows: [], gameText: text };
     return { rows, gameText: null, read: describeWhoIsOut(rows) };
   }
@@ -499,6 +563,7 @@ function findOutPages(rest, { text, pages, isTyping }) {
     return team ? [/** @type {PageRow} */ ({ kind: "player", team, player, out: "named" })] : [];
   });
   if (!rows.length) return { rows: [], gameText: text };
+  if (!pages.isOutKnown) return { rows, gameText: null };
   const [player] = players;
   const read =
     players.length === 1
@@ -539,35 +604,40 @@ function findPassedOverPlaces(tokens, text, pages) {
 }
 
 /**
- * The pages of the one team the words name, alone or with its section's name.
+ * The pages of the one team the words name, alone, with its section's name, or with a player's
+ * number, whose players' rows show first.
  * @param {import("./search-words.js").Token[]} teamTokens
  * @param {import("./search-words.js").Token[]} otherTokens
- * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages }} search
+ * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages, isTyping: boolean }} search
  * @returns {FoundPages}
  */
-function findTeamPages(teamTokens, otherTokens, { text, tokens, pages }) {
+function findTeamPages(teamTokens, otherTokens, { text, tokens, pages, isTyping }) {
   const otherWords = otherTokens.flatMap((token) => token.words);
   const team = findOneTeam(teamTokens, pages);
-  const rows = team ? listTeamRows(team, otherWords, pages) : [];
+  const isNumberPartial = isTyping && tokens.at(-1) === otherTokens.at(-1);
+  const rows = team ? listTeamRows(team, otherWords, { pages, isNumberPartial }) : [];
   if (!rows.length) return { rows: [], gameText: text };
   const taken = tokens.filter((token) => !teamTokens.includes(token) && !hasKind(token, "filler"));
-  return { rows, gameText: leaveGameText(tokens, taken) };
+  const isFirst = rows[0].kind === "player";
+  return { rows, gameText: leaveGameText(tokens, taken), isFirst };
 }
 
 /**
- * Who is out on a team, or, when no one is, its section, which lists every player.
+ * Who is out on a team, or, when no one is or its players don't say, its section, which lists
+ * every player.
  * @param {PageTeam} team
  * @param {SearchPages} pages
  * @returns {FoundPages}
  */
 function findTeamOutPages(team, pages) {
+  const section = pages.section ? [/** @type {PageRow} */ ({ kind: "section", team })] : [];
+  if (!pages.isOutKnown) return { rows: section, gameText: null };
   const rows = listOutRows(
     pages.players.filter((player) => player.team === team.code),
     pages,
   );
   const read = { lead: team.name, facts: ["Who's out", describeCount(rows.length, "player")] };
-  if (rows.length) return { rows, gameText: null, read };
-  return { rows: pages.section ? [{ kind: "section", team }] : [], gameText: null, read };
+  return { rows: rows.length ? rows : section, gameText: null, read };
 }
 
 /**

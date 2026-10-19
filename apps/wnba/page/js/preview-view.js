@@ -37,7 +37,6 @@ const LOOKS = { renderWinner: renderClub, renderLoser: renderTeamName, nameTeam 
 
 /** @param {Meeting} meeting */
 const readMeeting = (meeting) => ({
-  start: Date.parse(meeting.start),
   day: new Date(meeting.start),
   away: meeting.away,
   home: meeting.home,

@@ -1,7 +1,8 @@
 import { readEasternDay } from "#shared/days.js";
 import { readClubId } from "../../page/js/snapshot.js";
 import { fetchMlbJson, SEASON_PARAM } from "./mlb.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
+import { noteLeagueRead, readSeasonDocs } from "../../../../shared/worker/store-reads.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
 // One pitcher's side of the matchup sheet: who he is, his season, what he throws, his last starts,
@@ -354,25 +355,7 @@ function readPersonId(searchParams) {
   return Number.isInteger(id) && id > 0 && id <= LARGEST_PERSON_ID ? id : null;
 }
 
-/**
- * Reads a document from the store, as null when it has none.
- * @typedef {(key: string) => Promise<any>} ReadDoc
- */
-
-const NOTHING_SAVED = { pitcher: null, qualified: null, current: null };
-
-/**
- * Counts a read of MLB the store should have spared, which never holds up the sheet.
- * @param {string} what what was read, as an error names it
- * @param {() => Promise<void>} countLeagueRead
- */
-export async function noteLeagueRead(what, countLeagueRead) {
-  try {
-    await countLeagueRead();
-  } catch (error) {
-    console.error(`Counting ${what} read from MLB failed: ${describeError(error)}`);
-  }
-}
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 /**
  * @param {object} [options]
@@ -416,20 +399,15 @@ export function createPitcherServer({
    * What the store keeps of the sheet, each part null when it doesn't keep it, or can't be read.
    * @param {number} id
    * @param {number} season
-   * @param {ReadDoc} readDoc
+   * @param {ReadDoc | undefined} readDoc
    */
   async function readSaved(id, season, readDoc) {
-    try {
-      const [pitcher, qualified, current] = await Promise.all([
-        readDoc(namePitcherKey(season, id)),
-        readDoc(nameStartersKey(season)),
-        readDoc("live/current"),
-      ]);
-      return { pitcher, qualified, current: current?.season ?? null };
-    } catch (error) {
-      console.error(`Reading pitcher ${id} from the store failed: ${describeError(error)}`);
-      return NOTHING_SAVED;
-    }
+    const { docs, isCurrentSeason } = await readSeasonDocs(readDoc, season, [
+      namePitcherKey(season, id),
+      nameStartersKey(season),
+    ]);
+    const [pitcher = null, qualified = null] = docs ?? [];
+    return { pitcher, qualified, isCurrentSeason };
   }
 
   /**
@@ -440,21 +418,21 @@ export function createPitcherServer({
    */
   async function servePitcher(url, readDoc, countLeagueRead) {
     const id = readPersonId(url.searchParams);
-    if (id == null) return respondJson({ error: "id must be an MLB person id" }, 400);
+    if (id == null) return respondError(400, "invalid_argument", "id must be an MLB person id");
     const season = SEASON_PARAM.readSeason(url.searchParams, now());
-    if (season == null) return respondJson({ error: SEASON_PARAM.rule }, 400);
+    if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     try {
-      const saved = readDoc ? await readSaved(id, season, readDoc) : NOTHING_SAVED;
-      const hasStoreGap = season === saved.current && (!saved.pitcher || !saved.qualified);
+      const saved = await readSaved(id, season, readDoc);
+      const hasStoreGap = saved.isCurrentSeason && (!saved.pitcher || !saved.qualified);
       const [pitcher, qualified] = await Promise.all([
         saved.pitcher ?? fetchPitcher(id, season),
         saved.qualified ?? loadQualified(season),
         hasStoreGap && countLeagueRead && noteLeagueRead("a pitcher", countLeagueRead),
       ]);
-      if (!pitcher) return respondJson({ error: "MLB has no pitcher with that id" }, 404);
+      if (!pitcher) return respondError(404, "not_found", "MLB has no pitcher with that id");
       return respondJson(composePitcher(pitcher, qualified, now()));
     } catch (error) {
-      return respondJson({ error: `Couldn't read MLB: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read MLB: ${describeError(error)}`);
     }
   }
 

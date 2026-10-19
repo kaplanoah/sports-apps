@@ -7,6 +7,14 @@ import {
   waitForLoadToSettle,
 } from "../../../../tests/browser/at-rest.mjs";
 import { findSeasonPill } from "../../../../tests/browser/season-tab.mjs";
+import {
+  isPillBandShown,
+  readHeaderReach,
+  readPillHoldTop,
+  readSeasonPartScroll,
+  readSeasonRide,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 import { VALKYRIES_AT_WINGS, finishValkyriesAtWings } from "./game-sheet-games.mjs";
 
 // In full motion, every slide ends, and then nothing moves or asks for a frame. Each test counts
@@ -43,7 +51,7 @@ test("a tab tap, a tap on a day, and a tap on Today each leave the page at rest,
   expect(await readResizeLoops()).toEqual([]);
 });
 
-test("a tap on the pill between the bracket and the standings leaves the page at rest each way", async ({
+test("a tap on the pill between the bracket and the standings leaves the page at rest each way, and from far down the standings brings the bracket in with the header still gone", async ({
   page,
 }) => {
   const readResizeLoops = await listResizeLoops(page);
@@ -56,11 +64,15 @@ test("a tap on the pill between the bracket and the standings leaves the page at
   await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
   await expect(page.locator("#standings-league")).toBeInViewport();
   await expectAtRest(page);
+  await scrollSeasonPartToEnd(page, "standings");
 
   await findSeasonPill(page).getByRole("tab", { name: "Bracket" }).click();
   await expect(page.locator("#bracketWrap .bracket")).toBeInViewport();
   await expectAtRest(page);
 
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(await readHeaderReach(page));
+  expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
+  expect(await isPillBandShown(page)).toBe(true);
   expect(await readResizeLoops()).toEqual([]);
 });
 

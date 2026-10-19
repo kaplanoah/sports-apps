@@ -1,3 +1,4 @@
+import { measureTopAtRest, observeRoomForPart } from "#shared/bracket-standings.js";
 import { html, setHtml } from "#shared/html.js";
 import { watchOpeningRound } from "#shared/opening-round.js";
 import { markScrolledRound } from "#shared/round-dots.js";
@@ -58,13 +59,27 @@ function buildBracket(upper, lower, next) {
 }
 
 /**
- * @param {SVGSVGElement} svg
+ * Sizes the line layers to the bracket, measured without them: layers left at a larger size from
+ * before the bracket shrank would let it scroll past its cards, down or sideways.
  * @param {HTMLElement} tree
+ * @param {SVGSVGElement[]} layers
+ */
+function sizeLayers(tree, layers) {
+  const setSize = (/** @type {number} */ width, /** @type {number} */ height) => {
+    for (const layer of layers) {
+      layer.setAttribute("width", String(width));
+      layer.setAttribute("height", String(height));
+    }
+  };
+  setSize(0, 0);
+  setSize(tree.scrollWidth, tree.scrollHeight);
+}
+
+/**
+ * @param {SVGSVGElement} svg
  * @param {{ next: string, shape: string }[]} paths
  */
-function drawPaths(svg, tree, paths) {
-  svg.setAttribute("width", String(tree.scrollWidth));
-  svg.setAttribute("height", String(tree.scrollHeight));
+function drawPaths(svg, paths) {
   setHtml(
     svg,
     html`${paths.map(({ next, shape }) => html`<path data-next="${next}" d="${shape}"/>`)}`,
@@ -85,14 +100,15 @@ function drawLines(tree) {
   }));
   const findSvg = (/** @type {string} */ selector) =>
     /** @type {SVGSVGElement} */ (tree.querySelector(selector));
+  const linesLayer = findSvg(".bracket-lines");
+  const turnsLayer = findSvg(".bracket-turns");
+  sizeLayers(tree, [linesLayer, turnsLayer]);
   drawPaths(
-    findSvg(".bracket-lines"),
-    tree,
+    linesLayer,
     brackets.map(({ next, lines }) => ({ next, shape: lines })),
   );
   drawPaths(
-    findSvg(".bracket-turns"),
-    tree,
+    turnsLayer,
     brackets.map(({ next, turn }) => ({ next, shape: turn })),
   );
 }
@@ -106,12 +122,12 @@ const markScrollLeft = (tree) => tree.style.setProperty("--scroll-left", `${tree
 
 /**
  * While the round dots are pinned above a phone's tab bar, the gaps between the cards grow alike
- * so the bracket reaches down to them.
+ * so the bracket reaches down to them from where it starts at rest.
  * @param {HTMLElement} tree
  */
 function sizeCardGaps(tree) {
   const dots = /** @type {HTMLElement} */ (findWrap().querySelector(".round-dots"));
-  if (!isShown(dots) || getComputedStyle(dots).position !== "fixed") {
+  if (!isShown(dots) || getComputedStyle(dots).position === "static") {
     tree.style.removeProperty("--card-gap");
     return;
   }
@@ -119,8 +135,7 @@ function sizeCardGaps(tree) {
   const tightestGap = parseFloat(style.getPropertyValue("--tightest-card-gap"));
   const gap = parseFloat(style.getPropertyValue("--card-gap"));
   const tightestHeight = tree.offsetHeight - GAPS_BETWEEN_CARDS * (gap - tightestGap);
-  const top = tree.getBoundingClientRect().top + scrollY;
-  const room = dots.getBoundingClientRect().top - ROUND_DOTS_CLEARANCE - top;
+  const room = dots.getBoundingClientRect().top - ROUND_DOTS_CLEARANCE - measureTopAtRest(tree);
   const fittingGap = tightestGap + (room - tightestHeight) / GAPS_BETWEEN_CARDS;
   const grownGap = Math.min(tightestGap * MAX_GAP_GROWTH, Math.max(tightestGap, fittingGap));
   // Half pixels still fall on a phone's screen pixels, and leave the cards at most a pixel and a
@@ -151,19 +166,19 @@ function layOutAndMarkRound() {
   markVisibleRound();
 }
 
-// The cards move when the screen resizes, the tab shows, the header above them changes, or a font
-// arrives and changes their rows.
+// The cards move when the screen resizes, the tab shows, the room for the bracket's part changes
+// with what's above it, or a font arrives and changes their rows.
 export function startBracket() {
   const wrap = findWrap();
   placeOpeningRound = watchOpeningRound(wrap);
   // Laying the bracket out resizes what this observes, so it waits a frame rather than loop the
-  // observer, and only while the bracket shows. The standings sliding in beside it change the
-  // page's height but not the bracket, so it holds still until they rest.
+  // observer, and only while the bracket shows. While the parts slide it holds still, since laying
+  // it out then would move its cards as they slide in.
   resizes = new ResizeObserver(() => {
     if (isShown(wrap) && !wrap.closest("[data-sliding]")) requestAnimationFrame(layOutAndMarkRound);
   });
   resizes.observe(wrap);
-  resizes.observe(document.body);
+  observeRoomForPart(resizes, wrap);
   addEventListener("resize", layOutBracket);
   wrap.addEventListener("scroll", markVisibleRound, { capture: true, passive: true });
   document.fonts.addEventListener("loadingdone", layOutBracket);

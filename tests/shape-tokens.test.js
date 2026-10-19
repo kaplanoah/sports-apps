@@ -19,7 +19,6 @@ const APP_TOKENS = [
   "--radius-sheet",
   "--control-height",
   "--control-room",
-  "--held-bar-fade",
   "--held-bar-line",
   "--pager-label",
   "--pager-chosen-edge",

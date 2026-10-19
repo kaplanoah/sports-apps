@@ -29,6 +29,8 @@ export async function setAppKey({
   makeKey = createKey,
 }) {
   const secrets = createSecretsClient({ app, channel, fetchImpl, env, log });
+  // A key stored without its address printed would be lost, so a missing subdomain stops first.
+  const workerUrl = secrets.readWorkerUrl();
   if ((await secrets.listSecretNames()).includes(SECRET_NAME) && !isRotating)
     throw new Error(
       `The Worker already has an ${SECRET_NAME}. A new one changes the page's address, so the ` +
@@ -37,7 +39,7 @@ export async function setAppKey({
 
   const key = makeKey();
   await secrets.putSecret(SECRET_NAME, key);
-  const url = `${await secrets.readWorkerUrl()}${key}/`;
+  const url = `${workerUrl}${key}/`;
   log(`Page address: ${url}`);
   return url;
 }

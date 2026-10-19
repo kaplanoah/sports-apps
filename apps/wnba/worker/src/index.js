@@ -7,7 +7,6 @@ import { createPlayerServer } from "./player.js";
 import { LEAGUE_READS_COUNT, PLAYER_JOB } from "./player-updater.js";
 import { createPreviewServer } from "./preview.js";
 import { createRosterServer } from "./roster.js";
-import { createSnapshotServer } from "./snapshot.js";
 import {
   SeasonStore,
   addToJobCount,
@@ -16,7 +15,6 @@ import {
   readStoreDoc,
 } from "./store.js";
 
-const snapshots = createSnapshotServer();
 const boxScores = createBoxScoreServer();
 const highlights = createHighlightsServer();
 const leads = createLeadServer();
@@ -26,7 +24,6 @@ const players = createPlayerServer({ loadRoster: rosters.loadRoster });
 
 export default createAppWorker({
   pageFiles: PAGE_FILES,
-  serveSnapshot: (url) => snapshots.serveSnapshot(url),
   forwardToStore,
   isStoreAnswering,
   reads: {

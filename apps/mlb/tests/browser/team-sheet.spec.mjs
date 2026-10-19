@@ -14,6 +14,7 @@ import {
   ROSTER_DOCS,
   SEASON_2025,
   chooseSeason,
+  keepUpdatesFromEarlierVisit,
   matchPath,
   readColor,
 } from "./harness.mjs";
@@ -26,6 +27,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -91,6 +93,7 @@ function buildSnapshotWithClinch() {
 
 /** @param {import("@playwright/test").Page} page */
 async function showClinch(page) {
+  await keepUpdatesFromEarlierVisit(page);
   await openApp(page, { snapshots: { 2026: buildSnapshotWithClinch() } });
   const update = page.locator("#updates li").first();
   await expect(update.locator(".what")).toContainText("White Sox");
@@ -244,6 +247,18 @@ test("a club's row in the standings opens its sheet, with its nearest games, rac
   await expect(sheet).toBeHidden();
 });
 
+test("a club's card of a game being played draws its inning in the color of what's happening now", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await page.locator('.div-grid tr[data-team="TB"] .team-open').click();
+
+  const inning = page.locator("#teamSheet .game-card-now");
+  await expect(inning).toHaveText("Top 6th");
+  await expect(inning).toHaveCSS("color", await readColor(page, "--now"));
+});
+
 test("a club in the bracket opens its sheet", async ({ page }) => {
   await openBracket(page);
   const club = page.locator("#bracketWrap .team-id .team-open").first();
@@ -365,7 +380,7 @@ test.describe("on a phone", () => {
       ({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.dataset.game,
       spot,
     );
-    expect(landsOn).toBe("2026-09-24 HOU ATH 1");
+    expect(landsOn).toBe("824950 2026-09-24");
     await page.touchscreen.tap(spot.x, spot.y);
 
     const gameSheet = page.locator("#gameSheet");
@@ -484,7 +499,7 @@ test("a starter's sheet ranks him among the qualified starters, each rank all in
     "ERA",
     "K/9",
     "BB/9",
-    "Velo",
+    "Fastball mph",
   ]);
   await expect(playerSheet.locator(".pitch-mix")).toBeVisible();
   expect(await checkRanksAreDim(playerSheet, ".player-rank")).toEqual(Array(4).fill(true));
@@ -499,7 +514,8 @@ test("a starter's sheet ranks him among the qualified starters, each rank all in
 async function failStoreReads(page, path) {
   const pattern = matchPath(path);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 500, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 500, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(pattern, refuse);
   return () => page.unroute(pattern, refuse);
 }
@@ -544,12 +560,8 @@ test("a roster that didn't load says so over Try again, and reads again as the p
   expect(await listStrayPeriods(page)).toEqual([]);
 
   await answer();
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-    document.dispatchEvent(new Event("visibilitychange"));
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
+  await setHidden(page, true);
+  await setHidden(page, false);
   await expect(sheet.locator("#rosterBody .box-name").first()).toHaveText("Jo Adell");
 });
 

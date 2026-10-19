@@ -9,8 +9,8 @@ import { renderSheetPart } from "./sheet-part.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
 /**
- * A finished meeting: when it started, the day it's listed on, and each team with its score.
- * @typedef {{ start: number, day: Date, away: { team: string, score: number }, home: { team: string, score: number } }} Meeting
+ * A finished meeting: the day it's listed on, and each team with its score.
+ * @typedef {{ day: Date, away: { team: string, score: number }, home: { team: string, score: number } }} Meeting
  */
 /**
  * How a league shows a team: its winner with its dot, the team it beat by name, and its name in
@@ -70,7 +70,8 @@ export function renderSeasonSeries(meetings, series, looks) {
       SEASON_SERIES_TITLE,
       html`<p class="sheet-message">They haven't met this season</p>`,
     );
-  const ordered = [...meetings].sort((first, second) => first.start - second.start);
+  // A stable sort, so a day's meetings keep the order the league lists them in.
+  const ordered = [...meetings].sort((first, second) => first.day.getTime() - second.day.getTime());
   return renderSheetPart(
     SEASON_SERIES_TITLE,
     html`<ul class="meetings">

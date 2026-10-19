@@ -4,7 +4,7 @@ import {
   openApp,
   openLockedApp,
   buildFixtureSnapshot,
-  keepFromEarlierVisit,
+  keepUpdatesFromEarlierVisit,
   EVENING_FIXTURE,
   ON_A_PHONE,
 } from "./harness.mjs";
@@ -74,6 +74,12 @@ const OTHER_PLACES = [
     shown: (page) => page.getByRole("heading", { name: "Enter your access code" }),
   },
   {
+    name: "the Home Screen welcome",
+    device: ON_A_PHONE,
+    open: (page) => openApp(page, { isShowingWelcome: true }),
+    shown: (page) => page.getByRole("heading", { name: "Add MLB to your Home Screen" }),
+  },
+  {
     name: "a bracket with a series under way",
     open: async (page) => {
       const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
@@ -101,9 +107,7 @@ const OTHER_PLACES = [
           body: 'import { html } from "#shared/html.js";\nexport const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: html`Tap a game, then <b>Matchup</b>.` }];',
         }),
       );
-      await keepFromEarlierVisit(page, "updatesSeenAt", {
-        2026: Date.parse("2026-09-24T20:00:00Z"),
-      });
+      await keepUpdatesFromEarlierVisit(page);
       return openApp(page, {
         liveAvailable: false,
         store: { "seasons/2026": SEASON_WITH_A_CLUB_OUT },

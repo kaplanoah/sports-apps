@@ -8,6 +8,7 @@ import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
 import { checkAppPage } from "./check-page.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
+import { createGitHub } from "./github-api.mjs";
 
 export const API = "https://api.cloudflare.com/client/v4";
 const root = new URL("../", import.meta.url);
@@ -48,7 +49,20 @@ export const readAppWorkerConfig = (app, channel) =>
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 
-function isAncestor(git, commit, of) {
+/** @typedef {(args: string[]) => string} Git */
+
+/** @type {Git} */
+export const runGit = (args) =>
+  execFileSync("git", args, { cwd: fileURLToPath(root), encoding: "utf8" }).trim();
+
+/**
+ * Whether `commit` is `of` or comes before it in its history, and false when git doesn't know
+ * either one.
+ * @param {Git} git
+ * @param {string} commit
+ * @param {string} of
+ */
+export function isAncestor(git, commit, of) {
   try {
     git(["merge-base", "--is-ancestor", commit, of]);
     return true;
@@ -57,25 +71,29 @@ function isAncestor(git, commit, of) {
   }
 }
 
-// A commit its channel's branch has since moved past isn't deployed: the newer one's deploy
-// covers it, and deploying it would put older code live.
+// A commit its channel's branch has since moved past is a release a newer one may cover. A branch
+// each push replaces, as beta's force pushes do, can move past a commit without building on it,
+// so there a commit the push that started this run brought is one the branch held.
 /**
- * @param {(args: string[]) => string} [git]
+ * @param {Git} [git]
  * @param {string} [channel]
+ * @param {string} [pushedCommit] the commit the push that started this run brought, in Actions
  * @returns {{ commit: string, newer: string | null }}
  */
 export function checkRelease(
-  git = (args) => execFileSync("git", args, { cwd: fileURLToPath(root), encoding: "utf8" }).trim(),
+  git = runGit,
   channel = "production",
+  pushedCommit = process.env.GITHUB_SHA,
 ) {
-  const { branch, howToShip } = findChannel(channel);
+  const { branch, howToShip, isForcePushed } = findChannel(channel);
   if (git(["status", "--porcelain"]))
     throw new Error(`There are uncommitted changes. Deploy only what is on ${branch}.`);
   git(["fetch", "--quiet", "origin", branch]);
   const local = git(["rev-parse", "HEAD"]);
   const remote = git(["rev-parse", `origin/${branch}`]);
   if (local === remote) return { commit: local, newer: null };
-  if (isAncestor(git, local, remote)) return { commit: local, newer: remote };
+  const wasHeld = (isForcePushed && local === pushedCommit) || isAncestor(git, local, remote);
+  if (wasHeld) return { commit: local, newer: remote };
   const checkout = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   throw new Error(
     `This checkout (${checkout} at ${local.slice(0, 7)}) isn't ${branch} as GitHub has it (${remote.slice(0, 7)}). ${howToShip}, or check out origin/${branch}, and try again.`,
@@ -117,6 +135,29 @@ export function readAccount(env) {
     );
   return env.CLOUDFLARE_ACCOUNT_ID;
 }
+
+const WORKERS_SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+
+// A token limited to its channel's Workers can't read the account's workers.dev subdomain, so a
+// secret names it. Deploy logs are public, so a wrong one is never repeated back.
+export function readWorkersSubdomain(env) {
+  const subdomain = env.CLOUDFLARE_WORKERS_SUBDOMAIN;
+  if (!subdomain)
+    throw new Error(
+      "Set CLOUDFLARE_WORKERS_SUBDOMAIN to the account's workers.dev subdomain (Cloudflare dashboard > Workers & Pages, beside the Account ID).",
+    );
+  if (!WORKERS_SUBDOMAIN_PATTERN.test(subdomain))
+    throw new Error(
+      "CLOUDFLARE_WORKERS_SUBDOMAIN holds more than a subdomain: set it to just the part before .workers.dev.",
+    );
+  return subdomain;
+}
+
+/**
+ * @param {string} name The Worker's name.
+ * @param {string} subdomain The account's workers.dev subdomain.
+ */
+export const formatWorkerUrl = (name, subdomain) => `https://${name}.${subdomain}.workers.dev/`;
 
 export const findWorkersApi = (account) => `${API}/accounts/${account}/workers`;
 
@@ -235,6 +276,8 @@ export function createDeploymentsClient({ base, name, callCloudflare }) {
  * @param {typeof console.log} [options.log]
  * @param {(milliseconds: number) => Promise<unknown>} [options.pause]
  * @param {typeof checkAppPage} [options.checkPage] Opens the new version's page.
+ * @param {(commit: string, of: string) => boolean} [options.isEarlier] Whether a commit comes
+ *   before another in main's history.
  * @returns {Promise<string | null>} the Worker's address, or null when nothing needed deploying
  */
 export async function deploy({
@@ -248,9 +291,12 @@ export async function deploy({
   log = console.log,
   pause = waitFor,
   checkPage = checkAppPage,
+  isEarlier = (earlier, of) => isAncestor(runGit, earlier, of),
 }) {
   const account = readAccount(env);
+  const subdomain = readWorkersSubdomain(env);
   const { name, compatibilityDate } = readAppWorkerConfig(app, channel);
+  const { isForcePushed } = findChannel(channel);
   const base = findWorkersApi(account);
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const deployments = createDeploymentsClient({ base, name, callCloudflare });
@@ -260,11 +306,23 @@ export async function deploy({
     return newest ?? null;
   }
 
+  // A newer merge's deploy can go live before an older merge's run gets here, which would
+  // otherwise put older code back. Each push to beta replaces what it held, whatever it was.
+  /** @param {string} liveCommit */
+  const isLiveNewer = (liveCommit) =>
+    !isForcePushed && !!commit && liveCommit !== commit && isEarlier(commit, liveCommit);
+
   // Without a recorded commit, there's nothing to compare with, so it deploys.
   async function isDeployNeeded(previousVersions) {
     const liveCommit =
       previousVersions && (await deployments.readCommit(previousVersions, "live commit"));
     if (!liveCommit) return true;
+    if (isLiveNewer(liveCommit)) {
+      log(
+        `::notice::The live version is at ${liveCommit.slice(0, 7)}, which already has ${commit?.slice(0, 7)}, so nothing was deployed.`,
+      );
+      return false;
+    }
     const { isNeeded, reason } = decideDeploy(findChanges(liveCommit), app);
     log(isNeeded ? reason : `::notice::${reason}`);
     return isNeeded;
@@ -302,21 +360,6 @@ export async function deploy({
     await callCloudflare("upload", `${base}/scripts/${name}`, { method: "PUT", body: form });
   }
 
-  async function enableWorkersDevRoute() {
-    await callCloudflare("workers.dev route", `${base}/scripts/${name}/subdomain`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ enabled: true, previews_enabled: false }),
-    });
-  }
-
-  async function readWorkerUrl() {
-    const { subdomain } = await callCloudflare("subdomain", `${base}/subdomain`, {
-      method: "GET",
-    });
-    return `https://${name}.${subdomain}.workers.dev/`;
-  }
-
   // The upload makes the new version live, so anything that goes wrong after it puts the
   // earlier one back.
   /** @returns {Promise<never>} */
@@ -336,10 +379,15 @@ export async function deploy({
     await restoreAfter("The Worker didn't answer as the new version", previousVersions);
   }
 
-  // A Worker can answer while its page throws or never draws, which a phone would show.
+  // A Worker can answer while its page throws or never draws, which a phone would show. A check
+  // that itself fails is no proof the page draws.
   async function confirmPageDraws(previousVersions) {
-    const check = await checkPage({ app, channel, commit, env });
-    if (check.status === "drawn") log("page check: ok");
+    const check = await checkPage({ app, channel, commit, env }).catch((error) => ({
+      status: /** @type {const} */ ("broken"),
+      reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
+    }));
+    if (check.status === "drawn")
+      log(check.note ? `::notice::page check: ok, but ${check.note}` : "page check: ok");
     if (check.status === "unchecked") log(`::notice::page check: skipped, ${check.reason}`);
     if (check.status === "broken")
       await restoreAfter(
@@ -348,12 +396,15 @@ export async function deploy({
       );
   }
 
-  async function findNewVersionUrl(previousVersions) {
+  async function enableWorkersDevRoute(previousVersions) {
     try {
-      await enableWorkersDevRoute();
-      return await readWorkerUrl();
+      await callCloudflare("workers.dev route", `${base}/scripts/${name}/subdomain`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: true, previews_enabled: false }),
+      });
     } catch (error) {
-      return restoreAfter(error instanceof Error ? error.message : String(error), previousVersions);
+      await restoreAfter(error instanceof Error ? error.message : String(error), previousVersions);
     }
   }
 
@@ -361,7 +412,8 @@ export async function deploy({
   if (!(await isDeployNeeded(previousVersions))) return null;
   const migrations = listPendingMigrations(await readMigrationTag());
   await uploadWorker(migrations);
-  const url = await findNewVersionUrl(previousVersions);
+  await enableWorkersDevRoute(previousVersions);
+  const url = formatWorkerUrl(name, subdomain);
   await confirmWorkerAnswers(url, previousVersions);
   await confirmPageDraws(previousVersions);
   log("worker check: ok");
@@ -459,16 +511,62 @@ function readCommandLineOrExit(args) {
   }
 }
 
+/** @typedef {"passed" | "not passed" | "unknown"} CiState */
+
+/**
+ * Whether CI on main passed on a commit, or "unknown" when GitHub couldn't be asked: it answers
+ * only a run that holds GH_TOKEN and names GITHUB_REPOSITORY, as Actions does, and a read can fail.
+ * @param {string} commit
+ * @param {{ fetchImpl?: typeof fetch, env?: NodeJS.ProcessEnv }} [options]
+ * @returns {Promise<CiState>}
+ */
+export async function readMainCiState(commit, { fetchImpl = fetch, env = process.env } = {}) {
+  if (!env.GH_TOKEN || !env.GITHUB_REPOSITORY) return "unknown";
+  const github = createGitHub({ repository: env.GITHUB_REPOSITORY, fetchImpl, env });
+  try {
+    const { workflow_runs: runs } = await github(
+      `/actions/workflows/ci.yml/runs?head_sha=${commit}&event=push&per_page=1`,
+    );
+    return runs[0]?.conclusion === "success" ? "passed" : "not passed";
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Why a commit its branch has moved past deploys or not. A push to a force-pushed branch deploys at
+ * once, so it covers the commit before it. A merge to main deploys only once CI passes on it, so
+ * until then, or while GitHub can't say, the commit before it deploys, in case it never does.
+ * @param {{ commit: string, newer: string, channel: string }} release
+ * @param {(commit: string) => Promise<CiState>} readCiState
+ * @returns {Promise<{ isCovered: boolean, message: string }>}
+ */
+export async function decideMovedOn({ commit, newer, channel }, readCiState) {
+  const { branch, isForcePushed } = findChannel(channel);
+  const [shortCommit, shortNewer] = [commit.slice(0, 7), newer.slice(0, 7)];
+  const movedOn = `::notice::${branch} has moved on to ${shortNewer}`;
+  const ciState = isForcePushed ? "passed" : await readCiState(newer);
+  if (ciState === "passed")
+    return {
+      isCovered: true,
+      message: `${movedOn}, whose deploy covers ${shortCommit}, so nothing was deployed.`,
+    };
+  const why =
+    ciState === "unknown"
+      ? `but GitHub couldn't be asked whether CI on ${branch} passed on it`
+      : `but CI on ${branch} hasn't passed on it`;
+  return { isCovered: false, message: `${movedOn}, ${why}, so ${shortCommit} deploys.` };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { positionals, channel } = readCommandLineOrExit(process.argv.slice(2));
   const apps = listAppsOrExit(positionals[0]);
   const { branch } = findChannel(channel);
   const { commit, newer } = readReleaseOrExit(channel);
   if (newer) {
-    console.log(
-      `::notice::${branch} has moved on to ${newer.slice(0, 7)}, whose deploy covers ${commit.slice(0, 7)}, so nothing was deployed.`,
-    );
-    process.exit(0);
+    const { isCovered, message } = await decideMovedOn({ commit, newer, channel }, readMainCiState);
+    console.log(message);
+    if (isCovered) process.exit(0);
   }
   console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
   const isDeployed = await deployApps(apps, async (app) =>
