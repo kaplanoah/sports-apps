@@ -132,6 +132,6 @@
 
 @media (max-width: 779px) {
   .diagnostics-area {
-    padding-inline: 18px;
+    padding-inline: var(--sheet-side);
   }
 }

@@ -916,7 +916,7 @@ header.top h1 .title-letter:nth-child(3) {
 }
 .sheet-page .sheet-top :is(.sheet-close, .sheet-back) {
   top: calc(var(--top-inset) + var(--band-button-top));
-  left: 6px;
+  left: calc(var(--sheet-side) - var(--caret-reach));
 }
 /* The teams and the score hold one row, so they sit the same under every game's title, each team
    --faceoff-teams-drop lower than the score's middle, and what shows under them only adds rows:
@@ -1346,16 +1346,16 @@ table.players td.quiet-stat {
   box-sizing: border-box;
   width: max-content;
   min-width: 100%;
-  padding: var(--roster-space-above) 18px 0;
+  padding: var(--roster-space-above) var(--sheet-side) 0;
 }
 .roster-section :is(.roster-note, .roster-coach, .sheet-message) {
   position: sticky;
-  left: 18px;
+  left: var(--sheet-side);
   box-sizing: border-box;
-  width: calc(100cqw - 36px);
+  width: calc(100cqw - 2 * var(--sheet-side));
 }
 .roster-note {
-  margin-left: 18px;
+  margin-left: var(--sheet-side);
   padding-top: 14px;
 }
 table.roster {
@@ -1450,8 +1450,8 @@ table.roster-pinned {
   position: sticky;
   left: 0;
   z-index: 4;
-  margin-left: -18px;
-  padding-left: 18px;
+  margin-left: calc(-1 * var(--sheet-side));
+  padding-left: var(--sheet-side);
   background: var(--sheet);
 }
 /* A cell's width takes in its padding, so the number column is exactly as wide as the room the
@@ -2516,13 +2516,14 @@ body.kbd .player-open:focus {
 
 /* A player who is out has a box as her sheet's first part, outlined like the team sheet's game
    cards and washed in the chip's orange, --out-box-space from the band, the sheet's sides, and the
-   part under it, the sheet's sides being 18px from its text. Her Out chip leads the box's first
+   part under it, the sheet's sides being --sheet-side from its text. Her Out chip leads the box's first
    line, its words a pixel up, so they sit centered on the chip, then RotoWire's sentence 6px under
    it and where it's from 4px under that, closer, so it reads as the sentence's credit. Its reason
    and sentence set their own sizes, matched by eye. */
 .out-box {
   --out-box-space: 11.5px;
-  margin: calc(var(--out-box-space) - var(--part-space-first)) calc(var(--out-box-space) - 18px)
+  margin: calc(var(--out-box-space) - var(--part-space-first))
+    calc(var(--out-box-space) - var(--sheet-side))
     calc(var(--out-box-space) - var(--part-space-above));
   padding: 10px 9.5px 8px;
   border: 1px solid var(--out-box-edge);
