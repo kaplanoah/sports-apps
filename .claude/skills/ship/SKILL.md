@@ -62,7 +62,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   each on the first of its items' files GitHub takes and each a thread of its own,
   and any finding GitHub takes on no file in a comment in the PR's conversation.
   The first review reads the whole change, and each review after it reads what changed since the last review that finished.
-  A review asked for on code that already passed its review reads nothing,
+  A review asked for on the head the last finished review read in full reads nothing,
   and so does one whose pushes since change only what a merge of its base brings in.
   The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
   how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
@@ -85,7 +85,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Merge it yourself: the owner doesn't.
 - `check` holds the code that merges, the PR merged into `main` as `main` is then,
   so when `main` moved after the PR's last review, the run `phone-ok` starts fails `check` for want of a review.
-  Add the `review` label then: the head was already read in full, so that review reads nothing new and costs no Claude run.
+  Add the `review` label then.
 
 ## Step 9: the deploy
 
