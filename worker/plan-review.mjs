@@ -2,9 +2,10 @@
 // it tests, so CI's review (the review jobs in ci.yml, and review-area.yml for each area) has one
 // reviewer read each area in full. The first review reads the whole change. A review after it
 // reads only what the pushes since the last full read changed. A push that changes only what a
-// merge of the base brings in is read by no one, and neither is a run on the head the last full
-// read ended on. A test's recorded data, the lockfile, a binary file, and a drawing or minified
-// library a tool wrote go unread, named in the summary instead.
+// merge of the base brings in is read by no one, but for how it resolved each conflict, and
+// neither is a run on the head the last full read ended on. A test's recorded data, the lockfile,
+// a binary file, and a drawing or minified library a tool wrote go unread, named in the summary
+// instead.
 // Each file's diff is written in parts a reviewer reads whole, as is each rule file whose paths
 // match a file of its area, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
@@ -291,52 +292,13 @@ export function splitDiffByFile(diff) {
 }
 
 /**
- * A file's diff from its first hunk on, without the line numbers in its hunks' headers, so a diff
- * that a merge of the base only moved down the file reads the same, while a block moved within
- * the change, which its context shows, reads as changed. A diff with no hunk, as a binary file's
- * or a change of mode alone, reads as its header, whose blob hashes and modes change with it.
- * @param {string} fileDiff
- */
-export function describeChange(fileDiff) {
-  const lines = fileDiff.split("\n");
-  const firstHunk = lines.findIndex((line) => line.startsWith("@@ "));
-  if (firstHunk < 0) return lines.slice(1).join("\n");
-  return lines
-    .slice(firstHunk)
-    .map((line) => line.replace(/^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/, "@@"))
-    .join("\n");
-}
-
-/**
- * The files whose change differs between two of a pull request's diffs, as a push changes them.
- * @param {string} earlier the diff from the earlier head's base to the earlier head
- * @param {string} now the diff from the base to the head
- */
-export function listChangedSince(earlier, now) {
-  const before = splitDiffByFile(earlier);
-  const after = splitDiffByFile(now);
-  const paths = [...new Set([...before.keys(), ...after.keys()])].sort();
-  return paths.filter(
-    (path) => describeChange(before.get(path) ?? "") !== describeChange(after.get(path) ?? ""),
-  );
-}
-
-/**
  * The files the pushes since a reviewed head changed: those the pushed range changes, the range
- * the push's reviewers read, or, where that range holds the base's edits too, those whose change
- * from that head's base differs from the whole change now.
- * @param {object} review
- * @param {string} review.reviewedHead
- * @param {{ range: string[], hasBase: boolean }} review.pushed
- * @param {(one: string, other: string) => string} review.findMergeBase
- * @param {(range: string[]) => { numstat: string, diff: string }} review.readDiff
+ * the push's reviewers read.
+ * @param {string[]} pushed
+ * @param {(range: string[]) => { numstat: string }} readDiff
  */
-export function listPushedFiles({ reviewedHead, pushed, findMergeBase, readDiff }) {
-  if (!pushed.hasBase)
-    return readChangedFiles(readDiff(pushed.range).numstat).map(({ path }) => path);
-  const earlierBase = findMergeBase(WHOLE_CHANGE[0], reviewedHead);
-  return listChangedSince(readDiff([earlierBase, reviewedHead]).diff, readDiff(WHOLE_CHANGE).diff);
-}
+export const listPushedFiles = (pushed, readDiff) =>
+  readChangedFiles(readDiff(pushed).numstat).map(({ path }) => path);
 
 /**
  * Which review this run makes: the first, of the whole change; reviewed, on the head the last
@@ -586,8 +548,7 @@ const SHOW_WHOLE_FILE = `\`git diff ${WHOLE_CHANGE.join(" ")} -- <path>\` shows 
 
 const STAGE_WORDS = {
   first: "The first review of this pull request: each area's diffs hold its whole change.",
-  push: `The diffs hold only what the pushes since the last full review changed. ${SHOW_WHOLE_FILE}`,
-  "push-with-base": `The diffs hold what the pushes since the last full review changed, and, where those pushes merged the base and git couldn't set the base's own edits apart, those edits too: judge only what the pull request changed. ${SHOW_WHOLE_FILE}`,
+  push: `The diffs hold only what the pushes since the last full review changed. Where they merged the base and git couldn't settle a conflict on its own, a file's diff starts from git's conflict markers, so it shows how the conflict was resolved. ${SHOW_WHOLE_FILE}`,
 };
 
 /**
@@ -665,15 +626,14 @@ export const formatJobOutputs = ({ areas, areaNumbers, count }) =>
  * The change a stage's reviewers read, with the words its index opens with, or null for a stage
  * with none.
  * @param {ReturnType<typeof chooseStage>} choice
- * @param {{ range: string[], hasBase: boolean } | null} pushed
+ * @param {string[] | null} pushed
  * @param {(range: string[], files?: string[]) => { numstat: string, diff: string }} readDiff
  * @returns {{ numstat: string, diff: string, words: keyof typeof STAGE_WORDS } | null}
  */
 function readStageChange(choice, pushed, readDiff) {
   if (choice.stage === "first") return { ...readDiff(WHOLE_CHANGE), words: "first" };
   if (choice.stage !== "push" || !pushed) return null;
-  const words = pushed.hasBase ? "push-with-base" : "push";
-  return { ...readDiff(pushed.range, choice.files), words };
+  return { ...readDiff(pushed, choice.files), words: "push" };
 }
 
 /**
@@ -683,8 +643,7 @@ function readStageChange(choice, pushed, readDiff) {
  * @param {object} review
  * @param {ReturnType<typeof chooseStage>} review.choice
  * @param {string | null} review.since the head the last full read ended on
- * @param {{ range: string[], hasBase: boolean } | null} review.pushed the range that holds what
- *   the pushes since it changed, and whether it also holds the base's own edits
+ * @param {string[] | null} review.pushed the range that holds what the pushes since it changed
  * @param {(range: string[], files?: string[]) => { numstat: string, diff: string }} review.readDiff
  * @param {string[]} review.repoFiles
  * @param {() => { name: string, hits: string[] }[]} review.listStale
@@ -738,19 +697,28 @@ export const grepRepo = (pattern, isWord, git) =>
     .filter(Boolean)
     .map((hit) => hit.replace(/^HEAD:/, ""));
 
+// merge-tree's exit code when the merge conflicts, having still written the merged tree.
+const MERGE_CONFLICTS = 1;
+
 /**
  * The range that holds what the pushes since a head changed: from that head merged onto the base
- * to the pull request merged onto it, which leaves out the base's own edits, or, where that merge
- * conflicts, from the head to the pull request's head, which holds them too.
+ * to the pull request merged onto it, which leaves out the base's own edits. Where that merge
+ * conflicts, git writes each conflicted file with its markers, so the range holds how each
+ * conflict was resolved, and nothing else the base brought in.
  * @param {string} since
- * @param {(args: string[]) => string | null} git null where git fails, as merge-tree does on a
- * conflict
+ * @param {(args: string[]) => string} git throws as execFileSync does where git exits with an error
  */
 export function findPushedRange(since, git) {
-  const mergedTree = git(["merge-tree", "--write-tree", WHOLE_CHANGE[0], since])?.split("\n")[0];
-  return mergedTree
-    ? { range: [mergedTree, "HEAD"], hasBase: false }
-    : { range: [since, PULL_HEAD], hasBase: true };
+  const args = ["merge-tree", "--write-tree", WHOLE_CHANGE[0], since];
+  let output;
+  try {
+    output = git(args);
+  } catch (error) {
+    const failure = /** @type {{ status?: number, stdout?: string }} */ (error);
+    if (failure.status !== MERGE_CONFLICTS || !failure.stdout) throw error;
+    output = failure.stdout;
+  }
+  return [output.split("\n")[0], "HEAD"];
 }
 
 /**
@@ -817,21 +785,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       });
     return /** @type {{ numstat: string, diff: string }} */ (diffs.get(key));
   };
-  /** @type {{ range: string[], hasBase: boolean } | undefined} */
+  /** @type {string[] | undefined} */
   let pushedRange;
   const readPushedRange = () =>
-    (pushedRange ??= findPushedRange(/** @type {string} */ (reviewedHead), tryGit));
+    (pushedRange ??= findPushedRange(/** @type {string} */ (reviewedHead), runGit));
   const choice = chooseStage({
     reviewedHead,
     head,
     isOnBranch,
-    listChanged: () =>
-      listPushedFiles({
-        reviewedHead: /** @type {string} */ (reviewedHead),
-        pushed: readPushedRange(),
-        findMergeBase: (one, other) => runGit(["merge-base", one, other]).trim(),
-        readDiff,
-      }),
+    listChanged: () => listPushedFiles(readPushedRange(), readDiff),
   });
   const pushed = choice.stage === "push" ? readPushedRange() : null;
   const repoFiles = runGit(["ls-files"]).split("\n").filter(Boolean);
