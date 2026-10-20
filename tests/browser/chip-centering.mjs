@@ -13,37 +13,44 @@ export const listChipsOffCenter = (page) =>
     const round = (value) => Math.round(value * 100) / 100;
 
     /**
-     * Where the chip's baseline and capitals are drawn, from a zero-size box set inline after its
-     * words, whose top is on their baseline, and one as tall as their capitals, which text-box
-     * trims the words to.
-     * @param {Element} chip
+     * A box set inline after a chip's words, with no width, whose bottom is on their baseline.
+     * @param {string} height
      */
-    const readWords = (chip) => {
-      const baselineProbe = document.createElement("span");
-      baselineProbe.style.cssText = "display: inline-block; width: 0; height: 0";
-      const capitalsProbe = document.createElement("span");
-      capitalsProbe.style.cssText = "display: inline-block; width: 0; height: 1cap";
-      chip.append(baselineProbe, capitalsProbe);
-      const baseline = baselineProbe.getBoundingClientRect().top;
-      const capitals = capitalsProbe.getBoundingClientRect().height;
-      baselineProbe.remove();
-      capitalsProbe.remove();
-      return { baseline, capitalsMiddle: baseline - capitals / 2 };
+    const createProbe = (height) => {
+      const probe = document.createElement("span");
+      probe.style.cssText = `display: inline-block; width: 0; height: ${height}`;
+      return probe;
     };
 
-    /** @param {Element} chip */
-    const listProblems = (chip) => {
+    /**
+     * Where the chip's box, baseline, and capitals are drawn. The baseline is the top of a probe
+     * with no height, and the capitals as tall as a probe 1cap tall, which text-box trims the
+     * words to.
+     * @param {{ chip: Element, baselineProbe: Element, capitalsProbe: Element }} probed
+     */
+    const measureChip = ({ chip, baselineProbe, capitalsProbe }) => {
       const style = getComputedStyle(chip);
       const box = chip.getBoundingClientRect();
-      const insideMiddle =
-        (box.top +
-          parseFloat(style.borderTopWidth) +
-          box.bottom -
-          parseFloat(style.borderBottomWidth)) /
-        2;
-      const { baseline, capitalsMiddle } = readWords(chip);
+      const baseline = baselineProbe.getBoundingClientRect().top;
+      const capitals = capitalsProbe.getBoundingClientRect().height;
+      return {
+        chip,
+        top: box.top,
+        insideMiddle:
+          (box.top +
+            parseFloat(style.borderTopWidth) +
+            box.bottom -
+            parseFloat(style.borderBottomWidth)) /
+          2,
+        baseline,
+        capitalsMiddle: baseline - capitals / 2,
+      };
+    };
+
+    /** @param {ReturnType<typeof measureChip>} measured */
+    const listProblems = ({ top, insideMiddle, baseline, capitalsMiddle }) => {
       const offMiddle = capitalsMiddle - insideMiddle;
-      const baselineFromTop = baseline - box.top;
+      const baselineFromTop = baseline - top;
       const offWhole = baselineFromTop - Math.round(baselineFromTop);
       return [
         Math.abs(offMiddle) > MOST_OFF_PX ? `capitals ${round(offMiddle)}px off its middle` : "",
@@ -53,12 +60,27 @@ export const listChipsOffCenter = (page) =>
       ].filter(Boolean);
     };
 
-    return [...document.querySelectorAll(".chip")]
+    // Every probe goes in before any is read, so the page lays out once rather than once a chip.
+    const probed = [...document.querySelectorAll(".chip")]
       .filter((chip) => chip.checkVisibility())
-      .flatMap((chip) => {
-        const problems = listProblems(chip);
-        return problems.length
-          ? [`${chip.getAttribute("class")} "${chip.textContent?.trim()}": ${problems.join(", ")}`]
-          : [];
+      .map((chip) => {
+        const baselineProbe = createProbe("0");
+        const capitalsProbe = createProbe("1cap");
+        chip.append(baselineProbe, capitalsProbe);
+        return { chip, baselineProbe, capitalsProbe };
       });
+    const measured = probed.map(measureChip);
+    for (const { baselineProbe, capitalsProbe } of probed) {
+      baselineProbe.remove();
+      capitalsProbe.remove();
+    }
+
+    return measured.flatMap((each) => {
+      const problems = listProblems(each);
+      return problems.length
+        ? [
+            `${each.chip.getAttribute("class")} "${each.chip.textContent?.trim()}": ${problems.join(", ")}`,
+          ]
+        : [];
+    });
   });
