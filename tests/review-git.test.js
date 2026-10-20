@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findRefusal } from "../worker/review-git.mjs";
 
@@ -74,9 +77,11 @@ test("runs git with no shell, and refuses before git runs", () => {
     encoding: "utf8",
   });
   assert.match(subject, /;\$\(false\)\n$/);
+  const output = join(mkdtempSync(join(tmpdir(), "review-git-")), "out");
   assert.throws(
-    () => execFileSync("node", [script, "show", "--output=x", "HEAD"], { stdio: "pipe" }),
+    () => execFileSync("node", [script, "show", `--output=${output}`, "HEAD"], { stdio: "pipe" }),
     (/** @type {any} */ error) =>
       error.status === 2 && /refused: an option isn't one the review uses/.test(error.stderr),
   );
+  assert.equal(existsSync(output), false);
 });
