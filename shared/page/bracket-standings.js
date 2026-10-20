@@ -1,5 +1,5 @@
 import { markBarHeld, markBarStuck } from "./held-bar.js";
-import { findKeptTop } from "./kept-place.js";
+import { findKeptTop, findShortfall } from "./kept-place.js";
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
@@ -80,8 +80,9 @@ function readPartsTop() {
   return Number.isNaN(top) ? null : top;
 }
 
-/** @type {number | null} */
-let keptPartsTop = null;
+/** Where the parts started as each part's scroll last matched it, by part. */
+/** @type {WeakMap<HTMLElement, number>} */
+const keptPartsTops = new WeakMap();
 
 // Where the header rides, what's above the pill, like the Updates box or the header's lines, pads
 // the parts down as it grows, so each part scrolled keeps its rows where they are on the screen,
@@ -89,11 +90,13 @@ let keptPartsTop = null;
 // size, frame by frame as it eases, and again as the tab shows after a change while it didn't.
 function keepPartsPlace() {
   const partsTop = readPartsTop();
-  const change = keptPartsTop === null || partsTop === null ? 0 : partsTop - keptPartsTop;
-  keptPartsTop = partsTop;
-  if (change === 0) return;
-  for (const part of readOrder().map(findPart))
-    part.scrollTop = findKeptTop(part.scrollTop, change);
+  if (partsTop === null) return;
+  for (const part of readOrder().map(findPart)) {
+    const kept = keptPartsTops.get(part) ?? partsTop;
+    const wanted = findKeptTop(part.scrollTop, partsTop - kept);
+    if (partsTop !== kept) part.scrollTop = wanted;
+    keptPartsTops.set(part, partsTop - findShortfall(wanted, part.scrollTop));
+  }
 }
 
 // The pill holds once the part shown has scrolled as far as the header rides, and ends in its line
@@ -274,7 +277,7 @@ export function startBracketStandings() {
     onShow: showOn,
   });
   panels = slidePanels;
-  keptPartsTop = readPartsTop();
+  keepPartsPlace();
   slidePanels.jumpTo(readOrder().indexOf(readShownPart()));
   wireTabList(findPill(), (part) => showSeasonPart(/** @type {SeasonPart} */ (part)));
   setTabStart("bracket-standings", returnToStart);
