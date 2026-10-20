@@ -96,7 +96,7 @@ Don't run the tests: CI runs them all.
 
 ## How to report
 
-In CI, one reviewer an area looks for every item above and lists every problem it finds, each once with every place it shows.
+In CI, one reviewer an area looks for every item above and lists every problem it finds.
 One check across every area, one area too, confirms each against the code before anything is posted,
 merges repeats, weighs each, and adds what spans areas,
 and a step posts what it confirmed or left unsure.
