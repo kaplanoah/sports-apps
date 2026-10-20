@@ -192,7 +192,7 @@ export async function checkHandoffRenewal(app) {
   releaseRenewal();
   await expect.poll(readRead).toBe(5);
 
-  await page.locator("#settingsCloseBtn").click();
+  await page.locator("#settingsDialog .settings-body .sheet-close").click();
   await expect(page.locator("#appearanceNote")).toBeEmpty();
   await page.clock.runFor(15 * 60 * 1000);
   expect(await readAsked()).toBe(6);
