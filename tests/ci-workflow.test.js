@@ -408,39 +408,20 @@ test("a label change runs only the gate again once a run passed every test on th
   const check = readJob("check");
   assert.match(
     check,
-    /if: github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true'\n.*\n\s+name: ci-tested-/,
+    /github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true' &&\n\s+steps\.tested\.outputs\.reviewed == 'true'\n.*\n\s+name: ci-tested-/,
   );
   assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
 });
 
-// Tests pass on a push that reviews nothing, so whether they passed never waits on the review,
-// and a label that asks for one runs only the review.
-test("whether every test passed doesn't hang on the review", () => {
-  const tested = readJob("check").match(/TESTED: >-\n((?:\s+.*\n)+?)\s+# /)?.[1] ?? "";
-  assert.match(tested, /needs\.checks\.result == 'success'/);
-  assert.doesNotMatch(tested, /review/);
-});
-
-// A label that asks for a review skips it only where a run passed the review on exactly this
-// code. A run that wasn't asked to review, like a push's or a draft's, plans none, and a review
-// that failed doesn't count, so neither records its code as reviewed.
-test("only a run whose review passed, or that found one, records its code as reviewed", () => {
-  const passed = readJob("passed");
-  assert.match(passed, /reviewed-run: \$\{\{ steps\.reviewed\.outputs\.run \}\}/);
+// A run that wasn't asked to review, like a push's or a draft's, passes with a review still owed
+// on its code, so it never records its code for a later label to skip the review. A plan that
+// didn't finish says nothing, so it owes one too.
+test("a run that passed with a review still owed never records its code as reviewed", () => {
   assert.match(
-    passed,
-    /id: reviewed\n\s+if: github\.event_name == 'pull_request'\n(?:\s+.*\n)*?\s+run: node worker\/find-passed-ci\.mjs --reviewed\n/,
+    readJob("check"),
+    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.owed == 'false' \}\}/,
   );
-  const check = readJob("check");
-  assert.match(
-    check,
-    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.reviewed-run != '' \|\| \(needs\.review-plan\.outputs\.count != '' &&\n\s+needs\.review\.result == 'success'\) \}\}/,
-  );
-  assert.match(
-    check,
-    /github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true' &&\n\s+steps\.tested\.outputs\.reviewed == 'true'\n.*\n\s+name: ci-reviewed-/,
-  );
-  assert.ok(check.indexOf("name: ci-reviewed-") < check.indexOf("Require every job to pass"));
+  assert.match(readJob("review-plan"), /\n {6}owed: \$\{\{ steps\.decision\.outputs\.owed \}\}\n/);
 });
 
 /**
@@ -464,7 +445,7 @@ function decideReview(event) {
       EVENT: "pull_request",
       ACTION: "opened",
       LABEL: "",
-      REVIEWED_RUN: "",
+      PASSED_RUN: "",
       IS_DRAFT: "false",
       AUTHOR: "someone",
       CLAUDE_CODE_OAUTH_TOKEN: "token",
@@ -473,48 +454,59 @@ function decideReview(event) {
     },
   });
   assert.equal(status, 0, stderr);
-  return { review: readFileSync(output, "utf8").trim(), notice: stdout.trim() };
+  const written = Object.fromEntries(
+    readFileSync(output, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => line.split("=")),
+  );
+  return { review: written.review, owed: written.owed, notice: stdout.trim() };
 }
 
 // A pull request is reviewed once it's ready, and again only when the review label asks, never on
-// a push alone, so a session answers every finding in one push and then asks.
+// a push alone, so a session answers every finding in one push and then asks. A run that skips a
+// review it was never asked for still owes one.
 test("a pull request is reviewed when it's opened ready, marked ready, or labeled review, and on nothing else", () => {
   for (const event of [
     { ACTION: "opened" },
     { ACTION: "ready_for_review" },
     { ACTION: "labeled", LABEL: "review" },
   ])
-    assert.equal(decideReview(event).review, "review=true", JSON.stringify(event));
+    assert.deepEqual(
+      decideReview(event),
+      { review: "true", owed: "false", notice: "" },
+      JSON.stringify(event),
+    );
   for (const event of [
     { ACTION: "synchronize" },
     { ACTION: "reopened" },
     { ACTION: "labeled", LABEL: "phone-ok" },
     { ACTION: "labeled", LABEL: "reviewed" },
     { ACTION: "unlabeled", LABEL: "review" },
-    { EVENT: "push", ACTION: "" },
   ]) {
-    const { review, notice } = decideReview(event);
-    assert.equal(review, "review=false", JSON.stringify(event));
-    assert.match(notice, /^::notice::Nothing was reviewed: /);
+    const { review, owed, notice } = decideReview(event);
+    assert.equal(review, "false", JSON.stringify(event));
+    assert.equal(owed, "true", JSON.stringify(event));
+    assert.match(notice, /^::notice::Nothing was reviewed: a pull request is reviewed once/);
   }
+  assert.equal(decideReview({ EVENT: "push", ACTION: "" }).review, "false");
 });
 
 // Asking adds a label no run reads as a new ask once it's there, so each ask is a fresh label.
+// Only a draft still owes the review it skips; the rest never run one or already passed it.
 test("every reason not to review holds when the review is asked for", () => {
-  for (const [event, reason] of /** @type {[Record<string, string>, RegExp][]} */ ([
-    [{ REVIEWED_RUN: "7" }, /already passed its review/],
-    [{ IS_DRAFT: "true" }, /a draft is reviewed once it's ready/],
-    [{ AUTHOR: "dependabot[bot]" }, /Dependabot/],
-    [{ CLAUDE_CODE_OAUTH_TOKEN: "" }, /no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY/],
+  for (const [event, reason, owed] of /** @type {[Record<string, string>, RegExp, string][]} */ ([
+    [{ PASSED_RUN: "7" }, /already passed its review/, "false"],
+    [{ IS_DRAFT: "true" }, /a draft is reviewed once it's ready/, "true"],
+    [{ AUTHOR: "dependabot[bot]" }, /Dependabot/, "false"],
+    [{ CLAUDE_CODE_OAUTH_TOKEN: "" }, /no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY/, "false"],
   ])) {
     const asked = decideReview({ ACTION: "labeled", LABEL: "review", ...event });
-    assert.equal(asked.review, "review=false", JSON.stringify(event));
+    assert.equal(asked.review, "false", JSON.stringify(event));
+    assert.equal(asked.owed, owed, JSON.stringify(event));
     assert.match(asked.notice, reason);
   }
-  assert.match(
-    readJob("review-plan"),
-    /REVIEWED_RUN: \$\{\{ needs\.passed\.outputs\.reviewed-run \}\}/,
-  );
+  assert.match(readJob("review-plan"), /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
 });
 
 // Each ask is a fresh label, which GitHub sends only when the label isn't on the pull request, so
@@ -658,7 +650,7 @@ test("the areas are reviewed with the matrix the plan writes, each area as a uni
     ...plan
       .split(/^ {4}outputs:$/m)[1]
       .split(/^ {4}steps:$/m)[0]
-      .matchAll(/^ {6}([a-z-]+):/gm),
+      .matchAll(/^ {6}([a-z-]+): \$\{\{ steps\.plan\./gm),
   ].map(([, output]) => output);
   assert.deepEqual(handed, written);
   for (const output of written)

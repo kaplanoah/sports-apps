@@ -30,7 +30,6 @@ import {
  * @typedef {{ weight: string, path: string, line: number, body: string }} Finding
  */
 
-
 /** @typedef {(path: string, request?: { method?: string, body?: unknown }) => Promise<any>} CallGitHub */
 
 // The weights posted together in one comment, rather than a thread each.

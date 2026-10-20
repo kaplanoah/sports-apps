@@ -28,8 +28,7 @@ concurrency:
 jobs:
   # On main, a pull request's CI that passed on exactly this code has already run every check, so
   # they're skipped. A label change brings no new code, so once a run passed every test on exactly
-  # this code, only the gate runs again, and the review when the label asks for one and no run
-  # passed it on exactly this code (worker/find-passed-ci.mjs).
+  # this code with no review owed, only the gate runs again (worker/find-passed-ci.mjs).
   passed:
     if: github.event_name == 'push' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     runs-on: ubuntu-latest
@@ -39,7 +38,6 @@ jobs:
       actions: read
     outputs:
       run: ${{ steps.find.outputs.run }}
-      reviewed-run: ${{ steps.reviewed.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -55,12 +53,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SEARCH: ${{ github.event_name == 'pull_request' && '--tested' || '' }}
         run: node worker/find-passed-ci.mjs $SEARCH
-      - name: Find the CI run that passed its review on this code
-        id: reviewed
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node worker/find-passed-ci.mjs --reviewed
 
   # A red change merges only once the owner has used it on the beta app and labeled it phone-ok
   # (worker/red-change.mjs), which reads the pull request's timeline for who added the label, and
@@ -441,6 +433,7 @@ jobs:
       contents: read
       pull-requests: write
     outputs:
+      owed: ${{ steps.decision.outputs.owed }}
       stage: ${{ steps.plan.outputs.stage }}
       areas: ${{ steps.plan.outputs.areas }}
       area-numbers: ${{ steps.plan.outputs.area-numbers }}
@@ -452,7 +445,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           ACTION: ${{ github.event.action }}
           LABEL: ${{ github.event.label.name }}
-          REVIEWED_RUN: ${{ needs.passed.outputs.reviewed-run }}
+          PASSED_RUN: ${{ needs.passed.outputs.run }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -463,19 +456,23 @@ jobs:
             *) asked=false ;;
           esac
           reason=""
+          owed=false
           if [ "$EVENT" != "pull_request" ]; then
             reason="only pull requests are reviewed"
-          elif [ "$asked" != "true" ]; then
-            reason="a pull request is reviewed once it's ready, and again only when it's labeled $REVIEW_LABEL"
-          elif [ -n "$REVIEWED_RUN" ]; then
-            reason="a run on exactly this code already passed its review"
-          elif [ "$IS_DRAFT" = "true" ]; then
-            reason="a draft is reviewed once it's ready for review"
           elif [ "$AUTHOR" = "dependabot[bot]" ]; then
             reason="Dependabot's pull requests aren't reviewed"
           elif [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
             reason="there's no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY secret"
+          elif [ "$asked" != "true" ]; then
+            reason="a pull request is reviewed once it's ready, and again only when it's labeled $REVIEW_LABEL"
+            owed=true
+          elif [ -n "$PASSED_RUN" ]; then
+            reason="a run on exactly this code already passed its review"
+          elif [ "$IS_DRAFT" = "true" ]; then
+            reason="a draft is reviewed once it's ready for review"
+            owed=true
           fi
+          echo "owed=$owed" >> "$GITHUB_OUTPUT"
           if [ -n "$reason" ]; then
             echo "::notice::Nothing was reviewed: $reason."
             echo "review=false" >> "$GITHUB_OUTPUT"
@@ -730,22 +727,21 @@ jobs:
       contents: read
     steps:
       # Every test passed when passed found a run that passed them on exactly this code, or when
-      # every test job passed, the browser tests only where the change reaches them.
+      # every job but the gate passed, the browser tests only where the change reaches them.
       - name: Tell whether every test passed
         id: tested
         env:
           TESTED: >-
             ${{ needs.passed.outputs.run != '' || (needs.checks.result == 'success' &&
-            needs.scope.result == 'success' &&
+            needs.scope.result == 'success' && needs.review.result == 'success' &&
             (needs.scope.outputs.apps == '' || (needs.browser.result == 'success' &&
             needs.webkit.result == 'success')) &&
             (needs.scope.outputs.specs == '' || needs.burn-in.result == 'success')) }}
-          # The review passed on this code when passed found a run it passed on, or when this run
-          # planned one and it passed. A run that wasn't asked to review, like a push's or a
-          # draft's, plans none, so it never stands in for one.
+          # A run that wasn't asked to review, like a push's or a draft's, passes while a review is
+          # still owed on its code, so it doesn't stand in for one. Any other run reviewed, or
+          # skips a review that would never run or already passed.
           REVIEWED: >-
-            ${{ needs.passed.outputs.reviewed-run != '' || (needs.review-plan.outputs.count != '' &&
-            needs.review.result == 'success') }}
+            ${{ needs.passed.outputs.run != '' || needs.review-plan.outputs.owed == 'false' }}
         run: |
           echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
           echo "reviewed=$REVIEWED" >> "$GITHUB_OUTPUT"
@@ -766,10 +762,9 @@ jobs:
           required=$(gh api "repos/$REPO/rules/branches/main" --jq 'any(.[]; .type == "required_status_checks" and any(.parameters.required_status_checks[]?; .context == $ENV.PHONE_CONTEXT))')
           echo "Main's rules require the phone status: $required"
           echo "required=$required" >> "$GITHUB_OUTPUT"
-      # Records the code this pull request's checks passed on: once every test passed, so a label
-      # change runs only the gate again, and the review when it's asked for; once the review passed
-      # too, so asking again on the same code reviews nothing; and once the gate let it through too,
-      # so that once it merges, main deploys at once if it has exactly that code
+      # Records the code this pull request's checks passed on: once every test passed with no
+      # review owed, so a label change runs only the gate again, and once the gate let it through
+      # too, so that once it merges, main deploys at once if it has exactly that code
       # (worker/find-passed-ci.mjs).
       - name: Record the code the checks ran on
         id: code
@@ -778,17 +773,11 @@ jobs:
           git rev-parse HEAD > passed-commit.txt
           echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true'
-        with:
-          name: ci-tested-${{ steps.code.outputs.tree }}
-          path: passed-commit.txt
-          retention-days: 14
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: >-
           github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true' &&
           steps.tested.outputs.reviewed == 'true'
         with:
-          name: ci-reviewed-${{ steps.code.outputs.tree }}
+          name: ci-tested-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
       - name: Require every job to pass
