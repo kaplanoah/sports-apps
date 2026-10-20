@@ -1,8 +1,9 @@
-import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { IPHONE } from "../../../../tests/browser/devices.mjs";
+import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp } from "./harness.mjs";
-import { PHONE, WELCOME, CONTINUE, openSettings } from "./home-screen.mjs";
+import { PHONE, CONTINUE, openSettings } from "./home-screen.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -40,7 +41,7 @@ const listWelcomeSteps = (page) => page.locator(`${WELCOME} .welcome-steps > li:
 const PICK_STEP = "Pick your theme You can change it later in Settings System Maple Walnut";
 
 test.describe("on an iPhone, in the browser", () => {
-  test.use({ ...PHONE, userAgent: IPHONE_AGENT });
+  test.use(IPHONE);
 
   test("the page opens on the welcome, which picks a theme and says how to add the page to the Home Screen", async ({
     page,
@@ -48,7 +49,7 @@ test.describe("on an iPhone, in the browser", () => {
     await openApp(page, { isShowingWelcome: true });
     const welcome = page.locator(WELCOME);
     await expect(welcome).toBeVisible();
-    await expect(welcome.getByRole("heading")).toHaveText("Add WNBA to your Home Screen");
+    await expect(welcome.getByRole("heading")).toHaveText("Add WNBA to your home screen");
     await expect(listWelcomeSteps(page)).toHaveText([
       PICK_STEP,
       "Tap Share",
@@ -74,16 +75,6 @@ test.describe("on an iPhone, in the browser", () => {
   test("each step's number sits in the middle of its circle", async ({ page }) => {
     await openApp(page, { isShowingWelcome: true });
     expect(Math.abs(await measureStepNumbers(page))).toBeLessThan(MIDDLE_ALLOWANCE);
-  });
-
-  test("the heading opens the welcome's room", async ({ page }) => {
-    await openApp(page, { isShowingWelcome: true });
-    const headingGap = await page.locator(WELCOME).evaluate((welcome) => {
-      const roomTop =
-        welcome.getBoundingClientRect().top + parseFloat(getComputedStyle(welcome).paddingTop);
-      return welcome.querySelector(".welcome-title").getBoundingClientRect().top - roomTop;
-    });
-    expect(headingGap).toBe(0);
   });
 
   // An iPhone's bottom inset, which keeps its home bar clear, is 34px, and Android's Chrome has none.
@@ -198,7 +189,7 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(page.locator(WELCOME)).toBeHidden();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toHaveText(
-      "Use this site like an app Tap Share, then Add to Home Screen. It opens full screen, without the browser's bars.",
+      "Use this site like an app Tap Share then Add to Home Screen. It'll open full screen, without the browser's bars.",
       { useInnerText: true },
     );
   });
@@ -278,7 +269,7 @@ test.describe("on an Android phone, in the browser", () => {
     await page.locator(WELCOME).getByRole("button", CONTINUE).click();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toHaveText(
-      "Use this site like an app Tap Menu, then Add to Home screen. It opens full screen, without the browser's bars.",
+      "Use this site like an app Tap Menu then Add to Home screen. It'll open full screen, without the browser's bars.",
       { useInnerText: true },
     );
   });
@@ -295,7 +286,7 @@ test.describe("on an Android phone, in the browser", () => {
     await page.locator(WELCOME).getByRole("button", CONTINUE).click();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toHaveText(
-      "Use this site like an app It opens full screen, without the browser's bars INSTALL",
+      "Use this site like an app It'll open full screen, without the browser's bars INSTALL",
       { useInnerText: true },
     );
     expect(await listStrayPeriods(page)).toEqual([]);
@@ -320,7 +311,7 @@ test.describe("on an Android phone, in the browser", () => {
     await openSettings(page);
     await page.locator("#homeScreenTip").getByRole("button", { name: "Install" }).click();
 
-    await expect(page.locator("#homeScreenTip")).toContainText("Tap Menu, then Add to Home screen");
+    await expect(page.locator("#homeScreenTip")).toContainText("Tap Menu then Add to Home screen");
     await expect(page.locator("#homeScreenTip").getByRole("button")).toHaveCount(0);
     expect(await page.evaluate(() => /** @type {any} */ (window).installShown)).toBe(1);
   });

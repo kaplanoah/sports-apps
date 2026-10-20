@@ -1,17 +1,18 @@
 // The page's asks to be added to the Home Screen, which only a phone's or tablet's browser shows:
 // the welcome over the whole screen that it opens on, until the viewer adds the page or goes on in
-// the browser, and the box at the bottom of settings, which keeps the steps. Modules run only once
+// the browser, and the box at the top of settings, which keeps the steps. Modules run only once
 // all of them have loaded, so a welcome they drew would arrive over a page already painted. This
 // plain script loads in the head, and the page calls drawHomeScreenAsks() right after its
 // settings, before anything is painted, and it answers the welcome's own taps from then on, so they
-// work while the modules still load. home-screen.js runs Chrome's Install in both.
+// work while the modules still load. home-screen.js runs Chrome's Install in both, and slides the
+// welcome closed as settings closes.
 
 /* global isOnHomeScreen, WELCOME_CLOSED_KEY -- from pick-theme.js */
 /* global keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
 /* global readStored -- from open-last-tab.js */
 
 const TIP_TITLE = "Use this site like an app";
-const BENEFIT = "It opens full screen, without the browser's bars";
+const BENEFIT = "It'll open full screen, without the browser's bars";
 
 // The browser's own Share and menu buttons, copied so people find them.
 const SHARE_GLYPH = `<svg
@@ -27,7 +28,7 @@ const SHARE_GLYPH = `<svg
   <path d="M8.75 9.25H7.25a3 3 0 0 0-3 3v7a3 3 0 0 0 3 3h9.5a3 3 0 0 0 3-3v-7a3 3 0 0 0-3-3h-1.5" />
   <path d="M12 15.25V2.5M8.5 6 12 2.5 15.5 6" />
 </svg>`;
-const MENU_GLYPH = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+const MENU_GLYPH = `<svg class="menu-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
   <circle cx="12" cy="5" r="2" />
   <circle cx="12" cy="12" r="2" />
   <circle cx="12" cy="19" r="2" />
@@ -67,8 +68,8 @@ const listBrowserSteps = (isOnIos) =>
 /** @param {boolean} isOnIos */
 const writeTipSteps = (isOnIos) =>
   isOnIos
-    ? `Tap ${SHARE_GLYPH} <b>Share</b>, then <b>Add to Home Screen</b>. ${BENEFIT}.`
-    : `Tap ${MENU_GLYPH} <b>Menu</b>, then <b>Add to Home screen</b>. ${BENEFIT}.`;
+    ? `Tap ${SHARE_GLYPH} <b>Share</b> then <b>Add to Home Screen</b>. ${BENEFIT}.`
+    : `Tap ${MENU_GLYPH} <b>Menu</b> then <b>Add to Home screen</b>. ${BENEFIT}.`;
 
 // The appearance choices settings shows, as the welcome's first step, kept apart from them.
 function copyThemeChoices() {
@@ -89,7 +90,16 @@ function drawWelcome(isOnIos) {
   const welcome = /** @type {HTMLDialogElement} */ (document.getElementById("homeScreenWelcome"));
   const [shareStep, addStep] = listBrowserSteps(isOnIos);
   welcome.replaceChildren(
-    ...parseMarkup(`<h1 class="gate-title welcome-title" id="welcomeTitle"></h1>
+    ...parseMarkup(`<button type="button" class="welcome-close">
+        <!-- Phosphor's caret-down, at its Light weight. -->
+        <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+          <path
+            d="M212.24,100.24l-80,80a6,6,0,0,1-8.48,0l-80-80a6,6,0,0,1,8.48-8.48L128,167.51l75.76-75.75a6,6,0,0,1,8.48,8.48Z"
+          />
+        </svg>
+        <span class="sheet-close-label">Close</span>
+      </button>
+      <h1 class="gate-title welcome-title" id="welcomeTitle"></h1>
       <ol class="welcome-steps">
         <li>
           <span class="welcome-step" id="welcomePickTitle">Pick your theme</span>
@@ -109,7 +119,7 @@ function drawWelcome(isOnIos) {
   );
   const appName = document.querySelector('meta[name="apple-mobile-web-app-title"]');
   welcome.querySelector(".welcome-title").textContent =
-    `Add ${appName.getAttribute("content")} to your Home Screen`;
+    `Add ${appName.getAttribute("content")} to your home screen`;
   welcome.querySelector(".welcome-step-body").append(copyThemeChoices());
   return welcome;
 }
@@ -120,9 +130,17 @@ function wireWelcome(welcome) {
   welcome.addEventListener("change", (event) =>
     keepPickedAppearance(/** @type {HTMLInputElement} */ (event.target).value),
   );
-  welcome.querySelector(".welcome-continue").addEventListener("click", () => welcome.close());
-  // Continue in browser, Escape, and Android's back all close it, and it stays closed.
+  // Its buttons ask to close it as Escape does: home-screen.js takes the ask and slides it down, and
+  // until it loads, nothing does, so it closes at once.
+  const askToClose = () => {
+    if (welcome.dispatchEvent(new Event("cancel", { cancelable: true }))) welcome.close();
+  };
+  welcome.querySelector(".welcome-continue").addEventListener("click", askToClose);
+  welcome.querySelector(".welcome-close").addEventListener("click", askToClose);
+  // Continue in browser, the caret, Escape, and Android's back all close it, and it stays closed.
   welcome.addEventListener("close", keepWelcomeClosed);
+  // Opened again from settings, it rises, even when it closed before the modules arrived.
+  welcome.addEventListener("close", () => welcome.removeAttribute("data-reopened"));
 }
 
 /** @param {boolean} isOnIos */
@@ -149,5 +167,9 @@ function drawHomeScreenAsks() {
   drawTip(isOnIos);
   const welcome = drawWelcome(isOnIos);
   wireWelcome(welcome);
-  if (readStored(WELCOME_CLOSED_KEY) !== "closed") welcome.showModal();
+  if (readStored(WELCOME_CLOSED_KEY) === "closed") return;
+  // It shows before the first paint, so it's already there, and doesn't rise as it does from
+  // settings.
+  welcome.setAttribute("data-reopened", "");
+  welcome.showModal();
 }

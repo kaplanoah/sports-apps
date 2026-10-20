@@ -11,6 +11,7 @@ declare function keepPickedAppearance(choice: string): void;
 declare function openThemeAddress(choice: string): void;
 declare function buildSafariAddress(choice: string, address: string): string;
 declare const WELCOME_CLOSED_KEY: string;
+declare function forgetWelcomeClosed(): void;
 declare function readStored(key: string): string | null;
 declare function followSeasonPart(part?: HTMLElement): void;
 declare function listAboveSeasonView(): HTMLElement[];

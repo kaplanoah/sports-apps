@@ -140,7 +140,7 @@
   inset: 0;
   overflow: hidden auto;
   overscroll-behavior-y: none;
-  padding: 0 18px max(22px, env(safe-area-inset-bottom));
+  padding: 0 var(--sheet-side) max(22px, env(safe-area-inset-bottom));
 }
 /* Only what's shown is drawn at rest: a sheet under another, or a section beside the shown one,
    shows only while a finger or a slide moves them, as slide-panels.js reveals them. */
@@ -151,15 +151,15 @@
 .sheet-page[hidden] {
   display: none;
 }
-/* A sheet looks the same on every screen: its title centered at one size over 18px sides. Only its
+/* A sheet looks the same on every screen: its title centered at one size over its sides. Only its
    shape differs. */
 .sheet-content {
   --head-height: 64px;
-  padding: 0 18px max(22px, env(safe-area-inset-bottom));
+  padding: 0 var(--sheet-side) max(22px, env(safe-area-inset-bottom));
 }
 .sheet-content .sheet-top {
-  margin-inline: -18px;
-  padding-inline: 18px;
+  margin-inline: calc(-1 * var(--sheet-side));
+  padding-inline: var(--sheet-side);
 }
 /* A sheet's sections are named by pills under its title. */
 .sheet-top .pager-tabs {
