@@ -36,7 +36,8 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   A PR that does only part of it says "Part of #N" and comments on the issue with what's left.
 - A PR's description names work outside it only by its issue.
 - Flaky browser tests and each app's outage and no-code issues belong to their workflows, which find each by its title and read the flaky table back from its body: never edit or close one by hand.
-- No labels, milestones, or projects.
+- No labels, milestones, or projects on an issue.
+  Labels like `beta` and `phone-ok` are for PRs.
 
 ## The beta channel
 
@@ -44,28 +45,64 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
   key, and address, whose page says beta on the Home Screen and in settings' version line (the root's `worker/build.mjs`),
   and in a tag beside the app's name, with the commit it runs and how long ago that went live (`shared/page/channel-tag.js`).
-  A push to the `beta` branch deploys it at once, with the same checks and rollback as `main`'s deploy.
-  To use a PR's change on the owner's phone before it merges, reset `beta` to the PR's branch and push (`git push -f origin <branch>:beta`),
-  wait for that push's Deploy run to say `worker check: ok` for each app, and tell the user to use the beta app on the Home Screen.
+  A push to the `beta` branch deploys it at once, with the same checks and rollback as `main`'s deploy,
+  but only when the pushed commit is the head of the PR that holds beta (the root's `worker/beta-claim.mjs`).
   Each of `deploy:api`, `rollback`, `set-app-key`, `set-access-code`, and `set-page-host` takes `--channel beta`.
+- Beta holds one PR at a time, while the owner tests it on the phone.
+  A PR claims beta with the `beta` label, and of the open PRs labeled `beta`, the one labeled first holds it.
+  A PR waiting for beta has the `beta-wait` label, and the one labeled first has waited longest.
+  On every PR event, the `Beta` workflow (`.github/workflows/beta.yml`) takes `beta` off a PR that closed, was pushed after its label, or got `phone-ok` after it,
+  and off every PR but the one that holds beta, which it puts in line with `beta-wait`.
+  Once beta is free, it comments on the PR that has waited longest, which wakes its session: "Beta is free, and this pull request has waited longest."
+  A claim has no time limit, since the owner is the only tester.
+- Change a PR's labels one at a time, never by setting its whole list, which would drop `phone-ok` or `review`:
+  `gh pr edit <number> --add-label beta` or `--remove-label beta`, and the same for `beta-wait`.
+  See who holds beta with `gh pr list --label beta --state open`, and who waits with `gh pr list --label beta-wait --state open`.
+  Where a session has no `gh`, GitHub's issue tool sets a PR's whole label list, so read its labels just before and write them back with only the one change.
+- To put a PR on beta:
+  1. Merge `main` into its branch and push the branch, so the commit the owner tests is the one that merges,
+     since a PR merges while behind `main` as long as it has no conflicts.
+     A push gives beta up, so it comes before the claim.
+  2. Take `beta` off the PR if it still has it from before that push, since adding a label a PR already has changes nothing.
+  3. Add `beta` to the PR.
+  4. Confirm the PR holds beta: it does once it's the only open PR labeled `beta`.
+     While another still has it, wait a minute for the `Beta` workflow and look again.
+     If the workflow took `beta` off the PR and added `beta-wait`, beta is held: see the next bullet.
+  5. Take `beta-wait` off the PR if it has it, only now: taking it off first would tell the next in line, who would then lose the race.
+  6. Push to beta: `git push -f origin <branch>:beta`.
+  7. Wait for that push's Deploy run to say `worker check: ok` for each app, and tell the owner to use the beta app on the Home Screen.
+     Name the commit the beta tag at the top of the app should show, so a build swapped since is plain to see.
+- If beta is held, add `beta-wait` to the PR if the workflow hasn't, stay subscribed to the PR, and stop.
+  The last message to the owner names the PR holding beta, with its link,
+  and says the owner can say "put this on beta now" to take it.
+  When the workflow's comment says beta is free, put the PR on beta from step 1.
+- When the owner says "put this on beta now", take `beta` off the PR that holds it and add `beta-wait` to it, which puts it at the back of the line,
+  then put this PR on beta from step 1.
+  This is the only time a session changes another PR's labels, and only on the owner's word.
+  If the workflow tells another waiter in between, that waiter finds beta held and goes back in line.
+- A PR gives beta up as it closes or merges, as its branch is pushed, and as the owner adds `phone-ok`, and the workflow takes the label off.
+  Take `beta` off yourself when going back to work without a push yet, as when the owner's test found a problem,
+  and when the owner is done testing a PR that isn't red, which never gets `phone-ok`.
+  Take off both `beta` and `beta-wait` before saying the work is done.
 
 ## Red changes
 
-- Take a red change to its branch and PR, deploy it to beta once its CI passes, as "The beta channel" above says,
+- Take a red change to its branch and PR, put it on beta once its CI passes, as "The beta channel" above says,
   and stop there: tell the user what to use on the phone, and wait, keeping to steps 4 to 6 of AGENTS.md's list meanwhile.
   Its PR stays a draft while the owner tries its design on beta:
   CI tests a draft, and beta deploys it, as for any PR, but CI reviews it only once it's ready for review.
-  Once the owner says the design is the one to keep, mark the PR ready for review, which starts its first full review,
-  go on to step 7 and answer the review, and then deploy its reviewed head to beta for the owner's `phone-ok`.
+  Once the owner says the design is the one to keep, take `beta` off, since answering the review is going back to work,
+  mark the PR ready for review, which starts its first full review,
+  go on to step 7 and answer the review, and then put its reviewed head on beta for the owner's `phone-ok`.
   When you ask the owner to add `phone-ok`, link the PR in the same message.
   Never add `phone-ok`.
-  Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push.
+  Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push and gives beta up.
   A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
-  so deploy it to beta and ask.
-  Merge `main` into the branch just before each deploy to beta, so the commit the owner labels is the one that merges, since a PR merges while behind `main` as long as it has no conflicts.
+  so put it on beta again and ask.
 - One red change goes live per deploy.
-  Until a red change on beta has merged and its deploy has finished, or its PR has closed unmerged,
-  no other red PR merges, and none replaces it on beta.
+  From a red PR's push to beta until it has merged and its deploy has finished, or it has closed unmerged, no other red PR merges.
+  This rule outlasts the claim, which ends at `phone-ok`:
+  a red PR tested on beta can merge behind `main`, so had another red PR merged first, the tested commit never had it.
 
 ## Step 4: conflicts
 
@@ -136,6 +173,10 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 - The run was skipped:
   CI failed on `main`.
   Read the CI log, fix the failure in a new PR, and start again at step 1.
+- A run for a push to beta says "so nothing was deployed to beta": the pushed commit isn't the head of the PR that holds beta,
+  or GitHub couldn't say which PR does, so beta keeps the build it had.
+  The line names the PR holding beta and when it took it.
+  Put the PR on beta by the steps under The beta channel above.
 - It says "No CLOUDFLARE_API_TOKEN": the channel's environment has no Cloudflare token, so nothing was deployed.
   Tell the user.
 - The run failed: read the log.

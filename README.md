@@ -376,13 +376,22 @@ Each app also has a beta Worker, `<app>-app-beta`, named in the `[env.beta]` of
 its `wrangler.toml`, with its own store, key, and address. Its page names itself
 "beta" on the Home Screen, in its settings' version line, and in a tag beside its
 name with the commit it runs and how long ago that went live, so it can sit beside
-the real one. To use a pull request's change on the phone before it merges:
+the real one. Beta holds one pull request at a time: the one labeled `beta`
+first. Others wait in line with `beta-wait`, and the `Beta` workflow comments on
+the one that has waited longest once beta is free. To use a pull request's
+change on the phone before it merges:
 
-1. Reset `beta` to the pull request's branch and push it:
+1. Merge `main` into its branch, push the branch, and label the pull request
+   `beta`. Once it's the only open pull request labeled `beta`, it holds beta.
+2. Reset `beta` to the pull request's branch and push it:
    `git push -f origin <branch>:beta`.
-2. Wait for the Deploy run for that push to finish. It deploys the beta Workers
-   at once, with the same checks and rollback as `main`'s deploy.
-3. Open the beta app from the Home Screen and use the change.
+3. Wait for the Deploy run for that push to finish. It deploys the beta Workers
+   at once, with the same checks and rollback as `main`'s deploy, and deploys
+   nothing for a commit that isn't the head of the pull request holding beta.
+4. Open the beta app from the Home Screen and use the change.
+
+A pull request gives beta up as it closes or merges, as its branch is pushed,
+and as it's labeled `phone-ok`.
 
 Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`,
 in Cloudflare's dashboard, since the `beta` token can change only the Workers it
