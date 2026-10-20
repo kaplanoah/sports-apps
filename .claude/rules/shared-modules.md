@@ -173,7 +173,7 @@ paths:
   `game-search.css` the search's view, `game-row.css` lays out a game row and colors an All-Star team's star,
   `sheet.css` a sheet a tap opens, like MLB's pitching matchup,
   with its face-off rows and line of channels, titled parts, status chips,
-  and meetings and a player's facts,
+  the meetings of a season series, and a player's facts,
   `team-sheet.css` a team's sheet and the buttons that open a team's or a player's sheet,
   `row-button.css` a table's row that opens wherever it's tapped,
   `game-cards.css` the cards of its nearest games, `updates.css` the Updates box,
