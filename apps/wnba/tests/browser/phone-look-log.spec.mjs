@@ -56,9 +56,32 @@ test("with Diagnostics on, the page leaving the screen is kept on the device as 
     };
   });
 
-  const line = "the page left the screen; reads light, shows light";
+  const line = "the page left the screen; reads light, shows light, stylesheet light";
   expect(kept.log).toContain(line);
   expect(kept.records).toContain(line);
+});
+
+test("with Diagnostics on, each page step names the look the stylesheets see, which follows the phone's setting", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await reloadAndRecord(page);
+
+  await setHidden(page, true);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await setHidden(page, false);
+  await page.clock.runFor(100);
+  await openSettings(page);
+
+  const log = findRecords(page).locator(".diagnostics-record", { hasText: "Phone look" });
+  await log.locator("summary").click();
+  await expect(log.locator("li", { hasText: "the page left the screen" }).last()).toContainText(
+    "the page left the screen; reads light, shows light, stylesheet light",
+  );
+  await expect(log.locator("li", { hasText: "the page came back" }).last()).toContainText(
+    "the page came back; reads dark, shows dark, stylesheet dark",
+  );
 });
 
 test("with Diagnostics on, the page coming back is among the steps of the return's own record", async ({

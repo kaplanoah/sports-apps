@@ -73,10 +73,10 @@ paths:
         whether the page's code took it from the browser, whether the browser cancelled its pointer,
         and how far the part under it scrolled, and each click on them
       - `phone-look-log.js`: each change the phone reports of its light or dark look,
-        what the page reads of it then and a task later,
+        with what the page reads of it then and a task later,
         and each time the page leaves the screen, comes back, or loses or gets focus,
-        with the look it reads and the theme it shows then,
-        also among the steps of the open or return under way
+        with the look it reads, the theme it shows, and the look the stylesheets see then (`diagnostics.css`).
+        Each line also joins the steps of the open or return under way.
       - `error-log.js`: each error the page's code doesn't catch
   - The Home Screen welcome and theme:
     - `draw-home-screen-asks.js`: the welcome over the whole screen that a phone's or tablet's browser opens on,
