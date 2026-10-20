@@ -281,7 +281,7 @@
   --game-card-won: var(--result);
   --game-card-team-font: var(--team-name);
   --game-row-height: 90px;
-  --game-side-offset: 9px;
+  --game-side-offset: 9.25px;
   --game-label-offset: -32px;
   --game-headline-offset: 0px;
   --game-status-offset: 32px;
@@ -693,9 +693,11 @@ header.top h1 .title-letter:nth-child(3) {
 .game-side.lost .club {
   color: var(--ink-dim);
 }
+/* Bonus's line, with --game-side-offset, keeps each team level with the score and Bonus on a whole
+   pixel of its row. */
 .game-extra {
   min-height: 15px;
-  margin-top: 4px;
+  margin-top: 3.5px;
 }
 .game-middle {
   min-width: 76px;
