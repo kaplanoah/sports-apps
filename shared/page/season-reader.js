@@ -3,8 +3,7 @@ import { isSameJson } from "./compare.js";
 // Reads a league's season from the store, which says which season is current, so a page never goes
 // by its own clock, and pushes each change to the season's record. A page showing the current
 // season moves on to the next one when the store does. Each season a viewer picks is kept while its
-// record is on its way, and, once no read is out, put back on the season the page shows when it
-// can't be read or the page's own load takes its place.
+// record is on its way, and put back on the season shown when it can't be read.
 
 const CURRENT_PATH = "live/current";
 const STATUS_PATH = "live/status";
@@ -62,36 +61,11 @@ export function createSeasonReader({
   // The record as the store last answered, whether or not the page reads it.
   /** @type {any} */
   let lastRecord = null;
-  // The shown season's latest record while another's is on its way, kept for a read that fails, and
-  // whether the store moved on from the shown season meanwhile.
+  // The shown season's latest record while another's is on its way, kept for a read that fails.
   /** @type {any} */
   let heldRecord = null;
-  let isMoveOnOwed = false;
-  // How many reads are out, a load of the current season counting from its read of which that is,
-  // and what waits for none to be.
-  let readsOut = 0;
-  /** @type {(() => void)[]} */
-  let settledWaiters = [];
   let unwatchSeason = () => {};
   let isFollowing = false;
-
-  /**
-   * @template T
-   * @param {() => Promise<T>} read
-   */
-  async function countRead(read) {
-    readsOut++;
-    try {
-      return await read();
-    } finally {
-      readsOut--;
-      if (readsOut === 0) {
-        const waiters = settledWaiters;
-        settledWaiters = [];
-        for (const waiter of waiters) waiter();
-      }
-    }
-  }
 
   /** @param {string} path */
   async function readDoc(path) {
@@ -150,15 +124,12 @@ export function createSeasonReader({
   }
 
   // A season that can't be read leaves the page on the season it shows, with any change to it that
-  // came while the read was out, and moves it on to a new current season the store named meanwhile.
+  // came while the read was out.
   function stayOnShownYear() {
     askedYear = shownYear;
     const record = heldRecord;
     heldRecord = null;
     if (shownYear !== null && record !== null) showRecord(shownYear, record);
-    if (!isMoveOnOwed) return;
-    isMoveOnOwed = false;
-    showCurrentYear().catch(showLoadFailure);
   }
 
   /**
@@ -167,45 +138,34 @@ export function createSeasonReader({
    * @param {number} year
    * @param {any} [readRecord] the record, when it has just been read
    */
-  function showYear(year, readRecord) {
-    return countRead(async () => {
-      askedYear = year;
-      let season;
-      try {
-        season = readRecord ?? (await readDoc(nameSeasonPath(year)));
-      } catch (error) {
-        if (askedYear === year) stayOnShownYear();
-        throw error;
-      }
-      if (year !== askedYear) return;
-      shownYear = year;
-      heldRecord = null;
-      isMoveOnOwed = false;
-      lastRecord = season;
-      keepSeason(year, isReadable(season) ? season : null);
-      watchSeason(year);
-    });
+  async function showYear(year, readRecord) {
+    askedYear = year;
+    let season;
+    try {
+      season = readRecord ?? (await readDoc(nameSeasonPath(year)));
+    } catch (error) {
+      if (askedYear === year) stayOnShownYear();
+      throw error;
+    }
+    if (year !== askedYear) return;
+    shownYear = year;
+    heldRecord = null;
+    lastRecord = season;
+    keepSeason(year, isReadable(season) ? season : null);
+    watchSeason(year);
   }
 
-  async function showCurrentYear() {
-    const year = /** @type {number} */ (currentYear);
+  /** @param {number} year */
+  async function moveOnToYear(year) {
+    const wasShowingCurrent = askedYear === currentYear;
+    currentYear = year;
     try {
+      if (!wasShowingCurrent) return;
       await showYear(year);
       showChange();
     } finally {
       noteCurrentYear(year);
     }
-  }
-
-  // A page asking for the current season moves on with the store. One showing it while a picked
-  // season's read is out moves on only if that read fails.
-  /** @param {number} year */
-  async function moveOnToYear(year) {
-    const isAskingCurrent = askedYear === currentYear;
-    isMoveOnOwed ||= !isAskingCurrent && shownYear === currentYear;
-    currentYear = year;
-    if (isAskingCurrent) return showCurrentYear();
-    noteCurrentYear(year);
   }
 
   function followStore() {
@@ -228,11 +188,9 @@ export function createSeasonReader({
   // or moved on to a new season.
   async function loadCurrentSeason() {
     try {
-      await countRead(async () => {
-        const { year, record } = await readCurrentSeason();
-        currentYear = year;
-        await showYear(year, record);
-      });
+      const { year, record } = await readCurrentSeason();
+      currentYear = year;
+      await showYear(year, record);
     } finally {
       followStore();
     }
@@ -247,36 +205,22 @@ export function createSeasonReader({
     readCurrentYear: () => currentYear,
     /** The season whose record the page shows, or null before one has loaded. */
     readShownYear: () => shownYear,
-    /**
-     * Resolves once no read is out, so what the page shows has settled.
-     * @returns {Promise<void>}
-     */
-    waitForReads: () =>
-      readsOut === 0
-        ? Promise.resolve()
-        : new Promise((resolve) => settledWaiters.push(() => resolve(undefined))),
   };
 }
 
 /**
- * How a pick ended, and the season it leaves picked, null before any season has loaded.
- * @typedef {object} PickOutcome
- * @property {"shown" | "replaced" | "unread" | "overtaken"} kind its season shown, a newer pick
- *   taking its place, its record unread, or the page's own load taking its place, as the page
- *   loading the current season again on its return
- * @property {number | null} year
+ * @typedef {"shown" | "replaced" | "unread"} PickOutcome how a pick ended: its season shown, a
+ *   newer pick taking its place, or its record unread
  */
 
 /**
  * Shows each season a viewer picks with `reader`, keeping the pick with `keepPick` while its record
- * is on its way. Each pick settles only once the reader has no read out, as when the page's own
- * load of the current season is out too. A pick the page doesn't then show, unless a newer pick has
- * taken its place, keeps the season the page shows instead, or, before one has loaded, the pick
- * before the picks still on their way. One whose record couldn't be read, with nothing else shown
- * meanwhile, says the store can't be reached with `noteUnreachable`.
+ * is on its way. A pick whose record can't be read, unless a newer one has taken its place, keeps
+ * the season the page shows instead, or, before one has loaded, the pick before the picks still on
+ * their way, and says the store can't be reached with `noteUnreachable`.
  * @template {number | null} PickedYear
  * @param {{
- *   reader: Pick<ReturnType<typeof createSeasonReader>, "showYear" | "readShownYear" | "waitForReads">,
+ *   reader: Pick<ReturnType<typeof createSeasonReader>, "showYear" | "readShownYear">,
  *   readPick: () => PickedYear,
  *   keepPick: (year: PickedYear | number) => void,
  *   noteUnreachable: () => void,
@@ -293,20 +237,16 @@ export function createSeasonPicks({ reader, readPick, keepPick, noteUnreachable 
     picksOut++;
     latestPick = year;
     keepPick(year);
-    const shownBefore = reader.readShownYear();
-    const isRead = await reader.showYear(year).then(
-      () => true,
-      () => false,
-    );
-    await reader.waitForReads();
-    picksOut--;
-    if (latestPick !== year) return { kind: "replaced", year: latestPick };
-    const shown = reader.readShownYear();
-    if (shown === year) return { kind: "shown", year };
-    const kept = shown ?? pickBefore;
-    keepPick(kept);
-    if (isRead || shown !== shownBefore) return { kind: "overtaken", year: kept };
-    noteUnreachable();
-    return { kind: "unread", year: kept };
+    try {
+      await reader.showYear(year);
+    } catch {
+      if (latestPick !== year) return "replaced";
+      keepPick(reader.readShownYear() ?? pickBefore);
+      noteUnreachable();
+      return "unread";
+    } finally {
+      picksOut--;
+    }
+    return latestPick === year ? "shown" : "replaced";
   };
 }

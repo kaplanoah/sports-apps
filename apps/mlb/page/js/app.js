@@ -203,6 +203,7 @@ function wireControls() {
   startHomeScreen();
   watchSeasonPicks(findSeasonRow(), {
     pick: showYear,
+    readPick: () => session.activeYear,
     showPicked: drawPickedSeason,
     showUnread: () => redrawEased(renderStamp),
   });

@@ -116,17 +116,18 @@ const readMarkedYear = (picker) =>
 
 /**
  * Shows each season picked, from the picker the row draws now or later, with `pick`, then redraws
- * with `showPicked` once it shows. A pick whose record can't be read redraws with `showUnread`, and
- * one that leaves another season picked puts the picker on it, so picking it again retries. Before
- * any season has loaded, that's the one the row marked before the picks still on their way.
+ * with `showPicked` once it shows. A pick whose record can't be read redraws with `showUnread` and
+ * puts the picker back on the season `readPick` keeps instead, or, with none, the one it marked
+ * before the picks still on their way, so picking it again retries.
  * @param {HTMLElement} row
  * @param {{
  *   pick: (year: number) => Promise<import("./season-reader.js").PickOutcome>,
+ *   readPick: () => number | null,
  *   showPicked: () => void,
  *   showUnread: () => void,
  * }} handlers
  */
-export function watchSeasonPicks(row, { pick, showPicked, showUnread }) {
+export function watchSeasonPicks(row, { pick, readPick, showPicked, showUnread }) {
   let picksOut = 0;
   let markedBefore = "";
   row.addEventListener("change", async (event) => {
@@ -136,10 +137,10 @@ export function watchSeasonPicks(row, { pick, showPicked, showUnread }) {
     const year = picker.value;
     markPicked(row, year);
     const outcome = await pick(Number(year)).finally(() => picksOut--);
-    if (outcome.kind === "replaced") return;
-    if (outcome.kind === "shown") return showPicked();
-    if (outcome.kind === "unread") showUnread();
+    if (outcome === "shown") showPicked();
+    if (outcome !== "unread") return;
+    showUnread();
     if (row.querySelector("select")?.value === year)
-      markPicked(row, outcome.year === null ? markedBefore : String(outcome.year));
+      markPicked(row, String(readPick() ?? markedBefore));
   });
 }

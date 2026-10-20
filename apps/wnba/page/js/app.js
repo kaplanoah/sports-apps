@@ -289,6 +289,7 @@ async function boot() {
   startHomeScreen();
   watchSeasonPicks(findSeasonRow(), {
     pick: showYear,
+    readPick: () => session.pickedYear,
     showPicked: drawPickedSeason,
     showUnread: () => redrawEased(renderStamp),
   });
