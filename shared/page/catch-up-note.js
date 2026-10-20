@@ -1,4 +1,5 @@
 import { html } from "./html.js";
+import { readStoredText, storeText } from "./local-storage.js";
 import { renderStampWhen } from "./stamp.js";
 
 // The page shows what it last drew, and keeps what it has while it's away, so until the store has
@@ -30,7 +31,13 @@ const OFFLINE_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hi
   />
 </svg>`;
 
-/** @typedef {{ watchCatchUp: (onChange: (isCaughtUp: boolean) => void) => void, readSyncedAt: () => number | null }} CatchUpStore */
+/**
+ * @typedef {{
+ *   watchCatchUp: (onChange: (isCaughtUp: boolean) => void) => void,
+ *   readSyncedAt: () => number | null,
+ *   watchSyncedAt: (onChange: () => void) => void,
+ * }} CatchUpStore
+ */
 
 /** @type {CatchUpStore | null} */
 let watchedStore = null;
@@ -38,25 +45,15 @@ let isBehind = false;
 let isUpdatingShown = false;
 let isStalled = false;
 
-// Storage can be empty or refuse access, as in a private window, so the page never depends on it.
 /** @returns {number | null} */
 function readSavedSyncedAt() {
-  try {
-    const saved = Number(localStorage.getItem(SYNCED_AT_KEY));
-    return saved > 0 ? saved : null;
-  } catch {
-    return null;
-  }
+  const saved = Number(readStoredText(SYNCED_AT_KEY));
+  return saved > 0 ? saved : null;
 }
 
+// A time storage won't take leaves the next load's line without one.
 /** @param {number} at */
-function saveSyncedAt(at) {
-  try {
-    localStorage.setItem(SYNCED_AT_KEY, String(at));
-  } catch {
-    // The next load shows its line without a time.
-  }
-}
+const saveSyncedAt = (at) => storeText(SYNCED_AT_KEY, String(at));
 
 // Before the page first catches up, what it shows is what it showed on its last visit.
 const readSyncedAt = () => watchedStore?.readSyncedAt() ?? readSavedSyncedAt();
@@ -152,6 +149,12 @@ export function startCatchUpNote(store, redraw) {
         redrawIfChanged();
       }, STALLED_WAIT_MS);
     }
+    redrawIfChanged();
+  });
+  // A page still behind can read the store without its socket, which moves when its scores are
+  // from.
+  store.watchSyncedAt(() => {
+    saveStoreSyncedAt(store);
     redrawIfChanged();
   });
   addEventListener("online", redrawIfChanged);

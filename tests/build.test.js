@@ -1,7 +1,11 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { listApps } from "../worker/apps.mjs";
-import { labelChannelFiles, listBundledFiles, readRelease } from "../worker/build.mjs";
+import { buildWorker, labelChannelFiles, listBundledFiles, readRelease } from "../worker/build.mjs";
 
 const BUILT_AT = new Date("2026-10-07T12:00:00Z");
 const RELEASE = {
@@ -80,6 +84,38 @@ test("a production release has no label, so its page shows no channel tag", () =
     builtAt: BUILT_AT.toISOString(),
     label: null,
   });
+});
+
+/** @param {string} app */
+async function loadForbiddingGlobalWork(app) {
+  const folder = mkdtempSync(path.join(tmpdir(), `${app}-worker-`));
+  const bundlePath = path.join(folder, "worker.mjs");
+  writeFileSync(bundlePath, await buildWorker(app, { release: RELEASE }));
+  /** @param {string} name */
+  const refuse = (name) => () => {
+    throw new Error(`${app}'s Worker called ${name} while it loads`);
+  };
+  // Cloudflare refuses a Worker whose modules, as they load, do any of these.
+  const mocks = [
+    mock.method(globalThis, "fetch", refuse("fetch")),
+    mock.method(globalThis, "setTimeout", refuse("setTimeout")),
+    mock.method(globalThis, "setInterval", refuse("setInterval")),
+    mock.method(crypto, "getRandomValues", refuse("getRandomValues")),
+    mock.method(crypto, "randomUUID", refuse("randomUUID")),
+  ];
+  try {
+    return await import(pathToFileURL(bundlePath).href);
+  } finally {
+    for (const forbidden of mocks) forbidden.mock.restore();
+    rmSync(folder, { recursive: true });
+  }
+}
+
+test("each app's Worker loads without what Cloudflare refuses while a Worker loads", async () => {
+  for (const app of listApps()) {
+    const worker = await loadForbiddingGlobalWork(app);
+    assert.equal(typeof worker.default.fetch, "function", app);
+  }
 });
 
 test("a beta release with no version to count from still says beta", () => {

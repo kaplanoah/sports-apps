@@ -2,7 +2,7 @@
 // Phones show it over the whole screen, which a swipe down closes, wider screens as a modal. It
 // stays open off the screen only as long as a view keeps its place.
 // The page supplies the button (#settingsBtn) and the dialog (#settingsDialog), with its
-// .sheet-top, its close button (#settingsCloseBtn), and a place for the release (#versionNote).
+// .sheet-top, its close button (.sheet-close), and a place for the release (#versionNote).
 
 import { formatDateAndTime } from "./days.js";
 import { joinWithSeparator, setHtml } from "./html.js";
@@ -70,7 +70,7 @@ export function openSettings(key = null) {
 export function startSettingsSheet({ isOwnGesture } = {}) {
   const dialog = findDialog();
   findElement("settingsBtn").addEventListener("click", () => openSettings());
-  wireSheet(dialog, { closeButton: findElement("settingsCloseBtn"), isOwnGesture });
+  wireSheet(dialog, { isOwnGesture });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();
 }
