@@ -9,8 +9,9 @@ import {
 } from "../../../../tests/browser/start-over.mjs";
 
 // The Games list after a reload from each state a phone can hold, left on a day the season's
-// record lists and on one before it, and the season tab and News after a reload under two minutes
-// after the page left and after two.
+// record lists and on one before it, its strip of dates on today after a reload two minutes after
+// the page left, and the season tab and News after a reload under two minutes after the page left
+// and after two.
 
 test.use({
   viewport: { width: 390, height: 844 },

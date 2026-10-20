@@ -26,13 +26,14 @@ export function findShortfall(wanted, landed) {
 
 /**
  * How far a pull to refresh holds `element` down, by the relative offset it gives the page's parts
- * (pull-to-refresh.js), which isn't where it sits on the page.
+ * (pull-to-refresh.js), which isn't where it sits on the page. The offset is read as drawn, partway
+ * through an ease back.
  * @param {HTMLElement} element
  */
 function readPulledBy(element) {
   let pulled = 0;
   for (let part = /** @type {HTMLElement | null} */ (element); part; part = part.parentElement)
-    pulled += parseFloat(part.style.top) || 0;
+    if (part.style.top) pulled += parseFloat(getComputedStyle(part).top) || 0;
   return pulled;
 }
 

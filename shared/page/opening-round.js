@@ -32,14 +32,16 @@ const isPhone = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
 /**
  * Where the bracket opens: at its beginning when it isn't on a phone or that already shows the
- * target's round, so the rounds before it stay in view; otherwise with the target at the left edge.
+ * target's round, so the rounds before it stay in view; otherwise with the target at the left edge,
+ * or as near it as the bracket's end lets it scroll.
  * @param {HTMLElement} scroller @param {HTMLElement} target
  */
 function findTargetLeft(scroller, target) {
   if (!isPhone() || isShownFromStart(scroller, target)) return 0;
   const padding = parseFloat(getComputedStyle(scroller).scrollPaddingLeft) || 0;
   const offset = target.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
-  return scroller.scrollLeft + offset - padding;
+  const endLeft = scroller.scrollWidth - scroller.clientWidth;
+  return Math.min(scroller.scrollLeft + offset - padding, endLeft);
 }
 
 /**
@@ -55,6 +57,18 @@ function scrollToTarget(scroller, target, behavior = "instant") {
 /** @param {HTMLElement} scroller @param {HTMLElement} target */
 function noteStartLeft(scroller, target) {
   scroller.dataset.startLeft = String(Math.round(findTargetLeft(scroller, target)));
+}
+
+/**
+ * Where the reader left a bracket scrolled, read before a redraw to keep across it. A bracket a
+ * reload put back on its opening round after two minutes away (show-last-drawn.js) has no place
+ * of the reader's to keep, so its first draw opens it on the round still playing now.
+ * @param {HTMLElement | null} scroller
+ */
+export function takeKeptLeft(scroller) {
+  if (scroller?.dataset.putBackStart !== "true") return scroller?.scrollLeft ?? 0;
+  delete scroller.dataset.putBackStart;
+  return 0;
 }
 
 /** @type {Set<(behavior: ScrollBehavior) => void>} */

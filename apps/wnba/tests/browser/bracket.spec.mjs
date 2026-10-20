@@ -1,5 +1,5 @@
 import { TEAMS } from "../../page/js/teams.js";
-import { finishFirstRound } from "./bracket-rounds.mjs";
+import { finishFirstRound, finishSemifinals } from "./bracket-rounds.mjs";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
 import {
   findSeasonPill,
@@ -12,24 +12,6 @@ import { readRole } from "../../../../tests/browser/type-roles.mjs";
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const PHONE = { width: 390, height: 844 };
-
-/**
- * The season with both Semifinals over too, so the Finals are the round still playing.
- * @param {any} season
- */
-function finishSemifinals(season) {
-  finishFirstRound(season);
-  const findSeries = (id) => season.series.find((series) => series.id === id);
-  Object.assign(findSeries("2-0"), { winner: "NYL" });
-  Object.assign(findSeries("2-0").bottom, { wins: 3 });
-  Object.assign(findSeries("2-1"), { winner: "GSV" });
-  Object.assign(findSeries("2-1").top, { wins: 3 });
-  Object.assign(findSeries("3-0"), {
-    top: { team: "GSV", seed: 2, wins: 0 },
-    bottom: { team: "NYL", seed: 8, wins: 0 },
-  });
-  return season;
-}
 
 const readRoundName = (page, round) => page.locator(`.round-name[data-round="${round}"]`);
 

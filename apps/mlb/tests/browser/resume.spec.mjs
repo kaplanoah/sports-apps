@@ -3,7 +3,6 @@ import {
   retryReleaseCheck,
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
-import { trackTextChanges } from "../../../../tests/browser/text-changes.mjs";
 import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import {
   test,
@@ -273,23 +272,14 @@ test("a page coming back as the store updates draws once, with the update, never
   await expect(stamp).toContainText("Next first pitch");
   // Only the page's code keeps when it was last current, once it has caught up.
   await expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
-  await app.writeWhileAway("live/status", { error: "upstream_error", detail: "", write: "" });
-  app.changeSnapshots((snapshot) => ({ ...snapshot, missing: ["wildCardRank"] }));
-  app.passTimeAtWorker(31 * MINUTE_MS);
-  const readStampTexts = await trackTextChanges(page, "stamp");
-  const watchers = app.countWatchersHeard();
 
-  // The page's clock holds still, and then moves on without running its timers, as a phone that
-  // suspends it does, so its wait for the store's update outlasts however long the store takes
-  // to run it on a slow machine.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
-  await page.clock.setSystemTime(Date.parse(EVENING_FIXTURE.now) + 31 * MINUTE_MS);
-  await comeBack(page);
-  await expect.poll(() => app.countWatchersHeard()).toBe(watchers + 1);
-  await app.updateFromWorker();
+  const { texts } = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: async () => {
+      await app.writeWhileAway("live/status", { error: "upstream_error", detail: "", write: "" });
+      app.changeSnapshots((snapshot) => ({ ...snapshot, missing: ["wildCardRank"] }));
+    },
+  });
 
-  await expect(stamp).toContainText("MLB stopped sending wildCardRank");
-  const texts = await readStampTexts();
   expect(texts).toHaveLength(1);
   expect(texts[0]).toContain("MLB stopped sending wildCardRank");
 });
@@ -304,7 +294,7 @@ function rescoreFinal(season) {
   return season;
 }
 
-test("a page whose load failed, coming back as the store updates, never draws the copy the store held", async ({
+test("a page whose load failed, coming back as the store updates, never draws the copy the store held, and says it has caught up once it has drawn the update", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -321,12 +311,13 @@ test("a page whose load failed, coming back as the store updates, never draws th
   await page.reload();
   await expect(page.locator("#stamp")).toContainText("Can't reach the page's server");
 
-  const texts = await wakeAsStoreUpdates(page, app, {
-    changeWhileAway: rescoreFinal,
+  const { texts, stampAsCaughtUp } = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: () => app.changeSeasonWhileAway(rescoreFinal),
     onWake: () => page.unroute(matchPath("/store/"), failStore),
   });
 
   expect(texts.filter((text) => text.includes("11-2Final"))).toEqual([]);
+  expect(stampAsCaughtUp).not.toContain("Can't reach the page's server");
   await expect(final).toContainText("1-2Final");
 });
 

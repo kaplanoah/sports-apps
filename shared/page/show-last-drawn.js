@@ -65,7 +65,8 @@ function restoreScrolls(part, scrolls) {
     if (left > 0 && element.closest(".season-part"))
       requestAnimationFrame(() => (element.scrollLeft = left));
     if (!(element instanceof HTMLElement)) continue;
-    // A list put back on its start day goes to the start day its code finds, which can have moved.
+    // A list put back on its start, like the Games list's start day or a bracket's opening round,
+    // goes to the start its code finds, which can have moved.
     if (isOnStart) element.dataset.putBackStart = "true";
     // The page around a list can settle a little shorter or taller once its code draws it, which
     // can stop a scroll near the list's end short, so the list's code can take it again.

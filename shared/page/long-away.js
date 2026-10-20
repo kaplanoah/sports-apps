@@ -41,14 +41,11 @@ function findPlaceToShow(
   const isStartedOver = isLongAway && !isInSheet;
   /** @param {{ path?: unknown, left?: unknown, top?: unknown, startLeft?: unknown, startTop?: unknown }} scroll */
   const placeScroll = ({ path, left, top, startLeft, startTop }) => {
-    const isOnStart = isLongAway && startTop !== undefined;
-    const shownTop = isOnStart ? startTop : isStartedOver ? 0 : top;
-    return {
-      path,
-      left: Number(isStartedOver ? startLeft : left) || 0,
-      top: Number(shownTop) || 0,
-      isOnStart,
-    };
+    const isOnStart = isLongAway && (startLeft !== undefined || startTop !== undefined);
+    /** @param {unknown} start @param {unknown} kept */
+    const placeAxis = (start, kept) =>
+      Number(isOnStart && start !== undefined ? start : isStartedOver ? 0 : kept) || 0;
+    return { path, left: placeAxis(startLeft, left), top: placeAxis(startTop, top), isOnStart };
   };
   return {
     hidden: hidden === true || (isStartHidden && isLongAway),

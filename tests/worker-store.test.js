@@ -618,6 +618,27 @@ test("a page coming back with a drawing holds what the store held until the stor
   assert.deepEqual(changes, [true, false, true]);
 });
 
+test("a page coming back that reads before it redraws, as one whose load failed does, says it has caught up only once it has drawn", async () => {
+  const { store, changes, hear } = await startComingBack();
+  const steps = [];
+  /** @type {() => void} */
+  let finishRead = () => {};
+  store.afterHandOver(async () => {
+    await new Promise((resolve) => (finishRead = () => resolve(undefined)));
+    steps.push("drawn");
+  });
+  store.watchCatchUp((isCaughtUp) => isCaughtUp && steps.push("caught up"));
+
+  hear({ updating: false });
+  await settle();
+  assert.deepEqual(changes, [true, false]);
+
+  finishRead();
+  await settle();
+  assert.deepEqual(steps, ["drawn", "caught up"]);
+  assert.deepEqual(changes, [true, false, true]);
+});
+
 test("a page coming back to an update that changed nothing catches up with what the store held as the update is done", async () => {
   const { seen, changes, hear } = await startComingBack();
 

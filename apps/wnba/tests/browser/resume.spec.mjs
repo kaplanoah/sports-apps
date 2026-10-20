@@ -176,12 +176,14 @@ test("a page coming back as the store updates draws once, with the update, never
   await expect(page.locator('[data-game="1042600132"]')).toBeVisible();
   await waitForCatchUp(page);
 
-  const texts = await wakeAsStoreUpdates(page, app, { changeWhileAway: startGame });
+  const { texts } = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: () => app.changeSeasonWhileAway(startGame),
+  });
 
   expect(texts).toEqual([]);
 });
 
-test("a page whose load failed, coming back as the store updates, never draws the copy the store held", async ({
+test("a page whose load failed, coming back as the store updates, never draws the copy the store held, and says it has caught up once it has drawn the update", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -194,12 +196,13 @@ test("a page whose load failed, coming back as the store updates, never draws th
   await page.reload();
   await expect(page.locator("#stamp")).toContainText("Can't reach the page's server");
 
-  const texts = await wakeAsStoreUpdates(page, app, {
-    changeWhileAway: startGame,
+  const { texts, stampAsCaughtUp } = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: () => app.changeSeasonWhileAway(startGame),
     onWake: () => page.unroute(matchPath("/store/"), failStore),
   });
 
   expect(texts.filter((text) => text.includes("5:10"))).toEqual([]);
+  expect(stampAsCaughtUp).not.toContain("Can't reach the page's server");
   await expect(page.locator("#stamp")).not.toContainText("Can't reach the page's server");
 });
 

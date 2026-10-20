@@ -1,4 +1,4 @@
-import { finishFirstRound } from "./bracket-rounds.mjs";
+import { finishFirstRound, finishSemifinals } from "./bracket-rounds.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
@@ -15,6 +15,7 @@ import {
   MINUTE_MS,
   SHORT_PHONE,
   expectNewsAfterReloads,
+  expectOpeningRoundAfterReload,
   expectSeasonTabAfterReload,
 } from "../../../../tests/browser/start-over.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -354,7 +355,31 @@ test.describe("on a phone", () => {
     }) => {
       const app = await openApp(page);
       await app.changeSeason(finishFirstRound);
+      await expect(page.locator('[data-series="2-1"] .team-line').first()).toContainText(
+        "Valkyries",
+      );
       await expectSeasonTabAfterReload(page, { sideways: SIDEWAYS, awayMs: 2 * MINUTE_MS });
+    });
+
+    test("a reload two minutes or more after the page left opens the bracket on the round still playing, though another was when the page left, even once the page's saved season can't be read", async ({
+      page,
+    }) => {
+      const app = await openApp(page);
+      await app.changeSeason(finishFirstRound);
+      await expect(page.locator('[data-series="2-1"] .team-line').first()).toContainText(
+        "Valkyries",
+      );
+      await expectOpeningRoundAfterReload(page, {
+        sideways: SIDEWAYS,
+        // As after a release that reads its seasons in a new version, the page's code first draws
+        // the bracket from the store's season, over the copy put back as the page loaded.
+        changeWhileAway: async () => {
+          await app.changeSeason(finishSemifinals);
+          await page.evaluate(() =>
+            localStorage.setItem("lastSeen", JSON.stringify({ year: 2026, season: { series: 5 } })),
+          );
+        },
+      });
     });
 
     test("a reload under two minutes after the page left shows the season tab where it was left, the bracket sideways too", async ({

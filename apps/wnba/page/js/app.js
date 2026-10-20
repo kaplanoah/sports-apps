@@ -41,7 +41,7 @@ import {
 } from "#shared/bracket-standings.js";
 import { BACKGROUND_JOBS } from "./background-jobs.js";
 import { LOOKS } from "./looks.js";
-import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js";
+import { placeBracket, startBracket, takeBracketScroll } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
 import { openGameSection, refreshGameSheet, startGameSheet } from "./game-sheet.js";
 import { renderDot } from "./clubs.js";
@@ -90,7 +90,7 @@ function renderTitleYear() {
 function renderAll() {
   const now = Date.now();
   showSeasonPhase(isFieldSet(session.season?.series ?? []));
-  const keptLeft = readBracketScroll();
+  const keptLeft = takeBracketScroll();
   setHtml(findElement("bracketWrap"), renderBracket(session.season, now));
   placeBracket(keptLeft);
   fillDayStrip(listSeasonDays(session.season, session.schedule, now));

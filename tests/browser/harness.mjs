@@ -75,6 +75,19 @@ export function createTestStore(
   return { context, store, fireAlarm, passTime, acceptWatcher, countAccepted };
 }
 
+/**
+ * What a test does on the Worker's side of `testStore`: run the update its alarm runs on its own
+ * schedule, pass time while the page sleeps, which brings its next update due, and count the
+ * sockets it has accepted, each once it has told the page whether an update is coming.
+ * @param {ReturnType<typeof createTestStore>} testStore
+ */
+export const createWorkerControls = (testStore) => ({
+  updateFromWorker: () => testStore.fireAlarm(),
+  /** @param {number} ms */
+  passTimeAtWorker: (ms) => testStore.passTime(ms),
+  countWatchersHeard: () => testStore.countAccepted(),
+});
+
 // Routes match with patterns rather than functions: Playwright checks a pattern itself, but asks the
 // test about every request a function might match, which slows every page load.
 export const TEST_SERVER = /^http:\/\/127\.0\.0\.1[:/]/;

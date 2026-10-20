@@ -67,7 +67,7 @@ test("a list that names where it starts goes there after two minutes, and stays 
   ]);
 });
 
-test("a sideways bracket that names where it opens goes there after two minutes, and stays where it was before", () => {
+test("a sideways bracket that names where it opens goes there after two minutes, marked to open where its code finds, and stays where it was before", () => {
   const saveBracket = (awayMs) => ({
     scrolls: [{ path: [0], left: 640, top: 0, startLeft: 320 }],
     savedAt: Date.now() - awayMs,
@@ -77,7 +77,7 @@ test("a sideways bracket that names where it opens goes there after two minutes,
     { path: [0], left: 640, top: 0, isOnStart: false },
   ]);
   assert.deepEqual(findPlaceToShow(saveBracket(2 * MINUTE_MS)).scrolls, [
-    { path: [0], left: 320, top: 0, isOnStart: false },
+    { path: [0], left: 320, top: 0, isOnStart: true },
   ]);
 });
 

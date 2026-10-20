@@ -1,8 +1,8 @@
 // After two minutes away, the page starts over where a viewer moved it, on the tab it showed
 // (shared/page/long-away.js): the season's standings and bracket each at its top with the header
-// back, the pill on the part the tab is named for, the bracket on its opening round, and News at
-// its top. Under two minutes, each stays where it was left. Each app's tests move the page off its
-// start, leave, and come back or load again.
+// back, the pill on the part the tab is named for, the bracket on its opening round, the Games
+// list's strip of dates on today, and News at its top. Under two minutes, each stays where it was
+// left. Each app's tests move the page off its start, leave, and come back or load again.
 
 import { expect } from "@playwright/test";
 import { waitForLoadToSettle } from "./at-rest.mjs";
@@ -205,25 +205,55 @@ export async function expectSeasonTabAfterReload(page, { sideways, awayMs }) {
 }
 
 /**
- * Checks that a reload two minutes after the page left the Games list on `otherDay` shows its
- * strip of dates on the day the list opens on, the same before the page's code arrives as once it
- * runs.
+ * Checks that a reload two minutes after the page left the season tab off its start, with the
+ * bracket's opening round moved on by `changeWhileAway` while it was away, shows the bracket on the
+ * round it opened on as the page left before the page's code arrives, and on the round still
+ * playing once it runs.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ sideways: string, changeWhileAway: () => Promise<unknown> }} options
+ */
+export async function expectOpeningRoundAfterReload(page, { sideways, changeWhileAway }) {
+  const bracket = page.locator(sideways);
+  const readLeft = () => bracket.evaluate((element) => Math.round(element.scrollLeft));
+  const { start } = await moveSeasonTabOffStart(page, sideways);
+
+  const release = await reloadAfter(page, 2 * MINUTE_MS);
+  await changeWhileAway();
+
+  await expect(page.locator("#standingsWrap table").first()).toBeAttached();
+  await expect.poll(readLeft).toBe(start.bracketLeft);
+  await runPageCode(page, release);
+  await expect.poll(readLeft).toBeGreaterThan(start.bracketLeft);
+  expect(await readLeft()).toBe(Number(await bracket.getAttribute("data-start-left")));
+}
+
+/**
+ * Checks that a reload two minutes after the page left the Games list on `otherDay`, out of sight
+ * of today on its strip of dates, shows the strip on today, the same before the page's code
+ * arrives as once it runs.
  * @param {import("@playwright/test").Page} page
  * @param {string} otherDay
  */
 export async function expectDayStripAfterReload(page, otherDay) {
   const strip = page.locator("#seasonGames .day-strip");
   const readLeft = () => strip.evaluate((element) => Math.round(element.scrollLeft));
+  const isTodayInStrip = () =>
+    strip.locator(".is-today").evaluate((cell) => {
+      const shown = /** @type {Element} */ (cell.parentElement?.closest(".day-strip"));
+      const { left, right } = shown.getBoundingClientRect();
+      const box = cell.getBoundingClientRect();
+      return box.left >= left && box.right <= right;
+    });
   await waitForLoadToSettle(page);
   await page.locator(`#seasonGames .day-cell[data-day="${otherDay}"]`).click();
   await expect(page.locator(`#seasonGames .listed-day[data-day="${otherDay}"]`)).toBeInViewport();
-  const leftOnOtherDay = await readLeft();
+  expect(await isTodayInStrip()).toBe(false);
 
   const release = await reloadAfter(page, 2 * MINUTE_MS);
 
   await expect(strip).toBeAttached();
   const shownLeft = await readLeft();
-  expect(shownLeft).not.toBe(leftOnOtherDay);
+  expect(await isTodayInStrip()).toBe(true);
   await runPageCode(page, release);
   expect(await readLeft()).toBe(shownLeft);
 }

@@ -96,8 +96,11 @@ export function createWorkerStore({
   let holdTimer = null;
   /** @type {Map<string, () => void>} */
   const held = new Map();
-  /** @type {(() => void)[]} */
+  /** @type {(() => unknown)[]} */
   let afterHandOvers = [];
+  // A redraw that reads first, as a page whose load failed reads its season again, holds the page's
+  // word that it has caught up until it has drawn, so the header's sweep shows that drawing.
+  let redrawsUnderWay = 0;
   /** @type {number | null} */
   let syncedAt = null;
   /** @type {Set<(isCaughtUp: boolean) => void>} */
@@ -174,7 +177,19 @@ export function createWorkerStore({
     for (const deliver of deliveries) deliver();
     const callbacks = afterHandOvers;
     afterHandOvers = [];
-    for (const callback of callbacks) callback();
+    for (const callback of callbacks) awaitRedraw(callback());
+  }
+
+  /** @param {unknown} redraw what a callback of afterHandOver returned */
+  function awaitRedraw(redraw) {
+    if (!(redraw instanceof Promise)) return;
+    redrawsUnderWay++;
+    redraw
+      .catch(() => {})
+      .then(() => {
+        redrawsUnderWay--;
+        settleCatchUp();
+      });
   }
 
   // Set before the page says it's behind, so a hold that runs out does before the header's line
@@ -252,6 +267,7 @@ export function createWorkerStore({
 
   function markCaughtUp() {
     releaseHeld();
+    if (redrawsUnderWay > 0) return;
     reconnectDelay = RECONNECT_FIRST_MS;
     syncedAt = Date.now();
     if (!isCaughtUp) announceCatchUp(true);
@@ -544,12 +560,13 @@ export function createWorkerStore({
   /**
    * Calls `callback` once the page has what the store sent since it fell behind: at once while it
    * holds nothing back, or as it hands over what it held, before it says it has caught up, so a
-   * redraw then is the one the header's sweep shows.
-   * @param {() => void} callback
+   * redraw then is the one the header's sweep shows. A callback that returns a promise, as one that
+   * reads before it draws, holds that word until the promise settles.
+   * @param {() => unknown} callback
    */
   function afterHandOver(callback) {
     if (isHolding()) afterHandOvers.push(callback);
-    else callback();
+    else awaitRedraw(callback());
   }
 
   startHolding();

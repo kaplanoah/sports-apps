@@ -23,3 +23,21 @@ export function finishFirstRound(season) {
   });
   return season;
 }
+
+/**
+ * The season with both Semifinals over too, so the Finals are the round still playing.
+ * @param {any} season
+ */
+export function finishSemifinals(season) {
+  finishFirstRound(season);
+  const findSeries = (id) => season.series.find((series) => series.id === id);
+  Object.assign(findSeries("2-0"), { winner: "NYL" });
+  Object.assign(findSeries("2-0").bottom, { wins: 3 });
+  Object.assign(findSeries("2-1"), { winner: "GSV" });
+  Object.assign(findSeries("2-1").top, { wins: 3 });
+  Object.assign(findSeries("3-0"), {
+    top: { team: "GSV", seed: 2, wins: 0 },
+    bottom: { team: "NYL", seed: 8, wins: 0 },
+  });
+  return season;
+}

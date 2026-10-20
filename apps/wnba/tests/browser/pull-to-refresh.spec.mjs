@@ -117,6 +117,39 @@ test("on News, the header changing while the page is held down doesn't move the 
   await expect.poll(() => readNewsPlace(page)).toBe(place);
 });
 
+test("on News, the header changing as the page eases back up doesn't move the stories later, once they're scrolled and it changes again", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  const header = page.locator("header.top");
+  // The header grows as the page starts to ease back up from the pull's hold.
+  await header.evaluate((element) =>
+    element.addEventListener("transitionrun", function growAsEased(event) {
+      const { propertyName } = /** @type {TransitionEvent} */ (event);
+      if (propertyName !== "top" || element.style.top !== "0px") return;
+      element.removeEventListener("transitionrun", growAsEased);
+      element.style.paddingBottom = "40px";
+    }),
+  );
+  const release = await app.holdStore();
+  await pullDown(page, 200);
+  await expect(header).toHaveCSS("top", "56px");
+  release();
+  await page.clock.runFor(SHORTEST_REFRESH_MS);
+  await expect(header).toHaveCSS("padding-bottom", "40px");
+  await expect(header).toHaveCSS("top", "auto");
+  await page.evaluate(() => scrollTo({ top: 300, behavior: "instant" }));
+  const place = await readNewsPlace(page);
+
+  await header.evaluate((element) => (element.style.paddingBottom = "160px"));
+
+  await expect.poll(() => readNewsPlace(page)).toBe(place);
+});
+
 test("a pull on a page left a fraction of a pixel down, as a phone can leave it, still refreshes", async ({
   page,
 }) => {
