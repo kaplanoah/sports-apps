@@ -149,6 +149,7 @@ paths:
   how long a league's next update waits, from where its games stand,
   in `poll-schedule.js`, days and times in `days.js` (a day near now named in words with `nameDay`,
   the league's Eastern day with `readEasternDay`, and adding days to a date with `addDays`),
+  text made safe to match word for word in a regular expression in `escape-pattern.js`,
   a read worked out again only once what it reads from changes, like each app's season for its search, in `kept-read.js`,
   the header's lines on the latest score and the next game, in words like "last night",
   in `stamp.js`, the release check and catching up on return in `resume.js`,

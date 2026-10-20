@@ -1,22 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-  nameAcrossRecord,
-  nameCandidatesRecord,
-  nameCheckRecord,
-  nameCheckedRecord,
+  ACROSS_RECORD,
+  CANDIDATES_RECORD,
+  POST_RECORD,
   nameFindRecord,
-  namePostRecord,
 } from "../worker/judge-review.mjs";
 import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
-import { escapePattern } from "../worker/rule-files.mjs";
+import { escapePattern } from "../shared/page/escape-pattern.js";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
-/** @param {string} path from the repo's root */
-const readRepoFile = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-
-const WORKFLOWS = readdirSync(new URL("../.github/workflows/", import.meta.url)).filter((name) =>
+const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
 );
 
@@ -114,15 +112,10 @@ const readNeeds = (job, workflow = "ci.yml") =>
     .filter(Boolean);
 
 // check is the one job a merge waits on, so a job it doesn't need could fail without stopping
-// one. caches only costs pull requests their cache when it fails. The last read of the whole
-// change runs on every push's review, though it's due only once that review posts nothing, so
-// review, which check needs, judges whether its failure counts.
-test("the check job needs every other job but caches and the last read's areas", () => {
-  const others = listJobs().filter(
-    (job) => !["check", "caches", "review-final-area"].includes(job),
-  );
+// one. caches only costs pull requests their cache when it fails.
+test("the check job needs every other job but caches", () => {
+  const others = listJobs().filter((job) => !["check", "caches"].includes(job));
   assert.deepEqual(readNeeds("check").toSorted(), others.toSorted());
-  assert.ok(readNeeds("review").includes("review-final-area"));
 });
 
 // The config leaves out the WebKit projects wherever WebKit isn't installed, so a job that stopped
@@ -420,32 +413,178 @@ test("a label change runs only the gate again once a run passed every test on th
   assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
 });
 
-// A draft's run passes with its review skipped, which comes once it's ready on the same code, so
-// it never records its code for a later label change to skip the review.
-test("a draft's run never records its code as reviewed", () => {
+// A run that wasn't asked to review, like a push's or a draft's, leaves a review owed on its
+// code, so it never records its code for a later label to skip the review. A plan that didn't
+// finish says nothing, so it owes one too.
+test("a run that leaves a review owed never records its code as reviewed", () => {
   assert.match(
     readJob("check"),
-    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.count != '' \|\|\n\s+!github\.event\.pull_request\.draft \}\}/,
+    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.owed == 'false' \}\}/,
+  );
+  assert.match(readJob("review-plan"), /\n {6}owed: \$\{\{ steps\.decision\.outputs\.owed \}\}\n/);
+});
+
+// A ready pull request merges only once a review passed on exactly its code: a push, or a label
+// like phone-ok after a review that failed, never turns its check green without one. A draft is
+// reviewed once it's ready, so its check passes without one.
+test("check fails a ready pull request while a review of its code is owed", () => {
+  const check = readJob("check");
+  assert.match(
+    check,
+    /- name: Require a review of this code\n\s+if: needs\.review-plan\.outputs\.owed == 'true' && !github\.event\.pull_request\.draft\n\s+run: \|\n\s+echo "::error::.*\$REVIEW_LABEL.*"\n\s+exit 1\n/,
+  );
+  assert.ok(
+    check.indexOf("Require a review of this code") < check.indexOf("name: ci-passed-"),
+    "code a review is owed on never deploys at once from main",
   );
 });
 
+/**
+ * What review-plan's decision says for an event, by running its own script.
+ * @param {Record<string, string>} event the step's env, over a ready pull request's
+ */
+function decideReview(event) {
+  const step = readJob("review-plan").match(
+    /- name: Decide whether to review\n(?:\s+.*\n)*?\s+run: \|\n((?: {10}.*\n)+)/,
+  );
+  assert.ok(step, "review-plan decides whether to review in a script of its own");
+  const outputs = mkdtempSync(join(tmpdir(), "ci-decision-"));
+  const output = join(outputs, "output");
+  writeFileSync(output, "");
+  const { status, stdout, stderr } = spawnSync("bash", ["-e", "-c", step[1]], {
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH,
+      GITHUB_OUTPUT: output,
+      REVIEW_LABEL: readRepoFile(".github/workflows/ci.yml").match(/REVIEW_LABEL: (\S+)/)?.[1],
+      EVENT: "pull_request",
+      ACTION: "opened",
+      LABEL: "",
+      PASSED_RUN: "",
+      IS_DRAFT: "false",
+      AUTHOR: "someone",
+      CLAUDE_CODE_OAUTH_TOKEN: "token",
+      ANTHROPIC_API_KEY: "",
+      ...event,
+    },
+  });
+  assert.equal(status, 0, stderr);
+  const written = Object.fromEntries(
+    readFileSync(output, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => line.split("=")),
+  );
+  return {
+    review: written.review,
+    owed: written.owed,
+    labeled: written.labeled,
+    notice: stdout.trim(),
+  };
+}
+
+// A pull request is reviewed once it's ready, and again only when the review label asks, never on
+// a push alone, so a session answers every finding in one push and then asks. A run that skips a
+// review it was never asked for still owes one.
+test("a pull request is reviewed when it's opened ready, marked ready, or labeled review, and on nothing else", () => {
+  for (const [event, labeled] of /** @type {[Record<string, string>, string][]} */ ([
+    [{ ACTION: "opened" }, "false"],
+    [{ ACTION: "ready_for_review" }, "false"],
+    [{ ACTION: "labeled", LABEL: "review" }, "true"],
+  ]))
+    assert.deepEqual(
+      decideReview(event),
+      { review: "true", owed: "false", labeled, notice: "" },
+      JSON.stringify(event),
+    );
+  for (const event of [
+    { ACTION: "synchronize" },
+    { ACTION: "reopened" },
+    { ACTION: "labeled", LABEL: "phone-ok" },
+    { ACTION: "labeled", LABEL: "reviewed" },
+    { ACTION: "unlabeled", LABEL: "review" },
+  ]) {
+    const { review, owed, labeled, notice } = decideReview(event);
+    assert.equal(review, "false", JSON.stringify(event));
+    assert.equal(owed, "true", JSON.stringify(event));
+    assert.equal(labeled, "false", JSON.stringify(event));
+    assert.match(notice, /^::notice::Nothing was reviewed: a pull request is reviewed once/);
+  }
+  assert.equal(decideReview({ EVENT: "push", ACTION: "" }).review, "false");
+});
+
+// Asking adds a label no run reads as a new ask once it's there, so each ask is a fresh label.
+// Only a draft still owes the review it skips; the rest never run one or already passed it.
+test("every reason not to review holds when the review is asked for", () => {
+  for (const [event, reason, owed] of /** @type {[Record<string, string>, RegExp, string][]} */ ([
+    [{ PASSED_RUN: "7" }, /already passed its review/, "false"],
+    [{ IS_DRAFT: "true" }, /a draft is reviewed once it's ready/, "true"],
+    [{ AUTHOR: "dependabot[bot]" }, /Dependabot/, "false"],
+    [{ CLAUDE_CODE_OAUTH_TOKEN: "" }, /no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY/, "false"],
+  ])) {
+    const asked = decideReview({ ACTION: "labeled", LABEL: "review", ...event });
+    assert.equal(asked.review, "false", JSON.stringify(event));
+    assert.equal(asked.owed, owed, JSON.stringify(event));
+    assert.equal(asked.labeled, "true", "a label that asks comes off however the run decides");
+    assert.match(asked.notice, reason);
+  }
+  assert.match(readJob("review-plan"), /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
+});
+
+// The owner's phone-ok comes after the review passed on the same code, so check, which holds a
+// ready pull request while a review is owed, lets it through.
+test("a label on code a run already passed the review on owes no review", () => {
+  const phoneOk = decideReview({ ACTION: "labeled", LABEL: "phone-ok", PASSED_RUN: "7" });
+  assert.equal(phoneOk.review, "false");
+  assert.equal(phoneOk.owed, "false");
+  assert.match(phoneOk.notice, /already passed its review/);
+});
+
+// Each ask is a fresh label, which GitHub sends only when the label isn't on the pull request, so
+// the run it starts takes it off in its review-label job.
+test("a run the review label started takes the label off, and the label is named in one place", () => {
+  const workflow = readRepoFile(".github/workflows/ci.yml");
+  assert.match(workflow, /\nenv:\n(?: {2}.*\n)* {2}REVIEW_LABEL: review\n/);
+  assert.doesNotMatch(workflow, /'review'|"review"|labels\/review/);
+  assert.match(readJob("review-plan"), /permissions:\n\s+contents: read\n\s+pull-requests: read\n/);
+  assert.match(
+    readJob("review-plan"),
+    /\n {6}labeled: \$\{\{ steps\.decision\.outputs\.labeled \}\}\n/,
+  );
+  const label = readJob("review-label");
+  assert.deepEqual(readNeeds("review-label"), ["gate", "review-plan"]);
+  assert.ok(
+    label.includes(
+      "if: ${{ !cancelled() && needs.review-plan.outputs.labeled == 'true' && needs.gate.outputs.forked == 'false' }}",
+    ),
+    "the label comes off once the plan is written, but for a fork's pull request, whose token can't",
+  );
+  assert.match(label, /permissions:\n\s+pull-requests: write\n\s+steps:/);
+  assert.match(
+    label,
+    /gh api --method DELETE "repos\/\$REPO\/issues\/\$PR\/labels\/\$REVIEW_LABEL"/,
+  );
+  assert.doesNotMatch(label, /checkout|node /, "it runs none of the pull request's code");
+  for (const job of listJobs().filter((name) => name !== "review-label"))
+    assert.doesNotMatch(readJob(job), /labels\//, job);
+});
+
 // A review reads a change of any size in full, area by area: each reviewer's reads are checked,
-// each area's cases are checked before anything is posted, and review fails on anything due left
-// unread or unchecked, from a guide the pull request can't change, on a named model.
+// one check across every area confirms each case before anything is posted, and review fails on
+// anything due left unread or unchecked, from a guide the pull request can't change, on a named
+// model.
 test("the review reads every area in full, checks before it posts, and fails on anything left undone", () => {
   const plan = readJob("review-plan");
   assert.match(plan, /node worker\/plan-review\.mjs \.review >> "\$GITHUB_OUTPUT"/);
   assert.match(plan, /node worker\/review-context\.mjs \.review/);
   assert.match(plan, /git show "origin\/\$DEFAULT_BRANCH:REVIEW\.md" > \.review\/REVIEW\.md/);
   assert.match(plan, /fetch-depth: 0/);
+  assert.deepEqual(listJobs(AREA_WORKFLOW), ["find"]);
   const find = readJob("find", AREA_WORKFLOW);
-  assert.match(find, /include: \$\{\{ fromJSON\(inputs\.kinds\) \}\}/);
+  assert.doesNotMatch(find, /matrix/);
   assert.match(find, /--model claude-opus-5-5/);
   assert.match(find, /disableAllHooks/);
-  assert.match(
-    find,
-    /node worker\/judge-review\.mjs find \.review "\$STAGE" "\$AREA" "\$KIND" >> "\$GITHUB_OUTPUT"/,
-  );
+  assert.match(find, /node worker\/judge-review\.mjs find \.review "\$AREA" >> "\$GITHUB_OUTPUT"/);
   assert.match(
     find,
     /id: again\n\s+if: &retry-due \$\{\{ !cancelled\(\) && steps\.first\.outcome == 'success' && \(steps\.first\.outputs\.unread != '' \|\| steps\.first\.outputs\.answered != 'true'\) \}\}/,
@@ -467,67 +606,51 @@ test("the review reads every area in full, checks before it posts, and fails on 
     ),
     "a retry judges the whole area against a rule file the first try skipped",
   );
-  const check = readJob("check", AREA_WORKFLOW);
-  assert.match(check, /needs: find\n\s+if: \$\{\{ !cancelled\(\) \}\}\n/);
-  assert.match(
-    check,
-    /node worker\/judge-review\.mjs candidates \.review "\$STAGE" "\$AREA" >> "\$GITHUB_OUTPUT"/,
-  );
-  assert.match(check, /run: node worker\/judge-review\.mjs check .* >> "\$GITHUB_OUTPUT"/);
-  assert.match(check, /id: check\n\s+if: steps\.gather\.outputs\.count != '0'/);
-  assert.match(check, /if: steps\.keep\.outcome == 'success'\n\s+uses: actions\/upload-artifact/);
-  assert.match(
-    check,
-    /id: keep\n\s+if: steps\.check\.outcome == 'success' \|\| steps\.gather\.outputs\.count == '0'/,
-  );
-  assert.match(
-    check,
-    /if: steps\.keep\.outcome != 'success' \|\| steps\.keep\.outputs\.unchecked != '0'\n\s+run: \|\n.*\n\s+exit 1/,
-    "a checker that didn't finish fails its job, though the answer it never kept sets no count",
-  );
   assert.match(
     readRepoFile(`.github/workflows/${AREA_WORKFLOW}`),
     /\nenv:\n {2}STAGE: \$\{\{ inputs\.stage \}\}\n {2}AREA: \$\{\{ inputs\.area \}\}\n/,
   );
   const across = readJob("review-across");
-  assert.match(across, /node worker\/post-review\.mjs list \.review "\$STAGE"/);
-  assert.match(across, /node worker\/post-review\.mjs across \.review "\$STAGE"/);
-  assert.match(across, /if: steps\.across\.outcome != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
+  assert.match(across, /--model claude-opus-5-5/);
+  assert.match(across, /run: node worker\/judge-review\.mjs candidates \.review\n/);
+  assert.match(
+    across,
+    /id: keep\n\s+if: steps\.across\.outcome == 'success'\n(?:\s+.*\n)*?\s+run: node worker\/judge-review\.mjs across \.review >> "\$GITHUB_OUTPUT"\n/,
+  );
+  assert.match(across, /if: steps\.keep\.outcome == 'success'\n\s+uses: actions\/upload-artifact/);
+  assert.match(
+    across,
+    /if: steps\.keep\.outcome != 'success' \|\| steps\.keep\.outputs\.unchecked != '0'\n\s+run: \|\n.*\n\s+exit 1/,
+    "a check that didn't finish fails its job, though the answer it never kept sets no count",
+  );
   const post = readJob("review-post");
-  assert.match(post, /node worker\/post-review\.mjs post \.review "\$STAGE" >> "\$GITHUB_OUTPUT"/);
-  const [stage, area, kind] = ["${{ env.STAGE }}", "${{ env.AREA }}", "${{ matrix.kind }}"];
+  assert.match(post, /run: node worker\/post-review\.mjs \.review\n/);
+  const area = "${{ env.AREA }}";
   /** @type {[string, string, string][]} */
   const records = [
-    ["find", AREA_WORKFLOW, nameFindRecord(stage, area, kind)],
-    ["check", AREA_WORKFLOW, nameCandidatesRecord(stage, area)],
-    ["check", AREA_WORKFLOW, nameCheckRecord(stage, area)],
-    ["review-across", "ci.yml", nameCheckedRecord(stage)],
-    ["review-across", "ci.yml", nameAcrossRecord(stage)],
-    ["review-post", "ci.yml", namePostRecord(stage)],
+    ["find", AREA_WORKFLOW, nameFindRecord(area)],
+    ["review-across", "ci.yml", CANDIDATES_RECORD],
+    ["review-across", "ci.yml", ACROSS_RECORD],
+    ["review-post", "ci.yml", POST_RECORD],
   ];
   for (const [job, workflow, record] of records)
     assert.ok(readJob(job, workflow).includes(`.review/${record}`), `${job} names ${record}`);
   /** @param {string} record */
   const nameArtifact = (record) => `review-${record.replace(/\.json$/, "")}`;
-  const findArtifact = nameArtifact(nameFindRecord(stage, area, kind));
+  const findArtifact = nameArtifact(nameFindRecord(area));
   assert.ok(find.includes(`name: ${findArtifact}\n`), "each reviewer uploads its record");
   assert.ok(
-    check.includes(`pattern: ${findArtifact.slice(0, -kind.length)}*\n`),
-    "each checker downloads its area's reviewers' records",
+    across.includes(`pattern: ${nameArtifact(nameFindRecord("*"))}\n`),
+    "the check across areas downloads every area's reviewer's record",
   );
-  assert.ok(check.includes(`name: ${nameArtifact(nameCheckRecord(stage, area))}\n`));
-  assert.ok(across.includes(`pattern: ${nameArtifact(nameCheckRecord(stage, "*"))}\n`));
-  const acrossArtifact = escapePattern(nameArtifact(nameAcrossRecord(stage)));
-  assert.match(
-    post,
-    new RegExp(
-      `- if: env\\.AREAS > 1\\n\\s+uses: actions/download-artifact@\\S+ # \\S+\\n\\s+with:\\n\\s+name: ${acrossArtifact}\\n`,
-    ),
-    "the posting step downloads the check across areas only when there is one",
-  );
+  assert.ok(across.includes(`name: ${nameArtifact(ACROSS_RECORD)}\n`));
+  assert.ok(post.includes(`name: ${nameArtifact(ACROSS_RECORD)}\n`));
+  assert.ok(post.includes(`name: ${nameArtifact(POST_RECORD)}\n`));
   const review = readJob("review");
-  const reviewJobs = listJobs().filter((job) => job.startsWith("review-"));
-  for (const job of reviewJobs) assert.match(review, new RegExp(`^\\s+${job},$`, "m"), job);
+  const reviewJobs = listJobs().filter(
+    (job) => job.startsWith("review-") && job !== "review-label",
+  );
+  assert.deepEqual(readNeeds("review").toSorted(), reviewJobs.toSorted());
   assert.match(
     review,
     /- if: needs\.review-plan\.outputs\.count != ''\n\s+uses: actions\/download-artifact@\S+ # \S+\n\s+with:\n\s+pattern: review-\*\n/,
@@ -537,15 +660,37 @@ test("the review reads every area in full, checks before it posts, and fails on 
   assert.match(review, /if: needs\.review-plan\.result != 'success'\n\s+run: \|\n.*\n\s+exit 1/);
 });
 
-// The plan hands each stage's matrices to the jobs that review its areas, under the names they
-// read, and each area's unit takes the inputs it declares.
-test("each stage's areas are reviewed with the matrices the plan writes, each area as a unit of its own", () => {
+// One reviewer an area, then one check across every area, one area too: a review runs as many
+// Claude jobs as it has areas, and one more.
+test("a review has one reviewer an area and one check across them all, however many areas", () => {
+  assert.equal(listJobs().filter((job) => job.startsWith("review-")).length, 5);
+  const across = readJob("review-across");
+  assert.match(
+    across,
+    /\n {4}if: \$\{\{ !cancelled\(\) && needs\.review-area\.result != 'skipped' \}\}\n/,
+  );
+  assert.equal(across.match(/anthropics\/claude-code-action/g)?.length, 1);
+  const find = readJob("find", AREA_WORKFLOW);
+  assert.equal(find.match(/anthropics\/claude-code-action/g)?.length, 2);
+  assert.ok(find.includes('for every item in the guide\'s "What to look for"'));
+  assert.match(readRepoFile("REVIEW.md"), /^## What to look for$/m);
+});
+
+// The plan hands its matrix to the job that reviews its areas, under the names it reads, and each
+// area's unit takes the inputs it declares.
+test("the areas are reviewed with the matrix the plan writes, each area as a unit of its own", () => {
   const plan = readJob("review-plan");
-  const jobs = listPlanJobs([{ area: 1, name: "docs" }], []);
-  const written = ["stage", ...[formatJobOutputs("", jobs), formatJobOutputs("final-", jobs)]]
-    .join("\n")
-    .split("\n")
-    .map((line) => line.replace(/=.*$/, ""));
+  const written = [
+    "stage",
+    ...formatJobOutputs(listPlanJobs([{ area: 1, name: "docs" }])).split("\n"),
+  ].map((line) => line.replace(/=.*$/, ""));
+  const handed = [
+    ...plan
+      .split(/^ {4}outputs:$/m)[1]
+      .split(/^ {4}steps:$/m)[0]
+      .matchAll(/^ {6}([a-z-]+): \$\{\{ steps\.plan\./gm),
+  ].map(([, output]) => output);
+  assert.deepEqual(handed, written);
   for (const output of written)
     assert.ok(
       plan.includes(`\n      ${output}: \${{ steps.plan.outputs.${output} }}\n`),
@@ -555,56 +700,38 @@ test("each stage's areas are reviewed with the matrices the plan writes, each ar
     .split(/^ {4}inputs:$/m)[1]
     .split(/^ {4}secrets:$/m)[0];
   const declared = [...inputs.matchAll(/^ {6}([a-z-]+):$/gm)].map(([, input]) => input);
-  for (const [job, prefix, stage] of [
-    ["review-area", "", "${{ needs.review-plan.outputs.stage }}"],
-    ["review-final-area", "final-", "final"],
-  ]) {
-    const caller = readJob(job);
-    assert.match(caller, /\n {4}uses: \.\/\.github\/workflows\/review-area\.yml\n/, job);
-    assert.ok(
-      caller.includes(
-        `include: \${{ fromJSON(needs.review-plan.outputs.${prefix}areas || '[]') }}`,
-      ),
-      job,
-    );
-    const given = Object.fromEntries(
-      [...(caller.split(/^ {4}with:$/m)[1] ?? "").matchAll(/^ {6}([a-z-]+): (.*)$/gm)].map(
-        ([, input, value]) => [input, value],
-      ),
-    );
-    assert.deepEqual(Object.keys(given).toSorted(), declared.toSorted(), job);
-    assert.equal(given.stage, stage, job);
-    assert.equal(
-      given.area,
-      `\${{ fromJSON(needs.review-plan.outputs.${prefix}area-numbers)[matrix.name] }}`,
-      job,
-    );
-    assert.equal(given.name, "${{ matrix.name }}", job);
-    // GitHub can't fill a skipped job's typed name from its matrix, so it would show it unfilled;
-    // an unnamed one is named by its matrix when it runs and by its key when skipped.
-    assert.doesNotMatch(caller, /^ {4}name:/m, job);
-    assert.equal(given.kinds, `\${{ needs.review-plan.outputs.${prefix}kinds }}`, job);
-    assert.match(
-      caller,
-      /CLAUDE_CODE_OAUTH_TOKEN: \$\{\{ secrets\.CLAUDE_CODE_OAUTH_TOKEN \}\}|secrets: \*review-secrets/,
-      job,
-    );
-  }
+  const caller = readJob("review-area");
+  assert.match(caller, /\n {4}uses: \.\/\.github\/workflows\/review-area\.yml\n/);
+  assert.ok(caller.includes("include: ${{ fromJSON(needs.review-plan.outputs.areas || '[]') }}"));
+  const given = Object.fromEntries(
+    [...(caller.split(/^ {4}with:$/m)[1] ?? "").matchAll(/^ {6}([a-z-]+): (.*)$/gm)].map(
+      ([, input, value]) => [input, value],
+    ),
+  );
+  assert.deepEqual(Object.keys(given).toSorted(), declared.toSorted());
+  assert.equal(given.stage, "${{ needs.review-plan.outputs.stage }}");
+  assert.equal(given.area, "${{ fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name] }}");
+  assert.equal(given.name, "${{ matrix.name }}");
+  // GitHub can't fill a skipped job's typed name from its matrix, so it would show it unfilled;
+  // an unnamed one is named by its matrix when it runs and by its key when skipped.
+  assert.doesNotMatch(caller, /^ {4}name:/m);
+  assert.match(caller, /CLAUDE_CODE_OAUTH_TOKEN: \$\{\{ secrets\.CLAUDE_CODE_OAUTH_TOKEN \}\}/);
 });
 
-// Only the posting and summary steps hold a token that writes to the pull request; no job that runs
-// Claude, which reads the pull request's untrusted text, can write to it, and none is handed a
-// tool that comments. A job that calls a workflow caps the token of every job in it.
+// Only the posting and summary jobs, and review-label, which takes off the review label, hold a
+// token that writes to the pull request; no job that runs Claude, which reads the pull request's
+// untrusted text, can write to it, and none is handed a tool that comments. A job that calls a
+// workflow caps the token of every job in it.
 test("no job that runs Claude can write to the pull request", () => {
   const withClaude = [
     ...listJobs().map((job) => readJob(job)),
     ...listJobs(AREA_WORKFLOW).map((job) => readJob(job, AREA_WORKFLOW)),
-  ].filter((job) =>
-    /anthropics\/claude-code-action|steps: \*across-steps|review-area\.yml/.test(job),
-  );
-  assert.equal(withClaude.length, 6);
+  ].filter((job) => /anthropics\/claude-code-action|review-area\.yml/.test(job));
+  assert.equal(withClaude.length, 3);
   for (const job of withClaude) assert.doesNotMatch(job, /pull-requests: write/, job);
-  assert.doesNotMatch(readJob("review-post"), /claude-code-action/);
+  const writers = listJobs().filter((job) => /pull-requests: write/.test(readJob(job)));
+  assert.deepEqual(writers.toSorted(), ["review", "review-label", "review-post"]);
+  for (const job of writers) assert.doesNotMatch(readJob(job), /claude-code-action/, job);
   for (const workflow of ["ci.yml", AREA_WORKFLOW]) {
     const text = readRepoFile(`.github/workflows/${workflow}`);
     assert.doesNotMatch(text, /create_inline_comment/);
@@ -612,78 +739,13 @@ test("no job that runs Claude can write to the pull request", () => {
   }
 });
 
-// The last read of the whole change reads alongside a push's review that has anything to read,
-// and is checked across areas and posted only once that review finished and posted nothing and
-// each of its own areas finished, a rule that one job holds for both.
-test("the last read of the whole change reads alongside a push's review, and posts only once that review finished and posted nothing", () => {
-  assert.deepEqual(readNeeds("review-final-area"), ["review-plan"]);
-  assert.ok(
-    readJob("review-final-area").includes(
-      "if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 && needs.review-plan.outputs.final-count > 0 }}",
-    ),
-  );
-  assert.ok(
-    readJob("review-final-due").includes(
-      "if: ${{ !cancelled() && needs.review-area.result == 'success' && needs.review-post.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-final-area.result == 'success' }}",
-    ),
-    "a posting step that didn't finish never counts as having posted nothing",
-  );
-  assert.match(readJob("review-final-due"), /\n {4}steps:\n {6}- run: echo .*\n+$/);
-  assert.ok(
-    readJob("review-final-post").includes(
-      "if: ${{ !cancelled() && needs.review-final-due.result == 'success' }}",
-    ),
-  );
-  assert.ok(
-    readJob("review-final-across").includes(
-      "if: ${{ !cancelled() && needs.review-final-due.result == 'success' && needs.review-plan.outputs.final-area-count > 1 }}",
-    ),
-  );
-  const finalJobs = ["review-final-due", "review-final-across", "review-final-post"];
-  const dueRule = /review-area\.result|review-post\.outputs\.posted|review-final-area\.result/;
-  for (const job of finalJobs.slice(1))
-    assert.doesNotMatch(readJob(job), dueRule, `${job} reads the rule from review-final-due`);
-  assert.match(readJob("review-post"), /posted: \$\{\{ steps\.post\.outputs\.posted \}\}/);
-  assert.match(readJob("review-post"), /\n\s+id: post\n/);
-  for (const job of ["review-final-across", "review-final-post"])
-    assert.match(readJob(job), /\n\s+STAGE: final\n/, job);
-  assert.match(readJob("review-final-across"), /steps: \*across-steps/);
-  assert.match(readJob("review-final-post"), /steps: \*post-steps/);
-  assert.ok(
-    readJob("review-across").includes(
-      "if: ${{ !cancelled() && needs.review-area.result != 'skipped' && needs.review-plan.outputs.area-count > 1 }}",
-    ),
-    "the check across areas runs whenever its areas ran and there's more than one",
-  );
-});
-
-// Each review job runs only once the jobs whose records it reads have finished, and an area's
-// checker only once its own reviewers have.
+// Each review job runs only once the jobs whose records it reads have finished.
 test("each review job waits for the jobs whose records it reads", () => {
   /** @type {[string, string[]][]} */
   const order = [
     ["review-area", ["review-plan"]],
     ["review-across", ["review-plan", "review-area"]],
-    ["review-post", ["review-plan", "review-area", "review-across"]],
-    ["review-final-area", ["review-plan"]],
-    ["review-final-due", ["review-plan", "review-area", "review-post", "review-final-area"]],
-    ["review-final-across", ["review-plan", "review-final-area", "review-final-due"]],
-    [
-      "review-final-post",
-      ["review-plan", "review-final-area", "review-final-due", "review-final-across"],
-    ],
+    ["review-post", ["review-plan", "review-across"]],
   ];
-  for (const [job, before] of order)
-    for (const need of before) assert.ok(readNeeds(job).includes(need), `${job} needs ${need}`);
-  assert.deepEqual(readNeeds("check", AREA_WORKFLOW), ["find"]);
-});
-
-// A label change skips the review only when a run already passed it on exactly this code, so
-// adding a label never turns a failed review into a passing check.
-test("a label change reviews again unless a run passed the review on the same code", () => {
-  const plan = readJob("review-plan");
-  assert.match(plan, /needs: passed/);
-  assert.match(plan, /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
-  assert.match(plan, /elif \[ -n "\$PASSED_RUN" \]; then/);
-  assert.doesNotMatch(plan, /"\$ACTION" = "labeled"/);
+  for (const [job, before] of order) assert.deepEqual(readNeeds(job), before, job);
 });

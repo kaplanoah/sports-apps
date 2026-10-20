@@ -1,36 +1,29 @@
 // Splits a pull request's change into areas by what its files are about, each test with the code
-// it tests, so CI's review (the review jobs in ci.yml, and review-area.yml for each area) has a
-// reviewer for each kind of problem in KINDS read each area in full. The first review reads the
-// whole change. A review after it reads only what the pushes since the last full read changed,
-// and the whole change is read once more alongside it, by FINAL_KIND's reviewer, whose findings
-// are posted only when that review finishes and posts nothing. A push that changes only what a
+// it tests, so CI's review (the review jobs in ci.yml, and review-area.yml for each area) has one
+// reviewer read each area in full. The first review reads the whole change. A review after it
+// reads only what the pushes since the last full read changed. A push that changes only what a
 // merge of the base brings in is read by no one, and neither is a run on the head the last full
-// read ended on, as a label's is. A test's recorded data, the lockfile, a binary file, and a
-// drawing or minified library a tool wrote go unread, named in the summary instead.
+// read ended on. A test's recorded data, the lockfile, a binary file, and a drawing or minified
+// library a tool wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, as is each rule file whose paths
 // match a file of its area, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
 // commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,
-// GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints each stage's areas
-// and kinds of reviewer, and their counts, for $GITHUB_OUTPUT.
+// GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints the stage, its areas,
+// and their count for $GITHUB_OUTPUT.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { escapePattern } from "../shared/page/escape-pattern.js";
 import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 import { findSummary, readReviewedHead } from "./review-state.mjs";
-import {
-  RULES_FOLDER,
-  escapePattern,
-  listRulesFor,
-  readRuleFiles,
-  readRulePaths,
-} from "./rule-files.mjs";
+import { RULES_FOLDER, listRulesFor, readRuleFiles, readRulePaths } from "./rule-files.mjs";
 
 const AREA_LINES = 2000;
-// A smaller area shares its reviewers with the other small ones.
+// A smaller area shares its reviewer with the other small ones.
 const SMALL_AREA_LINES = 150;
 const MOST_AREAS = 12;
 // Half the lines one Read returns, and about half the 25,000 tokens it returns at most even for
@@ -48,39 +41,6 @@ const PULL_HEAD = "HEAD^2";
 
 const RECORDED_DATA = /(^|\/)tests\/fixtures\/.*\.(json|xml)$/;
 const GENERATED = /\.(svg|min\.js)$/;
-
-const BUG_ITEMS =
-  'REVIEW.md\'s "What to look for" items 1 (Bugs), 4 (Budgets and outside services), 5 (Security), and 6 (Red changes)';
-
-// Each area's reviewers, one for each kind of problem, two for bugs, which matter most and which
-// one reader misses most.
-export const KINDS = [
-  { kind: "bugs", role: "bugs reviewer", focus: `${BUG_ITEMS}.` },
-  {
-    kind: "bugs-from-end",
-    role: "second bugs reviewer",
-    focus: `${BUG_ITEMS}. Read your diffs from the last part to the first, and each from its end.`,
-  },
-  {
-    kind: "rules",
-    role: "rules reviewer",
-    focus:
-      'REVIEW.md\'s "What to look for" items 2 (One fact, one rule, one place), 3 (Both apps, every place), 8 (Leftovers), 9 (Search), 10 (Docs and comments the change makes wrong), and 11 (Any other rule in AGENTS.md or a rule file). For each new helper, constant, rule, or wording, search the repo for one that already does the same. Start from `.review/stale-names.md`, which lists the first places that still name each thing the change removed, and search the repo for the rest.',
-  },
-  {
-    kind: "tests",
-    role: "tests reviewer",
-    focus:
-      'REVIEW.md\'s "What to look for" item 7 (Tests). For each change to behavior, find the test that would fail without it, or report that none does. Also report a test the change makes vacuous, and a browser test that would pass only some of the time.',
-  },
-];
-
-// The whole change's last read, which finds what the first review missed.
-export const FINAL_KIND = {
-  kind: "all",
-  role: "last reviewer",
-  focus: 'Every item in REVIEW.md\'s "What to look for".',
-};
 
 /**
  * Each changed file and its changed lines, from `git diff --numstat`, which counts a binary file's
@@ -397,7 +357,7 @@ export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
   return files.length ? { stage: "push", files } : { stage: "none" };
 }
 
-// A stale name lists its first places only, enough for the rules reviewer to find the rest, and
+// A stale name lists its first places only, enough for a reviewer to find the rest, and
 // each place its first characters only, enough to show how it names what was removed.
 const MOST_STALE_HITS = 15;
 const HIT_LENGTH = 220;
@@ -628,7 +588,6 @@ const STAGE_WORDS = {
   first: "The first review of this pull request: each area's diffs hold its whole change.",
   push: `The diffs hold only what the pushes since the last full review changed. ${SHOW_WHOLE_FILE}`,
   "push-with-base": `The diffs hold what the pushes since the last full review changed, and, where those pushes merged the base and git couldn't set the base's own edits apart, those edits too: judge only what the pull request changed. ${SHOW_WHOLE_FILE}`,
-  final: "The last read of the whole change: each area's diffs hold its whole change.",
 };
 
 /**
@@ -660,26 +619,14 @@ function renderIndex(words, { areas, unread }) {
   ].join("\n");
 }
 
-/**
- * The kinds of reviewer a stage's areas each have: all of them for the first review and a push's,
- * one that looks for everything for the last read, and none when nothing is read.
- * @param {string} stage
- */
-export function listStageKinds(stage) {
-  if (stage === "first" || stage === "push") return KINDS;
-  return stage === "final" ? [FINAL_KIND] : [];
-}
-
 // GitHub names a matrix's job by its values, and a skipped one, whose matrix it never reads, by
 // the job alone, so each area holds only the name its job shows, and the job looks up its number.
 /**
- * A stage's matrices: its areas, each of which review-area.yml reviews and then checks on its own,
- * each area's number by its name, the kinds of reviewer each area has, and how many reviewers that
- * makes.
+ * The review's matrix: its areas, each of which review-area.yml reviews on its own, each area's
+ * number by its name, and how many there are.
  * @param {{ area: number, name: string }[]} areas
- * @param {{ kind: string, focus: string }[]} kinds
  */
-export function listJobs(areas, kinds) {
+export function listJobs(areas) {
   const names = areas.map(({ name }) => name);
   if (new Set(names).size < names.length)
     throw new Error(
@@ -688,37 +635,20 @@ export function listJobs(areas, kinds) {
   return {
     areas: names.map((name) => ({ name })),
     areaNumbers: Object.fromEntries(areas.map(({ area, name }) => [name, area])),
-    kinds: kinds.map(({ kind, focus }) => ({ kind, focus })),
-    count: areas.length * kinds.length,
+    count: areas.length,
   };
 }
 
 /**
- * A stage's matrices as the lines for $GITHUB_OUTPUT, each named after the prefix its jobs read.
- * @param {string} prefix
+ * The review's matrix as the lines for $GITHUB_OUTPUT.
  * @param {ReturnType<typeof listJobs>} jobs
  */
-export const formatJobOutputs = (prefix, { areas, areaNumbers, kinds, count }) =>
+export const formatJobOutputs = ({ areas, areaNumbers, count }) =>
   [
-    `${prefix}areas=${JSON.stringify(areas)}`,
-    `${prefix}area-numbers=${JSON.stringify(areaNumbers)}`,
-    `${prefix}area-count=${areas.length}`,
-    `${prefix}kinds=${JSON.stringify(kinds)}`,
-    `${prefix}count=${count}`,
+    `areas=${JSON.stringify(areas)}`,
+    `area-numbers=${JSON.stringify(areaNumbers)}`,
+    `count=${count}`,
   ].join("\n");
-
-/**
- * Writes a stage's diffs and index, and returns its areas and files left unread.
- * @param {string} folder
- * @param {"first" | "push" | "final"} stage
- * @param {StageChange} change
- * @param {keyof typeof STAGE_WORDS} [words]
- */
-function writeIndexedStage(folder, stage, change, words = stage) {
-  const written = writeStage(folder, stage, change);
-  writeFileSync(join(folder, `${stage}.md`), renderIndex(words, written));
-  return written;
-}
 
 /** @typedef {ReturnType<typeof writeStage>["areas"][number]} PlannedArea */
 
@@ -729,13 +659,26 @@ function writeIndexedStage(folder, stage, change, words = stage) {
  *   until this review finishes
  * @property {PlannedArea[]} areas the stage's areas
  * @property {any[]} unread the files the stage leaves unread, and why
- * @property {PlannedArea[]} final the last read's areas, which a push's review reads alongside it
- * @property {any[]} finalUnread the files the last read leaves unread, and why
  */
 
 /**
- * Writes the review's plan, its stages' diffs and indexes, and, for a stage with reviewers, the
- * list of stale names and a copy of each rule file.
+ * The change a stage's reviewers read, with the words its index opens with, or null for a stage
+ * with none.
+ * @param {ReturnType<typeof chooseStage>} choice
+ * @param {{ range: string[], hasBase: boolean } | null} pushed
+ * @param {(range: string[], files?: string[]) => { numstat: string, diff: string }} readDiff
+ * @returns {{ numstat: string, diff: string, words: keyof typeof STAGE_WORDS } | null}
+ */
+function readStageChange(choice, pushed, readDiff) {
+  if (choice.stage === "first") return { ...readDiff(WHOLE_CHANGE), words: "first" };
+  if (choice.stage !== "push" || !pushed) return null;
+  const words = pushed.hasBase ? "push-with-base" : "push";
+  return { ...readDiff(pushed.range, choice.files), words };
+}
+
+/**
+ * Writes the review's plan, and, for a stage with reviewers, its diffs and index, the list of
+ * stale names, and a copy of each rule file.
  * @param {string} folder
  * @param {object} review
  * @param {ReturnType<typeof chooseStage>} review.choice
@@ -752,30 +695,15 @@ export function writeReview(
   { choice, since, pushed, readDiff, repoFiles, listStale, rules: ruleFiles },
 ) {
   mkdirSync(folder, { recursive: true });
-  const hasReviewers = listStageKinds(choice.stage).length > 0;
-  if (hasReviewers) writeFileSync(join(folder, "stale-names.md"), renderStaleNames(listStale()));
-  const rules = hasReviewers ? writeRuleCopies(folder, ruleFiles) : [];
   /** @type {Plan} */
-  const plan = {
-    stage: choice.stage,
-    since,
-    areas: [],
-    unread: [],
-    final: [],
-    finalUnread: [],
-  };
-  if (choice.stage === "first")
-    Object.assign(
-      plan,
-      writeIndexedStage(folder, "first", { ...readDiff(WHOLE_CHANGE), repoFiles, rules }),
-    );
-  if (choice.stage === "push") {
-    const change = { ...readDiff(pushed.range, choice.files), repoFiles, rules };
-    const words = pushed.hasBase ? "push-with-base" : "push";
-    Object.assign(plan, writeIndexedStage(folder, "push", change, words));
-    const whole = { ...readDiff(WHOLE_CHANGE), repoFiles, rules };
-    const last = writeIndexedStage(folder, "final", whole);
-    Object.assign(plan, { final: last.areas, finalUnread: last.unread });
+  const plan = { stage: choice.stage, since, areas: [], unread: [] };
+  const change = readStageChange(choice, pushed, readDiff);
+  if (change) {
+    writeFileSync(join(folder, "stale-names.md"), renderStaleNames(listStale()));
+    const rules = writeRuleCopies(folder, ruleFiles);
+    const written = writeStage(folder, choice.stage, { ...change, repoFiles, rules });
+    writeFileSync(join(folder, `${choice.stage}.md`), renderIndex(change.words, written));
+    Object.assign(plan, written);
   }
   writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
   return plan;
@@ -922,6 +850,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     rules: readRuleFiles(repoFiles, (path) => readFileSync(path, "utf8")),
   });
   console.log(`stage=${plan.stage}`);
-  console.log(formatJobOutputs("", listJobs(plan.areas, listStageKinds(plan.stage))));
-  console.log(formatJobOutputs("final-", listJobs(plan.final, listStageKinds("final"))));
+  console.log(formatJobOutputs(listJobs(plan.areas)));
 }

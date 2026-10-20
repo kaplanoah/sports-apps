@@ -61,3 +61,6 @@ paths:
   A swipe is checked frame by frame: where what it moves is on each frame,
   never stepping back, and that the page changes nothing while the finger moves it but where that is,
   as the WNBA's `sheet-stack.spec.mjs` does for a sheet's swipe back.
+- The browser tests run in CI on Chromium's headless shell, which behaves differently from full Chromium; for example, it denies notification permission.
+  If you set `CHROMIUM_PATH`, point it at the headless shell.
+  Set `BROWSER_TEST_PORT` to run a second checkout's browser tests alongside another's, on that port and the next.
