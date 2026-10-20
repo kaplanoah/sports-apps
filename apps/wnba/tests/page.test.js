@@ -656,33 +656,39 @@ test("a team's next game is marked with Phosphor's caret-right icon, which readi
   );
 });
 
-test("a team's playoff games keep one the league put off as its next, as the bracket does, but not one a decided series no longer needs", () => {
-  const isAtlanta = (/** @type {any} */ game) =>
-    game.away.team === "ATL" || game.home.team === "ATL";
-  const next = SEASON.games.find((game) => isAtlanta(game) && game.state === "pre");
-  /** @param {object} change */
-  const changeNext = (change) => ({
-    ...SEASON,
-    games: SEASON.games.map((game) => (game === next ? { ...game, ...change } : game)),
-  });
-  /** @param {any} season */
-  const readNextNumber = (season) =>
-    renderTeamSheet(season, "ATL", { year: 2026, now: NOW }).body.text.match(
-      /<div class="team-game next[^"]*">\s*<span class="team-game-number">G(\d+)<\/span>/,
-    )?.[1] ?? null;
-  assert.equal(readNextNumber(SEASON), String(next.number));
-  assert.equal(readNextNumber(changeNext({ status: "Postponed" })), String(next.number));
-  const isLeftOver = (/** @type {any} */ game) =>
-    game.series === next.series && game.state === "pre";
-  const decided = {
-    ...SEASON,
-    games: SEASON.games.map((game) => (isLeftOver(game) ? { ...game, isIfNeeded: true } : game)),
-    series: SEASON.series.map((series) =>
-      series.id === next.series ? { ...series, winner: "ATL" } : series,
-    ),
-  };
-  assert.equal(readNextNumber(decided), null);
-});
+test("a playoff game the league put off or called off is left out alike by the team's cards, its Playoffs part, and the header, as if it weren't on the schedule", () =>
+  inEastern(() => {
+    const isAtlanta = (/** @type {any} */ game) =>
+      game.away.team === "ATL" || game.home.team === "ATL";
+    const next = SEASON.games.find((game) => isAtlanta(game) && game.state === "pre");
+    const after = SEASON.games.find(
+      (game) => isAtlanta(game) && game.state === "pre" && game !== next,
+    );
+    /** @param {(games: any[]) => any[]} change */
+    const changeGames = (change) => ({
+      ...SEASON,
+      games: change(SEASON.games),
+      nearestGames: change(SEASON.nearestGames),
+    });
+    const withoutNext = changeGames((games) => games.filter((game) => game.id !== next.id));
+    /** @param {any} season */
+    const readShown = (season) => ({
+      sheet: renderTeamSheet(season, "ATL", { year: 2026, now: NOW }).body.text,
+      header: readStampLines(season, NOW),
+    });
+    const nextRowNumber = (/** @type {string} */ sheet) =>
+      sheet.match(
+        /<div class="team-game next[^"]*">\s*<span class="team-game-number">G(\d+)<\/span>/,
+      )?.[1];
+    assert.equal(nextRowNumber(readShown(SEASON).sheet), String(next.number));
+    assert.equal(nextRowNumber(readShown(withoutNext).sheet), String(after.number));
+    for (const status of ["Postponed", "Cancelled"]) {
+      const putOff = changeGames((games) =>
+        games.map((game) => (game.id === next.id ? { ...game, status } : game)),
+      );
+      assert.deepEqual(readShown(putOff), readShown(withoutNext), status);
+    }
+  }));
 
 test("a game later today stands out the same on the team's card and in its playoff games, and a game tomorrow in neither", () =>
   inEastern(() => {

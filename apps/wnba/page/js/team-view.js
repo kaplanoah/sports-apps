@@ -14,7 +14,7 @@ import { renderTitles } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
 import { readGameDay } from "./days.js";
 import { describeLiveClock, describeStartTime } from "./games-view.js";
-import { findTeamNearestGames, isCalledOff, mapSeriesById } from "./nearest-games.js";
+import { findTeamNearestGames, isToBePlayed, mapSeriesById } from "./nearest-games.js";
 import { nameTeam, readPlayoffRuns } from "./series.js";
 import { formatMarkColors } from "./sheet-colors.js";
 import { renderPlayerTable } from "./sheet-parts.js";
@@ -110,8 +110,7 @@ const renderLeadingScorers = (leaders) =>
 const OTHER_PLACE = { home: "away", away: "home" };
 
 /**
- * A team's playoff games: those it has finished, and the next one it plays, if any. A game the
- * league put off stays its series' next, since the series plays it before the one after it.
+ * A team's playoff games: those it has finished, and the next one it will play, if any.
  * @param {Season} season
  * @param {string} team
  */
@@ -119,7 +118,7 @@ function listTeamGames(season, team) {
   const seriesById = mapSeriesById(season.series);
   const games = (season.games ?? []).filter((game) => findPlace(game, team));
   const finished = games.filter((game) => game.state === "final");
-  const next = games.find((game) => game.state !== "final" && !isCalledOff(game, seriesById));
+  const next = games.find((game) => game.state !== "final" && isToBePlayed(game, seriesById));
   return { finished, next: next ?? null };
 }
 
