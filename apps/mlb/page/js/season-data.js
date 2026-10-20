@@ -169,14 +169,23 @@ export async function loadSeason() {
   }
 }
 
-/** @param {number} year */
+/**
+ * Shows the season picked, resolving false where its record couldn't be read, which puts back the
+ * season shown before it, unless a newer pick has taken this one's place.
+ * @param {number} year
+ */
 export async function showYear(year) {
+  const before = session.activeYear;
   session.activeYear = year;
   try {
     await reader?.showYear(year);
   } catch {
+    if (session.activeYear !== year) return true;
+    session.activeYear = before;
     noteUnreachable();
+    return false;
   }
+  return true;
 }
 
 function collectTrackedTitles(docs) {

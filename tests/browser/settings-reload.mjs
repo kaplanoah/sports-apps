@@ -171,28 +171,28 @@ export async function checkPickKeptThroughRedraw({ page, pastSeason, newSeason, 
 }
 
 /**
- * A season picked whose record can't be read leaves the picker on the season the page shows,
- * which the title names, or, with none named, the current one.
+ * A past season picked whose record can't be read puts the picker back on the current season the
+ * page still shows, says the server can't be reached, and picking it again reads it again.
  * @param {{ page: import("@playwright/test").Page, pastSeason: string, currentSeason: string }} options
  */
-export async function checkFailedPickMatchesTitle({ page, pastSeason, currentSeason }) {
+export async function checkFailedPickPutBack({ page, pastSeason, currentSeason }) {
   await openSettings(page);
   const picker = page.locator("#seasonPicker");
   await expect(picker.locator("option")).not.toHaveCount(0);
-  await page.route(matchPath(`/store/seasons/${pastSeason}`), (route) => route.abort());
+  const failRead = (/** @type {import("@playwright/test").Route} */ route) => route.abort();
+  await page.route(matchPath(`/store/seasons/${pastSeason}`), failRead);
 
   await picker.selectOption(pastSeason);
 
-  const readShown = async () => [
-    await picker.inputValue(),
-    await page.locator("#seasonPicker option[selected]").getAttribute("value"),
-  ];
-  const title = page.locator("#titleYear");
-  const readTitled = async () => {
-    const year = (await title.isVisible()) ? await title.textContent() : currentSeason;
-    return [year, year];
-  };
-  await expect
-    .poll(async () => (await readShown()).join() === (await readTitled()).join())
-    .toBe(true);
+  await expect(page.locator("#stamp")).toContainText("Can't reach");
+  await expect(picker).toHaveValue(currentSeason);
+  await expect(page.locator("#seasonPicker option[selected]")).toHaveAttribute(
+    "value",
+    currentSeason,
+  );
+  await expect(page.locator("#titleYear")).toBeHidden();
+
+  await page.unroute(matchPath(`/store/seasons/${pastSeason}`), failRead);
+  await picker.selectOption(pastSeason);
+  await expect(page.locator("#titleYear")).toHaveText(pastSeason);
 }

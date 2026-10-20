@@ -107,13 +107,28 @@ export function createSeasonReader({
   }
 
   /**
-   * Shows a season's record, resolving once it has loaded, and then follows its changes.
+   * @param {number} year
+   * @param {any} [readRecord]
+   */
+  async function readShownSeason(year, readRecord) {
+    const before = shownYear;
+    shownYear = year;
+    try {
+      return readRecord ?? (await readDoc(nameSeasonPath(year)));
+    } catch (error) {
+      if (shownYear === year) shownYear = before;
+      throw error;
+    }
+  }
+
+  /**
+   * Shows a season's record, resolving once it has loaded, and then follows its changes. A read
+   * that fails leaves the season shown before, and its changes, followed.
    * @param {number} year
    * @param {any} [readRecord] the record, when it has just been read
    */
   async function showYear(year, readRecord) {
-    shownYear = year;
-    const season = readRecord ?? (await readDoc(nameSeasonPath(year)));
+    const season = await readShownSeason(year, readRecord);
     if (year !== shownYear) return;
     lastRecord = season;
     keepSeason(year, isReadable(season) ? season : null);

@@ -178,6 +178,36 @@ test("picking another season shows its record", async () => {
   assert.deepEqual(session.season, record2025);
 });
 
+test("picking a season that can't be read puts back the season shown and says the store can't be reached", async () => {
+  startReading(
+    { "live/current": { season: 2026 }, "seasons/2026": RECORD_2026 },
+    { unreadable: ["seasons/2025"] },
+  );
+  await loadSeason();
+
+  assert.equal(await showYear(2025), false);
+
+  assert.equal(session.activeYear, 2026);
+  assert.deepEqual(session.season, RECORD_2026);
+  assert.notEqual(session.problem, "");
+});
+
+test("a pick that can't be read after a newer pick replaced it leaves the newer one, with no problem", async () => {
+  startReading(
+    { "live/current": { season: 2026 }, "seasons/2026": RECORD_2026 },
+    { unreadable: ["seasons/2025"] },
+  );
+  await loadSeason();
+
+  const replaced = showYear(2025);
+  const newer = showYear(2026);
+
+  assert.equal(await replaced, true);
+  assert.equal(await newer, true);
+  assert.equal(session.activeYear, 2026);
+  assert.equal(session.problem, "");
+});
+
 // A season whose AL top seed swept through to win the World Series.
 function buildSeasonWonBy(champion) {
   const AL = [champion, "NYY", "TOR", "SEA", "BOS", "DET"];

@@ -6,7 +6,7 @@ import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
 import {
-  checkFailedPickMatchesTitle,
+  checkFailedPickPutBack,
   checkNewCurrentSeasonListed,
   checkPickKeptThroughRedraw,
   checkSeasonsOnFailedList,
@@ -123,7 +123,7 @@ test("a reload while the store can't be reached keeps the Season picker on the p
   await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
 });
 
-test("a reload while the store can't be reached, with nothing the page last showed to draw, leaves the Season picker as drawn, never adding the year by the phone's clock", async ({
+test("a reload while the store can't be reached, with nothing the page last showed to draw, leaves the Season picker as drawn, through a pick that can't be read too, never adding the year by the phone's clock", async ({
   page,
 }) => {
   await openApp(page, ONE_PAST_SEASON);
@@ -140,13 +140,18 @@ test("a reload while the store can't be reached, with nothing the page last show
   await filling;
   await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
   await expect(picker).toHaveValue("2026");
+
+  await picker.selectOption("2025");
+
+  await expect(picker).toHaveValue("2026");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
 });
 
-test("a season picked whose record can't be read leaves the Season picker on the season shown", async ({
+test("a past season picked whose record can't be read puts the Season picker back on the season shown, says so, and can be picked again", async ({
   page,
 }) => {
   await openApp(page, ONE_PAST_SEASON);
-  await checkFailedPickMatchesTitle({ page, pastSeason: "2025", currentSeason: "2026" });
+  await checkFailedPickPutBack({ page, pastSeason: "2025", currentSeason: "2026" });
 });
 
 test("while the store can't list its seasons, a new current season joins the Season picker, with the past season shown still chosen", async ({

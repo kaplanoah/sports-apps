@@ -160,6 +160,21 @@ test("a page showing a past season stays on it when the store moves on, and hear
   assert.deepEqual(shown.currentYears, [2027]);
 });
 
+test("a season that can't be read leaves the season shown before followed", async () => {
+  const { reader, shown, deliver } = startReader(
+    { "live/current": { season: 2026 }, "seasons/2026": SEASON_2026 },
+    { unreadable: ["seasons/2025"] },
+  );
+  await reader.loadCurrentSeason();
+  await settle();
+
+  await assert.rejects(reader.showYear(2025));
+  const later = { ...SEASON_2026, games: ["opener", "second game"] };
+  deliver("seasons/2026", later);
+
+  assert.deepEqual([shown.year, shown.season], [2026, later]);
+});
+
 test("an answer for a season the page has moved off is dropped", async () => {
   const { reader, shown, deliver } = startReader({
     "live/current": { season: 2026 },

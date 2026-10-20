@@ -98,21 +98,36 @@ export function fillSeasonPicker(row, { years, pickedYear, currentYear }, words)
 
 // The picker's markup marks the season picked as it's picked, as its choice does, since the page
 // saves the markup as it leaves the screen and a reload shows it before the page's code arrives.
-/** @param {HTMLSelectElement} picker */
-function markPicked(picker) {
+/**
+ * @param {HTMLElement} row
+ * @param {string} year
+ */
+function markPicked(row, year) {
+  const picker = row.querySelector("select");
+  if (!picker) return;
+  picker.value = year;
   for (const option of picker.options) option.defaultSelected = option.selected;
+  forgetWrittenMarkup(row);
 }
 
+/** @param {HTMLSelectElement} picker */
+const readMarkedYear = (picker) =>
+  [...picker.options].find((option) => option.defaultSelected)?.value ?? picker.value;
+
 /**
- * Calls `pick` with each season picked, from the picker the row draws now or later.
+ * Calls `pick` with each season picked, from the picker the row draws now or later. A pick whose
+ * season `pick` couldn't show, resolving false, puts the picker back on the season picked before,
+ * so picking it again retries.
  * @param {HTMLElement} row
- * @param {(year: number) => void} pick
+ * @param {(year: number) => Promise<boolean>} pick
  */
 export function watchSeasonPicks(row, pick) {
-  row.addEventListener("change", (event) => {
+  row.addEventListener("change", async (event) => {
     const picker = /** @type {HTMLSelectElement} */ (event.target);
-    markPicked(picker);
-    forgetWrittenMarkup(row);
-    pick(Number(picker.value));
+    const before = readMarkedYear(picker);
+    const year = picker.value;
+    markPicked(row, year);
+    if (await pick(Number(year))) return;
+    if (row.querySelector("select")?.value === year) markPicked(row, before);
   });
 }

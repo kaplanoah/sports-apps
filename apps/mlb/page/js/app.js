@@ -75,10 +75,15 @@ const findSeasonRow = () => /** @type {HTMLElement} */ (document.getElementById(
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 async function switchYear(year) {
-  await showYear(year);
-  if (session.activeYear !== year) return;
-  startOverDayStrip();
-  renderAll();
+  if (!(await showYear(year))) {
+    redrawEased(renderStamp);
+    return false;
+  }
+  if (session.activeYear === year) {
+    startOverDayStrip();
+    renderAll();
+  }
+  return true;
 }
 
 const readSeasonYears = keepSeasonYears(loadSeasonList);

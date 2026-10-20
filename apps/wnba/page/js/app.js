@@ -168,18 +168,18 @@ const fillSeasonList = (years) =>
     LEAGUE_WORDS,
   );
 
-// Another season's Games view opens on its start day: today, or a season over's last day. A pick
-// whose season can't be read puts the picker back on the season shown, so picking it again retries.
+// Another season's Games view opens on its start day: today, or a season over's last day.
 /** @param {number} year */
 async function switchSeason(year) {
   if (!(await showYear(year))) {
-    fillSeasonList(null);
     renderStamp();
-    return;
+    return false;
   }
-  if (session.pickedYear !== year) return;
-  startOverDayStrip();
-  renderAll();
+  if (session.pickedYear === year) {
+    startOverDayStrip();
+    renderAll();
+  }
+  return true;
 }
 
 // A new current season changes what the header says, and the picker lists it.

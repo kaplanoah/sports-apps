@@ -109,20 +109,22 @@ export async function loadSeason() {
 }
 
 /**
- * Shows the season picked, resolving false where its record couldn't be read, which leaves the
- * season shown picked, unless a newer pick has taken this one's place.
+ * Shows the season picked, resolving false where its record couldn't be read, which puts back the
+ * pick before it, unless a newer pick has taken this one's place.
  * @param {number} year
  */
 export async function showYear(year) {
+  const before = session.pickedYear;
   session.pickedYear = year;
   try {
     await reader?.showYear(year);
-    return true;
   } catch {
+    if (session.pickedYear !== year) return true;
+    session.pickedYear = before;
     noteUnreachable();
-    if (session.pickedYear === year) session.pickedYear = session.year;
     return false;
   }
+  return true;
 }
 
 /** The years of the seasons the store keeps, newest first. */
