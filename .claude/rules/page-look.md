@@ -24,8 +24,8 @@ paths:
 - A theme changes only colors, so each view lays out the same in each of an app's themes.
   A theme may also change a weight where its font keeps its width at every weight,
   as MLB's Ball sets a final's losing score a step lighter in Chivo Mono,
-  to stand apart from the winner as much as its dim ink does in Night Game,
-  and may lift a part a pixel or two where its colors look off center otherwise,
+  to stand apart from the winner as much as its dim ink does in Night Game.
+  A theme may also lift a part a pixel or two where its colors look off center otherwise,
   as MLB's bracket chips and their digits sit as each theme's set them by eye, which the root's `tests/browser/theme-layout.mjs` leaves out.
   The WNBA's `tests/browser/themes.spec.mjs` checks every view in Walnut against Maple,
   on a phone and a wide screen, with the root's `tests/browser/theme-layout.mjs`; a new view joins its list.
@@ -44,8 +44,8 @@ paths:
   matched by eye so a role looks as big and as heavy in every app, and a new league sets its own.
   A rule that sets a role's size sets its weight from the same role,
   or a step from it where its text leads or recedes within the role, as `calc(var(--type-label-weight) - 100)`,
-  and a heading's or label's letter spacing from `--type-heading-tracking` or `--type-label-tracking`,
-  and every line height set by its text's size is a share of the app's `--leading`,
+  and a heading's or label's letter spacing from `--type-heading-tracking` or `--type-label-tracking`.
+  Every line height set by its text's size is a share of the app's `--leading`,
   which MLB's Libre Franklin sets a little apart, while one in pixels keeps its pixels.
   The root's `tests/type-roles.test.js` checks the stylesheets for each.
   The WNBA sets its words in Barlow and its teams, numbers, and the app's name in Barlow Condensed,
@@ -59,8 +59,8 @@ paths:
   or in a weight its font has no face for, and each app's browser tests check every view with it.
   Each role draws in one font and one case,
   and in a second only where the app's `tests/browser/role-looks.spec.mjs` names the text and why,
-  like MLB's numbers in Chivo Mono and the WNBA Games list's dates in Barlow, as a wall calendar's;
-  it walks the theme specs' views from the app's `tests/browser/views.mjs`,
+  like MLB's numbers in Chivo Mono and the WNBA Games list's dates in Barlow, as a wall calendar's.
+  That spec walks the theme specs' views from the app's `tests/browser/views.mjs`,
   the gate, the Updates box, and the bracket before the playoff field is set,
   and fails on any look its tables don't name, and on any they name that nothing draws.
 - Shape every corner with the shape tokens the shared stylesheets read from each app's `:root`:
@@ -74,22 +74,27 @@ paths:
   and leave the page behind them as it is, closing with a caret at their top left,
   or, on a sheet opened from another, going back with an arrow in its place,
   each just the icon in the app's `--accent`, from `shared/page/sheet.css` and `chrome.css`.
-  The WNBA's look is Hardwood, which the top comment of its `page/styles.css` states in full: square corners,
-  cards and outlined buttons `--raised` inside an `--edge`, a held bar that ends in a line and never fades,
-  buttons in sentence case, the one that's on filled orange, like the list a pill shows,
-  whose other names are plain words, and orange and teal each with two jobs, named only in `:root` as the roles every rule uses:
-  `--now` (what's happening now) and `--action` (where to tap) in orange,
-  and `--structure` (what organizes the page) and `--result` (how something ended) in teal,
-  and everything else in ink, which its `tests/hardwood.test.js` checks.
+  The WNBA's look is Hardwood, which the top comment of its `page/styles.css` states in full:
+  - square corners
+  - cards and outlined buttons `--raised` inside an `--edge`
+  - a held bar that ends in a line and never fades
+  - buttons in sentence case, the one that's on filled orange, like the list a pill shows,
+    whose other names are plain words
+  - orange and teal each with two jobs, named only in `:root` as the roles every rule uses:
+    `--now` (what's happening now) and `--action` (where to tap) in orange,
+    and `--structure` (what organizes the page) and `--result` (how something ended) in teal
+  - everything else in ink, which its `tests/hardwood.test.js` checks
 - Channel logos in `shared/page/networks/` come only from Wikimedia Commons files marked public domain or CC0, or from the repo's owner, since the repo is public.
   A logo that works on only one background gets a version for the other,
   made by turning its black parts the cream of team names on a dark page or its white parts dark, and named with `-dark` for the dark one.
-- Icons come only from [Phosphor](https://phosphoricons.com), the apps' one icon set: copy the icon's path from it at the weight its neighbors use,
+- Icons come only from [Phosphor](https://phosphoricons.com), the apps' one icon set.
+  Copy the icon's path from it at the weight its neighbors use,
   Light for the page's controls, like the tab bar and close buttons,
-  and Regular in a line of text, and name the icon and weight in a comment where the code holds it, as `team-view.js` does for its caret-right.
+  and Regular in a line of text.
+  Name the icon and weight in a comment where the code holds it, as `team-view.js` does for its caret-right.
   Never draw an icon by hand or take one from another set, but for the four drawn for their place: the Home Screen steps' Share and menu glyphs,
-  which copy the browser's own buttons so people find them (`shared/page/draw-home-screen-asks.js`),
-  MLB's seed lock (`games-view.js`), and the catching-up ring,
+  which copy the browser's own buttons so people find them (`shared/page/draw-home-screen-asks.js`).
+  The other two are MLB's seed lock (`games-view.js`) and the catching-up ring,
   Phosphor's circle-notch at its Light weight with a 55-degree gap, set in a line of text (`shared/page/catch-up-note.js`).
   The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four,
   and on a Phosphor icon the last comment before it doesn't name with its weight.
@@ -97,11 +102,11 @@ paths:
   so it's drawn for its place too, filled with soft tips and set in as the app's dot is (`shared/page/all-star.js`).
 - Make every tap land on a button or a link.
   An iPhone hands the page a tap only where one is, whatever listens for it,
-  so a page's listener never finds what was tapped from the row or card around a button,
-  and a row that opens wherever it's tapped has its button reach over it,
-  as a game's row does (`shared/page/game-row.css`), the WNBA bracket's team lines do,
-  and, in a table, where Safari never lets a row hold what reaches over it,
-  the standings do, with the cell around the button and a clip around the table (`shared/page/row-button.css`).
+  so a page's listener never finds what was tapped from the row or card around a button.
+  A row that opens wherever it's tapped has its button reach over it,
+  as a game's row does (`shared/page/game-row.css`) and the WNBA bracket's team lines do.
+  The standings do too, in a table, where Safari never lets a row hold what reaches over it,
+  with the cell around the button and a clip around the table (`shared/page/row-button.css`).
   The root's `tests/browser/tap-states.mjs` lists each spot that shows a pointer where a tap lands on no button (`listTapsOffButtons`),
   and each app's browser tests check every view with it; a new view or sheet joins that list,
   and a test of a row's tap checks where a finger lands, with `document.elementFromPoint`, as well as what opens.
@@ -115,11 +120,13 @@ paths:
   which the root's `tests/hover-color.test.js` checks.
 - Readable before elegant.
   Text that's too small, light, or dim is a bug: check it against its type role,
-  and against WCAG's AA contrast, 4.5 to 1, which the root's `tests/browser/contrast.mjs` checks wherever the browser tests check the type roles,
-  once nothing is pressed or mid-transition, so a test of a pressed or hovered row's colors measures that on purpose,
-  and the WNBA's `tests/browser/themes.spec.mjs` in both its themes.
+  and against WCAG's AA contrast, 4.5 to 1.
+  The root's `tests/browser/contrast.mjs` checks contrast wherever the browser tests check the type roles,
+  once nothing is pressed or mid-transition, so a test of a pressed or hovered row's colors measures that on purpose.
+  The WNBA's `tests/browser/themes.spec.mjs` checks it in both its themes.
 - On the pages, text of one sentence or less, like a label, an empty view's note,
-  or a setting's note, ends without a period; text of two or more sentences,
+  or a setting's note, ends without a period.
+  Text of two or more sentences,
   like a release note or a message that says what to do, ends with one,
   but for text that ends in a link, which ends without one, as the Home Screen app's note does.
   An outlet's own words keep their punctuation, in an element marked `data-quoted`.

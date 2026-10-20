@@ -8,7 +8,8 @@ AGENTS.md and the rule files in `.claude/rules/` hold the rules the code keeps; 
 - Read in full every diff your review hands you:
   the whole change in a first review,
   and what the pushes since the last finished review changed in a review asked for after them.
-  A recorded fixture (`tests/fixtures/`) or `package-lock.json` needs only its name and size,
+  A recorded fixture (`tests/fixtures/`), `package-lock.json`, a binary file,
+  or a drawing or minified library a tool wrote needs only its name and size,
   and whether a test reads it.
 - Read past the diff: each caller of a function the change touches,
   and each place that holds a copy of what it changes.
@@ -24,10 +25,15 @@ AGENTS.md and the rule files in `.claude/rules/` hold the rules the code keeps; 
 In order of what has mattered here.
 
 1. **Bugs.** State and edge cases above all:
-   empty and missing values (a `null` or `NaN` that reaches the screen),
-   a game whose teams aren't known yet, doubleheaders, the playoffs, a season's first and last day,
-   a time zone on each side of UTC, a read that fails or answers late,
-   two reads that finish out of order, and a listener or timer that's never removed.
+   - empty and missing values (a `null` or `NaN` that reaches the screen)
+   - a game whose teams aren't known yet
+   - doubleheaders
+   - the playoffs
+   - a season's first and last day
+   - a time zone on each side of UTC
+   - a read that fails or answers late
+   - two reads that finish out of order
+   - a listener or timer that's never removed
 2. **One fact, one rule, one place.**
    AGENTS.md: "A rule or a limit two places share lives in one place",
    and "A fact two places show ... comes from one read, kept in one document".
@@ -60,9 +66,9 @@ In order of what has mattered here.
    So is a change to which tests a pull request runs, or which of their failures fail it,
    that runs or fails fewer: its `scope` and `burn-in` jobs in `.github/workflows/ci.yml`,
    `worker/browser-scope.mjs`, `worker/burn-in-specs.mjs`, and the modules they import to decide,
-   like `worker/deploy-scope.mjs` and `worker/package-imports.mjs`, and `worker/judge-burn-in.mjs`,
-   naming which browser tests or burn-in specs no longer run or fail,
-   since the pull request's own copy of them picks its own tests.
+   like `worker/deploy-scope.mjs` and `worker/package-imports.mjs`, and `worker/judge-burn-in.mjs`.
+   The finding names which browser tests or burn-in specs no longer run or fail,
+   since the pull request's own copy of those jobs and modules picks its own tests.
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
    that `worker/red-change-styles.mjs` doesn't list yet.
@@ -90,8 +96,9 @@ Don't run the tests: CI runs them all.
 
 ## How to report
 
-In CI, one reviewer an area looks for every item above and lists every problem it finds,
-one check across every area confirms each against the code before anything is posted, merges repeats, weighs each, and adds what spans areas,
+In CI, one reviewer an area looks for every item above and lists every problem it finds.
+One check across every area, one area too, confirms each against the code before anything is posted,
+merges repeats, weighs each, and adds what spans areas,
 and a step posts what it confirmed or left unsure.
 
 - Report every problem you find, not a sample, each as one finding that names every place it shows,
@@ -123,3 +130,4 @@ and a step posts what it confirmed or left unsure.
   how many of the problems the reviewers listed the check across areas turned down, how many of the changed files were read in full out of how many,
   each one that wasn't and why, and anything read but not judged.
   In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge.
+  Each later review updates that one comment in place.
