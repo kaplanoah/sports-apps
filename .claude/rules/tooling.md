@@ -56,4 +56,5 @@ paths:
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.
 - An app's deploy is skipped when nothing but docs, tests, tooling,
   and other apps' folders changed since its live version's commit; the root's `worker/deploy-scope.mjs` lists those files.
-  When you add a file that can't change the Worker, add it to that list.
+  It skips the root's `.claude/` folder whole, so a new hook, rule, or skill needs no entry.
+  When you add any other file that can't change the Worker, add it to that list.
