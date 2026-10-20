@@ -514,6 +514,17 @@ test("an answer says over its rows what they are, and how many, as the games lin
   assert.equal(readLine("Rook injury"), "A’ja Rook | Out");
   assert.equal(readLine("Quill injured"), "Jo Quill | Not out");
   assert.equal(readLine("Stone injury"), "Who's out | 2 players");
+  const oneOut = {
+    ...PAGES_WITH_NEWS,
+    players: PAGES_WITH_NEWS.players.map((player) =>
+      player.id === "2" ? { ...player, out: null } : player,
+    ),
+  };
+  assert.deepEqual(listRows("Stone injury", false, oneOut).rows, [
+    "player HAW Stone",
+    "player FOX Stone",
+  ]);
+  assert.equal(readLine("Stone injury", oneOut), null);
   assert.equal(readLine("Hawks news"), "Hawks | News | 3 stories");
   assert.equal(readLine("Foxes stories"), "Foxes | News | 2 stories");
   assert.equal(readLine("Hawks record"), null);

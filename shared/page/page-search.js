@@ -632,10 +632,10 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
 
 /**
  * Who is out, when the words ask with no name, then any other player whose name they start as
- * they're typed, as "hurt" starts Hurter's, with no line over rows that aren't all out; or the
- * players they name beside them, each saying whether she's out; or no page when they name no one.
- * A league whose players don't say who is out lists no one for the words alone, and the players
- * named without a word on it.
+ * they're typed, as "hurt" starts Hurter's; or the players they name beside them, each out saying
+ * why; or no page when they name no one. A line over the rows says they're who's out only when
+ * each is, and a player named alone, whether she is. A league whose players don't say who is out
+ * lists no one for the words alone, and the players named without a word on it.
  * @param {import("./search-words.js").Token[]} rest the tokens besides those that ask who is out
  * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages, isTyping: boolean }} search
  * @returns {FoundPages}
@@ -656,12 +656,24 @@ function findOutPages(rest, { text, tokens, pages, isTyping }) {
   const rows = listPlayerRows(players, pages, "named");
   if (!rows.length) return { rows: [], gameText: text };
   if (!pages.isOutKnown) return { rows, gameText: null };
+  const read = describeNamedOut(players, rows);
+  return read ? { rows, gameText: null, read } : { rows, gameText: null };
+}
+
+/**
+ * The line over the players named beside words asking who is out: whether she's out, for one, or
+ * who's out, when each of them is, or none when some aren't.
+ * @param {PagePlayer[]} players
+ * @param {PageRow[]} rows
+ */
+function describeNamedOut(players, rows) {
   const [player] = players;
-  const read =
-    players.length === 1
-      ? { lead: `${player.firstName} ${player.lastName}`, facts: [player.out ? "Out" : "Not out"] }
-      : describeWhoIsOut(rows);
-  return { rows, gameText: null, read };
+  if (players.length === 1)
+    return {
+      lead: `${player.firstName} ${player.lastName}`,
+      facts: [player.out ? "Out" : "Not out"],
+    };
+  return players.every((each) => each.out) ? describeWhoIsOut(rows) : undefined;
 }
 
 /**
