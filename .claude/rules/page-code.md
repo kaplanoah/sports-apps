@@ -27,7 +27,7 @@ paths:
   Add a note only when the user asks for one, whatever the PR's type, in the words they approve, with an `at` just before the PR merges.
   A word that should stand out, like a button's name, goes in `<b>`,
   in a note built with the `html` template, which the Updates box sets at 500, heavier than the note's text, as it does a final's team names.
-- A Diagnostics report, which a viewer shares wherever they like, carries none of what AGENTS.md's public-repo bullet keeps out of the repo:
+- A Diagnostics report, which a viewer shares wherever they like, carries none of what the public-repo bullet in `.claude/rules/tooling.md` keeps out of the repo:
   each of its logs names a file by its own name and the page as page (`nameFile` in `shared/page/step-log.js`).
 - Search finds every place the app has, as the phone's own search does: each tab,
   sheet, sheet section, and setting, and each kind of thing with a page of its own,
@@ -36,6 +36,4 @@ paths:
 - When you add a place, make it searchable in the app's `page/js/search-pages.js`,
   with its row, its words, and what it opens, and add it to `COVERAGE` in the app's `tests/search.test.js`,
   with the search that finds it, or with why search leaves it out.
-  That test reads the page's markup and fails on any tab, sheet,
-  sheet section, or setting `COVERAGE` doesn't name, on any setting's row without the `data-setting` its search opens, and on any search that no longer finds its place.
   A kind of thing whose pages share one sheet, like a player's, is named once, by a search that finds one of them.

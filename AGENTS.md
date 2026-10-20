@@ -79,9 +79,8 @@
 - Refer to PRs by number, not branch.
 - Work decided but left for later goes in an issue, opened in the turn it's left out, as the `ship` skill says.
 - Start every PR title with a type.
-  The squash merge carries it to `main`, where it sets the next version of each app it changes (the root's `worker/release.mjs`).
-  A PR that changes nothing an app's deploy counts (the root's `worker/deploy-scope.mjs`),
-  such as only its tests or other apps' folders, leaves that app's version alone.
+  The squash merge carries it to `main`, where it sets the next version of each app it changes,
+  and CI's `title` job checks it (`findTitleProblem` in the root's `worker/release.mjs`).
   Use `feat:` for something new to see or do (minor), `fix:` for fixes and polish (patch),
   `refactor:` for code the Worker runs with no visible change (patch),
   `build:` for dependencies, the build, and the deploy (patch),
@@ -91,11 +90,7 @@
   `beta` is a scratch branch: never commit to it or open a PR from it.
 - A red change is one only the owner's phone can test: `.claude/rules/red-change.md` says what makes one, and the `ship` skill how it ships.
 - `npm run rollback`, `set-app-key`, `set-access-code`, and `set-page-host` change the live apps: run each only as `.claude/rules/tooling.md` says.
-- The repo is public.
-  Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, page hosts, or personal data; use placeholders in tests and docs:
-  `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
-  which the root's `tests/no-secrets.test.js` tells from a real one, failing on any real one in a tracked file.
-  Nothing a change logs or posts where the public can read it, like a workflow's log or an issue, carries any of these either.
+- The repo is public: never commit or post secrets, keys, addresses, or personal data, as `.claude/rules/tooling.md` lists.
 - The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
   each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
   Never ask for one in chat or put one in environment variables, code, or commits.
@@ -184,15 +179,6 @@ When a step says to go back to an earlier step, continue in order from there.
 
 README and anything user-facing: be clear, direct, and concise.
 
-In this file, the rule files in `.claude/rules/`, the skills, and `REVIEW.md`,
-start each sentence on a line of its own, and break a long one after its commas,
-so two changes to one bullet touch different lines and rarely conflict.
-Keep each sentence to 60 words or fewer, and write a long catalog as a list.
-The root's `tests/agents-lines.test.js` checks the lines and the cap.
-Each rule file lists the `paths` it loads for, each matching a file in the repo, which the root's `tests/rule-files.test.js` checks.
-This file stays at 200 lines or fewer, since every session reads all of it,
-so a rule only some work needs goes in the rule file or skill for that work (the root's `tests/agents-lines.test.js`).
-
-On the pages, write how fans talk, not a league's official or press words:
-the playoffs in every app, never the postseason or a berth,
-and a league's own word only where its fans say it too, like the World Series, Opening Day, and extra innings.
+In this file, the rule files, the skills, and `REVIEW.md`, put each sentence on a line of its own, at 60 words or fewer,
+and keep this file to 200 lines, so a rule only some work needs goes in its rule file or skill (the root's `tests/agents-lines.test.js`).
+Each rule file's `paths` match files in the repo (the root's `tests/rule-files.test.js`).

@@ -49,7 +49,7 @@ In order of what has mattered here.
    A link from a feed reaches an `href` only through `isWebAddress`.
 5. **Security.**
    Text reaching the page without the `html` template, anything that weakens the `APP_KEY` check or the access gate,
-   and anything AGENTS.md's public-repo bullet keeps out of the repo, wherever it shows: code, docs, logs, issues, or a Diagnostics report.
+   and anything the public-repo bullet in `.claude/rules/tooling.md` keeps out of the repo, wherever it shows: code, docs, logs, issues, or a Diagnostics report.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
@@ -114,12 +114,7 @@ and a step posts what it confirmed or left unsure.
   for a security hole, or for a broken rule from AGENTS.md or a rule file;
   **Nit** for something worth fixing that doesn't block;
   **Pre-existing** for a problem in code the change didn't make worse.
-- An **Important** or **Unsure** finding is posted on its line, a thread of its own, or on its file when GitHub won't take the line.
-  A review's **Nit** and **Pre-existing** findings are posted together as a checklist, each item naming its file and line,
-  in one comment, or in more only past GitHub's limit on a comment's length, each on the first of its items' files GitHub takes.
-  Each checklist comment is one thread to answer and resolve.
-  A finding GitHub takes on no file goes in a comment in the pull request's conversation, which has no thread to resolve:
-  answer it with a reply in the conversation.
+- Each **Important** or **Unsure** finding gets a thread of its own, and the **Nit** and **Pre-existing** ones a checklist, as the root's `worker/post-review.mjs` posts them.
 - The numbered items above are never matters of taste:
   a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it.
 - Read the pull request's threads first.
