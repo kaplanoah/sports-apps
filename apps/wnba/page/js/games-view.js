@@ -156,7 +156,8 @@ const canOpen = (game) => hasBothTeams(game) && !game.allStar;
  */
 function describeSide(game, place) {
   const side = game[place];
-  const bonus = game.state === "live" && side.isInBonus && html`<span class="bonus">Bonus</span>`;
+  const bonus =
+    game.state === "live" && side.isInBonus && html`<span class="chip bonus">Bonus</span>`;
   return {
     lines: renderSideClub(game, place),
     classes: [findLoser(game) === place && "lost"],

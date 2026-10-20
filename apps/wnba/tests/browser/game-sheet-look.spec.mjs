@@ -10,6 +10,7 @@ import {
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { readOklab } from "../../../../shared/page/team-colors.js";
 import { TEAMS } from "../../page/js/teams.js";
@@ -330,7 +331,7 @@ test("a box score's and a preview's two teams line their numbers up column for c
   }
 });
 
-test("a box score's names rise a pixel beside the numbers, a fouled-out chip stays put, and its words center in it", async ({
+test("a box score's names rise a pixel beside the numbers, and a fouled-out chip sits on its name's line, its words on a whole pixel", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -339,8 +340,27 @@ test("a box score's names rise a pixel beside the numbers, a fouled-out chip sta
   const name = sheet.locator('table.players th[scope="row"]', { hasText: "Caitlin Clark" });
   await expect(name.locator(".foul-chip")).toHaveText("Fouled out");
   await expect(name).toHaveCSS("top", "-1px");
-  await expect(name.locator(".foul-chip")).toHaveCSS("top", "1px");
-  await expect(name.locator(".foul-chip-words")).toHaveCSS("top", "-0.5px");
+  const { nameBaseline, chipBaseline, rowTop } = await name.evaluate((cell) => {
+    const chip = /** @type {HTMLElement} */ (cell.querySelector(".foul-chip"));
+    // A zero-size box set inline has its top on the line's baseline.
+    const readBaseline = (/** @type {Element} */ parent, /** @type {Node | null} */ before) => {
+      const probe = document.createElement("span");
+      probe.style.cssText = "display: inline-block; width: 0; height: 0";
+      parent.insertBefore(probe, before);
+      const baseline = probe.getBoundingClientRect().top;
+      probe.remove();
+      return baseline;
+    };
+    return {
+      nameBaseline: readBaseline(cell, chip),
+      chipBaseline: readBaseline(chip, null),
+      rowTop: /** @type {Element} */ (cell.closest("tr")).getBoundingClientRect().top,
+    };
+  });
+  expect(chipBaseline).toBeCloseTo(nameBaseline, 2);
+  const baselineInRow = chipBaseline - rowTop;
+  expect(baselineInRow).toBeCloseTo(Math.round(baselineInRow), 1);
+  expect(await listChipsOffCenter(page)).toEqual([]);
 });
 
 test("while the lead loads after the box score, the sheet holds the chart's place, so nothing below it moves as it arrives", async ({
@@ -481,21 +501,25 @@ for (const { screen, viewport } of [
       await expect(page.locator(".bonus").first()).toBeAttached();
       await expect(sheet.locator(".line-score th.now")).toBeVisible();
       expect(await listTextOffRoles(page)).toEqual([]);
+      expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator(".clock").first()).toBeVisible();
       expect(await listTextOffRoles(page)).toEqual([]);
+      expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       const final = await openGameSheet(page, ACES_AT_FEVER);
       await expect(final.locator(".line-score")).toBeVisible();
       expect(await listTextOffRoles(page)).toEqual([]);
+      expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await final.getByRole("tab", { name: "Highlights" }).click();
       await expect(final.locator("#highlightsBody .clip-row").first()).toBeVisible();
       expect(await listTextOffRoles(page)).toEqual([]);
+      expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await page.keyboard.press("Escape");
@@ -503,6 +527,7 @@ for (const { screen, viewport } of [
       const preview = await openGameSheet(page, FEVER_AT_ACES);
       await expect(preview.locator(".meeting-score").first()).toBeVisible();
       expect(await listTextOffRoles(page)).toEqual([]);
+      expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
     });
@@ -619,6 +644,7 @@ test("a game yet to end whose channels aren't listed yet says to check back, und
   const faceOff = await sheet.locator(".faceoff-score").boundingBox();
   expect((await note.boundingBox()).y).toBeGreaterThan(faceOff.y + faceOff.height);
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });

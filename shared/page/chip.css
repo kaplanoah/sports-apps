@@ -1,0 +1,24 @@
+/*
+ * A chip: a short word or two in the Label role's capitals on a small box, like a status beside a
+ * title or Bonus under a team. Apps link it before their own styles.css, define --leading and
+ * --radius-chip, and give each kind of chip its colors, border, and side padding.
+ *
+ * Its words are trimmed to their capitals and centered in its fixed height, so they sit in its
+ * middle by what's drawn rather than by the font's line. At 15px, inside a 1px border or none, the
+ * words' baseline also lands on a whole pixel from the chip's top, where a screen draws them
+ * without snapping a pixel up or down.
+ */
+
+.chip {
+  display: inline-block;
+  height: 15px;
+  align-content: center;
+  border-radius: var(--radius-chip);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+  text-box: trim-both cap alphabetic;
+  white-space: nowrap;
+}

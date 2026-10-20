@@ -624,7 +624,7 @@ table.st .rank-cell {
 }
 /* The slot is there for unranked clubs too, and sets every row to a rank tag's height. */
 table.st .rank-slot {
-  height: 19px;
+  height: 18px;
   vertical-align: middle;
 }
 table.st .seed-cell {
@@ -639,40 +639,25 @@ table.st .seed-cell {
 .elim-num.live {
   color: var(--now);
 }
-.league-tag,
-.status-chip,
-.clinch-tag,
-.magic-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  height: 19px;
-  padding: 0 7px;
-  border-radius: var(--radius-chip);
-  line-height: var(--leading);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  text-transform: uppercase;
-  letter-spacing: var(--type-label-tracking);
-  white-space: nowrap;
-}
 /* text-indent balances the letter-spacing added after the last letter. */
 .league-tag {
   width: 24px;
-  padding-left: 0;
-  padding-right: 0;
+  text-align: center;
   text-indent: var(--type-label-tracking);
 }
 .clinch-tag {
+  padding: 0 7px;
   color: var(--highlight);
   border: 1px solid color-mix(in srgb, var(--highlight) 45%, transparent);
 }
 .magic-tag {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
   color: var(--now);
-  border: 0;
-  padding: 0;
-  height: auto;
 }
 .stand-empty {
   color: var(--ink-dim);
@@ -937,21 +922,21 @@ table.st .seed-cell {
   margin-right: 0;
 }
 
+/* A rank is numbers in the Caption role, untracked and with no capitals. Chivo Mono's capitals land
+   its baseline on a whole pixel only in an even height, so its chip is 18px rather than 15. */
 .rank-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   min-width: 26px;
-  height: 19px;
+  height: 18px;
   padding: 0 5px;
-  border-radius: var(--radius-chip);
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 150);
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: none;
   flex: none;
   background: transparent;
   border: 1px solid var(--now-line);
   color: var(--now);
-  line-height: 13px;
 }
 .rank-tag.solid {
   background: var(--now-line);
@@ -1349,9 +1334,6 @@ body.kbd .rank-item .grip:focus {
 }
 .rank-item .league-tag {
   grid-area: league;
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  letter-spacing: var(--type-label-tracking);
 }
 .rank-drought {
   display: none;
@@ -1371,13 +1353,6 @@ body.kbd .rank-item .grip:focus {
   font-weight: var(--type-caption-weight);
   line-height: 14px;
   color: var(--ink-dim);
-}
-.rank-item .status-chip {
-  height: 19px;
-  padding: 0 7px;
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  letter-spacing: var(--type-label-tracking);
 }
 @container (max-height: 47px) {
   .rank-id {
@@ -1975,7 +1950,7 @@ table.st.line-score td.team .club {
 }
 .out-line {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 9px;
   margin: 0;
   font-size: var(--type-body-size);

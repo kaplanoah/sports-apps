@@ -692,7 +692,7 @@ header.top h1 .title-letter:nth-child(3) {
   color: var(--ink-dim);
 }
 .game-extra {
-  min-height: 14px;
+  min-height: 15px;
   margin-top: 4px;
 }
 .game-middle {
@@ -807,14 +807,8 @@ header.top h1 .title-letter:nth-child(3) {
 .bonus {
   padding: 0 5px;
   border: 1px solid currentColor;
-  border-radius: var(--radius-chip);
   color: var(--now);
   font-family: var(--display);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  line-height: 12px;
-  text-transform: uppercase;
-  letter-spacing: var(--type-label-tracking);
 }
 
 /* The game sheet: the two teams across the score in its band, then the game's parts, each under a
@@ -1283,15 +1277,10 @@ table.players th[scope="row"] {
   font-weight: calc(var(--type-detail-weight) + 100);
   text-align: left;
 }
-/* Barlow sits low beside Barlow Condensed's numbers, so a player's name rises a pixel, and a chip
-   beside it stays where it was. */
+/* Barlow sits low beside Barlow Condensed's numbers, so a player's name rises a pixel. */
 table.players th[scope="row"] {
   position: relative;
   top: -1px;
-}
-table.players th[scope="row"] .foul-chip {
-  position: relative;
-  top: 1px;
 }
 table.players td.quiet-stat {
   font-weight: calc(var(--type-stat-weight) - 100);
@@ -1305,25 +1294,11 @@ table.players td.quiet-stat {
   color: var(--ink-dim);
 }
 .foul-chip {
-  display: inline-block;
   margin-left: 6px;
   padding: 0 5px;
   border: 1px solid currentColor;
-  border-radius: var(--radius-chip);
   font-family: var(--display);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
-  vertical-align: 1px;
-  white-space: nowrap;
   color: var(--now);
-}
-/* Capitals sit low in Barlow's line, so a chip's words rise half a pixel to center between its
-   borders. */
-.foul-chip-words {
-  position: relative;
-  top: -0.5px;
 }
 
 /* A team's Roster section scrolls both ways on its own, stopping at its edges without springing
@@ -2054,10 +2029,11 @@ table.standings tr.below td {
 .playoff-out {
   color: var(--ink-dim);
 }
-/* The chip centers on the name, rather than sharing its baseline. */
+/* The chip sits on the club's baseline, its dot's bottom, which keeps its words on a whole
+   pixel. */
 .team-cell {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
   min-width: 0;
   vertical-align: middle;
@@ -2066,17 +2042,12 @@ table.standings td.team .club {
   font-size: var(--type-team-size);
   font-weight: var(--type-team-weight);
 }
-/* Barlow's line runs well above its capitals, so the letter is trimmed to its capital and centers
-   by what's drawn. */
+/* A lone letter takes no tracking, which would leave it left of the chip's middle. */
 .conference-tag {
-  padding: 3px 4px;
+  padding: 0 4px;
   border: 1px solid currentColor;
-  border-radius: var(--radius-chip);
   font-family: var(--display);
-  font-size: var(--type-caption-size);
-  font-weight: calc(var(--type-caption-weight) + 200);
-  line-height: var(--leading);
-  text-box: trim-both cap alphabetic;
+  letter-spacing: 0;
   color: var(--ink-mid);
 }
 .seed-note {

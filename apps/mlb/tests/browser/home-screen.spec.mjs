@@ -10,6 +10,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { listThemeLayoutChanges, showTheme } from "../../../../tests/browser/theme-layout.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -63,6 +64,7 @@ test.describe("on an iPhone, in the browser", () => {
       "Tap Add to Home Screen",
     ]);
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listTapsOffButtons(page)).toEqual([]);

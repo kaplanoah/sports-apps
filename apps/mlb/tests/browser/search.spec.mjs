@@ -11,6 +11,7 @@ import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { listTextOffRoles, measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
@@ -703,6 +704,7 @@ test("every search state keeps to its type roles, its periods, and AA contrast, 
   await openSeasonGames(page);
   const expectReadable = async () => {
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listTapsOffButtons(page)).toEqual([]);

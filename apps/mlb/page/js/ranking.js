@@ -22,7 +22,7 @@ function renderRankItem(id, index) {
       <button type="button" class="grip" aria-label="Move ${nameTeam(id)}, ranked ${index + 1}. Use the up and down arrow keys.">&#8942;&#8942;</button>
       <span class="rank-id">
         ${renderPlainClub(id)}
-        <span class="league-tag ${league}">${league}</span>
+        <span class="chip league-tag ${league}">${league}</span>
         <span class="rank-drought tabular">${describeDrought(id)}</span>
         <span class="rank-ws tabular">${renderTitleSummary(id)}</span>
       </span>

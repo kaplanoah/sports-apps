@@ -1,6 +1,7 @@
 import { test, expect, openApp, openSettings, ON_A_PHONE } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
@@ -104,6 +105,7 @@ test("the News tab shows a card for each piece of news the Worker saves, newest 
     "MLB proposes shorter season, best-of-7 division series",
   ]);
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
@@ -124,6 +126,7 @@ test("switching off the Mets' own outlets or The Athletic leaves their stories o
 
   await openSettings(page);
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });

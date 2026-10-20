@@ -209,8 +209,7 @@ const renderPendingTeamStats = (teams) =>
     </div>`;
 
 /** @param {string} words */
-const renderFoulChip = (words) =>
-  html`<span class="foul-chip"><span class="foul-chip-words">${words}</span></span>`;
+const renderFoulChip = (words) => html`<span class="chip foul-chip">${words}</span>`;
 
 /**
  * @param {BoxPlayer} player

@@ -150,7 +150,7 @@ test("a player who is out has a box first saying why, with RotoWire's sentence a
   );
   assert.match(
     markup,
-    /^<section class="out-box">\s*<p class="out-line"><span class="foul-chip"><span class="foul-chip-words">Out<\/span><\/span><span class="out-words">Not injury related<\/span><\/p>/,
+    /^<section class="out-box">\s*<p class="out-line"><span class="chip foul-chip">Out<\/span><span class="out-words">Not injury related<\/span><\/p>/,
   );
   assert.match(markup, /<p class="out-sentence" data-quoted>Stewart/);
   assert.doesNotMatch(renderBody(createOutPlayer(), { showsOut: false }), /^Out|RotoWire/);

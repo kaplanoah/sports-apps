@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { readTokenColor } from "./theme.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -44,29 +45,31 @@ test("the standings leave room between each group's name and its columns' names"
   expect(gap).toBeGreaterThanOrEqual(STANDINGS_HEADING_GAP_PX);
 });
 
-test("a standings conference tag's letter is trimmed to its capital, with even room around it", async ({
+test("a standings conference tag sits on its club's dot's bottom, its letter centered on a whole pixel of its row", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  const tag = page.locator("#standings-league .conference-tag").first();
-  await expect(tag).toHaveText(/^[EW]$/);
-  const room = await tag.evaluate((element) => {
-    const style = getComputedStyle(element);
-    const content =
-      element.getBoundingClientRect().height -
-      ["borderTopWidth", "borderBottomWidth", "paddingTop", "paddingBottom"]
-        .map((side) => parseFloat(style[side]))
-        .reduce((sum, value) => sum + value);
+  const cell = page.locator("#standings-league .team-cell").first();
+  await expect(cell.locator(".conference-tag")).toHaveText(/^[EW]$/);
+  const { dotBottom, tagBaseline, rowTop } = await cell.evaluate((element) => {
+    // A zero-size box set inline after a text has its top on the text's baseline.
+    const probe = document.createElement("span");
+    probe.style.cssText = "display: inline-block; width: 0; height: 0";
+    /** @type {Element} */ (element.querySelector(".conference-tag")).append(probe);
+    const baseline = probe.getBoundingClientRect().top;
+    probe.remove();
     return {
-      content,
-      fontSize: parseFloat(style.fontSize),
-      above: style.paddingTop,
-      below: style.paddingBottom,
+      dotBottom: /** @type {Element} */ (element.querySelector(".dot")).getBoundingClientRect()
+        .bottom,
+      tagBaseline: baseline,
+      rowTop: /** @type {Element} */ (element.closest("tr")).getBoundingClientRect().top,
     };
   });
-  expect(room.content).toBeLessThan(room.fontSize * 0.8);
-  expect(room.above).toBe(room.below);
+  expect(tagBaseline).toBeCloseTo(dotBottom, 2);
+  const baselineInRow = tagBaseline - rowTop;
+  expect(baselineInRow).toBeCloseTo(Math.round(baselineInRow), 1);
+  expect(await listChipsOffCenter(page)).toEqual([]);
 });
 
 test("the standings' recent form reads a step below the season, in the mid ink", async ({

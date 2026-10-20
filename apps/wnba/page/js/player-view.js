@@ -92,7 +92,7 @@ const RANKED_STATS = [
   { key: "freeThrowShare", label: "FT%", isShare: true, shots: "free throws" },
 ];
 
-const OUT_CHIP = html`<span class="foul-chip"><span class="foul-chip-words">Out</span></span>`;
+const OUT_CHIP = html`<span class="chip foul-chip">Out</span>`;
 // Who wrote the sentence ESPN carries on a player who is out.
 const OUT_SOURCE = "RotoWire";
 // In sentence case, so the words take a capital only where they lead.

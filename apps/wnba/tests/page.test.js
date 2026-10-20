@@ -867,7 +867,7 @@ test("a team's Playoffs chip names its round, the same on a game day as any othe
     assert.match(readTeam(SEASON, "ATL").body, / Playoffs 1st Rd G1 /);
     assert.match(
       renderTeamSheet(SEASON, "ATL", { year: 2026, now: NOW }).body.text,
-      /<span class="status-chip alive">1st Rd<\/span>/,
+      /<span class="chip status-chip alive">1st Rd<\/span>/,
     );
     assert.match(
       readTeam(ATLANTA_SEASON, "ATL").body,

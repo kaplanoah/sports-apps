@@ -167,7 +167,7 @@ export function readTeamPlayoffs(season, team) {
 
 /** @param {{ label: string, kind: string } | null} chip */
 export const renderChip = (chip) =>
-  chip && html`<span class="status-chip ${chip.kind}">${chip.label}</span>`;
+  chip && html`<span class="chip status-chip ${chip.kind}">${chip.label}</span>`;
 
 /**
  * The seasons a team won it all: those it had won before, and this one once it has.

@@ -77,6 +77,7 @@ test("a team stays put as Bonus comes and goes, level with the score", async ({ 
   const before = await readTeamCenters();
   await goLive(true);
   await expect(row.locator(".bonus")).toHaveText("Bonus");
+  expect((await row.locator(".bonus").boundingBox())?.height).toBe(15);
   expect(await readTeamCenters()).toEqual(before);
   await goLive(false);
   await expect(row.locator(".bonus")).toHaveCount(0);
@@ -172,7 +173,7 @@ test("a date that starts with a 1 sits 0.065em left of its column's middle, so t
   ]);
 });
 
-test("a game's dots, names, and time center on their capitals, level with each other, the seed on the right half a pixel lower", async ({
+test("a game's dots and names center on their capitals, level with each other, the seed on the right and the time half a pixel lower", async ({
   page,
 }) => {
   await openApp(page);
@@ -201,7 +202,7 @@ test("a game's dots, names, and time center on their capitals, level with each o
   );
   const { ".game-side.away .dot": dot, ...letters } = pieces;
   for (const [selector, { middle, height, fontSize }] of Object.entries(letters)) {
-    const nudge = selector === ".game-side.home .seed" ? 0.5 : 0;
+    const nudge = [".game-side.home .seed", ".time"].includes(selector) ? 0.5 : 0;
     expect(height, selector).toBeLessThan(fontSize * 0.8);
     expect(middle - dot.middle, selector).toBeCloseTo(nudge, 1);
   }

@@ -5,6 +5,7 @@ import { showTheme } from "../../../../tests/browser/theme-layout.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { readTagOffset } from "../../../../tests/browser/title-row.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -88,6 +89,7 @@ test("the tag reads at its type role and clears contrast in both themes", async 
   for (const theme of /** @type {const} */ (["light", "dark"])) {
     await showTheme(page, theme);
     expect(await listTextOffRoles(page), theme).toEqual([]);
+    expect(await listChipsOffCenter(page), theme).toEqual([]);
     expect(await listLowContrastText(page), theme).toEqual([]);
   }
 });
