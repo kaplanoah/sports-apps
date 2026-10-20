@@ -167,8 +167,13 @@ async function writeListedMonths(docs, snapshot, saved) {
   }
 }
 
-// A month the schedule no longer lists lost every game it held, like a World Series' last games
-// after a sweep, unless a read without the standings left out its playoff games.
+/** @param {any} doc a month of the season's games as the store keeps it */
+const holdsOnlyPlayoffGames = (doc) =>
+  (doc.games ?? []).every((/** @type {any} */ game) => game.postseason);
+
+// Only playoff games are ever dropped, so a month of nothing else that the schedule no longer
+// lists lost every game it held, like a World Series' last games after a sweep, unless a read
+// without the standings left out its playoff games.
 /**
  * @param {any} docs
  * @param {any} snapshot
@@ -176,8 +181,8 @@ async function writeListedMonths(docs, snapshot, saved) {
  */
 async function removeEmptiedMonths(docs, snapshot, saved) {
   if (!snapshot.isSeriesKnown) return;
-  for (const month of saved.keys())
-    if (!Object.hasOwn(snapshot.schedule, month))
+  for (const [month, doc] of saved)
+    if (!Object.hasOwn(snapshot.schedule, month) && holdsOnlyPlayoffGames(doc))
       await docs.remove(MLBSnapshot.nameScheduleKey(snapshot.season, month));
 }
 

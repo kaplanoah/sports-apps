@@ -91,7 +91,7 @@ paths:
   - The list comes from the season's whole schedule,
     which the store keeps a month to a document in `schedules-<year>`.
   - The store reads MLB's whole schedule once a day and the days around today with each update,
-    and saves only the months that changed, removing one that lost every game.
+    and saves only the months that changed, removing a month of playoff games that lost every game.
   - A playoff game is listed only while MLB's postseason or the days around today list it,
     since MLB drops one a series no longer needs from those first.
   - Each game has its ballpark,

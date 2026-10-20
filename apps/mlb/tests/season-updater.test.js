@@ -335,6 +335,22 @@ test("a month whose every game MLB dropped goes, and tells open pages", async ()
   );
 });
 
+test("a season's whole schedule MLB answers with no games leaves the regular season's months as they were", async () => {
+  const { store, harness, read, context, clock } = createUpdatingStore({
+    snapshot: WHOLE_SEASON,
+    now: SEASON_NOW,
+  });
+  await store.alarm();
+  const july = read("schedules-2026/2026-07");
+  assert.ok(july);
+
+  const responses = { ...SEASON_GAMES.responses, seasonGames: { dates: [] } };
+  harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: SEASON_NOW });
+  assert.equal(harness.snapshot.schedule["2026-07"], undefined);
+  await updateSeasonAgain(store, context, clock);
+  assert.deepEqual(read("schedules-2026/2026-07"), july);
+});
+
 test("a read without the standings during the playoffs leaves the playoff games' months and each club's last and next games as they were", async () => {
   const { store, harness, read, context, clock } = createUpdatingStore({
     snapshot: WHOLE_SEASON,
