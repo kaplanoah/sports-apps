@@ -15,7 +15,7 @@ const UNREACHABLE = "Can't reach the page's server right now";
 /** @type {ReturnType<typeof createSeasonReader> | null} */
 let reader = null;
 /** @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>} */
-let showPickedYear = async () => "replaced";
+let pickSeason = async () => ({ kind: "replaced", year: null });
 /** @type {number | null} */
 let scheduleYear = null;
 let unwatchSchedule = () => {};
@@ -97,7 +97,7 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
       showCurrentYear();
     },
   });
-  showPickedYear = createSeasonPicks({
+  pickSeason = createSeasonPicks({
     reader,
     readPick: () => session.pickedYear,
     keepPick: (year) => {
@@ -122,7 +122,7 @@ export async function loadSeason() {
  * Shows the season picked, keeping it in `session.pickedYear` while its record is on its way.
  * @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>}
  */
-export const showYear = (year) => showPickedYear(year);
+export const showYear = (year) => pickSeason(year);
 
 /** The years of the seasons the store keeps, newest first. */
 export async function loadSeasonYears() {

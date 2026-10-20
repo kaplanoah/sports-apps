@@ -4,7 +4,56 @@ import {
   keepSeasonYears,
   listSeasonOptions,
   listSeasonYears,
+  watchSeasonPicks,
 } from "../shared/page/season-picker.js";
+
+/**
+ * A stand-in for the picker's row: its select's options, the one chosen and the one its markup
+ * marks, and a way to choose one as a viewer does, resolving once the row has dealt with it.
+ * @param {string[]} years
+ * @param {string} marked
+ */
+function createRow(years, marked) {
+  const options = years.map((value) => ({
+    value,
+    selected: value === marked,
+    defaultSelected: value === marked,
+  }));
+  const picker = {
+    options,
+    get value() {
+      return options.find((option) => option.selected)?.value ?? "";
+    },
+    /** @param {string} value */
+    set value(value) {
+      for (const option of options) option.selected = option.value === value;
+    },
+  };
+  /** @type {(event: { target: typeof picker }) => Promise<void>} */
+  let onChange = async () => {};
+  const row = {
+    querySelector: () => picker,
+    addEventListener: (/** @type {string} */ _type, /** @type {typeof onChange} */ listener) => {
+      onChange = listener;
+    },
+  };
+  /** @param {string} year */
+  const choose = (year) => {
+    picker.value = year;
+    return onChange({ target: picker });
+  };
+  const readMarked = () => options.find((option) => option.defaultSelected)?.value;
+  return { row: /** @type {any} */ (row), picker, choose, readMarked };
+}
+
+/** A pick a test answers, with the outcome it chooses. */
+function createHeldPick() {
+  /** @type {((outcome: import("../shared/page/season-reader.js").PickOutcome) => void)[]} */
+  const answers = [];
+  /** @returns {Promise<import("../shared/page/season-reader.js").PickOutcome>} */
+  const pick = () => new Promise((resolve) => answers.push(resolve));
+  return { pick, answers };
+}
 
 test("the seasons the store keeps list newest first, leaving out anything that isn't a year", () => {
   const docs = [{ id: "2025" }, { id: "2027" }, { id: "notes" }, { id: "2026" }];
@@ -80,4 +129,54 @@ test("an older read of the seasons that answers after a newer one leaves the new
   answers[0](["2026"]);
 
   assert.deepEqual(await older, ["2027", "2026"]);
+});
+
+/** @param {ReturnType<typeof createRow>["row"]} row */
+function watchRow(row) {
+  const { pick, answers } = createHeldPick();
+  const redraws = { picked: 0, unread: 0 };
+  watchSeasonPicks(row, {
+    pick,
+    showPicked: () => redraws.picked++,
+    showUnread: () => redraws.unread++,
+  });
+  return { answers, redraws };
+}
+
+test("a pick shown redraws the page, with the picker's markup marking it", async () => {
+  const { row, picker, choose, readMarked } = createRow(["2026", "2025"], "2026");
+  const { answers, redraws } = watchRow(row);
+
+  const chosen = choose("2025");
+  answers[0]({ kind: "shown", year: 2025 });
+  await chosen;
+
+  assert.deepEqual([picker.value, readMarked()], ["2025", "2025"]);
+  assert.deepEqual(redraws, { picked: 1, unread: 0 });
+});
+
+test("a pick that can't be read puts the picker on the season it leaves picked, and says so", async () => {
+  const { row, picker, choose, readMarked } = createRow(["2026", "2025", "2024"], "2024");
+  const { answers, redraws } = watchRow(row);
+
+  const chosen = choose("2025");
+  answers[0]({ kind: "unread", year: 2026 });
+  await chosen;
+
+  assert.deepEqual([picker.value, readMarked()], ["2026", "2026"]);
+  assert.deepEqual(redraws, { picked: 0, unread: 1 });
+});
+
+test("before any season has loaded, two picks that can't be read put the picker back on the season it marked before both", async () => {
+  const { row, picker, choose, readMarked } = createRow(["2026", "2025", "2024"], "2026");
+  const { answers } = watchRow(row);
+
+  const older = choose("2025");
+  const newer = choose("2024");
+  answers[0]({ kind: "replaced", year: 2024 });
+  await older;
+  answers[1]({ kind: "unread", year: null });
+  await newer;
+
+  assert.deepEqual([picker.value, readMarked()], ["2026", "2026"]);
 });

@@ -169,7 +169,7 @@ const fillSeasonList = (years) =>
   );
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
-function showPickedSeason() {
+function drawPickedSeason() {
   startOverDayStrip();
   renderAll();
 }
@@ -289,8 +289,7 @@ async function boot() {
   startHomeScreen();
   watchSeasonPicks(findSeasonRow(), {
     pick: showYear,
-    readPick: () => session.pickedYear,
-    showPicked: showPickedSeason,
+    showPicked: drawPickedSeason,
     showUnread: () => redrawEased(renderStamp),
   });
   startBracket();
@@ -305,7 +304,7 @@ async function boot() {
   keepLastSeen(readShown);
   startSeasonData({
     showChange: showNewData,
-    showStamp: renderStamp,
+    showStamp: () => redrawEased(renderStamp),
     showCurrentYear: showNewCurrentYear,
     showUnreadable: reloadIfReplaced,
   });

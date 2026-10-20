@@ -74,7 +74,7 @@ function drawNews() {
 const findSeasonRow = () => /** @type {HTMLElement} */ (document.getElementById("seasonRow"));
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
-function showPickedYear() {
+function drawPickedSeason() {
   startOverDayStrip();
   renderAll();
 }
@@ -203,8 +203,7 @@ function wireControls() {
   startHomeScreen();
   watchSeasonPicks(findSeasonRow(), {
     pick: showYear,
-    readPick: () => session.activeYear,
-    showPicked: showPickedYear,
+    showPicked: drawPickedSeason,
     showUnread: () => redrawEased(renderStamp),
   });
   document

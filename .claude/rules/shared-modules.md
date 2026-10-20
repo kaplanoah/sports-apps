@@ -213,7 +213,9 @@ paths:
     - `season-reader.js`: reading the season the store says is current,
       its record, which a page reads only in the version it knows,
       reloading once a newer release is out, and the store's status,
-      and moving on to the next season when the store does
+      and moving on to the next season when the store does.
+      It keeps each season a viewer picks while its record is on its way,
+      and puts it back on the season shown when it can't be read (`createSeasonPicks`).
     - `poll-schedule.js`: how long a league's next update waits, from where its games stand
     - `kept-read.js`: a read worked out again only once what it reads from changes, like each app's season for its search
     - the store client

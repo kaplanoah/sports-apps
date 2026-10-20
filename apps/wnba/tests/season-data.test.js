@@ -31,11 +31,12 @@ beforeEach(() => {
   });
 });
 
-test("picking a season that can't be read puts back the pick before it and says the store can't be reached", async () => {
+test("picking a season that can't be read puts back the season shown, not the pick before it, and says the store can't be reached", async () => {
   startReading({ unreadable: ["seasons/2025"] });
   await loadSeason();
+  session.pickedYear = 2024;
 
-  assert.equal(await showYear(2025), "unread");
+  assert.equal((await showYear(2025)).kind, "unread");
 
   assert.deepEqual([session.year, session.pickedYear], [2026, 2026]);
   assert.deepEqual(session.season, SEASON_2026);
@@ -46,7 +47,7 @@ test("before the store or the page's last showing names a season, a pick that ca
   startReading({ unreadable: ["live/current", "seasons/2025"] });
   Object.assign(session, { year: 2027, pickedYear: null });
 
-  assert.equal(await showYear(2025), "unread");
+  assert.equal((await showYear(2025)).kind, "unread");
 
   assert.equal(session.pickedYear, null);
 });
@@ -58,8 +59,8 @@ test("a pick that can't be read after a newer pick replaced it leaves the newer 
   const replaced = showYear(2025);
   const newer = showYear(2026);
 
-  assert.equal(await replaced, "replaced");
-  assert.equal(await newer, "shown");
+  assert.equal((await replaced).kind, "replaced");
+  assert.equal((await newer).kind, "shown");
   assert.equal(session.pickedYear, 2026);
   assert.equal(session.problem, "");
 });
