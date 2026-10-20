@@ -34,13 +34,12 @@ jobs:
             --setting-sources user
             --allowedTools "Bash(node worker/review-git.mjs:*)"
           prompt: |
-            The repository's owner is checking which forms of one harmless command your Bash permissions allow. Each command only prints the latest commit. Run these six Bash commands, one call each, in this order, exactly as written. Run every one, even after one is denied, and don't rewrite or retry a denied one. Then stop.
-            1. node worker/review-git.mjs log -1 --oneline
-            2. node worker/review-git.mjs log -1 $(echo HEAD)
-            3. node worker/review-git.mjs log -1 `echo HEAD`
-            4. FOO=1 node worker/review-git.mjs log -1
-            5. node worker/review-git.mjs log -1 > out.txt
-            6. node worker/review-git.mjs log -1 ; echo done
+            The repository's owner is checking which commands your Bash permissions allow in this throwaway CI runner. Run these five Bash commands, one call each, in this order, exactly as written. Run every one, even after one is denied, and don't rewrite or retry a denied one. Then stop.
+            1. node worker/review-git.mjs log -1 ; touch out2.txt
+            2. node worker/review-git.mjs log -1 ; cat /etc/hostname
+            3. node worker/review-git.mjs log -1 && git log -1 --output=out3.txt
+            4. node worker/review-git.mjs log -1 | tee out4.txt
+            5. cat /etc/hostname
       - name: Write what each call returned
         if: ${{ !cancelled() }}
         env:
@@ -65,5 +64,5 @@ jobs:
         shell: bash
       - name: List the files --output wrote
         if: ${{ !cancelled() }}
-        run: ls -la out.txt 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+        run: ls -la out*.txt 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
         shell: bash
