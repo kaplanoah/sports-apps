@@ -16,8 +16,9 @@ Answer every review finding, a Nit or Pre-existing one too, as below; the `ship`
   or that it rides the push an Important fix needs anyway, and never give one a push of its own.
 - The `review` label asks CI to review what the push changed, and takes the label off itself, so the next ask is a fresh label.
   Add it once the push's own CI run has started on the PR's head, since that run stops a label's run queued before it.
-  A push stops a review still running or waiting, and a label change stops one still waiting,
-  so when `check` says no review has passed on the PR's code, take the label off if the stopped run left it on, and add it again.
+  A push stops a review still running or waiting, and a label change stops one still waiting.
+  Whenever `check` says no review has passed on the code that merges, as after a stopped run or once `main` moved after the last review,
+  take the label off if a stopped run left it on, and add it again.
 - Fix a finding in every place the PR's own change shows the same problem, not only on its line,
   and leave what's outside the PR's one thing to an issue, as the `ship` skill's step 12 says, rather than widening the PR.
 - Once the push is up, resolve the thread of each finding you fixed, with no reply, since GitHub marks it outdated once its line changes,

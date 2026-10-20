@@ -102,7 +102,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Merge it yourself: the owner doesn't.
 - `check` holds the code that merges, the PR merged into `main` as `main` is then,
   so when `main` moved after the PR's last review, the run `phone-ok` starts fails `check` for want of a review.
-  Add the `review` label then.
+  Answer it as the steward skill says for a `check` with no review on the code that merges.
 
 ## Step 9: the deploy
 
