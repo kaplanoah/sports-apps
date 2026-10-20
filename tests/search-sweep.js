@@ -17,6 +17,9 @@ import { FORGIVING_LENGTH, isOneEditApart, normalizeText } from "#shared/search-
 // It also types each name of one word long enough to forgive a wrong letter with one letter wrong,
 // each way a thumb gets one wrong, and lists where it finds another name's games: a wrong letter
 // finds the name's, or, when it's as near another name, nothing.
+// And it types each team's name beside each number its players wear, each way fans write it, and
+// lists where it doesn't list just the team's players who wear it, or, while the number is last,
+// each number it starts, over suggestions that each keep the number.
 
 const SHORTEST_GUESS = 3;
 // A phone's keyboard, a row at a time, for the key a thumb lands on beside the one it meant.
@@ -189,6 +192,115 @@ export function sweepMisspellings({ context, pages }) {
           }),
       ),
     );
+  });
+}
+
+/**
+ * The ways fans write a team's name beside a player's number, each with the name it's written with:
+ * each way with its own name, and its other names, like its full name or its code, just beside the
+ * number.
+ * @param {string[]} names the team's own name first
+ * @param {string} number
+ */
+const listNumberPhrasings = ([name, ...others], number) => [
+  ...[
+    `${name} ${number}`,
+    `${name} #${number}`,
+    `${number} ${name}`,
+    `${name} No. ${number}`,
+    `${name} number ${number}`,
+  ].map((text) => ({ name, text })),
+  ...others.map((other) => ({ name: other, text: `${other} ${number}` })),
+];
+
+/**
+ * A team's names that name it alone, its own first, as "Dodgers" does, but not "Los Angeles".
+ * @param {import("#shared/game-search.js").SearchTeam} team
+ * @param {SearchContext} context
+ */
+function listOwnNames(team, { dictionary }) {
+  const isOwn = (/** @type {string} */ name) => {
+    const meanings = (dictionary.get(normalizeText(name)) ?? []).filter(
+      (meaning) => meaning.kind === "team",
+    );
+    return meanings.length > 0 && meanings.every((meaning) => meaning.value === team.code);
+  };
+  const names = [team.name, ...team.words, ...(team.shownNames ?? [])].map((name) =>
+    name.toLowerCase(),
+  );
+  return [...new Set(names)].filter(isOwn);
+}
+
+/**
+ * The ids of the players who wear a number or, while it's being typed, a number it starts, the
+ * number itself first, then by number.
+ * @param {import("#shared/page-search.js").PagePlayer[]} players
+ * @param {string} number
+ * @param {boolean} isStart
+ */
+const listWearing = (players, number, isStart) =>
+  players
+    .filter((player) => player.number === number || (isStart && player.number.startsWith(number)))
+    .toSorted(
+      (first, second) =>
+        first.number.length - second.number.length || Number(first.number) - Number(second.number),
+    )
+    .map((player) => player.id);
+
+/**
+ * What breaks a rule in what a search of a team's name beside a number shows: it lists just the
+ * team's players who wear the number, or, as it's typed with the number last, every number it
+ * starts, over its suggestions, which each keep the number, and finds the games the name alone does.
+ * @param {Shown} shown
+ * @param {{ text: string, expected: string[], nameGames: string | undefined }} search
+ */
+function listBrokenNumberRules(shown, { text, expected, nameGames }) {
+  const listed = shown.rows.map((row) => (row.kind === "player" ? row.player.id : row.kind));
+  const found = describeFound(shown);
+  const number = text.match(/\d+/)?.[0] ?? "";
+  const ignoring = shown.suggestions.filter((suggestion) => !suggestion.text.includes(number));
+  return [
+    ...(listed.join() === expected.join()
+      ? []
+      : [`${text}: lists ${listed.join(", ")}, not ${expected.join(", ")}`]),
+    ...(shown.isRowsFirst ? [] : [`${text}: lists its players under its suggestions`]),
+    ...ignoring.map((suggestion) => `${text}: suggests ${suggestion.text}, without its number`),
+    ...(found === nameGames ? [] : [`${text}: finds ${found}, not ${nameGames}`]),
+  ];
+}
+
+/**
+ * Each search of a team's name beside each number its players wear, as it's typed, and the plain
+ * one as it's sent, as "search: what's wrong", where it breaks a rule `listBrokenNumberRules` names.
+ * @param {{ context: SearchContext, pages: SearchPages }} search
+ */
+export function sweepPlayerNumbers({ context, pages }) {
+  /**
+   * @param {string} text
+   * @param {boolean} isTyping
+   */
+  const show = (text, isTyping) =>
+    readTypedSearch(text, { context, pages, isTyping, isGamesOnly: false });
+  return context.terms.teams.flatMap((team) => {
+    const players = pages.players.filter((player) => player.team === team.code && player.number);
+    const names = listOwnNames(team, context);
+    const nameGames = new Map(names.map((name) => [name, describeFound(show(name, false))]));
+    return [...new Set(players.map((player) => player.number))].flatMap((number) => {
+      const typed = listNumberPhrasings(names, number).flatMap(({ name, text }) =>
+        listBrokenNumberRules(show(text, true), {
+          text,
+          expected: listWearing(players, number, text.endsWith(number)),
+          nameGames: nameGames.get(name),
+        }),
+      );
+      const sentText = `${names[0]} ${number}`;
+      const sent = listBrokenNumberRules(show(sentText, false), {
+        text: `${sentText} sent`,
+        expected: listWearing(players, number, false),
+        nameGames: nameGames.get(names[0]),
+      });
+      return [...typed, ...sent];
+    });
   });
 }
 

@@ -6,7 +6,7 @@
 // from the cards of the team's nearest games. Details that didn't load read again on a tap on Try
 // again, as the phone comes back online, or as the page comes back.
 
-import { countDaysBetween, describeDay } from "#shared/days.js";
+import { countDaysBetween, describeDay, isStillToComeToday } from "#shared/days.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";
@@ -181,7 +181,9 @@ function isToday(game) {
 function noteGame(game) {
   noteShownGame(findSheet(), {
     key: game.id,
-    isPlayingToday: game.state === "live" || (game.state === "pre" && isToday(game)),
+    isPlayingToday:
+      game.state === "live" ||
+      isStillToComeToday({ state: game.state, day: readGameDay(game) }, new Date()),
     isOver: isOver(game),
   });
 }

@@ -1,51 +1,79 @@
 // Decides whether main needs a deploy. Only when nothing but the docs, tests, and tooling listed
 // here changed since the live version does it skip one, so a new kind of file deploys until it
 // is listed. An app's own folder deploys only that app; anything outside apps/ deploys them all.
+// What the deploy runs, .github/workflows/deploy.yml and each script it runs and each module
+// those import, like worker/check-page.mjs, isn't listed: only a deploy shows that a change to
+// how the apps deploy still works.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const SKIPPED_FILES = new Set([
+// What only configures the repository's checks, or what nothing runs, like the license, which
+// neither a deploy nor a browser test needs.
+export const CONFIG_ONLY_FILES = new Set([
   "LICENSE",
-  ".claude/hooks/one-command.mjs",
-  ".claude/settings.json",
   ".git-blame-ignore-revs",
-  ".github/dependabot.yml",
-  ".github/workflows/ci.yml",
-  ".github/workflows/conflicts.yml",
-  ".github/workflows/flaky.yml",
-  ".github/workflows/watch.yml",
   ".gitignore",
   ".prettierignore",
   "eslint.config.mjs",
   "knip.json",
-  "playwright.config.mjs",
   "tsconfig.json",
+]);
+const SKIPPED_FILES = new Set([
+  ...CONFIG_ONLY_FILES,
+  ".claude/hooks/one-command.mjs",
+  ".claude/settings.json",
+  ".github/dependabot.yml",
+  ".github/workflows/ci.yml",
+  ".github/workflows/conflicts.yml",
+  ".github/workflows/flaky.yml",
+  ".github/workflows/review-area.yml",
+  ".github/workflows/watch.yml",
+  "playwright.config.mjs",
   "types/globals.d.ts",
-  "worker/check-page.mjs",
+  "worker/browser-scope.mjs",
+  "worker/burn-in-specs.mjs",
   "worker/check-pr-title.mjs",
-  "worker/find-passed-ci.mjs",
   "worker/flag-conflicts.mjs",
-  "worker/github-api.mjs",
   "worker/judge-burn-in.mjs",
   "worker/judge-review.mjs",
+  "worker/package-imports.mjs",
   "worker/plan-review.mjs",
+  "worker/post-review.mjs",
   "worker/red-change.mjs",
+  "worker/red-change-styles.mjs",
   "worker/report-flaky-tests.mjs",
+  "worker/review-context.mjs",
+  "worker/review-state.mjs",
   "worker/rollback.mjs",
+  "worker/rule-files.mjs",
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
   "worker/set-page-host.mjs",
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);
-const SKIPPED_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
+const TEST_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
 
-const isSkipped = (path) =>
-  path.endsWith(".md") ||
-  SKIPPED_FILES.has(path) ||
-  SKIPPED_FOLDERS.some((folder) => folder.test(path));
+/**
+ * Whether a path is in the root's tests or an app's.
+ * @param {string} path
+ */
+export const isTestPath = (path) => TEST_FOLDERS.some((folder) => folder.test(path));
 
-const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
+/**
+ * Whether a path is a document, which nothing runs.
+ * @param {string} path
+ */
+export const isDocument = (path) => path.endsWith(".md");
+
+/** @param {string} path */
+const isSkipped = (path) => isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path);
+
+/**
+ * The app whose folder a path is in, or null for a path outside every app's.
+ * @param {string} path
+ */
+export const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
 
 /**
  * @param {string} path

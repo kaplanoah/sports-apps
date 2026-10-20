@@ -28,15 +28,12 @@ import {
 import {
   createPerStoreJob,
   createSavedDocs,
+  createVersionForgetter,
   listPastSeasons,
+  nameVersionedKey,
 } from "../../../../shared/worker/background-job.js";
 import { createFeedKeeper, isPlayerReadDue } from "../../../../shared/worker/feed-keeper.js";
-import {
-  catchFailure,
-  countRequests,
-  describeJobRun,
-  noteFailure,
-} from "../../../../shared/worker/job-status.js";
+import { catchFailure, noteFailure, runWithStatus } from "../../../../shared/worker/job-status.js";
 import { nameCountKey } from "../../../../shared/worker/season-store.js";
 
 // Keeps what the matchup sheet shows, so a tap reads only the store and never waits on MLB. Each
@@ -69,7 +66,7 @@ const FEEDS = {
 };
 
 /** @typedef {import("../../../../shared/worker/season-store.js").JobContext} JobContext */
-/** @typedef {JobContext & { failures: string[] }} RunContext */
+/** @typedef {import("../../../../shared/worker/job-status.js").RunContext} RunContext */
 /** @typedef {import("../../../../shared/worker/feed-keeper.js").PlayerRead} PlayerRead */
 
 /** @param {number} season */
@@ -82,7 +79,8 @@ export const SIDE_VERSION = 2;
  * @param {number} season
  * @param {number} [version] the saved sides' version
  */
-export const nameReadsKey = (season, version = SIDE_VERSION) => `reads:${season}:v${version}`;
+export const nameReadsKey = (season, version = SIDE_VERSION) =>
+  nameVersionedKey(`reads:${season}`, version);
 
 /**
  * How many of the games on the page's last night and today have ended, which grows as each ends.
@@ -118,15 +116,19 @@ function createStoreUpdate() {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
   let keeper = null;
   const { readDoc, saveDoc } = createSavedDocs();
+  const forgetEarlierVersions = createVersionForgetter();
 
   /**
    * @param {JobContext} context
    * @param {string} name which feed's limits apply
    * @param {string} key what the answer is kept under
    * @param {() => Promise<any>} load
+   * @param {(answer: any) => boolean} [isBehind] whether a kept answer is behind
    */
-  const readFeed = (context, name, key, load) =>
-    /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(name, key, load);
+  const readFeed = (context, name, key, load, isBehind) =>
+    /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(name, key, load, {
+      isBehind,
+    });
 
   /**
    * @param {JobContext} context
@@ -135,17 +137,24 @@ function createStoreUpdate() {
   const fetchJson = (context, path) => fetchMlbJson(context.fetchImpl, path, null);
 
   /**
-   * The last two weeks of every club's games, through today.
+   * The last two weeks of every club's games, through today, read again once today is a day the
+   * last read didn't reach, so a club's starts reach today however long the night's been quiet.
    * @param {JobContext} context
    * @param {number} season
    */
   function readSchedule(context, season) {
-    return readFeed(context, "schedule", String(season), async () => {
-      const today = readEasternDay(context.now()).date;
-      const from = addDays(today, -LOOKBACK_DAYS);
-      const schedule = await fetchJson(context, listScheduleRequest(null, from, today));
-      return { from, schedule };
-    });
+    return readFeed(
+      context,
+      "schedule",
+      String(season),
+      async () => {
+        const today = readEasternDay(context.now()).date;
+        const from = addDays(today, -LOOKBACK_DAYS);
+        const schedule = await fetchJson(context, listScheduleRequest(null, from, today));
+        return { from, through: today, schedule };
+      },
+      (recent) => !(recent.through >= readEasternDay(context.now()).date),
+    );
   }
 
   /**
@@ -216,6 +225,11 @@ function createStoreUpdate() {
       }
     }
     await context.storage.put(nameReadsKey(season), reads);
+    await forgetEarlierVersions(
+      context.storage,
+      (version) => nameReadsKey(season, version),
+      SIDE_VERSION,
+    );
   }
 
   /**
@@ -240,9 +254,9 @@ function createStoreUpdate() {
    * Each club's recent starts, saved only once every pitcher who made them is saved.
    * @param {JobContext} context
    * @param {number} season
-   * @param {{ from: string, schedule: any }} recent
+   * @param {{ from: string, through: string, schedule: any }} recent
    */
-  async function saveRotations(context, season, { from, schedule }) {
+  async function saveRotations(context, season, { from, through, schedule }) {
     for (const club of listScheduleClubs(schedule)) {
       const ids = listClubStarterIds(schedule, club);
       const sides = await Promise.all(
@@ -250,7 +264,7 @@ function createStoreUpdate() {
       );
       if (sides.some((side) => !side)) continue;
       const pitchers = new Map(sides.map((side) => [side.id, describeKeptRotationPitcher(side)]));
-      const clubStarts = describeClubStarts({ club, from, schedule, pitchers });
+      const clubStarts = describeClubStarts({ club, from, through, schedule, pitchers });
       await saveDoc(context.docs, nameRotationKey(season, club), clubStarts);
     }
   }
@@ -318,27 +332,14 @@ function createStoreUpdate() {
     );
   }
 
-  /**
-   * @param {RunContext} context
-   * @param {{ startedAt: number, requests: number }} run
-   */
-  async function saveStatus({ docs, storage, now, failures }, { startedAt, requests }) {
-    const stored = await docs.read(STATUS_KEY);
-    const failure = failures.join("; ");
-    await docs.write(STATUS_KEY, {
-      ...describeJobRun({ startedAt, endedAt: now(), requests, failure }, stored),
-      leagueReads: (await storage.get(nameCountKey(LEAGUE_READS_COUNT))) ?? 0,
-    });
-  }
+  /** @param {RunContext} context */
+  const describeRun = async ({ storage }) => ({
+    leagueReads: (await storage.get(nameCountKey(LEAGUE_READS_COUNT))) ?? 0,
+  });
 
   /** @param {JobContext} context */
-  async function updateStore(context) {
-    const startedAt = context.now();
-    const counter = countRequests(context.fetchImpl);
-    const runContext = { ...context, fetchImpl: counter.fetchImpl, failures: [] };
-    await keepPitchers(runContext);
-    await saveStatus(runContext, { startedAt, requests: counter.count });
-  }
+  const updateStore = (context) =>
+    runWithStatus(context, { statusKey: STATUS_KEY, updateStore: keepPitchers, describeRun });
 
   return updateStore;
 }

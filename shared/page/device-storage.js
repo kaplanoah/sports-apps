@@ -34,7 +34,8 @@ function parseKept(text) {
   }
 }
 
-// A choice storage wouldn't take is the one the viewer made, whatever storage still holds.
+// A choice storage refused to keep, as when it's full, lives in memory, ahead of the older value
+// storage still holds.
 /** @param {string} key */
 function readKept(key) {
   if (keptInMemory.has(key)) return keptInMemory.get(key);
@@ -57,19 +58,21 @@ function tellWatchers(key) {
   for (const each of keys) for (const onChange of watchersByKey.get(each) ?? []) onChange();
 }
 
-// Another tab's change to storage comes as an event, with no key when it cleared it all. It's the
-// viewer's newer choice, so it takes the place of one this tab's storage wouldn't take.
 /** @param {string | null} key */
-function takeOtherTabsChange(key) {
+function forgetKeptInMemory(key) {
   if (key === null) keptInMemory.clear();
   else keptInMemory.delete(key);
-  tellWatchers(key);
 }
 
+// Another tab's change to storage comes as an event, with no key when it cleared it all. What it
+// saved is newer than a choice this tab could only keep in memory.
 function watchOtherTabs() {
   if (isWatchingOtherTabs || typeof addEventListener !== "function") return;
   isWatchingOtherTabs = true;
-  addEventListener("storage", (event) => takeOtherTabsChange(event.key));
+  addEventListener("storage", (event) => {
+    forgetKeptInMemory(event.key);
+    tellWatchers(event.key);
+  });
 }
 
 /**

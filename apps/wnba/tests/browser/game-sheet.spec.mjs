@@ -8,12 +8,10 @@ import {
   matchPath,
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
-import {
-  recordSheetMotions,
-  waitForTimedMotions,
-} from "../../../../tests/browser/sheet-motions.mjs";
+import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-row.mjs";
-import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { comeBackTo, passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 import {
   ACES_AT_FEVER,
   FEVER_AT_ACES,
@@ -184,14 +182,6 @@ test("a sheet whose game the season no longer has closes once the page's code ar
 const MINUTE_MS = 60 * 1000;
 const SHEET_KEPT_MS = 6 * 60 * MINUTE_MS;
 
-/**
- * Moves the page's clock on by `ms` without running its timers, as a phone that suspends it does.
- * @param {import("@playwright/test").Page} page
- * @param {number} ms
- */
-const passTime = async (page, ms) =>
-  page.clock.setSystemTime((await page.evaluate(() => Date.now())) + ms);
-
 test("a sheet left off the screen six hours is closed as the page comes back, before it draws, and one left for less is still open", async ({
   page,
 }) => {
@@ -311,7 +301,7 @@ test.describe("on a phone", () => {
   }) => {
     await openApp(page);
     const sheet = await openGameSheet(page, ACES_AT_FEVER);
-    await waitForTimedMotions(page);
+    await waitForTimedAnimations(page);
     const close = await sheet.getByRole("button", { name: "Close" }).boundingBox();
     expect([Math.round(close.x), close.width]).toEqual([6, 44]);
     expect(await sheet.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
@@ -350,7 +340,7 @@ test.describe("on a phone", () => {
         part: "sheet",
         name: "sheet-rise",
       });
-      await waitForTimedMotions(page);
+      await waitForTimedAnimations(page);
       await readMotions();
       const backdrop = await page
         .locator("#sheetDialog")

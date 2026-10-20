@@ -7,6 +7,7 @@ import { renderPlaceholder } from "#shared/placeholder.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderPlayerButton } from "./player-button.js";
+import { isStarter } from "./starter-measures.js";
 import {
   countOuts,
   formatInnings,
@@ -59,13 +60,8 @@ const isPitcher = (player) => player.position === PITCHER || player.position ===
 /** @param {RosterPlayer} player */
 const isHitter = (player) => player.position !== PITCHER;
 
-/**
- * A pitcher who has started at least half the games he has pitched in.
- * @param {RosterPlayer} player
- */
-const isStarter = (player) =>
-  (player.pitching?.gamesStarted ?? 0) > 0 &&
-  player.pitching.gamesStarted * 2 >= player.pitching.gamesPlayed;
+/** @param {RosterPlayer} player */
+const isInRotation = (player) => isStarter(player.pitching);
 
 /**
  * @param {RosterPlayer[]} players
@@ -162,9 +158,12 @@ export function renderRoster(roster, { isLoading, failure }) {
     active.filter(isHitter),
     (player) => player.hitting?.plateAppearances ?? 0,
   );
-  const starters = sortByMost(pitchers.filter(isStarter), (player) => player.pitching.gamesStarted);
+  const starters = sortByMost(
+    pitchers.filter(isInRotation),
+    (player) => player.pitching.gamesStarted,
+  );
   const bullpen = sortByMost(
-    pitchers.filter((player) => !isStarter(player)),
+    pitchers.filter((player) => !isInRotation(player)),
     (player) => countOuts(player.pitching?.inningsPitched),
   );
   const { club } = roster;

@@ -1,20 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-
-const ROOT = new URL("../", import.meta.url);
+import { readTextFiles } from "./repo-files.js";
 
 // Tests and their fixtures hold the leagues' own words, accents and all.
 const isTestFile = (/** @type {string} */ file) => /^(tests|apps\/[^/]+\/tests)\//.test(file);
 
-// Git's own test for a binary file, like a font or an image: a NUL byte in its first 8000.
-const isBinary = (/** @type {Buffer} */ bytes) => bytes.subarray(0, 8000).includes(0);
-
-const listCheckedFiles = () =>
-  execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" })
-    .split("\n")
-    .filter((file) => file && !isTestFile(file));
+const readCheckedFiles = () => readTextFiles().filter(({ path }) => !isTestFile(path));
 
 /**
  * Each line of the file with a character outside plain ASCII, as file:line.
@@ -27,12 +18,9 @@ const listNonAsciiLines = (file, text) =>
     .flatMap((line, index) => (/[\u0080-\uffff]/.test(line) ? [`${file}:${index + 1}`] : []));
 
 test("code, styles, pages, docs, and settings are plain ASCII, with no em dashes or curly quotes", () => {
-  const files = listCheckedFiles();
+  const files = readCheckedFiles();
   assert.ok(files.length > 100, `only ${files.length} files to check`);
-  const lines = files.flatMap((file) => {
-    const bytes = readFileSync(new URL(file, ROOT));
-    return isBinary(bytes) ? [] : listNonAsciiLines(file, bytes.toString("utf8"));
-  });
+  const lines = files.flatMap(({ path, text }) => listNonAsciiLines(path, text));
   assert.deepEqual(lines, []);
 });
 

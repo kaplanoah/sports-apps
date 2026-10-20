@@ -2,7 +2,7 @@ import { isSameJson } from "../page/compare.js";
 import { readEasternDay } from "../page/days.js";
 import { isWebAddress } from "../page/html.js";
 import { hashText } from "./hash-text.js";
-import { countRequests, describeJobRun } from "./job-status.js";
+import { runWithStatus } from "./job-status.js";
 import { askClaude } from "./news-claude.js";
 import { frameNewsPhotos } from "./news-photos.js";
 import { describeError } from "./responses.js";
@@ -430,27 +430,16 @@ async function readRecentUsage(storage, now) {
   return usage;
 }
 
-async function saveStatus({ docs, storage, now, endedAt, requests, missing, problem, photos }) {
-  const stored = await docs.read(STATUS_KEY);
-  await docs.write(STATUS_KEY, {
-    ...describeJobRun({ startedAt: now, endedAt, requests, failure: problem }, stored),
-    missing,
-    problem,
-    photos,
-    usage: await readRecentUsage(storage, now),
-  });
-}
-
 /**
- * One run of the news.
- * @param {import("./season-store.js").JobContext} context
+ * The news's feeds read, its stories judged, and its cards saved, answering which feeds didn't
+ * answer, what went wrong asking Claude, which the run's failures name too, and how the photos
+ * were framed.
+ * @param {import("./job-status.js").RunContext} context
  * @param {NewsLeague} league
  */
-async function updateNews(context, league) {
-  const { docs, storage, env, now: readNow } = context;
-  const now = readNow();
-  const counter = countRequests(context.fetchImpl);
-  const { fetchImpl } = counter;
+async function keepNews(context, league) {
+  const { docs, storage, env, fetchImpl } = context;
+  const now = context.now();
   const { entries, missing } = await league.readFeeds(fetchImpl);
   const stories = await readStories(storage);
   await saveFeedEntries({ storage, stories, entries, now, league });
@@ -463,15 +452,27 @@ async function updateNews(context, league) {
     listCardPhotos(cards),
   );
   await saveCards(docs, cards, frames);
-  await saveStatus({
-    docs,
-    storage,
-    now,
-    endedAt: readNow(),
-    requests: counter.count,
-    missing,
-    problem,
-    photos: { framed, failed },
+  if (problem) context.failures.push(problem);
+  return { missing, problem, photos: { framed, failed } };
+}
+
+/**
+ * One run of the news, saving how it went with Claude's daily token counts.
+ * @param {import("./season-store.js").JobContext} context
+ * @param {NewsLeague} league
+ */
+async function updateNews(context, league) {
+  /** @type {Awaited<ReturnType<typeof keepNews>> | null} */
+  let kept = null;
+  await runWithStatus(context, {
+    statusKey: STATUS_KEY,
+    updateStore: async (runContext) => {
+      kept = await keepNews(runContext, league);
+    },
+    describeRun: async ({ storage, now }) => ({
+      ...kept,
+      usage: await readRecentUsage(storage, now()),
+    }),
   });
 }
 

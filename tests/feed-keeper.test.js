@@ -43,11 +43,11 @@ test("a feed's answer is kept until it's older than the feed's limit", async () 
 
 test("a game's end has a feed that changes with games read at once, and again ten minutes on", async () => {
   const { clock, keeper, reads, read } = createKeeper();
-  keeper.noteFinalCount(3);
+  await keeper.noteFinalCount(3);
   await Promise.all([read("standings"), read("season")]);
 
   clock.now = MINUTE_MS;
-  keeper.noteFinalCount(4);
+  await keeper.noteFinalCount(4);
   await Promise.all([read("standings"), read("season")]);
   assert.deepEqual(reads, { standings: 2, season: 1 });
 
@@ -96,13 +96,13 @@ test("an answer another feed shows is behind is read again every five minutes un
 
 test("a count that couldn't be read, or the first one, isn't a game ending", async () => {
   const { clock, keeper, reads, read } = createKeeper();
-  keeper.noteFinalCount(null);
-  keeper.noteFinalCount(3);
+  await keeper.noteFinalCount(null);
+  await keeper.noteFinalCount(3);
   await read("standings");
 
   clock.now = MINUTE_MS;
-  keeper.noteFinalCount(null);
-  keeper.noteFinalCount(3);
+  await keeper.noteFinalCount(null);
+  await keeper.noteFinalCount(3);
   await read("standings");
   assert.equal(reads.standings, 1);
 });

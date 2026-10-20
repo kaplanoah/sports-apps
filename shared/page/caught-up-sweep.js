@@ -1,4 +1,4 @@
-import { prefersReducedMotion } from "./device.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 
 // The page shows what it last drew while it catches up, so a header whose lines read the same
 // before and after the store answers gives no sign the page checked. Once the page has caught up,

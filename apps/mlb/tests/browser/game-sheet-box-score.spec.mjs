@@ -15,7 +15,7 @@ import { listTextOffRoles, readRole, readType } from "../../../../tests/browser/
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
-import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { comeBackTo, passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -172,14 +172,6 @@ test("a live game's box score follows each one the store pushes, and passes over
 });
 
 const MINUTE_MS = 60 * 1000;
-
-/**
- * Moves the page's clock on by `ms` without running its timers, as a phone that suspends it does.
- * @param {import("@playwright/test").Page} page
- * @param {number} ms
- */
-const passTime = async (page, ms) =>
-  page.clock.setSystemTime((await page.evaluate(() => Date.now())) + ms);
 
 test("a live game's sheet stays open however long the page is away, until an hour after its final shows", async ({
   page,

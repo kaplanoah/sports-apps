@@ -18,13 +18,14 @@ jobs:
   # A merge deploys at once when its pull request's CI passed on exactly the code main now has,
   # and otherwise once CI passes on main, unless nothing but docs, tests, and tooling changed
   # since the live version. A push to beta deploys the beta channel's Workers at once, to use a
-  # change on a phone before it merges. The token lives in the production environment, which only
-  # main and beta can use.
+  # change on a phone before it merges. Each channel has an environment of its own, which only its
+  # branch can use, holding a token that can change only that channel's Workers, so a branch on
+  # beta can never reach the live apps.
   deploy:
     if: github.event_name == 'push' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: production
+    environment: ${{ github.ref_name == 'beta' && 'beta' || 'production' }}
     # A workflow_run names main as its branch.
     env:
       CHANNEL: ${{ github.ref_name == 'beta' && 'beta' || 'production' }}
@@ -38,7 +39,9 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+          # The repository is public, so the deploy's fetches of main need no credentials.
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -62,12 +65,16 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - if: (github.event_name != 'push' || env.CHANNEL == 'beta' || steps.passed.outputs.run) && steps.browsers.outputs.cache-hit != 'true'
         run: npx playwright install --only-shell chromium
-      # Secrets, so the account ID and each page's address and code are masked in this public log.
+      # Secrets, so the account ID, its workers.dev subdomain, and each page's address and code are
+      # masked in this public log.
       - name: Deploy the Worker
         if: github.event_name != 'push' || env.CHANNEL == 'beta' || steps.passed.outputs.run
         env:
+          # To ask whether CI passed on a newer merge whose deploy would cover this one.
+          GH_TOKEN: ${{ github.token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ secrets.CLOUDFLARE_WORKERS_SUBDOMAIN }}
           MLB_PAGE_URL: ${{ secrets.MLB_PAGE_URL }}
           MLB_ACCESS_CODE: ${{ secrets.MLB_ACCESS_CODE }}
           MLB_BETA_PAGE_URL: ${{ secrets.MLB_BETA_PAGE_URL }}
@@ -78,7 +85,7 @@ jobs:
           WNBA_BETA_ACCESS_CODE: ${{ secrets.WNBA_BETA_ACCESS_CODE }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::notice::No CLOUDFLARE_API_TOKEN in the production environment, so nothing was deployed."
+            echo "::notice::No CLOUDFLARE_API_TOKEN in the $CHANNEL environment, so nothing was deployed."
             exit 0
           fi
           node worker/deploy.mjs --channel "$CHANNEL"

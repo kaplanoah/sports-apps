@@ -17,6 +17,7 @@ import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { LAPTOP } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -38,7 +39,7 @@ const PLAYOFF_FIELD_2026 = [
 test("renders the bracket, standings and stamp from the season's record the Worker saved", async ({
   page,
 }) => {
-  const app = await openApp(page);
+  await openApp(page);
 
   const bracket = page.locator("#bracketWrap");
   for (const club of PLAYOFF_FIELD_2026) await expect(bracket).toContainText(club);
@@ -49,7 +50,6 @@ test("renders the bracket, standings and stamp from the season's record the Work
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap .div-block")).toHaveCount(8);
   await expect(page.locator("#standingsWrap")).toContainText("AL East");
-  expect(app.countSnapshotRequests()).toBe(0);
 });
 
 test("standings open on each league's playoff field, and every table lines up", async ({
@@ -71,6 +71,24 @@ test("standings open on each league's playoff field, and every table lines up", 
   expect(tableHeights).toHaveLength(6);
   expect(new Set(tableHeights).size).toBe(1);
   expect(new Set(await readHeights("#standingsWrap .div-title")).size).toBe(1);
+});
+
+test("on a wide screen, every column of the standings shows inside its table", async ({ page }) => {
+  await page.setViewportSize(LAPTOP);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const tables = page.locator("#standingsWrap table.st");
+  await expect(tables).toHaveCount(8);
+
+  const cellsPastTheirTable = await tables.evaluateAll((all) =>
+    all.flatMap((table) => {
+      const right = table.closest(".st-scroll").getBoundingClientRect().right;
+      return [...table.querySelectorAll("th, td")]
+        .filter((cell) => cell.getBoundingClientRect().right > right + 0.5)
+        .map((cell) => cell.textContent.trim());
+    }),
+  );
+  expect(cellsPastTheirTable).toEqual([]);
 });
 
 test("the standings show each club's game under way, and a delay in gold", async ({ page }) => {
@@ -165,7 +183,6 @@ test("switching to 2025 shows the finished bracket and its champion from its rec
   await expect(championships).toHaveCount(2);
   await expect(championships.locator(".card-note")).toHaveCount(0);
   await expect(page.locator("#updates")).toBeHidden();
-  expect(app.countSnapshotRequests()).toBe(0);
 });
 
 test("warns under the title when MLB stops sending a field", async ({ page }) => {
@@ -341,5 +358,5 @@ test("while the store says last year's season is current, the page shows it and 
   await page.clock.fastForward("02:00:00");
 
   await expect(page.locator("#yearSel")).toHaveValue("2026");
-  expect(app.countSnapshotRequests()).toBe(0);
+  expect(app.listStoreReads().filter((path) => path.includes("2027"))).toEqual([]);
 });

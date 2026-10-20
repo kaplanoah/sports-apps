@@ -5,7 +5,7 @@ import { renderBoxScore, renderPendingBoxScore } from "../page/js/box-score-view
 import { isEarlierBoxScore } from "../page/js/game-sheet.js";
 import { listSeasonDays } from "../page/js/games-view.js";
 import { renderPreview } from "../page/js/preview-view.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSeasonWithLeaders } from "./player-fixtures.js";
 import { describeBoxScore } from "../worker/src/box-score.js";
 import { describePreview } from "../worker/src/preview.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
@@ -18,11 +18,8 @@ const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
 const NOW = Date.parse(AFTERNOON.now);
-// The afternoon's recording has no players' averages, so the next day's stand in for them.
-const SEASON = buildSnapshot(
-  { ...AFTERNOON.responses, players: GAMES.preview.players },
-  { season: 2026, now: NOW },
-);
+// The afternoon, with the leading scorers the store works out from the season's totals.
+const SEASON = buildSeasonWithLeaders(AFTERNOON.responses, { season: 2026, now: NOW });
 const FEVER_AT_ACES = { away: "IND", home: "LVA" };
 
 // Each tag reads as a space, and the page's separator as a bar.

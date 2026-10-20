@@ -1,23 +1,21 @@
 import * as WNBASnapshot from "../../page/js/snapshot.js";
 import { readEasternDay } from "#shared/days.js";
-import { serveSeasonSnapshot } from "../../../../shared/worker/seasons.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { createReusedLoader, fetchUpstream } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
 import { listUpcomingMeetings } from "./preview.js";
-import { ESPN_HEADERS, fetchWnbaJson, SEASON_PARAM } from "./wnba.js";
+import { ESPN_HEADERS, fetchWnbaJson } from "./wnba.js";
 
 const EDGE_CACHE_SECONDS = 5;
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
 const SNAPSHOT_REUSE_MS = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-// The schedule, bracket, standings, and players' averages change as games end, and otherwise
+// The schedule, bracket, and standings change as games end, and otherwise
 // hardly at all, and the stats site is slow and quick to turn away a busy caller.
 const SLOW_FEEDS = {
   schedule: { maxAgeMs: DAY_MS, changesWithGames: true },
   standings: { maxAgeMs: DAY_MS, changesWithGames: true },
-  players: { maxAgeMs: DAY_MS, changesWithGames: true },
   bracket: { maxAgeMs: DAY_MS, changesWithGames: true },
 };
 
@@ -27,10 +25,16 @@ const FEED_DATA = {
   schedule: (answer) => answer?.leagueSchedule?.gameDates,
   bracket: (answer) => answer?.bracket?.playoffBracketSeries,
   standings: (answer) => answer?.resultSets?.[0]?.rowSet,
-  players: (answer) => answer?.resultSets?.[0]?.rowSet,
 };
 
 const hasFeedData = (name, answer) => Array.isArray(FEED_DATA[name](answer));
+
+// The players' averages a game, a request the snapshot doesn't read, since the player job reads
+// their totals, but whose last answer the slow feeds' storage can still hold until it's forgotten,
+// written out as it was read.
+/** @param {number} season */
+const nameAveragesRequest = (season) =>
+  `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight=`;
 
 // Where a game is on rarely changes, so ESPN's scoreboard is read at most this often.
 const NETWORKS_MS = 6 * 60 * 60 * 1000;
@@ -46,14 +50,14 @@ const readEventId = (link) => String(link).match(/\/events\/(\d+)/)?.[1] ?? null
 const countFinals = (scoreboard) =>
   (scoreboard?.scoreboard?.games ?? []).filter((game) => game.gameStatus === 3).length;
 
-// Reads the league for the page, so every open page shares one trip to it at a time.
+// Reads the league for the store, and reads moments apart share one trip to it.
 /**
  * @param {object} [options]
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]
  * @param {() => number} [options.now]
  * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} [options.storage]
  */
-export function createSnapshotServer({
+export function createSnapshotLoader({
   fetchImpl = (input, init) => fetch(input, init),
   now = () => Date.now(),
   storage = undefined,
@@ -167,17 +171,17 @@ export function createSnapshotServer({
   }
 
   async function fetchResponses(season) {
+    await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
     const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard).catch(
       () => null,
     );
     await slowFeeds.noteFinalCount(scoreboard ? countFinals(scoreboard) : null);
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
-    const [schedule, bracket, standings, players] = await Promise.all([
+    const [schedule, bracket, standings] = await Promise.all([
       readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, hasGamesLeftLive).catch(() => null),
       readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season)).catch(() => null),
       readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season)).catch(() => null),
-      readSlowFeed("players", WNBASnapshot.REQUESTS.players(season)).catch(() => null),
     ]);
     if (!scoreboard && !schedule && !bracket)
       throw new Error("None of the WNBA's feeds answered with data");
@@ -186,7 +190,7 @@ export function createSnapshotServer({
       needsBackup ? fetchBackup().catch(() => null) : null,
       readNetworks(schedule, season),
     ]);
-    return { scoreboard, schedule, bracket, standings, players, backup, networks };
+    return { scoreboard, schedule, bracket, standings, backup, networks };
   }
 
   /**
@@ -222,14 +226,5 @@ export function createSnapshotServer({
 
   const loadSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
 
-  /** @param {URL} url */
-  const serveSnapshot = (url) =>
-    serveSeasonSnapshot(url, {
-      seasonParam: SEASON_PARAM,
-      loadSnapshot,
-      leagueName: "the WNBA",
-      now,
-    });
-
-  return { loadSnapshot, serveSnapshot };
+  return { loadSnapshot };
 }

@@ -171,7 +171,6 @@ function readAfternoonSnapshot(season) {
       buildSnapshot(
         {
           ...AFTERNOON.responses,
-          players: GAMES.preview.players,
           networks: Object.values(ESPN_SCOREBOARD.answers),
         },
         { season, now: Date.parse(NOW) },
@@ -207,8 +206,8 @@ export function readWholeSeasonSchedule() {
 
 /**
  * The Worker's store, already updated once from the afternoon's feeds, with each upcoming game's
- * meetings from the schedule, and what its jobs keep: the rosters, players' numbers, and finals'
- * box scores and leads.
+ * meetings from the schedule, and what its jobs keep: the rosters, players' numbers, every
+ * player's averages with each team's leading scorers, and finals' box scores and leads.
  * @param {Parameters<typeof listLeagueAnswers>[0]} [league]
  */
 async function createAfternoonStore(league = {}) {
@@ -230,29 +229,65 @@ async function createAfternoonStore(league = {}) {
 }
 
 /**
+ * A phone that has used the app before, last dismissing the Updates box before the afternoon's
+ * latest day of finals, and having kept none of its release notes' times yet, so each note out
+ * starts showing.
+ * @param {import("@playwright/test").Page} page
+ */
+const keepUpdatesFromEarlierVisit = (page) =>
+  page.addInitScript(() => {
+    if (localStorage.getItem("updatesSeenAt") === null)
+      localStorage.setItem("updatesSeenAt", String(Date.parse("2026-09-28T01:00:00Z")));
+    if (localStorage.getItem("releaseNotesShownUntil") === null)
+      localStorage.setItem("releaseNotesShownUntil", "{}");
+  });
+
+/**
+ * A phone that dismissed the Updates box after every final a test could add, so the box stays
+ * closed over the views a test is about.
+ * @param {import("@playwright/test").Page} page
+ */
+const keepUpdatesDismissed = (page) =>
+  page.addInitScript(() => localStorage.setItem("updatesSeenAt", String(Date.now() * 2)));
+
+/** @typedef {"dismissed" | "shown" | "new"} UpdatesBoxStart */
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {UpdatesBoxStart} updatesBox
+ */
+async function prepareUpdatesBox(page, updatesBox) {
+  if (updatesBox === "dismissed") await keepUpdatesDismissed(page);
+  if (updatesBox === "shown") await keepUpdatesFromEarlierVisit(page);
+}
+
+/**
  * The page as the Worker serves it, with the Worker's store behind it, already updated once from
  * the afternoon's feeds, and the game and team sheets' routes reading the store, and the recorded
  * answers for what it doesn't keep, unless the league is down by the time the page opens. On a
- * phone, the afternoon's finals would fill the Updates box above every view, so it starts
- * dismissed unless a test is about it.
+ * phone, a final a test adds would open the Updates box above every view, so by default it stays
+ * `"dismissed"`, as the welcome a phone's browser opens on starts closed. A test about the box
+ * opens it `"shown"`, as a phone that last dismissed it before the afternoon's latest day of
+ * finals, and `"new"` keeps nothing, as a phone new to the app, or one whose storage refuses the
+ * harness's writes.
  * @param {import("@playwright/test").Page} page
  * A past season's record is built from the afternoon's by its change in `pastSeasons`, by year.
  * The store keeps the afternoon's list of the season's games, its playoffs', or every game of the
  * season, regular season and all, for `isWholeSeason`.
- * @param {{ league?: Parameters<typeof listLeagueAnswers>[0], isLeagueDownForPage?: boolean, isShowingUpdates?: boolean, pastSeasons?: Record<number, (season: any) => any>, isWholeSeason?: boolean }} [options]
+ * @param {{ league?: Parameters<typeof listLeagueAnswers>[0], isLeagueDownForPage?: boolean, updatesBox?: UpdatesBoxStart, isShowingWelcome?: boolean, pastSeasons?: Record<number, (season: any) => any>, isWholeSeason?: boolean }} [options]
  */
 export async function openApp(
   page,
   {
     league = {},
     isLeagueDownForPage = false,
-    isShowingUpdates = false,
+    updatesBox = "dismissed",
+    isShowingWelcome = false,
     pastSeasons = {},
     isWholeSeason = false,
   } = {},
 ) {
-  if (!isShowingUpdates)
-    await page.addInitScript(() => localStorage.setItem("updatesSeenAt", String(Date.now() * 2)));
+  await prepareUpdatesBox(page, updatesBox);
   const testStore = await createAfternoonStore(league);
   const { context, store } = testStore;
   const readSeason = async () => structuredClone(await context.ctx.storage.get("seasons/2026"));
@@ -292,7 +327,7 @@ export async function openApp(
   await page.route(matchPath("/player"), (route) =>
     answerFromWorker(route, (url) => players.servePlayer(url, readDoc)),
   );
-  await loadPageAt(page, NOW);
+  await loadPageAt(page, NOW, { isShowingWelcome });
 
   return {
     countOpenSockets: () => openSockets.length,

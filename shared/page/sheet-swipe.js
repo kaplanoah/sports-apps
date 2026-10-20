@@ -2,7 +2,8 @@
 // down whichever way it closes. Each slide writes where it ends into the sheet's style and leaves
 // no animation behind once it ends.
 
-import { PHONE_WIDTH_QUERY, prefersReducedMotion } from "./device.js";
+import { PHONE_WIDTH_QUERY } from "./device.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 import { SHEET_EASING, SHEET_MOTION_MS, settleAfter } from "./slide-panels.js";
 
 // A swipe down closes the sheet once it goes this far or this fast; anything less springs back.

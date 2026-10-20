@@ -8,6 +8,7 @@
 
 import { readPath } from "./element-path.js";
 import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
+import { isSeasonPart } from "./season-part.js";
 import { keepImages } from "./service-worker.js";
 import { closeForgottenDialogs, noteShownEndsSeen } from "./sheet-memory.js";
 import { listOpenSheets, reopenSheets } from "./sheet-reopen.js";
@@ -41,6 +42,25 @@ const readScrolls = (part) =>
       startTop: Number(element.dataset.startTop ?? element.scrollTop),
     }));
 
+// A part drawn inside the season's standings or bracket, which each scroll on their own (pager.css),
+// keeps that holder's place too. A holder on a tab not shown reads as unscrolled, so it keeps the
+// place it last scrolled to, or the one a load put back that it hasn't shown yet.
+/** @type {WeakMap<Element, number>} */
+const holderTops = new WeakMap();
+
+/** @param {Event} event */
+function noteHolderTop({ target }) {
+  if (isSeasonPart(target)) holderTops.set(target, target.scrollTop);
+}
+
+/** @param {HTMLElement} part */
+function readHolderTop(part) {
+  const holder = part.parentElement;
+  if (!isSeasonPart(holder)) return undefined;
+  if (holder.getClientRects().length) return holder.scrollTop;
+  return Number(holder.dataset.putBackTop ?? holderTops.get(holder) ?? 0);
+}
+
 // A part's classes and colors can come from its code rather than its markup, like a pager's
 // classes and a game sheet's teams' colors.
 /**
@@ -53,6 +73,7 @@ const readDrawnPart = (part, savedAt) => ({
   classes: part.className,
   style: part.getAttribute("style"),
   scrolls: readScrolls(part),
+  holderTop: readHolderTop(part),
   savedAt,
 });
 
@@ -108,6 +129,7 @@ export function keepLastSeen(readShown) {
   /** @type {number | null} */
   let hiddenAt = null;
   const readLeftAt = () => hiddenAt ?? Date.now();
+  document.addEventListener("scroll", noteHolderTop, { capture: true, passive: true });
   // Only what the page drew before it first left the screen was seen.
   const noteEndsSeenUntilLeft = () => {
     if (hiddenAt === null) noteShownEndsSeen(Date.now());

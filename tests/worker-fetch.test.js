@@ -72,7 +72,10 @@ test("reads past their reuse time are let go as the next one is asked for", asyn
 });
 
 test("a failed read is forgotten, so the next one asks again", async () => {
-  const failure = { body: { error: "Couldn't read the WNBA" }, status: 502 };
+  const failure = {
+    body: { error: { code: "upstream_error", message: "Couldn't read the WNBA" } },
+    status: 502,
+  };
   const reads = startWorker(failure, { body: { id: "1" } });
 
   await assert.rejects(fetchFromWorker("failing", RULES), {
@@ -81,21 +84,6 @@ test("a failed read is forgotten, so the next one asks again", async () => {
   });
   assert.deepEqual(await fetchFromWorker("failing", RULES), { id: "1" });
   assert.equal(reads.length, 2);
-});
-
-test("an error the store or the access gate answers with is read for its message", async () => {
-  startWorker({
-    body: { error: { code: "access_required", message: "This page needs its access code." } },
-    status: 401,
-  });
-  globalThis.caches = /** @type {any} */ ({ keys: async () => [], delete: async () => true });
-  globalThis.location = /** @type {any} */ ({ href: PAGE, reload: () => {} });
-
-  await assert.rejects(fetchFromWorker("gated", RULES), {
-    message: "This page needs its access code.",
-    status: 401,
-  });
-  delete (/** @type {any} */ (globalThis).caches);
 });
 
 test("an error without a message of its own names the Worker's status", async () => {

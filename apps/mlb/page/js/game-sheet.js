@@ -13,12 +13,11 @@ import { fetchHighlights } from "./highlights-fetch.js";
 import {
   describeInning,
   groupShownSeriesFinals,
-  listSeasonGames,
   nameGame,
-  nameGameKey,
   renderArm,
   renderGameFaceOff,
 } from "./games-view.js";
+import { listSeasonGames, nameGameKey } from "./season-games.js";
 import { describeDay, readCalendarDate } from "#shared/days.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";

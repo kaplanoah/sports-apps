@@ -1,9 +1,9 @@
 // A search over a season's games, and the league's teams and players and its other pages too: a
 // field with Cancel, then what the words find. Before anything is
 // typed, quiet examples to tap sit under the field, inside its width. While words are typed,
-// suggestions sit over the pages the words name, like a team's sheet, then a line saying how the
-// search read the words, right over the games it found from today on, which a tap on the line opens
-// whole. A search sent shows the same without the suggestions, or, when its words ask only for
+// suggestions sit over the pages the words name, like a team's sheet, or under the players a
+// team's number names, then a line saying how the search read the words, right over the games it
+// found from today on, which a tap on the line opens whole. A search sent shows the same without the suggestions, or, when its words ask only for
 // games, the games at once, the line under the field and the list opening on the first from today,
 // as does a tap on the line. A tap on the field goes back to what typing showed. A reload shows the
 // search as it was, and two minutes away closes it. A league hands it its season's games and words,
@@ -12,6 +12,7 @@
 
 import { describeDay, readCalendarDate } from "./days.js";
 import { createSearchContext, createSearchDictionary, describeNoGames } from "./game-search.js";
+import { markBarStuck } from "./held-bar.js";
 import { html, isWebAddress, joinWithSeparator, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
@@ -439,10 +440,7 @@ function placeList({ at, day }) {
   markStuck();
 }
 
-// The bar ends in a line once something has scrolled under it, as the day strip's does.
-function markStuck() {
-  findBar()?.classList.toggle("stuck", (findList()?.scrollTop ?? 0) > 0);
-}
+const markStuck = () => markBarStuck(findBar(), findList());
 
 // The days near the screen are drawn once a frame, however many scroll events it brings.
 function followScroll() {
@@ -478,6 +476,7 @@ function draw() {
     suggestions,
     readText,
     rows,
+    isRowsFirst,
     answer,
     others,
     search,
@@ -503,13 +502,13 @@ function draw() {
     showDays(shown, place);
     return;
   }
+  const suggestionList = suggestions.length > 0 && renderSuggestions(suggestions, query);
+  const rowList = pages && rows.length > 0 && renderPageRows(rows, pages, context);
   setHtml(
     list,
-    html`${suggestions.length > 0 && renderSuggestions(suggestions, query)}${
-      pages && rows.length > 0 && renderPageRows(rows, pages, context)
-    }${others.length > 0 && renderSuggestions(others, "")}${
-      read && days.length > 0 && html`${renderGamesLine(read, readText)}${renderDays(days)}`
-    }`,
+    html`${isRowsFirst ? html`${rowList}${suggestionList}` : html`${suggestionList}${rowList}`}${
+      others.length > 0 && renderSuggestions(others, "")
+    }${read && days.length > 0 && html`${renderGamesLine(read, readText)}${renderDays(days)}`}`,
   );
   showDays(shown, place);
 }
@@ -596,12 +595,6 @@ function startGameSearchOver() {
 // Search opens with the keyboard up from the tap on its tab, or as it was left, while it's open.
 function enterSearch() {
   if (view?.hidden) openGameSearch();
-}
-
-// As on iPhone, choosing search while it shows goes back to where it starts: an empty field.
-function startSearchTabOver() {
-  startGameSearchOver();
-  return true;
 }
 
 // A search that closes while it shows goes back to the tab before it.
@@ -704,7 +697,7 @@ export function startGameSearch(element, searchLeague) {
   element.addEventListener("submit", sendSearch);
   findList()?.addEventListener("scroll", followScroll, { passive: true });
   findList()?.addEventListener("touchmove", putKeyboardAway, { passive: true });
-  setTabStart("search", startSearchTabOver);
+  setTabStart("search", startGameSearchOver);
   setTabEnter("search", enterSearch);
   watchTimeAway((awayMs) => {
     if (isAwayLong(awayMs)) closeGameSearch();

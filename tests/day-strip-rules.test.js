@@ -5,6 +5,7 @@ import {
   choosePlacement,
   chooseTrip,
   describeWhyNoSlide,
+  findCellScrollLeft,
   findDayScrollTop,
   isFollowingStartDay,
   isLedByOne,
@@ -70,6 +71,13 @@ test("the list stands with a day a gap under its top, or as near as its ends let
   assert.equal(findDayScrollTop({ ...list, dayTop: 4 }), 0);
   assert.equal(findDayScrollTop({ ...list, dayTop: 4900 }), 4200);
   assert.equal(findDayScrollTop({ ...list, dayTop: 4212 }), 4200);
+});
+
+test("the strip stands with a date in its middle, or as near as its ends let it", () => {
+  const strip = { cellWidth: 50, scrollWidth: 3000, clientWidth: 350 };
+  assert.equal(findCellScrollLeft({ ...strip, cellLeft: 1000 }), 850);
+  assert.equal(findCellScrollLeft({ ...strip, cellLeft: 100 }), 0);
+  assert.equal(findCellScrollLeft({ ...strip, cellLeft: 2950 }), 2650);
 });
 
 test("the list flies to a day within three screens and jumps when asked, farther, or with less motion", () => {

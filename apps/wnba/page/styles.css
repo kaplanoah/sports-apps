@@ -111,7 +111,8 @@
  * color, with a line under it only once something scrolls under it, never a fade.
  *
  * Buttons say what they do in sentence case, as capitals are only for labels and chips, and for the
- * tabs a wide screen shows, which sit in one track of the divider's color, as a segmented control.
+ * tabs a wide screen shows, which sit in one track of the divider's color faded into the floor, as a
+ * segmented control.
  * The one that's on, like the list a pill shows or the open tab, is filled orange, inside a darker
  * edge, and the rest are raised and outlined, in ink, with any icon in orange, but for a pill's
  * other names and the other tabs, which are plain words, and a sheet's close and back buttons,
@@ -130,6 +131,9 @@
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
+  /* Barlow's digits sit low in their line, which would leave each step's number under its
+     circle's middle. */
+  --step-number-lift: 0.5px;
   --orange: #a23a0a;
   --orange-ink: #ffffff;
   --teal: #0b6860;
@@ -170,6 +174,8 @@
   --radius-control: 3px;
   --radius-tabs: 3px;
   --radius-sheet: 14px;
+  /* Puts the channel tag's middle on the middle of the name's capitals. */
+  --channel-tag-lift: 0.25px;
   --control-height: 36px;
   --control-room: 15px;
   --scoreboard: #24180e;
@@ -242,7 +248,7 @@
   --header-gap: 14px;
   --pager-label: var(--ink);
   --pager-chosen-edge: color-mix(in srgb, var(--action) 70%, var(--shadow-ink));
-  --tabs-track: var(--divider);
+  --tabs-track: color-mix(in oklab, var(--divider) 45%, var(--bg));
   --tabs-track-edge: var(--edge);
   --tabs-chosen: var(--action);
   --tabs-chosen-edge: var(--pager-chosen-edge);
@@ -256,14 +262,13 @@
   --strip-edge-inset: 2px;
   --day-gap: 8px;
   --date-one-shift: 0.065em;
-  --held-bar-fade: 0px;
   --held-bar-line: var(--divider);
   --updates-head: var(--structure);
   --sheet-part-head: var(--structure);
   --game-card-edge: var(--edge);
   /* A player's Out box takes the floor's edge a little lighter, richer, and toward the orange. */
   --out-box-edge: #e6c89f;
-  --game-card-live: var(--now);
+  --game-card-now: var(--now);
   --game-card-won: var(--result);
   --game-card-team-font: var(--team-name);
   --game-row-height: 90px;
@@ -325,7 +330,7 @@ body {
   font-size: 16px;
   /* Insets are zero except in the home-screen app, which draws under the status bar and notch. */
   padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
-  padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
+  padding-block: calc(17px + env(safe-area-inset-top)) var(--view-end-room);
 }
 h1,
 h2,
@@ -356,6 +361,7 @@ header.top {
 }
 .season-year {
   font-weight: calc(var(--type-title-weight) - 200);
+  letter-spacing: 0.04em;
   color: var(--ink-dim);
 }
 header.top h1 {
@@ -1908,10 +1914,8 @@ th[aria-sort="ascending"] .roster-caret {
   font-weight: calc(var(--type-body-weight) + 200);
 }
 
-/* The pill sits a little closer under the header than a view's first card, as the control it is,
-   with the bar's reach up under the status bar kept inside it. */
+/* The pill sits a little closer under the header than a view's first card, as the control it is. */
 section.bracket-standings.active {
-  display: flow-root;
   margin-top: calc(10px - var(--header-gap));
 }
 .pager-bar {
@@ -1944,7 +1948,8 @@ nav.tabs .search-tab {
   max-width: 560px;
   padding-top: 3.5px;
 }
-/* Each table lays out in a grid, where its clip's max-content fits the table to the list's width.
+/* Each table lays out in a grid, where its clip, at least as wide as the table at its narrowest, fits
+   the table to the list's width.
    A table wider than the room reaches into the gutter and is cut off at the screen's edge, rather
    than scrolling the page sideways. */
 .standings-list {
@@ -2408,16 +2413,12 @@ table.standings tr.playoff-line + tr td {
   font-weight: calc(var(--type-detail-weight) + 100);
 }
 
-/* The Home Screen bar and box show the icon the theme showing would give the Home Screen. */
-.home-screen-icon {
-  background-image: url(icon-light-180.png);
-}
-:root[data-theme="dark"] .home-screen-icon {
-  background-image: url(icon-180.png);
-}
-
 .settings-footer .sep {
   opacity: 0.9;
+}
+/* The Home Screen box's Share icon, raised to sit with Barlow's words, as set by eye. */
+.home-screen-steps .share-glyph {
+  vertical-align: -0.5px;
 }
 /* Settings stay the floor's own color, without a band. */
 .settings-panel {
@@ -2434,9 +2435,6 @@ table.standings tr.playoff-line + tr td {
 }
 
 @media (max-width: 779px) {
-  body {
-    padding-bottom: var(--tab-bar-clearance);
-  }
   header.top {
     flex-wrap: wrap;
     row-gap: 8px;

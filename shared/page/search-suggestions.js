@@ -9,10 +9,12 @@
 // games. Runs in the page and in Node, so it uses no DOM.
 
 import { shiftMonth } from "./days.js";
+import { isPlayedBy } from "./game-clubs.js";
 import { nameMonth } from "./search-dates.js";
 import {
   describeCount,
   findSearchGames,
+  isAskingNothing,
   isGameInPlace,
   isTownMeaning,
   listPlaceTeams,
@@ -95,12 +97,8 @@ function findGames(text, context) {
  * @param {string | null} [rival]
  */
 function readNextStart(context, code, rival = null) {
-  const hasTeam = (
-    /** @type {import("./game-search.js").SearchGame} */ game,
-    /** @type {string} */ team,
-  ) => game.away === team || game.home === team;
   const games = context.games.filter(
-    (game) => hasTeam(game, code) && (!rival || hasTeam(game, rival)),
+    (game) => isPlayedBy(game, code) && (!rival || isPlayedBy(game, rival)),
   );
   const next = games.find((game) => game.state !== "final");
   return next ? next.startMs : Number.MAX_SAFE_INTEGER - (games.at(-1)?.startMs ?? 0);
@@ -361,9 +359,7 @@ function listFollowingCandidates(text, context) {
  * @param {string} code
  */
 function findOpponent(context, code) {
-  const games = context.games.filter(
-    (game) => (game.away === code || game.home === code) && game.away && game.home,
-  );
+  const games = context.games.filter((game) => isPlayedBy(game, code) && game.away && game.home);
   const game = games.find((each) => each.state !== "final") ?? games.at(-1);
   return game ? (game.away === code ? game.home : game.away) : null;
 }
@@ -375,22 +371,12 @@ function findOpponent(context, code) {
  */
 function findOnlyTeam(text, context) {
   const search = readSearch(text, context);
-  const asksMore = [
-    search.skipped,
-    search.starters,
-    search.places,
-    search.ranges,
-    search.times,
-    search.kinds,
-    search.states,
-  ].some((list) => list.length);
   const [team] = search.teams;
   const isOnlyTeam =
     search.teams.length === 1 &&
     team.codes.length === 1 &&
-    !asksMore &&
-    !search.pick &&
-    !search.side;
+    !search.skipped.length &&
+    isAskingNothing({ ...search, teams: [] });
   return isOnlyTeam ? team.codes[0] : null;
 }
 
@@ -437,7 +423,7 @@ function listTeamSearchCandidates(text, context) {
   const code = findOnlyTeam(text, context);
   if (!code) return [];
   const team = context.teamsByCode.get(code)?.name ?? code;
-  const games = context.games.filter((game) => game.away === code || game.home === code);
+  const games = context.games.filter((game) => isPlayedBy(game, code));
   const hasNext = games.some((game) => game.state !== "final");
   const isInPlayoffs = games.some((game) => game.kind === "playoffs" && game.state !== "final");
   const opponent = findOpponent(context, code);

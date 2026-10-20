@@ -35,6 +35,17 @@ const LOCAL_TIME_RESTRICTIONS = LOCAL_TIME_METHODS.map((property) => ({
 const CLAUDE_MESSAGES = String.raw`/api\.anthropic\.com.v1.messages/`;
 
 const DEVICE_STORAGES = ["localStorage", "sessionStorage"];
+
+// The plain scripts the page loads before its modules, whose functions the page calls.
+export const PLAIN_SCRIPTS = [
+  "shared/page/draw-home-screen-asks.js",
+  "shared/page/open-last-tab.js",
+  "shared/page/pick-theme.js",
+  "shared/page/season-header.js",
+  "shared/page/show-last-drawn.js",
+  "shared/page/slow-load.js",
+];
+
 const DEVICE_STORAGE_MESSAGE =
   "Keep a viewer's choice with createViewerChoice from shared/page/device-storage.js.";
 const SHARED_STORAGE_MESSAGE =
@@ -138,13 +149,7 @@ export default [
     // page's head, which run before any module, keep their own. A block's rule replaces an earlier
     // block's, so this one keeps the local-time restrictions too, but for days.js, below.
     files: ["shared/page/**/*.js"],
-    ignores: [
-      "shared/page/local-storage.js",
-      "shared/page/open-last-tab.js",
-      "shared/page/pick-theme.js",
-      "shared/page/release-guard.js",
-      "shared/page/show-last-drawn.js",
-    ],
+    ignores: ["shared/page/local-storage.js", "shared/page/release-guard.js", ...PLAIN_SCRIPTS],
     rules: {
       "no-restricted-globals": [
         "error",
@@ -180,12 +185,7 @@ export default [
     },
   },
   {
-    // A plain script the page loads before its modules, whose functions the page calls.
-    files: [
-      "shared/page/open-last-tab.js",
-      "shared/page/show-last-drawn.js",
-      "shared/page/slow-load.js",
-    ],
+    files: PLAIN_SCRIPTS,
     languageOptions: { sourceType: "script" },
     rules: { "no-unused-vars": ["error", { vars: "local" }] },
   },
@@ -237,7 +237,7 @@ export default [
   },
   {
     // Callbacks passed to page.evaluate run in the page.
-    files: ["apps/*/tests/browser/*.mjs", "tests/browser/*.mjs"],
+    files: ["apps/*/tests/browser/**/*.mjs", "tests/browser/**/*.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
     rules: {
       // A fixed wait, or one for the network to go quiet, is too short on a slow machine and wasted

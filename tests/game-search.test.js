@@ -607,6 +607,7 @@ test("before typing, the league's searches that find a game come first, then its
     places: [{ key: "settings", name: ["Settings"], words: ["settings"], icon: "settings" }],
     gameParts: [],
     examples: ["Settings", "Fireworks"],
+    isOutKnown: true,
   };
   const context = createContext();
   assert.deepEqual(listShownExamples(context, pages), [

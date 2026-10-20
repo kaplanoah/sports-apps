@@ -19,10 +19,8 @@ import {
   showSection,
   openMatchup,
 } from "./open-game-sheet.mjs";
-import {
-  recordSheetMotions,
-  waitForTimedMotions,
-} from "../../../../tests/browser/sheet-motions.mjs";
+import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -235,7 +233,7 @@ test("on a phone, the matchup rises to fill the screen, with its close button at
   await page.setViewportSize({ width: 390, height: 844 });
   const sheet = await openMatchup(page);
   await expect(sheet.locator(".pitch-mix")).toHaveCount(2);
-  await waitForTimedMotions(page);
+  await waitForTimedAnimations(page);
   const close = await sheet.getByRole("button", { name: "Close" }).boundingBox();
   expect([Math.round(close.x), close.width]).toEqual([6, 44]);
   expect(await page.locator("#sheetDialog").boundingBox()).toEqual({
@@ -266,7 +264,7 @@ test("on a phone, the close button and Escape slide the matchup down", async ({ 
   for (const [way, close] of Object.entries(closings)) {
     await page.getByRole("button", { name: ASTROS_AT_ATHLETICS }).click();
     const sheet = page.locator("#gameSheet");
-    await waitForTimedMotions(page);
+    await waitForTimedAnimations(page);
     await readMotions();
 
     await close();
@@ -518,7 +516,7 @@ test("a game's Runs set the runners who got on in a lighter ink than the play th
           playWidth: /** @type {Element} */ (
             element.querySelector(".runs-play")
           ).getBoundingClientRect().width,
-          credit: readColor("var(--credit-ink)"),
+          receding: readColor("var(--receding-ink)"),
           dim: readColor("var(--ink-dim)"),
         };
       }),
@@ -526,7 +524,7 @@ test("a game's Runs set the runners who got on in a lighter ink than the play th
   }
   const [ball, nightGame] = looks;
   const detail = String((await readRole(page, "detail")).weight);
-  expect(ball.setup).toBe(ball.credit);
+  expect(ball.setup).toBe(ball.receding);
   expect(nightGame.setup).toBe(nightGame.dim);
   for (const look of looks) expect([look.setupWeight, look.playWeight]).toEqual([detail, detail]);
   expect(ball.playWidth).toBeCloseTo(nightGame.playWidth, 1);

@@ -1,16 +1,15 @@
 // Finds a pull request's CI run that passed on exactly some code. A pull request's CI tests it
 // merged into its base branch as that branch was then, and records that code's git tree: once
-// every check passed, so that main can deploy without waiting for CI to run again, since when the
-// base is main and nothing else merged first, the squash merge has the same tree; and once every
-// test passed, whatever the gate said, so that a label change, which brings no new code, runs only
-// the gate again.
+// every check passed and the gate didn't hold the change, so that main can deploy without waiting
+// for CI to run again, since when the base is main and nothing else merged first, the squash merge
+// has the same tree; and once every test passed, whatever the gate said, so that a label change,
+// which brings no new code, runs only the gate again.
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createGitHub } from "./github-api.mjs";
 
-const API = "https://api.github.com";
-const CI_WORKFLOW = ".github/workflows/ci.yml";
-const REQUEST_TIMEOUT_MS = 10000;
+export const CI_WORKFLOW = ".github/workflows/ci.yml";
 
 /** @param {string} tree */
 export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
@@ -18,9 +17,10 @@ export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
 /** @param {string} tree */
 export const nameTestedArtifact = (tree) => `ci-tested-${tree}`;
 
-// Only CI as main's own workflow ran it, on a branch of this repository: a fork's pull request
-// runs its own copy of the workflow, which could record a tree it never tested.
-const isPullRequestRun = (run) =>
+// Only a pull request's run of the CI workflow's path, from a branch of this repository. A branch's
+// run uses the branch's own copy of the workflow, which only someone who can push here could
+// change, while a fork's could be anyone's, and could record a tree it never tested.
+export const isPullRequestRun = (run) =>
   run.path === CI_WORKFLOW &&
   run.event === "pull_request" &&
   run.head_repository?.id === run.repository?.id;
@@ -47,18 +47,7 @@ async function findRecordingRun({
   fetchImpl = fetch,
   env = process.env,
 }) {
-  const readJson = async (path) => {
-    const response = await fetchImpl(`${API}/repos/${repository}${path}`, {
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${env.GH_TOKEN}`,
-        "x-github-api-version": "2022-11-28",
-      },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) throw new Error(`GitHub answered ${response.status} for ${path}`);
-    return response.json();
-  };
+  const readJson = createGitHub({ repository, fetchImpl, env });
   const { artifacts } = await readJson(`/actions/artifacts?name=${artifact}&per_page=100`);
   for (const { expired, workflow_run } of artifacts) {
     if (expired) continue;
@@ -69,7 +58,7 @@ async function findRecordingRun({
 }
 
 /**
- * A run on which every check, the gate too, passed.
+ * A run on which every check passed and the gate didn't hold the change.
  * @param {FindOptions} options
  */
 export const findPassedRun = ({ tree, ...options }) =>
@@ -80,8 +69,8 @@ export const findPassedRun = ({ tree, ...options }) =>
   });
 
 /**
- * A run on which every test passed. Its gate may have failed it, so the run's own conclusion
- * doesn't count: the record is made only once every other job has passed.
+ * A run on which every test passed. Its check may have held a red change, so the run's own
+ * conclusion doesn't count: the record is made only once every test and the review passed.
  * @param {FindOptions} options
  */
 export const findTestedRun = ({ tree, ...options }) =>
