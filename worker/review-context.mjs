@@ -1,8 +1,8 @@
-// Writes what CI's reviewers and checkers read besides the code: the pull request's title and
-// description, every review thread on it so far, each with its first comment and latest replies and
-// whether it's resolved or outdated, and the findings the review posted on files the pull request
-// doesn't change, so a finding that was answered or fixed isn't raised again unless the answer is
-// wrong or the fix didn't hold.
+// Writes what CI's reviewers and its check across areas read besides the code: the pull request's
+// title and description, every review thread on it so far, each with its first comment and latest
+// replies and whether it's resolved or outdated, and the findings the review posted on files the
+// pull request doesn't change, so a finding that was answered or fixed isn't raised again unless
+// the answer is wrong or the fix didn't hold.
 // Usage: node worker/review-context.mjs <folder>, with GH_TOKEN, GITHUB_REPOSITORY, PR, TITLE,
 // and DESCRIPTION set.
 import { mkdirSync, writeFileSync } from "node:fs";
