@@ -3,14 +3,14 @@ name: Probe the reviewer's tools
 # Temporary: shows that the reviewer's tools refuse reads outside the checkout. Deleted before the
 # pull request is ready.
 on:
-  push:
-    branches: [claude/lock-down-review]
+  pull_request:
 
 permissions:
   contents: read
 
 jobs:
   probe:
+    if: github.head_ref == 'claude/lock-down-review'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:

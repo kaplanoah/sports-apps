@@ -606,19 +606,19 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
-          show_full_output: true
+          show_full_output: false
           settings: '{"disableAllHooks": true}'
           claude_args: |
             --model claude-opus-5-5
             --max-turns 200
-            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
+            --allowedTools "Bash(git log:*),Bash(git show:*)"
             --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}},"verdict":{"type":"string","enum":["confirmed","rejected","unsure"]},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"why":{"type":"string"}},"required":["ids","verdict","weight","path","line","body","why"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["findings","unjudged"]}'
           prompt: |
             You check what the reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, across every area of its change, before anything is posted. Its change is split into areas by what the files are about, and one reviewer read each area and listed every problem it found, unsure ones included. Their candidates are in `.review/candidates.json`, each with an id.
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md and the rule files `.review/${{ env.STAGE }}.md` lists for each area hold the rules the code keeps.
             2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, `.review/${{ env.STAGE }}.md`, which lists each area's diff files and rule files, which you read as you need, and `.review/candidates.json`.
-            3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with git show HEAD^1:<path>. Use Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects.
+            3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with git show HEAD^1:<path>. Use Read, Grep, and Glob, which reach only this checkout, and git log and git show, with git log -p and git log -L for history, each command on its own, with no pipes or redirects.
             4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
             5. Merge candidates that are the same problem into one finding, in one area or across areas, whether they name one place or several, naming every id it merges: one problem is one finding, however many places it shows, in both apps too. Every candidate's id appears in exactly one finding, rejected ones too: a step after you checks.
             6. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each the same way, and add each you confirm or can't settle that no candidate already says as a finding of its own, with no ids.

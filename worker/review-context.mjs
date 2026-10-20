@@ -1,6 +1,6 @@
 // Writes what CI's reviewers and its check across areas read besides the code: the pull request's
 // title and description, every review thread on it so far, each with its first comment and latest
-// replies and whether it's resolved or outdated, and the findings the review posted on files the
+// replies from people with a say in the repo and whether it's resolved or outdated, and the findings the review posted on files the
 // pull request doesn't change, so a finding that was answered or fixed isn't raised again unless
 // the answer is wrong or the fix didn't hold.
 // Usage: node worker/review-context.mjs <folder>, with GH_TOKEN, GITHUB_REPOSITORY, PR, TITLE,
@@ -14,6 +14,7 @@ import { OFF_DIFF_HEADING, REVIEWER } from "./review-state.mjs";
 // A thread's first comment, which holds what it raised, as every item of a checklist of Nits, and
 // its last ones, since its newest replies hold its answer.
 const LAST_COMMENTS = 49;
+const COMMENT_FIELDS = "author { __typename login } authorAssociation body";
 const THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -25,8 +26,8 @@ const THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!, $a
           path
           line
           originalLine
-          first: comments(first: 1) { nodes { author { login } body } }
-          comments(last: ${LAST_COMMENTS}) { totalCount nodes { author { login } body } }
+          first: comments(first: 1) { nodes { ${COMMENT_FIELDS} } }
+          comments(last: ${LAST_COMMENTS}) { totalCount nodes { ${COMMENT_FIELDS} } }
         }
       }
     }
@@ -89,6 +90,27 @@ export async function readConversation({ callGraphQL, callGitHub, pullRequest })
   return { threads, offDiff: listOffDiffFindings(comments) };
 }
 
+// The repo is public, so anyone can comment on a thread; a reviewer reads only what people with a
+// say in the repo wrote, and the review's own findings, whose bot has no say of its own.
+const REPO_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+// GraphQL names a bot without the "[bot]" the REST API adds to its login.
+const REVIEWER_BOT = REVIEWER.replace(/\[bot\]$/, "");
+const LEFT_OUT_COMMENT = "*A comment from someone outside the repo was left out.*";
+
+/**
+ * Whether a comment is one a reviewer reads: from someone with a say in the repo, or the review's.
+ * @param {any} comment
+ */
+const isFromRepo = (comment) =>
+  REPO_ASSOCIATIONS.has(comment.authorAssociation) ||
+  (comment.author?.__typename === "Bot" && comment.author.login === REVIEWER_BOT);
+
+/** @param {any} comment */
+const renderComment = (comment) =>
+  isFromRepo(comment)
+    ? [`**${comment.author?.login ?? "someone"}:**`, "", comment.body, ""]
+    : [LEFT_OUT_COMMENT, ""];
+
 /** @param {any} thread */
 const describeState = (thread) =>
   [thread.isResolved ? "resolved" : "open", thread.isOutdated ? "outdated" : ""]
@@ -104,12 +126,7 @@ export function renderContext({ title, description, threads, offDiff }) {
   const threadLines = threads.flatMap((thread) => [
     `## ${thread.path}:${thread.line ?? thread.originalLine ?? "file"} (${describeState(thread)})`,
     "",
-    ...thread.comments.nodes.flatMap((/** @type {any} */ comment) => [
-      `**${comment.author?.login ?? "someone"}:**`,
-      "",
-      comment.body,
-      "",
-    ]),
+    ...thread.comments.nodes.flatMap(renderComment),
   ]);
   return [
     `# ${title}`,

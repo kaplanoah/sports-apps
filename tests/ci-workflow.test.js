@@ -739,6 +739,41 @@ test("no job that runs Claude can write to the pull request", () => {
   }
 });
 
+/**
+ * A step's input, through the YAML anchor it names when it names one.
+ * @param {string} workflow the workflow's text
+ * @param {string} step
+ * @param {string} input
+ */
+function readStepInput(workflow, step, input) {
+  const value = step.match(new RegExp(`^ {10}${input}: (.*(?:\\n {12}.*)*)`, "m"))?.[1] ?? "";
+  const alias = value.match(/^\*([\w-]+)$/)?.[1];
+  if (!alias) return value;
+  return workflow.match(new RegExp(`^ {10}[\\w-]+: &${alias} (.*(?:\\n {12}.*)*)`, "m"))?.[1] ?? "";
+}
+
+// The repo is public, so a Claude step's transcript stays out of its log, and the reviewer, which
+// reads text anyone may have written, can reach nothing but the checkout and its history: Read,
+// Grep, and Glob need no rule within the checkout and are refused outside it, and git diff and git
+// blame, which read files outside it, aren't allowed.
+test("every Claude step keeps its transcript out of the log and reads only the checkout and its history", () => {
+  const steps = WORKFLOWS.flatMap((name) => {
+    const workflow = readRepoFile(`.github/workflows/${name}`);
+    return workflow
+      .split(/^ {6}- /m)
+      .filter((step) => /uses: anthropics\/claude-code-action@/.test(step))
+      .map((step) => ({ name, workflow, step }));
+  });
+  assert.ok(steps.length >= 3);
+  for (const { name, workflow, step } of steps) {
+    assert.equal(readStepInput(workflow, step, "show_full_output"), "false", name);
+    const tools = [
+      ...readStepInput(workflow, step, "claude_args").matchAll(/--allowedTools "([^"]*)"/g),
+    ].map(([, list]) => list);
+    assert.deepEqual(tools, ["Bash(git log:*),Bash(git show:*)"], name);
+  }
+});
+
 // Each review job runs only once the jobs whose records it reads have finished.
 test("each review job waits for the jobs whose records it reads", () => {
   /** @type {[string, string[]][]} */
