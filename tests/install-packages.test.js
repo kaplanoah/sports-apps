@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isInstallNeeded } from "../.claude/hooks/install-packages.mjs";
@@ -53,13 +53,50 @@ test("a folder with no lockfile needs no install", () => {
   assert.equal(isInstallNeeded(mkdtempSync(join(tmpdir(), "install-packages-"))), false);
 });
 
-test("the hook says nothing and lets the session start when the install is current", () => {
-  const installedAt = new Date(LOCKFILE_TIME.getTime() + 60_000);
-  const { status, stdout } = spawnSync("node", [HOOK], {
-    env: { ...process.env, CLAUDE_PROJECT_DIR: makeFolder({ installedAt }) },
+/**
+ * Runs the hook for a project folder, with a fake `npm` first on its PATH that writes the
+ * arguments it was given to `npm-arguments.txt` in the folder it ran in and exits with `exitCode`.
+ * @param {string} folder
+ * @param {number} [exitCode]
+ */
+function runHook(folder, exitCode = 0) {
+  const bin = mkdtempSync(join(tmpdir(), "install-packages-bin-"));
+  writeFileSync(join(bin, "npm"), `#!/bin/sh\necho "$@" > npm-arguments.txt\nexit ${exitCode}\n`, {
+    mode: 0o755,
+  });
+  return spawnSync("node", [HOOK], {
+    env: { ...process.env, CLAUDE_PROJECT_DIR: folder, PATH: `${bin}:${process.env.PATH}` },
     encoding: "utf8",
   });
+}
+
+test("the hook says nothing and lets the session start when the install is current", () => {
+  const installedAt = new Date(LOCKFILE_TIME.getTime() + 60_000);
+  const folder = makeFolder({ installedAt });
+  const { status, stdout } = runHook(folder);
   assert.deepEqual({ status, stdout }, { status: 0, stdout: "" });
+  assert.throws(() => readFileSync(join(folder, "npm-arguments.txt")), { code: "ENOENT" });
+});
+
+test("the hook runs npm ci in the project's folder and says so in one line", () => {
+  const folder = makeFolder();
+  const { status, stdout } = runHook(folder);
+  assert.deepEqual(
+    { status, stdout },
+    {
+      status: 0,
+      stdout: "Installed packages with npm ci, since node_modules was out of date.\n",
+    },
+  );
+  assert.equal(readFileSync(join(folder, "npm-arguments.txt"), "utf8"), "ci\n");
+});
+
+test("the hook lets the session start, and says so, when npm ci fails", () => {
+  const { status, stdout } = runHook(makeFolder(), 1);
+  assert.deepEqual(
+    { status, stdout },
+    { status: 0, stdout: "npm ci failed; run it before AGENTS.md's checks.\n" },
+  );
 });
 
 test("the project's settings run the hook as every session starts", () => {
