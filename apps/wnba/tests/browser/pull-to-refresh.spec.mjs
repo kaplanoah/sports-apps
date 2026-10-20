@@ -5,7 +5,7 @@ import {
 } from "../../../../tests/browser/page-left-down.mjs";
 import { findSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
-import { drag, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
+import { drag, dragAlong, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -167,19 +167,12 @@ test("a page pulled down and back up to where it started settles in place at onc
   await openFromHomeScreen(page);
   await openApp(page);
   await openGames(page);
-  const session = await page.context().newCDPSession(page);
-  await session.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
 
-  for (const [type, y] of /** @type {const} */ ([
-    ["touchStart", 40],
-    ["touchMove", 70],
-    ["touchMove", 100],
-    ["touchMove", 70],
-    ["touchMove", 40],
-  ]))
-    await session.send("Input.dispatchTouchEvent", { type, touchPoints: [{ x: 200, y }] });
-  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  await session.detach();
+  const release = await dragAlong(
+    page,
+    [40, 70, 100, 70, 40].map((y) => ({ x: 200, y })),
+  );
+  await release();
 
   await expect(page.locator("header.top")).toHaveCSS("top", "auto");
   await expect(page.locator("header.top")).toHaveCSS("position", "static");

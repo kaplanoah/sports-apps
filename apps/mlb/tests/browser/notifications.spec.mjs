@@ -5,12 +5,17 @@ test.use({ serviceWorkers: "allow" });
 
 const DEVICE_ENDPOINT = "https://fcm.googleapis.com/fcm/send/test-device";
 const NEXT_ENDPOINT = "https://fcm.googleapis.com/fcm/send/test-device-next";
+const STUB = {
+  endpoint: DEVICE_ENDPOINT,
+  keptKey: "test-push-subscription",
+  nextEndpointKey: "test-next-endpoint",
+};
 
 // Headless Chromium has no push service, and its headless shell denies notifications outright,
 // so the permission prompt and the subscription are stand-ins. The subscription has real keys,
 // which is all the Worker needs. Both last through a reload, as the browser's do. A test can name
 // the endpoint the next subscription gets, as a push service hands out a new one.
-function stubPushManager(endpoint) {
+function stubPushManager({ endpoint, keptKey, nextEndpointKey }) {
   const PERMISSION_KEY = "test-notification-permission";
   Object.defineProperty(Notification, "permission", {
     get: () => sessionStorage.getItem(PERMISSION_KEY) ?? "default",
@@ -19,15 +24,13 @@ function stubPushManager(endpoint) {
     sessionStorage.setItem(PERMISSION_KEY, "granted");
     return "granted";
   };
-  const KEPT_KEY = "test-push-subscription";
-  const NEXT_ENDPOINT_KEY = "test-next-endpoint";
   /** @returns {any} a stand-in for the browser's PushSubscription */
   const describeSubscription = (kept) => ({
     endpoint: kept.endpoint,
     options: { applicationServerKey: Uint8Array.from(kept.serverKey) },
     toJSON: () => ({ endpoint: kept.endpoint, keys: kept.keys }),
     unsubscribe: async () => {
-      sessionStorage.removeItem(KEPT_KEY);
+      sessionStorage.removeItem(keptKey);
       return true;
     },
   });
@@ -37,7 +40,7 @@ function stubPushManager(endpoint) {
       .replace(/\//g, "_")
       .replace(/=+$/, "");
   PushManager.prototype.getSubscription = async () => {
-    const kept = sessionStorage.getItem(KEPT_KEY);
+    const kept = sessionStorage.getItem(keptKey);
     return kept ? describeSubscription(JSON.parse(kept)) : null;
   };
   PushManager.prototype.subscribe = async (options) => {
@@ -50,11 +53,11 @@ function stubPushManager(endpoint) {
     };
     const serverKey = /** @type {ArrayBuffer} */ (options.applicationServerKey);
     const kept = {
-      endpoint: sessionStorage.getItem(NEXT_ENDPOINT_KEY) ?? endpoint,
+      endpoint: sessionStorage.getItem(nextEndpointKey) ?? endpoint,
       keys,
       serverKey: [...new Uint8Array(serverKey)],
     };
-    sessionStorage.setItem(KEPT_KEY, JSON.stringify(kept));
+    sessionStorage.setItem(keptKey, JSON.stringify(kept));
     return describeSubscription(kept);
   };
 }
@@ -62,7 +65,7 @@ function stubPushManager(endpoint) {
 test("notifications can be turned on and off, with no note while the switch works", async ({
   page,
 }) => {
-  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await page.addInitScript(stubPushManager, STUB);
   const app = await openApp(page);
   await openSettings(page);
 
@@ -85,22 +88,17 @@ test("notifications can be turned on and off, with no note while the switch work
 test("a device subscribed under the Worker's old signing key subscribes again, and the Worker forgets the old subscription", async ({
   page,
 }) => {
-  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await page.addInitScript(stubPushManager, STUB);
   const app = await openApp(page);
   await openSettings(page);
   const toggle = page.getByRole("switch", { name: "Notifications" });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
-  await page.evaluate((nextEndpoint) => {
-    const kept = JSON.parse(
-      /** @type {string} */ (sessionStorage.getItem("test-push-subscription")),
-    );
-    sessionStorage.setItem(
-      "test-push-subscription",
-      JSON.stringify({ ...kept, serverKey: [1, 2, 3] }),
-    );
-    sessionStorage.setItem("test-next-endpoint", nextEndpoint);
-  }, NEXT_ENDPOINT);
+  await page.evaluate(([{ keptKey, nextEndpointKey }, nextEndpoint]) => {
+    const kept = JSON.parse(/** @type {string} */ (sessionStorage.getItem(keptKey)));
+    sessionStorage.setItem(keptKey, JSON.stringify({ ...kept, serverKey: [1, 2, 3] }));
+    sessionStorage.setItem(nextEndpointKey, nextEndpoint);
+  }, /** @type {const} */ ([STUB, NEXT_ENDPOINT]));
   const savingNext = page.waitForRequest(
     (request) => request.method() === "PUT" && !!request.postData()?.includes(NEXT_ENDPOINT),
   );
@@ -114,7 +112,7 @@ test("a device subscribed under the Worker's old signing key subscribes again, a
 test("a device the Worker has no room for is left off, and is still off after a reload", async ({
   page,
 }) => {
-  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await page.addInitScript(stubPushManager, STUB);
   await openApp(page);
   await page.route(matchPath("/push/subscription"), (route) =>
     route.request().method() === "PUT"
@@ -148,7 +146,7 @@ test("a device the Worker has no room for is left off, and is still off after a 
 test("a device the Worker no longer has room for on a later visit is turned off", async ({
   page,
 }) => {
-  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await page.addInitScript(stubPushManager, STUB);
   await openApp(page);
   await openSettings(page);
   const toggle = page.getByRole("switch", { name: "Notifications" });
@@ -182,7 +180,7 @@ test("a device the Worker no longer has room for on a later visit is turned off"
 test("a new signing key whose save fails for a moment keeps the subscription, which the next visit saves", async ({
   page,
 }) => {
-  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await page.addInitScript(stubPushManager, STUB);
   await openApp(page);
   await openSettings(page);
   const toggle = page.getByRole("switch", { name: "Notifications" });

@@ -321,6 +321,41 @@ test.describe("with reduced motion", () => {
     await expectDayAtTop(page, "2026-09-30");
   });
 
+  test("after a night away, a click or key outside the list before the store catches up still has the list follow its start day", async ({
+    page,
+  }) => {
+    const app = await openSeasonGames(page);
+    await app.changeSeason((season) => {
+      const game = season.games.find((each) => each.id === "1042600132");
+      Object.assign(game, { state: "live", status: "Q4 0:40", period: 4, clock: "0:40" });
+      return season;
+    });
+    await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
+    await expectDayAtTop(page, "2026-09-30");
+    await setHidden(page, true);
+    await page.clock.fastForward("12:00:00");
+    await app.changeSeasonWhileAway((season) => {
+      const game = season.games.find((each) => each.id === "1042600132");
+      Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
+      return season;
+    });
+    const release = await app.holdStore();
+    await setHidden(page, false);
+    await page.clock.runFor(100);
+    await expectDayAtTop(page, "2026-09-30");
+
+    await page
+      .locator("#seasonGames .strip-month")
+      .dispatchEvent("pointerdown", { bubbles: true, pointerType: "mouse" });
+    await page.locator("#seasonGames .go-today").focus();
+    await page.keyboard.press("Shift");
+    release();
+
+    await expect(page.locator('[data-game="1042600132"] .game-status')).toContainText("Final");
+    await page.clock.runFor(100);
+    await expectDayAtTop(page, "2026-10-01");
+  });
+
   test("after two minutes away on another tab, the Games list opens on today once it's shown", async ({
     page,
   }) => {

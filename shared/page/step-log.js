@@ -12,15 +12,27 @@ const KEPT_LINES = 200;
 const SAVE_AFTER_MS = 1000;
 
 /** @typedef {{ at: number, text: string }} StepLine */
+/** @typedef {StepLine & { id: string }} LoggedLine */
 
 /**
  * Two tabs' lines as one log, each line once, oldest first, and only the last few.
- * @param {StepLine[]} kept
- * @param {StepLine[]} held
+ * @param {LoggedLine[]} kept
+ * @param {LoggedLine[]} held
  */
 function mergeLines(kept, held) {
-  const byStep = new Map([...kept, ...held].map((line) => [`${line.at} ${line.text}`, line]));
-  return [...byStep.values()].toSorted((first, second) => first.at - second.at).slice(-KEPT_LINES);
+  const byId = new Map([...kept, ...held].map((line) => [line.id, line]));
+  return [...byId.values()].toSorted((first, second) => first.at - second.at).slice(-KEPT_LINES);
+}
+
+/**
+ * A line as storage kept it, its addresses hidden, named by when it came and what it says when
+ * storage names it by nothing else.
+ * @param {any} line
+ * @returns {LoggedLine}
+ */
+function readKeptLine(line) {
+  const text = hideAddresses(String(line.text));
+  return { id: String(line.id ?? `${line.at} ${text}`), at: line.at, text };
 }
 
 /**
@@ -107,17 +119,19 @@ function describeTouchOrClick(event) {
 export function createStepLog({ key, title, isWatched }) {
   let isOn = () => false;
   let onLogged = () => {};
-  /** @type {StepLine[] | null} */
+  /** @type {LoggedLine[] | null} */
   let held = null;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let saveTimer;
+  // Each line is named by the tab's log that logged it and its count there, so two tabs' saves
+  // keep each line once, even two that say the same at the same moment.
+  const logId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  let linesLogged = 0;
 
-  /** @returns {StepLine[]} */
+  /** @returns {LoggedLine[]} */
   function loadLines() {
     const kept = readStoredJson(key);
-    return Array.isArray(kept)
-      ? kept.map((line) => ({ ...line, text: hideAddresses(String(line.text)) }))
-      : [];
+    return Array.isArray(kept) ? kept.map(readKeptLine) : [];
   }
 
   const holdLines = () => (held ??= loadLines());
@@ -162,7 +176,8 @@ export function createStepLog({ key, title, isWatched }) {
   function noteStep(text) {
     if (!isOn()) return;
     const lines = holdLines();
-    lines.push({ at: Date.now(), text: hideAddresses(text) });
+    linesLogged += 1;
+    lines.push({ id: `${logId}-${linesLogged}`, at: Date.now(), text: hideAddresses(text) });
     lines.splice(0, lines.length - KEPT_LINES);
     saveTimer ??= setTimeout(saveLines, SAVE_AFTER_MS);
     onLogged();

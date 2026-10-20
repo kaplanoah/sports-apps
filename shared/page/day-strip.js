@@ -860,12 +860,12 @@ function letGoOfHeldDay(taker) {
 
 // A finger, wheel, click, or key on the list takes it over, even on its way to a day, as anything
 // that stops its spring does. Only a finger or wheel moves the list or the strip itself, which
-// then has the strip's dates slide or its month follow.
+// then stops the list following its start day and has the strip's dates slide or its month follow.
 /** @param {Event} event */
 function noteTouch(event) {
   const target = /** @type {Node} */ (event.target);
   const isMoving = MOVING_EVENTS.includes(event.type);
-  followStartUntil = 0;
+  if (isMoving) followStartUntil = 0;
   if (findList()?.contains(target)) {
     if (isMoving) isListInHand = true;
     letGoOfHeldDay(`the list's ${event.type}`);

@@ -195,6 +195,23 @@ test("two tabs logging at once keep each other's lines", (context) => {
   assert.deepEqual(readStoredTexts("twoTabsLog"), ["first tab's step", "second tab's step"]);
 });
 
+test("two lines that say the same at the same moment are both kept, in one tab and across two", (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  const [first, second] = openTwoTabs("sameMomentLog", () => true);
+
+  first.noteStep("the same error");
+  first.noteStep("the same error");
+  second.noteStep("the same error");
+  hidePage();
+  hidePage();
+
+  assert.deepEqual(readStoredTexts("sameMomentLog"), [
+    "the same error",
+    "the same error",
+    "the same error",
+  ]);
+});
+
 test("a tab never keeps lines again from before another tab turned Diagnostics off and on", (context) => {
   context.mock.timers.enable({ apis: ["Date"], now: 1000 });
   let isOn = true;
