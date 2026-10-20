@@ -1,4 +1,4 @@
-import { finishFirstRound, finishSemifinals } from "./bracket-rounds.mjs";
+import { finishSemifinals, showFirstRoundFinished } from "./bracket-rounds.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
@@ -354,10 +354,7 @@ test.describe("on a phone", () => {
       page,
     }) => {
       const app = await openApp(page);
-      await app.changeSeason(finishFirstRound);
-      await expect(page.locator('[data-series="2-1"] .team-line').first()).toContainText(
-        "Valkyries",
-      );
+      await showFirstRoundFinished(page, app);
       await expectSeasonTabAfterReload(page, { sideways: SIDEWAYS, awayMs: 2 * MINUTE_MS });
     });
 
@@ -365,20 +362,10 @@ test.describe("on a phone", () => {
       page,
     }) => {
       const app = await openApp(page);
-      await app.changeSeason(finishFirstRound);
-      await expect(page.locator('[data-series="2-1"] .team-line').first()).toContainText(
-        "Valkyries",
-      );
+      await showFirstRoundFinished(page, app);
       await expectOpeningRoundAfterReload(page, {
         sideways: SIDEWAYS,
-        // As after a release that reads its seasons in a new version, the page's code first draws
-        // the bracket from the store's season, over the copy put back as the page loaded.
-        changeWhileAway: async () => {
-          await app.changeSeason(finishSemifinals);
-          await page.evaluate(() =>
-            localStorage.setItem("lastSeen", JSON.stringify({ year: 2026, season: { series: 5 } })),
-          );
-        },
+        changeWhileAway: () => app.changeSeason(finishSemifinals),
       });
     });
 

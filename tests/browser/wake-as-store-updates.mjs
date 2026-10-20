@@ -65,7 +65,6 @@ export async function wakeAsStoreUpdates(page, app, { changeWhileAway, onWake = 
   const readStampTexts = await trackTextChanges(page, "stamp");
   const readStampsAsSynced = await trackStampsAsSynced(page);
   const watchers = app.countWatchersHeard();
-  const syncedAt = await page.evaluate(() => localStorage.getItem("syncedAt"));
 
   // The page's clock holds still, and then moves on without running its timers, as a phone that
   // suspends it does, so its wait for the store's update outlasts however long the store takes
@@ -84,8 +83,11 @@ export async function wakeAsStoreUpdates(page, app, { changeWhileAway, onWake = 
   await expect.poll(() => app.countWatchersHeard()).toBeGreaterThan(watchers);
   await statusRead;
   await expect.poll(readsOut).toBeLessThan(1);
+  // The page saves when its scores are from as it falls behind too, so only a save after the
+  // update says it has caught up, which its hold for that update keeps from coming sooner.
+  const savesBehind = (await readStampsAsSynced()).length;
   await app.updateFromWorker();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBe(syncedAt);
+  await expect.poll(async () => (await readStampsAsSynced()).length).toBeGreaterThan(savesBehind);
   return {
     texts: [...(await readGamesTexts()), ...(await readStampTexts())],
     stampAsCaughtUp: (await readStampsAsSynced()).at(-1),

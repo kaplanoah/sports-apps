@@ -208,7 +208,9 @@ export async function expectSeasonTabAfterReload(page, { sideways, awayMs }) {
  * Checks that a reload two minutes after the page left the season tab off its start, with the
  * bracket's opening round moved on by `changeWhileAway` while it was away, shows the bracket on the
  * round it opened on as the page left before the page's code arrives, and on the round still
- * playing once it runs.
+ * playing once it runs. The season the page saved can't be read, as after a release that reads
+ * seasons in a new version, so the page's code first draws the bracket from the store's season,
+ * over the copy put back as the page loaded.
  * @param {import("@playwright/test").Page} page
  * @param {{ sideways: string, changeWhileAway: () => Promise<unknown> }} options
  */
@@ -219,6 +221,9 @@ export async function expectOpeningRoundAfterReload(page, { sideways, changeWhil
 
   const release = await reloadAfter(page, 2 * MINUTE_MS);
   await changeWhileAway();
+  await page.evaluate(() =>
+    localStorage.setItem("lastSeen", JSON.stringify({ year: 2026, season: { series: 5 } })),
+  );
 
   await expect(page.locator("#standingsWrap table").first()).toBeAttached();
   await expect.poll(readLeft).toBe(start.bracketLeft);

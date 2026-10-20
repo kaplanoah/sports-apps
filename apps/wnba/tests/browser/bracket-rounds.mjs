@@ -1,3 +1,5 @@
+import { expect } from "@playwright/test";
+
 /**
  * The afternoon's season with every first-round series over: the 8-seed Liberty win the upper
  * series and play the Semifinals under the 4-seed Dream, who host.
@@ -22,6 +24,16 @@ export function finishFirstRound(season) {
     bottom: { team: "IND", seed: 6, wins: 0 },
   });
   return season;
+}
+
+/**
+ * Has the store finish the first round, and waits for the bracket to show the Semifinals' teams.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ changeSeason: (change: (season: any) => any) => Promise<unknown> }} app
+ */
+export async function showFirstRoundFinished(page, app) {
+  await app.changeSeason(finishFirstRound);
+  await expect(page.locator('[data-series="2-1"] .team-line').first()).toContainText("Valkyries");
 }
 
 /**

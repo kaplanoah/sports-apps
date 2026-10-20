@@ -1,10 +1,11 @@
-import { test, openApp } from "./harness.mjs";
+import { test, expect, openApp } from "./harness.mjs";
 import { expectReloadOpensOn, RELOAD_STATES } from "../../../../tests/browser/reload-states.mjs";
 import {
   MINUTE_MS,
   SHORT_PHONE,
   expectDayStripAfterReload,
   expectNewsAfterReloads,
+  expectOpeningRoundAfterReload,
   expectSeasonTabAfterReload,
 } from "../../../../tests/browser/start-over.mjs";
 
@@ -49,10 +50,40 @@ test("a reload two minutes or more after the page left the Games list on another
   await expectDayStripAfterReload(page, "2026-09-10");
 });
 
+/**
+ * Has the store finish each of the series `ids`, won by its first club in `wins` games, as the
+ * Worker saves them.
+ * @param {Awaited<ReturnType<typeof openApp>>} app
+ * @param {string[]} ids
+ * @param {number} wins
+ */
+async function finishSeries(app, ids, wins) {
+  const season = await app.readDocument(SEASON_PATH);
+  const series = { ...season.series };
+  for (const id of ids) series[id] = { ...series[id], winsA: wins, started: true };
+  await app.writeFromWorker(SEASON_PATH, { ...season, series });
+}
+
+const SEASON_PATH = "seasons/2026";
+const WILD_CARD_SERIES = ["AL_WC1", "AL_WC2", "NL_WC1", "NL_WC2"];
+const DIVISION_SERIES = ["AL_DS1", "AL_DS2", "NL_DS1", "NL_DS2"];
+
 test.describe("on a short phone", () => {
   test.use({ viewport: SHORT_PHONE });
 
   const SIDEWAYS = "#bracketWrap .tree-scroll";
+
+  test("a reload two minutes or more after the page left opens the bracket on the round still playing, though another was when the page left, even once the page's saved season can't be read", async ({
+    page,
+  }) => {
+    const app = await openApp(page);
+    await finishSeries(app, WILD_CARD_SERIES, 2);
+    await expect(page.locator("#bracketWrap .nscore", { hasText: "2" })).toHaveCount(4);
+    await expectOpeningRoundAfterReload(page, {
+      sideways: SIDEWAYS,
+      changeWhileAway: () => finishSeries(app, DIVISION_SERIES, 3),
+    });
+  });
 
   test("a reload two minutes or more after the page left starts the season tab over, on the part it's named for, each part at its top with the header back, before the page's code arrives and once it runs", async ({
     page,

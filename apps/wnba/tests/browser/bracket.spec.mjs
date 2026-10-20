@@ -1,5 +1,5 @@
 import { TEAMS } from "../../page/js/teams.js";
-import { finishFirstRound, finishSemifinals } from "./bracket-rounds.mjs";
+import { finishFirstRound, finishSemifinals, showFirstRoundFinished } from "./bracket-rounds.mjs";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
 import {
   findSeasonPill,
@@ -357,8 +357,7 @@ test("thin square bracket lines run from the line between each pair's teams into
   await expectJoins();
 
   // The 8-seed Liberty win the upper series and play under the 4-seed Dream; the lines don't move.
-  await app.changeSeason(finishFirstRound);
-  await expect(page.locator('[data-series="2-1"] .team-line').first()).toContainText("Valkyries");
+  await showFirstRoundFinished(page, app);
   await expectJoins();
 });
 
