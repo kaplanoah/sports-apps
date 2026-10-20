@@ -22,6 +22,7 @@ import {
   findSeasonTab,
   openSeasonPart,
 } from "../../../../tests/browser/season-tab.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 // What Search finds and opens, on a phone.
 
@@ -450,7 +451,7 @@ test("a setting's words find it, and its row opens settings with the setting in 
 
   await findRows(page).tap();
 
-  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(page.locator("#appearanceTitle")).toBeInViewport();
 });
 

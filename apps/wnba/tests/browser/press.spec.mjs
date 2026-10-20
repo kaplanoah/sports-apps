@@ -2,7 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { findCenter } from "../../../../tests/browser/season-scroll.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
-import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
 import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
 import {
   holdClock,
@@ -246,7 +246,7 @@ test("a finger the browser takes for a scroll on an Appearance choice in setting
 }) => {
   await openApp(page);
   await openSettings(page);
-  const maple = page.locator("#settingsDialog label.appearance-choice", { hasText: "Maple" });
+  const maple = page.locator(`${SETTINGS} label.appearance-choice`, { hasText: "Maple" });
   await expect(maple).toBeVisible();
   const theme = await page.evaluate(() => document.documentElement.dataset.theme);
   await holdClock(page);
@@ -264,7 +264,7 @@ test("a finger the browser takes for a scroll on a Diagnostics section's name ne
   await openApp(page);
   await turnOnDiagnostics(page);
   await openSettings(page);
-  const record = page.locator("#settingsDialog details.diagnostics-record").first();
+  const record = page.locator(`${SETTINGS} details.diagnostics-record`).first();
   await expect(record).toBeAttached();
   const isOpen = await record.evaluate(
     (details) => /** @type {HTMLDetailsElement} */ (details).open,

@@ -4,6 +4,7 @@ import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -109,7 +110,7 @@ async function switchOff(page, name) {
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
+  await expect(page.locator(SETTINGS)).toBeHidden();
 }
 
 const readHeadlines = (page) => page.locator(".news-card h3").allTextContents();

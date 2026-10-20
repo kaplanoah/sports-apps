@@ -5,7 +5,7 @@ import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
-import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -33,7 +33,7 @@ test("Diagnostics sit past the end of settings, off, with nothing recorded, with
 
   await openSettings(page);
 
-  await expect(page.locator("#settingsDialog")).toContainText("Noah Kaplan");
+  await expect(page.locator(SETTINGS)).toContainText("Noah Kaplan");
   await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "false");
   await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
   await expect(findRecords(page)).toBeHidden();

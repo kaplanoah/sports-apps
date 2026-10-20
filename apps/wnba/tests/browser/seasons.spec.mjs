@@ -2,7 +2,7 @@ import { test, expect, expectDayAtTop, openApp, matchPath } from "./harness.mjs"
 import { SNAPSHOT_VERSION } from "../../page/js/snapshot.js";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { readYearTracking } from "../../../../tests/browser/title-row.mjs";
-import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
 import { ONE_PAST_SEASON } from "./past-season.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -15,14 +15,14 @@ async function chooseSeason(page, year) {
   await openSettings(page);
   await page.getByRole("combobox", { name: "Season" }).selectOption(String(year));
   await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
+  await expect(page.locator(SETTINGS)).toBeHidden();
 }
 
 test("with only the current season kept, settings show no Season picker", async ({ page }) => {
   await openApp(page);
   await openSettings(page);
 
-  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Season" })).toHaveCount(0);
 });
 

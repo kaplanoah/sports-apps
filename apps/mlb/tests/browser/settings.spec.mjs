@@ -19,13 +19,14 @@ import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { waitForScrollEnd } from "../../../../tests/browser/scroll-end.mjs";
 import { readYearGap, readYearTracking } from "../../../../tests/browser/title-row.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 test("settings leave the page behind them as it is, as every sheet does", async ({ page }) => {
   await openApp(page);
   await openSettings(page);
-  const settings = page.locator("#settingsDialog");
+  const settings = page.locator(SETTINGS);
   await expect(settings).toBeVisible();
   const dim = await settings.evaluate(
     (dialog) => getComputedStyle(dialog, "::backdrop").backgroundColor,
@@ -36,7 +37,7 @@ test("settings leave the page behind them as it is, as every sheet does", async 
 test("settings' header holds its title, its close button, and the room under them alike on a phone and a wide screen", async ({
   page,
 }) => {
-  const top = page.locator("#settingsDialog .sheet-top");
+  const top = page.locator(`${SETTINGS} .sheet-top`);
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSettings(page);
@@ -105,7 +106,7 @@ test("settings left off the screen two minutes are closed as the page comes back
 
   await setHidden(page, true);
   await page.clock.runFor(2 * 60_000 - 1000);
-  expect(await comeBackTo(page, "#settingsDialog")).toBe(true);
+  expect(await comeBackTo(page, SETTINGS)).toBe(true);
 
   await setHidden(page, true);
   await page.clock.runFor(2 * 60_000);
@@ -120,7 +121,7 @@ test("settings left off the screen two minutes are closed as the page comes back
   await openSettings(page);
   await setHidden(page, true);
   await page.clock.runFor(2 * 60_000);
-  expect(await comeBackTo(page, "#settingsDialog")).toBe(false);
+  expect(await comeBackTo(page, SETTINGS)).toBe(false);
   await expect(settings).toBeHidden();
 });
 
@@ -253,11 +254,11 @@ test("at their foot, settings name the release and when it came out, in the view
   const version = page.locator("#versionNote");
   await expect(version).toHaveText("v2.13.0\u2022Released Sep 27, 8:10 PM");
   await expect(version).toHaveAttribute("title", "Commit abc1234");
-  await expect(page.locator("#settingsDialog .settings-footer .settings-version")).toHaveText([
+  await expect(page.locator(`${SETTINGS} .settings-footer .settings-version`)).toHaveText([
     "v2.13.0\u2022Released Sep 27, 8:10 PM",
     "\u00a9 2026 Noah Kaplan",
   ]);
-  await expect(page.locator("#settingsDialog .sheet-top")).not.toContainText("Released");
+  await expect(page.locator(`${SETTINGS} .sheet-top`)).not.toContainText("Released");
 });
 
 test("on a wide screen, settings end at the bottom left, level with the ranking's end", async ({
@@ -268,7 +269,7 @@ test("on a wide screen, settings end at the bottom left, level with the ranking'
   await openApp(page);
   await openSettings(page);
 
-  const footer = page.locator("#settingsDialog .settings-footer");
+  const footer = page.locator(`${SETTINGS} .settings-footer`);
   await expect(footer).toHaveCSS("text-align", "left");
   const [box, controls, ranking] = await Promise.all(
     [footer, page.locator(".settings-main > .settings-controls"), page.locator(".rank-frame")].map(
@@ -287,7 +288,7 @@ test("on a phone, settings end with the copyright, centered under the ranking", 
   await openApp(page);
   await openSettings(page);
 
-  const footer = page.locator("#settingsDialog .settings-footer > :last-child");
+  const footer = page.locator(`${SETTINGS} .settings-footer > :last-child`);
   await expect(footer).toHaveText("\u00a9 2026 Noah Kaplan");
   await expect(footer).toHaveCSS("text-align", "center");
   const [ranking, copyright] = await Promise.all(
@@ -304,7 +305,7 @@ test("on a phone, a scroll just past the end of settings rests at their end, wit
   await openApp(page);
   await openSettings(page);
   await expect(page.locator("#versionNote")).toBeVisible();
-  const settings = page.locator("#settingsDialog");
+  const settings = page.locator(SETTINGS);
 
   const copyright = page.getByText("\u00a9 2026 Noah Kaplan");
   const copyrightBottom = await copyright.evaluate((line) => line.getBoundingClientRect().bottom);
@@ -353,7 +354,7 @@ test("on a phone, settings rise to fill the screen, with their close button leve
 });
 
 const readSheetTop = (page) =>
-  page.locator("#settingsDialog").evaluate((dialog) => dialog.getBoundingClientRect().top);
+  page.locator(SETTINGS).evaluate((dialog) => dialog.getBoundingClientRect().top);
 
 test("on a phone, settings rise only when the viewer allows motion", async ({ page }) => {
   await page.setViewportSize(PHONE);
@@ -462,9 +463,7 @@ test("settings open at the top again after scrolling down to the ranking", async
 
   await openSettings(page);
 
-  await expect
-    .poll(() => page.locator("#settingsDialog").evaluate((dialog) => dialog.scrollTop))
-    .toBe(0);
+  await expect.poll(() => page.locator(SETTINGS).evaluate((dialog) => dialog.scrollTop)).toBe(0);
 });
 
 test("on a wide screen, settings run the screen's height, short of its top and bottom", async ({
@@ -474,7 +473,7 @@ test("on a wide screen, settings run the screen's height, short of its top and b
   await openApp(page);
   await openSettings(page);
 
-  const box = await page.locator("#settingsDialog").boundingBox();
+  const box = await page.locator(SETTINGS).boundingBox();
   expect(box.y).toBe(24);
   expect(box.y + box.height).toBe(LAPTOP.height - 24);
 });

@@ -1,14 +1,14 @@
 import { expect } from "@playwright/test";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
-import { openSettings } from "./settings.mjs";
+import { SETTINGS, openSettings } from "./settings.mjs";
 
 /**
  * What settings shows of the device's choices and the seasons it can pick.
  * @param {import("@playwright/test").Page} page
  */
 const readSettings = (page) =>
-  page.locator("#settingsDialog").evaluate((settings) => {
+  page.locator(SETTINGS).evaluate((settings) => {
     const row = /** @type {HTMLElement} */ (settings.querySelector("#seasonRow"));
     const picker = /** @type {HTMLSelectElement | null} */ (row.querySelector("select"));
     const checked = /** @type {HTMLInputElement | null} */ (
@@ -40,7 +40,7 @@ const readSettings = (page) =>
  */
 export async function checkSettingsOnReload({ page, look, switchName, pastSeason, currentSeason }) {
   await openSettings(page);
-  const settings = page.locator("#settingsDialog");
+  const settings = page.locator(SETTINGS);
   await settings.getByRole("radio", { name: look, exact: true }).check();
   const toggle = settings.getByRole("switch", { name: switchName });
   await toggle.click();

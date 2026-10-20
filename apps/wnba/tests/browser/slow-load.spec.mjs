@@ -3,13 +3,14 @@ import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const holdPageCode = (page) => holdRequests(page, matchPath("/js/app.js"));
 
 // The markup after the views is read only once the page has started watching its load.
-const waitForLoadWatch = (page) => expect(page.locator("#settingsDialog")).toBeAttached();
+const waitForLoadWatch = (page) => expect(page.locator(SETTINGS)).toBeAttached();
 
 test("a page whose code is slow to arrive says so until it draws the season", async ({ page }) => {
   const release = await holdPageCode(page);

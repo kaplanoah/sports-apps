@@ -1,4 +1,10 @@
-import { ANDROID_AGENT, IPAD, IPHONE, WIDE_IPHONE } from "../../../../tests/browser/devices.mjs";
+import {
+  ANDROID_PHONE,
+  IPAD,
+  IPHONE,
+  WIDE_IPHONE,
+  fakeIpadPlatform,
+} from "../../../../tests/browser/devices.mjs";
 import {
   checkCaretBeforeCode,
   checkCaretPlace,
@@ -12,7 +18,7 @@ import {
   checkWelcomeSwipesDown,
 } from "../../../../tests/browser/home-screen-help.mjs";
 import { test, openApp } from "./harness.mjs";
-import { PHONE, openSettings } from "./home-screen.mjs";
+import { openSettings } from "./home-screen.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -74,6 +80,7 @@ test.describe("on the widest iPhone, in the browser", () => {
 
 test.describe("on an iPad, in the browser", () => {
   test.use(IPAD);
+  test.beforeEach(({ page }) => fakeIpadPlatform(page));
 
   test("the Notifications note and its ? are the iPhone's", async ({ page }) => {
     await checkHelpOpensWelcome({ page, openApp, openSettings });
@@ -88,6 +95,7 @@ test.describe("on an iPad, in the browser", () => {
 
 test.describe("on an iPad with a trackpad, in the browser", () => {
   test.use({ userAgent: IPAD.userAgent });
+  test.beforeEach(({ page }) => fakeIpadPlatform(page));
 
   test("the Notifications note says why to add the page to the home screen, with no ? where the welcome isn't drawn", async ({
     page,
@@ -97,7 +105,7 @@ test.describe("on an iPad with a trackpad, in the browser", () => {
 });
 
 test.describe("on an Android phone, in the browser", () => {
-  test.use({ ...PHONE, userAgent: ANDROID_AGENT });
+  test.use(ANDROID_PHONE);
 
   test("the menu's dots sit as set by eye in the welcome and the settings' box", async ({
     page,
