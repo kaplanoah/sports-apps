@@ -243,10 +243,10 @@ test("before any season has loaded, two picks that can't be read keep the pick b
   const newer = pickSeason(2024);
 
   releaseOlder();
-  assert.equal((await older).kind, "replaced");
   releaseNewer();
-  assert.deepEqual(await newer, { kind: "unread", year: null });
 
+  assert.equal((await older).kind, "replaced");
+  assert.deepEqual(await newer, { kind: "unread", year: null });
   assert.deepEqual(picks, { picked: null, unreachable: 1 });
 });
 
@@ -264,9 +264,11 @@ test("a pick that fails after a newer one replaced it changes nothing", async ()
   const release = holdReads("seasons/2025");
 
   const replaced = pickSeason(2025);
-  assert.deepEqual(await pickSeason(2024), { kind: "shown", year: 2024 });
+  const newer = pickSeason(2024);
+  await settle();
   release();
 
+  assert.deepEqual(await newer, { kind: "shown", year: 2024 });
   assert.equal((await replaced).kind, "replaced");
   assert.deepEqual(picks, { picked: 2024, unreachable: 0 });
 });
@@ -291,10 +293,10 @@ test("a pick the page's own load of the current season takes over leaves the sea
 
 /**
  * A page showing 2024 whose viewer has picked 2025, with 2025's read held, and the page's own load
- * of the current season begun with its record held too.
- * @param {string[]} unreadable
+ * of the current season begun with the read `heldPath` names held too.
+ * @param {{ unreadable?: string[], heldPath: string }} options
  */
-async function startPickDuringLoad(unreadable) {
+async function startPickDuringLoad({ unreadable = [], heldPath }) {
   const { reader, holdReads } = startReader(
     {
       "live/current": { season: 2026 },
@@ -308,35 +310,71 @@ async function startPickDuringLoad(unreadable) {
   await reader.showYear(2024);
   const { picks, pickSeason } = startPicks(reader, 2024);
   const releasePick = holdReads("seasons/2025");
-  const releaseLoad = holdReads("seasons/2026");
+  const releaseLoad = holdReads(heldPath);
   const picked = pickSeason(2025);
-  const loading = reader.loadCurrentSeason();
+  const loading = reader.loadCurrentSeason().catch(() => "unread");
   await settle();
   return { picks, picked, loading, releasePick, releaseLoad };
 }
 
-test("a pick that answers while the page's own load is still out leaves the season that load asks for picked", async () => {
-  const { picks, picked, loading, releasePick, releaseLoad } = await startPickDuringLoad([]);
+test("a pick that answers while the page's own load is still out settles on the season that load shows", async () => {
+  const { picks, picked, loading, releasePick, releaseLoad } = await startPickDuringLoad({
+    heldPath: "seasons/2026",
+  });
 
   releasePick();
-  assert.deepEqual(await picked, { kind: "overtaken", year: 2026 });
+  await settle();
   releaseLoad();
   await loading;
 
+  assert.deepEqual(await picked, { kind: "overtaken", year: 2026 });
   assert.equal(picks.picked, 2026);
 });
 
-test("a pick that can't be read while the page's own load is still out leaves the season that load asks for picked", async () => {
-  const { picks, picked, loading, releasePick, releaseLoad } = await startPickDuringLoad([
-    "seasons/2025",
-  ]);
+test("a pick that answers before the page's own load has asked for a season settles on the season that load shows", async () => {
+  const { picks, picked, loading, releasePick, releaseLoad } = await startPickDuringLoad({
+    heldPath: "live/current",
+  });
 
   releasePick();
-  assert.deepEqual(await picked, { kind: "unread", year: 2026 });
+  await settle();
   releaseLoad();
   await loading;
 
+  assert.deepEqual(await picked, { kind: "overtaken", year: 2026 });
   assert.equal(picks.picked, 2026);
+});
+
+test("a pick that can't be read while the page's own load is still out settles on the season that load shows", async () => {
+  const { picks, picked, loading, releasePick, releaseLoad } = await startPickDuringLoad({
+    unreadable: ["seasons/2025"],
+    heldPath: "seasons/2026",
+  });
+
+  releasePick();
+  await settle();
+  releaseLoad();
+  await loading;
+
+  assert.deepEqual(await picked, { kind: "overtaken", year: 2026 });
+  assert.equal(picks.picked, 2026);
+});
+
+test("a pick that answers while the page's own load is out, which then fails, settles on the season still shown", async () => {
+  const unreadable = [];
+  const { picks, picked, loading, releasePick, releaseLoad } = await startPickDuringLoad({
+    unreadable,
+    heldPath: "seasons/2026",
+  });
+
+  releasePick();
+  await settle();
+  unreadable.push("seasons/2026");
+  releaseLoad();
+
+  assert.equal(await loading, "unread");
+  assert.deepEqual(await picked, { kind: "overtaken", year: 2024 });
+  assert.equal(picks.picked, 2024);
 });
 
 test("a page whose picked season's read is out stays on the pick when the store moves on", async () => {

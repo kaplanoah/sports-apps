@@ -215,7 +215,7 @@ paths:
       reloading once a newer release is out, and the store's status,
       and moving on to the next season when the store does.
       It keeps each season a viewer picks while its record is on its way,
-      and puts it back on the season the page asks for when it can't be read,
+      and, once no read is out, puts it back on the season the page shows when it can't be read,
       or when the page's own load, as on a return, takes its place (`createSeasonPicks`).
     - `poll-schedule.js`: how long a league's next update waits, from where its games stand
     - `kept-read.js`: a read worked out again only once what it reads from changes, like each app's season for its search
