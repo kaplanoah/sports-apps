@@ -144,8 +144,8 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 - A review finding outside the PR's one thing that AGENTS.md's step 12 names becomes an issue, linked from its thread, not a commit on the PR.
   The same problem in the other app, or in another view, sheet, or theme, is part of the one thing, and is fixed on the PR.
 - A PR built to fix review findings left for later takes findings that make one thing, like one area's or about five sharing a cause, never a whole review's.
-- When a change has red and non-red parts that can each stand alone, split them:
-  the non-red PR first, and the red one stacked on it, so the non-red half ships without waiting for the owner's phone.
+- When a change has red and non-red parts, split them, so the non-red work never waits for the owner's phone.
+  A red PR that needs the non-red one's changes stacks on it, and one that stands alone goes into `main` on its own.
 - A PR that needs another PR's unmerged changes doesn't wait for it: stack it.
   Start its branch from that PR's branch, open it into that branch,
   so its diff and review show only its own changes, and name the PR it builds on in its description.
