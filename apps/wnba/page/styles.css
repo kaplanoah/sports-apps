@@ -285,6 +285,8 @@
   --game-label-offset: -32px;
   --game-headline-offset: 0px;
   --game-status-offset: 32px;
+  /* A team is one line, level with the score, so a score keeps its place without a label. */
+  --game-unlabeled-lift: 0px;
   --network-logo-height: 13px;
   --network-gap: 16px;
   --network-name-offset: -0.5px;

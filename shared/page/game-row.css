@@ -10,7 +10,9 @@
  *   --game-label-offset      the label over the time or score
  *   --game-headline-offset   the time or score
  *   --game-status-offset     the status under the time or score
- * Without a label, the time or score and its status center as a pair, as far apart as under one.
+ *   --game-unlabeled-lift    how far the time or score and its status rise together without a
+ *                            label, as the pair's middle centers it where teams take two lines
+ * A time alone, without a label or status, centers in the row.
  * Its lines, and the tint on a row that opens under a press, take chrome.css's --divider and --ink,
  * and its team names under a mouse take --ink-hover.
  *
@@ -78,8 +80,8 @@
   align-items: center;
 }
 .game-middle:not(:has(> .game-label)) {
-  --headline-offset: calc((var(--game-headline-offset) - var(--game-status-offset)) / 2);
-  --status-offset: calc((var(--game-status-offset) - var(--game-headline-offset)) / 2);
+  --headline-offset: calc(var(--game-headline-offset) - var(--game-unlabeled-lift));
+  --status-offset: calc(var(--game-status-offset) - var(--game-unlabeled-lift));
 }
 .game-middle:not(:has(> .game-label, > .game-status)) {
   --headline-offset: 0px;
