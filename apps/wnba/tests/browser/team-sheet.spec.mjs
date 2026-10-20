@@ -334,15 +334,22 @@ test.describe("a team's sheet", () => {
   }) => {
     await openApp(page);
     await openSeasonPart(page, "Standings");
-    const name = page
-      .locator('#standings-league tr[data-team="LVA"] .team-open')
-      .locator(".team-name");
+    const row = page.locator('#standings-league tr[data-team="LVA"]');
+    const name = row.locator(".team-open .team-name");
     const readColor = () => name.evaluate((element) => getComputedStyle(element).color);
     const before = await readColor();
     await name.hover();
 
     await expect.poll(readColor).not.toBe(before);
     await expect(name).toHaveCSS("text-decoration-line", "none");
+
+    await page.mouse.move(0, 0);
+    await expect.poll(readColor).toBe(before);
+    const wins = row.locator("td.season").first();
+    await wins.scrollIntoViewIfNeeded();
+    const box = await wins.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect.poll(readColor).not.toBe(before);
   });
 
   test("an opponent's name in a team's sheet opens that team's sheet in its place", async ({

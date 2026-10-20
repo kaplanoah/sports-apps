@@ -92,10 +92,28 @@ test("next game is the one on now or next, even before its opponent is known", (
   });
 });
 
+test("a game the league put off is never a team's next game", () => {
+  const [next, after] = SEASON_GAMES.filter(
+    (game) => game.state === "pre" && [game.away.team, game.home.team].includes("NYL"),
+  );
+  const putOff = SEASON_GAMES.map((game) =>
+    game === next ? { ...game, status: "Postponed" } : game,
+  );
+  const games = listSearchGames(putOff, (game) => readSearchGame(game, null));
+  const context = { ...CONTEXT, games };
+  const asked = readSearch("Liberty next game", context);
+  const found = findSearchGames(asked, context).games.map((game) => game.id);
+  assert.deepEqual(found, [after.id]);
+});
+
 test("nicknames, cities, and filler words read as a fan would mean them", () => {
   assert.equal(search("When do the NY Liberty play the Aces?").line, "Liberty vs Aces | 4 games");
   assert.deepEqual(search("NY Liberty Valks").games, search("Liberty Valkyries").games);
   assert.equal(search("Liberyt").line, "Liberty | 52 games");
+});
+
+test("each team's words name it once each, its nicknames only what its name, city, and code don't", () => {
+  for (const team of TERMS.teams) assert.deepEqual(team.words, [...new Set(team.words)], team.code);
 });
 
 test("dates relative to now read as the days they cover, a weekend from Friday evening", () => {

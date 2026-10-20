@@ -13,7 +13,14 @@ import { renderTeamDetail } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
 import { formatMarkColors } from "./sheet-colors.js";
 import { renderSheetMessage } from "./sheet-parts.js";
-import { readTeamPlayoffs, renderChip, renderFinishedGame, renderNextGame } from "./team-view.js";
+import {
+  formatAverage,
+  formatPercentage,
+  readTeamPlayoffs,
+  renderChip,
+  renderFinishedGame,
+  renderNextGame,
+} from "./team-view.js";
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
 /** @typedef {import("./roster-view.js").RosterPlayer} RosterPlayer */
@@ -102,15 +109,6 @@ export const describePosition = (position) =>
     .split("-")
     .map((letter) => POSITION_WORDS[/** @type {"G" | "F" | "C"} */ (letter)] ?? letter)
     .join("-");
-
-/** @param {number} value */
-const formatAverage = (value) => value.toFixed(1);
-
-/** @param {number | null} value */
-function formatStat(value, isShare = false) {
-  if (value == null) return "-";
-  return isShare ? (value * 100).toFixed(1) : value.toFixed(1);
-}
 
 /**
  * Her dot and name.
@@ -332,6 +330,17 @@ const listUnrankedShares = (season) =>
       isShare && season.stats.some((stat) => stat.key === key && stat.rank == null),
   );
 
+// Who the WNBA ranks in a shooting percentage, worded once for every note that names it.
+const SHOTS_NEEDED = "who've made a certain number of shots";
+
+/**
+ * The WNBA's rule for its leaders: enough games or a stat's total for a stat, and enough shots made
+ * for a percentage (worker/src/player.js).
+ * @param {RegularSeason} season
+ */
+const describeRule = (season) =>
+  `WNBA only ranks players who've played ${season.gamesNeeded} games or reached a certain total in a stat, and shooting percentages only for those ${SHOTS_NEEDED}`;
+
 /**
  * Why a stat may have no rank, or why the number ranked varies by stat.
  * @param {RegularSeason} season
@@ -339,9 +348,9 @@ const listUnrankedShares = (season) =>
  */
 export function describeRankNote(season, isPastSeason) {
   if (season.stats.every((stat) => stat.rank != null))
-    return `The number of ranked players varies by stat because the WNBA only ranks players who've played ${season.gamesNeeded} games or, for shooting percentages, made a certain number of shots`;
+    return `The number of ranked players varies by stat because the ${describeRule(season)}`;
   if (season.games < season.gamesNeeded)
-    return `The WNBA only ranks players who've played ${season.gamesNeeded} games or, for shooting percentages, made a certain number of shots. She's played ${season.games} ${season.games === 1 ? "game" : "games"}.`;
+    return `The ${describeRule(season)}. She's played ${season.games} ${season.games === 1 ? "game" : "games"}.`;
   const unranked = listUnrankedShares(season);
   const shots = joinNames(
     unranked.map((stat) => stat.shots ?? ""),
@@ -354,7 +363,7 @@ export function describeRankNote(season, isPastSeason) {
   const shortfall = isPastSeason
     ? `She didn't make enough ${shots} to be ranked in ${shares}.`
     : `She hasn't made enough ${shots} to be ranked in ${shares}.`;
-  return `${shortfall} The WNBA only ranks shooting percentages for players who've made a certain number of shots.`;
+  return `${shortfall} The WNBA only ranks shooting percentages for players ${SHOTS_NEEDED}.`;
 }
 
 /**
@@ -385,7 +394,7 @@ function renderRegularSeason(team, season, isPastSeason) {
     const stat = /** @type {RankedStat} */ (season.stats.find((each) => each.key === key));
     return renderRankRow({
       label,
-      shown: formatStat(stat.value, isShare),
+      shown: isShare ? formatPercentage(stat.value) : formatAverage(stat.value),
       stat: addWouldRank(stat, isFewestFirst),
       isFewestFirst,
     });

@@ -189,7 +189,7 @@ test("a box score id that isn't a game's is refused before reading the league", 
   assert.equal(league.reads.length, 0);
 });
 
-test("a preview lists the teams' finished regular-season meetings, newest first, without the playoffs", () => {
+test("a preview lists the teams' finished regular-season meetings, as the schedule lists them, without the playoffs", () => {
   const preview = describePreview(GAMES.preview.schedule, {
     season: 2026,
     away: "IND",
@@ -203,9 +203,9 @@ test("a preview lists the teams' finished regular-season meetings, newest first,
       `${home.team} ${home.score}`,
     ]),
     [
-      ["102", "LVA 86", "IND 84"],
-      ["102", "IND 109", "LVA 75"],
       ["102", "IND 84", "LVA 68"],
+      ["102", "IND 109", "LVA 75"],
+      ["102", "LVA 86", "IND 84"],
     ],
   );
   const games = GAMES.preview.schedule.leagueSchedule.gameDates.flatMap((day) => day.games);
