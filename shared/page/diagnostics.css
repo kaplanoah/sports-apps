@@ -1,7 +1,8 @@
 /*
  * Diagnostics, at the very end of settings: the switch, the one button, which sends the report,
  * and the records listed under it. Apps link it right after chrome.css, which lays out
- * the settings dialog around it, and before their own styles.css.
+ * the settings dialog around it, and before their own styles.css. It also sets --stylesheet-look,
+ * the light or dark look the stylesheets see, for the Phone look log (phone-look-log.js).
  *
  * An app's :root defines these tokens:
  *   --card, --card-border      the records' color and edge
