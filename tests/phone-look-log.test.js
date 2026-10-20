@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { setTimeout as waitFor } from "node:timers/promises";
 import {
+  describePageStep,
   describePhoneLookChange,
   phoneLookLog,
   watchPhoneLook,
@@ -25,6 +26,7 @@ global.document = {
     return page.hidden;
   },
   hasFocus: () => page.isFocused,
+  documentElement: { dataset: /** @type {{ theme?: string }} */ ({ theme: "light" }) },
   addEventListener: (/** @type {string} */ type, /** @type {any} */ listener) =>
     listeners.set(type, listener),
 };
@@ -77,20 +79,33 @@ test("each change of the phone's look goes to the log and to the record under wa
   assert.deepEqual(recorded, readLogged());
 });
 
-test("the page leaving, coming back, and losing and getting focus are logged among the changes", () => {
+test("a page step says what the page reads of the phone's look and the theme it shows", () => {
+  assert.equal(
+    describePageStep({ step: "the page came back", phoneLook: "dark", theme: "light" }),
+    "the page came back; reads dark, shows light",
+  );
+  assert.equal(
+    describePageStep({ step: "the page got focus", phoneLook: "light", theme: undefined }),
+    "the page got focus; reads light, shows no theme",
+  );
+});
+
+test("the page leaving, coming back, and losing and getting focus are logged among the changes, with the look read and the theme shown then", () => {
   phoneLookLog.forgetLines();
   page.hidden = true;
   fire("visibilitychange");
+  phoneLook = "dark";
   page.hidden = false;
   fire("visibilitychange");
   fire("blur");
+  global.document.documentElement.dataset.theme = "dark";
   fire("focus");
 
   assert.deepEqual(readLogged(), [
-    "the page left the screen",
-    "the page came back",
-    "the page lost focus",
-    "the page got focus",
+    "the page left the screen; reads light, shows light",
+    "the page came back; reads dark, shows light",
+    "the page lost focus; reads dark, shows light",
+    "the page got focus; reads dark, shows dark",
   ]);
 });
 

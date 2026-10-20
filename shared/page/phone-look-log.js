@@ -5,7 +5,8 @@ import { createStepLog } from "./step-log.js";
 
 // Each change the phone reports of its light or dark look, with what the page reads of it then and
 // a task later, as the note on the icon reads it, and each time the page leaves the screen, comes
-// back, or loses or gets focus, as it does under Control Center.
+// back, or loses or gets focus, with the look it reads and the theme it shows then, since a phone
+// can change its look while the page is away and report it only once the page is back.
 export const phoneLookLog = createStepLog({
   key: "diagnosticsPhoneLook",
   title: "Phone look",
@@ -46,11 +47,18 @@ export const describePhoneLookChange = (change) =>
  * @param {Event} event
  * @returns {string}
  */
-const describePageEvent = (event) => {
+const namePageEvent = (event) => {
   if (event.type === "visibilitychange")
     return document.hidden ? "the page left the screen" : "the page came back";
   return event.type === "focus" ? "the page got focus" : "the page lost focus";
 };
+
+/**
+ * @param {{ step: string, phoneLook: PhoneLook, theme: string | undefined }} pageStep
+ * @returns {string}
+ */
+export const describePageStep = ({ step, phoneLook, theme }) =>
+  `${step}; reads ${phoneLook}, shows ${theme ?? "no theme"}`;
 
 const readPage = () => ({ isHidden: document.hidden, hasFocus: document.hasFocus() });
 
@@ -88,7 +96,14 @@ export function watchPhoneLook(noteInRecord) {
   };
   /** @param {Event} event */
   const notePageEvent = (event) => {
-    if (phoneLookLog.isLogging()) noteChange(describePageEvent(event));
+    if (!phoneLookLog.isLogging()) return;
+    noteChange(
+      describePageStep({
+        step: namePageEvent(event),
+        phoneLook: readPhoneLook(),
+        theme: document.documentElement.dataset.theme,
+      }),
+    );
   };
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", noteLookChange);
   document.addEventListener("visibilitychange", notePageEvent);

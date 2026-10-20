@@ -72,6 +72,7 @@ paths:
       - `phone-look-log.js`: each change the phone reports of its light or dark look,
         what the page reads of it then and a task later,
         and each time the page leaves the screen, comes back, or loses or gets focus,
+        with the look it reads and the theme it shows then,
         also among the steps of the open or return under way
       - `error-log.js`: each error the page's code doesn't catch
   - The Home Screen welcome and theme:
