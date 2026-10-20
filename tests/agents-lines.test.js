@@ -121,7 +121,7 @@ test(`a sentence in a guidance file is ${MOST_SENTENCE_WORDS} words or fewer`, (
 });
 
 test("a heading, a blank line, a list item of any mark, or a fence starts a new sentence", () => {
-  const text = "one two\n# Head\nthree\n\nfour\n- five\n* six\n1. seven\n---\neight";
+  const text = "one two\n## Head\nthree\n\nfour\n  - five\n* six\n1. seven\n---\neight";
   assert.deepEqual(listSentences(text), [
     { line: 1, words: 2 },
     { line: 2, words: 1 },

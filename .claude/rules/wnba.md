@@ -16,7 +16,7 @@ paths:
   - The page saves nothing to the store.
   - The settings pick any season the store keeps, once it keeps more than one.
 - A team's sheet:
-  - A team's sheet opens on cards of its last game, the one it's playing, and its next,
+  - It opens on cards of its last game, the one it's playing, and its next,
     from the whole season, regular season and all (`page/js/nearest-games.js`).
     - Each card opens the game's sheet.
     - The store keeps all of them with the season and reads ahead like the playoffs'.
@@ -68,8 +68,8 @@ paths:
     - The Highlights are ESPN's recap video, its story, and its clips, from ESPN's game summary,
       each leaving once ESPN takes it down.
     - The store keeps them for each of the current season's finals, read as it ends and again over the hours after.
-- Search:
-  - Search, a round button beside the tab bar, finds the season's games from the words a fan types,
+- Search, a round button beside the tab bar:
+  - It finds the season's games from the words a fan types,
     like teams, a city or arena, a day or time, a round, or a team's next game.
   - It suggests as they type, from the league's names for its teams, places, and rounds (`page/js/search-terms.js`).
   - It also finds the app's own pages (`page/js/search-pages.js`):
@@ -80,8 +80,7 @@ paths:
     - the bracket and the News tab
     - the standings' lists
     - settings and each setting
-- The bracket:
-  - The bracket joins each pair of series to the one they feed with square lines (`page/js/bracket-tree.js`).
+- The bracket joins each pair of series to the one they feed with square lines (`page/js/bracket-tree.js`).
 - News:
   - Beside the season's updates, the Worker:
     - reads the news from the outlets' feeds (`worker/src/news-feeds.js`)
@@ -105,8 +104,7 @@ paths:
     unless the viewer picks one in settings or the Home Screen welcome (the shared `appearance.js`, kept per device,
     and `pick-theme.js`, which the browser's address names it in for the Home Screen app).
   - It uses its own self-hosted fonts.
-- The Updates box:
-  - The Updates box (`page/js/updates.js`):
-    - The page lists each playoff final in an Updates box only on phones and tablets, and only for the current season.
-    - Each device keeps when its box counts from, its first look or last dismissal,
-      and a final counts as new by when the Worker first found it.
+- The Updates box (`page/js/updates.js`):
+  - The page lists each playoff final in an Updates box only on phones and tablets, and only for the current season.
+  - Each device keeps when its box counts from, its first look or last dismissal,
+    and a final counts as new by when the Worker first found it.

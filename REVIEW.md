@@ -8,7 +8,8 @@ AGENTS.md and the rule files in `.claude/rules/` hold the rules the code keeps; 
 - Read in full every diff your review hands you:
   the whole change in a first review and in the last read of it,
   and what the pushes since the last finished review changed in a review of a later push.
-  A recorded fixture (`tests/fixtures/`) or `package-lock.json` needs only its name and size,
+  A recorded fixture (`tests/fixtures/`), `package-lock.json`, a binary file,
+  or a drawing or minified library a tool wrote needs only its name and size,
   and whether a test reads it.
 - Read past the diff: each caller of a function the change touches,
   and each place that holds a copy of what it changes.
@@ -130,6 +131,5 @@ and a step posts what they confirmed or left unsure.
 - The review ends with one summary comment: the commit reviewed, what it read, the findings by weight,
   how many of the problems the reviewers listed the checkers turned down, how many of the changed files were read in full out of how many,
   each one that wasn't and why, and anything read but not judged.
-  Recorded data and drawings are the kind of file a review leaves unread.
   In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge.
   Each later review updates that one comment in place.
