@@ -17,13 +17,15 @@ const MOST_SENTENCE_WORDS = 60;
 
 const LIST_MARK = String.raw`[-*]|\d+\.`;
 const HEADING_MARK = "#+";
-const LEADING_MARK = new RegExp(String.raw`^\s*(?:${LIST_MARK}|${HEADING_MARK})\s+`);
+const LIST_START = String.raw`^\s*(?:${LIST_MARK})\s`;
+const HEADING_START = String.raw`^(?:${HEADING_MARK})\s`;
+const LEADING_MARK = new RegExp(String.raw`(?:${LIST_START}|${HEADING_START})\s*`);
 
 const isFence = (/** @type {string} */ line) => /^---\s*$/.test(line);
-const isHeading = (/** @type {string} */ line) =>
-  new RegExp(String.raw`^(?:${HEADING_MARK})\s`).test(line);
-const isListItem = (/** @type {string} */ line) =>
-  new RegExp(String.raw`^\s*(?:${LIST_MARK})\s`).test(line);
+const HEADING = new RegExp(HEADING_START);
+const LIST_ITEM = new RegExp(LIST_START);
+const isHeading = (/** @type {string} */ line) => HEADING.test(line);
+const isListItem = (/** @type {string} */ line) => LIST_ITEM.test(line);
 const startsUnit = (/** @type {string} */ line) =>
   !line.trim() || isFence(line) || isHeading(line) || isListItem(line);
 
@@ -121,7 +123,8 @@ test(`a sentence in a guidance file is ${MOST_SENTENCE_WORDS} words or fewer`, (
 });
 
 test("a heading, a blank line, a list item of any mark, or a fence starts a new sentence", () => {
-  const text = "one two\n## Head\nthree\n\nfour\n  - five\n* six\n1. seven\n  ---\n---\neight";
+  const text =
+    "one two\n## Head\nthree\n\nfour\n  - five\n* six\n1. seven\n  ## deep\n  ---\n---\neight";
   assert.deepEqual(listSentences(text), [
     { line: 1, words: 2 },
     { line: 2, words: 1 },
@@ -129,8 +132,8 @@ test("a heading, a blank line, a list item of any mark, or a fence starts a new 
     { line: 5, words: 1 },
     { line: 6, words: 1 },
     { line: 7, words: 1 },
-    { line: 8, words: 2 },
-    { line: 11, words: 1 },
+    { line: 8, words: 4 },
+    { line: 12, words: 1 },
   ]);
 });
 
