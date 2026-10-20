@@ -1,5 +1,5 @@
-// The events iOS sends for a touch, sent by hand, since no CI browser sends a click after a touch
-// it took for a scroll, as iOS sometimes does.
+// The events iOS sends for a touch and a list's glide, sent by hand, since no CI browser glides on
+// after a finger lifts or sends a click after a touch it took for a scroll, as iOS sometimes does.
 
 /**
  * Clicks an element, as iOS can after a finger left it, and says whether the click went through.
@@ -13,13 +13,27 @@ export const sendClick = (target) =>
 /**
  * Sends a finger's pointer on an element as the browser does: down at its middle, each move down
  * the screen by `moves`, then up, or cancelled once the browser takes the touch for a scroll, and
- * the touch's end, a lift or, as iOS ends some, a cancel.
+ * the touch's end, a lift or, as iOS ends some, a cancel. A finger that `isScrolling` scrolls what
+ * holds the element, or the page, before it lifts, as one that flings a list does, and the page's
+ * code scrolls what `scrollsAlong` selects with it, as the Games list's strip slides with its list.
  * @param {import("@playwright/test").Locator} target
- * @param {{ moves: number[], isCancelled?: boolean, isTouchCancelled?: boolean }} finger
+ * @param {{ moves: number[], isCancelled?: boolean, isTouchCancelled?: boolean, isScrolling?: boolean, scrollsAlong?: string }} finger
  */
-export const sendFinger = (target, { moves, isCancelled = false, isTouchCancelled = false }) =>
+export const sendFinger = (
+  target,
+  { moves, isCancelled = false, isTouchCancelled = false, isScrolling = false, scrollsAlong = "" },
+) =>
   target.evaluate(
     (element, finger) => {
+      /** @param {Element} start */
+      const findScroller = (start) => {
+        for (let node = start.parentElement; node; node = node.parentElement) {
+          const { overflowY } = getComputedStyle(node);
+          const isScrollable = overflowY === "auto" || overflowY === "scroll";
+          if (isScrollable && node.scrollHeight > node.clientHeight) return node;
+        }
+        return document;
+      };
       const box = element.getBoundingClientRect();
       /**
        * @param {string} type
@@ -38,10 +52,13 @@ export const sendFinger = (target, { moves, isCancelled = false, isTouchCancelle
       send("pointerdown", 0);
       for (const down of finger.moves) send("pointermove", down);
       send(finger.isCancelled ? "pointercancel" : "pointerup", finger.moves.at(-1) ?? 0);
+      if (finger.isScrolling) findScroller(element).dispatchEvent(new Event("scroll"));
+      if (finger.scrollsAlong)
+        document.querySelector(finger.scrollsAlong)?.dispatchEvent(new Event("scroll"));
       const end = finger.isTouchCancelled ? "touchcancel" : "touchend";
       element.dispatchEvent(new TouchEvent(end, { bubbles: true }));
     },
-    { moves, isCancelled, isTouchCancelled },
+    { moves, isCancelled, isTouchCancelled, isScrolling, scrollsAlong },
   );
 
 /**
@@ -58,6 +75,17 @@ export const sendSecondFinger = (target, type) =>
       ),
     type,
   );
+
+/**
+ * Sends a scroll on an element, or on the page itself without one, as the browser does on each
+ * frame of a glide.
+ * @param {import("@playwright/test").Page} page
+ * @param {import("@playwright/test").Locator} [target]
+ */
+export const sendScroll = (page, target) =>
+  target
+    ? target.evaluate((element) => element.dispatchEvent(new Event("scroll")))
+    : page.evaluate(() => document.dispatchEvent(new Event("scroll")));
 
 /**
  * Holds the page's clock still, so a click sent after a finger comes as soon after its lift as
