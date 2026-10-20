@@ -219,7 +219,12 @@ async function flingGamesList(page) {
   const button = page.locator("#seasonGames .game-day.is-today .game-row .game-open").first();
   await expect(button).toBeVisible();
   await holdClock(page);
-  await sendFinger(button, { moves: [12], isCancelled: true, isScrolling: true });
+  await sendFinger(button, {
+    moves: [12],
+    isCancelled: true,
+    isScrolling: true,
+    scrollsAlong: "#seasonGames .day-strip",
+  });
   await sendScroll(page, page.locator("#seasonGames .day-list"));
   await sendScroll(page, page.locator("#seasonGames .day-strip"));
   return button;

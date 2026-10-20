@@ -14,13 +14,14 @@ export const sendClick = (target) =>
  * Sends a finger's pointer on an element as the browser does: down at its middle, each move down
  * the screen by `moves`, then up, or cancelled once the browser takes the touch for a scroll, and
  * the touch's end, a lift or, as iOS ends some, a cancel. A finger that `isScrolling` scrolls what
- * holds the element, or the page, before it lifts, as one that flings a list does.
+ * holds the element, or the page, before it lifts, as one that flings a list does, and the page's
+ * code scrolls what `scrollsAlong` selects with it, as the Games list's strip slides with its list.
  * @param {import("@playwright/test").Locator} target
- * @param {{ moves: number[], isCancelled?: boolean, isTouchCancelled?: boolean, isScrolling?: boolean }} finger
+ * @param {{ moves: number[], isCancelled?: boolean, isTouchCancelled?: boolean, isScrolling?: boolean, scrollsAlong?: string }} finger
  */
 export const sendFinger = (
   target,
-  { moves, isCancelled = false, isTouchCancelled = false, isScrolling = false },
+  { moves, isCancelled = false, isTouchCancelled = false, isScrolling = false, scrollsAlong = "" },
 ) =>
   target.evaluate(
     (element, finger) => {
@@ -52,10 +53,12 @@ export const sendFinger = (
       for (const down of finger.moves) send("pointermove", down);
       send(finger.isCancelled ? "pointercancel" : "pointerup", finger.moves.at(-1) ?? 0);
       if (finger.isScrolling) findScroller(element).dispatchEvent(new Event("scroll"));
+      if (finger.scrollsAlong)
+        document.querySelector(finger.scrollsAlong)?.dispatchEvent(new Event("scroll"));
       const end = finger.isTouchCancelled ? "touchcancel" : "touchend";
       element.dispatchEvent(new TouchEvent(end, { bubbles: true }));
     },
-    { moves, isCancelled, isTouchCancelled, isScrolling },
+    { moves, isCancelled, isTouchCancelled, isScrolling, scrollsAlong },
   );
 
 /**

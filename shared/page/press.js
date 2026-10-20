@@ -41,8 +41,8 @@ let press = null;
 // scroll, and when it lifted.
 /** @type {{ pointerId: number, target: EventTarget | null, isScroll: boolean, liftedAt: number | null } | null} */
 let touch = null;
-// When a finger's scroll last moved each element, and the page, apart, since the page's code can
-// scroll another along with it, as the Games list's strip of dates slides with its list.
+// When a finger's scroll last moved each element, and the page, apart, so each glides on and comes
+// to rest on its own.
 /** @type {WeakMap<EventTarget, number>} */
 const lastScrolledAt = new WeakMap();
 
