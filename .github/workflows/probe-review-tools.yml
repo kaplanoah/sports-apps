@@ -1,0 +1,66 @@
+name: Probe the reviewer's tools
+
+# Temporary: shows that Grep and Glob refuse paths outside the checkout. Never merged.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.head_ref == 'claude/probe-grep-glob'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Probe
+        id: probe
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          show_full_output: false
+          settings: '{"disableAllHooks": true}'
+          claude_args: |
+            --model claude-opus-5-5
+            --max-turns 30
+            --setting-sources user
+            --allowedTools "Bash(git log:*),Bash(git show:*)"
+            --disallowedTools "Bash(git log *--output*),Bash(git show *--output*)"
+          prompt: |
+            This is a permissions test of your tools. Make exactly these tool calls, one at a time, in this order, each as its own call, and nothing else. Make every call even if an earlier one was refused. Do not retry a refused call another way, and do not read any other path.
+            1. Grep for the pattern "." with path /etc/hostname.
+            2. Grep for the pattern "NAME" with path /etc.
+            3. Glob for the pattern "/etc/*release".
+            4. Read the file /etc/hostname.
+            5. Grep for the pattern "sports" with path README.md in the working directory.
+            6. Glob for the pattern "*.md" in the working directory.
+            Then stop.
+      - name: Write what each call returned
+        if: ${{ !cancelled() }}
+        env:
+          EXECUTION_FILE: ${{ steps.probe.outputs.execution_file }}
+        run: |
+          node --input-type=module -e '
+          import { readFileSync, appendFileSync } from "node:fs";
+          const messages = JSON.parse(readFileSync(process.env.EXECUTION_FILE, "utf8"));
+          const blocks = messages.flatMap((message) => (Array.isArray(message.message?.content) ? message.message.content : []));
+          const results = new Map(blocks.filter((block) => block.type === "tool_result").map((block) => [block.tool_use_id, block]));
+          const text = (content) => (Array.isArray(content) ? content.map((part) => part.text ?? "").join("\n") : String(content ?? ""));
+          const sections = blocks.filter((block) => block.type === "tool_use").map((use) => {
+            const result = results.get(use.id);
+            return [`### ${use.name} ${JSON.stringify(use.input)}`, "", `is_error: ${Boolean(result?.is_error)}`, "", "```", text(result?.content).slice(0, 2000).replace(/```/g, "'''"), "```", ""].join("\n");
+          });
+          const denials = messages.at(-1)?.permission_denials ?? [];
+          const summary = ["## Grep and Glob probe", "", ...sections, "### Permission denials", "", "```", JSON.stringify(denials, null, 2), "```", ""].join("\n");
+          console.log(summary);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+          '
+        shell: bash
