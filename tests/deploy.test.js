@@ -983,7 +983,12 @@ test("the deploy job runs no package's install scripts or tests while it holds t
 
 test("project settings ask before any deploy but beta's or a key change, and deny running them any other way", () => {
   const { permissions } = JSON.parse(readRepoFile(".claude/settings.json"));
-  assert.deepEqual(permissions.allow, ["Bash(git push -f origin *:beta)"]);
+  // A message to another of the owner's sessions changes nothing outside them, so a session a
+  // session started reports to it without asking.
+  assert.deepEqual(permissions.allow, [
+    "Bash(git push -f origin *:beta)",
+    "mcp__claude-code-remote__send_message",
+  ]);
   for (const rule of [
     "Bash(npm run deploy)",
     "Bash(npx wrangler *)",
