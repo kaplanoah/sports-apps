@@ -124,8 +124,10 @@ export function createStepLog({ key, title, isWatched }) {
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let saveTimer;
   // Each line is named by the tab's log that logged it and its count there, so two tabs' saves
-  // keep each line once, even two that say the same at the same moment.
-  const logId = crypto.randomUUID();
+  // keep each line once, even two that say the same at the same moment. The id is made with the
+  // first line, since a Worker that imports a log may not make random values as it loads.
+  /** @type {string | undefined} */
+  let logId;
   let linesLogged = 0;
 
   /** @returns {LoggedLine[]} */
@@ -176,6 +178,7 @@ export function createStepLog({ key, title, isWatched }) {
   function noteStep(text) {
     if (!isOn()) return;
     const lines = holdLines();
+    logId ??= crypto.randomUUID();
     linesLogged += 1;
     lines.push({ id: `${logId}-${linesLogged}`, at: Date.now(), text: hideAddresses(text) });
     lines.splice(0, lines.length - KEPT_LINES);
