@@ -78,7 +78,7 @@ function isGliding(scroller) {
 export function isOnGlide(target) {
   let element = target instanceof Element ? target : null;
   while (element && !isGliding(element)) element = element.parentElement;
-  return element !== null || isGliding(document);
+  return Boolean(element) || isGliding(document);
 }
 
 /**
