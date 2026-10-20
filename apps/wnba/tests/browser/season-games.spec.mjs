@@ -9,6 +9,34 @@ import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
+/**
+ * Opens the Games view while today's last game is under way, leaves for a night in which it ends,
+ * and comes back, with the store held, so the page hasn't caught up, when `holdStore` says so.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ holdStore?: boolean }} [options]
+ */
+async function returnAfterNightAway(page, { holdStore = false } = {}) {
+  const app = await openSeasonGames(page);
+  await app.changeSeason((season) => {
+    const game = season.games.find((each) => each.id === "1042600132");
+    Object.assign(game, { state: "live", status: "Q4 0:40", period: 4, clock: "0:40" });
+    return season;
+  });
+  await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
+  await expectDayAtTop(page, "2026-09-30");
+  await setHidden(page, true);
+  await page.clock.fastForward("12:00:00");
+  await app.changeSeasonWhileAway((season) => {
+    const game = season.games.find((each) => each.id === "1042600132");
+    Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
+    return season;
+  });
+  const release = holdStore ? await app.holdStore() : () => {};
+  await setHidden(page, false);
+  await page.clock.runFor(100);
+  return { release };
+}
+
 test.describe("with reduced motion", () => {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -265,23 +293,7 @@ test.describe("with reduced motion", () => {
   test("after a night away, the list follows its start day to today once the store says the game it opened on has ended", async ({
     page,
   }) => {
-    const app = await openSeasonGames(page);
-    await app.changeSeason((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "live", status: "Q4 0:40", period: 4, clock: "0:40" });
-      return season;
-    });
-    await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
-    await expectDayAtTop(page, "2026-09-30");
-    await setHidden(page, true);
-    await page.clock.fastForward("12:00:00");
-    await app.changeSeasonWhileAway((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
-      return season;
-    });
-    await setHidden(page, false);
-    await page.clock.runFor(100);
+    await returnAfterNightAway(page);
 
     await expect(page.locator('[data-game="1042600132"] .game-status')).toContainText("Final");
     await expectDayAtTop(page, "2026-10-01");
@@ -290,24 +302,7 @@ test.describe("with reduced motion", () => {
   test("after a night away, a swipe on the strip before the store catches up keeps the list where it is", async ({
     page,
   }) => {
-    const app = await openSeasonGames(page);
-    await app.changeSeason((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "live", status: "Q4 0:40", period: 4, clock: "0:40" });
-      return season;
-    });
-    await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
-    await expectDayAtTop(page, "2026-09-30");
-    await setHidden(page, true);
-    await page.clock.fastForward("12:00:00");
-    await app.changeSeasonWhileAway((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
-      return season;
-    });
-    const release = await app.holdStore();
-    await setHidden(page, false);
-    await page.clock.runFor(100);
+    const { release } = await returnAfterNightAway(page, { holdStore: true });
     await expectDayAtTop(page, "2026-09-30");
 
     await page.locator("#seasonGames .day-strip").evaluate((strip) => {
@@ -324,24 +319,7 @@ test.describe("with reduced motion", () => {
   test("after a night away, a click or key outside the list before the store catches up still has the list follow its start day", async ({
     page,
   }) => {
-    const app = await openSeasonGames(page);
-    await app.changeSeason((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "live", status: "Q4 0:40", period: 4, clock: "0:40" });
-      return season;
-    });
-    await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
-    await expectDayAtTop(page, "2026-09-30");
-    await setHidden(page, true);
-    await page.clock.fastForward("12:00:00");
-    await app.changeSeasonWhileAway((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
-      return season;
-    });
-    const release = await app.holdStore();
-    await setHidden(page, false);
-    await page.clock.runFor(100);
+    const { release } = await returnAfterNightAway(page, { holdStore: true });
     await expectDayAtTop(page, "2026-09-30");
 
     await page

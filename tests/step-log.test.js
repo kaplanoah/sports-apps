@@ -134,6 +134,32 @@ test("no line holds an address, which holds the page's key, even one kept before
   assert.doesNotMatch(stored.get("addressLog") ?? "", /k3y|example-subdomain/);
 });
 
+test("lines kept with only their time and text each stay as the log saves again", () => {
+  stored.set(
+    "keptWithoutIdsLog",
+    JSON.stringify([
+      { at: 1, text: "the first step" },
+      { at: 2, text: "the second step" },
+      { at: 3, text: "the third step" },
+    ]),
+  );
+  const log = createStepLog({ key: "keptWithoutIdsLog", title: "Errors", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+
+  log.noteStep("a new step");
+  hidePage();
+
+  assert.deepEqual(readStoredTexts("keptWithoutIdsLog"), [
+    "the first step",
+    "the second step",
+    "the third step",
+    "a new step",
+  ]);
+});
+
 test("a log holds its lines as it logs, reading the device once, and keeps them there as the page leaves the screen", (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const log = createStepLog({ key: "heldLog", title: "Games list", isWatched: () => false });
@@ -202,7 +228,6 @@ test("two lines that say the same at the same moment are both kept, in one tab a
   first.noteStep("the same error");
   first.noteStep("the same error");
   second.noteStep("the same error");
-  hidePage();
   hidePage();
 
   assert.deepEqual(readStoredTexts("sameMomentLog"), [

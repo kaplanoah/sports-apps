@@ -125,7 +125,7 @@ export function createStepLog({ key, title, isWatched }) {
   let saveTimer;
   // Each line is named by the tab's log that logged it and its count there, so two tabs' saves
   // keep each line once, even two that say the same at the same moment.
-  const logId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const logId = crypto.randomUUID();
   let linesLogged = 0;
 
   /** @returns {LoggedLine[]} */
