@@ -1,6 +1,6 @@
 ---
 name: ship
-description: "What the Shipping a change steps in AGENTS.md leave out: PR titles' major bumps, issues for later work, the beta channel, red changes and phone-ok, CI's review and a failed review job, the deploy and its log, and stacked PRs"
+description: "What the Shipping a change steps in AGENTS.md leave out: major bumps, issues for later work, the beta channel, red changes and phone-ok, CI's review and its failures, the deploy's log, and one thing a PR, stacked or not"
 ---
 
 # Shipping a change
@@ -19,8 +19,8 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Issues
 
-- An issue holds one PR-sized change that's decided but left for later, written so a session can build it with no other prompt.
-- Open one in the turn the work is left out: a review finding declined for scope, something the owner chose not to build yet, or a bug seen on beta that isn't this PR's.
+- An issue holds one thing a PR could do, as AGENTS.md's step 12 says, decided but left for later, written so a session can build it with no other prompt.
+- Open one in the turn the work is left out: a review finding outside the PR's one thing, something the owner chose not to build yet, or a bug seen on beta that isn't this PR's.
   A finding declined as not worth its code gets no issue: the reply on its thread says why.
 - First search the open issues, and comment on one that already covers the work rather than open a second.
 - Write it under these headings:
@@ -139,10 +139,13 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   If it says "the earlier version is live again", the Worker rolled back and is unchanged.
   Tell the user what failed and recommend a fix.
 
-## Step 12: stacked PRs
+## Step 12: one thing a PR, and stacked PRs
 
-- Split work into several PRs only when its parts can be reviewed or rolled back on their own.
-  A PR that needs another PR's unmerged changes doesn't wait for it: stack it.
+- A review finding outside the one thing AGENTS.md's step 12 names becomes an issue, linked from its thread, not a commit on the PR.
+- A PR built to fix review findings left for later takes one area's findings, or about five, never a whole review's.
+- When a change has red and non-red parts that can each stand alone, split them:
+  the non-red PR first, and the red one stacked on it, so the non-red half ships without waiting for the owner's phone.
+- A PR that needs another PR's unmerged changes doesn't wait for it: stack it.
   Start its branch from that PR's branch, open it into that branch,
   so its diff and review show only its own changes, and name the PR it builds on in its description.
   Whenever the earlier PR's branch changes, merge it into the stacked branch.

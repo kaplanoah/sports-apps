@@ -7,6 +7,7 @@ Answer every review finding, a Nit or Pre-existing one too, as below; the `ship`
 
 - Answer all of a review's findings in one push: fix each and go back to step 2 of "Shipping a change" in AGENTS.md, or reply on its thread, only when you won't fix it, saying why,
   and linking the issue that holds it when it's left for later.
+  A finding outside the PR's one thing is never fixed on it: it becomes an issue, as the `ship` skill's step 12 says.
 - End every push that answers a review, one that fixes only Nits too, by adding the `review` label to the PR,
   which asks CI to review what it changed, and takes the label off itself, so the next ask is a fresh label.
   Add it once the push's own CI run has started on the PR's head, since that run stops a label's run queued before it.
