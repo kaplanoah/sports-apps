@@ -84,7 +84,9 @@ paths:
       It keeps each install's icon, from the address it opens at or, added on System, the phone's setting as it first opened.
     - `re-add-note.js`: deciding when settings shows the note on updating the icon, while the look picked isn't the icon's,
       and keeping its dismissal for that install
-    - `appearance.js`: the note itself, with both icons and an X
+    - `appearance.js`: settings' Appearance choices and the welcome's copy of them,
+      and the note on updating the icon, with both icons and an X,
+      whose link it keeps signed in with a fresh handoff while settings shows it
     - `dismiss-button.js`: the X in the corner of a box like the note or the Updates box
   - Standings and bracket:
     - `bracket-standings.js`: one tab for a season's standings and its bracket,

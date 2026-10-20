@@ -1,4 +1,4 @@
-import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
+import { createSeasonPicks, createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { buildBracket } from "./bracket.js";
 import { namePlayerIndexKey, readPlayerIndex } from "#shared/page-search.js";
@@ -14,6 +14,8 @@ const UNREACHABLE = "Can't reach the page's server right now";
 
 /** @type {ReturnType<typeof createSeasonReader> | null} */
 let reader = null;
+/** @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>} */
+let showPickedYear = async () => "replaced";
 /** @type {{ year: number, record: any } | null} */
 let deferredSeason = null;
 /** @type {number | null} */
@@ -156,6 +158,14 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
       showCurrentYear();
     },
   });
+  showPickedYear = createSeasonPicks({
+    reader,
+    readPick: () => session.activeYear,
+    keepPick: (year) => {
+      session.activeYear = year;
+    },
+    noteUnreachable,
+  });
 }
 
 // A page whose load failed may be watching a season the store doesn't have yet, and the store may
@@ -170,23 +180,10 @@ export async function loadSeason() {
 }
 
 /**
- * Shows the season picked, resolving false where its record couldn't be read, which puts back the
- * season shown before it, unless a newer pick has taken this one's place.
- * @param {number} year
+ * Shows the season picked, keeping it in `session.activeYear` while its record is on its way.
+ * @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>}
  */
-export async function showYear(year) {
-  const before = session.activeYear;
-  session.activeYear = year;
-  try {
-    await reader?.showYear(year);
-  } catch {
-    if (session.activeYear !== year) return true;
-    session.activeYear = before;
-    noteUnreachable();
-    return false;
-  }
-  return true;
-}
+export const showYear = (year) => showPickedYear(year);
 
 function collectTrackedTitles(docs) {
   const titles = {};

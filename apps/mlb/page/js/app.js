@@ -74,16 +74,9 @@ function drawNews() {
 const findSeasonRow = () => /** @type {HTMLElement} */ (document.getElementById("seasonRow"));
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
-async function switchYear(year) {
-  if (!(await showYear(year))) {
-    redrawEased(renderStamp);
-    return false;
-  }
-  if (session.activeYear === year) {
-    startOverDayStrip();
-    renderAll();
-  }
-  return true;
+function showPickedYear() {
+  startOverDayStrip();
+  renderAll();
 }
 
 const readSeasonYears = keepSeasonYears(loadSeasonList);
@@ -208,7 +201,12 @@ function wireControls() {
   startAppearance(LOOKS);
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);
   startHomeScreen();
-  watchSeasonPicks(findSeasonRow(), switchYear);
+  watchSeasonPicks(findSeasonRow(), {
+    pick: showYear,
+    readPick: () => session.activeYear,
+    showPicked: showPickedYear,
+    showUnread: () => redrawEased(renderStamp),
+  });
   document
     .getElementById("rankList")
     .addEventListener(REORDER_EVENT, (event) =>

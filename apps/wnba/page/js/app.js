@@ -169,17 +169,9 @@ const fillSeasonList = (years) =>
   );
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
-/** @param {number} year */
-async function switchSeason(year) {
-  if (!(await showYear(year))) {
-    renderStamp();
-    return false;
-  }
-  if (session.pickedYear === year) {
-    startOverDayStrip();
-    renderAll();
-  }
-  return true;
+function showPickedSeason() {
+  startOverDayStrip();
+  renderAll();
 }
 
 // A new current season changes what the header says, and the picker lists it.
@@ -295,7 +287,12 @@ async function boot() {
   startChannelTag();
   startNewsRedraws(findElement("newsList"), drawNews, NEWS_LEAGUE);
   startHomeScreen();
-  watchSeasonPicks(findSeasonRow(), switchSeason);
+  watchSeasonPicks(findSeasonRow(), {
+    pick: showYear,
+    readPick: () => session.pickedYear,
+    showPicked: showPickedSeason,
+    showUnread: () => redrawEased(renderStamp),
+  });
   startBracket();
   startBracketStandings();
   session.db = createWorkerStore();
