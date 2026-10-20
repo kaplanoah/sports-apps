@@ -1,4 +1,4 @@
-import { IPAD, IPHONE, fakeIpadPlatform } from "../../../../tests/browser/devices.mjs";
+import { IPHONE, useIpad } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -240,8 +240,7 @@ test.describe("on a computer", () => {
 });
 
 test.describe("on a tablet, in the browser", () => {
-  test.use(IPAD);
-  test.beforeEach(({ page }) => fakeIpadPlatform(page));
+  useIpad(test);
 
   test("the Home Screen box, with Safari's steps, sits at the top of the settings, level with the ranking's heading beside it, and 14px over the settings' line, as on a phone", async ({
     page,

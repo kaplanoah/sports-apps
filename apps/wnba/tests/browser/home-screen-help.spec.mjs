@@ -1,9 +1,9 @@
 import {
   ANDROID_PHONE,
-  IPAD,
+  IPAD_AGENT,
   IPHONE,
   WIDE_IPHONE,
-  fakeIpadPlatform,
+  useIpad,
 } from "../../../../tests/browser/devices.mjs";
 import {
   checkCaretBeforeCode,
@@ -79,8 +79,7 @@ test.describe("on the widest iPhone, in the browser", () => {
 });
 
 test.describe("on an iPad, in the browser", () => {
-  test.use(IPAD);
-  test.beforeEach(({ page }) => fakeIpadPlatform(page));
+  useIpad(test);
 
   test("the Notifications note and its ? are the iPhone's", async ({ page }) => {
     await checkHelpOpensWelcome({ page, openApp, openSettings });
@@ -94,8 +93,7 @@ test.describe("on an iPad, in the browser", () => {
 });
 
 test.describe("on an iPad with a trackpad, in the browser", () => {
-  test.use({ userAgent: IPAD.userAgent });
-  test.beforeEach(({ page }) => fakeIpadPlatform(page));
+  useIpad(test, { userAgent: IPAD_AGENT });
 
   test("the Notifications note says why to add the page to the home screen, with no ? where the welcome isn't drawn", async ({
     page,
