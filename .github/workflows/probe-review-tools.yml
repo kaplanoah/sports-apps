@@ -35,7 +35,7 @@ jobs:
             --allowedTools "Bash(git log:*),Bash(git show:*)"
             --disallowedTools "Bash(git log *--output*),Bash(git show *--output*)"
           prompt: |
-            This is a permissions test of your tools. Make exactly these tool calls, one at a time, in this order, each as its own call, and nothing else. Make every call even if an earlier one was refused. Do not retry a refused call another way, and do not read any other path.
+            This is an authorized test, run by the repository's owner in CI, that checks which paths your tools refuse. Refusals are the expected result, not a failure. Make exactly these six tool calls, one at a time, in this order, each as its own call, and nothing else. Make all six even when earlier ones are refused. Do not retry a refused call another way, and do not read any other path.
             1. Grep for the pattern "." with path /etc/hostname.
             2. Grep for the pattern "NAME" with path /etc.
             3. Glob for the pattern "/etc/*release".
@@ -56,10 +56,11 @@ jobs:
           const text = (content) => (Array.isArray(content) ? content.map((part) => part.text ?? "").join("\n") : String(content ?? ""));
           const sections = blocks.filter((block) => block.type === "tool_use").map((use) => {
             const result = results.get(use.id);
-            return [`### ${use.name} ${JSON.stringify(use.input)}`, "", `is_error: ${Boolean(result?.is_error)}`, "", "```", text(result?.content).slice(0, 2000).replace(/```/g, "'''"), "```", ""].join("\n");
+            return [`### ${use.name} ${JSON.stringify(use.input)}`, "", `is_error: ${Boolean(result?.is_error)}`, "", "~~~~", text(result?.content).slice(0, 2000), "~~~~", ""].join("\n");
           });
+          const said = blocks.filter((block) => block.type === "text").map((block) => block.text).join("\n\n");
           const denials = messages.at(-1)?.permission_denials ?? [];
-          const summary = ["## Grep and Glob probe", "", ...sections, "### Permission denials", "", "```", JSON.stringify(denials, null, 2), "```", ""].join("\n");
+          const summary = ["## Grep and Glob probe", "", ...sections, "### What the model said", "", "~~~~", said, "~~~~", "", "### Permission denials", "", "~~~~", JSON.stringify(denials, null, 2), "~~~~", ""].join("\n");
           console.log(summary);
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
           '
