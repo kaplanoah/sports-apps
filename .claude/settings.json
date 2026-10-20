@@ -1,6 +1,14 @@
 {
   "permissions": {
-    "allow": ["Bash(git push -f origin *:beta)", "mcp__claude-code-remote__send_message"],
+    "allow": [
+      "Bash(git push -f origin *:beta)",
+      "Bash(gh issue create *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh issue close *)",
+      "mcp__github__add_issue_comment",
+      "mcp__github__issue_write",
+      "mcp__claude-code-remote__send_message"
+    ],
     "deny": [
       "Bash(npm run deploy)",
       "Bash(npm run deploy *)",

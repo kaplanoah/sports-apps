@@ -1,6 +1,6 @@
 ---
 name: ship
-description: "What the Shipping a change steps in AGENTS.md leave out: PR titles' major bumps, the beta channel, red changes and the owner's phone-ok, CI's review and a failed review job, the deploy and its log, and stacked PRs"
+description: "What the Shipping a change steps in AGENTS.md leave out: PR titles' major bumps, issues for later work, the beta channel, red changes and phone-ok, CI's review and a failed review job, the deploy and its log, and stacked PRs"
 ---
 
 # Shipping a change
@@ -16,6 +16,27 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   CI's `title` job checks it.
 - Don't spend time curating commit history.
   Squash merges make it irrelevant.
+
+## Issues
+
+- An issue holds one PR-sized change that's decided but left for later, written so a session can build it with no other prompt.
+- Open one in the turn the work is left out: a review finding declined for scope, something the owner chose not to build yet, or a bug seen on beta that isn't this PR's.
+  A finding declined as not worth its code gets no issue: the reply on its thread says why.
+- First search the open issues, and comment on one that already covers the work rather than open a second.
+- Write it under these headings:
+  - Background: what's wrong or missing, where it was found, and why it was left out.
+  - What to build, with the files it touches.
+  - Tests: what each new test checks.
+  - Type: the PR title's type, and whether the change is red, by `.claude/rules/red-change.md`.
+- An issue that waits on another PR names it in its first line, as in "Waits on #671."
+- Open it with `gh issue create --title '<title>' --body-file <file>`, or with GitHub's issue tool where a session has no `gh`, which `.claude/settings.json` allows without asking.
+  When a session still can't, it gives the owner that command to paste, with the brief in a heredoc.
+- Before building from an issue, check it still holds on `main`; if it doesn't, close it as not planned, or as a duplicate of the one that covers it, saying why.
+- The PR that does the work says "Fixes #N" in its description, which closes the issue as the PR merges into `main`.
+  A PR that does only part of it says "Part of #N" and comments on the issue with what's left.
+- A PR's description names work outside it only by its issue.
+- Flaky browser tests and each app's outage and no-code issues belong to their workflows, which find each by its title and read the flaky table back from its body: never edit or close one by hand.
+- No labels, milestones, or projects.
 
 ## The beta channel
 
