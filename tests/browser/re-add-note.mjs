@@ -93,17 +93,26 @@ const closeSettings = (page) => page.locator("#settingsCloseBtn").click();
 
 /**
  * In an iPhone's Home Screen app added on the dark look, picking the light one in settings shows
- * the note under the icons, with the icon the app has, the one adding it again gives, and a link
- * that opens Safari on the light look. Picking the dark look again takes it away, and it shows on
- * each open of settings, and after a reload, while the light look stays picked, on System while
- * the phone shows the light look, with a link on System, and follows a look picked in another
- * tab, but never in the browser or in an Android Home Screen app.
+ * the note `noteAbove` pixels under the icons' names, with the icon the app has, the one adding it
+ * again gives, and a link that opens Safari on the light look. Picking the dark look again takes
+ * it away, and it shows on each open of settings, and after a reload, while the light look stays
+ * picked, on System while the phone shows the light look, with a link on System, and follows a
+ * look picked in another tab, but never in the browser or in an Android Home Screen app.
  * @param {App & {
  *   context: import("@playwright/test").BrowserContext,
  *   browser: import("@playwright/test").Browser,
+ *   noteAbove: number,
  * }} app
  */
-export async function checkReAddNote({ page, context, browser, openApp, openSettings, looks }) {
+export async function checkReAddNote({
+  page,
+  context,
+  browser,
+  openApp,
+  openSettings,
+  looks,
+  noteAbove,
+}) {
   await openHomeScreenApp(page, openApp, "dark");
   await openSettings(page);
   const note = findNote(page);
@@ -125,8 +134,7 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
         .bottom,
     SETTINGS,
   );
-  // The row's gap, as the icons sit under the title.
-  expect(noteBelowIcons).toBe(14);
+  expect(noteBelowIcons).toBe(noteAbove);
   await checkNoteReads(page);
 
   await pick(page, looks.dark);

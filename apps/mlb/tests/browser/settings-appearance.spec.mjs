@@ -114,7 +114,7 @@ test.describe("in an iPhone's Home Screen app", () => {
     context,
     browser,
   }) => {
-    await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+    await checkReAddNote({ page, context, browser, openApp, openSettings, looks, noteAbove: 8 });
   });
 
   test("the icon note's X takes it away for good in that install", async ({ page }) => {

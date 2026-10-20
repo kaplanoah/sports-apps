@@ -43,6 +43,8 @@
  *                                              passes once the page catches up, like 0.75
  *   --step-number-lift                         how far a Home Screen step's number rises in its
  *                                              circle, so the app's digits sit in its middle
+ *   --re-add-note-above                        the room between the Appearance choices' names and
+ *                                              the note on updating the icon under them
  * and this sets:
  *   --sheet-side                               a sheet's sides, and settings' on a phone
  *   --caret-reach                              how far a sheet's caret reaches out past its sides
@@ -556,7 +558,13 @@ body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
 .appearance-row {
   flex-direction: column;
   align-items: stretch;
-  gap: 14px;
+  gap: 0;
+}
+.appearance-row > .appearance-choices {
+  margin-top: 14px;
+}
+.appearance-row > .re-add-note {
+  margin-top: var(--re-add-note-above);
 }
 /* As on the Home Screen, each icon sits a set step from the next, its name centered under it and
    reaching past its sides when longer, so a long name never pushes an icon along. */
