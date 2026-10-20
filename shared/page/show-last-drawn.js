@@ -1,11 +1,18 @@
 // Modules run only once all of them have loaded, and the browser can paint before then, so a page
 // left to them would first show empty views. The page saves what each part it draws whole showed
-// as it leaves the screen (last-seen.js), with the sheets it showed, and this plain script, loaded
-// in the head, puts it back: the page calls showLastDrawn() right after its views, its sheets, and
+// as it leaves the screen (last-seen.js), with the sheets it showed and its settings' switches, and
+// this plain script, loaded in the head, puts it back, with the look picked that settings shows:
+// the page calls showLastDrawn() right after its views, its sheets, and
 // openLastTab(), before anything is painted, since a part on a hidden tab can't take back where it
 // was scrolled. After two minutes away, what a viewer moved starts over (long-away.js).
 
 /* global findPlaceToShow, isLongAwayFrom -- from long-away.js */
+/* global LAST_DRAWN_KEY -- from open-last-tab.js */
+/* global checkPickedChoice, readPickedAppearance -- from pick-theme.js */
+
+// What last-seen.js saves the page's open sheets and settings' switches under.
+const OPEN_SHEETS_KEY = "openSheets";
+const LAST_SWITCHED_KEY = "lastSwitched";
 
 // Storage can be empty or refuse access, as in a private window, so the page never depends on it.
 /** @param {string} key */
@@ -18,7 +25,7 @@ function readSaved(key) {
 }
 
 function readLastDrawn() {
-  const saved = readSaved("lastDrawn");
+  const saved = readSaved(LAST_DRAWN_KEY);
   return saved && typeof saved === "object" ? saved : {};
 }
 
@@ -198,7 +205,7 @@ function showLastDialog(dialog, sheets) {
 // again, beside any it was opened from, until the page's modules take it over (sheet.js's
 // reopenSheets) or close it, unless it was left open longer than it stays (sheet-memory.js).
 function showLastSheets() {
-  const saved = readSaved("openSheets");
+  const saved = readSaved(OPEN_SHEETS_KEY);
   if (!Array.isArray(saved)) return;
   /** @type {Map<HTMLDialogElement, { sheet: HTMLElement, saved: any }[]>} */
   const dialogs = new Map();
@@ -214,6 +221,29 @@ function showLastSheets() {
     if (!sheets.some(({ saved }) => isForgotten(saved))) showLastDialog(dialog, sheets);
 }
 
+// Settings' switches show the device's own choices, which their modules set only once they load,
+// each kept under its own key by its own rules, so the page saves what each showed as it leaves the
+// screen, but for one inside a part drawn whole, which that part's markup holds.
+const KEPT_SWITCHES = "[data-setting] [role=switch][id]:not([data-last-drawn] *)";
+
+function showLastSwitches() {
+  const saved = readSaved(LAST_SWITCHED_KEY);
+  if (!saved || typeof saved !== "object") return;
+  for (const [id, isOn] of Object.entries(saved)) {
+    const element = document.getElementById(id);
+    if (element?.matches(KEPT_SWITCHES) && (isOn === "true" || isOn === "false"))
+      element.setAttribute("aria-checked", isOn);
+  }
+}
+
+// The look picked is the one pick-theme.js shows, read from where the page keeps it.
+function showPickedAppearance() {
+  const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
+    document.querySelectorAll("[data-setting] input[name=appearance]")
+  );
+  checkPickedChoice(choices, readPickedAppearance());
+}
+
 // What the page last showed is a drawing of its own, so the note that its views are still empty
 // goes with it.
 function showLastDrawn() {
@@ -225,5 +255,7 @@ function showLastDrawn() {
   // the page has loaded, after its parts have shown where they were.
   history.scrollRestoration = "manual";
   scrollTo({ top: Math.max(0, ...pageTops), behavior: "instant" });
+  showLastSwitches();
+  showPickedAppearance();
   showLastSheets();
 }

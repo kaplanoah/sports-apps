@@ -37,13 +37,16 @@ function isStartedOver(tab) {
   return !saved || saved.hidden === true || isLongAwayFrom(saved.savedAt);
 }
 
+// What last-seen.js saves the parts the page draws whole under, which show-last-drawn.js puts back.
+const LAST_DRAWN_KEY = "lastDrawn";
+
 /**
  * What the page saved of a part it draws whole as it last left the screen, or null.
  * @param {string} id
  */
 function readSavedPart(id) {
   try {
-    return JSON.parse(readStored("lastDrawn") ?? "null")?.[id] ?? null;
+    return JSON.parse(readStored(LAST_DRAWN_KEY) ?? "null")?.[id] ?? null;
   } catch {
     return null;
   }

@@ -1,7 +1,8 @@
 /*
  * The chrome every app's page shares: the settings button, the tabs (a floating tinted bar on
- * phones), the settings dialog (the whole screen on phones), its Appearance choices, and the lines
- * at its foot, a sideways bracket's round dots (pinned above the tab bar on phones), the welcome
+ * phones), the settings dialog (the whole screen on phones), its Appearance choices and the note
+ * under them on bringing a Home Screen app's icon up to date, and the lines at its foot, the X that
+ * dismisses a box, a sideways bracket's round dots (pinned above the tab bar on phones), the welcome
  * and settings box that ask a phone's browser to add the page to the Home Screen, with the title
  * and button the access code's page takes from gate.css, which apps link too, the note a slow load
  * shows, the header's line while the page catches up and the sweep through its lines once it has,
@@ -42,11 +43,15 @@
  *                                              passes once the page catches up, like 0.75
  *   --step-number-lift                         how far a Home Screen step's number rises in its
  *                                              circle, so the app's digits sit in its middle
+ *   --re-add-note-above                        the room between the Appearance choices' names and
+ *                                              the note on updating the icon under them
  * and this sets:
  *   --sheet-side                               a sheet's sides, and settings' on a phone
  *   --caret-reach                              how far a sheet's caret reaches out past its sides
  *   --view-end-room                            the room at the end of the page, or of a view that
  *                                              scrolls in itself, past the tab bar on a phone
+ *   --box-pad-start, --box-pad-end,            a dismissible box's padding, which the X in its
+ *   --box-pad-block                            corner reaches into
  * and on phones:
  *   --tab-bar-bottom                           how far the tab bar floats above the screen's bottom
  *   --tab-bar-height                           the tab bar's height
@@ -555,7 +560,13 @@ body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
 .appearance-row {
   flex-direction: column;
   align-items: stretch;
-  gap: 14px;
+  gap: 0;
+}
+.appearance-row > .appearance-choices {
+  margin-top: 14px;
+}
+.appearance-row > .re-add-note {
+  margin-top: var(--re-add-note-above);
 }
 /* As on the Home Screen, each icon sits a set step from the next, its name centered under it and
    reaching past its sides when longer, so a long name never pushes an icon along. */
@@ -565,7 +576,7 @@ body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
   grid-auto-flow: column;
   grid-auto-columns: var(--appearance-icon-size);
   justify-content: start;
-  gap: 18px;
+  gap: 22px;
 }
 .appearance-choice {
   position: relative;
@@ -644,10 +655,72 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .control-note:empty {
   display: none;
 }
-/* The note's tall lines and the names over it add their own room, so it comes up to sit as far
-   under the names as the icons sit under the title. */
-.appearance-row .control-note {
-  margin-top: -3px;
+/* A card with an X in its corner (dismiss-button.js), like the Updates box and the note on
+   bringing a Home Screen app's icon up to date. Its end leaves the X room, which the X reaches
+   into to sit 6px from the corner. */
+.dismissible-box {
+  --box-pad-start: 13px;
+  --box-pad-end: 22px;
+  --box-pad-block: 10px;
+  padding: var(--box-pad-block) var(--box-pad-end) var(--box-pad-block) var(--box-pad-start);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+}
+.dismiss-button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: -4px calc(6px - var(--box-pad-end)) -2px 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: color-mix(in srgb, var(--ink-dim) 62%, transparent);
+  cursor: pointer;
+}
+/* Phosphor draws inside a wide margin, so the X reads at about 10px. */
+.dismiss-button svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+@media (hover: hover) {
+  .dismiss-button:hover {
+    color: var(--ink-hover);
+  }
+}
+/* The note under the Appearance choices on bringing a Home Screen app's icon up to date
+   (appearance.js), with the icon the app has, an arrow, and the one adding it again gives it, a
+   step further from the words than the X is. */
+.re-add-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.re-add-note:empty {
+  display: none;
+}
+.re-add-icons {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+  color: var(--ink-dim);
+}
+.re-add-arrow {
+  width: 14px;
+  height: 14px;
+}
+.re-add-note .control-note {
+  flex: 1;
+}
+.re-add-note .dismiss-button {
+  align-self: flex-start;
 }
 .control-note a {
   color: var(--accent);
@@ -764,8 +837,10 @@ body.kbd .notify-help:focus {
   background-image: var(--home-screen-icon-light);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
 }
-/* The Home Screen box shows the icon the theme showing would give the Home Screen. */
-:root[data-theme="dark"] .home-screen-icon {
+/* The Home Screen box shows the icon the theme showing would give the Home Screen, and the note on
+   bringing the icon up to date the one its data-look names. */
+:root[data-theme="dark"] .home-screen-tip .home-screen-icon,
+.home-screen-icon[data-look="dark"] {
   background-image: var(--home-screen-icon-dark);
 }
 .home-screen-copy {
@@ -927,9 +1002,6 @@ body.kbd .notify-help:focus {
   display: grid;
   justify-items: start;
   margin-top: 8px;
-}
-.welcome .appearance-choices {
-  gap: 22px;
 }
 .welcome-continue {
   align-self: center;

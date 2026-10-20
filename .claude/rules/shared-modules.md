@@ -25,6 +25,7 @@ paths:
     - `long-away.js`: the two minutes away after which the page starts over where a viewer moved it, on the tab it showed,
       a plain script in the head whose limit and rules the page's modules read too
     - `show-last-drawn.js`: putting back what each part the page draws whole last showed,
+      the switches its settings showed and the look picked,
       and the sheets it had open, before the first paint,
       or, after two minutes away, starting it over (`long-away.js`),
       and hiding again a part marked `data-start-hidden`, like the search
@@ -86,6 +87,14 @@ paths:
       and which the Home Screen app keeps on its first open.
       An iPhone's app, which keeps the icon it was added with, hands Safari a link to add the site again,
       opening Safari's page on that theme and the welcome.
+      It keeps each install's icon, from the address it opens at or, added on System, the phone's setting as it first opened.
+    - `re-add-note.js`: deciding when settings shows the note on updating the icon, while the look picked, or on System the phone's, isn't the icon's,
+      or, for an app that doesn't know its icon, from the first switch of looks,
+      and keeping that switch and its dismissal for that install
+    - `appearance.js`: settings' Appearance choices and the welcome's copy of them,
+      and the note on updating the icon, with both icons and an X,
+      whose link it keeps signed in with a fresh handoff while settings shows it
+    - `dismiss-button.js`: the X in the corner of a box like the note or the Updates box
   - Standings and bracket:
     - `bracket-standings.js`: one tab for a season's standings and its bracket,
       named Standings and opening on them until the playoff field is set, and Bracket from then on.
@@ -215,7 +224,9 @@ paths:
     - `season-reader.js`: reading the season the store says is current,
       its record, which a page reads only in the version it knows,
       reloading once a newer release is out, and the store's status,
-      and moving on to the next season when the store does
+      and moving on to the next season when the store does.
+      It keeps each season a viewer picks while its record is on its way,
+      and puts it back on the season shown when it can't be read (`createSeasonPicks`).
     - `poll-schedule.js`: how long a league's next update waits, from where its games stand
     - `kept-read.js`: a read worked out again only once what it reads from changes, like each app's season for its search
     - the store client (`worker-store.js`), which, coming back with a drawing on the screen,
@@ -235,6 +246,7 @@ paths:
   which pages link before their own `styles.css` and theme with the tokens their top comments list:
   - `type.css` lists the type roles
   - `chrome.css` styles the tab bar, settings sheet and its Diagnostics, round dots, Home Screen welcome and box,
+    a card with an X in its corner and settings' note on updating the icon,
     the catching-up line and the sweep once caught up, and pull to refresh's spokes
   - `pager.css` styles a pill's names and the standings and bracket under one
   - `day-strip.css` styles a season's list of days and its strip

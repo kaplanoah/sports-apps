@@ -48,7 +48,8 @@ function changeSavedState(state) {
   const seen = read("lastSeen");
   const drawn = read("lastDrawn");
   if (state === "nothing saved") {
-    for (const key of ["lastSeen", "lastDrawn", "openSheets"]) localStorage.removeItem(key);
+    for (const key of ["lastSeen", "lastDrawn", "openSheets", "lastSwitched"])
+      localStorage.removeItem(key);
   } else if (state === "a copy saved more than two minutes ago") {
     for (const part of Object.values(drawn)) part.savedAt -= 3 * 60_000;
     write("lastDrawn", drawn);

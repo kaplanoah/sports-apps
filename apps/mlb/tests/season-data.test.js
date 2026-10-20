@@ -8,46 +8,7 @@ import {
   startSeasonData,
 } from "../page/js/season-data.js";
 import { session } from "../page/js/session.js";
-
-// A stand-in for the store: a read answers with what's stored, a watch answers once the test moves
-// on, and the test can change a document and tell its watchers.
-function createStore(documents, { unreadable = [] } = {}) {
-  /** @type {Record<string, (snapshot: any) => void>} */
-  const watchers = {};
-  const readStored = (path) => ({
-    id: path.split("/").pop(),
-    exists: path in documents,
-    data: () => documents[path],
-  });
-  const store = {
-    doc: (path) => ({
-      get: async () => {
-        if (unreadable.includes(path)) throw new Error("unreadable");
-        return readStored(path);
-      },
-      onSnapshot: (onNext) => {
-        watchers[path] = onNext;
-        queueMicrotask(() => onNext(readStored(path)));
-        return () => delete watchers[path];
-      },
-    }),
-    collection: (name) => ({
-      limit: () => ({
-        get: async () => ({
-          docs: Object.keys(documents)
-            .filter((path) => path.startsWith(`${name}/`))
-            .map(readStored),
-        }),
-        onSnapshot: () => () => {},
-      }),
-    }),
-  };
-  const deliver = (path, data) => {
-    documents[path] = data;
-    watchers[path]?.(readStored(path));
-  };
-  return { store, deliver };
-}
+import { createFakeStore } from "../../../tests/fake-store.js";
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -64,7 +25,7 @@ const RECORD_2026 = {
  * @param {{ unreadable?: string[] }} [options]
  */
 function startReading(documents, options) {
-  const { store, deliver } = createStore(documents, options);
+  const { store, deliver } = createFakeStore(documents, options);
   const redraws = { changes: 0, stamps: 0, currentYears: 0, unreadable: 0 };
   session.db = store;
   startSeasonData({
@@ -176,6 +137,36 @@ test("picking another season shows its record", async () => {
 
   assert.equal(session.activeYear, 2025);
   assert.deepEqual(session.season, record2025);
+});
+
+test("picking a season that can't be read puts back the season shown and says the store can't be reached", async () => {
+  startReading(
+    { "live/current": { season: 2026 }, "seasons/2026": RECORD_2026 },
+    { unreadable: ["seasons/2025"] },
+  );
+  await loadSeason();
+
+  assert.equal((await showYear(2025)).kind, "unread");
+
+  assert.equal(session.activeYear, 2026);
+  assert.deepEqual(session.season, RECORD_2026);
+  assert.notEqual(session.problem, "");
+});
+
+test("a pick that can't be read after a newer pick replaced it leaves the newer one, with no problem", async () => {
+  startReading(
+    { "live/current": { season: 2026 }, "seasons/2026": RECORD_2026 },
+    { unreadable: ["seasons/2025"] },
+  );
+  await loadSeason();
+
+  const replaced = showYear(2025);
+  const newer = showYear(2026);
+
+  assert.equal((await replaced).kind, "replaced");
+  assert.equal((await newer).kind, "shown");
+  assert.equal(session.activeYear, 2026);
+  assert.equal(session.problem, "");
 });
 
 // A season whose AL top seed swept through to win the World Series.

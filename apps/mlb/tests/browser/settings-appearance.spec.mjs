@@ -4,9 +4,23 @@ import { IPHONE, IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import {
+  checkFailedPickPutBack,
+  checkNewCurrentSeasonListed,
+  checkPickKeptThroughRedraw,
+  checkSeasonsOnFailedList,
+  checkSettingsOnReload,
+} from "../../../../tests/browser/settings-reload.mjs";
+import { WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
+import {
   checkHandoffRenewal,
+  checkIconKeptOnlyOnOpen,
+  checkNoteWithoutIcon,
   checkReAddHandoff,
   checkReAddNote,
+  checkReAddNoteDismissal,
+  checkReAddNoteEases,
+  checkReAddNoteOnReload,
+  checkSystemInstallIcon,
 } from "../../../../tests/browser/re-add-note.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -95,12 +109,46 @@ test.describe("in an iPhone's Home Screen app", () => {
   test.use({ userAgent: IPHONE_AGENT });
   const looks = { light: "Ball", dark: "Night Game" };
 
-  test("changing the appearance says how to update the icon, under the icons, linking to Safari on the theme picked, which the browser and Android leave out", async ({
+  test("while the look picked, or on System the phone's, isn't the icon's, settings shows both icons and how to update it, linking to Safari on the choice picked, which the browser and Android leave out", async ({
     page,
     context,
     browser,
   }) => {
-    await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+    await checkReAddNote({ page, context, browser, openApp, openSettings, looks, noteAbove: 8 });
+  });
+
+  test("the icon note's X takes it away for good in that install", async ({ page }) => {
+    await checkReAddNoteDismissal({ page, openApp, openSettings, looks });
+  });
+
+  test("a reload with settings open on the icon note shows the note before the page's code arrives", async ({
+    page,
+  }) => {
+    await checkReAddNoteOnReload({ page, openApp, openSettings, looks });
+  });
+
+  test("a reload keeps no icon for an app that has none yet, rather than the phone's setting, and settings says nothing of it until the viewer switches looks", async ({
+    page,
+  }) => {
+    await checkIconKeptOnlyOnOpen({ page, openApp, openSettings, looks });
+  });
+
+  test("an app that doesn't know its icon shows the note from the first switch of looks, System too, until the X", async ({
+    page,
+  }) => {
+    await checkNoteWithoutIcon({ page, openApp, openSettings, looks });
+  });
+
+  test("an app added on System has the icon the phone's setting showed as it first opened", async ({
+    page,
+  }) => {
+    await checkSystemInstallIcon({ page, openApp, openSettings, looks });
+  });
+
+  test("the icon note grows in as a pick sets the icon off and shrinks away on its opening's curve", async ({
+    page,
+  }) => {
+    await checkReAddNoteEases({ page, openApp, openSettings, looks });
   });
 
   test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
@@ -110,11 +158,63 @@ test.describe("in an iPhone's Home Screen app", () => {
     await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
   });
 
-  test("the link's handoff follows the last pick, renews halfway through and on coming back once that's due, tries again after a failure, and stops once settings closes", async ({
+  test("the link's handoff renews halfway through and on coming back once that's due, tries again after a failure, stops once settings closes or the icon's look is picked, and starts again as settings opens on the note", async ({
     page,
   }) => {
     await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });
   });
+});
+
+test("a reload with settings open shows its seasons, switches, and look picked before the page's code arrives", async ({
+  page,
+}) => {
+  await openApp(page, WITH_A_PAST_SEASON);
+  await checkSettingsOnReload({
+    page,
+    look: "Night Game",
+    switchName: "Include content from The Athletic",
+    pastSeason: "2025",
+    currentSeason: "2026",
+  });
+});
+
+test("a season picked while its record is on its way stays picked as the picker is drawn again meanwhile", async ({
+  page,
+}) => {
+  const app = await openApp(page, WITH_A_PAST_SEASON);
+  await checkPickKeptThroughRedraw({
+    page,
+    pastSeason: "2025",
+    newSeason: 2027,
+    moveCurrentTo: (year) => app.writeFromWorker("live/current", { season: year }),
+  });
+});
+
+test("a past season picked whose record can't be read puts the Season picker back on the season shown, says so, and can be picked again", async ({
+  page,
+}) => {
+  await openApp(page, WITH_A_PAST_SEASON);
+  await checkFailedPickPutBack({ page, pastSeason: "2025", currentSeason: "2026" });
+});
+
+test("while the store can't list its seasons, a new current season joins the Season picker, with the past season shown still chosen", async ({
+  page,
+}) => {
+  const app = await openApp(page, WITH_A_PAST_SEASON);
+  await checkNewCurrentSeasonListed({
+    page,
+    pastSeason: "2025",
+    newSeason: 2027,
+    moveCurrentTo: (year) => app.writeFromWorker("live/current", { season: year }),
+    seasons: ["2027", "2026", "2025"],
+  });
+});
+
+test("a reload with settings open while the store can't list its seasons lists the ones it listed, with the season shown chosen", async ({
+  page,
+}) => {
+  await openApp(page, WITH_A_PAST_SEASON);
+  await checkSeasonsOnFailedList({ page, seasons: ["2026", "2025"], shown: "2026" });
 });
 
 test("Appearance sits under Notifications, above the News switches, each choice showing the icon it offers", async ({

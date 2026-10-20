@@ -207,7 +207,7 @@
   </nav>
   <div class="edge-fade" aria-hidden="true"></div>
 
-  <div id="updates" class="updates" hidden data-last-drawn></div>
+  <div id="updates" class="updates dismissible-box" hidden data-last-drawn></div>
 
   <p id="loadNote" class="load-note" role="status" hidden></p>
 
@@ -302,10 +302,13 @@
         hidden
       ></div>
       <div class="settings-controls grouped">
-        <label class="control-row" data-setting="settings:season" hidden>
-          <span>Season</span>
-          <select id="seasonPicker" class="select-field" aria-label="Season"></select>
-        </label>
+        <label
+          class="control-row"
+          id="seasonRow"
+          data-setting="settings:season"
+          hidden
+          data-last-drawn
+        ></label>
         <div
           class="control-row"
           id="notifyRow"
@@ -369,7 +372,12 @@
               <span>Walnut</span>
             </label>
           </div>
-          <span class="control-note" id="appearanceNote" role="status"></span>
+          <div
+            class="re-add-note dismissible-box"
+            id="appearanceNote"
+            role="status"
+            data-last-drawn
+          ></div>
         </div>
       </div>
       <footer class="settings-footer">
