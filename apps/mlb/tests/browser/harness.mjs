@@ -466,6 +466,9 @@ export async function openApp(
     // Time passing for the Worker while the page sleeps, which brings its next update due.
     /** @param {number} ms */
     passTimeAtWorker: (ms) => testStore.passTime(ms),
+    // How many sockets the store has accepted, each once it has told the page whether an update
+    // is coming.
+    countWatchersHeard: () => testStore.countAccepted(),
     countSeasonReads: () =>
       harness.storeReads.filter((path) => path === `/store/${currentPath}`).length,
     listStoreReads: () => [...harness.storeReads],

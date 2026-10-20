@@ -23,7 +23,7 @@ export { expect };
  * whose pushes all succeed, as does every other request but what `fetchImpl` answers.
  * `fireAlarm` runs its next update, `passTime` moves its clock on, and `acceptWatcher` opens a
  * page's socket through the store, as the Worker does, so the page hears what the store says as it
- * opens.
+ * opens, which `countAccepted` counts once the page has heard it.
  * @template {{ fetch: (request: Request) => Promise<Response>, webSocketMessage: (socket: any, message: string | Buffer) => void, alarm: () => Promise<void> }} Store
  * @param {new (ctx: any, env: object, options: object) => Store} SeasonStore the app's store class
  * @param {object} options
@@ -41,6 +41,7 @@ export function createTestStore(
   const clock = { now: Date.parse(now) };
   // The page's sockets the store accepts next, in the order the page opened them.
   const arriving = [];
+  let acceptedCount = 0;
   const store = new SeasonStore(
     context.ctx,
     {},
@@ -61,15 +62,17 @@ export function createTestStore(
     await store.alarm();
   };
   /** @param {{ send: (message: string) => void }} socket */
-  const acceptWatcher = (socket) => {
+  const acceptWatcher = async (socket) => {
     arriving.push(socket);
-    return store.fetch(new Request("https://store/watch", { headers: { upgrade: "websocket" } }));
+    await store.fetch(new Request("https://store/watch", { headers: { upgrade: "websocket" } }));
+    acceptedCount += 1;
   };
   /** @param {number} ms */
   const passTime = (ms) => {
     clock.now += ms;
   };
-  return { context, store, fireAlarm, passTime, acceptWatcher };
+  const countAccepted = () => acceptedCount;
+  return { context, store, fireAlarm, passTime, acceptWatcher, countAccepted };
 }
 
 // Routes match with patterns rather than functions: Playwright checks a pattern itself, but asks the

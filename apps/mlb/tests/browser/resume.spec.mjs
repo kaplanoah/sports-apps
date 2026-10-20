@@ -289,15 +289,21 @@ test("a page coming back as the store updates draws once, with the update, never
   await app.updateFromWorker();
   const stamp = page.locator("#stamp");
   await expect(stamp).toContainText("Next first pitch");
+  // Only the page's code keeps when it was last current, once it has caught up.
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
   await app.writeWhileAway("live/status", { error: "upstream_error", detail: "", write: "" });
   app.changeSnapshots((snapshot) => ({ ...snapshot, missing: ["wildCardRank"] }));
   app.passTimeAtWorker(31 * MINUTE_MS);
   const readStampTexts = await trackStampTexts(page);
-  const seasonReads = app.countSeasonReads();
+  const watchers = app.countWatchersHeard();
 
+  // The page's clock holds still, and then moves on without running its timers, as a phone that
+  // suspends it does, so its wait for the store's update outlasts however long the store takes
+  // to run it on a slow machine.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
   await page.clock.setSystemTime(Date.parse(EVENING_FIXTURE.now) + 31 * MINUTE_MS);
   await comeBack(page);
-  await expect.poll(() => app.countSeasonReads()).toBe(seasonReads + 1);
+  await expect.poll(() => app.countWatchersHeard()).toBe(watchers + 1);
   await app.updateFromWorker();
 
   await expect(stamp).toContainText("MLB stopped sending wildCardRank");
