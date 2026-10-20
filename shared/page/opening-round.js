@@ -31,19 +31,44 @@ function isShownFromStart(scroller, target) {
 const isPhone = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
 /**
- * Starts at the bracket's beginning when it isn't on a phone or that already shows the target's
- * round, so the rounds before it stay in view; otherwise brings the target to the left edge.
+ * Where the bracket opens: at its beginning when it isn't on a phone or that already shows the
+ * target's round, so the rounds before it stay in view; otherwise with the target at the left edge,
+ * or as near it as the bracket's end lets it scroll.
+ * @param {HTMLElement} scroller @param {HTMLElement} target
+ */
+function findTargetLeft(scroller, target) {
+  if (!isPhone() || isShownFromStart(scroller, target)) return 0;
+  const padding = parseFloat(getComputedStyle(scroller).scrollPaddingLeft) || 0;
+  const offset = target.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
+  const endLeft = scroller.scrollWidth - scroller.clientWidth;
+  return Math.min(scroller.scrollLeft + offset - padding, endLeft);
+}
+
+/**
  * @param {HTMLElement} scroller @param {HTMLElement} target
  * @param {ScrollBehavior} [behavior]
  */
 function scrollToTarget(scroller, target, behavior = "instant") {
-  if (!isPhone() || isShownFromStart(scroller, target)) {
-    scroller.scrollTo({ left: 0, behavior });
-    return;
-  }
-  const padding = parseFloat(getComputedStyle(scroller).scrollPaddingLeft) || 0;
-  const offset = target.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
-  scroller.scrollTo({ left: scroller.scrollLeft + offset - padding, behavior });
+  scroller.scrollTo({ left: findTargetLeft(scroller, target), behavior });
+}
+
+// Where the bracket opens, which a page that loads again after two minutes away opens on
+// (show-last-drawn.js).
+/** @param {HTMLElement} scroller @param {HTMLElement} target */
+function noteStartLeft(scroller, target) {
+  scroller.dataset.startLeft = String(Math.round(findTargetLeft(scroller, target)));
+}
+
+/**
+ * Where the reader left a bracket scrolled, read before a redraw to keep across it. A bracket a
+ * reload put back on its opening round after two minutes away (show-last-drawn.js) has no place
+ * of the reader's to keep, so its first draw opens it on the round still playing now.
+ * @param {HTMLElement | null} scroller
+ */
+export function takeKeptLeft(scroller) {
+  if (scroller?.dataset.putBackStart !== "true") return scroller?.scrollLeft ?? 0;
+  delete scroller.dataset.putBackStart;
+  return 0;
 }
 
 /** @type {Set<(behavior: ScrollBehavior) => void>} */
@@ -59,18 +84,20 @@ export function showOpeningRound(behavior) {
 
 /**
  * Brings a sideways bracket to its opening round each time it comes into view, since a hidden tab
- * loses its scroll, and whenever that round changes. Any other redraw keeps the reader's place.
- * Returns what the app calls after each draw, with the scroller, the opening round's first
- * series, that round's index, and the scroll the bracket had before the draw.
+ * loses its scroll, and whenever that round changes. Any other redraw keeps the reader's place, as
+ * does the first draw of a bracket a reload put back scrolled (show-last-drawn.js). Returns what
+ * the app calls after each draw, with the scroller, the opening round's first series, that round's
+ * index, and the scroll the bracket had before the draw.
  * @param {HTMLElement} wrap holds the bracket, and stays across redraws
  */
 export function watchOpeningRound(wrap) {
   /** @type {{ scroller: HTMLElement, target: HTMLElement, round: number } | null} */
   let drawn = null;
-  let wasShown = false;
+  let wasShown = wrap.getClientRects().length > 0;
   new ResizeObserver(() => {
     const isShown = wrap.getClientRects().length > 0;
     if (isShown && !wasShown && drawn) scrollToTarget(drawn.scroller, drawn.target);
+    if (isShown && drawn) noteStartLeft(drawn.scroller, drawn.target);
     wasShown = isShown;
   }).observe(wrap);
   openingRoundReturns.add((behavior) => {
@@ -79,9 +106,11 @@ export function watchOpeningRound(wrap) {
 
   /** @param {{ scroller: HTMLElement, target: HTMLElement, round: number, keptLeft: number }} draw */
   return ({ scroller, target, round, keptLeft }) => {
+    const isPutBack = !drawn && keptLeft > 0;
     const isNewRound = round !== drawn?.round;
     drawn = { scroller, target, round };
-    if (isNewRound) scrollToTarget(scroller, target);
+    if (isNewRound && !isPutBack) scrollToTarget(scroller, target);
     else scroller.scrollLeft = keptLeft;
+    noteStartLeft(scroller, target);
   };
 }

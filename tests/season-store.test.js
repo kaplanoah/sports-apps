@@ -15,7 +15,7 @@ const QUIET_LEAGUE = {
   createLoadSnapshot: () => async () => ({}),
   loadCurrentSnapshot: async () => ({ season: 2026 }),
   readUpdates: async () => null,
-  saveSnapshot: async () => {},
+  saveSnapshot: /** @type {(docs: any, snapshot: any) => Promise<void>} */ (async () => {}),
   describeSnapshotStatus: () => ({ error: "" }),
   choosePollDelay: () => 60_000,
   listNotifications: () => [],
@@ -173,14 +173,19 @@ function createWatchedStore(league) {
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore({ ...QUIET_LEAGUE, ...league });
   const clock = { now: NOW };
+  /** @type {any[][]} what each page's socket heard, in the order the pages opened */
+  const heard = [];
   const openSocket = (ctx) => {
-    ctx.acceptWebSocket({ send: () => {} });
-    return new Response(null);
+    const messages = [];
+    heard.push(messages);
+    const socket = { send: (message) => messages.push(JSON.parse(message)) };
+    ctx.acceptWebSocket(socket);
+    return { socket, response: new Response(null) };
   };
   const store = new SeasonStore(context.ctx, {}, { now: () => clock.now, openSocket });
   const openPage = () =>
     store.fetch(new Request(`${ORIGIN}/watch`, { headers: { upgrade: "websocket" } }));
-  return { context, clock, store, openPage };
+  return { context, clock, store, openPage, heard };
 }
 
 test("with no page open, a store updates at most every fifty seconds", async () => {
@@ -221,6 +226,63 @@ test("a page that opens has the season updated once it's fifteen minutes old", a
   }
 });
 
+test("a page that opens as its update comes due hears it's coming, and hears when it's done, though nothing changed", async () => {
+  const { context, clock, store, openPage, heard } = createWatchedStore({
+    choosePollDelay: () => 15_000,
+  });
+  await store.alarm();
+
+  clock.now = NOW + 20_000;
+  await openPage();
+  assert.deepEqual(heard[0], [{ updating: true }]);
+
+  await fireNextAlarm(store, context, clock);
+  assert.deepEqual(heard[0], [{ updating: true }, { updating: false }]);
+});
+
+test("a page that opens as its update comes due hears what the update saves before it hears the update is done", async () => {
+  const { context, clock, store, openPage, heard } = createWatchedStore({
+    choosePollDelay: () => 15_000,
+    saveSnapshot: async (docs) => {
+      await docs.write("seasons/2026", { inning: clock.now });
+    },
+  });
+  await store.alarm();
+
+  clock.now = NOW + 20_000;
+  await openPage();
+  await fireNextAlarm(store, context, clock);
+
+  assert.deepEqual(
+    heard[0].map((message) => message.path ?? message.updating),
+    [true, "seasons/2026", false],
+  );
+});
+
+test("a page that opens before its update comes due hears none is coming", async () => {
+  const { clock, store, openPage, heard } = createWatchedStore({ choosePollDelay: () => 15_000 });
+  await store.alarm();
+
+  clock.now = NOW + 5_000;
+  await openPage();
+  assert.deepEqual(heard[0], [{ updating: false }]);
+});
+
+test("a page that opens after a deploy hears the season's update is coming", async () => {
+  const { context, clock, store, openPage, heard } = createWatchedStore({
+    choosePollDelay: () => 15_000,
+  });
+  await store.alarm();
+  await context.ctx.storage.put("poll:schedule", {
+    ...(await context.ctx.storage.get("poll:schedule")),
+    release: "abc1234",
+  });
+
+  clock.now = NOW + 5_000;
+  await openPage();
+  assert.deepEqual(heard[0], [{ updating: true }]);
+});
+
 test("a page that opens while the league isn't answering still waits out the retry", async () => {
   const { context, clock, store, openPage } = createWatchedStore({
     loadCurrentSnapshot: async () => {
@@ -246,13 +308,19 @@ test("a store answers a page's close, so the socket stops counting as an open pa
   assert.equal(closes, 1);
 });
 
-/** A page's socket, as the store sees it, keeping what the page said it watches. */
+/**
+ * A page's socket, as the store sees it, keeping what the page said it watches and the path of each
+ * document pushed to it.
+ */
 function createPageSocket() {
   const sent = [];
   let attachment = null;
   return {
     sent,
-    send: (message) => sent.push(JSON.parse(message).path),
+    send: (message) => {
+      const { path } = JSON.parse(message);
+      if (path) sent.push(path);
+    },
     serializeAttachment: (value) => {
       attachment = structuredClone(value);
     },

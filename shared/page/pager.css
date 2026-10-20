@@ -26,7 +26,8 @@
 /* The parts sit side by side, as slide-panels.js moves them, so a part slides off the screen
    rather than the gutter. Each scrolls on its own, past the tab bar at its end, as a sheet's
    sections do (sheet.css), so it keeps its place while the other shows and a slide never scrolls
-   the page. Where the header stays put, they fill the room under the pill. */
+   the page. Where the header stays put, they fill the room under the pill. The page keeps a part's
+   rows in place as what's above them grows (bracket-standings.js), so the browser doesn't too. */
 .season-parts {
   position: relative;
   flex: 1 1 0;
@@ -39,6 +40,7 @@
   inset: 0;
   padding: 0 var(--reach-right) var(--view-end-room) var(--reach-left);
   overflow: hidden auto;
+  overflow-anchor: none;
   overscroll-behavior-y: contain;
 }
 /* At rest, the part whose name isn't chosen doesn't show, so the pill a reload puts back

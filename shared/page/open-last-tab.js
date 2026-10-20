@@ -12,13 +12,10 @@ function readStored(key) {
   }
 }
 
-// After two minutes away, a view goes back to where it starts, as the page's modules do
-// (long-away.js): a part that starts hidden, like a search, is hidden again (show-last-drawn.js),
-// and a tab that shows nothing else goes back to the tab before it.
-const START_AFTER_AWAY_MS = 2 * 60 * 1000;
+/* global isLongAwayFrom -- from long-away.js */
 
-/** @param {unknown} savedAt */
-const isLongAwayFrom = (savedAt) => !(Date.now() - Number(savedAt) < START_AFTER_AWAY_MS);
+// After two minutes away, a part that starts hidden, like a search, is hidden again
+// (show-last-drawn.js), and a tab that shows nothing else goes back to the tab before it.
 
 /**
  * The part a tab's view shows alone, when it starts hidden, as a search's own view does.

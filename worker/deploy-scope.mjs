@@ -3,7 +3,8 @@
 // is listed. An app's own folder deploys only that app; anything outside apps/ deploys them all.
 // What the deploy runs, .github/workflows/deploy.yml and each script it runs and each module
 // those import, like worker/check-page.mjs, isn't listed: only a deploy shows that a change to
-// how the apps deploy still works.
+// how the apps deploy still works. The beta claim's check is listed, since every push to beta
+// runs it, whether or not a Worker deploys, and the production deploy never does.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +24,7 @@ const SKIPPED_FILES = new Set([
   ".claude/hooks/one-command.mjs",
   ".claude/settings.json",
   ".github/dependabot.yml",
+  ".github/workflows/beta.yml",
   ".github/workflows/ci.yml",
   ".github/workflows/conflicts.yml",
   ".github/workflows/flaky.yml",
@@ -30,12 +32,14 @@ const SKIPPED_FILES = new Set([
   ".github/workflows/watch.yml",
   "playwright.config.mjs",
   "types/globals.d.ts",
+  "worker/beta-claim.mjs",
   "worker/browser-scope.mjs",
   "worker/burn-in-specs.mjs",
   "worker/check-pr-title.mjs",
   "worker/flag-conflicts.mjs",
   "worker/judge-burn-in.mjs",
   "worker/judge-review.mjs",
+  "worker/labeling.mjs",
   "worker/package-imports.mjs",
   "worker/plan-review.mjs",
   "worker/post-review.mjs",

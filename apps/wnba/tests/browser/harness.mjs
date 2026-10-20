@@ -28,6 +28,7 @@ import {
   test,
   expect,
   createTestStore,
+  createWorkerControls,
   connectToStore,
   loadPageAt,
   matchPath,
@@ -366,6 +367,7 @@ export async function openApp(
       await context.ctx.storage.put("seasons/2026", change(await readSeason()));
     },
     holdStore: () => holdStore(page),
+    ...createWorkerControls(testStore),
     /**
      * The saved season as the store would hold it in the next year's off-season.
      * @param {number} year

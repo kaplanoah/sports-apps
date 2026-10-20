@@ -39,6 +39,7 @@ import {
   test,
   expect,
   createTestStore,
+  createWorkerControls,
   connectToStore,
   loadPageAt,
   matchPath,
@@ -461,8 +462,7 @@ export async function openApp(
       );
     },
     holdStore: () => holdStore(page),
-    // What the Worker's alarm does on its own schedule.
-    updateFromWorker: () => testStore.fireAlarm(),
+    ...createWorkerControls(testStore),
     countSeasonReads: () =>
       harness.storeReads.filter((path) => path === `/store/${currentPath}`).length,
     listStoreReads: () => [...harness.storeReads],
