@@ -11,7 +11,7 @@ import { measureTopAtRest, observeRoomForPart } from "#shared/bracket-standings.
 import { formatClockTime, formatShortDate, formatShortWeekday, nameDay } from "#shared/days.js";
 import { describeInning, renderOutLights } from "./games-view.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
-import { findOpeningRound, watchOpeningRound } from "#shared/opening-round.js";
+import { findOpeningRound, takeKeptLeft, watchOpeningRound } from "#shared/opening-round.js";
 import { markScrolledRound, renderRoundDots } from "#shared/round-dots.js";
 import { findPartHolding } from "#shared/season-part.js";
 import { session } from "./session.js";
@@ -429,7 +429,7 @@ export function renderBracket() {
   const growth = isStacked ? measureGrowth(wrap) : 0;
   const fits = !isStacked || measureFit(wrap);
   const stage = isStacked ? renderStackedStage(bracket, growth, fits) : renderWideStage(bracket);
-  const scrollLeft = wrap.querySelector(".tree-scroll")?.scrollLeft ?? 0;
+  const keptLeft = takeKeptLeft(wrap.querySelector(".tree-scroll"));
   const hadFocus = wrap.contains(document.activeElement);
   setHtml(
     wrap,
@@ -446,7 +446,7 @@ export function renderBracket() {
     scroller,
     target,
     round: ROUND_ORDER.indexOf(openingRound),
-    keptLeft: scrollLeft,
+    keptLeft,
   });
   if (hadFocus) scroller.focus({ preventScroll: true });
   markRoundScrolledTo();

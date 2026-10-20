@@ -23,10 +23,13 @@ paths:
       listing every such choice, and telling the page when another tab changes one
     - `local-storage.js`: what the page keeps on the device, which storage that refuses access or is full never breaks
   - Opening, coming back, and catching up:
+    - `long-away.js`: the two minutes away after which the page starts over where a viewer moved it, on the tab it showed,
+      a plain script in the head whose limit and rules the page's modules read too
     - `show-last-drawn.js`: putting back what each part the page draws whole last showed,
       the switches its settings showed and the look picked,
       and the sheets it had open, before the first paint,
-      and hiding again a part marked `data-start-hidden`, like the search, after two minutes away
+      or, after two minutes away, starting it over (`long-away.js`),
+      and hiding again a part marked `data-start-hidden`, like the search
     - `sheet-memory.js`: closing, before the page draws as it comes back or loads again,
       settings left two minutes and any other sheet six hours,
       but not a game's sheet on top showing a game on its day or under way,
@@ -174,6 +177,8 @@ paths:
       and a tapped search row's search waiting for its tint to show.
       A touch the browser takes for a scroll never taps what it landed on,
       even when iOS still sends its click, as an iPhone's lists do.
+    - `kept-place.js`: keeping the rows on the screen where they are as what's above a list grows or shrinks,
+      as Chrome's scroll anchoring does and Safari's doesn't
     - `eased-redraw.js`: easing the page's parts to their new heights, fading in what's new,
       when new data redraws them
     - `slide-panels.js`: panels side by side, one shown,
@@ -233,7 +238,8 @@ paths:
       and puts it back on the season shown when it can't be read (`createSeasonPicks`).
     - `poll-schedule.js`: how long a league's next update waits, from where its games stand
     - `kept-read.js`: a read worked out again only once what it reads from changes, like each app's season for its search
-    - the store client
+    - the store client (`worker-store.js`), which, coming back with a drawing on the screen,
+      holds what the store sends until the update the store brought forward is done, so the page redraws once
     - notifications
   - News:
     - `news.js`, `news-view.js`, `news-picks.js`, and `news-choices.js`: the News tab,

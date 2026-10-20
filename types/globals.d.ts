@@ -3,7 +3,7 @@ declare const Sortable: {
 };
 
 // The page's plain scripts in its head share these, from shared/page/pick-theme.js,
-// open-last-tab.js, show-last-drawn.js, and season-header.js.
+// long-away.js, open-last-tab.js, show-last-drawn.js, and season-header.js.
 declare function isOnHomeScreen(): boolean;
 declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;
@@ -16,9 +16,30 @@ declare function readPhoneLook(): "light" | "dark";
 declare function readHomeScreenIcon(): string | null;
 declare const WELCOME_CLOSED_KEY: string;
 declare function forgetWelcomeClosed(): void;
+declare const START_AFTER_AWAY_MS: number;
+declare function isAwayLong(awayMs: number): boolean;
+declare function isLongAwayFrom(savedAt: unknown, now?: number): boolean;
+declare function findPlaceToShow(
+  saved: {
+    hidden?: unknown;
+    scrolls?: unknown;
+    holderTop?: unknown;
+    pageTop?: unknown;
+    classes?: unknown;
+    savedAt?: unknown;
+  },
+  where: { isInSheet: boolean; isStartHidden: boolean },
+  now: number,
+): {
+  hidden: boolean;
+  scrolls: { path: unknown; left: number; top: number; isOnStart: boolean }[];
+  holderTop: number;
+  pageTop: number;
+  classes: string;
+  isOnFirstTab: boolean;
+};
 declare function readStored(key: string): string | null;
 declare const LAST_DRAWN_KEY: string;
-declare function isLongAwayFrom(savedAt: unknown): boolean;
 declare const OPEN_SHEETS_KEY: string;
 declare const LAST_SWITCHED_KEY: string;
 declare const KEPT_SWITCHES: string;

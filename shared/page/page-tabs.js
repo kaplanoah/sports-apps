@@ -1,7 +1,10 @@
 import { readTabBeforeLast, saveLastTab } from "./last-tab.js";
+import { watchTimeAway } from "./resume.js";
 import { isPageOffTop, scrollToTop } from "./spring-scroll.js";
 import { moveTabSelection } from "./tab-bar.js";
 import { readSelectedTab, selectTab, wireTabs } from "./tabs.js";
+
+/* global isAwayLong -- from long-away.js */
 
 // The page's own tabs, in the tab bar and beside it, each showing the section whose id is
 // `view-<tab>`.
@@ -112,7 +115,18 @@ function chooseTab(tab) {
   entries.get(tab)?.();
 }
 
+// After two minutes away, the page and every tab start at their top, as the page does
+// (long-away.js), but on the tab shown. Safari loses a scroll made as the page comes back, before
+// it draws again, so the page moves in the first frame it draws.
+/** @param {number} awayMs */
+function startOverAfterLongAway(awayMs) {
+  if (!isAwayLong(awayMs)) return;
+  tabScrolls.clear();
+  requestAnimationFrame(() => scrollTo({ top: 0, behavior: "instant" }));
+}
+
 // The page has already reopened its last tab (open-last-tab.js), with the pill on it.
 export function startPageTabs() {
   wireTabs(findTabButtons(), chooseTab);
+  watchTimeAway(startOverAfterLongAway);
 }

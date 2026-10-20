@@ -12,6 +12,7 @@
     "shared/page/offline-worker.js",
     "shared/page/service-worker-steps.js",
     "shared/page/draw-home-screen-asks.js",
+    "shared/page/long-away.js",
     "shared/page/open-last-tab.js",
     "shared/page/season-header.js",
     "shared/page/show-last-drawn.js",
