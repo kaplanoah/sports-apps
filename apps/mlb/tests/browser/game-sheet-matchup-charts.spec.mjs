@@ -2,11 +2,12 @@ import { test, expect, MATCHUP_STARTERS, buildSnapshotWithStarters } from "./har
 import { openMatchup } from "./open-game-sheet.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 /**
- * The ERA row's numbers, as the sheet colors them: each one's text color and weight, whether its
+ * The ERA row's numbers, as the sheet colors them: each one's text color and its line's weight, whether its
  * dot is dimmed from its club's color, and the ink a number is in unless it ranks lower.
  * @param {import("@playwright/test").Locator} sheet
  */
@@ -31,7 +32,10 @@ const readEraColors = (sheet) =>
         const club = paint(getComputedStyle(number).getPropertyValue("--side"));
         return {
           color: getComputedStyle(number).color,
-          weight: getComputedStyle(number).fontWeight,
+          weight: Number(
+            getComputedStyle(/** @type {Element} */ (number.querySelector(".tape-number-line")))
+              .fontWeight,
+          ),
           isDotDimmed: paint(getComputedStyle(dot).backgroundColor) !== club,
         };
       };
@@ -42,7 +46,8 @@ test("a starter's number is white and bolder when it ranks above the other's, an
   page,
 }) => {
   const era = await readEraColors(await openMatchup(page));
-  expect(era.away).toEqual({ color: era.ink, weight: "550", isDotDimmed: false });
+  const stat = await readRole(page, "stat");
+  expect(era.away).toEqual({ color: era.ink, weight: stat.weight + 50, isDotDimmed: false });
   expect(era.home.color).not.toBe(era.ink);
   expect(era.home.isDotDimmed).toBe(true);
 });
@@ -53,8 +58,9 @@ test("beside a starter who isn't ranked, both numbers are white, and only the un
   const era = await readEraColors(
     await openMatchup(page, { ...MATCHUP_STARTERS, 2: { ...MATCHUP_STARTERS[2], ranks: null } }),
   );
-  expect(era.away).toEqual({ color: era.ink, weight: "400", isDotDimmed: false });
-  expect(era.home).toEqual({ color: era.ink, weight: "400", isDotDimmed: true });
+  const { weight } = await readRole(page, "stat");
+  expect(era.away).toEqual({ color: era.ink, weight: weight - 100, isDotDimmed: false });
+  expect(era.home).toEqual({ color: era.ink, weight: weight - 100, isDotDimmed: true });
 });
 
 /** @param {import("@playwright/test").Locator} sheet */
@@ -257,14 +263,13 @@ test("an unranked starter's note sets his innings against his club's games, a st
   expect(space).toBeCloseTo(19.5, 1);
 });
 
-test("the Matchup's stat names are a half step over the sheet's capital labels, at 13.5px", async ({
-  page,
-}) => {
+test("the Matchup's stat names are the sheet's capital labels", async ({ page }) => {
   const sheet = await openMatchup(page);
+  const label = await readRole(page, "label");
   const sizes = await sheet
     .locator(".tape-label")
     .evaluateAll((labels) => labels.map((label) => getComputedStyle(label).fontSize));
-  expect(sizes).toEqual(["13.5px", "13.5px", "13.5px", "13.5px"]);
+  expect(sizes).toEqual(Array(4).fill(`${label.size}px`));
 });
 
 /** @param {import("@playwright/test").Locator} chart */
@@ -312,7 +317,7 @@ for (const viewport of [
   { width: 1280, height: 720 },
   { width: 320, height: 640 },
 ]) {
-  test(`at ${viewport.width}px wide, the speed labels stay 13px, each number on its speed, over the pitches`, async ({
+  test(`at ${viewport.width}px wide, the speed labels stay at the caption's size in Chivo Mono, each number on its speed, over the pitches`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -320,7 +325,9 @@ for (const viewport of [
     const chart = sheet.locator(".pitch-mix").first();
     const labels = chart.locator(".speed-label");
     await expect(labels).toHaveText(["70 mph", "80", "90", "100"]);
-    await expect(labels.first()).toHaveCSS("font-size", "13px");
+    const caption = await readRole(page, "caption");
+    await expect(labels.first()).toHaveCSS("font-size", `${caption.size}px`);
+    await expect(labels.first()).toHaveCSS("font-family", /^"Chivo Mono"/);
     const { lineStart, lineEnd } = await measurePitchMix(chart);
     const readCenters = () =>
       labels.evaluateAll((elements) =>

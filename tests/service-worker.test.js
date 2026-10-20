@@ -1,21 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
+import { readRepoFile } from "./repo-files.js";
 
 const SCOPE = "https://mlb-app.example.workers.dev/k3y/";
 const OLD_ENDPOINT = "https://web.push.apple.com/old";
 const NEW_ENDPOINT = "https://web.push.apple.com/new";
 
-const REPO_ROOT = `${import.meta.dirname}/..`;
-
 // The Worker serves the shared page files under shared/, beside each app's own.
 const readPageFile = (app, path) =>
-  readFileSync(
+  readRepoFile(
     path.startsWith("shared/")
-      ? `${REPO_ROOT}/shared/page/${path.slice("shared/".length)}`
-      : `${REPO_ROOT}/apps/${app}/page/${path}`,
-    "utf8",
+      ? `shared/page/${path.slice("shared/".length)}`
+      : `apps/${app}/page/${path}`,
   );
 
 /**
@@ -173,6 +170,24 @@ test("a subscription the browser replaced is saved, and the old one removed", as
   ]);
 });
 
+test("a replaced subscription the Worker won't save keeps the old one, and fails the change", async () => {
+  const worker = startServiceWorker({
+    answer: async (url) =>
+      url === `${SCOPE}push/subscription`
+        ? new Response("", { status: 503 })
+        : answerPublicKey("AQID_w")(),
+  });
+
+  await assert.rejects(
+    worker.dispatch("pushsubscriptionchange", {
+      oldSubscription: worker.createSubscription(OLD_ENDPOINT),
+      newSubscription: worker.createSubscription(NEW_ENDPOINT),
+    }),
+    /answered 503/,
+  );
+  assert.deepEqual(listSubscriptionRequests(worker.requests), [["PUT", NEW_ENDPOINT]]);
+});
+
 test("a subscription the browser dropped is made again with the Worker's key", async () => {
   const worker = startServiceWorker({ publicKey: "AQID_w" });
   await worker.dispatch("pushsubscriptionchange", { oldSubscription: null, newSubscription: null });
@@ -217,18 +232,24 @@ const STYLESHEET = `@font-face { src: url("fonts/text.woff2") format("woff2"); }
 `;
 
 /**
- * The Worker as the service worker reaches it, on one release at a time, or not at all.
- * @param {{ release: string, pageStatus?: number, isOffline?: boolean, isSignedOut?: boolean, missing?: Set<string> }} server
+ * The Worker as the service worker reaches it, on one release at a time, or not at all, with the
+ * files of any `earlier` releases still there, as while a deploy reaches each server, and each
+ * file `held` answering only once its promise settles.
+ * @param {{ release: string, earlier?: string[], held?: Map<string, Promise<void>>, pageStatus?: number, isOffline?: boolean, isSignedOut?: boolean, missing?: Set<string> }} server
  */
 const serveRelease = (server) => async (url) => {
   if (server.isOffline) throw new TypeError("Failed to fetch");
+  await server.held?.get(url.slice(SCOPE.length));
   if (url === SCOPE && server.pageStatus) return new Response("", { status: server.pageStatus });
   if (url === SCOPE && server.isSignedOut)
     return new Response(GATE, { headers: { "cache-control": "no-store" } });
   if (url === SCOPE)
     return new Response(writePage(server.release), { headers: { "cache-control": "no-cache" } });
   const path = url.slice(SCOPE.length);
-  if (path.startsWith(`release/${server.release}/`) && !server.missing?.has(path))
+  const isServed = [server.release, ...(server.earlier ?? [])].some((release) =>
+    path.startsWith(`release/${release}/`),
+  );
+  if (isServed && !server.missing?.has(path))
     return new Response(path.endsWith(".css") ? STYLESHEET : `file ${path}`);
   return new Response("Not found", { status: 404 });
 };
@@ -371,6 +392,46 @@ test("a page asking for a fresh copy hears whether the copy now holds the Worker
   Object.assign(server, { pageStatus: undefined, isSignedOut: true });
   assert.equal(await worker.refreshCopy(), true);
   assert.equal(await readCopy(worker), null);
+});
+
+/** Lets every read and write under way land. */
+async function settleWorker() {
+  for (let turn = 0; turn < 100; turn++) await new Promise((resolve) => setImmediate(resolve));
+}
+
+test("an open the copy can't answer yet, while the worker's first read is under way, leaves the copy whole", async () => {
+  /** @type {() => void} */
+  let sendFont = () => {};
+  const font = new Promise((resolve) => (sendFont = () => resolve(undefined)));
+  const server = {
+    release: "a",
+    earlier: ["a"],
+    held: new Map([["release/a/fonts/text.woff2", font]]),
+  };
+  const worker = startServiceWorker({ answer: serveRelease(server) });
+  await worker.dispatch("activate", {});
+  server.release = "b";
+
+  const opening = worker.request(SCOPE, NAVIGATION);
+  await settleWorker();
+  sendFont();
+  await opening;
+  await settleWorker();
+
+  const copy = await readCopy(worker);
+  assert.deepEqual(listKept(worker), listReleaseFiles(copy === writePage("a") ? "a" : "b"));
+});
+
+test("a release check while a read from before the deploy is under way reads the page again, and hears whether the copy holds the newer page", async () => {
+  const server = { release: "a", earlier: ["a"] };
+  const worker = startServiceWorker({ answer: serveRelease(server) });
+  await worker.dispatch("activate", {});
+  server.release = "b";
+
+  assert.equal(await worker.refreshCopy(), true);
+
+  assert.equal(await readCopy(worker), writePage("b"));
+  assert.deepEqual(listKept(worker), listReleaseFiles("b"));
 });
 
 test("pages asking at once share one read of the page", async () => {
@@ -544,4 +605,27 @@ test("the page reads the steps the worker kept at the same address, and forgets 
     Reflect.deleteProperty(globalThis, "caches");
     Reflect.deleteProperty(globalThis, "location");
   }
+});
+
+test("a service worker that failed to register is registered again the next time the page asks", async (t) => {
+  const realNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  t.after(() => {
+    if (realNavigator) Object.defineProperty(globalThis, "navigator", realNavigator);
+  });
+  const answers = [
+    () => Promise.reject(new TypeError("Failed to fetch")),
+    () => Promise.resolve("registered"),
+  ];
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      serviceWorker: { register: () => /** @type {() => Promise<string>} */ (answers.shift())() },
+    },
+  });
+  const { registerServiceWorker } = await import("../shared/page/service-worker.js");
+
+  await assert.rejects(registerServiceWorker(), /Failed to fetch/);
+
+  assert.equal(await registerServiceWorker(), "registered");
+  assert.equal(await registerServiceWorker(), "registered");
 });

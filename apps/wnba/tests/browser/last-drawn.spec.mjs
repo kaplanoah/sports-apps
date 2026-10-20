@@ -1,6 +1,17 @@
 import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
+import { findSeasonPill, findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
+import {
+  holdHeaderStill,
+  readPillHoldTop,
+  readSeasonPartScroll,
+  readSeasonRide,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
+import { findRows, sendSearch, tapSearch } from "./search-page.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -36,13 +47,45 @@ test("a reload shows what the page last drew before its code arrives", async ({ 
 
 test("a saved part the page doesn't draw whole keeps the markup the page has", async ({ page }) => {
   await storeBeforeLoad(page, {
-    lastDrawn: JSON.stringify({ "view-bracket": { markup: "<p>Old</p>", hidden: false } }),
+    lastDrawn: JSON.stringify({
+      "view-bracket-standings": { markup: "<p>Old</p>", hidden: false },
+    }),
   });
 
   await openApp(page);
 
   await expect(findFinalWinner(page)).toContainText("Liberty");
-  await expect(page.locator("#view-bracket")).not.toContainText("Old");
+  await expect(page.locator("#view-bracket-standings")).not.toContainText("Old");
+});
+
+test("a reload puts back the colors a part's code gave it, but nothing else in its style, before its code arrives", async ({
+  page,
+}) => {
+  await openApp(page);
+  await expect(findFinalWinner(page)).toContainText("Liberty");
+  await storeBeforeLoad(page, {
+    lastDrawn: JSON.stringify({
+      gameBody: {
+        markup: "",
+        hidden: false,
+        style: "--away-light: #123456; position: relative; top: 56px; --home-light: #654321;",
+      },
+    }),
+  });
+  const release = await holdPageCode(page);
+
+  await page.reload({ waitUntil: "commit" });
+
+  const body = page.locator("#gameBody");
+  await expect(body).toHaveCSS("top", "auto");
+  expect(
+    await body.evaluate((element) =>
+      ["--away-light", "--home-light"].map((name) =>
+        getComputedStyle(element).getPropertyValue(name).trim(),
+      ),
+    ),
+  ).toEqual(["#123456", "#654321"]);
+  release();
 });
 
 test("saved markup that can't be read leaves the page to open as it would", async ({ page }) => {
@@ -82,10 +125,7 @@ test.describe("on a phone", () => {
     // The copy the page put back has already taken the load note away, so only the page's loading
     // says its code has run and is there to note when the page leaves the screen.
     await page.waitForLoadState("domcontentloaded");
-    await page.evaluate(() => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    await setHidden(page, true);
     await page.clock.runFor(2 * 60_000);
     release = await holdPageCode(page);
 
@@ -147,10 +187,7 @@ test.describe("on a phone", () => {
     const chosen = page.locator("#seasonGames .day-cell.is-chosen");
     await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
     await expect(chosen).toHaveAttribute("data-day", "2026-09-30");
-    await page.evaluate(() => {
-      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    await setHidden(page, true);
     await page.clock.fastForward("12:00:00");
     await app.changeSeasonWhileAway((season) => {
       const game = season.games.find((each) => each.id === "1042600132");
@@ -165,25 +202,120 @@ test.describe("on a phone", () => {
     await expect(page.locator('#seasonGames .listed-day[data-day="2026-10-01"]')).toBeInViewport();
   });
 
-  test("the standings sit as far under their pill before the page's code arrives as after", async ({
+  test("the tab's name, its pill on the part last chosen, and the standings under it, as far down as after, show before the page's code arrives", async ({
     page,
   }) => {
-    await storeBeforeLoad(page, { lastTab: "standings" });
     await openApp(page);
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
     const readGap = async () => {
-      const pill = await page.locator("#standingsPager [role=tablist]").boundingBox();
-      const table = await page.locator("#standingsPager table").first().boundingBox();
+      const pill = await findSeasonPill(page).boundingBox();
+      const table = await page.locator("#standingsWrap table").first().boundingBox();
       return table.y - (pill.y + pill.height);
     };
-    await expect(page.locator("#standingsPager table").first()).toBeVisible();
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
     const placedGap = await readGap();
     const release = await holdPageCode(page);
 
     await page.reload({ waitUntil: "commit" });
 
-    await expect(page.locator("#standingsPager table").first()).toBeVisible();
+    await expect(findSeasonTab(page)).toHaveAccessibleName("Bracket");
+    await expect(findSeasonPill(page).getByRole("tab", { name: "Standings" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await expect(page.locator("#bracketWrap")).toBeHidden();
     expect(await readGap()).toBeCloseTo(placedGap, 0);
     release();
+  });
+
+  test("the standings show as far down as they were left, with the header gone and the pill held at the top in its line, before the page's code arrives, and stay there once it runs", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await scrollSeasonPartToEnd(page, "standings");
+    const left = await readSeasonPartScroll(page, "standings");
+    const pill = page.locator("#bracketStandingsPill");
+    const release = await holdPageCode(page);
+
+    await page.reload({ waitUntil: "commit" });
+
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(left);
+    await expect
+      .poll(() => readSeasonRide(page))
+      .toMatchObject({ pillTop: await readPillHoldTop(page) });
+    await expect(pill).toHaveClass(/\bstuck\b/);
+    // Only the page's code keeps when it was last current, so once that's back its code has drawn.
+    await page.evaluate(() => localStorage.removeItem("syncedAt"));
+    release();
+    await page.waitForLoadState("domcontentloaded");
+    await waitForLoadToSettle(page);
+    expect(await readSeasonPartScroll(page, "standings")).toBe(left);
+    expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
+    await expect(pill).toHaveClass(/\bstuck\b/);
+  });
+
+  /**
+   * Leaves the standings far down, then the page from the Games tab, twice, the second time without
+   * the standings shown since the first reload, and checks the standings show there again once
+   * their tab shows.
+   * @param {import("@playwright/test").Page} page
+   */
+  async function expectStandingsBackAfterReloadsFromGames(page) {
+    await openApp(page);
+    await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await scrollSeasonPartToEnd(page, "standings");
+    const left = await readSeasonPartScroll(page, "standings");
+    await page.getByRole("tab", { name: "Games" }).click();
+    await expect(page.locator("#view-games")).toBeVisible();
+
+    await page.reload();
+    await expect(page.locator("#view-games")).toBeVisible();
+    await page.reload();
+    await expect(page.locator("#view-games")).toBeVisible();
+    await findSeasonTab(page).click();
+
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(left);
+  }
+
+  test("the standings left far down show there again after reloads the page left from another tab, once their tab shows", async ({
+    page,
+  }) => {
+    await expectStandingsBackAfterReloadsFromGames(page);
+  });
+
+  test("where the header stays put, the standings left far down show there again after reloads the page left from another tab, once their tab shows", async ({
+    page,
+  }) => {
+    await holdHeaderStill(page);
+    await expectStandingsBackAfterReloadsFromGames(page);
+  });
+
+  test("search's Bracket row opens the bracket at its top after a reload the page left from another tab with the bracket scrolled down", async ({
+    page,
+  }) => {
+    // A screen short enough for the bracket to scroll.
+    await page.setViewportSize({ width: 390, height: 480 });
+    await openApp(page);
+    await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+    await scrollSeasonPartToEnd(page, "bracket");
+    expect(await readSeasonPartScroll(page, "bracket")).toBeGreaterThan(0);
+    await page.getByRole("tab", { name: "Games" }).click();
+    await expect(page.locator("#view-games")).toBeVisible();
+    await page.reload();
+    await expect(page.locator("#view-games")).toBeVisible();
+    await tapSearch(page);
+
+    await sendSearch(page, "bracket");
+    await findRows(page).filter({ hasText: "Bracket" }).first().tap();
+
+    await expect(page.locator("#bracketWrap .round-name").first()).toBeInViewport();
+    await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBe(0);
   });
 
   test("the tab bar's pill rests on the last tab before the page's code arrives, where the code keeps it", async ({

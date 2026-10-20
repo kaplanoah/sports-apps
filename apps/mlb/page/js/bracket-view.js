@@ -1,32 +1,20 @@
-import { ROUND_LABEL, buildBracket, listSlotCandidates } from "./bracket.js";
-import { listRankedOrder, renderRankTag, nameTeam, renderClub } from "./clubs.js";
+import {
+  ROUND_LABEL,
+  buildBracket,
+  describeFirstPitchWait,
+  findPreferredSide,
+  orderRows,
+} from "./bracket.js";
+import { listRankedOrder, renderRankTag, renderClub } from "./clubs.js";
 import { readGameDay } from "./dates.js";
+import { measureTopAtRest, observeRoomForPart } from "#shared/bracket-standings.js";
 import { formatClockTime, formatShortDate, formatShortWeekday, nameDay } from "#shared/days.js";
 import { describeInning, renderOutLights } from "./games-view.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { findOpeningRound, watchOpeningRound } from "#shared/opening-round.js";
 import { markScrolledRound, renderRoundDots } from "#shared/round-dots.js";
+import { findPartHolding } from "#shared/season-part.js";
 import { session } from "./session.js";
-
-const findRank = (id) => {
-  const index = listRankedOrder().indexOf(id);
-  return index === -1 ? Infinity : index;
-};
-
-function listSideCandidates(series, side) {
-  const team = side === "A" ? series.teamA : series.teamB;
-  return team ? [team] : listSlotCandidates(session.state, series.id, side);
-}
-
-// A side is preferred only when every club that could fill it is ranked above every club on the other.
-function findPreferredSide(series) {
-  const ranksA = listSideCandidates(series, "A").map(findRank);
-  const ranksB = listSideCandidates(series, "B").map(findRank);
-  if (!ranksA.length || !ranksB.length) return null;
-  if (Math.max(...ranksA) < Math.min(...ranksB)) return "A";
-  if (Math.max(...ranksB) < Math.min(...ranksA)) return "B";
-  return null;
-}
 
 const renderSeriesWins = (wins, isWinner = false) =>
   html`<span class="nscore tabular ${isWinner ? "lead" : ""}">${wins ?? ""}</span>`;
@@ -38,7 +26,7 @@ export function renderMatchupRow(series, side) {
     return html`<div class="matchup-row"><span class="tbd">TBD</span>${renderSeriesWins(null)}</div>`;
   const isWinner = series.winner === id;
   const isLoser = series.winner && series.winner !== id;
-  const isPreferred = findPreferredSide(series) === side;
+  const isPreferred = findPreferredSide(session.state, series, listRankedOrder()) === side;
   // A score stays empty until the series' first game starts, and counts from 0 after.
   const shownWins = series.started ? wins : null;
   return html`<div class="matchup-row ${isWinner ? "winner" : ""} ${isLoser ? "eliminated" : ""}">
@@ -50,7 +38,7 @@ export function renderMatchupRow(series, side) {
 // Card metrics must match styles.css.
 const CARD = { width: 209, height: 90, topSlotY: 41, dividerY: 57 };
 // Room beside a card for a seed's label, from styles.css's .seed-labels.
-const SEED_LABEL_ROOM = 50;
+const SEED_LABEL_ROOM = 51;
 
 /* Desktop: AL on the left and NL on the right under their league bars, meeting at the World
    Series in the middle. Each wild card card sits dividerY - topSlotY above its division card, so
@@ -75,15 +63,16 @@ const STACKED = {
   noteHeight: 22,
   lineHeight: 19,
   // Room above the tab bar for the round dots, which chrome.css pins there, and a gap above them.
-  // It matches what --tab-bar-clearance in chrome.css adds to the bar, so a bracket that fills the
-  // screen leaves the page nothing to scroll.
+  // It matches what --view-end-room in chrome.css leaves past the bar on a phone, so a bracket that
+  // fills the screen ends where its part's room does.
   tabBarClearance: 24,
   minGrowth: 0.5,
   maxGrowth: 3,
 };
-/* The spaces, which all grow or shrink by one factor to fit the screen's height. The header's
-   margin in styles.css supplies the first aboveLeague, which never shrinks, since the stage can't
-   reach above its scroller. The NL's line sits betweenRows below the AL's last note. */
+/* The spaces, which all grow or shrink by one factor to fit the screen's height. The room under
+   the pill over the bracket (pager.css) supplies the first aboveLeague, which never shrinks, since
+   the stage can't reach above its scroller. The NL's line sits betweenRows below the AL's last
+   note. */
 const SPACES = { aboveLeague: 13, belowLine: 11, betweenRows: 13 };
 // A row of level cards and their notes.
 const SERIES_HEIGHT = CARD.height + STACKED.noteHeight;
@@ -129,32 +118,6 @@ function describeNextGame(series) {
   return joinWithSeparator([describeGameDay(day, new Date()), describeStartTime(next)]);
 }
 
-const readWinningPercentage = (team) =>
-  team.w != null && team.l != null && team.w + team.l > 0 ? team.w / (team.w + team.l) : null;
-
-// The higher seed hosts within a league; the World Series goes to the better record.
-function findHomeSide(series) {
-  if (!series.teamA || !series.teamB) return null;
-  const teamA = session.state.teams[series.teamA];
-  const teamB = session.state.teams[series.teamB];
-  if (!teamA || !teamB) return null;
-
-  if (series.round === "WS") {
-    const percentageA = readWinningPercentage(teamA);
-    const percentageB = readWinningPercentage(teamB);
-    if (percentageA == null || percentageB == null) return null;
-    return percentageA >= percentageB ? "A" : "B";
-  }
-  return teamA.seed <= teamB.seed ? "A" : "B";
-}
-
-// The host goes on the bottom, as in a line score. In the WC and DS, teamA is the higher seed.
-function orderRows(series) {
-  const home = findHomeSide(series);
-  if (home) return home === "A" ? ["B", "A"] : ["A", "B"];
-  return series.round === "WC" || series.round === "DS" ? ["B", "A"] : ["A", "B"];
-}
-
 const isPlayedBetween = (game, series) =>
   !!series.teamA &&
   !!series.teamB &&
@@ -169,25 +132,17 @@ function findNextSlateGame(series) {
   return games.find((game) => isPlayedBetween(game, series) && game.start === next.at) || null;
 }
 
-const FIRST_PITCH_COUNTDOWN_MS = 30 * 60 * 1000;
-const MS_PER_MINUTE = 60 * 1000;
-
-const renderFirstPitchPart = (text, isDelayed = false) =>
-  html`<div class="card-note live ${isDelayed ? "delayed" : ""}"><span class="live-part">${text}</span></div>`;
-
-// First pitch often comes a few minutes after the scheduled start.
 function renderFirstPitchNote(game, now) {
-  if (game.tbd) return null;
-  const msToStart = Date.parse(game.start) - now;
-  if (msToStart > FIRST_PITCH_COUNTDOWN_MS) return null;
-  if (game.delay) return renderFirstPitchPart(game.delay, true);
-  if (msToStart <= 0) return renderFirstPitchPart("Warmup");
-  return renderFirstPitchPart(`First pitch in ${Math.ceil(msToStart / MS_PER_MINUTE)} min`);
+  const wait = describeFirstPitchWait(game, now);
+  return (
+    wait &&
+    html`<div class="card-note live ${wait.isDelayed ? "delayed" : ""}"><span class="live-part">${wait.text}</span></div>`
+  );
 }
 
 // The runs read in the card's row order, top row first.
 function describeLiveScore(series, game) {
-  const [firstSide, secondSide] = orderRows(series);
+  const [firstSide, secondSide] = orderRows(series, session.state.teams);
   const readRuns = (side) => {
     const id = side === "A" ? series.teamA : series.teamB;
     return game.away === id ? game.score[0] : game.score[1];
@@ -199,8 +154,7 @@ function renderLiveNote(series, game) {
   return html`<div class="card-note live ${game.delay ? "delayed" : ""}"><span class="live-part tabular">${describeLiveScore(series, game)}</span> <span class="live-part">${game.delay || describeInning(game)}</span>${renderOutLights(game)}</div>`;
 }
 
-export function renderCardNote(series, champLine) {
-  if (champLine) return html`<div class="card-note champ">${champLine}</div>`;
+export function renderCardNote(series) {
   const game = findNextSlateGame(series);
   if (game?.state === "live") return renderLiveNote(series, game);
   const firstPitchNote = game?.state === "pre" && renderFirstPitchNote(game, Date.now());
@@ -228,27 +182,17 @@ function renderSeedLabels(series, sides, seedSide) {
   return html`<div class="seed-labels ${seedSide}">${sides.map((side) => renderSeedLabel(series, side))}</div>`;
 }
 
-function renderSeriesCard(
-  series,
-  top,
-  left,
-  { champLine = "", width = CARD.width, seedSide = "left" } = {},
-) {
-  const [first, second] = orderRows(series);
+function renderSeriesCard(series, top, left, { width = CARD.width, seedSide = "left" } = {}) {
+  const [first, second] = orderRows(series, session.state.teams);
   return html`<div class="box" data-round="${series.round}" style="left:${left}px; top:${top}px; width:${width}px;">
     ${renderSeedLabels(series, [first, second], seedSide)}
     <div class="series ${series.round === "WS" ? "world" : ""}">
       <div class="bestof"><span>${ROUND_LABEL[series.round]}</span><span>BO${series.bestOf}</span></div>
       ${renderMatchupRow(series, first)}${renderMatchupRow(series, second)}
     </div>
-    ${renderCardNote(series, champLine)}
+    ${renderCardNote(series)}
   </div>`;
 }
-
-const describeAdvance = (champion) => (champion ? `${nameTeam(champion)} advance` : "");
-
-const describeWorldSeriesWin = (ws) =>
-  ws.winner ? `${nameTeam(ws.winner)} win the World Series` : "";
 
 function drawWideConnectors() {
   const left = (index) => findColumnLeft(WIDE, index);
@@ -285,9 +229,9 @@ function renderWideCards(bracket) {
     renderSeriesCard(al.wc[0], WIDE.wildCard2Y, left(0)),
     renderSeriesCard(al.ds[0], WIDE.division1Y, left(1)),
     renderSeriesCard(al.ds[1], WIDE.division2Y, left(1)),
-    renderSeriesCard(al.cs[0], WIDE.middleY, left(2), { champLine: describeAdvance(al.champion) }),
-    renderSeriesCard(ws, WIDE.middleY, left(3), { champLine: describeWorldSeriesWin(ws) }),
-    renderSeriesCard(nl.cs[0], WIDE.middleY, left(4), { champLine: describeAdvance(nl.champion) }),
+    renderSeriesCard(al.cs[0], WIDE.middleY, left(2)),
+    renderSeriesCard(ws, WIDE.middleY, left(3)),
+    renderSeriesCard(nl.cs[0], WIDE.middleY, left(4)),
     renderSeriesCard(nl.ds[0], WIDE.division1Y, left(5), nlSide),
     renderSeriesCard(nl.ds[1], WIDE.division2Y, left(5), nlSide),
     renderSeriesCard(nl.wc[1], WIDE.wildCard1Y, left(6), nlSide),
@@ -330,12 +274,18 @@ const isShown = (element) => element.getClientRects().length > 0;
 let renderedGrowth = 0;
 let renderedFits = false;
 
-// A floating tab bar's transform is left out, since the bar stretches while it moves.
-function findSpaceBottom() {
+// Where the bracket's space ends with the page at its top, so its spaces hold however far the page
+// is scrolled. A floating tab bar's transform is left out, since the bar stretches while it moves.
+/** @param {HTMLElement} part the bracket's part, which scrolls on its own (pager.css) */
+function findSpaceBottom(part) {
   const tabBar = document.getElementById("tabBar");
   const tabBarStyle = getComputedStyle(tabBar);
   if (tabBarStyle.position !== "fixed")
-    return innerHeight - parseFloat(getComputedStyle(document.body).paddingBottom);
+    return (
+      part.getBoundingClientRect().bottom +
+      scrollY -
+      parseFloat(getComputedStyle(part).paddingBottom)
+    );
   const tabBarTop = innerHeight - parseFloat(tabBarStyle.bottom) - tabBar.offsetHeight;
   return tabBarTop - STACKED.tabBarClearance;
 }
@@ -351,9 +301,9 @@ const solveGrowth = (room) =>
 // Solves the stage's height, the sized spaces plus the lines and rows, for the space it has.
 function measureGrowth(wrap) {
   if (!isShown(wrap)) return renderedGrowth || 1;
-  const top = wrap.getBoundingClientRect().top + scrollY;
+  const part = findPartHolding(wrap);
   const fixedHeight = 2 * STACKED.lineHeight + 4 * SERIES_HEIGHT;
-  const growth = solveGrowth(findSpaceBottom() - top - fixedHeight);
+  const growth = solveGrowth(findSpaceBottom(part) - measureTopAtRest(wrap) - fixedHeight);
   const bounded = Math.min(STACKED.maxGrowth, Math.max(STACKED.minGrowth, growth));
   return Math.floor(bounded * 100) / 100;
 }
@@ -412,9 +362,7 @@ function renderLeague(key, league, place) {
     renderSeriesCard(league.wc[0], place.rowY[1], left(0)),
     renderSeriesCard(league.ds[0], place.rowY[0], left(1)),
     renderSeriesCard(league.ds[1], place.rowY[1], left(1)),
-    renderSeriesCard(league.cs[0], place.championshipY, left(2), {
-      champLine: describeAdvance(league.champion),
-    }),
+    renderSeriesCard(league.cs[0], place.championshipY, left(2)),
   ];
 }
 
@@ -435,7 +383,6 @@ function renderStackedStage(bracket, growth, fits) {
     <svg class="bracket-lines" width="${STACKED_LINES_WIDTH}" height="${height}" viewBox="0 0 ${STACKED_LINES_WIDTH} ${height}">${drawStackedConnectors([al, nl], worldSeriesY)}</svg>
     ${renderLeague("al", bracket.al, al)}
     ${renderSeriesCard(bracket.ws, worldSeriesY, worldSeriesLeft, {
-      champLine: describeWorldSeriesWin(bracket.ws),
       width: STACKED.worldSeriesWidth,
     })}
     ${renderLeague("nl", bracket.nl, nl)}
@@ -521,9 +468,10 @@ export function watchBracketSpace() {
   addEventListener("resize", redrawIfResized);
   wrap.addEventListener("scroll", markRoundScrolledTo, { capture: true, passive: true });
   new ResizeObserver(markRoundScrolledTo).observe(wrap);
-  // A redraw resizes the body, so it waits a frame rather than loop the observer, and only while
-  // the bracket shows.
-  new ResizeObserver(() => {
+  // It waits a frame, as a redraw can change the part's own layout, and only while the bracket
+  // shows.
+  const resizes = new ResizeObserver(() => {
     if (isShown(wrap)) requestAnimationFrame(redrawIfResized);
-  }).observe(document.body);
+  });
+  observeRoomForPart(resizes, wrap);
 }

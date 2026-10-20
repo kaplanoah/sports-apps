@@ -5,8 +5,10 @@ import {
   choosePlacement,
   chooseTrip,
   describeWhyNoSlide,
+  findCellScrollLeft,
   findDayScrollTop,
   isFollowingStartDay,
+  isLedByOne,
   isRowOutOfSight,
   listShownDays,
   listStripDays,
@@ -31,6 +33,16 @@ test("a day in the strip is named Today, its month on the first, and otherwise i
   assert.equal(chooseCellLabel("2026-07-01", "2026-06-10"), "month");
   assert.equal(chooseCellLabel("2026-07-02", "2026-06-10"), "weekday");
   assert.equal(chooseCellLabel("2026-06-30", "2026-06-10"), "weekday");
+});
+
+test("a date is led by a 1 on the 1st and the 10th to the 19th, and on no other day", () => {
+  const ledByOne = Array.from(
+    { length: 31 },
+    (_, index) => `2026-07-${String(index + 1).padStart(2, "0")}`,
+  )
+    .filter(isLedByOne)
+    .map((day) => Number(day.slice(-2)));
+  assert.deepEqual(ledByOne, [1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
 });
 
 test("a date without games a tap brought in shows in its place among the game days", () => {
@@ -59,6 +71,13 @@ test("the list stands with a day a gap under its top, or as near as its ends let
   assert.equal(findDayScrollTop({ ...list, dayTop: 4 }), 0);
   assert.equal(findDayScrollTop({ ...list, dayTop: 4900 }), 4200);
   assert.equal(findDayScrollTop({ ...list, dayTop: 4212 }), 4200);
+});
+
+test("the strip stands with a date in its middle, or as near as its ends let it", () => {
+  const strip = { cellWidth: 50, scrollWidth: 3000, clientWidth: 350 };
+  assert.equal(findCellScrollLeft({ ...strip, cellLeft: 1000 }), 850);
+  assert.equal(findCellScrollLeft({ ...strip, cellLeft: 100 }), 0);
+  assert.equal(findCellScrollLeft({ ...strip, cellLeft: 2950 }), 2650);
 });
 
 test("the list flies to a day within three screens and jumps when asked, farther, or with less motion", () => {

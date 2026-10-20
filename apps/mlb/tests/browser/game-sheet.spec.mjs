@@ -7,6 +7,7 @@ import {
   buildFixtureSnapshot,
   buildSnapshotWithStarters,
   LIVE_BOX_SCORE,
+  readColor,
   swipeSheetDown,
 } from "./harness.mjs";
 import {
@@ -18,12 +19,10 @@ import {
   showSection,
   openMatchup,
 } from "./open-game-sheet.mjs";
-import {
-  recordSheetMotions,
-  waitForTimedMotions,
-} from "../../../../tests/browser/sheet-motions.mjs";
+import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 
@@ -160,11 +159,12 @@ test("the sheet's title names it in capitals, at one size on a desktop and a pho
 }) => {
   const sheet = await openMatchup(page);
   const title = sheet.getByRole("heading", { level: 2 });
+  const heading = await readRole(page, "heading");
   await expect(title).toHaveCSS("text-transform", "uppercase");
-  await expect(title).toHaveCSS("font-weight", "500");
-  await expect(title).toHaveCSS("font-size", "16px");
+  await expect(title).toHaveCSS("font-weight", String(heading.weight));
+  await expect(title).toHaveCSS("font-size", `${heading.size}px`);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(title).toHaveCSS("font-size", "16px");
+  await expect(title).toHaveCSS("font-size", `${heading.size}px`);
 });
 
 test("on a desktop, the title centers over the sheet, with its close button at its left edge, and 18px sides as on a phone", async ({
@@ -233,7 +233,7 @@ test("on a phone, the matchup rises to fill the screen, with its close button at
   await page.setViewportSize({ width: 390, height: 844 });
   const sheet = await openMatchup(page);
   await expect(sheet.locator(".pitch-mix")).toHaveCount(2);
-  await waitForTimedMotions(page);
+  await waitForTimedAnimations(page);
   const close = await sheet.getByRole("button", { name: "Close" }).boundingBox();
   expect([Math.round(close.x), close.width]).toEqual([6, 44]);
   expect(await page.locator("#sheetDialog").boundingBox()).toEqual({
@@ -257,14 +257,14 @@ test("on a phone, the close button and Escape slide the matchup down", async ({ 
   const readMotions = await recordSheetMotions(page);
   await page.setViewportSize({ width: 390, height: 844 });
   const closings = {
-    "the close button": () => page.locator("#gameCloseBtn").dispatchEvent("click"),
+    "the close button": () => page.locator("#gameSheet .sheet-close").dispatchEvent("click"),
     Escape: () => page.keyboard.press("Escape"),
   };
   await showGames(page);
   for (const [way, close] of Object.entries(closings)) {
     await page.getByRole("button", { name: ASTROS_AT_ATHLETICS }).click();
     const sheet = page.locator("#gameSheet");
-    await waitForTimedMotions(page);
+    await waitForTimedAnimations(page);
     await readMotions();
 
     await close();
@@ -288,32 +288,25 @@ test("on a phone, the matchup rises only when the viewer allows motion", async (
   await expect(dialog).toHaveCSS("animation-name", "sheet-rise");
 });
 
-test("on a desktop, a game lights up under the pointer, past the row's sides, and goes back after", async ({
+test("on a desktop, a game's team names take the hover color under the pointer, with no fill, and go back after", async ({
   page,
 }) => {
   await openApp(page, { snapshots: { 2026: buildSnapshotWithStarters() } });
   await page.getByRole("tab", { name: "Games" }).click();
-  const readHighlight = (row) =>
-    row.evaluate((element) => {
-      const { backgroundColor, boxShadow } = getComputedStyle(element);
-      return { backgroundColor, boxShadow };
-    });
   const [first, second] = [0, 1].map((index) =>
     page.locator("#seasonGames .game-day.is-today .game-row").nth(index),
   );
-  const resting = await readHighlight(first);
-
-  // The highlight's color fills the row and both 12px reaches beyond its sides.
-  const isReachingPast = async () => {
-    const { backgroundColor, boxShadow } = await readHighlight(first);
-    const reach = `${backgroundColor} -12px 0px 0px 0px, ${backgroundColor} 12px 0px 0px 0px`;
-    return backgroundColor !== resting.backgroundColor && boxShadow === reach;
-  };
+  const [away, home] = [first.locator(".team-name").first(), first.locator(".team-name").last()];
+  const hoverColor = await readColor(page, "--ink-hover");
+  const restingColor = await away.evaluate((name) => getComputedStyle(name).color);
 
   await first.hover();
-  await expect.poll(isReachingPast).toBe(true);
+  await expect(away).toHaveCSS("color", hoverColor);
+  await expect(home).toHaveCSS("color", hoverColor);
+  await expect(first).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+
   await second.hover();
-  await expect.poll(() => readHighlight(first)).toEqual(resting);
+  await expect(away).toHaveCSS("color", restingColor);
 });
 
 for (const { screen, viewport } of [
@@ -323,17 +316,17 @@ for (const { screen, viewport } of [
   test.describe(`on ${screen}`, () => {
     test.use({ viewport });
 
-    test("every piece of text in a game's sheet keeps to the type scale, in both its sections", async ({
+    test("every piece of text in a game's sheet keeps to its type role, in both its sections", async ({
       page,
     }) => {
       const sheet = await openGame(page);
       await expect(sheet.getByRole("button", { name: BLUBAUGH_VS_SPRINGS })).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await showSection(sheet, "Matchup");
       await expect(sheet.locator(".pitch-rows li")).toHaveCount(5);
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
     });
@@ -361,7 +354,13 @@ test("a game still to come lists its clubs' meetings so far under its starters, 
     [sheet.locator(".starters-open"), series].map((each) => each.boundingBox()),
   );
   expect(part.y).toBeGreaterThan(starters.y + starters.height);
-  expect(await listOffScaleText(page)).toEqual([]);
+  const [club, score] = await Promise.all(
+    [".meeting-result > .team-open", ".meeting-score"].map((selector) =>
+      series.locator(selector).first().boundingBox(),
+    ),
+  );
+  expect(score.y + score.height / 2 - (club.y + club.height / 2)).toBeCloseTo(0.25, 2);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -439,7 +438,7 @@ test("a live game's Runs so far set each runner's name by his base on the field,
   };
   for (const [name, value] of Object.entries(expected))
     expect(layout[name], name).toBeCloseTo(value, 0);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
@@ -475,13 +474,13 @@ test("a live game's Runs so far center who's pinch running for whom between the 
   const expected = { above: 9, below: 6, offCenter: 0 };
   for (const [name, value] of Object.entries(expected))
     expect(layout[name], name).toBeCloseTo(value, 1);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
 });
 
-test("a game's Runs set the runners who got on lighter than the play that scored them, which Ball sets a step heavier and Night Game in the same weight", async ({
+test("a game's Runs set the runners who got on in a lighter ink than the play that scored them, at one weight in both themes, and the score after it in Chivo Mono", async ({
   page,
 }) => {
   const raysAtYankees = "823493";
@@ -493,6 +492,7 @@ test("a game's Runs set the runners who got on lighter than the play that scored
   await page.getByRole("button", { name: /^Game details: Rays at Yankees, Thu, Sep 24/ }).click();
   const change = page.locator("#gameBody .runs-change");
   await expect(change.locator(".runs-play")).toHaveText("Pages singled home Ohtani");
+  await expect(change.locator(".runs-score")).toHaveCSS("font-family", /^"Chivo Mono"/);
 
   const looks = [];
   for (const theme of ["light", "dark"]) {
@@ -516,17 +516,17 @@ test("a game's Runs set the runners who got on lighter than the play that scored
           playWidth: /** @type {Element} */ (
             element.querySelector(".runs-play")
           ).getBoundingClientRect().width,
-          credit: readColor("var(--credit-ink)"),
+          receding: readColor("var(--receding-ink)"),
           dim: readColor("var(--ink-dim)"),
         };
       }),
     );
   }
   const [ball, nightGame] = looks;
-  expect(ball.setup).toBe(ball.credit);
-  expect([ball.setupWeight, ball.playWeight]).toEqual(["400", "500"]);
+  const detail = String((await readRole(page, "detail")).weight);
+  expect(ball.setup).toBe(ball.receding);
   expect(nightGame.setup).toBe(nightGame.dim);
-  expect([nightGame.setupWeight, nightGame.playWeight]).toEqual(["400", "400"]);
+  for (const look of looks) expect([look.setupWeight, look.playWeight]).toEqual([detail, detail]);
   expect(ball.playWidth).toBeCloseTo(nightGame.playWidth, 1);
   expect(await listLowContrastText(page)).toEqual([]);
 });

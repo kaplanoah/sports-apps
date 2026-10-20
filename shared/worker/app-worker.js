@@ -1,9 +1,11 @@
 import {
   ACCESS_PATH,
   createAccessCookie,
+  HANDOFF_PATH,
   readAccess,
   respondAccessRequired,
   serveAccess,
+  serveHandoff,
 } from "./access-gate.js";
 import { createHealthServer } from "./health.js";
 
@@ -64,7 +66,7 @@ const REPLACED_RELEASE_PATH = /^release\/([^/]+)\/version\.json$/;
 
 /** @param {string} commit */
 const serveReplacedRelease = (commit) =>
-  new Response(JSON.stringify({ version: null, commit, builtAt: null }), {
+  new Response(JSON.stringify({ version: null, commit, builtAt: null, label: null }), {
     headers: { "content-type": "application/json", ...PAGE_HEADERS, "cache-control": "no-store" },
   });
 
@@ -84,13 +86,40 @@ function findPageFile(pagePath, releaseFolder) {
   return { path, headers: PAGE_HEADERS };
 }
 
+const MANIFEST_PATH = "manifest.webmanifest";
+
+// An iPhone, an iPad, which names itself a Mac, or a Mac's Safari.
+/** @param {Request} request */
+function isFromSafari(request) {
+  const agent = request.headers.get("user-agent") ?? "";
+  const isMacSafari =
+    /Macintosh/.test(agent) && /Safari\//.test(agent) && !/Chrome|Edg\//.test(agent);
+  return /iPhone|iPad/.test(agent) || isMacSafari;
+}
+
+// Safari reads a manifest once, as the page loads, and opens a Home Screen app at its start_url,
+// or, without one, at the page's address as it stands when it's added, which names the theme
+// picked before then (pick-theme.js). Chrome offers its own install only with a start_url.
+/** @param {string} manifest */
+function dropStartUrl(manifest) {
+  const parsed = JSON.parse(manifest);
+  delete parsed.start_url;
+  return JSON.stringify(parsed);
+}
+
+/**
+ * @param {{ path: string, body: string }} file
+ * @param {Request} request
+ */
+const writeBody = ({ path, body }, request) =>
+  path === MANIFEST_PATH && isFromSafari(request) ? dropStartUrl(body) : body;
+
 /**
  * @param {Parameters<typeof decodePageFiles>[0]} pageFiles
- * @param {string | null} releaseCommit
+ * @param {string | null} releaseFolder
  */
-function createPageServer(pageFiles, releaseCommit) {
+function createPageServer(pageFiles, releaseFolder) {
   const files = decodePageFiles(pageFiles);
-  const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
   // Every load asks again for a file outside the release's folder, and a browser that already has
   // it gets a 304 instead of the file.
   return async function servePageFile(request, pagePath) {
@@ -101,12 +130,17 @@ function createPageServer(pageFiles, releaseCommit) {
     if (replaced) return serveReplacedRelease(replaced[1]);
     const file = files.get(path);
     if (!file) return serveNotFound();
+    const body = writeBody({ path, body: file.body }, request);
     file.etag ??= hashBody(file.body);
-    const etag = await file.etag;
-    const headers = { "content-type": file.contentType, etag, ...cacheHeaders };
+    const etag = body === file.body ? await file.etag : await hashBody(body);
+    const headers = {
+      "content-type": file.contentType,
+      etag,
+      ...cacheHeaders,
+      ...(path === MANIFEST_PATH ? { vary: "user-agent" } : {}),
+    };
     if (hasMatchingTag(request, etag)) return new Response(null, { status: 304, headers });
-    const body = request.method === "HEAD" ? null : file.body;
-    return new Response(body, { headers });
+    return new Response(request.method === "HEAD" ? null : body, { headers });
   };
 }
 
@@ -128,10 +162,24 @@ const serveRobots = (commit) =>
     commit ? { [RELEASE_COMMIT_HEADER]: commit } : {},
   );
 
-// The page and its store answer only under the APP_KEY secret; only robots.txt and health don't.
-function findAppPath(pathname, appKey) {
-  if (!appKey) return null;
-  const prefix = `/${appKey}`;
+// The page and its store answer under the APP_KEY secret, and at the address the PAGE_HOST secret
+// names without it, where the access code alone guards them, so only while the Worker has one.
+// Only robots.txt and health answer anywhere.
+/**
+ * @param {URL} url
+ * @param {any} env
+ * @returns {string | null} what the page's paths start with, or null where nothing answers
+ */
+function findAppPrefix(url, env) {
+  if (env.PAGE_HOST && url.hostname === env.PAGE_HOST) return env.ACCESS_CODE ? "" : null;
+  return env.APP_KEY ? `/${env.APP_KEY}` : null;
+}
+
+/**
+ * @param {string} pathname
+ * @param {string} prefix
+ */
+function findAppPath(pathname, prefix) {
   if (pathname === prefix) return "";
   return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) : null;
 }
@@ -139,33 +187,26 @@ function findAppPath(pathname, appKey) {
 const isStorePath = (appPath) =>
   appPath === "/watch" || appPath.startsWith("/store/") || appPath.startsWith("/push/");
 
-const isIndexPath = (appPath) => appPath === "/" || appPath === "/index.html";
-
 const GATE_PATH = "/gate.html";
 
 /**
- * An app's Worker: its page, its store, its live snapshot, and any reads of its own, all under the
- * APP_KEY secret, and behind the ACCESS_CODE secret when the Worker has one.
+ * An app's Worker: its page, its store, and any reads of its own, all under the APP_KEY secret or
+ * at the PAGE_HOST address, and behind the ACCESS_CODE secret when the Worker has one.
  * @param {object} app
  * @param {Parameters<typeof decodePageFiles>[0]} app.pageFiles
- * @param {(url: URL) => Response | Promise<Response>} app.serveSnapshot
  * @param {(request: Request, env: any, storePath: string) => Response | Promise<Response>} app.forwardToStore
  * @param {(env: any) => Promise<boolean>} app.isStoreAnswering
  * @param {Record<string, (url: URL, env: any) => Response | Promise<Response>>} [app.reads] more GET
  *   paths, each handed the Worker's bindings, so it can read the store
  */
-export function createAppWorker({
-  pageFiles,
-  serveSnapshot,
-  forwardToStore,
-  isStoreAnswering,
-  reads = {},
-}) {
+export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, reads = {} }) {
   const releaseCommit = readReleaseCommit(pageFiles);
-  const servePageFile = createPageServer(pageFiles, releaseCommit);
+  const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
+  const servePageFile = createPageServer(pageFiles, releaseFolder);
+  // Decided by the file a path names, since the release's folder names the page too.
+  const isIndexPath = (appPath) => findPageFile(appPath, releaseFolder).path === "index.html";
   const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
-  const isDataPath = (appPath) =>
-    isStorePath(appPath) || appPath === "/snapshot" || Object.hasOwn(reads, appPath);
+  const isDataPath = (appPath) => isStorePath(appPath) || Object.hasOwn(reads, appPath);
 
   // Until the phone sends the access code, the page's address shows the gate instead, and
   // nothing from the season answers. The page's other files are the repo's own, and public.
@@ -178,9 +219,10 @@ export function createAppWorker({
   }
 
   // Each visit to a page with a code renews its cookie, so a phone in use never has to type it again.
-  async function servePage(request, env, appPath) {
+  async function servePage(request, env, appPath, prefix) {
     const page = await servePageFile(request, appPath);
-    if (env.ACCESS_CODE) page.headers.append("set-cookie", await createAccessCookie(request, env));
+    if (env.ACCESS_CODE)
+      page.headers.append("set-cookie", await createAccessCookie(request, env, prefix));
     return page;
   }
 
@@ -189,16 +231,17 @@ export function createAppWorker({
       const url = new URL(request.url);
       if (url.pathname === "/robots.txt") return serveRobots(releaseCommit);
       if (url.pathname === "/health") return serveHealth(env);
-      const appPath = findAppPath(url.pathname, env.APP_KEY);
+      const prefix = findAppPrefix(url, env);
+      const appPath = prefix === null ? null : findAppPath(url.pathname, prefix);
       if (appPath === null) return serveNotFound();
       if (appPath === "") return redirectToFolder(url);
-      if (appPath === ACCESS_PATH) return serveAccess(request, env);
+      if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
+      if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
       if ((await readAccess(request, env)) !== "open") return serveLocked(request, appPath);
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
-      if (request.method === "GET" && appPath === "/snapshot") return serveSnapshot(url);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))
         return reads[appPath](url, env);
-      if (isIndexPath(appPath)) return servePage(request, env, appPath);
+      if (isIndexPath(appPath)) return servePage(request, env, appPath, prefix);
       return servePageFile(request, appPath);
     },
   };

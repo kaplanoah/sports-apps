@@ -1,4 +1,5 @@
 import { test, expect, openApp } from "./harness.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -189,7 +190,7 @@ test("a card's lines sit at their spacing, from the tops of their capitals to th
         belowTeam: button.bottom - 1 - readBox(".game-card-name").bottom,
         title: readType("h3"),
         day: readType(".game-card-when"),
-        clock: card.querySelector(".game-card-clock") && readType(".game-card-clock"),
+        clock: card.querySelector(".game-card-now") && readType(".game-card-now"),
         result: card.querySelector(".game-card-result") && readType(".game-card-result"),
         margin: card.querySelector(".game-card-margin") && readType(".game-card-margin"),
         score: readType(".game-card-score"),
@@ -234,7 +235,7 @@ test("a card's lines sit at their spacing, from the tops of their capitals to th
 test("a team without a game yet starts its sheet 20px under the band", async ({ page }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('#standings-league tr[data-team="SEA"] .team-open').click();
   const sheet = page.locator("#teamSheet");
   await expect(sheet.locator("#teamTitle")).toHaveText("Seattle Storm");

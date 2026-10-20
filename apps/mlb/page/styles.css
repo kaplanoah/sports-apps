@@ -1,11 +1,30 @@
-/* One variable font file holds every weight. The extended Latin one loads only for a name that
-   needs it. Chivo Mono draws 6% smaller, so it looks as big as Barlow at the same font size, and
-   it reads heavier, so its weights sit 50 under Barlow's. */
+/* Words in Libre Franklin and numbers in Chivo Mono, each one variable file that holds every weight,
+   with an extended Latin one that loads only for a name that needs it. Chivo Mono draws a little
+   smaller, so its numbers look as big as Libre Franklin's words at the same size, matched by eye. */
+@font-face {
+  font-family: "Libre Franklin";
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(fonts/libre-franklin-latin.woff2) format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Libre Franklin";
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(fonts/libre-franklin-latin-ext.woff2) format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
 @font-face {
   font-family: "Chivo Mono";
   font-weight: 100 900;
   font-display: swap;
-  size-adjust: 94%;
+  size-adjust: 97.48%;
   src: url(fonts/chivo-mono-latin.woff2) format("woff2");
   unicode-range:
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
@@ -15,54 +34,81 @@
   font-family: "Chivo Mono";
   font-weight: 100 900;
   font-display: swap;
-  size-adjust: 94%;
+  size-adjust: 97.48%;
   src: url(fonts/chivo-mono-latin-ext.woff2) format("woff2");
   unicode-range:
     U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
     U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
     U+A720-A7FF;
 }
-/* Fields set 16px, which an iPhone doesn't zoom into when they're tapped, so these draw Chivo Mono
-   smaller to look as it does at their step: the search at --size-read's 14.5px (94% x 14.5 / 16)
-   and the Season picker, which shows only years, at --size-glance's 13px (94% x 13 / 16). */
+/* Fields set 16px, which an iPhone doesn't zoom into when they're tapped, so these draw smaller to
+   look as they do at their role: the search in Libre Franklin at the body's 13.75px (13.75 / 16),
+   and the Season picker, which shows only years, in Chivo Mono at the detail's 12.75px
+   (97.48% x 12.75 / 16). */
 @font-face {
-  font-family: "Chivo Mono Search";
+  font-family: "Libre Franklin Search";
   font-weight: 100 900;
   font-display: swap;
-  size-adjust: 85.1875%;
-  src: url(fonts/chivo-mono-latin.woff2) format("woff2");
+  size-adjust: 85.9375%;
+  src: url(fonts/libre-franklin-latin.woff2) format("woff2");
   unicode-range:
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: "Chivo Mono Search";
+  font-family: "Libre Franklin Search";
   font-weight: 100 900;
   font-display: swap;
-  size-adjust: 85.1875%;
-  src: url(fonts/chivo-mono-latin-ext.woff2) format("woff2");
+  size-adjust: 85.9375%;
+  src: url(fonts/libre-franklin-latin-ext.woff2) format("woff2");
   unicode-range:
     U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
-    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F,
     U+A720-A7FF;
 }
 @font-face {
   font-family: "Chivo Mono Select";
   font-weight: 100 900;
   font-display: swap;
-  size-adjust: 76.375%;
+  size-adjust: 77.679%;
   src: url(fonts/chivo-mono-latin.woff2) format("woff2");
 }
 
 :root {
-  /* Chivo Mono's own size for each step of the type scale, matched by eye to Barlow's 16, 14, and
-     13px, and settings' 17 and 15px. Its letters run wider than Barlow's, so the larger steps sit
-     lower. */
-  --size-read: 0.90625rem;
-  --size-glance: 0.8125rem;
-  --size-small: 0.8125rem;
-  --size-setting: 0.96875rem;
-  --size-setting-note: 0.875rem;
+  /* Each type role's size and weight in its font (shared/page/type.css): Chivo Mono for the title,
+     score, and stats, and Libre Franklin for the rest. */
+  --type-title-size: calc(22.5rem / 16);
+  --type-title-weight: 500;
+  --type-headline-size: calc(17.5rem / 16);
+  --type-headline-weight: 525;
+  --type-heading-size: calc(15.75rem / 16);
+  --type-heading-weight: 525;
+  --type-heading-tracking: 0.035em;
+  --type-team-large-size: calc(16rem / 16);
+  --type-team-large-weight: 525;
+  --type-team-size: calc(13.5rem / 16);
+  --type-team-weight: 400;
+  --type-score-size: calc(15.75rem / 16);
+  --type-score-weight: 500;
+  --type-stat-large-size: calc(15.5rem / 16);
+  --type-stat-large-weight: 400;
+  --type-stat-size: calc(13.5rem / 16);
+  --type-stat-weight: 450;
+  --type-body-size: calc(13.75rem / 16);
+  --type-body-weight: 400;
+  --type-detail-size: calc(12.75rem / 16);
+  --type-detail-weight: 400;
+  --type-label-size: calc(12rem / 16);
+  --type-label-weight: 400;
+  --type-label-tracking: 0.055em;
+  --type-caption-size: calc(12.25rem / 16);
+  --type-caption-weight: 350;
+  --type-setting-size: calc(14.75rem / 16);
+  --type-setting-weight: 425;
+  --type-setting-note-size: calc(13.25rem / 16);
+  --type-setting-note-weight: 400;
+  /* Libre Franklin sets its lines a little apart. */
+  --leading: 1.01;
   --bg: #f5f1e6;
   --card: #fffdf8;
   --sheet: var(--card);
@@ -71,10 +117,17 @@
   --sheet-band: var(--sheet);
   --sheet-band-line: transparent;
   --sheet-gap: 0px;
+  --meeting-day-width: 4.5em;
+  --meeting-room: 8px;
+  --meeting-result-gap: 10px;
+  /* Chivo Mono's digits ride a little high beside Libre Franklin's names when both are centered. */
+  --meeting-score-lift: 0.25px;
+  --player-fact-room: 10px;
   --card-border: #ddd5c6;
   --ink: #1e1b18;
   --ink-dim: #625a52;
   --catch-up-fade: 0.75;
+  --step-number-lift: 0px;
   --ink-mid: color-mix(in srgb, var(--ink-dim) 55%, var(--ink));
   --ink-hover: color-mix(in srgb, var(--ink) 75%, var(--accent));
   --divider: #ebe4d6;
@@ -98,21 +151,34 @@
   --all-star-light: rgba(255, 255, 255, 0.4);
   --all-star-shift: -3px;
   --out: #6b645c;
-  /* A source's credit under what it said, as pale as WCAG's AA level lets text be on a card. */
-  --credit-ink: color-mix(in srgb, var(--ink-dim) 84%, var(--card));
-  /* Runs set the plays that changed the score apart from the runners who got on before them, in
-     Ball a weight heavier too, which Chivo Mono draws at the same width, so both themes still lay
-     out the same. */
-  --runs-setup-ink: var(--credit-ink);
-  --runs-play-weight: 500;
+  /* Text that steps back from the words beside it, like a source's credit under what it said or
+     the Home Screen box's steps around its buttons' names. Ball's dim ink alone sets it apart
+     less than in Night Game, so it's paler, still at WCAG's AA level on the Home Screen box, half
+     card and half page. */
+  --receding-ink: color-mix(in srgb, var(--ink-dim) 86.4%, var(--card));
+  /* Runs set the plays that changed the score apart from the runners who got on before them. */
+  --runs-setup-ink: var(--receding-ink);
+  /* A final's losing score, a step lighter in Ball, where its dim ink alone sets it apart from the
+     winner less than in Night Game. Chivo Mono draws every weight at the same width, so both
+     themes still lay out the same. */
+  --lost-score-weight: calc(var(--type-stat-large-weight) - 100);
+  /* A series score is sunk a little into the card, and the winner's deeper into its red. */
+  --won-chip-shade: rgba(0, 0, 0, 0.44);
+  --score-chip: color-mix(in srgb, var(--divider) 12%, var(--card));
+  --score-chip-shade: rgba(0, 0, 0, 0.18);
   --focus-ring: var(--now);
-  --gate-heading-font: "Chivo Mono", "JetBrains Mono", monospace;
-  --gate-code-font: "Chivo Mono", "JetBrains Mono", monospace;
+  --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --radius-card: 3px;
   --radius-chip: 3px;
   --radius-control: 6px;
+  --radius-tabs: 8px;
   --radius-sheet: 12px;
+  /* Puts the channel tag's middle half a pixel above the middle of the name's capitals. */
+  --channel-tag-lift: -0.85px;
+  --re-add-note-above: 8px;
+  --control-height: 36px;
+  --control-room: 14px;
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23625a52' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-tint: var(--card);
   --tab-bar-edge: var(--card-border);
@@ -122,8 +188,14 @@
   --page-gutter: 18px;
   --header-gap: 13px;
   --pager-chosen-edge: transparent;
-  --held-bar-fade: 18px;
-  --held-bar-line: transparent;
+  /* The open tab is raised in its track, as iOS draws a segmented control, so it reads apart from a
+     pill's filled name. */
+  --tabs-track: var(--divider);
+  --tabs-track-edge: var(--card-border);
+  --tabs-chosen: var(--card);
+  --tabs-chosen-edge: var(--card-border);
+  --tabs-chosen-ink: var(--ink);
+  --held-bar-line: var(--divider);
   --pager-label: var(--ink-dim);
   --updates-head: var(--highlight);
   --sheet-part-head: var(--highlight);
@@ -133,7 +205,7 @@
   --logos-for-light: inline;
   --logos-for-dark: none;
   --game-card-edge: var(--card-border);
-  --game-card-live: var(--now);
+  --game-card-now: var(--now);
   --game-card-won: var(--highlight);
   --game-card-team-font: inherit;
   --game-row-height: 82.5px;
@@ -146,16 +218,22 @@
   --raised: var(--card);
   --edge: var(--card-border);
   --action: var(--highlight);
-  --text: "Chivo Mono", "JetBrains Mono", monospace;
-  --search-face: "Chivo Mono Search", "JetBrains Mono", monospace;
+  --text: "Libre Franklin", system-ui, sans-serif;
+  --numbers: "Chivo Mono", "JetBrains Mono", monospace;
+  --search-face: "Libre Franklin Search", system-ui, sans-serif;
   --search-words-lift: 0px;
   --select-face: "Chivo Mono Select", "JetBrains Mono", monospace;
   --strip-edge-inset: 0.5px;
   --day-gap: 18px;
+  /* Chivo Mono draws its 1 centered on its stem. */
+  --date-one-shift: 0em;
   --game-side-offset: 0px;
   --game-label-offset: -26.5px;
   --game-headline-offset: -1px;
   --game-status-offset: 20.5px;
+  /* A club's name sits over its record or starter, so without a label the score and its status
+     center as a pair, level with the two lines. */
+  --game-unlabeled-lift: calc((var(--game-headline-offset) + var(--game-status-offset)) / 2);
   --game-if-necessary-offset: 26.5px;
   /* Pitch colors run by family: fastballs warm, breaking balls blue, changeups pink. */
   --pitch-four-seam: #bf3623;
@@ -195,8 +273,10 @@
   --all-star-shadow: rgba(0, 0, 0, 0.138);
   --all-star-light: rgba(241, 234, 212, 0.13);
   --out: #998b7d;
-  --credit-ink: var(--ink-dim);
-  --runs-play-weight: 400;
+  --receding-ink: var(--ink-dim);
+  --lost-score-weight: var(--type-stat-large-weight);
+  --score-chip: var(--divider);
+  --score-chip-shade: var(--won-chip-shade);
   --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-ink: #fff;
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
@@ -218,24 +298,40 @@
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: "Chivo Mono", "JetBrains Mono", monospace;
+  font-family: var(--text);
   font-size: 16px;
   /* Insets are zero except in the home-screen app, which draws under the status bar and notch. */
   padding-inline: max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-right));
-  padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
+  padding-block: calc(17px + env(safe-area-inset-top)) var(--view-end-room);
   /* WIDE_STAGE_WIDTH in bracket-view.js, plus .tree-scroll's 18px each side. */
-  max-width: 1791px;
+  max-width: 1793px;
   margin: 0 auto;
 }
 h1,
 h2,
 h3 {
-  font-weight: 550;
   margin: 0;
   letter-spacing: 0.01em;
 }
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+/* Numbers, and the app's name, in Chivo Mono. */
+.tabular,
+.game-score,
+.game-time,
+.game-facts,
+.cell-number,
+.stamp b:not(.now),
+.rank-tag,
+.seed-cell,
+.elim-num,
+.arm,
+.nscore,
+.runs-score,
+.speed-labels,
+header.top h1 {
+  font-family: var(--numbers);
 }
 .sep {
   margin: 0 6px;
@@ -252,12 +348,24 @@ header.top {
   margin-bottom: var(--header-gap);
 }
 header.top h1 {
-  font-size: 1.15rem;
-  font-weight: 400;
-  line-height: 1;
+  --title-tracking: 0.06em;
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--leading);
   color: var(--ink);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--title-tracking);
+  /* A space in Chivo Mono is as wide as a digit, so the season's year would sit 14.5px from the
+     name at the title's 22.5px; it sits 9px from it. */
+  word-spacing: -0.2444em;
+}
+/* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
+   spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */
+header.top h1 .title-letter:nth-child(1) {
+  margin-right: calc(0.04em - var(--title-tracking));
+}
+header.top h1 .title-letter:nth-child(2) {
+  margin-right: calc(0.005em - var(--title-tracking));
 }
 .head-right {
   display: flex;
@@ -270,9 +378,10 @@ header.top h1 {
   align-items: center;
   gap: 10px;
 }
-/* Chivo Mono at 350 reads as Barlow at 400, the lightest the type scale allows at this size. */
+/* The season's year recedes a step beside the app's name. */
 .season-year {
-  font-weight: 350;
+  font-weight: calc(var(--type-title-weight) - 50);
+  letter-spacing: 0.02em;
   color: var(--ink-dim);
 }
 .stamp {
@@ -281,7 +390,8 @@ header.top h1 {
   align-items: flex-end;
   gap: 1px;
   min-width: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   letter-spacing: 0.03em;
   /* Whole-pixel lines keep the header a whole number of pixels tall, so the Games lists rise
@@ -290,12 +400,13 @@ header.top h1 {
   text-align: right;
 }
 .stamp b {
-  font-weight: 400;
+  font-weight: var(--type-detail-weight);
   color: var(--ink-mid);
 }
 .stamp .ap {
   margin-left: 0.5ch;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
 }
 .stamp b.now {
   margin-right: 0.5ch;
@@ -311,10 +422,10 @@ header.top h1 {
 }
 
 .stand-head {
-  font-weight: 450;
-  font-size: var(--size-small);
+  font-weight: var(--type-label-weight);
+  font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.11em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   margin: 21px 0 15px;
   padding-bottom: 7px;
@@ -352,20 +463,15 @@ header.top h1 {
   border-radius: var(--radius-card);
   overflow: hidden;
 }
-/* A search that opens a league's divisions stops with the first as far under the status bar as the
-   page's header starts. */
-.div-block[data-standings] {
-  scroll-margin-top: calc(17px + env(safe-area-inset-top));
-}
 .div-title {
-  font-weight: 450;
+  font-weight: var(--type-label-weight);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--type-label-tracking);
   background: var(--card);
   border-bottom: 1px solid var(--divider);
   padding: 7px 10px;
@@ -418,10 +524,10 @@ table.st {
 }
 table.st th {
   text-align: right;
-  font-weight: 450;
-  font-size: var(--size-small);
+  font-weight: var(--type-label-weight);
+  font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   padding: 7px 0 4px 10px;
   border-bottom: 1px solid var(--divider);
@@ -438,7 +544,8 @@ table.st th[title] {
 }
 table.st td {
   padding: 5px 0 5px 10px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   border-bottom: 1px solid var(--divider);
   text-align: right;
   white-space: nowrap;
@@ -482,7 +589,8 @@ table.st th.next-cell {
 table.st tr.alive td.next-cell,
 table.st tr.eliminated td.next-cell {
   text-align: left;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-mid);
 }
 table.st tr.alive td.next-cell.live,
@@ -524,7 +632,8 @@ table.st .rank-slot {
 }
 table.st .seed-cell {
   width: 28px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   font-variant-numeric: tabular-nums;
 }
 .elim-num.clinched {
@@ -544,11 +653,11 @@ table.st .seed-cell {
   height: 19px;
   padding: 0 7px;
   border-radius: var(--radius-chip);
-  line-height: 1;
-  font-size: var(--size-small);
-  font-weight: 450;
+  line-height: var(--leading);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   white-space: nowrap;
 }
 /* text-indent balances the letter-spacing added after the last letter. */
@@ -556,7 +665,7 @@ table.st .seed-cell {
   width: 24px;
   padding-left: 0;
   padding-right: 0;
-  text-indent: 0.07em;
+  text-indent: var(--type-label-tracking);
 }
 .clinch-tag {
   color: var(--highlight);
@@ -570,8 +679,9 @@ table.st .seed-cell {
 }
 .stand-empty {
   color: var(--ink-dim);
-  font-size: var(--size-glance);
-  line-height: 1.6;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.6 * var(--leading));
   max-width: 60ch;
 }
 
@@ -586,21 +696,29 @@ table.st .seed-cell {
 .search-view {
   margin-top: calc(11px - var(--header-gap));
 }
-/* Today's capitals sit level with the month's, half a pixel lower than the shared rule sets them,
-   and its icon moves with them. */
+/* Today's capitals sit level with the month's, a pixel lower than the shared rule sets them, and
+   its icon moves with them. */
 .go-today > span {
-  translate: 0 -0.5px;
-}
-.go-today svg {
   translate: none;
 }
-/* Chivo Mono reads heavier, so the strip's month and dates, and the search's lead, under the
-   field or over the games, sit a weight under the shared 600. */
-.strip-month,
-.cell-number,
+.go-today svg {
+  translate: 0 0.5px;
+}
+/* The strip's month and dates, and the search's lead, under the field or over the games, each a
+   step from its role of MLB's own. */
+.strip-month {
+  font-weight: calc(var(--type-label-weight) + 100);
+}
+.cell-name,
+.cell-month {
+  font-weight: calc(var(--type-label-weight) + 50);
+}
+.cell-number {
+  font-weight: calc(var(--type-body-weight) + 150);
+}
 .search-read b,
 .search-games-line b {
-  font-weight: 550;
+  font-weight: calc(var(--type-detail-weight) + 150);
 }
 /* The list keeps a day's gap above its first day, so a held heading reaches up over it to the
    strip's line, leaving no gap for the games passing under it to show through. */
@@ -612,10 +730,10 @@ table.st .seed-cell {
   padding: 10px var(--reach-right) 8px var(--reach-left);
   background: var(--bg);
   box-shadow: 0 1px 0 var(--divider);
-  font-size: var(--size-small);
-  font-weight: 450;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 /* On a wide screen, the strip's line stops at the column's edges, and so does a held heading's. */
@@ -631,7 +749,8 @@ table.st .seed-cell {
 .empty-note {
   margin: 0;
   color: var(--ink-dim);
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .no-games .empty-note {
   padding-block: 16px;
@@ -644,22 +763,23 @@ table.st .seed-cell {
   gap: 5.5px;
 }
 .game-side .club {
-  font-size: var(--size-glance);
-  font-weight: 400;
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
 .game-side.home .club,
 .game-side.home .game-facts {
   flex-direction: row-reverse;
 }
 .game-side.won .club {
-  font-weight: 550;
+  font-weight: calc(var(--type-team-weight) + 150);
 }
 /* One line, so a club's race letter stays with its record even if it nears the time. */
 .game-facts {
   display: flex;
   align-items: baseline;
   gap: 1.5ch;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   white-space: nowrap;
 }
@@ -672,7 +792,8 @@ table.st .seed-cell {
   align-items: baseline;
   gap: 1ch;
   max-width: 100%;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-mid);
 }
 .starter.home {
@@ -689,15 +810,17 @@ table.st .seed-cell {
   font-style: italic;
 }
 .arm {
-  font-size: var(--size-small);
-  line-height: 1.3;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: calc(1.3 * var(--leading));
   padding: 0 3px;
   border: 1px solid var(--card-border);
   border-radius: var(--radius-chip);
   color: var(--ink-dim);
 }
 .starter .arm {
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
 }
 /* A character width from the word, like the number, and a pixel low so it reads level with the text. */
 .seed-lock {
@@ -709,7 +832,7 @@ table.st .seed-cell {
 }
 .race.clinched {
   color: var(--highlight);
-  font-weight: 400;
+  font-weight: var(--type-caption-weight);
 }
 .race.racing {
   color: var(--now);
@@ -721,21 +844,22 @@ table.st .seed-cell {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 1.05rem;
-  font-weight: 550;
+  font-size: var(--type-stat-large-size);
+  font-weight: var(--type-stat-large-weight);
   line-height: 20px;
 }
 .score-dash {
   color: var(--card-border);
-  font-weight: 400;
+  font-weight: var(--type-stat-large-weight);
 }
 .game-time {
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
   line-height: 20px;
 }
 .game-status {
-  font-weight: 450;
-  font-size: var(--size-small);
+  font-weight: calc(var(--type-caption-weight) + 50);
+  font-size: var(--type-caption-size);
   color: var(--ink-dim);
 }
 .if-necessary {
@@ -746,10 +870,10 @@ table.st .seed-cell {
   --status-offset: var(--game-if-necessary-offset);
 }
 .series-label {
-  font-weight: 450;
-  font-size: var(--size-small);
+  font-weight: var(--type-label-weight);
+  font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .series-count {
@@ -767,7 +891,7 @@ table.st .seed-cell {
 }
 .game-score .lost {
   color: var(--ink-dim);
-  font-weight: 400;
+  font-weight: var(--lost-score-weight);
 }
 .game-row.off .game-side,
 .game-row.off .game-time {
@@ -800,46 +924,12 @@ table.st .seed-cell {
 }
 
 .updates-list .what {
-  font-weight: 350;
+  font-weight: calc(var(--type-body-weight) - 50);
 }
-.updates-list .what b,
-.updates-list .what .team-name {
-  font-weight: 500;
-}
-.updates .rank-slot {
-  width: auto;
-  margin: 0 6px 0 0;
-  vertical-align: 1px;
-}
-.updates .rank-tag {
-  height: 16px;
-  min-width: 0;
-  padding: 0 4px;
-  font-size: var(--size-small);
-  line-height: 12px;
-}
-.updates .club {
-  gap: 7px;
+.updates-list .what b {
+  font-weight: calc(var(--type-body-weight) + 100);
 }
 
-.no-field-note {
-  background: var(--card);
-  border: 1px dashed var(--card-border);
-  border-radius: var(--radius-card);
-  padding: 22px;
-  margin-bottom: 18px;
-  text-align: center;
-}
-.no-field-note h2 {
-  font-size: 1.15rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.no-field-note p {
-  color: var(--ink-dim);
-  font-size: var(--size-read);
-  margin-top: 10px;
-}
 .rank-slot {
   display: inline-flex;
   justify-content: flex-end;
@@ -858,8 +948,8 @@ table.st .seed-cell {
   height: 19px;
   padding: 0 5px;
   border-radius: var(--radius-chip);
-  font-size: var(--size-small);
-  font-weight: 550;
+  font-size: var(--type-caption-size);
+  font-weight: calc(var(--type-caption-weight) + 150);
   flex: none;
   background: transparent;
   border: 1px solid var(--now-line);
@@ -882,19 +972,19 @@ table.st .seed-cell {
   position: relative;
 }
 .league-head {
-  font-weight: 450;
+  font-weight: var(--type-label-weight);
   position: absolute;
   height: 19px;
   text-align: center;
   border-bottom: 0.5px solid currentColor;
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
   line-height: 16px;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
 }
 /* Its offset counts from inside .tree-scroll's padding, so 0 keeps it where it rests. */
 .league-name {
-  font-weight: 450;
+  font-weight: var(--type-label-weight);
   display: inline-block;
   position: sticky;
   left: 0;
@@ -927,8 +1017,9 @@ table.st .seed-cell {
   display: grid;
   grid-template-rows: 32px 32px;
   align-items: center;
-  font-size: var(--size-small);
-  font-weight: 450;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ink-dim);
@@ -942,7 +1033,7 @@ table.st .seed-cell {
   justify-items: start;
 }
 .seed-number {
-  font-weight: 500;
+  font-weight: calc(var(--type-label-weight) + 50);
   color: var(--ink);
 }
 .series.world .bestof span:first-child {
@@ -956,9 +1047,10 @@ table.st .seed-cell {
 .stacked .box {
   scroll-snap-align: start;
 }
-/* A division card stops with its bye's seed label still on screen. */
+/* A division card stops with its bye's seed label still on screen, in SEED_LABEL_ROOM in
+   bracket-view.js. */
 .stacked .box:has(.seed-labels) {
-  scroll-margin-left: 50px;
+  scroll-margin-left: 51px;
 }
 .stacked .box:has(.world) {
   scroll-snap-align: center;
@@ -976,7 +1068,8 @@ table.st .seed-cell {
   right: 0;
   margin-top: 6px;
   padding-left: 1px;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   /* With the margin, STACKED.noteHeight in bracket-view.js. */
   line-height: 16px;
   font-style: italic;
@@ -1001,17 +1094,6 @@ table.st .seed-cell {
 .card-note.live .out-lights {
   margin-left: 1.17em;
 }
-.card-note.champ {
-  margin-top: 8px;
-  padding-left: 0;
-  font-size: var(--size-small);
-  font-style: normal;
-  font-weight: 550;
-  color: var(--highlight);
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
 
 .series {
   background: var(--card);
@@ -1021,14 +1103,14 @@ table.st .seed-cell {
   overflow: hidden;
 }
 .series .bestof {
-  font-weight: 450;
+  font-weight: var(--type-label-weight);
   display: flex;
   align-items: center;
   justify-content: space-between;
   height: 24px;
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   padding: 0 8px;
   border-bottom: 1px solid var(--divider);
@@ -1041,7 +1123,6 @@ table.st .seed-cell {
   height: 32px;
   padding: 0 7px;
   gap: 8px;
-  font-size: 0.9rem;
 }
 .matchup-row + .matchup-row {
   border-top: 1px solid var(--divider);
@@ -1096,38 +1177,51 @@ table.st .seed-cell {
 }
 .matchup-row .team-name,
 table.st td.team .team-name {
-  font-size: var(--size-glance);
-  font-weight: 400;
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
 .tbd {
   color: var(--ink-dim);
   font-style: italic;
-  font-size: 0.88rem;
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
+/* Each chip sits a little above its row's middle, and its digit a little below the chip's, by as
+   much as its colors need to look centered, set by eye in each theme: the inset shadow darkens the
+   top of a cream or green chip more than a red or gold one. A margin of twice the lift moves the
+   chip, and the split of its padding moves the digit. */
 .nscore {
   min-width: 1.5em;
   text-align: center;
-  font-weight: 550;
-  font-size: 1rem;
-  padding: 3.5px 6px 0.5px;
+  font-weight: var(--type-score-weight);
+  font-size: var(--type-score-size);
+  padding: 3px 6px 1px;
   border-radius: var(--radius-chip);
-  background: var(--divider);
-  /* Centered on its row, half a pixel up. */
-  margin-bottom: 1px;
+  background: var(--score-chip);
+  margin-bottom: 0.5px;
   box-shadow:
-    inset 0 2px 3px rgba(0, 0, 0, 0.44),
+    inset 0 2px 3px var(--score-chip-shade),
     0 1px 0 rgba(241, 234, 212, 0.13);
 }
 /* An empty score keeps the height it has with a digit in it. */
 .nscore:empty::before {
   content: "\00a0";
 }
-/* The inset shadow darkens the top of a dark box but hardly shows on gold, so a digit sits lower
-   in a dark box to look centered. */
 .nscore.lead {
-  padding: 2.75px 6px 1.25px;
+  padding-top: 2.5px;
+  padding-bottom: 1.5px;
+  margin-bottom: 0;
   background: var(--accent);
   color: var(--accent-ink);
+  --score-chip-shade: var(--won-chip-shade);
+}
+:root[data-theme="dark"] .nscore:not(.lead) {
+  padding-top: 3.5px;
+  padding-bottom: 0.5px;
+  margin-bottom: 2.5px;
+}
+:root[data-theme="dark"] .nscore.lead {
+  margin-bottom: 1px;
 }
 
 /* The rank numbers sit in their own column so they stay put while rows move. Each number takes
@@ -1155,8 +1249,8 @@ table.st td.team .team-name {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  font-size: 1.05rem;
-  font-weight: 550;
+  font-size: var(--type-stat-large-size);
+  font-weight: var(--type-stat-large-weight);
   color: var(--now);
 }
 .rank-numbers li + li {
@@ -1179,7 +1273,8 @@ table.st td.team .team-name {
 }
 .rank-empty {
   padding: 14px 16px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 /* The twelve rows share the list's height, and each row sizes its text to the height it gets. */
@@ -1210,13 +1305,14 @@ table.st td.team .team-name {
   border: 0;
   line-height: inherit;
   color: color-mix(in srgb, var(--ink-dim) 62%, transparent);
-  font-size: 0.9rem;
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
   letter-spacing: -2px;
   cursor: grab;
 }
 @media (hover: hover) {
   .grip:hover {
-    color: var(--ink);
+    color: var(--ink-hover);
   }
 }
 .grip:active {
@@ -1250,18 +1346,22 @@ body.kbd .rank-item .grip:focus {
   grid-area: club;
 }
 .rank-id .team-name {
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   line-height: 16px;
 }
 .rank-item .league-tag {
   grid-area: league;
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
 }
 .rank-drought {
   display: none;
   grid-area: drought;
   justify-self: end;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   white-space: nowrap;
 }
@@ -1270,25 +1370,30 @@ body.kbd .rank-item .grip:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   line-height: 14px;
   color: var(--ink-dim);
 }
 .rank-item .status-chip {
   height: 19px;
   padding: 0 7px;
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
 }
 @container (max-height: 47px) {
   .rank-id {
     row-gap: 2px;
   }
   .rank-id .team-name {
-    font-size: var(--size-small);
+    font-size: var(--type-caption-size);
+    font-weight: var(--type-caption-weight);
     line-height: 15px;
   }
   .rank-ws {
-    font-size: var(--size-small);
+    font-size: var(--type-caption-size);
+    font-weight: var(--type-caption-weight);
     line-height: 13px;
   }
 }
@@ -1304,7 +1409,8 @@ body.kbd .rank-item .grip:focus {
     display: inline;
   }
   .rank-id .team-name {
-    font-size: var(--size-small);
+    font-size: var(--type-caption-size);
+    font-weight: var(--type-caption-weight);
   }
 }
 
@@ -1321,30 +1427,45 @@ body.kbd .rank-item .grip:focus {
   background: var(--accent);
   color: var(--accent-ink);
 }
-.home-screen-icon {
-  background-image: url(icon-180.png);
+.home-screen-steps {
+  color: var(--receding-ink);
 }
-/* The mono face runs heavy, so the Home Screen bar and box and Diagnostics take lighter weights
-   than the shared ones. */
-.home-screen-title,
+/* The Home Screen steps' Share icon, raised to sit with Libre Franklin's words, as set by eye. */
+.welcome-step .share-glyph {
+  position: relative;
+  top: -1.5px;
+}
+.home-screen-steps .share-glyph {
+  vertical-align: -1px;
+}
+/* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
+.home-screen-title {
+  font-weight: calc(var(--type-detail-weight) + 100);
+}
 .home-screen-steps b {
-  font-weight: 500;
+  font-weight: calc(var(--type-caption-weight) + 75);
 }
 .home-screen-install {
-  font-weight: 400;
+  font-weight: calc(var(--type-label-weight) - 50);
 }
-.diagnostics-head h3,
+.diagnostics-head h3 {
+  font-weight: calc(var(--type-body-weight) + 50);
+}
 .diagnostics-button,
 .diagnostics-flag {
-  font-weight: 450;
+  font-weight: var(--type-label-weight);
 }
 
-/* The settings and, on a phone, the box under them that says how to add the page to the Home
-   Screen. */
+/* The settings and, in a phone's or tablet's browser, the box over them that says how to add the
+   page to the Home Screen. */
 .settings-main {
   display: flex;
   flex-direction: column;
   gap: var(--section-gap);
+}
+/* The News switches end with a line, as the settings above them do. */
+.settings-group-rows {
+  border-bottom: 1px solid var(--divider);
 }
 /* Settings fill the whole sheet, so the ranking can be one sheet tall, and a scroll settles on the
    settings, the ranking, the copyright at their end, or Diagnostics past it, each of which would
@@ -1378,14 +1499,15 @@ body.kbd .rank-item .grip:focus {
   gap: 3px;
 }
 .ranking-heading h3 {
-  font-size: var(--size-setting);
-  font-weight: 400;
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
   letter-spacing: 0;
 }
 .ranking-note {
   margin: 0;
-  font-size: var(--size-setting-note);
-  line-height: 1.4;
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
+  line-height: calc(1.4 * var(--leading));
   color: var(--ink-dim);
 }
 /* On a short sheet the note would squeeze each row to one line, so it gives way. */
@@ -1395,9 +1517,8 @@ body.kbd .rank-item .grip:focus {
   }
 }
 /* Wide screens show everything at once: the settings on the left, the ranking filling the right.
-   The ranking's heading gets its own grid row so the list can fill the rest; the settings start
-   level with that heading, under the header's line. Only Diagnostics, past the sheet's end, need
-   a scroll. */
+   The ranking's heading gets its own grid row so the list can fill the rest. Only Diagnostics,
+   past the sheet's end, need a scroll. */
 @media (min-width: 900px) {
   .settings-panel {
     width: min(920px, calc(100% - 48px));
@@ -1405,6 +1526,7 @@ body.kbd .rank-item .grip:focus {
     scroll-snap-type: none;
   }
   .settings-body {
+    --ranking-heading-top: 20px;
     height: 100%;
     display: grid;
     grid-template-columns: 330px minmax(0, 1fr);
@@ -1428,8 +1550,14 @@ body.kbd .rank-item .grip:focus {
     align-self: start;
     margin-right: 24px;
   }
-  .settings-controls {
+  /* Settings that start right under the header's line need no line of their own; under the Home
+     Screen box, they start with one, as on a phone. */
+  .settings-main > .home-screen-tip[hidden] + .settings-controls {
     border-top: 0;
+  }
+  /* The box at the settings' top starts level with the ranking's heading. */
+  .settings-main > .home-screen-tip {
+    margin-top: var(--ranking-heading-top);
   }
   .settings-ranking {
     display: contents;
@@ -1437,7 +1565,7 @@ body.kbd .rank-item .grip:focus {
   .ranking-heading {
     grid-column: 2;
     grid-row: 2;
-    padding: 20px 0 8px 24px;
+    padding: var(--ranking-heading-top) 0 8px 24px;
   }
   .rank-frame {
     grid-column: 2;
@@ -1464,37 +1592,6 @@ body.kbd .rank-item .grip:focus {
 .game-faceoff .game-row {
   border-bottom: 0;
 }
-/* A game's season series: each meeting's day, its winner and score, and where it was played. */
-.meetings {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--divider);
-}
-.meetings li {
-  display: grid;
-  grid-template-columns: 4.5em minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--divider);
-  font-size: var(--size-glance);
-  color: var(--ink-dim);
-}
-.meeting-result {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.meeting-result .club {
-  color: var(--ink);
-}
-.meeting-score {
-  font-size: var(--size-read);
-  font-weight: 500;
-  color: var(--ink);
-}
 .starters-open {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
@@ -1504,7 +1601,8 @@ body.kbd .rank-item .grip:focus {
   margin: 0;
   padding: 12px 12px 12px 14px;
   font: inherit;
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
   color: var(--ink);
   background: none;
   border: 1px solid var(--card-border);
@@ -1525,15 +1623,15 @@ body.kbd .rank-item .grip:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 550;
+  font-weight: calc(var(--type-body-weight) + 150);
 }
 .starters-side .arm {
   color: var(--ink-mid);
 }
 .starters-versus {
-  font-size: var(--size-small);
-  font-weight: 500;
-  letter-spacing: 0.09em;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) + 50);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -1547,8 +1645,11 @@ body.kbd .rank-item .grip:focus {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
   text-transform: none;
   letter-spacing: 0;
+  color: var(--ink-dim);
 }
 .box-wrap {
   overflow-x: auto;
@@ -1565,7 +1666,8 @@ table.st.line-score {
 .box-pos,
 .box-decision {
   margin-left: 8px;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 .box-decision {
@@ -1585,7 +1687,12 @@ table.st.line-score td.mid {
 table.st.line-score .total {
   padding-left: 10px;
   color: var(--ink);
-  font-weight: 550;
+}
+table.st.line-score th.total {
+  font-weight: calc(var(--type-label-weight) + 100);
+}
+table.st.line-score td.total {
+  font-weight: calc(var(--type-detail-weight) + 150);
 }
 table.st.line-score td.team .club {
   display: inline-flex;
@@ -1616,9 +1723,9 @@ table.st.line-score td.team .club {
   column-gap: 8px;
   align-items: baseline;
   margin: 0;
-  font-size: var(--size-small);
-  font-weight: 450;
-  letter-spacing: 0.09em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -1632,8 +1739,9 @@ table.st.line-score td.team .club {
   margin: 0;
   padding: 0 0 0 22px;
   list-style: none;
-  font-size: var(--size-glance);
-  line-height: 1.35;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.35 * var(--leading));
 }
 .runs-change {
   display: grid;
@@ -1647,21 +1755,19 @@ table.st.line-score td.team .club {
 .runs-setup {
   color: var(--runs-setup-ink);
 }
-.runs-play {
-  font-weight: var(--runs-play-weight);
-}
 .runs-score {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--ink-dim);
 }
 .runs-score b {
-  font-weight: 550;
+  font-weight: calc(var(--type-detail-weight) + 150);
   color: var(--ink);
 }
 .runs-none {
   margin: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 .runs-now {
@@ -1677,15 +1783,16 @@ table.st.line-score td.team .club {
   color: var(--now);
 }
 .runs-now-label {
-  font-size: var(--size-small);
-  font-weight: 550;
-  letter-spacing: 0.09em;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) + 100);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
 }
 .runs-now-inning {
   display: inline-flex;
   align-items: center;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .runs-now-inning .out-lights {
   margin-left: 0.6em;
@@ -1694,8 +1801,9 @@ table.st.line-score td.team .club {
 .runs-pinch-runners {
   display: grid;
   margin: 9px 0 0;
-  font-size: var(--size-glance);
-  line-height: 1.4;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.4 * var(--leading));
   text-align: center;
   color: var(--ink-dim);
 }
@@ -1709,7 +1817,7 @@ table.st.line-score td.team .club {
   position: relative;
   width: 268px;
   aspect-ratio: 240 / 178;
-  margin-top: 9px;
+  margin-top: 8px;
 }
 .runs-field svg {
   display: block;
@@ -1762,8 +1870,9 @@ table.st.line-score td.team .club {
   flex-direction: column;
   padding: 0 3px;
   background: var(--sheet);
-  font-size: var(--size-glance);
-  line-height: 1.3;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.3 * var(--leading));
   white-space: nowrap;
 }
 .on-2B .runs-runner-name {
@@ -1773,21 +1882,23 @@ table.st.line-score td.team .club {
   align-items: flex-end;
 }
 .runs-runner-name b {
-  font-weight: 550;
+  font-weight: calc(var(--type-detail-weight) + 150);
 }
 .runs-runner-name span {
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 .runs-up {
   margin: 8px 0 0;
-  font-size: var(--size-glance);
-  line-height: 1.4;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.4 * var(--leading));
   color: var(--ink-dim);
 }
 .runs-pinch-runners b,
 .runs-up b {
-  font-weight: 550;
+  font-weight: calc(var(--type-detail-weight) + 150);
   color: var(--ink);
 }
 /* A club's Roster section: its hitters, starters, and bullpen, then its injured list. */
@@ -1807,7 +1918,8 @@ table.st.line-score td.team .club {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .injured-list li {
   display: flex;
@@ -1818,13 +1930,14 @@ table.st.line-score td.team .club {
   color: var(--now);
 }
 /* A club's leaders, a table for hitting and one for pitching, each row's stat before its leader's
-   name, a half step over the roster's rows. */
+   name. */
 .leaders {
   display: grid;
   gap: 4px;
 }
 .leaders table.st td {
-  font-size: 13.5px;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .leader-stat {
   display: inline-block;
@@ -1832,63 +1945,23 @@ table.st.line-score td.team .club {
   margin-right: 8px;
   color: var(--ink-dim);
 }
-/* A player's name in a roster, which opens his sheet. The button only clears the browser's own
-   look, so the name keeps the type of the row it sits in. */
-.player-open {
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-  text-align: inherit;
-  cursor: pointer;
-}
-body.kbd .player-open:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-@media (hover: hover) {
-  .player-open:hover {
-    color: var(--ink-hover);
-  }
-}
-
-/* A player's sheet: his facts in a row in the sheet's top, short labels over values, then his
-   totals in an outlined box over each ranked number, its curve, and its rank. */
+/* A player's sheet: his facts in a row in the sheet's top, as shared/sheet.css lays them out, then
+   his totals in an outlined box over each ranked number, its curve, and its rank. */
 .player-facts-slot {
   margin-top: 12px;
 }
-.player-facts {
-  display: flex;
-  justify-content: center;
-  margin: 0;
-}
-.player-fact {
-  display: grid;
-  gap: 1px;
-  padding-inline: 10px;
-  text-align: center;
-}
 .player-fact dt {
-  font-size: var(--size-small);
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-}
-.player-fact dd {
-  margin: 0;
-  font-size: var(--size-glance);
-  font-weight: 500;
-  color: var(--ink);
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) + 50);
+  letter-spacing: var(--type-label-tracking);
 }
 .player-body {
   padding-top: 8px;
 }
 .season-line {
   margin: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-mid);
 }
 .player-body .team-stats {
@@ -1908,8 +1981,8 @@ body.kbd .player-open:focus {
   align-items: center;
   gap: 9px;
   margin: 0;
-  font-size: var(--size-read);
-  font-weight: 500;
+  font-size: var(--type-body-size);
+  font-weight: calc(var(--type-body-weight) + 100);
   color: var(--now);
 }
 .status-chip.injured {
@@ -1918,14 +1991,16 @@ body.kbd .player-open:focus {
 }
 .out-sentence {
   margin: 7px 0 0;
-  font-size: var(--size-glance);
-  line-height: 1.4;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.4 * var(--leading));
   color: var(--ink);
 }
 .out-source {
   margin: 4.5px 0 0;
-  font-size: var(--size-small);
-  color: var(--credit-ink);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  color: var(--receding-ink);
 }
 .player-ranks {
   display: grid;
@@ -1938,37 +2013,24 @@ body.kbd .player-open:focus {
 }
 .player-rank-label {
   padding-right: 15px;
-  font-size: var(--size-small);
-  font-weight: 500;
-  letter-spacing: 0.07em;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) + 50);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
 .player-rank-value {
   padding-right: 23px;
-  font-size: var(--size-read);
-  font-weight: 500;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
   text-align: right;
 }
 .player-rank {
   padding-left: 18px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   text-align: right;
   white-space: nowrap;
-  color: var(--ink-dim);
-}
-.player-rank-notes {
-  display: grid;
-  grid-column: 1 / -1;
-  gap: 7px;
-  margin-top: 5px;
-}
-.player-rank-note {
-  margin: 0;
-  font-size: var(--size-glance);
-  line-height: 1.35;
-  text-align: center;
-  text-wrap: balance;
   color: var(--ink-dim);
 }
 /* A club's numbers rank like a player's: its regular season on curves of every club's, and its
@@ -2003,7 +2065,8 @@ body.kbd .player-open:focus {
 }
 .placed-other {
   padding-left: 18px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   text-align: right;
   white-space: nowrap;
   color: var(--ink);
@@ -2020,7 +2083,8 @@ body.kbd .player-open:focus {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .field-heads .club {
   display: inline-flex;
@@ -2055,17 +2119,19 @@ body.kbd .player-open:focus {
 .pitcher-first {
   display: block;
   margin-bottom: 1px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 .pitcher-last {
   display: block;
-  font-size: 1.07rem;
-  font-weight: 550;
-  line-height: 1.1;
+  font-size: var(--type-team-large-size);
+  font-weight: var(--type-team-large-weight);
+  line-height: calc(1.1 * var(--leading));
 }
 .pitcher-id .club {
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   gap: 6px;
 }
@@ -2080,15 +2146,17 @@ body.kbd .player-open:focus {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 .pitcher-bio .arm {
-  line-height: 1.4;
+  line-height: calc(1.4 * var(--leading));
 }
 .check-back {
   margin: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   text-align: center;
   color: var(--ink-dim);
 }
@@ -2123,7 +2191,7 @@ body.kbd .player-open:focus {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   column-gap: 8px;
-  padding-block: 7.5px 19px;
+  padding-block: 7.5px 20px;
 }
 /* A rank hangs under its number, 4px clear of the curve, so a number sits at the same height with
    a rank or without one. */
@@ -2131,7 +2199,8 @@ body.kbd .player-open:focus {
   position: relative;
   display: grid;
   justify-items: start;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink);
 }
 .tape-number.worse {
@@ -2146,7 +2215,8 @@ body.kbd .player-open:focus {
   align-items: center;
   gap: 6px;
   padding-block: 1px;
-  font-size: 0.875rem;
+  font-size: var(--type-stat-size);
+  font-weight: calc(var(--type-stat-weight) - 100);
 }
 .tape-number.home .tape-number-line {
   flex-direction: row-reverse;
@@ -2164,21 +2234,21 @@ body.kbd .player-open:focus {
 .tape-rank {
   position: absolute;
   top: calc(100% + 1px);
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   white-space: nowrap;
   color: var(--ink-dim);
 }
 .tape-number.home .tape-rank {
   right: 0;
 }
-.tape-number.better {
-  font-weight: 550;
-}
-.tape-number.better .tape-rank {
-  font-weight: 400;
+.tape-number.better .tape-number-line {
+  font-weight: calc(var(--type-stat-weight) + 50);
 }
 .matchup-body .tape .tape-label {
-  font-size: 0.84375rem;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) + 50);
+  letter-spacing: var(--type-label-tracking);
 }
 .matchup-body .tape .player-curve > span {
   inset-inline: calc(7px / 2);
@@ -2204,27 +2274,29 @@ body.kbd .player-open:focus {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .scout h3 span {
-  font-size: var(--size-small);
-  font-weight: 450;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .scout h4 {
   margin: 10px 0 0;
-  font-size: var(--size-small);
-  font-weight: 450;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .scout-note {
   margin: 0;
-  font-size: var(--size-glance);
-  line-height: 1.5;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.5 * var(--leading));
   color: var(--ink-dim);
 }
 /* A starter whose numbers didn't load says so under his club, over a Try again button: 11px under
@@ -2238,7 +2310,8 @@ body.kbd .player-open:focus {
 }
 .retry-side .retry-message {
   margin-left: 2px;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 .matchup-body .retry-block {
@@ -2250,7 +2323,8 @@ body.kbd .player-open:focus {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 .recent-starts li {
@@ -2271,7 +2345,8 @@ body.kbd .player-open:focus {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 .rotation li {
@@ -2334,7 +2409,8 @@ body.kbd .player-open:focus {
   position: relative;
   height: 16px;
   margin-top: 3px;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   line-height: 16px;
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
@@ -2371,7 +2447,8 @@ body.kbd .player-open:focus {
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .pitch-rows li {
   display: contents;
@@ -2476,11 +2553,8 @@ body.kbd .player-open:focus {
     gap: 3px;
   }
 
-  body {
-    padding-bottom: var(--tab-bar-clearance);
-  }
-  /* The body's bottom padding already holds the round dots, so a bracket that fills the screen
-     leaves the page nothing to scroll. */
+  /* The bracket's part's bottom padding (pager.css) already holds the round dots, so a bracket that
+     fills the screen ends where its part's room does. */
   .tree-scroll.stacked {
     padding-bottom: 0;
   }
@@ -2490,8 +2564,8 @@ body.kbd .player-open:focus {
   }
 }
 
-/* The News view, as shared/news.css lays it out, in the page's cards and Chivo Mono's lighter
-   weights, its Read button outlined in capitals like Try again, its arrow in gold. */
+/* The News view, as shared/news.css lays it out, in the page's cards, its Read button outlined in
+   capitals like Try again, its arrow in gold. */
 .news-card {
   border: 1px solid var(--card-border);
   background: var(--card);
@@ -2512,36 +2586,32 @@ body.kbd .player-open:focus {
   border: 0;
   background: none;
   font: inherit;
-  font-size: var(--size-small);
-  font-weight: 450;
-  letter-spacing: 0.06em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
 }
 .news-title {
-  font-size: 1.0625rem;
-  font-weight: 500;
-  line-height: 1.38;
+  font-size: var(--type-headline-size);
+  font-weight: var(--type-headline-weight);
+  line-height: calc(1.38 * var(--leading));
   letter-spacing: 0;
 }
 .news-meta {
-  line-height: 1.4;
+  line-height: calc(1.4 * var(--leading));
 }
 .news-more {
   gap: 9px;
-}
-.news-more-label {
-  font-weight: 450;
-  letter-spacing: 0.06em;
 }
 .news-more-list {
   gap: 11px;
 }
 .news-more-title {
   margin: 0 0 3px;
-  font-weight: 450;
-  line-height: 1.4;
+  font-weight: calc(var(--type-detail-weight) + 50);
+  line-height: calc(1.4 * var(--leading));
 }
 .news-summary {
-  line-height: 1.5;
+  line-height: calc(1.5 * var(--leading));
   color: color-mix(in srgb, var(--ink-dim) 45%, var(--ink));
 }
 .news-foot {
@@ -2549,14 +2619,10 @@ body.kbd .player-open:focus {
 }
 .read-button {
   gap: 7px;
-  height: 28px;
-  padding: 0 10px 0 12px;
+  height: var(--control-height);
+  padding: 0 calc(var(--control-room) - 2px) 0 var(--control-room);
   background: var(--card);
   box-shadow: inset 0 0 0 1px var(--card-border);
-  font-size: var(--size-small);
-  font-weight: 450;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--ink);
 }
 .read-arrow {
@@ -2564,30 +2630,16 @@ body.kbd .player-open:focus {
   height: 14px;
   color: var(--highlight);
 }
-/* The News switches sit in a group under their own label, apart from the settings above them. */
-.settings-news {
-  display: grid;
-  gap: 6px;
-}
-.settings-news .settings-group-label {
-  font-weight: 450;
-  letter-spacing: 0.06em;
-}
-
-/* Try again, outlined in capitals like Diagnostics' buttons, and filled gold where it stands alone
-   in place of what didn't load. */
+/* Try again, outlined like Read, and filled gold where it stands alone in place of what didn't
+   load. */
 .retry-button {
   gap: 7px;
-  height: 28px;
-  padding: 0 12px;
+  height: var(--control-height);
+  padding: 0 var(--control-room);
   border-radius: var(--radius-control);
   background: var(--card);
   box-shadow: inset 0 0 0 1px var(--card-border);
   color: var(--ink);
-  font-size: var(--size-small);
-  font-weight: 450;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 .retry-button .retry-icon {
   width: 14px;
@@ -2595,8 +2647,6 @@ body.kbd .player-open:focus {
   color: var(--highlight);
 }
 .retry-button.filled {
-  height: 32px;
-  padding: 0 16px;
   background: var(--accent);
   box-shadow: none;
   color: var(--accent-ink);
@@ -2604,62 +2654,80 @@ body.kbd .player-open:focus {
 .retry-button.filled .retry-icon {
   color: inherit;
 }
-@media (hover: hover) {
-  .retry-button:not(.filled):hover {
-    color: var(--ink-hover);
-  }
-}
 .retry-block .retry-title {
-  font-weight: 450;
-  line-height: 1.5;
+  font-weight: calc(var(--type-detail-weight) + 50);
+  line-height: calc(1.5 * var(--leading));
 }
 
-/* Capital labels and the gate's button in the shared styles, a step lighter for Chivo Mono. */
+/* Every button's words, from a wide screen's tabs to the gate's Open, in capitals at the body's
+   size. */
+.tab-list button,
+nav.tabs .search-tab,
 .pager-tabs button,
-.updates-count {
-  font-weight: 450;
-}
+.read-button,
+.retry-button,
 .open-button {
-  font-weight: 550;
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  text-transform: uppercase;
+  letter-spacing: var(--type-label-tracking);
 }
 
-/* A final's Highlights, as shared/highlights.css lays it out, set in Chivo Mono's lighter
-   weights. */
-.clip-title,
+/* Capital labels and a club's sheet in the shared styles, each a step from its role of MLB's own. */
+.updates-count {
+  font-weight: var(--type-label-weight);
+}
+.game-card-when {
+  font-weight: calc(var(--type-label-weight) + 50);
+}
+.tape-label {
+  font-weight: calc(var(--type-label-weight) + 50);
+}
+.team-stat b {
+  font-weight: calc(var(--type-stat-large-weight) - 50);
+}
+
+/* A final's Highlights, as shared/highlights.css lays it out, each part a step from its role of
+   MLB's own. */
+.clip-title {
+  font-weight: calc(var(--type-detail-weight) + 50);
+}
+.clip-feature .clip-title {
+  font-weight: calc(var(--type-body-weight) + 50);
+}
 .clip-length {
-  font-weight: 450;
+  font-weight: calc(var(--type-caption-weight) + 50);
 }
-.clip-meta b,
+.clip-meta b {
+  font-weight: calc(var(--type-caption-weight) + 150);
+}
 .highlights-story-title {
-  font-weight: 550;
+  font-weight: calc(var(--type-body-weight) + 150);
 }
 
-/* A club's sheet, as shared/team-sheet.css lays it out, set in Chivo Mono's lighter weights, its
-   parts under gold titles like the Updates box's and its labels in the green of the page's. A club's name or dot opens it wherever it shows,
-   and in the standings so does the rest of its row. */
-@media (hover: hover) {
-  table.st tr[data-team]:hover td {
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
-  }
-}
+/* A club's sheet, as shared/team-sheet.css lays it out, its parts under gold titles like the
+   Updates box's and its labels in the green of the page's. A club's name or dot opens it wherever
+   it shows, and in the standings so does the rest of its row. */
 .sheet-head h2.team-title {
-  font-size: 1.15rem;
-  font-weight: 550;
+  font-size: var(--type-team-large-size);
+  font-weight: var(--type-team-large-weight);
   letter-spacing: 0.02em;
 }
-.sheet-head .team-note {
-  font-weight: 450;
+.sheet-head .team-note,
+.player-place {
+  font-weight: calc(var(--type-detail-weight) + 50);
+}
+/* A player's hometown sits under his title, which holds his name and one line as every sheet's
+   does, so the title and its back arrow stay where they are on every sheet. */
+.player-place {
+  color: var(--ink-mid);
+  text-align: center;
 }
 .sheet-head .team-note .NL {
   color: var(--nl);
 }
 .sheet-head .team-note .AL {
   color: var(--al);
-}
-.sheet-part-head h3,
-.team-label {
-  font-weight: 450;
-  letter-spacing: 0.09em;
 }
 .team-label {
   color: var(--ink-dim);
@@ -2669,11 +2737,12 @@ body.kbd .player-open:focus {
 }
 .team-titles {
   margin: 0;
-  font-size: var(--size-glance);
-  line-height: 1.5;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.5 * var(--leading));
 }
 .team-titles b {
-  font-weight: 550;
+  font-weight: calc(var(--type-detail-weight) + 150);
 }
 /* The cards of the club's nearest games sit under the sheet's top and reach nearer its sides than
    its text, so three fit on a small phone. */
@@ -2685,7 +2754,7 @@ body.kbd .player-open:focus {
   height: 9.5px;
 }
 .game-card-score {
-  font-weight: 550;
+  font-weight: calc(var(--type-detail-weight) + 150);
 }
 .team-series {
   display: grid;
@@ -2699,20 +2768,22 @@ body.kbd .player-open:focus {
   grid-template-columns: 4.6em minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 10px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .series-round {
-  font-size: var(--size-small);
-  font-weight: 450;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .series-opp {
   min-width: 0;
 }
 .series-opp .tbd {
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .series-result {
   text-align: right;

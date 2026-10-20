@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createBoxScoreServer, nameBoxScoreRequest } from "../worker/src/box-score.js";
-import { createGameDetailsJob } from "../worker/src/game-details-updater.js";
+import { createWnbaGameDetailsJob } from "../worker/src/game-details-updater.js";
 import { createLeadServer, nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
@@ -14,6 +14,13 @@ const LEAD = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-espn-lead.json`, "utf8"),
 );
 const MINUTE_MS = 60 * 1000;
+const STATUS_KEY = "games/status";
+
+/**
+ * The details the job saved, apart from its status.
+ * @param {{ writes: string[] }} docs
+ */
+const listDetailWrites = (docs) => docs.writes.filter((key) => key !== STATUS_KEY);
 const VALKYRIES_AT_WINGS = {
   id: "1042600112",
   state: "final",
@@ -85,12 +92,12 @@ function createRun({
   const storage = createJobStorage();
   const league = createLeagueFetch(answer);
   const clock = { now: NOW };
-  const job = createGameDetailsJob();
+  const job = createWnbaGameDetailsJob();
   const runJob = () =>
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => null,
+      createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: league.fetchImpl,
       now: () => clock.now,
@@ -101,7 +108,7 @@ function createRun({
   };
   /** Takes the requests made since the last take. */
   const takeRequests = () => league.requests.splice(0);
-  return { docs, runJob, wait, takeRequests };
+  return { docs, storage, runJob, wait, takeRequests };
 }
 
 /** @param {string} id */
@@ -168,7 +175,11 @@ test("a game that just ended is read at once, again once the league and ESPN hav
   wait(5);
   await runJob();
   assert.deepEqual(takeRequests(), listGameRequests(VALKYRIES_AT_WINGS.id));
-  assert.deepEqual(docs.writes, [`games/${VALKYRIES_AT_WINGS.id}`], "nothing changed to save");
+  assert.deepEqual(
+    listDetailWrites(docs),
+    [`games/${VALKYRIES_AT_WINGS.id}`],
+    "nothing changed to save",
+  );
   for (const minutes of [10, 60, 24 * 60]) {
     wait(minutes);
     await runJob();
@@ -192,13 +203,13 @@ test("a run that finds nothing new reads nothing from the league and saves nothi
   wait(10);
   await runJob();
   takeRequests();
-  const writes = docs.writes.length;
+  const writes = listDetailWrites(docs).length;
 
   wait(10);
   await runJob();
 
   assert.deepEqual(takeRequests(), []);
-  assert.equal(docs.writes.length, writes);
+  assert.equal(listDetailWrites(docs).length, writes);
 });
 
 test("a game still to start or being played is left to the pages watching it", async () => {
@@ -214,7 +225,7 @@ test("a game still to start or being played is left to the pages watching it", a
   await runJob();
 
   assert.deepEqual(takeRequests(), []);
-  assert.deepEqual(docs.writes, []);
+  assert.deepEqual(listDetailWrites(docs), []);
 });
 
 /**
@@ -316,4 +327,81 @@ test("a box score the league answers is kept while ESPN doesn't answer", async (
   const saved = await docs.read(`games/${ACES_AT_FEVER.id}`);
   assert.equal(saved.boxScore.home.score, 99);
   assert.equal(saved.lead, null);
+});
+
+test("only a season's finals keep their reads, so a team's game no longer among its nearest leaves them", async () => {
+  const seattlesLast = { ...ACES_AT_FEVER, id: "1022600325", start: "2026-09-24T02:00:00Z" };
+  const { docs, storage, runJob, wait } = createRun({
+    seasons: { 2026: [ACES_AT_FEVER] },
+    nearest: { 2026: [seattlesLast] },
+  });
+  await runJob();
+  assert.deepEqual(
+    Object.keys(storage.stored.get("final-reads:2026")).sort(),
+    [ACES_AT_FEVER.id, seattlesLast.id].sort(),
+  );
+
+  const season = await docs.read("seasons/2026");
+  await docs.write("seasons/2026", { ...season, nearestGames: [] });
+  wait(10);
+  await runJob();
+
+  assert.deepEqual(Object.keys(storage.stored.get("final-reads:2026")), [ACES_AT_FEVER.id]);
+});
+
+test("the reads the WNBA's own job kept are taken as the shared job's, so no final is read again, and then forgotten", async () => {
+  const { storage, runJob, takeRequests } = createRun();
+  const doneRead = { firstReadAt: 0, readAt: 0, isDone: true };
+  await storage.put("reads:2026", {
+    [VALKYRIES_AT_WINGS.id]: doneRead,
+    [ACES_AT_FEVER.id]: doneRead,
+  });
+
+  await runJob();
+
+  assert.deepEqual(takeRequests(), []);
+  assert.equal(storage.stored.has("reads:2026"), false);
+  assert.deepEqual(
+    Object.keys(storage.stored.get("final-reads:2026")).sort(),
+    [ACES_AT_FEVER.id, VALKYRIES_AT_WINGS.id].sort(),
+  );
+});
+
+test("a past season whose every final is read isn't looked through again", async () => {
+  const { docs, runJob, wait, takeRequests } = createRun({
+    seasons: { 2026: [], 2025: listFinals(2025, 1) },
+    answer: (url) =>
+      url.includes("/boxscore/") ? GAMES.boxScores[ACES_AT_FEVER.id] : { events: [] },
+  });
+  await runJob();
+  assert.ok(takeRequests().length > 0);
+
+  const season = await docs.read("seasons/2025");
+  await docs.write("seasons/2025", { ...season, games: listFinals(2025, 2) });
+  wait(10);
+  await runJob();
+
+  assert.deepEqual(takeRequests(), []);
+});
+
+test("each run saves its status: when it ran, how many requests it made, and a read that failed", async () => {
+  let isLeagueDown = true;
+  const { docs, runJob, wait } = createRun({
+    seasons: { 2026: [ACES_AT_FEVER] },
+    answer: (url) => (isLeagueDown ? undefined : listAnswers()[url]),
+  });
+
+  await runJob();
+  const failed = await docs.read(STATUS_KEY);
+  assert.equal(failed.ranAt, new Date(NOW).toISOString());
+  assert.equal(failed.requests, 2);
+  assert.match(failed.lastFailure.message, /^Reading game 1042600122's details failed: /);
+
+  isLeagueDown = false;
+  wait(10);
+  await runJob();
+  const read = await docs.read(STATUS_KEY);
+  assert.equal(read.ranAt, new Date(NOW + 10 * MINUTE_MS).toISOString());
+  assert.equal(read.requests, 2);
+  assert.deepEqual(read.lastFailure, failed.lastFailure);
 });

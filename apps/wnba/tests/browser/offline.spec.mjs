@@ -1,4 +1,6 @@
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
+import { findDiagnosticsSwitch } from "../../../../tests/browser/diagnostics-switch.mjs";
+import { takeAwayPush } from "../../../../tests/browser/devices.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
 test.use({ serviceWorkers: "allow", contextOptions: { reducedMotion: "reduce" } });
@@ -49,8 +51,8 @@ async function openKeptApp(page) {
 test("a page opened offline opens from its copy and shows what it last showed", async ({
   page,
 }) => {
-  // A browser without push, like Safari outside the Home Screen, keeps the copy all the same.
-  await page.addInitScript(() => delete window.PushManager);
+  // A browser without push keeps the copy all the same.
+  await takeAwayPush(page);
   await openApp(page);
   await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
   await waitForCopy(page);
@@ -100,7 +102,7 @@ test("Diagnostics show the steps the service worker kept: its start, install, an
   await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
 
-  await page.getByRole("switch", { name: "Diagnostics" }).click();
+  await findDiagnosticsSwitch(page).click();
 
   const steps = page.locator("#diagnostics .diagnostics-record", { hasText: "Service worker" });
   await expect(steps).toHaveCount(1);

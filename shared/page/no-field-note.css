@@ -1,0 +1,25 @@
+/*
+ * The bracket before the playoff field is set: a Label heading over a Detail note, centered on the
+ * page. Apps link it before their own styles.css, and define --ink and --ink-dim.
+ */
+
+.no-field-note {
+  padding: 22px;
+  margin-bottom: 18px;
+  text-align: center;
+}
+.no-field-note h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  text-transform: uppercase;
+  letter-spacing: var(--type-label-tracking);
+}
+.no-field-note p {
+  margin: 10px 0 0;
+  color: var(--ink-dim);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  text-wrap: balance;
+}

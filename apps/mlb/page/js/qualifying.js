@@ -7,6 +7,9 @@ import { countOuts, formatInnings } from "./stat-table.js";
 
 const PLATE_APPEARANCES_PER_GAME = 3.1;
 
+export const QUALIFIED_HITTERS_NOTE = `Rank among qualified hitters (${PLATE_APPEARANCES_PER_GAME} plate appearances per team game)`;
+export const QUALIFIED_STARTERS_NOTE = "Rank among qualified starters";
+
 /**
  * A club's games in the season the page shows, from its standings, or null for another season.
  * @param {string} club

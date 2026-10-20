@@ -1,10 +1,10 @@
-import { renderClub, renderRankTag } from "./clubs.js";
+import { renderClubName } from "./clubs.js";
 import { isPastMidnight, readMlbDay } from "./dates.js";
 import { describeEntry, describeUpdate } from "./entry-text.js";
 import { readCalendarDate } from "#shared/days.js";
 import { isTouchDevice } from "#shared/device.js";
 import { html } from "#shared/html.js";
-import { dismissNotes, listNotesToShow, showUpdates } from "#shared/updates.js";
+import { dismissNotes, listNotesToShow, readOrStartSeenAt, showUpdates } from "#shared/updates.js";
 import { keepSeenAt, readSeenAt } from "./kept-on-device.js";
 import { RELEASE_NOTES } from "./release-notes.js";
 import { session, readSeasonYear } from "./session.js";
@@ -12,12 +12,12 @@ import { TEAMS } from "./teams.js";
 import { renderGameButton } from "./games-view.js";
 import { describeGame, findCommonGames, groupUpdates, isResult } from "./update-groups.js";
 
-function renderClubChip(id) {
-  return TEAMS[id] ? html`${renderRankTag(id)}${renderClub(id)}` : html``;
+function renderUpdateClub(id) {
+  return TEAMS[id] ? html`<b>${renderClubName(id)}</b>` : html``;
 }
 
 const readTextContext = () => ({
-  renderClub: renderClubChip,
+  renderClub: renderUpdateClub,
   teams: session.state?.teams,
   standings: session.standings,
 });
@@ -35,24 +35,18 @@ const findHappenedAt = (group) => Math.max(...group.map(readHappenedAt));
 
 const readNoticedAt = (entry) => Date.parse(entry.at);
 
-const FIRST_VISIT_SPAN_MS = 24 * 60 * 60 * 1000;
-
-const readActiveSeenAt = () => readSeenAt(session.activeYear);
-
 const isCurrentSeason = () => session.activeYear === readSeasonYear();
 
-// Until its first dismissal, the box lists the day of updates up to the newest, not the whole
-// season, which a new store notices all at once.
-function listFirstVisitEntries(entries) {
-  const newest = Math.max(...entries.map(readHappenedAt));
-  return entries.filter((entry) => newest - readHappenedAt(entry) < FIRST_VISIT_SPAN_MS);
-}
+// A page that couldn't read its season shows an empty one in its place, which says nothing of
+// what's out. The copy a page draws first from its last visit does say what was out then, so a
+// phone with no start yet counts from that visit and lists what came after it.
+const hasReadSeason = () => !session.problem;
 
 function listUnseenEntries(entries) {
-  const seen = readActiveSeenAt();
-  return seen
-    ? entries.filter((entry) => readNoticedAt(entry) > seen)
-    : listFirstVisitEntries(entries);
+  const year = session.activeYear;
+  const times = hasReadSeason() ? entries.map(readNoticedAt) : null;
+  const seen = readOrStartSeenAt(readSeenAt(year), times, (start) => keepSeenAt(year, start));
+  return entries.filter((entry) => readNoticedAt(entry) > seen);
 }
 
 export function listFreshUpdates() {
@@ -121,14 +115,14 @@ function describeUpdateGroup(group) {
 /** What the box lists, newest first. */
 export const listUpdates = () => listFreshUpdates().map(describeUpdateGroup);
 
-// Each device keeps its own dismissal, so the box shows only on phones and tablets, not again on
-// each computer.
+// Each device keeps when its box counts from, so the box shows only on phones and tablets, not
+// again on each computer.
 export function renderUpdates() {
   const isShown = isTouchDevice() && isCurrentSeason();
   const updates = isShown ? listUpdates() : [];
   showUpdates(/** @type {HTMLElement} */ (document.getElementById("updates")), updates, {
     dismiss: dismissUpdates,
-    notes: isShown ? listNotesToShow(RELEASE_NOTES, readActiveSeenAt()) : [],
+    notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
     today: readCalendarDate(readMlbDay(Date.now())),
   });
 }

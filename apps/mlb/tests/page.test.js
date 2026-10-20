@@ -6,7 +6,7 @@ import { renderDivisionBlock, renderFieldBlock, renderNextCell } from "../page/j
 import { describeTeamStatus, findSeries, nameSeries } from "../page/js/bracket.js";
 import { renderCardNote, renderMatchupRow } from "../page/js/bracket-view.js";
 import { describeDrought, listRankedOrder, listTitles } from "../page/js/clubs.js";
-import { keepRanking, keepSeenAt } from "../page/js/kept-on-device.js";
+import { keepRanking } from "../page/js/kept-on-device.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
 import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
 import { listSlateGames } from "../page/js/slate.js";
@@ -25,6 +25,7 @@ import {
 import { normalizeSpaces, stripTags } from "../../../tests/text.js";
 import { readFontFaces } from "../../../tests/css-rules.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "../../../tests/time-zone.js";
+import { dropSavedStorage, useKeptChoices } from "../../../tests/saved-storage.js";
 import { TWO_UPDATES, readUpdateBox } from "./update-box.js";
 
 // The expected times below are what a viewer in Eastern time sees.
@@ -39,10 +40,9 @@ function checkAt(isoTime, check) {
   }
 }
 
-const RANK_CHIP = /<span class="rank-slot">.*?<\/span><\/span>/g;
-const describeEntry = (entry) => stripTags(String(renderEntryText(entry)).replace(RANK_CHIP, ""));
+const describeEntry = (entry) => stripTags(String(renderEntryText(entry)));
 const describeUpdate = (entries) =>
-  stripTags(String(renderUpdateText(entries)).replace(RANK_CHIP, ""))
+  stripTags(String(renderUpdateText(entries)))
     .replace(/&mdash;/g, "--")
     .replace(/&#39;/g, "'");
 
@@ -121,22 +121,69 @@ const clinchDivision = (team, div, at, ended) => ({
 const listFreshTeams = () =>
   listFreshUpdates().flatMap((group) => group.map((entry) => entry.team));
 
-test("Updates box: before its first dismissal, only the 24 hours up to the newest update", () => {
+/**
+ * A device's own storage, holding what it kept, for the test.
+ * @param {import("node:test").TestContext} t
+ * @param {[string, unknown][]} kept
+ */
+function useDeviceStorage(t, kept) {
+  useKeptChoices(kept);
+  t.after(dropSavedStorage);
+}
+
+const FIRST_TWO_CLINCHES = [
+  clinchDivision("TB", "AL East", "2026-09-27T23:00:00Z"),
+  clinchDivision("MIL", "NL Central", "2026-09-26T22:00:00Z"),
+];
+
+test("Updates box: a new device's first look lists none of the updates already out, and each one after it, whatever its clock says", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-09-29T00:00:00Z") });
+  useDeviceStorage(t, []);
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), []);
+
   session.state = {
     teams: {},
-    log: [
-      clinchDivision("TB", "AL East", "2026-09-27T23:00:00Z"),
-      clinchDivision("LAD", "NL West", "2026-09-27T01:00:00Z"),
-      clinchDivision("MIL", "NL Central", "2026-09-26T22:00:00Z"),
-      clinchDivision("CWS", "AL Central", "2026-09-27T23:00:00Z", "2026-09-20T02:00:00Z"),
-    ],
+    log: [clinchDivision("LAD", "NL West", "2026-09-28T01:00:00Z"), ...FIRST_TWO_CLINCHES],
   };
-  assert.deepEqual(listFreshTeams(), ["TB", "LAD"]);
+  assert.deepEqual(listFreshTeams(), ["LAD"]);
+});
+
+test("Updates box: a new device's first look before any update lists every update after it", (t) => {
+  useDeviceStorage(t, []);
+  session.state = { teams: {}, log: [] };
+  assert.deepEqual(listFreshTeams(), []);
+
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), ["TB", "MIL"]);
+});
+
+test("Updates box: a new device whose first read of the season failed starts once a read succeeds", (t) => {
+  useDeviceStorage(t, []);
+  t.after(() => Object.assign(session, { problem: "" }));
+  Object.assign(session, { problem: "unreachable", state: { teams: {}, log: [] } });
+  assert.deepEqual(listFreshTeams(), []);
+
+  Object.assign(session, { problem: "", state: { teams: {}, log: FIRST_TWO_CLINCHES } });
+  assert.deepEqual(listFreshTeams(), []);
+
+  session.state = {
+    teams: {},
+    log: [clinchDivision("LAD", "NL West", "2026-09-28T01:00:00Z"), ...FIRST_TWO_CLINCHES],
+  };
+  assert.deepEqual(listFreshTeams(), ["LAD"]);
+});
+
+test("Updates box: a device that dismissed an earlier season's box lists every update of this one", (t) => {
+  useDeviceStorage(t, [["updatesSeenAt", { [session.activeYear - 1]: Date.parse("2025-09-28") }]]);
+  session.state = { teams: {}, log: FIRST_TWO_CLINCHES };
+  assert.deepEqual(listFreshTeams(), ["TB", "MIL"]);
 });
 
 test("Updates box: after a dismissal, everything noticed since, however long ago it happened", (t) => {
-  keepSeenAt(session.activeYear, Date.parse("2026-09-27T00:00:00Z"));
-  t.after(() => keepSeenAt(session.activeYear, 0));
+  useDeviceStorage(t, [
+    ["updatesSeenAt", { [session.activeYear]: Date.parse("2026-09-27T00:00:00Z") }],
+  ]);
   session.state = {
     teams: {},
     log: [
@@ -148,7 +195,8 @@ test("Updates box: after a dismissal, everything noticed since, however long ago
   assert.deepEqual(listFreshTeams(), ["TB", "CWS"]);
 });
 
-test("Updates box: a game that ends past midnight names the night it was played", () => {
+test("Updates box: a game that ends past midnight names the night it was played", (t) => {
+  useDeviceStorage(t, [["updatesSeenAt", { [session.activeYear]: 0 }]]);
   const brewersWin = (game, ended) => ({
     at: ended,
     kind: "game",
@@ -279,12 +327,32 @@ test("update log: a series game's result and where the series stands join with a
   const describeGame = (entry) => describeEntry({ kind: "game", series: "AL_DS1", ...entry });
   assert.equal(
     describeGame({ won: "NYY", lost: "TOR", runs: [5, 3], game: 2, score: [2, 0] }),
-    "Yankees beat the Blue Jays 5-3 in Game&nbsp;2, lead the ALDS 2&ndash;0",
+    "Yankees beat the Blue Jays 5-3 in Game&nbsp;2, lead the ALDS 2-0",
   );
   assert.equal(
     describeGame({ won: "TOR", lost: "NYY", runs: [4, 1], game: 3, score: [1, 2] }),
-    "Blue Jays beat the Yankees 4-1 in Game&nbsp;3, trail the ALDS 1&ndash;2",
+    "Blue Jays beat the Yankees 4-1 in Game&nbsp;3, trail the ALDS 1-2",
   );
+});
+
+test("update log: each club is its name in bold, without its rank or dot", () => {
+  session.state = { teams: { NYY: {}, TOR: {} } };
+  const rendered = String(
+    renderEntryText({
+      kind: "game",
+      series: "AL_DS1",
+      won: "NYY",
+      lost: "TOR",
+      runs: [5, 3],
+      game: 2,
+      score: [2, 0],
+    }),
+  );
+  assert.deepEqual(
+    [...rendered.matchAll(/<b><button [^>]*>([^<]+)<\/button><\/b>/g)].map(([, name]) => name),
+    ["Yankees", "Blue Jays"],
+  );
+  assert.doesNotMatch(rendered, /rank-tag|class="dot"/);
 });
 
 test("update log: clinches", () => {
@@ -969,6 +1037,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
       date: "2026-09-25",
       games: [
         {
+          id: "900001",
           away: "BAL",
           home: "NYY",
           state: "pre",
@@ -977,6 +1046,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
           doubleheader: 2,
         },
         {
+          id: "900002",
           away: "BAL",
           home: "NYY",
           state: "final",
@@ -985,6 +1055,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
           doubleheader: 1,
         },
         {
+          id: "900003",
           away: "CLE",
           home: "BOS",
           state: "live",
@@ -996,6 +1067,7 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
       ],
       postponed: [
         {
+          id: "900004",
           away: "TOR",
           home: "BAL",
           state: "off",
@@ -1005,7 +1077,14 @@ test("games list: live halves, a doubleheader in game order, a postponement, an 
       ],
     },
     next: [
-      { date: "2026-10-03", away: null, home: "TB", state: "pre", start: "2026-10-03T17:08:00Z" },
+      {
+        id: "900005",
+        date: "2026-10-03",
+        away: null,
+        home: "TB",
+        state: "pre",
+        start: "2026-10-03T17:08:00Z",
+      },
     ],
   };
   assert.deepEqual(describeGameList(slate), [
@@ -1034,6 +1113,24 @@ const seasonSnapshot = buildSnapshot(SEASON_FIXTURE.responses, {
   now: SEASON_FIXTURE_NOW,
 });
 const seasonSchedule = Object.values(seasonSnapshot.schedule).flat();
+
+test("every playoff game listed before its clubs are known keeps a row and a button of its own", () => {
+  const responses = {
+    ...eveningFixture.responses,
+    seasonGames: eveningFixture.responses.postseason,
+  };
+  const now = Date.parse(eveningFixture.now);
+  const snapshot = buildSnapshot(responses, { season: eveningFixture.season, now });
+  session.state = snapshot;
+  const schedule = Object.values(snapshot.schedule).flat();
+  const wildCardDay = schedule.filter((game) => game.date === "2026-09-29");
+  assert.equal(wildCardDay.length, 4);
+  const { days } = listSeasonDays(snapshot.slate, schedule, now);
+  const markup = String(days.find((listed) => listed.day === "2026-09-29")?.markup ?? "");
+  const keys = [...markup.matchAll(/data-game="([^"]*)"/g)].map(([, key]) => key);
+  assert.equal(keys.length, 4);
+  assert.equal(new Set(keys).size, 4);
+});
 
 /** @param {string} row @param {RegExp} pattern */
 const readRowText = (row, pattern) => normalizeSpaces(stripTags(pattern.exec(row)?.[1] ?? ""));
@@ -1134,21 +1231,23 @@ test("games list: a game still to play names its starters with their arm, leavin
       date: "2026-09-29",
       games: [
         {
+          id: "900006",
           away: "BOS",
           home: "NYY",
           state: "pre",
           start: "2026-09-30T00:08:00Z",
           starters: [
-            { id: 801139, name: "Tolle", hand: "L", era: "3.03" },
-            { id: 693645, name: "Schlittler", hand: "R", era: "1.95" },
+            { id: 801139, name: "Tolle", hand: "L" },
+            { id: 693645, name: "Schlittler", hand: "R" },
           ],
         },
         {
+          id: "900007",
           away: "CHC",
           home: "SD",
           state: "pre",
           start: "2026-09-30T02:08:00Z",
-          starters: [{ id: 571510 }, { id: 650633, name: "King", hand: "R", era: null }],
+          starters: [{ id: 571510 }, { id: 650633, name: "King", hand: "R" }],
         },
       ],
     },
@@ -1170,7 +1269,7 @@ test("games list: a game still to play names its starters with their arm, leavin
       rendered,
     );
   assert.equal(button[1], "Game details: Red Sox at Yankees, Tue, Sep 29");
-  assert.equal(button[2], "2026-09-29 BOS NYY 1");
+  assert.equal(button[2], "900006 2026-09-29");
 });
 
 test("a game's sheet heads its Game section with the game's row, whose clubs open their sheets, without its starters or the button that opens it", () => {
@@ -1279,6 +1378,7 @@ test("games list: a delay shows under the start time or the score", () => {
       date: "2026-09-27",
       games: [
         {
+          id: "900008",
           away: "BAL",
           home: "NYY",
           state: "pre",
@@ -1286,6 +1386,7 @@ test("games list: a delay shows under the start time or the score", () => {
           delay: "Delayed: Rain",
         },
         {
+          id: "900009",
           away: "TB",
           home: "PHI",
           state: "live",
@@ -1354,8 +1455,16 @@ test("games list: a finished game marks its winner and dims only the losing scor
     today: {
       date: "2026-09-26",
       games: [
-        { away: "BAL", home: "NYY", state: "final", start: "2026-09-26T17:05:00Z", score: [3, 7] },
         {
+          id: "900010",
+          away: "BAL",
+          home: "NYY",
+          state: "final",
+          start: "2026-09-26T17:05:00Z",
+          score: [3, 7],
+        },
+        {
+          id: "900011",
           away: "TB",
           home: "BOS",
           state: "live",
@@ -1385,8 +1494,15 @@ test("games list: a club out of the race or knocked out of the postseason shows 
     today: {
       date: "2026-10-01",
       games: [
-        { away: "DET", home: "BOS", state: "final", start: "2026-10-01T17:05:00Z", score: [1, 4] },
-        { away: "BAL", home: "TOR", state: "pre", start: "2026-10-01T23:07:00Z" },
+        {
+          id: "900012",
+          away: "DET",
+          home: "BOS",
+          state: "final",
+          start: "2026-10-01T17:05:00Z",
+          score: [1, 4],
+        },
+        { id: "900013", away: "BAL", home: "TOR", state: "pre", start: "2026-10-01T23:07:00Z" },
       ],
     },
   };
@@ -1470,6 +1586,23 @@ test("a seed is final only once no club can still pass or tie it", () => {
 
   session.state = { ...session.state, projected: false };
   assert.equal(isSeedFinal("CHC"), true, "MLB has set the bracket");
+});
+
+test("a division winner's seed is final once a rival a game short for a rainout MLB cancelled can no longer reach it", () => {
+  session.state = { teams: { TB: { seed: 1 }, CLE: { seed: 2 }, HOU: { seed: 3 } } };
+  const listStandings = (scheduled) => ({
+    divisions: {
+      ...FINAL_DAY_STANDINGS.divisions,
+      "AL West": [
+        { id: "HOU", w: 84, l: 77, elim: "-", wce: "-", lead: true, ...scheduled },
+        { id: "TEX", w: 80, l: 81, elim: "-", wce: "E", ...scheduled },
+      ],
+    },
+  });
+  session.standings = listStandings({ scheduled: 161 });
+  assert.equal(isSeedFinal("CLE"), true, "the Astros can win 84 at most, under the Guardians' 85");
+  session.standings = listStandings({});
+  assert.equal(isSeedFinal("CLE"), false, "over 162 games the Astros could still tie");
 });
 
 test("games list: a season with no live data says why", () => {
@@ -1581,7 +1714,15 @@ test("an update finds the one game all its entries came from, and none when they
 });
 
 test("games list: a game under way shows its outs as two lights beside the inning", () => {
-  const live = (away, outs) => ({ away, home: "NYY", state: "live", inning: 5, half: "top", outs });
+  const live = (away, outs) => ({
+    id: `${away}-NYY`,
+    away,
+    home: "NYY",
+    state: "live",
+    inning: 5,
+    half: "top",
+    outs,
+  });
   const slate = {
     today: { date: "2026-09-24", games: [live("BOS", 1), live("TB", 2), live("TOR", 0)] },
   };
@@ -1636,7 +1777,7 @@ const readBracketScores = (seriesIds) =>
 /** What each series' card says under it, in the order of `seriesIds`, without its markup. */
 const readCardNotes = (seriesIds = SERIES_IDS) =>
   seriesIds.map((id) => {
-    const note = String(renderCardNote(findSeries(session.state, id), ""));
+    const note = String(renderCardNote(findSeries(session.state, id)));
     return {
       text: stripTags(normalizeSpaces(note).replace(/&bull;/g, "•")),
       classes:
@@ -1794,20 +1935,17 @@ test("bracket: a delayed start shows its delay instead of a countdown", () =>
     ]);
   }));
 
-test("Chivo Mono draws 6% smaller than its size, so it looks as big as Barlow", () => {
-  const faces = readFontFaces(`${import.meta.dirname}/../page/styles.css`).filter(
-    (face) => face["font-family"] === "Chivo Mono",
-  );
-  assert.deepEqual(
-    faces.map((face) => face["size-adjust"]),
-    ["94%", "94%"],
-  );
+test("Chivo Mono draws a little smaller than its size, so its numbers look as big as Libre Franklin's words", () => {
+  const readAdjusts = (/** @type {string} */ family) =>
+    readFontFaces(`${import.meta.dirname}/../page/styles.css`)
+      .filter((face) => face["font-family"] === family)
+      .map((face) => face["size-adjust"] ?? "100%");
+  assert.deepEqual(readAdjusts("Chivo Mono"), ["97.48%", "97.48%"]);
+  assert.deepEqual(readAdjusts("Libre Franklin"), ["100%", "100%"]);
 });
 
-test("Updates box: each update shows when it happened, not when the page noticed it", (t) => {
-  keepSeenAt(session.activeYear, Date.parse("2026-09-24T20:00:00Z"));
-  t.after(() => keepSeenAt(session.activeYear, 0));
-  const { count, whens } = readUpdateBox(TWO_UPDATES);
+test("Updates box: each update shows when it happened, not when the page noticed it", () => {
+  const { count, whens } = readUpdateBox(TWO_UPDATES, Date.parse("2026-09-24T20:00:00Z"));
   assert.equal(count, "2 updates since yesterday");
   assert.deepEqual(whens, ["8:30 PM", "Yesterday"]);
 });
@@ -2000,23 +2138,21 @@ test("games list: a game away from its home club's own ballpark names the city i
   assert.equal(labels.filter(Boolean).length, 1);
 });
 
-test("each appearance choice shows the home-screen icon it offers, and the page has each one", () => {
+test("each appearance choice shows the home-screen icon it offers", () => {
   const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
   const choices = Object.fromEntries(
     [...page.matchAll(/<label class="appearance-choice">([\s\S]*?)<\/label>/g)].map(
       ([, choice]) => [
         choice.match(/<span>([^<]+)<\/span>\s*$/)[1],
-        [...choice.matchAll(/<img src="([^"]+)"/g)].map(([, source]) => source),
+        choice.match(/class="appearance-icon (appearance-icon-[a-z]+)"/)[1],
       ],
     ),
   );
   assert.deepEqual(choices, {
-    System: ["icon-light-180.png", "icon-180.png"],
-    Ball: ["icon-light-180.png"],
-    "Night Game": ["icon-180.png"],
+    System: "appearance-icon-halves",
+    Ball: "appearance-icon-light",
+    "Night Game": "appearance-icon-dark",
   });
-  for (const source of Object.values(choices).flat())
-    assert.ok(existsSync(`${import.meta.dirname}/../page/${source}`), source);
 });
 
 test("each look offers icons the page has, and Ball's is Night Game's ball on cream", () => {

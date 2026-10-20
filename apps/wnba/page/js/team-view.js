@@ -1,4 +1,4 @@
-import { countDaysBetween, describeDay, formatClockTime, formatShortDate } from "#shared/days.js";
+import { describeDay, formatClockTime, formatShortDate, isStillToComeToday } from "#shared/days.js";
 import { renderGameCards } from "#shared/game-cards.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
@@ -14,13 +14,12 @@ import { renderTitles } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
 import { readGameDay } from "./days.js";
 import { describeLiveClock, describeStartTime } from "./games-view.js";
-import { findTeamNearestGames } from "./nearest-games.js";
+import { findTeamNearestGames, isToBePlayed, mapSeriesById } from "./nearest-games.js";
 import { nameTeam, readPlayoffRuns } from "./series.js";
 import { formatMarkColors } from "./sheet-colors.js";
 import { renderPlayerTable } from "./sheet-parts.js";
 import { renderPlayerButton } from "./player-button.js";
 import { ROUNDS } from "./snapshot.js";
-import { renderStreak } from "./standings-view.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("./games-view.js").Game} Game */
@@ -50,10 +49,10 @@ export const findTeamLeaders = (season, team) =>
 
 // A leader saved without her minutes or shooting shows a dash until the season's next update.
 /** @param {number | null | undefined} value */
-const formatAverage = (value) => (value == null ? "-" : value.toFixed(1));
+export const formatAverage = (value) => (value == null ? "-" : value.toFixed(1));
 
 /** @param {number | null | undefined} share */
-const formatPercentage = (share) => (share == null ? "-" : (share * 100).toFixed(1));
+export const formatPercentage = (share) => (share == null ? "-" : (share * 100).toFixed(1));
 
 // Points, rebounds, and assists, then how well each player shoots and how much she plays.
 /** @type {LeaderColumn[]} */
@@ -111,29 +110,17 @@ const renderLeadingScorers = (leaders) =>
 const OTHER_PLACE = { home: "away", away: "home" };
 
 /**
- * A team's playoff games: those it has finished, and the next one it plays, if any. A game left
- * over in a series that's already decided won't be played.
+ * A team's playoff games: those it has finished, and the next one it will play, if any.
  * @param {Season} season
  * @param {string} team
  */
 function listTeamGames(season, team) {
-  const decided = new Set(
-    (season.series ?? []).filter((series) => series.winner).map((series) => series.id),
-  );
+  const seriesById = mapSeriesById(season.series);
   const games = (season.games ?? []).filter((game) => findPlace(game, team));
   const finished = games.filter((game) => game.state === "final");
-  const next = games.find((game) => game.state !== "final" && !decided.has(game.series ?? ""));
+  const next = games.find((game) => game.state !== "final" && isToBePlayed(game, seriesById));
   return { finished, next: next ?? null };
 }
-
-/**
- * @param {Game} game
- * @param {number} now
- */
-const isToday = (game, now) => {
-  const day = readGameDay(game);
-  return !!day && countDaysBetween(new Date(now), day) === 0;
-};
 
 /**
  * @param {Game} game
@@ -231,8 +218,11 @@ const readLeaguePlayoffs = (games) =>
       .map((game) => ({ home: game.home.score ?? 0, away: game.away.score ?? 0 })),
   );
 
-/** @param {number} margin */
-const formatPointMargin = (margin) => formatMargin(margin, 1);
+/**
+ * A points margin a game, with its sign, as +4.2, or 0.0 when it rounds to nothing.
+ * @param {number} margin
+ */
+export const formatPointMargin = (margin) => formatMargin(margin, 1);
 
 /** @type {Measure[]} */
 const MEASURES = [
@@ -284,6 +274,13 @@ function renderAgainstField(code, team, field, teams) {
 }
 
 /**
+ * A streak, like W 3, marked when it's a winning one.
+ * @param {string} streak
+ */
+const renderStreak = (streak) =>
+  streak.startsWith("W") ? html`<span class="streak-won">${streak}</span>` : streak;
+
+/**
  * How the team ended the regular season: its last ten games and its streak, as the standings
  * show them, each on its own line, or nothing while it has neither.
  * @param {StandingsRow} row
@@ -326,7 +323,7 @@ function renderRegularSeason(code, standings) {
 }
 
 /**
- * The seasons a team won it all, newest first, the oldest it won under an earlier name saying so.
+ * The seasons a team won it all, newest first, each it won under an earlier name saying so.
  * @param {string} code
  * @param {{ before: number[], now: number[] }} titles
  */
@@ -334,9 +331,7 @@ function listTitleYears(code, titles) {
   const formerTeam = TEAMS[code].titlesAs;
   const before = [...titles.before]
     .sort((first, second) => second - first)
-    .map((year, index, years) =>
-      formerTeam && index === years.length - 1 ? `${year} (as ${formerTeam})` : String(year),
-    );
+    .map((year) => (formerTeam ? `${year} (as ${formerTeam})` : String(year)));
   return [...titles.now.map(String), ...before];
 }
 
@@ -389,7 +384,9 @@ const NEXT_GAME_ICON = html`<svg class="next-game-icon" viewBox="0 0 256 256" fi
  * @param {number} now
  */
 export function renderNextGame(game, team, now) {
-  const isSoon = game.state === "live" || isToday(game, now);
+  const isSoon =
+    game.state === "live" ||
+    isStillToComeToday({ state: game.state, day: readGameDay(game) }, new Date(now));
   return html`<div class="team-game next${isSoon ? " soon" : ""}">
     <span class="team-game-number">G${game.number}</span>
     <span class="team-result" aria-hidden="true">${NEXT_GAME_ICON}</span>
@@ -430,12 +427,12 @@ function renderPlayoffs(team, { finished, next }, chip, { isPlaying, field, team
  * @param {Season} season
  * @param {string} team
  */
-function readNearestGames(season, team) {
-  const decided = new Set(
-    (season.series ?? []).filter((series) => series.winner).map((series) => series.id),
+const readNearestGames = (season, team) =>
+  findTeamNearestGames(
+    season.nearestGames ?? season.games ?? [],
+    team,
+    mapSeriesById(season.series),
   );
-  return findTeamNearestGames(season.nearestGames ?? season.games ?? [], team, decided);
-}
 
 /** @param {Game} game */
 function describeCardDay(game) {
@@ -452,15 +449,12 @@ function describeGameCard(game, team) {
   const place = findPlace(game, team) ?? "home";
   const other = game[OTHER_PLACE[place]];
   const own = game[place].score;
-  const day = describeCardDay(game);
   return {
     id: game.id,
-    label: `${nameTeam(game.away.team)} at ${nameTeam(game.home.team)}, ${day}`,
+    label: `${nameTeam(game.away.team)} at ${nameTeam(game.home.team)}, ${describeCardDay(game)}`,
     state: /** @type {"final" | "live" | "pre"} */ (game.state),
-    when:
-      game.state === "live"
-        ? html`<span class="game-card-clock">${describeLiveClock(game)}</span>`
-        : day,
+    day: readGameDay(game),
+    clock: game.state === "live" ? describeLiveClock(game) : "",
     score: own == null || other.score == null ? null : { own, theirs: other.score },
     time: describeStartTime(game),
     isHome: place === "home",
@@ -472,11 +466,15 @@ function describeGameCard(game, team) {
 /**
  * @param {Season} season
  * @param {string} team
+ * @param {number} now
  */
-function renderNearestGames(season, team) {
-  const { last, now, next } = readNearestGames(season, team);
-  const games = [last, now, next].filter((game) => game !== null);
-  return renderGameCards(games.map((game) => describeGameCard(game, team)));
+function renderNearestGames(season, team, now) {
+  const nearest = readNearestGames(season, team);
+  const games = [nearest.last, nearest.now, nearest.next].filter((game) => game !== null);
+  return renderGameCards(
+    games.map((game) => describeGameCard(game, team)),
+    new Date(now),
+  );
 }
 
 /**
@@ -518,7 +516,7 @@ export function renderTeamSheet(season, code, { year, now }) {
   return {
     heading: renderTeamHeading(code),
     note: joinWithSeparator(listFacts(row, run)),
-    body: html`${renderNearestGames(season ?? {}, code)}
+    body: html`${renderNearestGames(season ?? {}, code, now)}
     ${run ? html`${playoffs}${regularSeason}` : html`${regularSeason}${playoffs}`}
     ${renderTitles(listTitleYears(code, titles))}`,
   };

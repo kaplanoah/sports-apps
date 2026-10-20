@@ -1,6 +1,6 @@
 import { test, expect, openApp, openSettings, ON_A_PHONE } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
@@ -103,7 +103,7 @@ test("the News tab shows a card for each piece of news the Worker saves, newest 
   await expect(page.locator(".news-more-title")).toHaveText([
     "MLB proposes shorter season, best-of-7 division series",
   ]);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
@@ -123,7 +123,7 @@ test("switching off the Mets' own outlets or The Athletic leaves their stories o
   await expect(page.locator(".news-more")).toHaveCount(0);
 
   await openSettings(page);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });
@@ -189,7 +189,10 @@ test("a photo's credit too long to split before its agency wraps as one text, in
     outlet: "ESPN",
     source: "espn",
     teams: ["CLE", "CWS"],
-    photo: { url: photoUrl, credit: "Frank Jansky/Icon Sportswire via Getty Images" },
+    photo: {
+      url: photoUrl,
+      credit: "Frank Jansky/Icon Sportswire/Zuma via Getty Images",
+    },
   });
   await app.writeFromWorker("news/cards", { cards: [{ lead, more: [] }] });
   const credit = page.locator(".news-photo-credit");

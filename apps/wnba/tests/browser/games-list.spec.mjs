@@ -1,5 +1,7 @@
 import { test, expect, expectDayAtTop, openApp, readWholeSeasonSchedule } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
+import { startValkyriesAtWings } from "./game-sheet-games.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -46,8 +48,10 @@ test("a score the Worker saves shows up without a reload", async ({ page }) => {
   await expect(page.locator("#stamp > span").first()).toHaveText(
     /^NOW\s*Dream @ Mystics 30-27 with 5:10 in Q2$/,
   );
-  await expect(page.locator("#stamp b.now")).toHaveCSS("font-size", "13px");
-  await expect(page.locator("#stamp")).toHaveCSS("font-size", "14px");
+  const caption = await readRole(page, "caption");
+  const detail = await readRole(page, "detail");
+  await expect(page.locator("#stamp b.now")).toHaveCSS("font-size", `${caption.size}px`);
+  await expect(page.locator("#stamp")).toHaveCSS("font-size", `${detail.size}px`);
 });
 
 test("a team stays put as Bonus comes and goes, level with the score", async ({ page }) => {
@@ -79,6 +83,45 @@ test("a team stays put as Bonus comes and goes, level with the score", async ({ 
   await expect(row.locator(".bonus")).toHaveCount(0);
   expect(await readTeamCenters()).toEqual(before);
   expect(Math.abs(before[0] - (await findCenter(row.locator(".score"))))).toBeLessThan(1);
+});
+
+test("a regular-season game's score and status sit where a playoff game's do, the score level with its teams", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await app.changeSeason((season) => {
+    startValkyriesAtWings(season);
+    const game = season.games.find((each) => each.id === "1042600132");
+    Object.assign(game, {
+      state: "live",
+      status: "Q2 5:10",
+      period: 2,
+      clock: "5:10",
+      round: null,
+    });
+    Object.assign(game.away, { score: 30, seed: null });
+    Object.assign(game.home, { score: 27, seed: null });
+    return season;
+  });
+  const readOffsets = (row) =>
+    row.evaluate((element) => {
+      const findMiddle = (part) => {
+        const box = /** @type {Element} */ (element.querySelector(part)).getBoundingClientRect();
+        return box.top + box.height / 2;
+      };
+      const middle = findMiddle(".game-middle");
+      return [".game-headline", ".game-status", ".game-side.away .club"].map(
+        (part) => findMiddle(part) - middle,
+      );
+    });
+  const regular = page.locator('[data-game="1042600132"]');
+  const playoff = page.locator('[data-game="1042600112"]');
+  await expect(regular.locator(".game-label")).toHaveCount(0);
+  await expect(playoff.locator(".game-label")).toHaveText(/^1st Rd/);
+  const [score, status, team] = await readOffsets(regular);
+  expect([score, status]).toEqual((await readOffsets(playoff)).slice(0, 2));
+  expect(score).toBeCloseTo(team, 0);
 });
 
 test("the Games lists' days, series labels, and statuses are in Barlow, apart from the team names", async ({
@@ -117,15 +160,56 @@ test("a Games list's day reads its month, date, and weekday at their sizes, weig
     }),
   );
   const [month, date, weekday] = parts;
-  expect(
-    parts.map(({ fontSize, fontWeight, letterSpacing }) => [fontSize, fontWeight, letterSpacing]),
-  ).toEqual([
-    ["13px", "600", "0.91px"],
-    ["24px", "600", "normal"],
-    ["13px", "600", "0.78px"],
+  const label = await readRole(page, "label");
+  const score = await readRole(page, "score");
+  expect(parts.map(({ fontSize, fontWeight }) => [fontSize, fontWeight])).toEqual([
+    [`${label.size}px`, String(label.weight)],
+    [`${score.size}px`, String(score.weight)],
+    [`${label.size}px`, String(label.weight)],
   ]);
+  expect(date.letterSpacing).toBe("normal");
+  expect(parseFloat(month.letterSpacing)).toBeCloseTo(label.spacing, 2);
+  expect(parseFloat(weekday.letterSpacing)).toBeCloseTo(label.spacing, 2);
   expect(date.top - month.bottom).toBeCloseTo(3, 1);
   expect(weekday.top - date.bottom).toBeCloseTo(4.5, 1);
+});
+
+test("a date that starts with a 1 sits 0.065em left of its column's middle, so the 1's stem centers, in the strip and beside its games, each digit its own width", async ({
+  page,
+}) => {
+  await openApp(page, { isWholeSeason: true });
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+  const day = page.locator('#seasonGames .day-cell[data-day="2026-10-01"]');
+  await day.click();
+  await expect(day).toHaveClass(/is-chosen/);
+  await page.clock.runFor(2000);
+  await expect(page.locator('#seasonGames .listed-day[data-day="2026-10-01"]')).toBeInViewport();
+
+  const readOffsets = () =>
+    page.evaluate(() =>
+      [
+        ['.day-cell[data-day="2026-09-30"]', ".cell-number"],
+        ['.day-cell[data-day="2026-10-01"]', ".cell-number"],
+        ['.day-cell[data-day="2026-10-11"]', ".cell-number"],
+        ['.listed-day[data-day="2026-10-01"] .day-label', ".day-number"],
+      ].map(([holder, part]) => {
+        const box = /** @type {Element} */ (document.querySelector(`#seasonGames ${holder}`));
+        const number = /** @type {HTMLElement} */ (box.querySelector(part));
+        const middle = (rect) => rect.left + rect.width / 2;
+        const { fontSize, fontVariantNumeric } = getComputedStyle(number);
+        const offset =
+          (middle(number.getBoundingClientRect()) - middle(box.getBoundingClientRect())) /
+          parseFloat(fontSize);
+        return [number.textContent, Math.round(offset * 200) / 200 + 0, fontVariantNumeric];
+      }),
+    );
+  expect(await readOffsets()).toEqual([
+    ["30", 0, "normal"],
+    ["1", -0.065, "normal"],
+    ["11", -0.065, "normal"],
+    ["1", -0.065, "normal"],
+  ]);
 });
 
 test("a game's dots, names, and time center on their capitals, level with each other, the seed on the right half a pixel lower", async ({
@@ -240,7 +324,7 @@ test("on a day without games, the Games list has a day saying so at today's plac
   await expectDayAtTop(page, "2026-09-30");
 });
 
-test("No games today is 15.5px, centered beside today's date, its capitals a touch above the middle of the date's number", async ({
+test("No games today is a sentence, centered beside today's date, its capitals a touch above the middle of the date's number", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -248,7 +332,7 @@ test("No games today is 15.5px, centered beside today's date, its capitals a tou
   await dropTodaysGames(app);
   const note = page.locator("#seasonGames .no-games .empty-note");
   await expect(note).toHaveText("No games today");
-  await expect(note).toHaveCSS("font-size", "15.5px");
+  await expect(note).toHaveCSS("font-size", `${(await readRole(page, "body")).size}px`);
   // Chromium's builds set a baseline up to a pixel apart, so the note's lead over the number is
   // checked loosely.
   const { middle: noteMiddle } = await readCapitals(note);
@@ -267,7 +351,7 @@ test("No games today is 15.5px, centered beside today's date, its capitals a tou
   expect(Math.abs(textMiddle - columnMiddle)).toBeLessThanOrEqual(1);
 });
 
-test("a game's series label is on the type scale's small step, and it and If necessary read lighter than Final", async ({
+test("a game's series label is a label, and it and If necessary read a step lighter than Final", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -278,11 +362,14 @@ test("a game's series label is on the type scale's small step, and it and If nec
   });
   const ifNeeded = page.locator('[data-game="1042600132"] .game-status');
   await expect(ifNeeded).toHaveText("If necessary");
-  await expect(ifNeeded.locator(".if-needed")).toHaveCSS("font-weight", "500");
+  const label = await readRole(page, "label");
+  const lighter = String(label.weight - 100);
+  await expect(ifNeeded.locator(".if-needed")).toHaveCSS("font-weight", lighter);
   const final = page.locator("#seasonGames .game-status", { hasText: "Final" }).first();
-  await expect(final).toHaveCSS("font-weight", "600");
-  await expect(page.locator("#seasonGames .series-label").first()).toHaveCSS("font-weight", "500");
-  await expect(page.locator("#seasonGames .series-label").first()).toHaveCSS("font-size", "13px");
+  await expect(final).toHaveCSS("font-weight", String(label.weight));
+  const series = page.locator("#seasonGames .series-label").first();
+  await expect(series).toHaveCSS("font-weight", lighter);
+  await expect(series).toHaveCSS("font-size", `${label.size}px`);
 });
 
 test("a break between periods reads in the status's capitals, in the live game's orange", async ({
@@ -348,7 +435,10 @@ test("a seed sits a little lighter than its team's name, centered on its row lik
       offset: middle(seed.getBoundingClientRect()) - middle(element.getBoundingClientRect()),
     };
   });
-  expect([seedWeight, nameWeight]).toEqual(["400", "600"]);
+  const seed = await readRole(page, "caption");
+  const team = await readRole(page, "team");
+  expect([seedWeight, nameWeight]).toEqual([String(seed.weight), String(team.weight)]);
+  expect(seed.weight).toBeLessThan(team.weight);
   expect(offset).toBeCloseTo(0, 1);
   const isLoaded = await page.evaluate(() => document.fonts.check('400 12px "Barlow Condensed"'));
   expect(isLoaded).toBe(true);

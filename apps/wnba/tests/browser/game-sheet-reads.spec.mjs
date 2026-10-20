@@ -1,7 +1,7 @@
 import { test, expect, openApp, openGameSheet, findGameButton, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { describeBoxScore } from "../../worker/src/box-score.js";
 import {
@@ -111,10 +111,10 @@ test("a game that hasn't started previews the meetings, the season stats, and th
   await expect(sheet.getByRole("heading", { level: 2 })).toHaveText("First Round Game 3");
   await expect(sheet.locator(".faceoff .time")).toHaveText(/^9:00\sPM$/);
   await expect(sheet.locator(".sheet-part-head").first()).toHaveText(
-    /Meetings\s*Fever won the season series 2-1/,
+    /Season series\s*Fever won 2-1/,
   );
   await expect(sheet.locator(".meetings li")).toHaveCount(3);
-  await expect(sheet.locator(".meetings li").first()).toHaveText(/Aug 6\s*Aces\s*86-84\s*at Fever/);
+  await expect(sheet.locator(".meetings li").first()).toHaveText(/Jul 5\s*Fever\s*84-68\s*at Aces/);
   await expect(sheet.locator(".tape-label")).toHaveText([
     "Record",
     "PPG",
@@ -161,7 +161,7 @@ test("a game the league has no box score for says so, and a preview whose meetin
   );
   await expect(preview.locator(".tape-label")).toHaveCount(6);
   await expect(preview.locator(".players tbody tr:not(.players-head)")).toHaveCount(10);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });
@@ -171,7 +171,8 @@ test("a preview's meetings that didn't load read again on a tap on Try again, ho
 }) => {
   await openApp(page);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 502, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 502, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(matchPath("/preview"), refuse);
   const preview = await openGameSheet(page, FEVER_AT_ACES);
   const meetings = preview.locator(".sheet-part").first();
@@ -202,7 +203,7 @@ test("a final's box score and a preview's meetings open from what the store keep
   const preview = await openGameSheet(page, FEVER_AT_ACES);
   await expect(preview.locator(".meetings li")).toHaveCount(3);
   await expect(preview.locator(".meetings li").first()).toHaveText(
-    /Aug 6\s*Aces\s*86-84\s*at Fever/,
+    /Jul 5\s*Fever\s*84-68\s*at Aces/,
   );
 });
 
@@ -234,13 +235,16 @@ test("a box score the Worker can't load says so over Try again, which holds the 
   await openApp(page);
   /** @param {import("@playwright/test").Route} route */
   const refuse = (route) =>
-    route.fulfill({ status: 502, json: { error: "Couldn't read the WNBA: test" } });
+    route.fulfill({
+      status: 502,
+      json: { error: { code: "upstream_error", message: "Couldn't read the WNBA: test" } },
+    });
   await page.route(matchPath("/box-score"), refuse);
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
   const block = sheet.locator("#gameBody .retry-block");
   await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
   await expect(block.locator(".retry-next")).toHaveText("Try again to load box score");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -258,7 +262,8 @@ test("a box score that didn't load reads again as the phone comes back online", 
 }) => {
   await openApp(page);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 502, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 502, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(matchPath("/box-score"), refuse);
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
   await expect(sheet.locator("#gameBody .retry-block")).toBeVisible();
@@ -303,7 +308,7 @@ test("while its meetings load, the sheet holds their shape, with the season stat
   const sheet = await openGameSheet(page, FEVER_AT_ACES);
 
   await expect(sheet.locator(".sheet-part-head h3")).toHaveText([
-    "Meetings",
+    "Season series",
     "Season stats",
     "Leading scorers",
   ]);

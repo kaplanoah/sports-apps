@@ -67,6 +67,7 @@ const TONIGHT = "2026-09-24";
 // Each club's games so far, which a starter needs as many innings as to qualify.
 const CLUB_GAMES = { HOU: 157, ATH: 158 };
 const AT_ATHLETICS = {
+  id: "824950",
   date: TONIGHT,
   start: "2026-09-25T01:40:00Z",
   state: "pre",
@@ -220,6 +221,17 @@ test("each starter's marks take his club's color in each theme, the away club ta
     readColors("NYY", "LAD"),
     "--away-dark: #ffffff; --home-dark: #4690d6; --away-light: #6f6e6e; --home-light: #005a9c",
   );
+});
+
+test("an ERA MLB can't figure yet, before a starter's first out, shows the dash an empty stat shows, marked neither ahead nor behind", () => {
+  const opener = {
+    ...BLUBAUGH,
+    line: { ...BLUBAUGH.line, era: "-.--" },
+    ranks: { ...BLUBAUGH.ranks, era: null },
+  };
+  const [era] = readTape(renderStarters(opener, SPRINGS));
+  assert.deepEqual(era.away, { value: "-", rank: null, standing: "unranked" });
+  assert.equal(era.home.standing, null);
 });
 
 test("two numbers that read the same mark neither starter as ahead", () => {
@@ -383,6 +395,26 @@ test("a start in the game under way says Today once he's pulled", () =>
       isNow: false,
     });
   }));
+
+test("a start from last night still says Today until MLB's day ends at 6am Eastern", () => {
+  const lastNight = {
+    date: TONIGHT,
+    opp: "ATH",
+    home: false,
+    ip: "6.0",
+    runs: 1,
+    k: 7,
+    pitches: 95,
+  };
+  const pitcher = { ...BLUBAUGH, starts: [lastNight, ...BLUBAUGH.starts] };
+  const final = { ...AT_ATHLETICS, state: "final" };
+  const readFirstStartDay = () => {
+    const markup = renderLoaded(final, [{ pitcher }, { pitcher: SPRINGS }]);
+    return readText(markup.match(/<ul class="recent-starts"><li>(<span[^>]*>[^<]*<\/span>)/)[1]);
+  };
+  checkAt("2026-09-25T06:30:00Z", () => assert.equal(readFirstStartDay(), "Today"));
+  checkAt("2026-09-25T10:30:00Z", () => assert.equal(readFirstStartDay(), "Sep 24"));
+});
 
 test("both starters' speed lines share one scale, from the slowest pitch either throws to the fastest", () => {
   const markup = renderStarters();

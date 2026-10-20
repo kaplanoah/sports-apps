@@ -1,9 +1,17 @@
 // Modules run only once all of them have loaded, and the browser can paint before then, so a page
 // left to them would first show empty views. The page saves what each part it draws whole showed
-// as it leaves the screen (last-seen.js), with the sheets it showed, and this plain script, loaded
-// in the head, puts it back: the page calls showLastDrawn() right after its views, its sheets, and
+// as it leaves the screen (last-seen.js), with the sheets it showed and its settings' switches, and
+// this plain script, loaded in the head, puts it back, with the look picked that settings shows:
+// the page calls showLastDrawn() right after its views, its sheets, and
 // openLastTab(), before anything is painted, since a part on a hidden tab can't take back where it
 // was scrolled.
+
+/* global LAST_DRAWN_KEY, isLongAwayFrom -- from open-last-tab.js */
+/* global checkPickedChoice, readPickedAppearance -- from pick-theme.js */
+
+// What last-seen.js saves the page's open sheets and settings' switches under.
+const OPEN_SHEETS_KEY = "openSheets";
+const LAST_SWITCHED_KEY = "lastSwitched";
 
 // Storage can be empty or refuse access, as in a private window, so the page never depends on it.
 /** @param {string} key */
@@ -16,7 +24,7 @@ function readSaved(key) {
 }
 
 function readLastDrawn() {
-  const saved = readSaved("lastDrawn");
+  const saved = readSaved(LAST_DRAWN_KEY);
   return saved && typeof saved === "object" ? saved : {};
 }
 
@@ -40,13 +48,6 @@ function findByPath(part, path) {
   for (const index of path) element = element?.children[index];
   return element;
 }
-
-// After two minutes away, a list goes back to where it starts, as the Games view's list does
-// (long-away.js), and a part that starts hidden, like the Games view's search, is hidden again.
-const START_AFTER_AWAY_MS = 2 * 60 * 1000;
-
-/** @param {unknown} savedAt */
-const isLongAwayFrom = (savedAt) => !(Date.now() - Number(savedAt) < START_AFTER_AWAY_MS);
 
 /**
  * @param {Element} part
@@ -72,18 +73,37 @@ function restoreScrolls(part, scrolls, savedAt) {
   }
 }
 
+// A part's style comes back only for the colors its code hands it as custom properties, like a game
+// sheet's teams'. The rest was the page's for a moment, like the hold of a pull to refresh that
+// reloaded the page, and would stay for good.
+/** @param {string} style */
+const keepCustomProperties = (style) =>
+  style
+    .split(";")
+    .map((declaration) => declaration.trim())
+    .filter((declaration) => declaration.startsWith("--"))
+    .join("; ");
+
 /**
  * @param {string} id
- * @param {{ markup: string, hidden: boolean, classes?: unknown, style?: unknown, scrolls?: unknown, savedAt?: unknown }} part
+ * @param {{ markup: string, hidden: boolean, classes?: unknown, style?: unknown, scrolls?: unknown, holderTop?: unknown, savedAt?: unknown }} part
  */
-function showPart(id, { markup, hidden, classes, style, scrolls, savedAt }) {
+function showPart(id, { markup, hidden, classes, style, scrolls, holderTop, savedAt }) {
   const element = /** @type {HTMLElement} */ (document.getElementById(id));
   element.innerHTML = markup;
   const isBackToStart = element.hasAttribute("data-start-hidden") && isLongAwayFrom(savedAt);
   element.hidden = hidden === true || isBackToStart;
   if (typeof classes === "string") element.classList.add(...classes.split(" ").filter(Boolean));
-  if (typeof style === "string") element.setAttribute("style", style);
+  if (typeof style === "string") element.setAttribute("style", keepCustomProperties(style));
   restoreScrolls(element, scrolls, savedAt);
+  // A part drawn inside the season's standings or bracket, which each scroll on their own, goes
+  // back to where its holder was scrolled, which season-header.js takes again once it knows the
+  // holder's room.
+  const holder = element.parentElement;
+  if (Number(holderTop) > 0 && holder) {
+    holder.scrollTop = Number(holderTop);
+    holder.dataset.putBackTop = String(holderTop);
+  }
 }
 
 /** @param {any} saved */
@@ -163,7 +183,7 @@ function showLastDialog(dialog, sheets) {
 // again, beside any it was opened from, until the page's modules take it over (sheet.js's
 // reopenSheets) or close it, unless it was left open longer than it stays (sheet-memory.js).
 function showLastSheets() {
-  const saved = readSaved("openSheets");
+  const saved = readSaved(OPEN_SHEETS_KEY);
   if (!Array.isArray(saved)) return;
   /** @type {Map<HTMLDialogElement, { sheet: HTMLElement, saved: any }[]>} */
   const dialogs = new Map();
@@ -179,11 +199,36 @@ function showLastSheets() {
     if (!sheets.some(({ saved }) => isForgotten(saved))) showLastDialog(dialog, sheets);
 }
 
+// Settings' switches show the device's own choices, which their modules set only once they load,
+// each kept under its own key by its own rules, so the page saves what each showed as it leaves the
+// screen, but for one inside a part drawn whole, which that part's markup holds.
+const KEPT_SWITCHES = "[data-setting] [role=switch][id]:not([data-last-drawn] *)";
+
+function showLastSwitches() {
+  const saved = readSaved(LAST_SWITCHED_KEY);
+  if (!saved || typeof saved !== "object") return;
+  for (const [id, isOn] of Object.entries(saved)) {
+    const element = document.getElementById(id);
+    if (element?.matches(KEPT_SWITCHES) && (isOn === "true" || isOn === "false"))
+      element.setAttribute("aria-checked", isOn);
+  }
+}
+
+// The look picked is the one pick-theme.js shows, read from where the page keeps it.
+function showPickedAppearance() {
+  const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
+    document.querySelectorAll("[data-setting] input[name=appearance]")
+  );
+  checkPickedChoice(choices, readPickedAppearance());
+}
+
 // What the page last showed is a drawing of its own, so the note that its views are still empty
 // goes with it.
 function showLastDrawn() {
   const parts = Object.entries(readLastDrawn()).filter(([id, part]) => isDrawnPart(id, part));
   for (const [id, part] of parts) showPart(id, part);
   if (parts.length) document.getElementById("loadNote")?.remove();
+  showLastSwitches();
+  showPickedAppearance();
   showLastSheets();
 }

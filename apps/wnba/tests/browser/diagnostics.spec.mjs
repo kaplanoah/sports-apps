@@ -1,4 +1,11 @@
-import { test, expect, findGameButton, openApp, matchPath, NOW } from "./harness.mjs";
+import { test, expect, findGameButton, openApp, NOW } from "./harness.mjs";
+import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
+import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
+import {
+  findDiagnosticsSwitch,
+  turnOnDiagnostics,
+} from "../../../../tests/browser/diagnostics-switch.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -10,22 +17,7 @@ test.use({
 const RECORD_MS = 5000;
 
 /** @param {import("@playwright/test").Page} page */
-const openSettings = (page) => page.getByRole("button", { name: "Settings", exact: true }).click();
-
-/** @param {import("@playwright/test").Page} page */
-const findSwitch = (page) => page.getByRole("switch", { name: "Diagnostics" });
-
-/** @param {import("@playwright/test").Page} page */
 const findRecords = (page) => page.locator("#diagnostics");
-
-/** @param {import("@playwright/test").Page} page */
-async function turnOnDiagnostics(page) {
-  await openSettings(page);
-  await findSwitch(page).click();
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "true");
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
-}
 
 /** @param {import("@playwright/test").Page} page */
 async function reloadAndRecord(page) {
@@ -33,16 +25,6 @@ async function reloadAndRecord(page) {
   await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
   await page.clock.runFor(RECORD_MS + 1000);
 }
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} isHidden
- */
-const setHidden = (page, isHidden) =>
-  page.evaluate((hidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, isHidden);
 
 test("Diagnostics sit past the end of settings, off, with nothing recorded, with no note under their name", async ({
   page,
@@ -52,8 +34,8 @@ test("Diagnostics sit past the end of settings, off, with nothing recorded, with
   await openSettings(page);
 
   await expect(page.locator("#settingsDialog")).toContainText("Noah Kaplan");
-  await expect(findSwitch(page)).toHaveAttribute("aria-checked", "false");
-  await expect(findSwitch(page)).not.toBeInViewport();
+  await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "false");
+  await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
   await expect(findRecords(page)).toBeHidden();
   await expect(page.locator(".diagnostics-area .control-label")).toHaveText("Diagnostics");
 });
@@ -61,11 +43,12 @@ test("Diagnostics sit past the end of settings, off, with nothing recorded, with
 test("Diagnostics, once on, start with the app, the release, and its commit, set apart by dots", async ({
   page,
 }) => {
-  await page.route(matchPath("/version.json"), (route) =>
-    route.fulfill({
-      json: { version: "3.6.0-beta", commit: "abc1234", builtAt: "2026-10-08T03:14:57Z" },
-    }),
-  );
+  await serveReleases(page, {
+    version: "3.6.0-beta",
+    commit: "abc1234",
+    builtAt: "2026-10-08T03:14:57Z",
+    label: "beta",
+  });
   await openApp(page);
 
   await turnOnDiagnostics(page);
@@ -137,29 +120,7 @@ test("a reload's first reading is what the page put back from its last showing, 
   const record = findRecords(page).locator(".diagnostics-record").first();
   await expect(record).toContainText(/Shows .*seasonGames \d+\/\d+px/);
   await expect(record).not.toContainText("seasonGames: text");
-  await expect(record).not.toContainText("standingsPager: text");
-});
-
-test("a record ends with where the shown pager's lists are and what a tap on each one's first item lands on", async ({
-  page,
-}) => {
-  await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  await turnOnDiagnostics(page);
-
-  await reloadAndRecord(page);
-  await openSettings(page);
-
-  const record = findRecords(page).locator(".diagnostics-record").first();
-  await expect(record).toContainText(/standings-pages scrolled \d+ of \d+, 390 wide, /);
-  await expect(record).toContainText(
-    /standings-league at -?\d+,\d+ \d+x\d+, opacity 1, visible, transform none, first item at .*, opacity 1, a tap there lands on /,
-  );
-  await expect(record).toContainText(
-    /standings-east at .*, inert, first item at .*, off the screen/,
-  );
-  await expect(record).toContainText(/Animations: /);
-  await expect(record).not.toContainText("seasonGames scrolled");
+  await expect(record).not.toContainText("standingsWrap: text");
 });
 
 test("a record ends with where the season's list of days is, where its strip's box sits, the day at its top, and what a tap on it lands on", async ({
@@ -176,7 +137,6 @@ test("a record ends with where the season's list of days is, where its strip's b
   await expect(record).toContainText(
     /seasonGames scrolled \d+ of \d+, \d+ tall; strip on 2026-09-30, strip scrolled \d+ of \d+, its box on the strip; 2026-09-30 at the top, first item at .*, opacity 1, a tap there lands on /,
   );
-  await expect(record).not.toContainText("standings-pages");
 });
 
 test("a reload is recorded with its first paint and when each font file arrived", async ({
@@ -222,8 +182,7 @@ test("a return to the page is recorded with how long it was away", async ({ page
   await openApp(page);
   await turnOnDiagnostics(page);
   await setHidden(page, true);
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.setSystemTime(now + 5 * 60 * 1000);
+  await passTime(page, 5 * 60 * 1000);
 
   await setHidden(page, false);
   await page.clock.runFor(RECORD_MS + 1000);
@@ -236,6 +195,23 @@ test("a return to the page is recorded with how long it was away", async ({ page
 const findViewportLog = (page) =>
   findRecords(page).locator(".diagnostics-record", { hasText: "Viewport" });
 
+/**
+ * The page reads the viewport on the frame after its resize event, and a slow machine can send that
+ * event only after the test has opened a sheet, so the clock moves on once the page has it.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ width: number, height: number }} size
+ */
+async function resizeViewport(page, size) {
+  const resize = await page.evaluateHandle(() => ({
+    seen: new Promise((resolve) =>
+      visualViewport?.addEventListener("resize", () => resolve(true), { once: true }),
+    ),
+  }));
+  await page.setViewportSize(size);
+  await resize.evaluate((pending) => pending.seen);
+  await page.clock.runFor(100);
+}
+
 test("with Diagnostics on, the viewport is logged as the page opens, and again when it changes", async ({
   page,
 }) => {
@@ -243,8 +219,7 @@ test("with Diagnostics on, the viewport is logged as the page opens, and again w
   await turnOnDiagnostics(page);
   await reloadAndRecord(page);
 
-  await page.setViewportSize({ width: 390, height: 700 });
-  await page.clock.runFor(100);
+  await resizeViewport(page, { width: 390, height: 700 });
   await openSettings(page);
 
   const lines = findViewportLog(page).locator("li");
@@ -360,6 +335,35 @@ test("with Diagnostics on, a tap that opens a team's sheet from a game's, the ro
   );
 });
 
+test("with Diagnostics on, what's logged while settings is closed draws nothing, and shows once settings opens", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await findRecords(page).evaluate((records) => {
+    const changes = { count: 0 };
+    new MutationObserver((mutations) => (changes.count += mutations.length)).observe(records, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    Object.assign(window, { recordChanges: changes });
+  });
+  const countChanges = () => page.evaluate(() => /** @type {any} */ (window).recordChanges.count);
+
+  await (await findGameButton(page, "Game details: Aces at Fever, First Round Game 2")).click();
+  await expect(page.locator("#gameSheet")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#sheetDialog")).toBeHidden();
+  expect(await countChanges()).toBe(0);
+  await openSettings(page);
+
+  await expect(findRecords(page).locator(".diagnostics-record", { hasText: "Sheets" })).toHaveCount(
+    1,
+  );
+  expect(await countChanges()).toBeGreaterThan(0);
+});
+
 test("with Diagnostics on, each tap on the Games list's strip and Today is logged, with where it takes the list and when it arrives", async ({
   page,
 }) => {
@@ -443,9 +447,9 @@ test("turning Diagnostics off forgets what it recorded", async ({ page }) => {
     findRecords(page).locator(".diagnostics-record", { hasText: "Games list" }),
   ).toHaveCount(1);
 
-  await findSwitch(page).click();
+  await findDiagnosticsSwitch(page).click();
   await expect(findRecords(page)).toBeHidden();
-  await findSwitch(page).click();
+  await findDiagnosticsSwitch(page).click();
 
   await expect(findRecords(page)).toContainText("Nothing yet");
   await expect(findRecords(page).locator(".diagnostics-record")).toHaveCount(0);
@@ -513,6 +517,22 @@ test("Share report notes the page as it is, with the sheets open, and shares it 
   expect(copied).toMatch(/^\+0 Animations: /m);
 });
 
+test("a report on the season tab lists no animation for the header that rides up with its part, which moves only as the part scrolls", async ({
+  page,
+}) => {
+  await stubShare(page);
+  await openApp(page);
+  await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
+  await turnOnDiagnostics(page);
+  await openSettings(page);
+
+  await findReportButton(page).click();
+
+  await expect(findReportButton(page)).toHaveText("Shared");
+  const [{ text: copied }] = await readShares(page);
+  expect(copied).toMatch(/^\+0 Animations: none$/m);
+});
+
 test("each report notes the page as it is only for itself, and keeps every record of an open", async ({
   page,
 }) => {
@@ -574,29 +594,6 @@ const stubShare = (page) =>
 /** @param {import("@playwright/test").Page} page */
 const readShares = (page) =>
   page.evaluate(() => /** @type {ShareData[]} */ (Reflect.get(window, "diagnosticsShares")));
-
-test("a report names the list the pager's lists went back from after a move no one made", async ({
-  page,
-}) => {
-  await stubShare(page);
-  await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  await turnOnDiagnostics(page);
-  const pages = page.locator("#standings-pages");
-  await pages.evaluate((element) =>
-    element.scrollTo({ left: element.clientWidth, behavior: "instant" }),
-  );
-  await expect(pages).toHaveAttribute("data-put-back-from", "east");
-
-  await openSettings(page);
-  await findReportButton(page).click();
-
-  await expect(findReportButton(page)).toHaveText("Shared");
-  const [{ text: report }] = await readShares(page);
-  expect(report).toMatch(
-    /standings-pages scrolled 0 of \d+, \d+ wide, last settled by scrollend, last put back from east, a move no one made;/,
-  );
-});
 
 test("on a phone, Share report shares the report at once, then offers it again", async ({
   page,
@@ -680,5 +677,39 @@ test.describe("on a computer", () => {
     expect(await readShares(page)).toHaveLength(0);
     await page.clock.runFor(2000);
     await expect(button).toHaveText("Copy report");
+  });
+
+  test("the report never holds the page's address, whose path is its key, even where the page itself failed", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await stubShare(page);
+    await openApp(page);
+    await turnOnDiagnostics(page);
+    await page.evaluate((address) => {
+      dispatchEvent(
+        new ErrorEvent("error", {
+          message: "ResizeObserver loop completed with undelivered notifications.",
+          filename: address,
+        }),
+      );
+      dispatchEvent(
+        new PromiseRejectionEvent("unhandledrejection", {
+          promise: Promise.resolve(),
+          reason: new TypeError(`Load failed for ${address}`),
+        }),
+      );
+    }, "https://example-subdomain.workers.dev/k3y/");
+    await openSettings(page);
+    await findReportButton(page).click();
+    await expect(findReportButton(page)).toHaveText("Copied");
+
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain(
+      "ResizeObserver loop completed with undelivered notifications. at page",
+    );
+    expect(copied).toContain("a promise failed: TypeError: Load failed for page");
+    expect(copied).not.toMatch(/k3y|example-subdomain/);
   });
 });

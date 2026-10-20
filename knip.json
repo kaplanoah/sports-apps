@@ -11,13 +11,15 @@
     "shared/page/push-worker.js",
     "shared/page/offline-worker.js",
     "shared/page/service-worker-steps.js",
+    "shared/page/draw-home-screen-asks.js",
     "shared/page/open-last-tab.js",
+    "shared/page/season-header.js",
     "shared/page/show-last-drawn.js",
     "shared/page/slow-load.js",
     "shared/page/gate.js",
     "shared/page/release-guard.js",
     "apps/*/tests/*.test.js",
-    "apps/*/tests/browser/*.spec.mjs",
+    "apps/*/tests/browser/**/*.spec.mjs",
     "apps/*/tests/fixtures/record*.js",
     ".claude/hooks/*.mjs"
   ],
@@ -31,5 +33,6 @@
     "*.mjs",
     ".claude/hooks/*.mjs"
   ],
-  "ignore": ["apps/*/page/js/sortable.min.js"]
+  "ignore": ["apps/*/page/js/sortable.min.js"],
+  "ignoreBinaries": ["jq"]
 }

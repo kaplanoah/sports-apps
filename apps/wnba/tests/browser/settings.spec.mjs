@@ -1,7 +1,20 @@
-import { test, expect, openApp } from "./harness.mjs";
+import { test, expect, matchPath, openApp } from "./harness.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
-import { measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
+import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
+import {
+  checkFailedPickPutBack,
+  checkNewCurrentSeasonListed,
+  checkPickKeptThroughRedraw,
+  checkSeasonsOnFailedList,
+  checkSettingsOnReload,
+  waitForSettingsFill,
+} from "../../../../tests/browser/settings-reload.mjs";
+import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
+import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
+import { ONE_PAST_SEASON } from "./past-season.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -32,14 +45,128 @@ async function expectTheme(page, theme) {
   );
 }
 
-test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-glance", async ({
+test("settings' header holds its title, its close button, and the room under them alike on a phone and a wide screen", async ({
+  page,
+}) => {
+  const top = page.locator("#settingsDialog .sheet-top");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(top).toBeVisible();
+  const onPhone = await readTopSpacing(top);
+
+  await page.setViewportSize({ width: 1280, height: 844 });
+
+  expect(await readTopSpacing(top)).toEqual(onPhone);
+});
+
+test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's text", async ({
   page,
 }) => {
   await openApp(page);
   const picker = page.locator("#seasonPicker");
   await expect(picker).toHaveCSS("font-size", "16px");
-  const widths = await measureFieldFace(picker, "--size-glance");
-  expect(widths.field).toBeCloseTo(widths.step, 0);
+  const widths = await measureFieldFace(picker, "--type-detail-size");
+  expect(widths.field).toBeCloseTo(widths.role, 0);
+});
+
+test("a reload with settings open shows its seasons, switches, and look picked before the page's code arrives", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await checkSettingsOnReload({
+    page,
+    look: "Walnut",
+    switchName: "Include content from The Athletic",
+    pastSeason: "2025",
+    currentSeason: "2026",
+  });
+});
+
+test("a season picked while its record is on its way stays picked as the picker is drawn again meanwhile", async ({
+  page,
+}) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await checkPickKeptThroughRedraw({
+    page,
+    pastSeason: "2025",
+    newSeason: 2027,
+    moveCurrentTo: (year) => app.writeDocument("live/current", { season: year }),
+  });
+});
+
+test("a reload while the store can't be reached keeps the Season picker on the past season the page shows", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await picker.selectOption("2025");
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+  await page.route(matchPath("/store/"), (route) => route.abort());
+  const filling = waitForSettingsFill(page);
+
+  await page.reload();
+
+  await filling;
+  await expect(picker).toHaveValue("2025");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+});
+
+test("a reload while the store can't be reached, with nothing the page last showed to draw, leaves the Season picker as drawn, through a pick that can't be read too, never adding the year by the phone's clock", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+  await page.route(matchPath("/store/"), (route) => route.abort());
+  await page.addInitScript(() => localStorage.removeItem("lastSeen"));
+  await page.clock.setSystemTime(new Date("2027-01-15T17:00:00Z"));
+  const filling = waitForSettingsFill(page);
+
+  await page.reload();
+
+  await filling;
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+  await expect(picker).toHaveValue("2026");
+
+  await picker.selectOption("2025");
+
+  await expect(picker).toHaveValue("2026");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+});
+
+test("a past season picked whose record can't be read puts the Season picker back on the season shown, says so, and can be picked again", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await checkFailedPickPutBack({ page, pastSeason: "2025", currentSeason: "2026" });
+});
+
+test("while the store can't list its seasons, a new current season joins the Season picker, with the past season shown still chosen", async ({
+  page,
+}) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await checkNewCurrentSeasonListed({
+    page,
+    pastSeason: "2025",
+    newSeason: 2027,
+    moveCurrentTo: (year) => app.writeDocument("live/current", { season: year }),
+    seasons: ["2027", "2026", "2025"],
+  });
+});
+
+test("a reload with settings open while the store can't list its seasons lists the ones it listed, with the season shown, even one the store moved on to, chosen", async ({
+  page,
+}) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await checkSeasonsOnFailedList({
+    page,
+    beforeReload: () => app.moveSeasonTo(2027),
+    seasons: ["2027", "2026", "2025"],
+    shown: "2027",
+  });
 });
 
 test("settings list Notifications, the News switches, and Appearance, with lines only between the three", async ({
@@ -137,16 +264,6 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Walnut" })).toBeChecked();
 });
 
-test("changing the appearance says how to match the home-screen icon", async ({ page }) => {
-  await openApp(page);
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const note = page.locator("#appearanceNote");
-  await expect(note).toBeHidden();
-  await page.getByRole("radio", { name: "Walnut" }).check();
-  await expect(note).toBeVisible();
-  await expect(note).toHaveText(/Apple sets a home-screen icon only when the page is added/);
-});
-
 test("settings end with the release, NBA.com's credit for the data, and the copyright", async ({
   page,
 }) => {
@@ -171,7 +288,7 @@ async function openSettingsWithRelease(page) {
   await openApp(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.locator("#versionNote")).toBeVisible();
-  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await waitForTimedAnimations(page);
 }
 
 /** @param {import("@playwright/test").Page} page */
@@ -185,6 +302,7 @@ const readSettingsBoxes = (page) =>
       head: readBox(".sheet-head"),
       title: readBox("h2"),
       close: readBox(".sheet-close"),
+      tip: readBox("#homeScreenTip"),
       controls: readBox(".settings-controls"),
       footer: readBox(".settings-footer"),
     };
@@ -200,16 +318,28 @@ test.describe("on a phone, settings", () => {
     expect([sheet.top, sheet.height]).toEqual([0, 844]);
   });
 
-  test("set their title level with their close button and 32px over the first setting, and end 17px over the bottom", async ({
+  // A phone's browser, unlike the Home Screen app, draws the Home Screen box.
+  test("set their title level with their close button and 32px over the Home Screen box, then the first setting, and end 17px over the bottom", async ({
     page,
   }) => {
     await openSettingsWithRelease(page);
-    const { sheet, top, head, title, close, controls, footer } = await readSettingsBoxes(page);
+    const { sheet, top, head, title, close, tip, controls, footer } = await readSettingsBoxes(page);
     const findMiddle = (box) => box.top + box.height / 2;
     expect(Math.abs(findMiddle(title) - findMiddle(close))).toBeLessThan(1);
     expect(head.bottom).toBeLessThanOrEqual(top.bottom);
-    expect(Math.round(controls.top - title.bottom)).toBe(32);
+    expect(Math.round(tip.top - title.bottom)).toBe(32);
+    expect(Math.round(controls.top - tip.bottom)).toBe(14);
     expect(Math.round(sheet.bottom - footer.bottom)).toBe(17);
+  });
+
+  test("in the Home Screen app, which has no Home Screen box, set the first setting 32px under their title", async ({
+    page,
+  }) => {
+    await openFromHomeScreen(page);
+    await openSettingsWithRelease(page);
+    await expect(page.locator("#homeScreenTip")).toBeHidden();
+    const { title, controls } = await readSettingsBoxes(page);
+    expect(Math.round(controls.top - title.bottom)).toBe(32);
   });
 });
 
@@ -242,12 +372,20 @@ test.describe("on a phone", () => {
   }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const readSize = (locator) => locator.evaluate((element) => getComputedStyle(element).fontSize);
+    const readSize = (locator) =>
+      locator.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    const [setting, note, body, detail] = await Promise.all(
+      ["setting", "setting-note", "body", "detail"].map(
+        async (role) => (await readRole(page, role)).size,
+      ),
+    );
 
-    expect(await readSize(page.getByText("Include content from The Athletic"))).toBe("17px");
-    expect(await readSize(page.getByText("Most stories need a subscription"))).toBe("15px");
-    expect(await readSize(page.locator(".appearance-choice").first())).toBe("15px");
-    const icon = await page.locator(".appearance-icon").first().boundingBox();
+    expect(await readSize(page.getByText("Include content from The Athletic"))).toBe(setting);
+    expect(await readSize(page.getByText("Most stories need a subscription"))).toBe(note);
+    expect(await readSize(page.locator("#settingsDialog .appearance-choice").first())).toBe(note);
+    expect(setting).toBeGreaterThan(body);
+    expect(note).toBeGreaterThan(detail);
+    const icon = await page.locator("#settingsDialog .appearance-icon").first().boundingBox();
     expect(icon.width).toBe(60);
   });
 

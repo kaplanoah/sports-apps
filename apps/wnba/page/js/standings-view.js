@@ -1,5 +1,5 @@
-import { html } from "#shared/html.js";
-import { createPager } from "#shared/pager.js";
+import { scrollUnderPill } from "#shared/bracket-standings.js";
+import { html, setHtml } from "#shared/html.js";
 import { renderPlainClub, renderTeamButton } from "./clubs.js";
 import { readPlayoffRuns } from "./series.js";
 import { ROUNDS } from "./snapshot.js";
@@ -17,9 +17,6 @@ const STANDINGS_VIEWS = ["League", "East", "West"];
 
 /** @param {StandingsView} view */
 const nameViewKey = (view) => view.toLowerCase();
-
-/** @type {ReturnType<typeof createPager> | null} */
-let standingsPager = null;
 
 // The top eight across the league make the playoffs, whatever their conference.
 const PLAYOFF_SPOTS = 8;
@@ -45,13 +42,6 @@ function renderTeamTag(row, view) {
 }
 
 /**
- * A streak, like W 3, marked when it's a winning one.
- * @param {string | null} streak
- */
-export const renderStreak = (streak) =>
-  streak?.startsWith("W") ? html`<span class="streak-won">${streak}</span>` : (streak ?? "");
-
-/**
  * A team's first-round series from its own side: "W 2-0" once it won, "L 0-2" once it lost, and
  * "1-1" while it's still being played.
  * @param {Series} series
@@ -61,7 +51,7 @@ function renderFirstRound(series, team) {
   const [own, other] =
     series.top?.team === team ? [series.top, series.bottom] : [series.bottom, series.top];
   const score = `${own?.wins ?? 0}-${other?.wins ?? 0}`;
-  if (series.winner === team) return html`<span class="series-won">W ${score}</span>`;
+  if (series.winner === team) return `W ${score}`;
   return series.winner ? `L ${score}` : score;
 }
 
@@ -73,11 +63,10 @@ function renderFirstRound(series, team) {
  */
 function renderPlayoffNow(run, firstRound) {
   if (run.isOut) return html`<span class="playoff-out">Out</span>`;
-  if (run.isChampion) return html`<span class="still-in">Champions</span>`;
-  if (firstRound.winner)
-    return html`<span class="still-in">${ROUNDS[Math.max(run.round, 2)].shortName}</span>`;
+  if (run.isChampion) return "Champions";
+  if (firstRound.winner) return ROUNDS[Math.max(run.round, 2)].shortName;
   const nextGame = (firstRound.top?.wins ?? 0) + (firstRound.bottom?.wins ?? 0) + 1;
-  return html`<span class="still-in">Game ${nextGame}</span>`;
+  return `Game ${nextGame}`;
 }
 
 /** @param {[Cell, Cell]} cells */
@@ -89,7 +78,7 @@ const renderFormCells = ([first, second]) =>
 const RECENT_COLUMNS = {
   group: "Recent",
   heads: ["L10", "Strk"],
-  renderCells: (row) => [row.lastTen ?? "", renderStreak(row.streak)],
+  renderCells: (row) => [row.lastTen ?? "", row.streak ?? ""],
 };
 
 /**
@@ -173,7 +162,8 @@ function listViewRows(league, view) {
 }
 
 /**
- * One table, of the league or a conference, with the playoff line after the league's eighth.
+ * One table, of the league or a conference, named over its teams, with the playoff line after the
+ * league's eighth.
  * @param {Season | null} season
  * @param {StandingsView} [view]
  */
@@ -191,8 +181,7 @@ export function renderStandings(season, view = "League") {
           <th colspan="2" class="recent-start">${form.group}</th>
         </tr>
         <tr>
-          <th></th>
-          <th class="team">Team</th>
+          <th colspan="2" class="list-title">${view}</th>
           <th>W-L</th>
           <th class="pair-end">GB</th>
           <th class="recent recent-start">${form.heads[0]}</th>
@@ -206,33 +195,31 @@ export function renderStandings(season, view = "League") {
   </div>`;
 }
 
-/** Builds the pill over the league's and each conference's table, which a swipe moves between. */
-export function startStandings() {
-  standingsPager = createPager(
-    /** @type {HTMLElement} */ (document.getElementById("standingsPager")),
-    {
-      label: "Standings",
-      idPrefix: "standings",
-      lists: STANDINGS_VIEWS.map((view) => ({ key: nameViewKey(view), name: view })),
-      openOn: nameViewKey("League"),
-    },
-  );
+/**
+ * The league's table, then each conference's, one under another.
+ * @param {Season | null} season
+ */
+export function renderStandingsLists(season) {
+  if (!season?.standings?.length) return renderStandings(season);
+  return html`${STANDINGS_VIEWS.map(
+    (view) =>
+      html`<div class="standings-list" id="standings-${nameViewKey(view)}">${renderStandings(season, view)}</div>`,
+  )}`;
 }
 
 /** @param {Season | null} season */
 export function drawStandings(season) {
-  standingsPager.fill((key) =>
-    renderStandings(
-      season,
-      STANDINGS_VIEWS.find((view) => nameViewKey(view) === key),
-    ),
+  setHtml(
+    /** @type {HTMLElement} */ (document.getElementById("standingsWrap")),
+    renderStandingsLists(season),
   );
 }
 
 /**
- * Shows one of the tab's lists, as a search's row for it asks.
+ * Brings one of the standings' lists up under the pill, as a search's row for it asks.
  * @param {string} key
  */
 export function showStandingsList(key) {
-  standingsPager?.switchToList(key);
+  const list = document.getElementById(`standings-${key}`);
+  if (list) scrollUnderPill(list);
 }

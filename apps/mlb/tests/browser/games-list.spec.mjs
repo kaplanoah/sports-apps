@@ -9,11 +9,13 @@ import {
   SCHEDULE_DOCS,
 } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { readStripEdges } from "../../../../tests/browser/day-strip-edges.mjs";
 import {
   listLowContrastText,
   listLowContrastTextAsShown,
 } from "../../../../tests/browser/contrast.mjs";
+import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
 import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -126,7 +128,7 @@ test("a day's heading holds under the strip while its games pass, until the next
   expect(pushed.bottom).toBeLessThanOrEqual(next.top + 0.5);
 });
 
-test("each day's heading is a band of the page's color, ending in a line, its capitals on the type scale", async ({
+test("each day's heading is a band of the page's color, ending in a line, its capitals a label", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -134,7 +136,7 @@ test("each day's heading is a band of the page's color, ending in a line, its ca
   const pageColor = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
   await expect(heading).toHaveCSS("background-color", pageColor);
-  await expect(heading).toHaveCSS("font-size", "13px");
+  await expect(heading).toHaveCSS("font-size", `${(await readRole(page, "label")).size}px`);
   await expect(heading).toHaveCSS("text-transform", "uppercase");
   await expect(heading).toHaveCSS("box-shadow", /0px 1px 0px 0px$/);
   await expect(
@@ -160,6 +162,21 @@ test("a day far from the list's top stands in for its games at the height they t
   await expect(
     page.locator('#seasonGames .listed-day[data-day="2026-09-24"] .game-list'),
   ).toHaveClass(/is-stand-in/);
+});
+
+test("the Games view keeps its height as the season's days change the list's height", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  const heights = await page.locator("#seasonGames").evaluate((view) => {
+    const day = /** @type {HTMLElement} */ (view.querySelector('[data-day="2026-04-01"]'));
+    return Array.from({ length: 40 }, (_, step) => {
+      day.style.paddingTop = `${step * 0.37}px`;
+      return view.getBoundingClientRect().height;
+    });
+  });
+
+  expect(new Set(heights).size).toBe(1);
 });
 
 test("scrolling the list draws each day whole as it nears the top, before it shows", async ({
@@ -226,6 +243,22 @@ test("tapping the Games tab while it shows goes back to today", async ({ page })
   );
 });
 
+test("tapping the Games tab brings back today at once, even with the page left a pixel from its top", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await page.locator('#seasonGames .day-cell[data-day="2026-06-10"]').click();
+  await expect(page.locator('#seasonGames .listed-day[data-day="2026-06-10"]')).toBeInViewport();
+  expect(await leavePagePixelDown(page)).toBe(1);
+
+  await page.getByRole("tab", { name: "Games" }).click();
+
+  await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
+    "data-day",
+    "2026-09-24",
+  );
+});
+
 test("after a tap on the Games tab while the list is already on today, the strip follows a scroll that no finger or wheel makes, as a keyboard's does", async ({
   page,
 }) => {
@@ -275,7 +308,13 @@ test("a game still to come shows its start time centered in its row", async ({ p
 const openPostseasonDay = async (page, games, earlierGames) => {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   /** @param {string} start */
-  const describeGame = (start) => (game) => ({ state: "pre", start, postseason: true, ...game });
+  const describeGame = (start) => (game) => ({
+    id: `${game.away}-${game.home}-${game.date ?? start}`,
+    state: "pre",
+    start,
+    postseason: true,
+    ...game,
+  });
   snapshot.slate.today.games = games.map(describeGame("2026-09-24T18:08:00Z"));
   snapshot.slate.previous = earlierGames.map((game) => ({
     date: "2026-09-23",
@@ -378,7 +417,7 @@ test("a clinched club's race letter is gold at the facts' own weight", async ({ 
   await page.getByRole("tab", { name: "Games" }).click();
   const race = page.locator("#seasonGames .game-day.is-today .race.clinched").first();
   await expect(race).toHaveCSS("color", await readColor(page, "--highlight"));
-  await expect(race).toHaveCSS("font-weight", "400");
+  await expect(race).toHaveCSS("font-weight", String((await readRole(page, "caption")).weight));
 });
 
 for (const [theme, colorScheme] of /** @type {const} */ ([
@@ -536,14 +575,54 @@ test("the Games tab bolds each winner, and shows a club that's out as any other"
   const winnerOut = findSide("Nationals", "Tigers", "away").locator(".team-name");
   const loserOut = findSide("Nationals", "Tigers", "home");
 
-  await expect(winnerStillIn).toHaveCSS("font-weight", "550");
+  const team = await readRole(page, "team");
+  await expect(winnerStillIn).toHaveCSS("font-weight", String(team.weight + 150));
   await expect(winnerStillIn).toHaveCSS("color", await readColor(page, "--ink"));
-  await expect(loserStillIn).toHaveCSS("font-weight", "400");
+  await expect(loserStillIn).toHaveCSS("font-weight", String(team.weight));
   await expect(loserStillIn).toHaveCSS("color", await readColor(page, "--ink"));
-  await expect(winnerOut).toHaveCSS("font-weight", "550");
+  await expect(winnerOut).toHaveCSS("font-weight", String(team.weight + 150));
   await expect(winnerOut).toHaveCSS("color", await readColor(page, "--ink"));
   await expect(loserOut.locator(".team-name")).toHaveCSS("color", await readColor(page, "--ink"));
   await expect(loserOut.locator(".dot")).toHaveCSS("opacity", "1");
+});
+
+test("a final's losing score is dimmed, a step lighter than the winner's in Ball but not in Night Game, at the same width in both", async ({
+  page,
+}) => {
+  await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  const score = page
+    .locator("#seasonGames .game-day:not(.is-today) .game-row")
+    .filter({ hasText: "Nationals" })
+    .filter({ hasText: "Tigers" })
+    .locator(".game-score");
+  const readScore = () =>
+    score.evaluate((element) => {
+      const lost = /** @type {Element} */ (element.querySelector(".lost"));
+      return {
+        winner: getComputedStyle(element).fontWeight,
+        loser: getComputedStyle(lost).fontWeight,
+        width: lost.getBoundingClientRect().width,
+      };
+    });
+  const scoreWeight = (await readRole(page, "stat-large")).weight;
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(score.locator(".lost")).toHaveCSS("color", await readColor(page, "--ink-dim"));
+  const ball = await readScore();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(score.locator(".lost")).toHaveCSS("color", await readColor(page, "--ink-dim"));
+  const nightGame = await readScore();
+
+  expect(ball).toEqual({ ...ball, winner: String(scoreWeight), loser: String(scoreWeight - 100) });
+  expect(nightGame).toEqual({
+    ...nightGame,
+    winner: String(scoreWeight),
+    loser: String(scoreWeight),
+  });
+  expect(nightGame.width).toBeCloseTo(ball.width, 2);
 });
 
 test("on a wide screen, the Games strip and list sit in the middle of the page", async ({
@@ -588,4 +667,27 @@ test("on a wide screen, the strip, its line, and a held day's line stop at the c
   expect(edges.lastDayRight).toBeCloseTo(edges.strip.right, 0);
   expect(edges.monthLeft - edges.column.left).toBeCloseTo(0.5, 1);
   expect(edges.column.right - edges.todayRight).toBeCloseTo(0.5, 1);
+});
+
+test("on a phone, the Games strip and the Search bar each end in the divider's line once their list scrolls under them", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  const line = `${await readColor(page, "--divider")} 0px 1px 0px 0px`;
+  const strip = page.locator("#seasonGames .day-bar");
+  await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 400 }));
+  await expect(strip).toHaveCSS("box-shadow", line);
+  await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 0 }));
+  await expect(strip).toHaveCSS("box-shadow", "none");
+
+  await page.locator("#tab-search").click();
+  await page.locator("#gameSearch .search-input").fill("games");
+  await page.locator("#gameSearch .search-input").press("Enter");
+  await expect(page.locator("#gameSearch .listed-day").first()).toBeAttached();
+  const bar = page.locator("#gameSearch .search-bar");
+  const list = page.locator("#gameSearch .search-list");
+  await list.evaluate((element) => element.scrollTo({ top: 400 }));
+  await expect(bar).toHaveCSS("box-shadow", line);
+  await list.evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(bar).toHaveCSS("box-shadow", "none");
 });

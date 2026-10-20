@@ -44,15 +44,50 @@ const TEXT_ENTITIES = {
   "&ndash;": "\u2013",
   "&mdash;": "\u2014",
   "&nbsp;": "\u00a0",
+  "&bull;": "\u2022",
 };
 
-// For places that show only text, like a notification.
+const SEPARATOR = new Markup('<span class="sep">&bull;</span>');
+
+// For places that show only text, like a notification. The separator stands apart from the facts
+// around it by its margins on the page, and by spaces in text.
 export const convertToText = (markup) =>
   renderValue(markup)
+    .replaceAll(SEPARATOR.text, " &bull; ")
     .replace(/<[^>]*>/g, "")
-    .replace(/&(?:amp|lt|gt|quot|#39|ndash|mdash|nbsp);/g, (entity) => TEXT_ENTITIES[entity]);
+    .replace(/&(?:amp|lt|gt|quot|#39|ndash|mdash|nbsp|bull);/g, (entity) => TEXT_ENTITIES[entity]);
 
-const SEPARATOR = new Markup('<span class="sep">&bull;</span>');
+// Stored and fetched text is never trusted as a link, so only a web address is.
+/** @param {string} url */
+export const isWebAddress = (url) => /^https?:\/\//i.test(url ?? "");
+
+/**
+ * Text with its first letter capitalized, as it starts a line.
+ * @param {string} text
+ */
+export const capitalize = (text) => text.charAt(0).toLocaleUpperCase() + text.slice(1);
+
+const NAME_LISTS = {
+  and: new Intl.ListFormat("en", { type: "conjunction" }),
+  or: new Intl.ListFormat("en", { type: "disjunction" }),
+};
+
+/**
+ * Names joined as a sentence does: "A", "A or B", "A, B, or C", or with "and".
+ * @param {string[]} names
+ * @param {"and" | "or"} joiner
+ */
+export const joinNames = (names, joiner) => NAME_LISTS[joiner].format(names);
+
+/**
+ * Items of markup or text joined as `joinNames` joins names, each kept as it is.
+ * @param {unknown[]} items
+ * @param {"and" | "or"} joiner
+ */
+export const joinItems = (items, joiner) =>
+  html`${NAME_LISTS[joiner]
+    .formatToParts(items.map((_, index) => String(index)))
+    .map((part) => (part.type === "element" ? items[Number(part.value)] : part.value))}`;
 
 /**
  * Joins items with the page's one separator, so every list of facts reads the same way. Each fact
@@ -194,7 +229,7 @@ function patchNode(current, next, keyed) {
     return;
   }
   patchAttributes(current, /** @type {Element} */ (next));
-  if (!writtenMarkup.has(current)) patchChildren(current, next, keyed);
+  if (!writtenMarkup.has(current)) patchContent(current, next, keyed);
 }
 
 /**
@@ -234,6 +269,20 @@ function patchChildren(parent, nextParent, keyed) {
   }
 }
 
+// A select's choice is its options' state, not their markup, and an option picked before keeps
+// its choice whatever its markup says, so a select follows the markup's choice as a newly written
+// one would. Patching moves the options it reads from, so it's read first.
+/**
+ * @param {Element} current
+ * @param {Node} next
+ * @param {KeyedItems} keyed
+ */
+function patchContent(current, next, keyed) {
+  const selectedIndex = next instanceof HTMLSelectElement ? next.selectedIndex : -1;
+  patchChildren(current, next, keyed);
+  if (current instanceof HTMLSelectElement) current.selectedIndex = selectedIndex;
+}
+
 /**
  * @param {Element} element
  * @param {string} text
@@ -243,11 +292,16 @@ function patchMarkup(element, text) {
   // an SVG, without running it in the page.
   const next = /** @type {Element} */ (element.cloneNode(false));
   next.innerHTML = text;
-  // A select's choice is its options' state, not their markup, so it follows the markup's as a
-  // newly written select would. Patching moves the options it reads from, so it's read first.
-  const selectedIndex = next instanceof HTMLSelectElement ? next.selectedIndex : -1;
-  patchChildren(element, next, collectKeyed(element));
-  if (element instanceof HTMLSelectElement) element.selectedIndex = selectedIndex;
+  patchContent(element, next, collectKeyed(element));
+}
+
+/**
+ * Marks an element's markup as changed outside `setHtml`, as a picker's choice marked as it's
+ * picked, so the next `setHtml` writes its markup even where it's the markup written last.
+ * @param {Element} element
+ */
+export function forgetWrittenMarkup(element) {
+  writtenMarkup.delete(element);
 }
 
 /**

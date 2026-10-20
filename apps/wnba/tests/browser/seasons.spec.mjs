@@ -1,36 +1,11 @@
 import { test, expect, expectDayAtTop, openApp, matchPath } from "./harness.mjs";
 import { SNAPSHOT_VERSION } from "../../page/js/snapshot.js";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { readYearTracking } from "../../../../tests/browser/title-row.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { ONE_PAST_SEASON } from "./past-season.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
-
-const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-
-/** @param {string | null | undefined} time */
-const moveBackAYear = (time) => time && new Date(Date.parse(time) - YEAR_MS).toISOString();
-
-/**
- * The afternoon's season as last year's record, its finals a year earlier and nothing still to
- * play.
- * @param {any} season
- */
-const keepAsLastSeason = (season) => ({
-  ...season,
-  season: 2025,
-  games: keepFinalsAYearBack(season.games),
-  nearestGames: keepFinalsAYearBack(season.nearestGames),
-});
-
-/** @param {any[]} games */
-const keepFinalsAYearBack = (games) =>
-  games
-    .filter((game) => game.state === "final")
-    .map((game) => ({ ...game, start: moveBackAYear(game.start), end: moveBackAYear(game.end) }));
-
-const ONE_PAST_SEASON = { pastSeasons: { 2025: keepAsLastSeason } };
-
-/** @param {import("@playwright/test").Page} page */
-const openSettings = (page) => page.getByRole("button", { name: "Settings", exact: true }).click();
 
 /**
  * @param {import("@playwright/test").Page} page
@@ -161,7 +136,9 @@ test("once the Finals are won, the current season's year is in the title too", a
   await expect(findTitle(page)).toHaveText("WNBA 2026");
 });
 
-test("the year is the title's font and size, lighter and dimmer", async ({ page }) => {
+test("the year is the title's font and size, lighter, dimmer, and its digits 0.04em apart", async ({
+  page,
+}) => {
   await openApp(page, ONE_PAST_SEASON);
   await chooseSeason(page, 2025);
   await expect(findTitle(page)).toHaveText("WNBA 2025");
@@ -175,9 +152,15 @@ test("the year is the title's font and size, lighter and dimmer", async ({ page 
   const title = await readLook("header.top h1");
   const year = await readLook("#titleYear");
 
-  expect({ ...year, fontWeight: title.fontWeight, color: title.color }).toEqual(title);
+  const sameLook = {
+    fontWeight: title.fontWeight,
+    color: title.color,
+    letterSpacing: title.letterSpacing,
+  };
+  expect({ ...year, ...sameLook }).toEqual(title);
   expect(Number(year.fontWeight)).toBeLessThan(Number(title.fontWeight));
   expect(year.color).not.toBe(title.color);
+  expect(await readYearTracking(page)).toBeCloseTo(0.04, 3);
 });
 
 test.describe("on a phone", () => {
@@ -192,7 +175,7 @@ test.describe("on a phone", () => {
         body: 'export const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: "Something new." }];',
       }),
     );
-    await openApp(page, { ...ONE_PAST_SEASON, isShowingUpdates: true });
+    await openApp(page, { ...ONE_PAST_SEASON, updatesBox: "shown" });
     const updates = page.locator("#updates");
     await expect(updates).toContainText("Something new.");
 

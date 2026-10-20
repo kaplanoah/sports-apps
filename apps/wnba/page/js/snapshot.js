@@ -1,15 +1,16 @@
 // Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 // The league's own feeds: today's scoreboard and the season's schedule from its CDN, and the
-// playoff bracket, the standings, and the players' season averages from its stats site. When the
-// scoreboard doesn't answer, ESPN's stands in for today's scores and clocks, and for a game the
-// schedule still holds as under way once the scoreboard no longer lists it. The league's feeds
-// don't say where a game is on, so ESPN's scoreboard does, and it says when a game starts while the
-// league's schedule still has its time to be decided.
+// playoff bracket and the standings from its stats site. When the scoreboard doesn't answer,
+// ESPN's stands in for today's scores and clocks, and for a game the schedule still holds as under
+// way once the scoreboard no longer lists it. The league's feeds don't say where a game is on, so
+// ESPN's scoreboard does, and it says when a game starts while the league's schedule still has its
+// time to be decided.
 
 import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import { findTeamCode, findTeamCodeByEspnId, TEAMS } from "./teams.js";
-import { findTeamNearestGames } from "./nearest-games.js";
+import { findTeamNearestGames, isPutOff, isToBePlayed, mapSeriesById } from "./nearest-games.js";
+import { REGULATION_PERIODS } from "./periods.js";
 
 // The shape of a snapshot, and of the season record saved from it, which a page reads only when it
 // knows it.
@@ -25,7 +26,7 @@ const WNBA_STATS = "https://stats.wnba.com";
 const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/wnba";
 const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba";
 
-const LEAGUE_FEEDS = ["bracket", "players", "schedule", "scoreboard", "standings"];
+const LEAGUE_FEEDS = ["bracket", "schedule", "scoreboard", "standings"];
 
 export const REQUESTS = {
   scoreboard: `${WNBA_CDN}/static/json/liveData/scoreboard/todaysScoreboard_10.json`,
@@ -36,45 +37,6 @@ export const REQUESTS = {
   /** @param {number} season */
   standings: (season) =>
     `${WNBA_STATS}/stats/leaguestandingsv3?LeagueID=10&Season=${season}&SeasonType=Regular+Season`,
-  /** @param {number} season */
-  players: (season) =>
-    `${WNBA_STATS}/stats/leaguedashplayerstats?${new URLSearchParams({
-      College: "",
-      Conference: "",
-      Country: "",
-      DateFrom: "",
-      DateTo: "",
-      Division: "",
-      DraftPick: "",
-      DraftYear: "",
-      GameScope: "",
-      GameSegment: "",
-      Height: "",
-      LastNGames: "0",
-      LeagueID: "10",
-      Location: "",
-      MeasureType: "Base",
-      Month: "0",
-      OpponentTeamID: "0",
-      Outcome: "",
-      PORound: "0",
-      PaceAdjust: "N",
-      PerMode: "PerGame",
-      Period: "0",
-      PlayerExperience: "",
-      PlayerPosition: "",
-      PlusMinus: "N",
-      Rank: "N",
-      Season: String(season),
-      SeasonSegment: "",
-      SeasonType: "Regular Season",
-      ShotClockRange: "",
-      StarterBench: "",
-      TeamID: "0",
-      VsConference: "",
-      VsDivision: "",
-      Weight: "",
-    })}`,
 };
 
 export const BACKUP_REQUESTS = {
@@ -121,6 +83,13 @@ export function readPlayoffGameId(id) {
 const SEASON_GAME_ID = /^10[2-5](\d{2})\d{5}$/;
 
 const ALL_STAR_GAME_ID = /^103/;
+const CUP_FINAL_ID = /^105/;
+
+/**
+ * Whether a game is the Commissioner's Cup final.
+ * @param {{ id: string }} game
+ */
+export const isCupFinal = (game) => CUP_FINAL_ID.test(game.id);
 
 // The All-Star Game's teams aren't the league's, so the game carries their names: a captain's name
 // or a conference, without the feeds' "Team" before it, as every team shows its name without its
@@ -137,6 +106,32 @@ function readAllStarTeams(game) {
 function readGameSeason(id) {
   const [, season] = String(id).match(SEASON_GAME_ID) ?? [];
   return season ? 2000 + Number(season) : null;
+}
+
+// The Games view leaves out the preseason, whose games are numbered 101 and then the season's last
+// two digits, but the season starts with its first game.
+const PRESEASON_GAME_ID = /^101(\d{2})\d{5}$/;
+
+/** @param {string} id */
+function readAnyGameSeason(id) {
+  const [, preseason] = String(id).match(PRESEASON_GAME_ID) ?? [];
+  return preseason ? 2000 + Number(preseason) : readGameSeason(id);
+}
+
+/**
+ * The league's day of the season's first game, its preseason's first when it has one, or null
+ * while the schedule lists none of its games.
+ * @param {any} schedule
+ * @param {number} season
+ * @returns {string | null}
+ */
+function readOpeningDay(schedule, season) {
+  const starts = (schedule?.leagueSchedule?.gameDates ?? [])
+    .flatMap((day) => day.games)
+    .filter((game) => readAnyGameSeason(game.gameId) === season)
+    .map((game) => Date.parse(game.gameDateTimeUTC))
+    .filter(Number.isFinite);
+  return starts.length ? readEasternDay(Math.min(...starts)).date : null;
 }
 
 const nameSeries = (round, series) => `${round}-${series}`;
@@ -257,64 +252,6 @@ function readStandingsRows(response) {
     .filter((row) => row.team)
     .sort((first, second) => first.place - second.place);
 }
-
-// The feed gives a player's name whole; everything after the first space is her last name.
-function splitName(name) {
-  const [firstName, ...rest] = String(name).split(" ");
-  return { firstName, lastName: rest.join(" ") };
-}
-
-/**
- * A team's best scorers by points a game. A player who has missed most of the team's games
- * doesn't lead it, however well she scores.
- * @param {any} players the stats site's season averages
- * @param {string} team
- * @param {number} count
- */
-function listTeamLeaders(players, team, count) {
-  const rows = readStatsTable(players).filter((row) => findTeamCode(row.TEAM_ID) === team);
-  const most = Math.max(0, ...rows.map((row) => row.GP));
-  return rows
-    .filter((row) => row.GP >= most / 2)
-    .sort((first, second) => second.PTS - first.PTS)
-    .slice(0, count)
-    .map((row) => ({
-      id: row.PLAYER_ID,
-      ...splitName(row.PLAYER_NAME),
-      games: row.GP,
-      minutes: row.MIN,
-      points: row.PTS,
-      rebounds: row.REB,
-      assists: row.AST,
-      fieldGoalShare: row.FG_PCT,
-    }));
-}
-
-// A team's sheet shows its leading five, and a game's preview the first three of them.
-const LEADERS_PER_TEAM = 5;
-
-const listLeaders = (players) =>
-  Object.keys(TEAMS).flatMap((team) =>
-    listTeamLeaders(players, team, LEADERS_PER_TEAM).map((leader) => ({ team, ...leader })),
-  );
-
-/**
- * Every player's averages a game, for her team's Roster page.
- * @param {any} players the stats site's season averages
- */
-const listAverages = (players) =>
-  readStatsTable(players)
-    .map((row) => ({
-      team: findTeamCode(row.TEAM_ID),
-      id: row.PLAYER_ID,
-      ...splitName(row.PLAYER_NAME),
-      games: row.GP,
-      minutes: row.MIN,
-      points: row.PTS,
-      rebounds: row.REB,
-      assists: row.AST,
-    }))
-    .filter((player) => player.team);
 
 // The schedule and the scoreboard hold the last season's games until the league starts the next.
 const listSeasonGames = (games, season) =>
@@ -599,19 +536,31 @@ function addEspnListings(games, networkGames) {
 
 /**
  * Each team's nearest games, each game once, in order of start: its last, the one it's playing,
- * and its next. A game left over in a series that's already decided won't be played.
+ * and its next.
  * @param {any[]} games the season's games, in order of start
  * @param {any[]} series
  */
 function listNearestGames(games, series) {
-  const decided = new Set(series.filter((each) => each.winner).map((each) => each.id));
+  const seriesById = mapSeriesById(series);
   const nearest = new Set(
     Object.keys(TEAMS).flatMap((team) =>
-      Object.values(findTeamNearestGames(games, team, decided)).filter(Boolean),
+      Object.values(findTeamNearestGames(games, team, seriesById)).filter(Boolean),
     ),
   );
   return games.filter((game) => nearest.has(game));
 }
+
+/** @param {any} game */
+const isTimedToCome = (game) => game.state === "pre" && game.isTimeSet;
+
+/**
+ * When the league had each of the season's games it put off and hasn't played to start, regular
+ * season and playoffs, kept apart since the schedule's copy of a game to come leaves out its status.
+ * @param {any[]} games
+ * @returns {string[]}
+ */
+const listPutOffStarts = (games) =>
+  games.filter((game) => isTimedToCome(game) && isPutOff(game)).map((game) => game.start);
 
 /**
  * When each of the season's playoff games and each team's nearest games start, as the league's
@@ -628,7 +577,7 @@ export function listScheduledStarts(schedule, season) {
 }
 
 /**
- * @param {{ scoreboard?: any, schedule?: any, bracket?: any, standings?: any, players?: any, backup?: { games: any[] } | null, networks?: any[] | null }} responses
+ * @param {{ scoreboard?: any, schedule?: any, bracket?: any, standings?: any, backup?: { games: any[] } | null, networks?: any[] | null }} responses
  * @param {{ season: number, now?: number }} options
  */
 export function buildSnapshot(responses, { season, now = Date.now() }) {
@@ -656,13 +605,13 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     asOf: new Date(now).toISOString(),
     games,
     nearestGames: listNearestGames(seasonGames, series),
+    putOffStarts: listPutOffStarts(seasonGames),
     schedule: seasonGames.map(readScheduledGame),
     series,
     standings: readStandingsRows(responses.standings),
-    leaders: listLeaders(responses.players),
-    averages: listAverages(responses.players),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
+    openingDay: readOpeningDay(responses.schedule, season),
   };
 }
 
@@ -670,7 +619,6 @@ const POLL_LIVE_MS = 15 * 1000;
 // The last minutes of the 4th quarter and all of overtime are followed as fast as the Worker's
 // copy of the scoreboard turns over.
 const POLL_CLOSING_MS = 5 * 1000;
-const FOURTH_QUARTER = 4;
 const CLOSING_SECONDS = 5 * 60;
 
 // A clock reads like 4:32, or 45.2 under a minute.
@@ -681,9 +629,9 @@ function readClockSeconds(clock) {
 
 function isClosingStretch(game) {
   if (game.state !== "live") return false;
-  if (game.period > FOURTH_QUARTER) return true;
+  if (game.period > REGULATION_PERIODS) return true;
   return (
-    game.period === FOURTH_QUARTER &&
+    game.period === REGULATION_PERIODS &&
     typeof game.clock === "string" &&
     readClockSeconds(game.clock) <= CLOSING_SECONDS
   );
@@ -692,11 +640,13 @@ function isClosingStretch(game) {
 // A live game on a team's sheet is followed as closely as a playoff game.
 export function choosePollDelay(snapshot, now = Date.now()) {
   const games = [...(snapshot?.games ?? []), ...(snapshot?.nearestGames ?? [])];
+  const seriesById = mapSeriesById(snapshot?.series);
   return PollSchedule.choosePollDelay({
     isLive: games.some((game) => game.state === "live"),
     starts: games
-      .filter((game) => game.state === "pre" && game.isTimeSet)
+      .filter((game) => isTimedToCome(game) && isToBePlayed(game, seriesById))
       .map((game) => Date.parse(game.start)),
+    putOffStarts: (snapshot?.putOffStarts ?? []).map(Date.parse),
     liveMs: games.some(isClosingStretch) ? POLL_CLOSING_MS : POLL_LIVE_MS,
     now,
   });

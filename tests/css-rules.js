@@ -1,4 +1,19 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { listApps } from "../worker/apps.mjs";
+
+const SHARED = new URL("../shared/page/", import.meta.url);
+const APPS = new URL("../apps/", import.meta.url);
+
+/** The path of each stylesheet the apps' pages share. */
+export const listSharedStylesheets = () =>
+  readdirSync(SHARED)
+    .filter((name) => name.endsWith(".css"))
+    .map((name) => fileURLToPath(new URL(name, SHARED)));
+
+/** The path of each app's own stylesheet. */
+export const listAppStylesheets = () =>
+  listApps().map((app) => fileURLToPath(new URL(`${app}/page/styles.css`, APPS)));
 
 /** @typedef {{ selectors: string[], property: string, value: string }} Declaration */
 
@@ -106,9 +121,24 @@ const hasOwnShape = (rule) => rule.split(",").every((selector) => OWN_SHAPES.has
  */
 export const listStrayCorners = (path) =>
   readDeclarations(path)
-    .filter((declaration) => /^border(-[a-z]+)*-radius$/.test(declaration.property))
+    .filter((declaration) => /^(border(-[a-z]+)*-radius|rx|ry)$/.test(declaration.property))
     .filter((declaration) => !hasOwnShape(readRule(declaration)))
     .filter((declaration) => !isTokenCorner(declaration.value))
+    .map(
+      (declaration) => `${readRule(declaration)} { ${declaration.property}: ${declaration.value} }`,
+    );
+
+const HOVER_CHANGE = "color: var(--ink-hover)";
+
+/**
+ * Each change a stylesheet makes under a mouse but the one a hover makes, its text or icon taking
+ * --ink-hover.
+ * @param {string} path
+ */
+export const listOtherHoverChanges = (path) =>
+  readDeclarations(path)
+    .filter((declaration) => readRule(declaration).includes(":hover"))
+    .filter((declaration) => `${declaration.property}: ${declaration.value}` !== HOVER_CHANGE)
     .map(
       (declaration) => `${readRule(declaration)} { ${declaration.property}: ${declaration.value} }`,
     );

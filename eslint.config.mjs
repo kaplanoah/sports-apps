@@ -35,8 +35,25 @@ const LOCAL_TIME_RESTRICTIONS = LOCAL_TIME_METHODS.map((property) => ({
 const CLAUDE_MESSAGES = String.raw`/api\.anthropic\.com.v1.messages/`;
 
 const DEVICE_STORAGES = ["localStorage", "sessionStorage"];
+
+// The plain scripts the page loads before its modules, whose functions the page calls.
+export const PLAIN_SCRIPTS = [
+  "shared/page/draw-home-screen-asks.js",
+  "shared/page/open-last-tab.js",
+  "shared/page/pick-theme.js",
+  "shared/page/season-header.js",
+  "shared/page/show-last-drawn.js",
+  "shared/page/slow-load.js",
+];
+
 const DEVICE_STORAGE_MESSAGE =
   "Keep a viewer's choice with createViewerChoice from shared/page/device-storage.js.";
+const SHARED_STORAGE_MESSAGE =
+  "Keep what the page keeps on the device with shared/page/local-storage.js.";
+// Device storage read off the window or the worker's global, which the bare globals rule misses.
+const SHARED_STORAGE_PROPERTIES = ["window", "self"].flatMap((object) =>
+  DEVICE_STORAGES.map((property) => ({ object, property, message: SHARED_STORAGE_MESSAGE })),
+);
 
 // A generic name hides what a function does; calling a library's run is fine, declaring one is not.
 // A later block's no-restricted-syntax replaces this one's for its files, so each such block lists
@@ -127,6 +144,29 @@ export default [
     },
   },
   {
+    // Shared page code keeps what it keeps on the device only through shared/page/local-storage.js,
+    // so storage that refuses access or is full never breaks the page; the plain scripts in the
+    // page's head, which run before any module, keep their own. A block's rule replaces an earlier
+    // block's, so this one keeps the local-time restrictions too, but for days.js, below.
+    files: ["shared/page/**/*.js"],
+    ignores: ["shared/page/local-storage.js", "shared/page/release-guard.js", ...PLAIN_SCRIPTS],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...DEVICE_STORAGES.map((name) => ({ name, message: SHARED_STORAGE_MESSAGE })),
+      ],
+      "no-restricted-properties": [
+        "error",
+        ...LOCAL_TIME_RESTRICTIONS,
+        ...SHARED_STORAGE_PROPERTIES,
+      ],
+    },
+  },
+  {
+    files: ["shared/page/days.js"],
+    rules: { "no-restricted-properties": ["error", ...SHARED_STORAGE_PROPERTIES] },
+  },
+  {
     // A change to shared code reaches every app, so an app hands it what it needs instead.
     files: ["shared/**/*.{js,mjs}"],
     rules: {
@@ -145,12 +185,7 @@ export default [
     },
   },
   {
-    // A plain script the page loads before its modules, whose functions the page calls.
-    files: [
-      "shared/page/open-last-tab.js",
-      "shared/page/show-last-drawn.js",
-      "shared/page/slow-load.js",
-    ],
+    files: PLAIN_SCRIPTS,
     languageOptions: { sourceType: "script" },
     rules: { "no-unused-vars": ["error", { vars: "local" }] },
   },
@@ -202,7 +237,7 @@ export default [
   },
   {
     // Callbacks passed to page.evaluate run in the page.
-    files: ["apps/*/tests/browser/*.mjs", "tests/browser/*.mjs"],
+    files: ["apps/*/tests/browser/**/*.mjs", "tests/browser/**/*.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
     rules: {
       // A fixed wait, or one for the network to go quiet, is too short on a slow machine and wasted

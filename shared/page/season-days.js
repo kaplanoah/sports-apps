@@ -9,6 +9,7 @@ import {
   readCalendarDate,
   readDayOfMonth,
 } from "./days.js";
+import { isLedByOne } from "./day-strip-rules.js";
 import { html, joinWithSeparator } from "./html.js";
 
 // A season's game days as the day strip lists them (day-strip.js), each under a label: its date
@@ -50,7 +51,7 @@ function renderCalendarLabel(day, today) {
   const month = formatShortMonth(date);
   return html`<h3 class="day-label" aria-label="${nameListDay(date, todayDate)}, ${month} ${readDayOfMonth(day)}">
     <span class="day-month">${month}</span
-    ><span class="day-number tabular">${readDayOfMonth(day)}</span
+    ><span class="day-number${isLedByOne(day) ? " leads-with-one" : ""}">${readDayOfMonth(day)}</span
     ><span class="day-name">${abbreviateDay(date, todayDate)}</span>
   </h3>`;
 }
@@ -169,7 +170,7 @@ export function listSeasonDays({
   renderLabel = renderCalendarLabel,
   standsIn = false,
 }) {
-  const days = gameDays.map((gameDay) => listGameDay(gameDay, today, renderLabel, standsIn));
+  const days = listFoundDays({ gameDays, today, renderLabel, standsIn });
   const isTodayInSeason = !!days.length && days[0].day < today && today < days.at(-1).day;
   if (isTodayInSeason && !days.some(({ day }) => day === today)) {
     const after = days.findIndex(({ day }) => day > today);

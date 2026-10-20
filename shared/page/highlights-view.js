@@ -4,8 +4,8 @@
 // came. A tap on a clip plays it full screen (clip-player.js). A clip the league has taken down
 // leaves the list.
 
-import { html, joinWithSeparator } from "./html.js";
-import { isWebAddress } from "./news-picks.js";
+import { hasImageFailed } from "./failed-images.js";
+import { html, isWebAddress, joinWithSeparator } from "./html.js";
 import { renderReadButton } from "./news-view.js";
 import { renderPlaceholder } from "./placeholder.js";
 import { renderSheetPart } from "./sheet-part.js";
@@ -57,6 +57,7 @@ function renderStill(clip) {
     ${
       clip.still &&
       isWebAddress(clip.still) &&
+      !hasImageFailed(clip.still) &&
       html`<img src="${clip.still}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
     }
     <span class="clip-play">${PLAY}</span>

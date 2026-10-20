@@ -1,21 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { IconStyle, icons } from "@phosphor-icons/core";
-
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const PAGE_FOLDERS = [
-  "shared/page",
-  ...readdirSync(join(ROOT, "apps")).map((app) => `apps/${app}/page`),
-];
-
-/** @param {string} folder */
-const listPageFiles = (folder) =>
-  readdirSync(join(ROOT, folder), { recursive: true, encoding: "utf8" })
-    .filter((path) => /\.(js|html)$/.test(path))
-    .map((path) => `${folder}/${path}`);
+import { listPageSources } from "./page-sources.js";
+import { readRepoFile } from "./repo-files.js";
 
 /** @param {string} name @param {string} style */
 function readPhosphorIcon(name, style) {
@@ -61,7 +50,7 @@ function describeIconProblem(svg) {
 const HAND_DRAWN_ICONS = {
   "apps/mlb/page/js/games-view.js": 1,
   "shared/page/catch-up-note.js": 1,
-  "shared/page/home-screen.js": 2,
+  "shared/page/draw-home-screen-asks.js": 2,
 };
 
 /** @param {string} source */
@@ -73,13 +62,12 @@ const listSvgs = (source) =>
 
 /** @param {string} file */
 const countHandDrawnIcons = (file) =>
-  listSvgs(readFileSync(join(ROOT, file), "utf8")).filter(
-    ({ svg }) => !isDrawing(svg) && describeIconProblem(svg),
-  ).length;
+  listSvgs(readRepoFile(file)).filter(({ svg }) => !isDrawing(svg) && describeIconProblem(svg))
+    .length;
 
 test("every icon on the pages is a Phosphor icon, copied path for path, but the named few drawn by hand", () => {
   const counts = Object.fromEntries(
-    PAGE_FOLDERS.flatMap(listPageFiles)
+    listPageSources([".js", ".html"])
       .map((file) => /** @type {[string, number]} */ ([file, countHandDrawnIcons(file)]))
       .filter(([, count]) => count > 0),
   );
@@ -115,7 +103,7 @@ const isNamedIn = (comment, { name, style }) =>
  * @param {string} file
  */
 function listUnnamedIcons(file) {
-  const source = readFileSync(join(ROOT, file), "utf8");
+  const source = readRepoFile(file);
   const comments = listComments(source);
   return listSvgs(source)
     .filter(({ svg }) => !isDrawing(svg) && !describeIconProblem(svg))
@@ -132,10 +120,10 @@ function listUnnamedIcons(file) {
 }
 
 test("every Phosphor icon on the pages follows a comment naming the icon and its weight", () => {
-  assert.deepEqual(PAGE_FOLDERS.flatMap(listPageFiles).flatMap(listUnnamedIcons), []);
+  assert.deepEqual(listPageSources([".js", ".html"]).flatMap(listUnnamedIcons), []);
 });
 
 test("pull to refresh's spinner has every one of its eight spokes", () => {
-  const [spinner] = readPaths(readFileSync(join(ROOT, "shared/page/pull-to-refresh.js"), "utf8"));
+  const [spinner] = readPaths(readRepoFile("shared/page/pull-to-refresh.js"));
   assert.equal(spinner.match(/[Mm]/g)?.length, 8);
 });

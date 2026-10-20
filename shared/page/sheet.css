@@ -15,6 +15,15 @@
  *   --sheet-gap          the room between two sheets, or two sections, while they slide, in the
  *                        sheet's own color
  *
+ * A game's sheet before it starts lists the teams' meetings, and a player's sheet the player's
+ * facts, which take these, set by eye for the app's fonts:
+ *   --meeting-day-width     the column of each meeting's day
+ *   --meeting-room          the room above and below each meeting
+ *   --meeting-result-gap    the room between a meeting's winner and its score
+ *   --meeting-score-lift    how far the score sits below its middle, to look level with the name
+ *   --numbers               the font the score is set in, the app's face for numbers
+ *   --player-fact-room      the room on each side of one of a player's facts
+ *
  * Its content falls in titled parts, as sheet-part.js builds them, each with an optional note
  * across from its title, which takes the app's --sheet-part-head color. A short status beside a
  * title, like how far a team got, is a .status-chip, whose kinds the app colors.
@@ -131,7 +140,7 @@
   inset: 0;
   overflow: hidden auto;
   overscroll-behavior-y: none;
-  padding: 0 18px max(22px, env(safe-area-inset-bottom));
+  padding: 0 var(--sheet-side) max(22px, env(safe-area-inset-bottom));
 }
 /* Only what's shown is drawn at rest: a sheet under another, or a section beside the shown one,
    shows only while a finger or a slide moves them, as slide-panels.js reveals them. */
@@ -142,18 +151,15 @@
 .sheet-page[hidden] {
   display: none;
 }
-/* A sheet looks the same on every screen: its title centered at one size over 18px sides. Only its
+/* A sheet looks the same on every screen: its title centered at one size over its sides. Only its
    shape differs. */
 .sheet-content {
   --head-height: 64px;
-  padding: 0 18px max(22px, env(safe-area-inset-bottom));
+  padding: 0 var(--sheet-side) max(22px, env(safe-area-inset-bottom));
 }
 .sheet-content .sheet-top {
-  margin-inline: -18px;
-  padding-inline: 18px;
-}
-.sheet-content .sheet-head h2 {
-  font-size: 1rem;
+  margin-inline: calc(-1 * var(--sheet-side));
+  padding-inline: var(--sheet-side);
 }
 /* A sheet's sections are named by pills under its title. */
 .sheet-top .pager-tabs {
@@ -162,7 +168,8 @@
 
 .sheet-note {
   margin: 0;
-  font-size: var(--size-small);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   white-space: nowrap;
 }
@@ -178,14 +185,15 @@
   gap: 10px;
 }
 .sheet-part-head h3 {
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--sheet-part-head);
 }
-.sheet-part-head span {
-  font-size: var(--size-glance);
+.sheet-part-head > span {
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   text-align: right;
   color: var(--ink-dim);
 }
@@ -195,11 +203,11 @@
   height: 19px;
   padding: 0 7px;
   border-radius: var(--radius-chip);
-  font-size: var(--size-small);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   white-space: nowrap;
 }
 
@@ -214,14 +222,14 @@
   column-gap: 8px;
 }
 .tape-label {
-  font-size: var(--size-small);
-  line-height: 1.25;
+  font-size: var(--type-label-size);
+  line-height: calc(1.25 * var(--leading));
   text-wrap: balance;
   text-align: center;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
-  font-weight: 500;
+  font-weight: calc(var(--type-label-weight) - 100);
 }
 .tape-side {
   display: grid;
@@ -235,15 +243,15 @@
   display: flex;
   align-items: baseline;
   gap: 5px;
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
 }
 .tape-side.away .tape-value {
   flex-direction: row-reverse;
 }
 .tape-detail {
-  font-size: 0.85em;
-  font-weight: 400;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 .tape-bar {
@@ -271,7 +279,8 @@
 }
 .tape-note {
   margin: 0;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   text-align: center;
   color: var(--ink-dim);
   text-wrap: balance;
@@ -279,6 +288,67 @@
 /* A fact that doesn't fit moves to the next line whole, so the line breaks only after a dot. */
 .tape-note .fact {
   display: inline-block;
+}
+
+/* Two teams' meetings this season, before their game: each one's day, its winner and score, and
+   where it was played, between lines. */
+.meetings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--divider);
+}
+.meetings li {
+  display: grid;
+  grid-template-columns: var(--meeting-day-width) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: var(--meeting-room) 0;
+  border-bottom: 1px solid var(--divider);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  color: var(--ink-dim);
+}
+.meeting-result {
+  display: flex;
+  align-items: center;
+  gap: var(--meeting-result-gap);
+  min-width: 0;
+}
+.meeting-result .club {
+  color: var(--ink);
+}
+.meeting-score {
+  position: relative;
+  top: var(--meeting-score-lift);
+  font-family: var(--numbers);
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
+  color: var(--ink);
+}
+
+/* A player's facts, like the player's position and age, in a row under the name, each value under
+   a quiet label, without lines between them. The app sets the labels' type. */
+.player-facts {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+}
+.player-fact {
+  display: grid;
+  gap: 1px;
+  padding-inline: var(--player-fact-room);
+  text-align: center;
+}
+.player-fact dt {
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.player-fact dd {
+  margin: 0;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
+  color: var(--ink);
 }
 
 @media (max-width: 779px) {
@@ -329,7 +399,8 @@
   justify-content: center;
   align-items: center;
   gap: 8px var(--network-gap);
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-mid);
 }
 .networks-pending {

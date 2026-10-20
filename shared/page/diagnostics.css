@@ -9,7 +9,8 @@
  *   --ink, --ink-mid, --ink-dim  the text, a record's lines, and its quieter parts
  *   --accent, --accent-ink     the button, its text, and a dip
  *   --radius-card, --radius-control  a record's corners and the button's
- * and chrome.css's .settings-panel sets --bottom-padding, the room under them.
+ * and chrome.css sets --sheet-side, the sides under 780px, and its .settings-panel sets
+ * --bottom-padding, the room under them.
  */
 /*
  * Diagnostics sit just past the end of settings, out of the sheet's height, so only someone who
@@ -43,8 +44,8 @@
 }
 .diagnostics-head h3 {
   margin: 0;
-  font-size: var(--size-read);
-  font-weight: 500;
+  font-size: var(--type-body-size);
+  font-weight: calc(var(--type-body-weight) + 100);
 }
 .diagnostics-actions {
   display: flex;
@@ -58,15 +59,16 @@
   background: var(--accent);
   color: var(--accent-ink);
   font: inherit;
-  font-size: var(--size-small);
-  font-weight: 500;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
 }
 .diagnostics-release,
 .diagnostics-empty {
   margin: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 .diagnostics-record {
@@ -80,7 +82,8 @@
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   cursor: pointer;
   list-style: none;
 }
@@ -92,10 +95,10 @@
 }
 .diagnostics-flag {
   flex: none;
-  font-size: var(--size-small);
-  font-weight: 500;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .diagnostics-flag.dip,
@@ -109,7 +112,8 @@
   padding: 10px 12px 12px;
   border-top: 1px solid var(--divider);
   list-style: none;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-mid);
   overflow-wrap: anywhere;
 }
@@ -129,6 +133,6 @@
 
 @media (max-width: 779px) {
   .diagnostics-area {
-    padding-inline: 18px;
+    padding-inline: var(--sheet-side);
   }
 }

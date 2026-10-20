@@ -2,10 +2,11 @@
 // the same path is shared, so the read a finger starts as it comes down on a row serves the sheet
 // the tap opens, and a sheet opened again soon doesn't wait on another.
 import { reloadWhenSignedOut } from "./access.js";
+import { readWorkerError } from "./worker-error.js";
 
 /** @typedef {{ timeoutMs: number, isExpected: (body: any) => boolean }} ReadRules */
 
-/** @type {Map<string, { at: number, promise: Promise<any> }>} */
+/** @type {Map<string, { at: number, until: number, promise: Promise<any> }>} */
 const recentReads = new Map();
 
 /**
@@ -21,7 +22,7 @@ async function requestFromWorker(path, { timeoutMs, isExpected }) {
   reloadWhenSignedOut(response);
   const body = await response.json().catch(() => null);
   if (!response.ok)
-    throw Object.assign(new Error(body?.error || `The Worker answered ${response.status}`), {
+    throw Object.assign(new Error(readWorkerError(body, response.status).message), {
       status: response.status,
     });
   if (!body || !isExpected(body))
@@ -46,10 +47,21 @@ function forgetRead(path, promise) {
  * @returns {Promise<any>}
  */
 export function fetchFromWorker(path, { reuseMs, ...rules }) {
+  const now = Date.now();
+  forgetReadsPastReuse(now);
   const kept = recentReads.get(path);
-  if (kept && Date.now() - kept.at < reuseMs) return kept.promise;
+  if (kept && now - kept.at < reuseMs) return kept.promise;
   const promise = requestFromWorker(path, rules);
-  recentReads.set(path, { at: Date.now(), promise });
+  recentReads.set(path, { at: now, until: now + reuseMs, promise });
   promise.catch(() => forgetRead(path, promise));
   return promise;
 }
+
+// A read past the reuse time it was made with is let go, so reads never pile up as sheets open.
+/** @param {number} now */
+function forgetReadsPastReuse(now) {
+  for (const [path, { until }] of recentReads) if (until <= now) recentReads.delete(path);
+}
+
+/** How many reads are kept for reuse. */
+export const countKeptReads = () => recentReads.size;

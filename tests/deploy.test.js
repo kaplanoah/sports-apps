@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { listApps } from "../worker/apps.mjs";
+import { readRepoFile } from "./repo-files.js";
 
 const loadDeployModule = () => import("../worker/deploy.mjs");
-const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123" };
+const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
 
 const API = "https://api.cloudflare.com/client/v4";
 const WORKER_URL = "https://mlb-app.example-subdomain.workers.dev/";
@@ -39,7 +40,9 @@ function createFakeCloudflare({
     calls.push({ url, init });
     if (!url.startsWith(API)) return answerWorker();
     const isDeployments = url.endsWith("/deployments");
+    // A token limited to its channel's Workers is refused the account's workers.dev subdomain.
     const isRefused =
+      url.endsWith("/workers/subdomain") ||
       (refuse && url.includes(refuse)) ||
       (refuseRollback && isDeployments && init.method === "POST");
     if (isRefused) {
@@ -61,7 +64,6 @@ function createFakeCloudflare({
       );
     }
     let result = {};
-    if (url.endsWith("/workers/subdomain")) result = { subdomain: "example-subdomain" };
     if (url.endsWith("/workers/scripts"))
       result = isNew ? [] : [{ id: "mlb-app", migration_tag: migrationTag }];
     if (isDeployments && init.method === "GET") result = { deployments: LIVE_DEPLOYMENTS };
@@ -86,7 +88,7 @@ test("the name and compatibility date come from wrangler.toml", async () => {
 
 test("the beta channel's Worker is named by its environment, with the top level's date", async () => {
   const { readAppWorkerConfig, readWorkerConfig } = await loadDeployModule();
-  for (const app of ["mlb", "wnba"])
+  for (const app of listApps())
     assert.deepEqual(readAppWorkerConfig(app, "beta"), {
       name: `${app}-app-beta`,
       compatibilityDate: "2026-09-01",
@@ -144,7 +146,6 @@ test("upload, route, and the Worker URL", async () => {
     "GET /accounts/acct123/workers/scripts",
     "PUT /accounts/acct123/workers/scripts/mlb-app",
     "POST /accounts/acct123/workers/scripts/mlb-app/subdomain",
-    "GET /accounts/acct123/workers/subdomain",
     `GET ${ROBOTS_URL}`,
   ]);
 
@@ -264,8 +265,8 @@ test("a migration already applied isn't sent again", async () => {
 
 test("each app's wrangler.toml declares the same bindings and migrations", async () => {
   const { MIGRATIONS } = await loadDeployModule();
-  for (const app of ["mlb", "wnba"]) {
-    const toml = readFileSync(`${import.meta.dirname}/../apps/${app}/worker/wrangler.toml`, "utf8");
+  for (const app of listApps()) {
+    const toml = readRepoFile(`apps/${app}/worker/wrangler.toml`);
     assert.match(
       toml,
       /\[\[durable_objects\.bindings\]\]\nname = "STORE"\nclass_name = "SeasonStore"/,
@@ -345,6 +346,41 @@ test("a refusal names the step and Cloudflare's reason; no account ID is caught 
     }),
     /CLOUDFLARE_ACCOUNT_ID/,
   );
+});
+
+test("the workers.dev subdomain comes from its secret, checked before anything is sent", async () => {
+  const { deploy } = await loadDeployModule();
+  const cloudflare = createFakeCloudflare();
+  const missing = /Set CLOUDFLARE_WORKERS_SUBDOMAIN/;
+  const tooMuch = /just the part before \.workers\.dev/;
+  for (const { subdomain, reason } of [
+    { subdomain: undefined, reason: missing },
+    { subdomain: "", reason: missing },
+    { subdomain: "example-subdomain.workers.dev", reason: tooMuch },
+    { subdomain: "https://example-subdomain", reason: tooMuch },
+  ]) {
+    const failure = await deploy({
+      app: "mlb",
+      fetchImpl: cloudflare.fetchImpl,
+      env: { ...ENV, CLOUDFLARE_WORKERS_SUBDOMAIN: subdomain },
+      script: "",
+      log: () => {},
+      pause: skipPause,
+    }).catch((error) => error);
+    assert.match(failure.message, reason);
+    assert.doesNotMatch(failure.message, /example-subdomain/);
+  }
+  assert.deepEqual(cloudflare.calls, []);
+});
+
+test("the deploy step passes each Cloudflare secret the deploy reads", () => {
+  const workflow = readRepoFile(".github/workflows/deploy.yml");
+  for (const secret of [
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_WORKERS_SUBDOMAIN",
+  ])
+    assert.ok(workflow.includes(`${secret}: \${{ secrets.${secret} }}`), secret);
 });
 
 test("a refusal that isn't Cloudflare's shows its status, server, and raw body", async () => {
@@ -551,10 +587,161 @@ test("a new version's page that doesn't draw puts the live version back", async 
   );
 });
 
+test("a page check that fails puts the live version back", async () => {
+  const { deploy } = await loadDeployModule();
+  const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+  await assert.rejects(
+    deploy({
+      app: "mlb",
+      fetchImpl: cloudflare.fetchImpl,
+      env: ENV,
+      script: "",
+      commit: NEW_COMMIT,
+      findChanges: () => ["apps/mlb/page/js/app.js"],
+      log: () => {},
+      pause: skipPause,
+      checkPage: async () => {
+        throw new Error("browserType.newContext: Target closed");
+      },
+    }),
+    /The page didn't draw as the new version: the page check failed: browserType\.newContext: Target closed, so the earlier version is live again/,
+  );
+  assert.equal(
+    describeCalls(cloudflare.calls).at(-1),
+    "POST /accounts/acct123/workers/scripts/mlb-app/deployments",
+  );
+});
+
+test("a merge whose live version already has it isn't deployed, but a push to beta is", async () => {
+  const { deploy } = await loadDeployModule();
+  /** @type {string[][]} */
+  const asked = [];
+  /** @param {string} channel */
+  const deployOlder = (channel) => {
+    const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+    const lines = [];
+    const url = deploy({
+      app: "mlb",
+      channel,
+      fetchImpl: cloudflare.fetchImpl,
+      env: ENV,
+      script: "",
+      commit: NEW_COMMIT,
+      findChanges: () => ["apps/mlb/page/js/app.js"],
+      log: (line) => lines.push(line),
+      pause: skipPause,
+      checkPage: async () => ({ status: "drawn" }),
+      isEarlier: (commit, of) => {
+        asked.push([commit, of]);
+        return true;
+      },
+    });
+    return { url, lines, cloudflare };
+  };
+
+  const merge = deployOlder("production");
+  assert.equal(await merge.url, null);
+  assert.deepEqual(asked, [[NEW_COMMIT, LIVE_COMMIT]]);
+  assert.match(
+    merge.lines.at(-1),
+    /^::notice::The live version is at 1111111, which already has 2222222, so nothing was deployed\.$/,
+  );
+  assert.ok(!describeCalls(merge.cloudflare.calls).some((call) => call.startsWith("PUT ")));
+
+  const beta = deployOlder("beta");
+  assert.equal(await beta.url, "https://mlb-app-beta.example-subdomain.workers.dev/");
+  assert.equal(asked.length, 1);
+});
+
+test("a merge main has moved past deploys unless CI passed on the newer one, and beta's newer push always covers it", async () => {
+  const { decideMovedOn } = await loadDeployModule();
+  const release = { commit: LIVE_COMMIT, newer: NEW_COMMIT };
+  /** @type {string[]} */
+  const asked = [];
+  /** @param {"passed" | "not passed" | "unknown"} state */
+  const answerCi = (state) => async (/** @type {string} */ commit) => {
+    asked.push(commit);
+    return state;
+  };
+
+  assert.deepEqual(await decideMovedOn({ ...release, channel: "production" }, answerCi("passed")), {
+    isCovered: true,
+    message:
+      "::notice::main has moved on to 2222222, whose deploy covers 1111111, so nothing was deployed.",
+  });
+  assert.deepEqual(asked, [NEW_COMMIT]);
+  assert.deepEqual(
+    await decideMovedOn({ ...release, channel: "production" }, answerCi("not passed")),
+    {
+      isCovered: false,
+      message:
+        "::notice::main has moved on to 2222222, but CI on main hasn't passed on it, so 1111111 deploys.",
+    },
+  );
+  assert.deepEqual(
+    await decideMovedOn({ ...release, channel: "production" }, answerCi("unknown")),
+    {
+      isCovered: false,
+      message:
+        "::notice::main has moved on to 2222222, but GitHub couldn't be asked whether CI on main passed on it, so 1111111 deploys.",
+    },
+  );
+  const beta = await decideMovedOn({ ...release, channel: "beta" }, answerCi("not passed"));
+  assert.equal(beta.isCovered, true);
+  assert.equal(asked.length, 3, "beta asks nothing");
+});
+
+test("whether CI on main passed on a commit comes from its newest push run, and is unknown when GitHub can't be asked", async () => {
+  const { readMainCiState } = await loadDeployModule();
+  const env = { GH_TOKEN: "token", GITHUB_REPOSITORY: "owner/repo" };
+  /** @type {string[]} */
+  const urls = [];
+  /** @param {Response} answer */
+  const createFetch = (answer) => async (/** @type {string} */ url) => {
+    urls.push(url);
+    return answer;
+  };
+  /** @param {(string | null)[]} conclusions */
+  const answerRuns = (conclusions) =>
+    Response.json({ workflow_runs: conclusions.map((conclusion) => ({ conclusion })) });
+
+  assert.equal(
+    await readMainCiState(NEW_COMMIT, { fetchImpl: createFetch(answerRuns(["success"])), env }),
+    "passed",
+  );
+  assert.deepEqual(urls, [
+    `https://api.github.com/repos/owner/repo/actions/workflows/ci.yml/runs?head_sha=${NEW_COMMIT}&event=push&per_page=1`,
+  ]);
+  for (const answer of [answerRuns(["failure"]), answerRuns([null]), answerRuns([])])
+    assert.equal(
+      await readMainCiState(NEW_COMMIT, { fetchImpl: createFetch(answer), env }),
+      "not passed",
+    );
+  assert.equal(
+    await readMainCiState(NEW_COMMIT, {
+      fetchImpl: createFetch(new Response("", { status: 500 })),
+      env,
+    }),
+    "unknown",
+  );
+  for (const unnamed of [{}, { GH_TOKEN: "token" }, { GITHUB_REPOSITORY: "owner/repo" }])
+    assert.equal(
+      await readMainCiState(NEW_COMMIT, {
+        fetchImpl: createFetch(answerRuns(["success"])),
+        env: unnamed,
+      }),
+      "unknown",
+    );
+});
+
 test("a new version passes once its Worker answers and its page draws, or has no page to open", async () => {
   const { deploy } = await loadDeployModule();
   for (const [check, line] of [
     [{ status: "drawn" }, "page check: ok"],
+    [
+      { status: "drawn", note: "the page asks for no code" },
+      "::notice::page check: ok, but the page asks for no code",
+    ],
     [
       { status: "unchecked", reason: "no MLB_PAGE_URL secret" },
       "::notice::page check: skipped, no MLB_PAGE_URL secret",
@@ -576,10 +763,8 @@ test("a new version passes once its Worker answers and its page draws, or has no
 });
 
 test("each deploy and each watch of the apps opens every app's page with its own secrets", async () => {
-  const { listApps } = await import("../worker/apps.mjs");
   const { nameAccessSecrets } = await import("../worker/check-page.mjs");
-  const readWorkflow = (name) =>
-    readFileSync(`${import.meta.dirname}/../.github/workflows/${name}`, "utf8");
+  const readWorkflow = (name) => readRepoFile(`.github/workflows/${name}`);
   const listPassed = (workflow, channel) =>
     listApps().flatMap((app) =>
       Object.values(nameAccessSecrets(app, channel)).filter(
@@ -739,38 +924,57 @@ test("anything else is refused, with the reason", async () => {
   );
 });
 
-test("a beta release is exactly what GitHub has as beta", async () => {
+test("a beta release is what GitHub has as beta, and a push beta has since replaced, built on or not, is older", async () => {
   const { checkRelease } = await loadDeployModule();
   const fake = createFakeGit({ branch: "claude/some-branch" });
-  assert.deepEqual(checkRelease(fake.git, "beta"), { commit: "a".repeat(40), newer: null });
+  assert.deepEqual(checkRelease(fake.git, "beta", ""), { commit: "a".repeat(40), newer: null });
   assert.ok(fake.asked.includes("fetch --quiet origin beta"));
   assert.ok(fake.asked.includes("rev-parse origin/beta"));
-  assert.throws(
-    () => checkRelease(createFakeGit({ head: "b".repeat(40) }).git, "beta"),
-    /isn't beta as GitHub has it \(aaaaaaa\)\. Push it with git push -f origin <branch>:beta/,
-  );
+  const forcePushedOver = createFakeGit({ branch: "HEAD", head: "b".repeat(40) });
+  assert.deepEqual(checkRelease(forcePushedOver.git, "beta", "b".repeat(40)), {
+    commit: "b".repeat(40),
+    newer: "a".repeat(40),
+  });
+});
+
+test("a checkout at a commit beta never held isn't a beta release, and says how to push one", async () => {
+  const { checkRelease } = await loadDeployModule();
+  for (const pushedCommit of ["", "c".repeat(40)])
+    assert.throws(
+      () =>
+        checkRelease(
+          createFakeGit({ branch: "claude/some-branch", head: "b".repeat(40) }).git,
+          "beta",
+          pushedCommit,
+        ),
+      /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Push it with git push -f origin <branch>:beta/,
+    );
 });
 
 test("a push to beta deploys the beta channel, and main still waits for its CI", () => {
-  const workflow = readFileSync(`${import.meta.dirname}/../.github/workflows/deploy.yml`, "utf8");
+  const workflow = readRepoFile(".github/workflows/deploy.yml");
   assert.match(workflow, /push:\n {4}branches: \[main, beta\]/);
   assert.match(
     workflow,
     /CHANNEL: \$\{\{ github\.ref_name == 'beta' && 'beta' \|\| 'production' \}\}/,
   );
   assert.match(workflow, /group: deploy-\$\{\{ github\.ref_name \}\}/);
+  // A push to beta runs that branch's own scripts, so it gets beta's environment and token.
+  assert.match(
+    workflow,
+    /environment: \$\{\{ github\.ref_name == 'beta' && 'beta' \|\| 'production' \}\}/,
+  );
+  assert.match(workflow, /No CLOUDFLARE_API_TOKEN in the \$CHANNEL environment/);
   assert.match(workflow, /if: github\.event_name == 'push' && env\.CHANNEL == 'production'\n/);
 });
 
 test("deploy:api runs the tests before it deploys, and sends its calls through any proxy", () => {
-  const scripts = JSON.parse(
-    readFileSync(`${import.meta.dirname}/../package.json`, "utf8"),
-  ).scripts;
+  const scripts = JSON.parse(readRepoFile("package.json")).scripts;
   assert.equal(scripts["deploy:api"], "npm test && NODE_USE_ENV_PROXY=1 node worker/deploy.mjs");
 });
 
 test("the deploy job runs no package's install scripts or tests while it holds the token", () => {
-  const workflow = readFileSync(`${import.meta.dirname}/../.github/workflows/deploy.yml`, "utf8");
+  const workflow = readRepoFile(".github/workflows/deploy.yml");
   assert.match(workflow, /- run: npm ci --ignore-scripts\n/);
   assert.match(workflow, /\n {10}node worker\/deploy\.mjs --channel "\$CHANNEL"\n/);
   assert.doesNotMatch(workflow, /npm run deploy:api|npm test/);
@@ -778,10 +982,19 @@ test("the deploy job runs no package's install scripts or tests while it holds t
 });
 
 test("project settings ask before any deploy but beta's or a key change, and deny running them any other way", () => {
-  const { permissions } = JSON.parse(
-    readFileSync(`${import.meta.dirname}/../.claude/settings.json`, "utf8"),
-  );
-  assert.deepEqual(permissions.allow, ["Bash(git push -f origin *:beta)"]);
+  const { permissions } = JSON.parse(readRepoFile(".claude/settings.json"));
+  // A message to another of the owner's sessions changes nothing outside them, so a session a
+  // session started reports to it without asking. A session opens an issue for work it leaves for
+  // later in the same turn, which a prompt it can't answer would lose.
+  assert.deepEqual(permissions.allow, [
+    "Bash(git push -f origin *:beta)",
+    "Bash(gh issue create *)",
+    "Bash(gh issue comment *)",
+    "Bash(gh issue close *)",
+    "mcp__github__add_issue_comment",
+    "mcp__github__issue_write",
+    "mcp__claude-code-remote__send_message",
+  ]);
   for (const rule of [
     "Bash(npm run deploy)",
     "Bash(npx wrangler *)",

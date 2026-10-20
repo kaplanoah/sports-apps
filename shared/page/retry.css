@@ -4,10 +4,11 @@
  * button, centered; in place of one part, a .retry-note of why, after a warning icon, over an
  * outlined one, its message keeping the size of the text it stands in for.
  * Apps link it after sheet.css, before their own styles.css, which draws .retry-button and its
- * .filled form the way the app's other buttons look, and sets the block's title weight.
+ * .filled form, and sets its words, the way the app's other buttons look, and sets the block's
+ * title weight.
  *
- * Beside chrome.css's --ink and --ink-dim, and type.css's --size-glance, it reads no tokens of its
- * own.
+ * Beside chrome.css's --ink and --ink-dim, the page's --ink-hover, and the detail role's size and
+ * weight, it reads no tokens of its own.
  */
 
 .retry-button {
@@ -18,8 +19,18 @@
   white-space: nowrap;
   cursor: pointer;
 }
+/* Its words center on their capitals, as every button's do. */
+.retry-button > span {
+  text-box: trim-both cap alphabetic;
+}
 .retry-icon {
   flex: none;
+}
+/* Under the pointer, an outlined button's words take the hover's ink, as every link's do. */
+@media (hover: hover) {
+  .retry-button:not(.filled):hover {
+    color: var(--ink-hover);
+  }
 }
 
 .retry-block {
@@ -35,12 +46,14 @@
 }
 .retry-title {
   margin: 10px 0 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink);
 }
 .retry-next {
   margin: 3px 0 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   text-wrap: balance;
 }

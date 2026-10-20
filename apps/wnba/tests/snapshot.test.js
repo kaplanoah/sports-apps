@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { GAME_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import * as WNBASnapshot from "../page/js/snapshot.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
 );
-// The afternoon's recording has no players' averages, so the next day's stand in for them.
+// The next day's games, with the whole season's schedule.
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
@@ -14,7 +15,7 @@ const GAMES = JSON.parse(
 const ESPN_SCOREBOARD = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-02-espn-scoreboard.json`, "utf8"),
 );
-const RESPONSES = { ...AFTERNOON.responses, players: GAMES.preview.players };
+const RESPONSES = AFTERNOON.responses;
 const buildAfternoon = (responses = RESPONSES) =>
   WNBASnapshot.buildSnapshot(responses, {
     season: AFTERNOON.season,
@@ -82,12 +83,16 @@ const SEATTLE_AT_CHICAGO = {
   homeTeam: { teamTricode: "CHI", score: 58 },
 };
 
-/** @param {any} game */
-const addToScoreboard = (game) => {
+/** @param {any[]} games */
+const withScoreboardGames = (games) => {
   const { scoreboard } = AFTERNOON.responses;
-  const games = [...scoreboard.scoreboard.games, game];
   return { scoreboard: { ...scoreboard, scoreboard: { ...scoreboard.scoreboard, games } } };
 };
+
+const SCOREBOARD_GAMES = AFTERNOON.responses.scoreboard.scoreboard.games;
+
+/** @param {any} game */
+const addToScoreboard = (game) => withScoreboardGames([...SCOREBOARD_GAMES, game]);
 
 test("each team's nearest games come from its whole season, while the games are only the playoffs'", () => {
   const { games, nearestGames } = buildWithWholeSeason();
@@ -389,64 +394,6 @@ test("each team's standing has its points a game, for and against, and its home 
   );
 });
 
-test("each team's five leading scorers are those with the most points a game who played most of its games", () => {
-  const { leaders } = buildAfternoon();
-  assert.equal(leaders.length, 75);
-  const indiana = leaders.filter((leader) => leader.team === "IND");
-  assert.deepEqual(
-    indiana.map((leader) => `${leader.firstName} ${leader.lastName}`),
-    ["Kelsey Mitchell", "Caitlin Clark", "Aliyah Boston", "Sophie Cunningham", "Monique Billings"],
-  );
-  assert.deepEqual(
-    leaders.find((leader) => leader.team === "LVA"),
-    {
-      team: "LVA",
-      id: 1628932,
-      firstName: "A'ja",
-      lastName: "Wilson",
-      games: 41,
-      minutes: 32,
-      points: 26.2,
-      rebounds: 9.4,
-      assists: 3.2,
-      fieldGoalShare: 0.527,
-    },
-  );
-
-  const players = structuredClone(RESPONSES.players);
-  const table = players.resultSets[0];
-  const column = Object.fromEntries(table.headers.map((header, index) => [header, index]));
-  const mitchell = table.rowSet.find((row) => row[column.PLAYER_NAME] === "Kelsey Mitchell");
-  mitchell[column.GP] = 10;
-  const fewGames = buildAfternoon({ ...RESPONSES, players }).leaders;
-  assert.ok(!fewGames.some((leader) => leader.lastName === "Mitchell"));
-  assert.equal(fewGames.filter((leader) => leader.team === "IND").length, 5);
-});
-
-test("every player on a team has her averages a game, for her team's roster", () => {
-  const { averages } = buildAfternoon();
-  assert.equal(averages.length, 239);
-  assert.deepEqual(
-    averages.find((player) => player.lastName === "Stewart"),
-    {
-      team: "NYL",
-      id: 1627668,
-      firstName: "Breanna",
-      lastName: "Stewart",
-      games: 42,
-      minutes: 32.9,
-      points: 20.8,
-      rebounds: 8.3,
-      assists: 3.3,
-    },
-  );
-});
-
-test("without the players' averages, there are no top scorers or averages, and the feed is missing", () => {
-  const { leaders, averages, missing } = buildAfternoon({ ...RESPONSES, players: null });
-  assert.deepEqual([leaders, averages, missing], [[], [], ["players"]]);
-});
-
 test("polling waits until 15 minutes before the next set start, and runs every 15 seconds in a game", () => {
   const snapshot = buildAfternoon();
   const now = Date.parse(AFTERNOON.now);
@@ -502,6 +449,61 @@ test("a game that hasn't started is followed closely at first, then less, and th
   assert.equal(WNBASnapshot.choosePollDelay(snapshot, start + HOUR_MS / 2), 15 * 1000);
   assert.equal(WNBASnapshot.choosePollDelay(snapshot, start + 4 * HOUR_MS), 5 * 60 * 1000);
   assert.equal(WNBASnapshot.choosePollDelay(snapshot, start + 9 * HOUR_MS), 24 * HOUR_MS);
+});
+
+/** @param {string} gameId */
+const putOffOnScoreboard = (gameId) =>
+  withScoreboardGames(
+    SCOREBOARD_GAMES.map((game) =>
+      game.gameId === gameId ? { ...game, gameStatusText: "PPD" } : game,
+    ),
+  );
+
+// A regular-season game in Chicago tonight, which the league put off.
+const PUT_OFF_IN_CHICAGO = {
+  ...SEATTLE_AT_CHICAGO,
+  gameId: "1022600401",
+  gameStatus: 1,
+  gameStatusText: "PPD",
+  gameTimeUTC: "2026-09-30T23:30:00Z",
+  period: 0,
+  gameClock: "",
+};
+
+test("a game the league put off, playoff or regular season, isn't followed past its start as one about to tip off, but keeps its day a game day", () => {
+  const playoff = buildAfternoon(putOffOnScoreboard("1042600132"));
+  const lateGame = playoff.games.find((game) => game.id === "1042600132");
+  assert.deepEqual(playoff.putOffStarts, [lateGame.start]);
+  const quietPlayoff = { games: [lateGame], putOffStarts: playoff.putOffStarts };
+  const playoffStart = Date.parse(lateGame.start);
+  assert.equal(
+    WNBASnapshot.choosePollDelay(quietPlayoff, playoffStart + 30 * 60 * 1000),
+    GAME_DAY_CHECK_MS,
+  );
+
+  const regularSeason = buildWithWholeSeason(addToScoreboard(PUT_OFF_IN_CHICAGO));
+  assert.deepEqual(regularSeason.putOffStarts, [PUT_OFF_IN_CHICAGO.gameTimeUTC]);
+  const regularStart = Date.parse(PUT_OFF_IN_CHICAGO.gameTimeUTC);
+  assert.equal(
+    WNBASnapshot.choosePollDelay(
+      { putOffStarts: regularSeason.putOffStarts },
+      regularStart + 30 * 60 * 1000,
+    ),
+    GAME_DAY_CHECK_MS,
+  );
+});
+
+test("a game a decided series no longer needs isn't followed past its start", () => {
+  const lateGame = buildAfternoon().games.find((game) => game.id === "1042600132");
+  const start = Date.parse(lateGame.start);
+  const calledOff = {
+    games: [{ ...lateGame, isIfNeeded: true }],
+    series: [{ id: lateGame.series, winner: lateGame.home.team }],
+  };
+  assert.equal(
+    WNBASnapshot.choosePollDelay(calledOff, start + 30 * 60 * 1000),
+    24 * 60 * 60 * 1000,
+  );
 });
 
 test("each game keeps the arena the schedule names, through the scoreboard's copy of today's games, and none while the league hasn't set it", () => {

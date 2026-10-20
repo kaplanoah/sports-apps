@@ -1,9 +1,11 @@
 import { readEasternDay } from "#shared/days.js";
+import { OVERTIME_SECONDS, QUARTER_SECONDS, REGULATION_PERIODS } from "../../page/js/periods.js";
 import { findTeamCodeByEspnId, TEAMS } from "../../page/js/teams.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { fetchUpstream } from "../../../../shared/worker/upstream.js";
 import { GAME_ID } from "./box-score.js";
-import { nameGameDetailsKey, readKeptDoc } from "./store-docs.js";
+import { nameGameDetailsKey } from "./store-docs.js";
+import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { ESPN_HEADERS } from "./wnba.js";
 
 // Reads ESPN for the score through one game, for the game sheet's chart of the lead: the score
@@ -11,15 +13,12 @@ import { ESPN_HEADERS } from "./wnba.js";
 // The store keeps each finished game's (game-details-updater.js), so the route reads ESPN only for
 // a game still being played, or one the store hasn't kept yet.
 
-/** @typedef {import("./store-docs.js").ReadDoc} ReadDoc */
+/** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
 const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba";
 // A day's games change only as they start and end, and a live game's plays with every basket.
 const SCOREBOARD_CACHE_SECONDS = 60;
 const SUMMARY_CACHE_SECONDS = 15;
-const QUARTER_SECONDS = 10 * 60;
-const OVERTIME_SECONDS = 5 * 60;
-const REGULATION_PERIODS = 4;
 
 /** @param {string} start */
 export const nameScoreboardRequest = (start) =>
@@ -202,13 +201,17 @@ export function createLeadServer({ fetchImpl = (input, init) => fetch(input, ini
   async function serveLead(url, readDoc) {
     const game = readGame(url.searchParams);
     if (!game)
-      return respondJson({ error: "id, away, home, and start must name a WNBA game" }, 400);
+      return respondError(
+        400,
+        "invalid_argument",
+        "id, away, home, and start must name a WNBA game",
+      );
     try {
       const lead = await loadLead(game, readDoc);
-      if (!lead) return respondJson({ error: "ESPN has no such game that day" }, 404);
+      if (!lead) return respondError(404, "not_found", "ESPN has no such game that day");
       return respondJson(lead);
     } catch (error) {
-      return respondJson({ error: `Couldn't read ESPN: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read ESPN: ${describeError(error)}`);
     }
   }
 

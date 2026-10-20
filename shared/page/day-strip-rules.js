@@ -39,6 +39,12 @@ export function chooseCellLabel(day, today) {
 }
 
 /**
+ * Whether a day's date starts with a 1, whose stem the eye centers it on, right of its box's middle.
+ * @param {string} day
+ */
+export const isLedByOne = (day) => String(readDayOfMonth(day)).startsWith("1");
+
+/**
  * The days the list shows: each game day, and in its place among them a date without games a tap
  * brought in.
  * @param {ListedDay[]} days
@@ -70,6 +76,13 @@ export function choosePlacement({ isPlaced, hasPutBackDay }) {
  */
 export const findDayScrollTop = ({ dayTop, gap, scrollHeight, clientHeight }) =>
   Math.max(0, Math.min(dayTop - gap, scrollHeight - clientHeight));
+
+/**
+ * Where the strip stands with a date in its middle, or as near as its ends let it.
+ * @param {{ cellLeft: number, cellWidth: number, scrollWidth: number, clientWidth: number }} strip
+ */
+export const findCellScrollLeft = ({ cellLeft, cellWidth, scrollWidth, clientWidth }) =>
+  Math.max(0, Math.min(cellLeft - (clientWidth - cellWidth) / 2, scrollWidth - clientWidth));
 
 /**
  * How the list travels to a day: at once when asked to, more than three screens away, or with

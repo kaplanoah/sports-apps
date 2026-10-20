@@ -1,10 +1,15 @@
-// The thin bar over the top of the page and the box at the bottom of settings that ask a phone's
-// browser to add the page to the Home Screen. Neither shows on a computer, or once the page is
-// opened from the Home Screen. Closing the bar keeps it closed on this device, and the box stays,
-// so the steps are still there. The page supplies an empty #homeScreenBar and #homeScreenTip.
+// The page's asks to be added to the Home Screen, which draw-home-screen-asks.js draws before the
+// first paint, and whose welcome keeps its own theme pick and closing: the welcome a phone's or
+// tablet's browser opens on, and the box at the top of settings. Neither shows on a computer, or
+// once the page is opened from the Home Screen. With Chrome's own install to hand, Install takes
+// the place of the steps in both. The welcome opens again from settings' Notifications, rising
+// as settings does, and closes as settings does, sliding down from its caret, Continue in browser,
+// Escape, Android's back, or a swipe down.
 
-import { isIos, isOnHomeScreen, isTouchDevice } from "./device.js";
-import { html, setHtml } from "./html.js";
+/* global forgetWelcomeClosed -- from pick-theme.js */
+
+import { isOnHomeScreen, isTouchDevice } from "./device.js";
+import { closeOnCancel, closeOnSwipeDown } from "./sheet-swipe.js";
 
 /**
  * Chrome's own install dialog, which it offers only to a page it can install.
@@ -14,102 +19,24 @@ import { html, setHtml } from "./html.js";
  * }} InstallPrompt
  */
 
-const CLOSED_KEY = "homeScreenBarClosed";
-const TITLE = "Use this site like an app";
-const BENEFIT = "It opens full screen, without the browser's bars";
-
-const SHARE_ICON = html`<svg
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
-  aria-hidden="true"
->
-  <path d="M8 9H6a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10a1 1 0 0 0-1-1h-2" />
-  <path d="M12 15V3" />
-  <path d="M8.5 6.5 12 3l3.5 3.5" />
-</svg>`;
-const MENU_ICON = html`<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-  <circle cx="12" cy="5" r="2" />
-  <circle cx="12" cy="12" r="2" />
-  <circle cx="12" cy="19" r="2" />
-</svg>`;
-// Phosphor's x, at its Light weight, like the page's other close buttons.
-const CLOSE_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
-  <path
-    d="M204.24,195.76a6,6,0,1,1-8.48,8.48L128,136.49,60.24,204.24a6,6,0,0,1-8.48-8.48L119.51,128,51.76,60.24a6,6,0,0,1,8.48-8.48L128,119.51l67.76-67.75a6,6,0,0,1,8.48,8.48L136.49,128Z"
-  />
-</svg>`;
-const ICON = html`<span class="home-screen-icon" aria-hidden="true"></span>`;
-const INSTALL_BUTTON = html`<button type="button" class="home-screen-install">Install</button>`;
-
 /** @type {InstallPrompt | null} */
 let installPrompt = null;
 let isInstalled = false;
-let isBarClosed = false;
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
+const findWelcome = () => /** @type {HTMLDialogElement} */ (findElement("homeScreenWelcome"));
 
-// Storage can be off, as in a private window, and then the bar comes back on the next visit.
-function readBarClosed() {
-  try {
-    return localStorage.getItem(CLOSED_KEY) === "closed";
-  } catch {
-    return false;
-  }
-}
+export const isAskingToAdd = () => isTouchDevice() && !isOnHomeScreen() && !isInstalled;
 
-function saveBarClosed() {
-  try {
-    localStorage.setItem(CLOSED_KEY, "closed");
-  } catch {
-    /* the bar stays closed until the page reloads */
-  }
-}
-
-const isAsking = () => isTouchDevice() && !isOnHomeScreen() && !isInstalled;
-
-function renderSteps() {
-  if (isIos()) return html`Tap ${SHARE_ICON} <b>Share</b>, then <b>Add to Home Screen</b>`;
-  return html`Tap ${MENU_ICON} <b>Menu</b>, then <b>Add to Home screen</b>`;
-}
-
-// With Chrome's dialog to hand, Install takes the place of the steps.
-function renderBar() {
-  return html`${ICON}
-    <span class="home-screen-copy">
-      <span class="home-screen-title">${TITLE}</span>
-      ${!installPrompt && html`<span class="home-screen-steps">${renderSteps()}</span>`}
-    </span>
-    ${!!installPrompt && INSTALL_BUTTON}
-    <button type="button" class="home-screen-close" aria-label="Close">${CLOSE_ICON}</button>`;
-}
-
-function renderTip() {
-  const steps = installPrompt ? BENEFIT : html`${renderSteps()}. ${BENEFIT}.`;
-  return html`${ICON}
-    <span class="home-screen-copy">
-      <span class="home-screen-title">${TITLE}</span>
-      <span class="home-screen-steps">${steps}</span>
-      ${!!installPrompt && INSTALL_BUTTON}
-    </span>`;
-}
+// Each ask shows Chrome's Install while it's to hand, and the browser's own steps otherwise.
+/** @param {HTMLElement} part */
+const isPartShown = (part) => (part.dataset.ask === "install") === !!installPrompt;
 
 function showAsks() {
-  const bar = findElement("homeScreenBar");
-  const tip = findElement("homeScreenTip");
-  bar.hidden = !isAsking() || isBarClosed;
-  tip.hidden = !isAsking();
-  if (!bar.hidden) setHtml(bar, renderBar());
-  if (!tip.hidden) setHtml(tip, renderTip());
-}
-
-function closeBar() {
-  isBarClosed = true;
-  saveBarClosed();
-  showAsks();
+  findElement("homeScreenTip").hidden = !isAskingToAdd();
+  const parts = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-ask]"));
+  for (const part of parts) part.hidden = !isPartShown(part);
+  if (!isAskingToAdd() && findWelcome().open) findWelcome().close();
 }
 
 // Chrome's dialog can be shown only once, so the steps come back if it's turned down or fails.
@@ -129,8 +56,7 @@ async function install() {
 /** @param {Event} event */
 function followClick(event) {
   const target = /** @type {Element} */ (event.target);
-  if (target.closest(".home-screen-close")) closeBar();
-  else if (target.closest(".home-screen-install") && installPrompt) install();
+  if (target.closest("[data-install]") && installPrompt) install();
 }
 
 /** @param {Event} event */
@@ -146,10 +72,25 @@ function forgetAsks() {
   showAsks();
 }
 
+/**
+ * Opens the welcome over the page, rising as a sheet does, and keeps it open through the reload a
+ * theme picked on it brings in Safari.
+ */
+export function openWelcome() {
+  forgetWelcomeClosed();
+  findWelcome().showModal();
+}
+
+function wireWelcomeClosing() {
+  const welcome = findWelcome();
+  closeOnCancel(welcome);
+  closeOnSwipeDown(welcome, { isOwnGesture: () => false, findScroller: () => welcome });
+}
+
 export function startHomeScreen() {
-  isBarClosed = readBarClosed();
-  findElement("homeScreenBar").addEventListener("click", followClick);
   findElement("homeScreenTip").addEventListener("click", followClick);
+  findWelcome().addEventListener("click", followClick);
+  wireWelcomeClosing();
   // Chrome would otherwise show its own banner along the bottom of the screen.
   window.addEventListener("beforeinstallprompt", keepInstallPrompt);
   window.addEventListener("appinstalled", forgetAsks);

@@ -1,25 +1,14 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { readPillNames } from "../../../../tests/browser/pill-names.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { scrollSeasonPartToEnd } from "../../../../tests/browser/season-scroll.mjs";
+import { readRole } from "../../../../tests/browser/type-roles.mjs";
+import { readTokenColor } from "./theme.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const PHONE = { width: 390, height: 844 };
-
-/**
- * What a token computes to in the page's theme, as a color.
- * @param {import("@playwright/test").Page} page
- * @param {string} token
- */
-const readTokenColor = (page, token) =>
-  page.evaluate((name) => {
-    const probe = document.createElement("i");
-    probe.style.color = `var(${name})`;
-    document.body.append(probe);
-    const { color } = getComputedStyle(probe);
-    probe.remove();
-    return color;
-  }, token);
 
 /**
  * The colors a chip of each class draws with, set loose on the page.
@@ -62,7 +51,24 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
   });
 }
 
-test("a Read button is raised like a card, a button's height, its words centered on their capitals", async ({
+for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  test(`the Updates box and settings' icon note are cards raised inside an edge, in ${colorScheme}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await openApp(page);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    const [raised, edge] = await Promise.all(
+      ["--raised", "--edge"].map((token) => readTokenColor(page, token)),
+    );
+    for (const box of ["#updates", "#appearanceNote"]) {
+      await expect(page.locator(box)).toHaveCSS("background-color", raised);
+      await expect(page.locator(box)).toHaveCSS("border-top-color", edge);
+    }
+  });
+}
+
+test("a Read button is raised like a card, a button's height, its words a button's, centered on their capitals", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -90,55 +96,59 @@ test("a Read button is raised like a card, a button's height, its words centered
 
   const look = await button.evaluate((element) => {
     const box = element.getBoundingClientRect();
-    const words = element.querySelector(".read-label").getBoundingClientRect();
-    const card = getComputedStyle(element.closest(".news-card"));
+    const card = getComputedStyle(/** @type {Element} */ (element.closest(".news-card")));
     const style = getComputedStyle(element);
     return {
       height: box.height,
+      middle: (box.top + box.bottom) / 2,
+      size: style.fontSize,
       weight: style.fontWeight,
       background: style.backgroundColor,
       cardBackground: card.backgroundColor,
-      roomAbove: Math.round((words.top - box.top) * 2) / 2,
-      roomBelow: Math.round((box.bottom - words.bottom) * 2) / 2,
     };
   });
-  expect(look.height).toBe(30);
-  expect(look.weight).toBe("500");
+  const setting = await readRole(page, "setting");
+  expect(look.height).toBe(36);
+  expect(look.size).toBe(`${setting.size}px`);
+  expect(look.weight).toBe(String(setting.weight));
   expect(look.background).toBe(look.cardBackground);
-  expect(look.roomAbove).toBe(look.roomBelow);
+  const capitals = await readCapitals(button.locator(".read-label"));
+  expect(capitals.middle - look.middle).toBeCloseTo(0, 0);
 });
 
-test("a pill's names are buttons, in sentence case at a button's weight and height, centered on their capitals, the pill 10px under the header and 9px over its lists, and its bar held at the top ends in a line, not a fade", async ({
+test("a pill's names are buttons, in sentence case in a button's words and height, centered on their capitals, the pill 10px under the header and 9px over what it shows, and its bar ends in a line, not a fade, once what it shows scrolls under it", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  const name = page.locator("#standings-bar .pager-tabs button").first();
+  await openSeasonPart(page, "Standings");
+  const name = page.locator("#bracketStandingsPill .pager-tabs button").first();
+  const setting = await readRole(page, "setting");
   await expect(name).toHaveCSS("text-transform", "none");
-  await expect(name).toHaveCSS("font-weight", "500");
-  await expect(name).toHaveCSS("height", "30px");
-  await expect(name).toHaveCSS("text-box-trim", "trim-both");
+  await expect(name).toHaveCSS("font-size", `${setting.size}px`);
+  await expect(name).toHaveCSS("font-weight", String(setting.weight));
+  await expect(name).toHaveCSS("height", "36px");
+  const box = /** @type {{ y: number, height: number }} */ (await name.boundingBox());
+  expect((await readCapitals(name)).middle - (box.y + box.height / 2)).toBeCloseTo(0, 0);
   const room = await page.evaluate(() => {
     const readBox = (/** @type {string} */ selector) =>
       /** @type {Element} */ (document.querySelector(selector)).getBoundingClientRect();
     const header = readBox("header.top");
-    const pill = readBox("#standings-bar .pager-tabs");
-    const lists = readBox("#standings-pages");
-    return { above: pill.top - header.bottom, height: pill.height, below: lists.top - pill.bottom };
+    const pill = readBox("#bracketStandingsPill .pager-tabs");
+    const standings = readBox("#standingsWrap");
+    return {
+      above: pill.top - header.bottom,
+      height: pill.height,
+      below: standings.top - pill.bottom,
+    };
   });
-  expect(room).toEqual({ above: 10, height: 30, below: 9 });
+  expect(room).toEqual({ above: 10, height: 36, below: 9 });
 
-  await page.evaluate(() => scrollTo({ top: 400, behavior: "instant" }));
-  const bar = page.locator("#standings-bar");
-  await expect(bar).toHaveClass(/stuck/);
+  await scrollSeasonPartToEnd(page, "standings");
+  const bar = page.locator("#bracketStandingsPill");
   const divider = await readTokenColor(page, "--divider");
   await expect(bar).toHaveCSS("box-shadow", `${divider} 0px 1px 0px 0px`);
-  const floor = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  await expect(bar).toHaveCSS(
-    "background-image",
-    `linear-gradient(${floor} 100%, rgba(0, 0, 0, 0))`,
-  );
+  await expect(bar).toHaveCSS("background-image", "none");
 });
 
 /**
@@ -162,25 +172,25 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
   }) => {
     await page.emulateMedia({ colorScheme });
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    const chosen = page.locator("#standings-bar .pager-tabs button.active");
-    await expect(chosen).toHaveText("League");
+    await openSeasonPart(page, "Standings");
+    const chosen = page.locator("#bracketStandingsPill .pager-tabs button.active");
+    await expect(chosen).toHaveText("Standings");
     const [orange, onOrange, ink] = await Promise.all(
       ["--orange", "--orange-ink", "--ink"].map(async (token) =>
         readChannels(page, await readTokenColor(page, token)),
       ),
     );
-    const [league, ...others] = await readPillNames(page.locator("#standings-bar [role=tablist]"));
-    expect(league.name).toBe("League");
-    expect(await readChannels(page, league.fill)).toEqual(orange);
-    expect(await readChannels(page, league.textColor)).toEqual(onOrange);
-    for (const other of others) {
+    const names = await readPillNames(page.locator("#bracketStandingsPill [role=tablist]"));
+    const standings = names.find((each) => each.name === "Standings");
+    expect(await readChannels(page, standings.fill)).toEqual(orange);
+    expect(await readChannels(page, standings.textColor)).toEqual(onOrange);
+    for (const other of names.filter((each) => each !== standings)) {
       expect(other.fill, other.name).toBe("rgba(0, 0, 0, 0)");
       expect(await readChannels(page, other.textColor), other.name).toEqual(ink);
     }
-    await expect(page.locator("#standings-bar .pager-tabs button:not(.active)").first()).toHaveCSS(
+    await expect(page.locator("#bracketStandingsPill .pager-tabs button:not(.active)")).toHaveCSS(
       "font-weight",
-      "500",
+      String((await readRole(page, "setting")).weight),
     );
   });
 
@@ -218,9 +228,10 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
     expect(await readChannels(page, await readColor(weekday, "color"))).toEqual(inkDim);
     const quietNumber = page.locator('#seasonGames .day-cell[data-day="2026-09-28"] .cell-number');
     expect(await readChannels(page, await readColor(quietNumber, "color"))).toEqual(inkDim);
-    await expect(quietNumber).toHaveCSS("font-weight", "500");
+    const body = await readRole(page, "body");
+    await expect(quietNumber).toHaveCSS("font-weight", String(body.weight + 100));
     const gameNumber = page.locator('#seasonGames .day-cell[data-day="2026-09-29"] .cell-number');
-    await expect(gameNumber).toHaveCSS("font-weight", "600");
+    await expect(gameNumber).toHaveCSS("font-weight", String(body.weight + 200));
     const goToday = page.locator("#seasonGames .go-today");
     await expect(goToday).toHaveText("Today");
     expect(await readChannels(page, await readColor(goToday, "color"))).toEqual(orange);

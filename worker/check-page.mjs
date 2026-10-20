@@ -6,7 +6,7 @@ const DRAW_TIMEOUT_MS = 30 * 1000;
 const RELEASE_FOLDER = /\/release\/([^/]+)\//;
 
 /**
- * @typedef {{ status: "drawn" }
+ * @typedef {{ status: "drawn", note?: string }
  *   | { status: "broken", reason: string }
  *   | { status: "unchecked", reason: string }} PageCheck
  */
@@ -64,6 +64,10 @@ const sendAccessCode = (page, pageUrl, accessCode) =>
     { address: new URL("access", pageUrl).href, code: accessCode },
   );
 
+// A Worker that asks for no code answers its code's route 404, and its page opens as it is.
+const NO_CODE_ASKED = 404;
+const NO_CODE_NOTE = "the page asks for no code, so its access code secret isn't needed";
+
 /**
  * A refused code means the secret is out of date, not that the page is broken.
  * @param {number} status
@@ -74,6 +78,22 @@ function judgeSignIn(status) {
   if (status === 401) return markUnchecked("the Worker refused the access code");
   if (status === 429) return markUnchecked("the Worker had too many tries at the access code");
   return markBroken(`the access code's route answered ${status}`);
+}
+
+/**
+ * Signs the page in with its code and opens it again, or says why it couldn't.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} pageUrl
+ * @param {string} accessCode
+ * @returns {Promise<{ problem?: PageCheck, note?: string }>}
+ */
+async function signInWithCode(page, pageUrl, accessCode) {
+  const status = await sendAccessCode(page, pageUrl, accessCode);
+  if (status === NO_CODE_ASKED) return { note: NO_CODE_NOTE };
+  const problem = judgeSignIn(status);
+  if (problem) return { problem };
+  await page.goto(pageUrl);
+  return {};
 }
 
 /**
@@ -153,14 +173,12 @@ export async function checkPage(
   page.on("pageerror", (error) => errors.push(error.message));
   const response = await page.goto(pageUrl);
   if (!response?.ok()) return markBroken(`the page answered ${response?.status()}`);
-  if (accessCode) {
-    const signInProblem = judgeSignIn(await sendAccessCode(page, pageUrl, accessCode));
-    if (signInProblem) return signInProblem;
-    await page.goto(pageUrl);
-  }
+  const signIn = accessCode ? await signInWithCode(page, pageUrl, accessCode) : {};
+  if (signIn.problem) return signIn.problem;
   if (commit && !isFromRelease(await listScriptSources(page), commit))
     return markBroken("the page is still the version before");
-  if (await waitForDrawing(page, timeoutMs)) return { status: "drawn" };
+  if (await waitForDrawing(page, timeoutMs))
+    return signIn.note ? { status: "drawn", note: signIn.note } : { status: "drawn" };
   if (errors.length) return markBroken(`the page threw: ${errors[0]}`);
   const serverProblem = await readServerProblem(page);
   if (serverProblem) return markBroken(`the page says "${serverProblem}"`);
@@ -196,8 +214,22 @@ export function hideAddress(check, pageUrl) {
 const waitFor = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 /**
+ * Chromium, from CHROMIUM_PATH when it names one.
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {Promise<import("@playwright/test").Browser>}
+ */
+async function launchChromium(env) {
+  // Only a check that has a page to open needs a browser.
+  const { chromium } = await import("@playwright/test");
+  const executablePath = env.CHROMIUM_PATH;
+  return chromium.launch(executablePath ? { executablePath } : {});
+}
+
+/**
  * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
- * broken, up to `attempts` times.
+ * broken, up to `attempts` times. A page with no address, or whose access code the Worker refuses
+ * or rate-limits, goes unchecked; a browser that doesn't start throws, so the deploy puts the
+ * version before back and the watch's run fails.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
@@ -205,6 +237,7 @@ const waitFor = (milliseconds) => new Promise((resolve) => setTimeout(resolve, m
  * @param {NodeJS.ProcessEnv} [options.env]
  * @param {number} [options.attempts]
  * @param {number} [options.pauseMs]
+ * @param {typeof launchChromium} [options.launchBrowser]
  * @returns {Promise<PageCheck>}
  */
 export async function checkAppPage({
@@ -214,13 +247,11 @@ export async function checkAppPage({
   env = process.env,
   attempts = 3,
   pauseMs = 5000,
+  launchBrowser = launchChromium,
 }) {
   const access = readPageAccess(app, channel, env);
   if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
-  // Only a check that has a page to open needs a browser.
-  const { chromium } = await import("@playwright/test");
-  const executablePath = env.CHROMIUM_PATH;
-  const browser = await chromium.launch(executablePath ? { executablePath } : {});
+  const browser = await launchBrowser(env);
   try {
     /** @type {PageCheck} */
     let check = markBroken("the page wasn't opened");

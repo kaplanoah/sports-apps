@@ -1,26 +1,37 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
-import { labelChannelFiles, listBundledFiles, readRelease } from "../worker/build.mjs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { listApps } from "../worker/apps.mjs";
+import { buildWorker, labelChannelFiles, listBundledFiles, readRelease } from "../worker/build.mjs";
 
 const BUILT_AT = new Date("2026-10-07T12:00:00Z");
-const RELEASE = { version: "2.32.2-beta", commit: "b102733", builtAt: BUILT_AT.toISOString() };
+const RELEASE = {
+  version: "2.32.2-beta",
+  commit: "b102733",
+  builtAt: BUILT_AT.toISOString(),
+  label: "beta",
+};
 
 const readManifest = (files) => JSON.parse(files["manifest.webmanifest"].text);
 const readHomeScreenTitle = (files, path) =>
   files[path].text.match(/<meta name="apple-mobile-web-app-title" content="([^"]+)"/)[1];
 
 test("a beta page names itself beta on the Home Screen, and production's doesn't", () => {
-  for (const app of ["mlb", "wnba"]) {
-    const name = app.toUpperCase();
-    const beta = listBundledFiles(app, RELEASE, "beta");
-    assert.equal(readManifest(beta).name, `${name} beta`);
-    assert.equal(readManifest(beta).short_name, `${name} beta`);
-    assert.equal(readHomeScreenTitle(beta, "index.html"), `${name} beta`);
-    assert.equal(readHomeScreenTitle(beta, "gate.html"), `${name} beta`);
-
+  for (const app of listApps()) {
     const production = listBundledFiles(app, { ...RELEASE, version: "2.32.2" });
-    assert.equal(readManifest(production).short_name, name);
-    assert.equal(readHomeScreenTitle(production, "index.html"), name);
+    const name = readManifest(production).short_name;
+    assert.equal(readManifest(production).name, name, app);
+    assert.equal(readHomeScreenTitle(production, "index.html"), name, app);
+    assert.equal(readHomeScreenTitle(production, "gate.html"), name, app);
+
+    const beta = listBundledFiles(app, RELEASE, "beta");
+    assert.equal(readManifest(beta).name, `${name} beta`, app);
+    assert.equal(readManifest(beta).short_name, `${name} beta`, app);
+    assert.equal(readHomeScreenTitle(beta, "index.html"), `${name} beta`, app);
+    assert.equal(readHomeScreenTitle(beta, "gate.html"), `${name} beta`, app);
   }
 });
 
@@ -56,7 +67,55 @@ test("a beta release counts main's version where its branch left it, and says be
     version: "2.33.0-beta",
     commit: "b102733",
     builtAt: BUILT_AT.toISOString(),
+    label: "beta",
   });
+});
+
+test("a production release has no label, so its page shows no channel tag", () => {
+  const git = createGit({
+    "log -1 --format=%h": "b102733\n",
+    "merge-base --is-ancestor 3cf716ccf7c056c3e598a7e4ce82c0c591ac210c HEAD": "",
+    "log --first-parent --reverse --format=\x1e%s --name-only --diff-merges=first-parent --no-renames 3cf716ccf7c056c3e598a7e4ce82c0c591ac210c..HEAD":
+      "\x1efeat: something new\napps/mlb/page/js/app.js\n",
+  });
+  assert.deepEqual(readRelease("mlb", git, BUILT_AT), {
+    version: "2.33.0",
+    commit: "b102733",
+    builtAt: BUILT_AT.toISOString(),
+    label: null,
+  });
+});
+
+/** @param {string} app */
+async function loadForbiddingGlobalWork(app) {
+  const folder = mkdtempSync(path.join(tmpdir(), `${app}-worker-`));
+  const bundlePath = path.join(folder, "worker.mjs");
+  writeFileSync(bundlePath, await buildWorker(app, { release: RELEASE }));
+  /** @param {string} name */
+  const refuse = (name) => () => {
+    throw new Error(`${app}'s Worker called ${name} while it loads`);
+  };
+  // Cloudflare refuses a Worker whose modules, as they load, do any of these.
+  const mocks = [
+    mock.method(globalThis, "fetch", refuse("fetch")),
+    mock.method(globalThis, "setTimeout", refuse("setTimeout")),
+    mock.method(globalThis, "setInterval", refuse("setInterval")),
+    mock.method(crypto, "getRandomValues", refuse("getRandomValues")),
+    mock.method(crypto, "randomUUID", refuse("randomUUID")),
+  ];
+  try {
+    return await import(pathToFileURL(bundlePath).href);
+  } finally {
+    for (const forbidden of mocks) forbidden.mock.restore();
+    rmSync(folder, { recursive: true });
+  }
+}
+
+test("each app's Worker loads without what Cloudflare refuses while a Worker loads", async () => {
+  for (const app of listApps()) {
+    const worker = await loadForbiddingGlobalWork(app);
+    assert.equal(typeof worker.default.fetch, "function", app);
+  }
 });
 
 test("a beta release with no version to count from still says beta", () => {

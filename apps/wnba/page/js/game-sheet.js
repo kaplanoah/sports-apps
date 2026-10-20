@@ -6,7 +6,7 @@
 // from the cards of the team's nearest games. Details that didn't load read again on a tap on Try
 // again, as the phone comes back online, or as the page comes back.
 
-import { countDaysBetween, describeDay } from "#shared/days.js";
+import { describeDay, isStillToComeToday } from "#shared/days.js";
 import { html, joinWithSeparator, setHtml } from "#shared/html.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";
@@ -17,7 +17,7 @@ import { openSheet, wireSheet } from "#shared/sheet.js";
 import { letGoOfGame, noteShownGame } from "#shared/sheet-memory.js";
 import { renderBoxScore, renderPendingBoxScore } from "./box-score-view.js";
 import { renderClub } from "./clubs.js";
-import { readGameDay } from "./days.js";
+import { isGameToday, readGameDay } from "./days.js";
 import { fetchBoxScore, fetchHighlights, fetchLead, fetchPreview } from "./game-details-fetch.js";
 import {
   describeFinalInSeries,
@@ -27,6 +27,7 @@ import {
   renderHeadline,
   renderStatus,
 } from "./games-view.js";
+import { isPutOff } from "./nearest-games.js";
 import { renderPreview } from "./preview-view.js";
 import { describeSeriesStanding } from "./series.js";
 import { session } from "./session.js";
@@ -126,6 +127,13 @@ const renderFaceOff = (game) =>
 const isLoading = (opened) => !opened.details && !opened.error;
 
 /**
+ * Whether two teams' season series is over by a game of theirs: a playoff game comes once the
+ * regular season is, and the Commissioner's Cup final, played in it, has no round.
+ * @param {Pick<Game, "round">} game
+ */
+export const isSeasonSeriesOver = (game) => game.round != null;
+
+/**
  * @param {ShownGame} opened
  * @param {Game} game
  */
@@ -133,13 +141,19 @@ function renderDetails(opened, game) {
   const teams = { away: game.away.team, home: game.home.team };
   if (opened.kind === "preview") {
     const meetings = opened.details?.meetings ?? null;
-    return renderPreview({ teams, season: session.season, meetings, isLoading: isLoading(opened) });
+    return renderPreview({
+      teams,
+      season: session.season,
+      meetings,
+      isLoading: isLoading(opened),
+      isSeriesOver: isSeasonSeriesOver(game),
+    });
   }
   if (opened.error?.status === 404)
     return renderSheetMessage("The league hasn't posted a box score for this game yet");
   if (opened.error) return renderRetryBlock("box score", classifyReadFailure(opened.error));
   return opened.details
-    ? renderBoxScore(opened.details, opened, isToday(game))
+    ? renderBoxScore(opened.details, opened, isGameToday(game, Date.now()))
     : renderPendingBoxScore(teams, opened);
 }
 
@@ -167,21 +181,16 @@ function offerHighlights(game) {
   else if (sections?.readShown() === "highlights") sections.showSection("game", true);
 }
 
-// The league marks a game it put off or called off in its status, and keeps it as one to come.
 /** @param {Game} game */
-const isOver = (game) => game.state === "final" || /postpon|ppd|cancel/i.test(game.status);
-
-/** @param {Game} game */
-function isToday(game) {
-  const day = readGameDay(game);
-  return !!day && countDaysBetween(day, new Date()) === 0;
-}
+const isOver = (game) => game.state === "final" || isPutOff(game);
 
 /** @param {Game} game */
 function noteGame(game) {
   noteShownGame(findSheet(), {
     key: game.id,
-    isPlayingToday: game.state === "live" || (game.state === "pre" && isToday(game)),
+    isPlayingToday:
+      game.state === "live" ||
+      isStillToComeToday({ state: game.state, day: readGameDay(game) }, new Date()),
     isOver: isOver(game),
   });
 }
@@ -434,8 +443,6 @@ export function startGameSheet() {
   for (const holder of ["seasonGames", "gameSearch", "updates", "teamBody"])
     watchGameOpens(findElement(holder), { open: openFromRow, prepare: prepareFromRow });
   wireSheet(findSheet(), {
-    closeButton: findElement("gameCloseBtn"),
-    backButton: findElement("gameBackBtn"),
     findScroller: sections.findShownSection,
     keeper: { read: readShownGame, reopen: reopenGameSheet },
     name: "Game",

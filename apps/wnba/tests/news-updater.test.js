@@ -107,9 +107,9 @@ function createRun({ env = ENV, now = NOW } = {}) {
   const storage = createJobStorage();
   const docs = createDocs();
   const job = createWnbaNewsJob();
-  const loadSnapshot = async () => ({});
+  const createLoadSnapshot = () => async () => ({});
   const runJob = (fetchImpl) =>
-    job.updateStore({ docs, storage, loadSnapshot, env, fetchImpl, now: () => now });
+    job.updateStore({ docs, storage, createLoadSnapshot, env, fetchImpl, now: () => now });
   return { storage, docs, runJob };
 }
 
@@ -396,7 +396,7 @@ test("Claude answers in the schema, and a run whose answer Claude didn't finish 
 // with this hash.
 test("the WNBA's prompt is the one its stories were last judged by", () => {
   const hash = createHash("sha256").update(LABEL_PROMPT).digest("hex").slice(0, 16);
-  assert.equal(hash, "5a56822c8c0fb6d6");
+  assert.equal(hash, "2bb0ad1e7203fb81");
 });
 
 /** @param {{ stored: Map<string, any> }} docs */
@@ -489,6 +489,29 @@ test("a photo whose size couldn't be read is read again on the next runs, three 
   assert.ok(listCardPhotos(docs).every((photo) => photo.width === undefined));
 });
 
+test("a story whose outlet moves its photo shows the photo at its new address", async () => {
+  const espnUrl = NEWS_FEEDS.find((feed) => feed.id === "espn")?.url;
+  const firstPhoto = "https://a.espncdn.com/photo/2026/1004/r1726050_1296x729_16-9.jpg";
+  const movedPhoto = "https://a.espncdn.com/photo/2026/1005/r1726050_1296x729_16-9.jpg";
+  const readFeeds = createFetch();
+  /** @type {typeof fetch} */
+  const readMovedFeeds = async (url, init) => {
+    const response = await readFeeds(url, init);
+    if (String(url) !== espnUrl) return response;
+    return new Response((await response.text()).replaceAll(firstPhoto, movedPhoto));
+  };
+  const { docs, runJob } = createRun();
+  await runJob(readFeeds);
+  const urls = () => listCardPhotos(docs).map((photo) => photo.url);
+  assert.ok(urls().includes(firstPhoto));
+
+  await runJob(readMovedFeeds);
+
+  assert.ok(!urls().includes(firstPhoto));
+  const moved = listCardPhotos(docs).find((photo) => photo.url === movedPhoto);
+  assert.equal(moved?.width, 1800);
+});
+
 test("without an API key, no photo is asked about, and one no card shows is forgotten", async () => {
   const { docs, storage } = createRun();
   const job = createWnbaNewsJob();
@@ -497,7 +520,7 @@ test("without an API key, no photo is asked about, and one no card shows is forg
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => ({}),
+      createLoadSnapshot: () => async () => ({}),
       env,
       fetchImpl: createFetch({ photoSize: TALL_PHOTO, spotRequests }),
       now: () => NOW,

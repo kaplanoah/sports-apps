@@ -7,7 +7,8 @@
 // service worker kept (service-worker-steps.js), which it keeps on its own, since a load it never
 // let reach the page is what they're for, and the logs of the viewport's changes
 // (viewport-log.js), of what each dialog's row of sheets does (sheet-log.js), of what a season's
-// list of days does (day-strip-log.js), and of each error the page's code doesn't catch
+// list of days does (day-strip-log.js), of what became of each touch on a season's standings and
+// bracket (bracket-standings-log.js), and of each error the page's code doesn't catch
 // (error-log.js). It records nothing while it's off, which it starts as.
 
 import {
@@ -17,16 +18,25 @@ import {
   nameDay,
 } from "./days.js";
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
-import { html, joinWithSeparator, setHtml } from "./html.js";
-import { describeAnimations, describeShownDayLists, describeShownPagers } from "./pager-log.js";
+import { capitalize, html, joinWithSeparator, setHtml } from "./html.js";
+import { describeAnimations, describeShownDayLists } from "./list-log.js";
+import {
+  forgetStored,
+  readStoredJson,
+  readStoredText,
+  storeJson,
+  storeText,
+} from "./local-storage.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 import { loadRelease } from "./release.js";
 import { watchTimeAway } from "./resume.js";
 import { forgetServiceWorkerSteps, readServiceWorkerSteps } from "./service-worker.js";
 import { listSheetsInOpenDialogs } from "./sheet-reopen.js";
+import { bracketStandingsLog, watchTouches } from "./bracket-standings-log.js";
 import { dayStripLog } from "./day-strip-log.js";
 import { errorLog, watchErrors } from "./error-log.js";
 import { sheetLog } from "./sheet-log.js";
-import { writeStepsAsText } from "./step-log.js";
+import { hideAddresses, writeStepsAsText } from "./step-log.js";
 import {
   forgetViewportLines,
   readViewportLines,
@@ -44,7 +54,7 @@ const MINUTE_MS = 60 * 1000;
 // The report button says it copied or shared the report for this long, then offers it again.
 const SENT_MS = 2000;
 const ON_REQUEST = "On request";
-const STEP_LOGS = [errorLog, sheetLog, dayStripLog];
+const STEP_LOGS = [errorLog, sheetLog, dayStripLog, bracketStandingsLog];
 const SERVICE_WORKER_TITLE = "Service worker";
 
 /** @typedef {{ ms: number, text: string, isDip?: boolean }} RecordLine */
@@ -104,49 +114,30 @@ let serviceWorkerSteps = [];
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
-// Storage can be empty or refuse access, as in a private window, so the page never depends on it.
-
-function isRecording() {
-  try {
-    return localStorage.getItem(SWITCH_KEY) === "on";
-  } catch {
-    return false;
-  }
-}
+const isRecording = () => readStoredText(SWITCH_KEY) === "on";
 
 /** @returns {OpenRecord[]} */
 function readRecords() {
-  try {
-    const records = JSON.parse(localStorage.getItem(RECORDS_KEY) ?? "[]");
-    return Array.isArray(records) ? records : [];
-  } catch {
-    return [];
-  }
+  const records = readStoredJson(RECORDS_KEY);
+  return Array.isArray(records) ? records : [];
 }
 
+// A record storage won't take is lost, and the next one tries again.
 /** @param {OpenRecord[]} records */
-function saveRecords(records) {
-  try {
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(records.slice(-KEPT_RECORDS)));
-  } catch {
-    /* the record is lost, and the next one tries again */
-  }
-}
+const saveRecords = (records) => storeJson(RECORDS_KEY, records.slice(-KEPT_RECORDS));
 
+// A switch storage won't take stays as it was.
 /** @param {boolean} isOn */
 function saveSwitch(isOn) {
-  try {
-    if (isOn) localStorage.setItem(SWITCH_KEY, "on");
-    else {
-      localStorage.removeItem(SWITCH_KEY);
-      localStorage.removeItem(RECORDS_KEY);
-      forgetViewportLines();
-      for (const log of STEP_LOGS) log.forgetLines();
-      forgetServiceWorkerSteps();
-    }
-  } catch {
-    /* the switch stays as it was */
+  if (isOn) {
+    storeText(SWITCH_KEY, "on");
+    return;
   }
+  if (!forgetStored(SWITCH_KEY)) return;
+  forgetStored(RECORDS_KEY);
+  forgetViewportLines();
+  for (const log of STEP_LOGS) log.forgetLines();
+  forgetServiceWorkerSteps();
 }
 
 /**
@@ -238,11 +229,7 @@ function finishRecord() {
  */
 const listRecords = () => [...readRecords(), ...(record ? [sortLines(record)] : [])].toReversed();
 
-const describeShownLists = () => [
-  ...describeShownPagers(),
-  ...describeShownDayLists(),
-  describeAnimations(),
-];
+const describeShownLists = () => [...describeShownDayLists(), describeAnimations()];
 
 function sampleParts() {
   if (!record) return;
@@ -285,8 +272,11 @@ function watchTimings() {
   for (const type of ["paint", "resource"]) observer.observe({ type, buffered: true });
 }
 
+// A tab named for what it opens on holds a face for each, only one of them shown.
 const readShownTab = () =>
-  document.querySelector("nav.tabs [role=tab][aria-selected=true]")?.textContent?.trim() ?? "";
+  document
+    .querySelector("nav.tabs [role=tab][aria-selected=true] .tab-label:not([hidden] *)")
+    ?.textContent?.trim() ?? "";
 
 /**
  * A line for each sheet in an open dialog's row, saying which one its dialog shows.
@@ -392,9 +382,6 @@ const countTimes = (count) => (count === 1 ? "1 time" : `${count} times`);
 /** @param {number} count */
 const countRequests = (count) => (count === 1 ? "1 request" : `${count} requests`);
 
-/** @param {string} name */
-const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
-
 /**
  * One line on a background job's last run, from the status document it saves.
  * @param {JobStatus} job
@@ -425,7 +412,7 @@ export const writeHeader = (facts) =>
   [
     describeRelease(facts),
     `Device: ${describeDevice(facts.userAgent)}`,
-    facts.isOnHomeScreen ? "Runs from the Home Screen" : "Runs in the browser",
+    facts.isOnHomeScreen ? "Runs from the home screen" : "Runs in the browser",
     `Viewport ${facts.width}x${facts.height} at ${facts.pixelRatio}x`,
     `Reduced motion ${facts.prefersReducedMotion ? "on" : "off"}`,
     facts.theme && `Theme ${facts.theme}`,
@@ -448,7 +435,7 @@ const readPageFacts = () => ({
   width: innerWidth,
   height: innerHeight,
   pixelRatio: devicePixelRatio,
-  prefersReducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+  prefersReducedMotion: prefersReducedMotion(),
   theme: document.documentElement.dataset.theme,
   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   openedAt,
@@ -649,12 +636,25 @@ function renderRecords() {
     ${STEP_LOGS.map(renderStepLog)}`;
 }
 
+const findSettings = () =>
+  /** @type {HTMLDialogElement | null} */ (findElement("diagnostics").closest("dialog"));
+
+// The records are drawn only while settings shows them, and again as it opens, since a log can
+// take a line many times a second.
 function drawRecords() {
   const isOn = isRecording();
   findElement("diagnosticsSwitch").setAttribute("aria-checked", String(isOn));
   const section = findElement("diagnostics");
   section.hidden = !isOn;
-  setHtml(section, isOn ? renderRecords() : html``);
+  if (findSettings()?.open) setHtml(section, isOn ? renderRecords() : html``);
+}
+
+function drawRecordsAsSettingsOpens() {
+  const settings = findSettings();
+  if (!settings) return;
+  new MutationObserver(() => settings.open && drawRecords()).observe(settings, {
+    attributeFilter: ["open"],
+  });
 }
 
 function toggleRecording() {
@@ -666,6 +666,13 @@ function toggleRecording() {
   drawRecords();
 }
 
+/**
+ * A report from its parts, each that has anything, with no address in any of its lines, wherever
+ * a line came from, like a job's failure or the service worker's steps.
+ * @param {string[]} parts
+ */
+export const joinReport = (parts) => hideAddresses(parts.filter(Boolean).join("\n\n"));
+
 /** @param {OpenRecord} pageNow */
 function writeReport(pageNow) {
   const header = writeHeader(readPageFacts());
@@ -673,7 +680,7 @@ function writeReport(pageNow) {
   const worker = writeStepsAsText(SERVICE_WORKER_TITLE, listServiceWorkerSteps());
   const viewport = writeViewportAsText(readViewportLines().toReversed());
   const steps = STEP_LOGS.map((log) => log.writeLinesAsText(log.readLines().toReversed()));
-  return [header, records, worker, viewport, ...steps].filter(Boolean).join("\n\n");
+  return joinReport([header, records, worker, viewport, ...steps]);
 }
 
 /** @param {ReportStep | null} step */
@@ -739,7 +746,8 @@ function noteReturn(awayMs) {
 /**
  * Wires the settings switch (#diagnosticsSwitch) and the records under it (#diagnostics), and,
  * while the switch is on, records this load, each return to the page, each change to the
- * viewport, and each step of a dialog's row of sheets. A page that leaves the screen keeps
+ * viewport, each step of a dialog's row of sheets, and what became of each touch on the standings
+ * and bracket. A page that leaves the screen keeps
  * what it recorded so far, as when it reloads for a new release or the phone drops it. The page
  * starts it before drawing anything, so a load's first reading is what show-last-drawn.js put
  * back.
@@ -748,6 +756,7 @@ export function startDiagnostics() {
   findElement("diagnosticsSwitch").addEventListener("click", toggleRecording);
   findElement("diagnostics").addEventListener("click", followSectionClick);
   findElement("settingsBtn").addEventListener("click", refreshJobStatusesWhileRecording);
+  drawRecordsAsSettingsOpens();
   drawRecords();
   startRecord(describeLoad(readNavigationType()));
   watchTimings();
@@ -765,4 +774,5 @@ export function startDiagnostics() {
   watchViewport(isRecording, drawRecords);
   for (const log of STEP_LOGS) log.watchSteps(isRecording, drawRecords);
   watchErrors();
+  watchTouches();
 }

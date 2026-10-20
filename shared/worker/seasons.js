@@ -1,6 +1,4 @@
-import { describeError, respondJson } from "./responses.js";
-
-// The season a request names, and the league's snapshot of it.
+// The season a request names.
 
 export const LAST_SEASON = 2100;
 
@@ -28,23 +26,4 @@ export function createSeasonParam({ firstSeason, readCurrentSeason }) {
       return isValid ? season : null;
     },
   };
-}
-
-/**
- * Answers with the snapshot of the season a request names.
- * @param {URL} url
- * @param {object} league
- * @param {SeasonParam} league.seasonParam
- * @param {(season: number) => Promise<any>} league.loadSnapshot
- * @param {string} league.leagueName the league as an error names it, as in "Couldn't read MLB"
- * @param {() => number} league.now
- */
-export async function serveSeasonSnapshot(url, { seasonParam, loadSnapshot, leagueName, now }) {
-  const season = seasonParam.readSeason(url.searchParams, now());
-  if (season == null) return respondJson({ error: seasonParam.rule }, 400);
-  try {
-    return respondJson(await loadSnapshot(season));
-  } catch (error) {
-    return respondJson({ error: `Couldn't read ${leagueName}: ${describeError(error)}` }, 502);
-  }
 }

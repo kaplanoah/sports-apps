@@ -6,6 +6,7 @@ import {
   describeLoad,
   describeOpenSheets,
   describeTimeAway,
+  joinReport,
   nameReportButton,
   writeHeader,
   writeRecordsAsText,
@@ -103,7 +104,7 @@ test("a device names an iPhone's Safari version and WebKit build, and the iOS ve
 
 const PAGE_FACTS = {
   appName: "WNBA",
-  release: { version: "2.27.13", commit: "abc1234", builtAt: "2026-10-06T12:00:00Z" },
+  release: { version: "2.27.13", commit: "abc1234", builtAt: "2026-10-06T12:00:00Z", label: null },
   userAgent: IPHONE_HOME_SCREEN,
   isOnHomeScreen: true,
   width: 390,
@@ -148,7 +149,7 @@ test("the report opens with the release, the device, and the page's state", () =
       [
         "WNBA v2.27.13 commit abc1234",
         "Device: iPhone, WebKit 605.1.15, reports iOS 18.6.2",
-        "Runs from the Home Screen",
+        "Runs from the home screen",
         "Viewport 390x844 at 3x",
         "Reduced motion off",
         "Theme dark",
@@ -190,6 +191,33 @@ test("a job's line says when it has no run saved, or its status couldn't be read
     "News job: status couldn't be read",
   );
 });
+
+test("a report holds no address, which holds the page's key, in any of its parts, a job's failure and the service worker's steps among them", () =>
+  checkInTimeZone(EASTERN, () => {
+    const page = "https://example-subdomain.workers.dev/k3y/";
+    const job = describeJobStatus({
+      name: "games",
+      status: {
+        ranAt: "2026-10-14T04:00:00Z",
+        requests: 3,
+        lastFailure: { at: "2026-10-14T03:00:00Z", message: `${page}store answered 500` },
+      },
+    });
+    const worker = `Service worker\n12:28:41 AM Couldn't open ${page}release/c9c63e6/js/app.js`;
+
+    const report = joinReport([
+      job,
+      "",
+      worker,
+      `Store socket wss://example-subdomain.workers.dev/k3y/watch`,
+    ]);
+
+    assert.doesNotMatch(report, /k3y|example-subdomain/);
+    assert.match(report, /last failed .*: page answered 500/);
+    assert.match(report, /Couldn't open app\.js/);
+    assert.match(report, /Store socket page$/);
+    assert.equal(report.split("\n\n").length, 3);
+  }));
 
 test("a record on request lists each open sheet and which one its dialog shows", () => {
   assert.deepEqual(

@@ -82,6 +82,8 @@ const TERMS = {
     },
     crossConference: { name: "Interleague", words: ["interleague"] },
     neverShown: ["postseason"],
+    seasonSpansYears: false,
+    searchFiller: ["pitching", "starter"],
   },
   examples: [],
 };
@@ -235,6 +237,11 @@ test("a starter's name finds the games he starts, his next once it's announced, 
     line: "Bo Smith | Next start | Not yet announced",
     empty: "Bo Smith's next start isn't announced yet",
   });
+});
+
+test("a league's own words for nothing a game has, like baseball's pitching, are passed over", () => {
+  assert.deepEqual(search("Jones pitching"), search("Jones"));
+  assert.deepEqual(search("who's the Pilots starter"), search("Pilots"));
 });
 
 test("day and night games go by the clock where they're played", () => {

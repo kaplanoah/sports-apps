@@ -1,28 +1,49 @@
-import { test, expect, openApp, openSettings } from "./harness.mjs";
+import { IPHONE_AGENT, takeAwayPush } from "../../../../tests/browser/devices.mjs";
+import { test, expect, matchPath, openApp, openSettings } from "./harness.mjs";
 
 // The switch subscribes through the page's service worker.
 test.use({ serviceWorkers: "allow" });
 
 const DEVICE_ENDPOINT = "https://fcm.googleapis.com/fcm/send/test-device";
+const NEXT_ENDPOINT = "https://fcm.googleapis.com/fcm/send/test-device-next";
+const STUB = {
+  endpoint: DEVICE_ENDPOINT,
+  keptKey: "test-push-subscription",
+  nextEndpointKey: "test-next-endpoint",
+};
 
 // Headless Chromium has no push service, and its headless shell denies notifications outright,
 // so the permission prompt and the subscription are stand-ins. The subscription has real keys,
-// which is all the Worker needs.
-function stubPushManager(endpoint) {
-  /** @type {NotificationPermission} */
-  let permission = "default";
-  Object.defineProperty(Notification, "permission", { get: () => permission });
+// which is all the Worker needs. Both last through a reload, as the browser's do. A test can name
+// the endpoint the next subscription gets, as a push service hands out a new one.
+function stubPushManager({ endpoint, keptKey, nextEndpointKey }) {
+  const PERMISSION_KEY = "test-notification-permission";
+  Object.defineProperty(Notification, "permission", {
+    get: () => sessionStorage.getItem(PERMISSION_KEY) ?? "default",
+  });
   Notification.requestPermission = async () => {
-    permission = "granted";
-    return permission;
+    sessionStorage.setItem(PERMISSION_KEY, "granted");
+    return "granted";
   };
-  let current = null;
+  /** @returns {any} a stand-in for the browser's PushSubscription */
+  const describeSubscription = (kept) => ({
+    endpoint: kept.endpoint,
+    options: { applicationServerKey: Uint8Array.from(kept.serverKey) },
+    toJSON: () => ({ endpoint: kept.endpoint, keys: kept.keys }),
+    unsubscribe: async () => {
+      sessionStorage.removeItem(keptKey);
+      return true;
+    },
+  });
   const encode = (buffer) =>
     btoa(String.fromCharCode(...new Uint8Array(buffer)))
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
-  PushManager.prototype.getSubscription = async () => current;
+  PushManager.prototype.getSubscription = async () => {
+    const kept = sessionStorage.getItem(keptKey);
+    return kept ? describeSubscription(JSON.parse(kept)) : null;
+  };
   PushManager.prototype.subscribe = async (options) => {
     const pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, [
       "deriveBits",
@@ -31,23 +52,21 @@ function stubPushManager(endpoint) {
       p256dh: encode(await crypto.subtle.exportKey("raw", pair.publicKey)),
       auth: encode(crypto.getRandomValues(new Uint8Array(16))),
     };
-    current = {
-      endpoint,
-      options: { applicationServerKey: options.applicationServerKey },
-      toJSON: () => ({ endpoint, keys }),
-      unsubscribe: async () => {
-        current = null;
-        return true;
-      },
+    const serverKey = /** @type {ArrayBuffer} */ (options.applicationServerKey);
+    const kept = {
+      endpoint: sessionStorage.getItem(nextEndpointKey) ?? endpoint,
+      keys,
+      serverKey: [...new Uint8Array(serverKey)],
     };
-    return current;
+    sessionStorage.setItem(keptKey, JSON.stringify(kept));
+    return describeSubscription(kept);
   };
 }
 
 test("notifications can be turned on and off, with no note while the switch works", async ({
   page,
 }) => {
-  await page.addInitScript(stubPushManager, DEVICE_ENDPOINT);
+  await page.addInitScript(stubPushManager, STUB);
   const app = await openApp(page);
   await openSettings(page);
 
@@ -67,6 +86,136 @@ test("notifications can be turned on and off, with no note while the switch work
   expect(app.countSubscriptions()).toBe(0);
 });
 
+test("a device subscribed under the Worker's old signing key subscribes again, and the Worker forgets the old subscription", async ({
+  page,
+}) => {
+  await page.addInitScript(stubPushManager, STUB);
+  const app = await openApp(page);
+  await openSettings(page);
+  const toggle = page.getByRole("switch", { name: "Notifications" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await page.evaluate(([{ keptKey, nextEndpointKey }, nextEndpoint]) => {
+    const kept = JSON.parse(/** @type {string} */ (sessionStorage.getItem(keptKey)));
+    sessionStorage.setItem(keptKey, JSON.stringify({ ...kept, serverKey: [1, 2, 3] }));
+    sessionStorage.setItem(nextEndpointKey, nextEndpoint);
+  }, /** @type {const} */ ([STUB, NEXT_ENDPOINT]));
+  const savingNext = page.waitForRequest(
+    (request) => request.method() === "PUT" && !!request.postData()?.includes(NEXT_ENDPOINT),
+  );
+
+  await page.reload();
+  await (await savingNext).response();
+
+  expect(app.countSubscriptions()).toBe(1);
+});
+
+test("a device the Worker has no room for is left off, and is still off after a reload", async ({
+  page,
+}) => {
+  await page.addInitScript(stubPushManager, STUB);
+  await openApp(page);
+  await page.route(matchPath("/push/subscription"), (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 429,
+          json: { error: { code: "too_many_devices", message: "Too many devices." } },
+        })
+      : route.fallback(),
+  );
+  await openSettings(page);
+  const toggle = page.getByRole("switch", { name: "Notifications" });
+
+  await toggle.click();
+  await expect(page.locator("#notifyNote")).toHaveText(
+    "Too many devices get notifications already",
+  );
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        return registration.pushManager.getSubscription();
+      }),
+    )
+    .toBeNull();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+});
+
+test("a device the Worker no longer has room for on a later visit is turned off", async ({
+  page,
+}) => {
+  await page.addInitScript(stubPushManager, STUB);
+  await openApp(page);
+  await openSettings(page);
+  const toggle = page.getByRole("switch", { name: "Notifications" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await page.route(matchPath("/push/subscription"), (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 429,
+          json: { error: { code: "too_many_devices", message: "Too many devices." } },
+        })
+      : route.fallback(),
+  );
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  await expect(page.locator("#notifyNote")).toHaveText(
+    "Too many devices get notifications already",
+  );
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        return registration.pushManager.getSubscription();
+      }),
+    )
+    .toBeNull();
+});
+
+test("a new signing key whose save fails for a moment keeps the subscription, which the next visit saves", async ({
+  page,
+}) => {
+  await page.addInitScript(stubPushManager, STUB);
+  await openApp(page);
+  await openSettings(page);
+  const toggle = page.getByRole("switch", { name: "Notifications" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  const newKey = Buffer.from(new Uint8Array(65).fill(4)).toString("base64url");
+  await page.route(matchPath("/push/key"), (route) =>
+    route.fulfill({ json: { publicKey: newKey } }),
+  );
+  const answerUnavailable = (/** @type {import("@playwright/test").Route} */ route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 503,
+          json: { error: { code: "unavailable", message: "The store is busy." } },
+        })
+      : route.fallback();
+  await page.route(matchPath("/push/subscription"), answerUnavailable);
+  const failedSave = page.waitForResponse(
+    (response) => response.url().endsWith("/push/subscription") && response.status() === 503,
+  );
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await failedSave;
+
+  await page.unroute(matchPath("/push/subscription"), answerUnavailable);
+  const save = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/push/subscription") && response.request().method() === "PUT",
+  );
+  await page.reload({ waitUntil: "domcontentloaded" });
+  expect((await save).status()).toBe(204);
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+});
+
 test("blocked notifications point to the browser's site settings", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(Notification, "permission", { get: () => "denied" });
@@ -79,12 +228,10 @@ test("blocked notifications point to the browser's site settings", async ({ page
 });
 
 test("on an iPhone, blocked notifications point to Settings", async ({ page }) => {
-  await page.addInitScript(() => {
+  await page.addInitScript((agent) => {
     Object.defineProperty(Notification, "permission", { get: () => "denied" });
-    Object.defineProperty(navigator, "userAgent", {
-      get: () => "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
-    });
-  });
+    Object.defineProperty(navigator, "userAgent", { get: () => agent });
+  }, IPHONE_AGENT);
   await openApp(page);
   await openSettings(page);
 
@@ -93,15 +240,13 @@ test("on an iPhone, blocked notifications point to Settings", async ({ page }) =
 });
 
 test("on an iPhone outside the Home Screen, the page says to add it there", async ({ page }) => {
-  await page.addInitScript(() => {
-    delete window.PushManager;
-    Object.defineProperty(navigator, "userAgent", {
-      get: () => "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
-    });
-  });
+  await takeAwayPush(page);
+  await page.addInitScript((agent) => {
+    Object.defineProperty(navigator, "userAgent", { get: () => agent });
+  }, IPHONE_AGENT);
   await openApp(page);
   await openSettings(page);
 
-  await expect(page.locator("#notifyNote")).toHaveText(/add this page to your Home Screen/);
+  await expect(page.locator("#notifyNote")).toHaveText(/add this site to your home screen/);
   await expect(page.getByRole("switch", { name: "Notifications" })).toBeHidden();
 });

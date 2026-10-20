@@ -254,7 +254,10 @@ test("her playoffs list her team's games with her points in each, DNP for one sh
 test("her regular season ranks each average among the players the WNBA ranks, on a curve, and says why the count varies", () => {
   const text = renderBody(createPlayer());
   assert.match(text, /Regular season 42 games Pts 20\.8 7th of 125 3P% 25\.4 76th of 76/);
-  assert.match(text, /only ranks players who've played 31 games or, for shooting percentages/);
+  assert.match(
+    text,
+    /varies by stat because the WNBA only ranks players who've played 31 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots(?!\.)/,
+  );
   assert.match(
     String(
       renderPlayerBody({
@@ -286,7 +289,7 @@ test("a stat she isn't ranked in shows her number alone, and the note says why",
   assert.equal(String(body.text).match(/player-curve-area/g)?.length, 1);
   assert.equal(
     describeRankNote(player.regularSeason, false),
-    "The WNBA only ranks players who've played 31 games or, for shooting percentages, made a certain number of shots. She's played 21 games.",
+    "The WNBA only ranks players who've played 31 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots. She's played 21 games.",
   );
   player.regularSeason.games = 1;
   assert.match(describeRankNote(player.regularSeason, false), /She's played 1 game\.$/);

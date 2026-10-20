@@ -92,10 +92,28 @@ test("next game is the one on now or next, even before its opponent is known", (
   });
 });
 
+test("a game the league put off is never a team's next game", () => {
+  const [next, after] = SEASON_GAMES.filter(
+    (game) => game.state === "pre" && [game.away.team, game.home.team].includes("NYL"),
+  );
+  const putOff = SEASON_GAMES.map((game) =>
+    game === next ? { ...game, status: "Postponed" } : game,
+  );
+  const games = listSearchGames(putOff, (game) => readSearchGame(game, null));
+  const context = { ...CONTEXT, games };
+  const asked = readSearch("Liberty next game", context);
+  const found = findSearchGames(asked, context).games.map((game) => game.id);
+  assert.deepEqual(found, [after.id]);
+});
+
 test("nicknames, cities, and filler words read as a fan would mean them", () => {
   assert.equal(search("When do the NY Liberty play the Aces?").line, "Liberty vs Aces | 4 games");
   assert.deepEqual(search("NY Liberty Valks").games, search("Liberty Valkyries").games);
   assert.equal(search("Liberyt").line, "Liberty | 52 games");
+});
+
+test("each team's words name it once each, its nicknames only what its name, city, and code don't", () => {
+  for (const team of TERMS.teams) assert.deepEqual(team.words, [...new Set(team.words)], team.code);
 });
 
 test("dates relative to now read as the days they cover, a weekend from Friday evening", () => {
@@ -317,13 +335,16 @@ test("the examples are three searches for games, then a player and a team's Rost
 // out. A new one fails the test below until it's here, so it's made searchable, or left out on
 // purpose.
 const COVERAGE = {
-  "tab:bracket": { search: "bracket", opens: "tab:bracket" },
+  "tab:bracket-standings": { search: "bracket", opens: "season:bracket" },
   "tab:games": { leftOut: "Typing games already searches every game" },
-  "tab:standings": { search: "standings", opens: "standings:league" },
   "tab:news": { search: "news", opens: "tab:news" },
   "tab:search": { leftOut: "It's the search itself" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },
   "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
+  "dialog:homeScreenWelcome": {
+    leftOut:
+      "It shows before the page is added, and the box at the top of Settings and the Notifications note's ? keep its steps",
+  },
   "sheet:gameSheet": { games: "Liberty at Lynx" },
   "section:game": { games: "Liberty at Lynx" },
   "section:highlights": { search: "highlights", opens: "highlights" },
@@ -337,7 +358,8 @@ const COVERAGE = {
   "settings:paywalled": { search: "the athletic", opens: "settings:paywalled" },
   "settings:appearance": { search: "dark mode", opens: "settings:appearance" },
   "settings:home-screen": {
-    leftOut: "Shows only in a phone's browser, whose bar at the top also asks to add the page",
+    leftOut:
+      "Shows only in a phone's or tablet's browser, at the top of Settings, which search finds",
   },
   "settings:diagnostics": { search: "diagnostics", opens: "settings:diagnostics" },
 };
@@ -557,7 +579,7 @@ test("the playoff picture lists the Bracket and the league's standings beside th
   for (const text of ["playoff picture", "seeds", "who clinched"])
     assert.deepEqual(
       findListedPages(text).rows.map((row) => (row.kind === "place" ? row.place.key : row.kind)),
-      ["tab:bracket", "standings:league"],
+      ["season:bracket", "standings:league"],
       text,
     );
   assert.equal(findListedPages("playoff picture").gameText, "playoff");

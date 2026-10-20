@@ -1,7 +1,18 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
+import { findCenter } from "../../../../tests/browser/season-scroll.mjs";
+import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
+import {
+  holdClock,
+  sendClick,
+  sendFinger,
+  sendSecondFinger,
+} from "../../../../tests/browser/stray-click.mjs";
 
-// A row that opens something tints while it's pressed, as an iPhone's lists do (press.js).
+// A row that opens something tints while it's pressed, and a touch the browser takes for a scroll
+// never taps what it landed on, as on an iPhone (press.js).
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -14,12 +25,7 @@ test.use({
  * The middle of what a locator shows.
  * @param {import("@playwright/test").Locator} locator
  */
-async function findMiddle(locator) {
-  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (
-    await locator.boundingBox()
-  );
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-}
+const findMiddle = async (locator) => findCenter(await locator.boundingBox());
 
 /**
  * Notes, in the page, each time a button is first marked pressed.
@@ -70,6 +76,255 @@ test("a finger that starts a scroll on a row never tints it", async ({ page }) =
   await page.clock.runFor(200);
 
   expect(await readPresses(page)).toEqual([]);
+});
+
+/** @param {import("@playwright/test").Page} page */
+async function openStandings(page) {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const row = page.locator('#standings-league tr[data-team="LVA"]');
+  await expect(row).toBeVisible();
+  return { row, button: row.locator(".team-open") };
+}
+
+test("a finger that drags a team's row in the standings never opens the team, even when iOS still sends the tap", async ({
+  page,
+}) => {
+  const { row, button } = await openStandings(page);
+  await holdClock(page);
+
+  await (
+    await drag(page, await findMiddle(row), { y: -30 })
+  )();
+
+  expect(await sendClick(button)).toBe(false);
+  await expect(page.locator("#teamSheet")).toBeHidden();
+});
+
+test("a finger the browser takes for a scroll never opens a team, even one the click lands on beside it", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+
+  await sendFinger(button, { moves: [6, 12], isCancelled: true });
+
+  const beside = page
+    .locator('#standings-league tr[data-team]:not([data-team="LVA"]) .team-open')
+    .first();
+  expect(await sendClick(beside)).toBe(false);
+  await expect(page.locator("#teamSheet")).toBeHidden();
+});
+
+test("a finger the browser takes for a scroll and that iOS ends with a cancel never opens the team", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+
+  await sendFinger(button, { moves: [12], isCancelled: true, isTouchCancelled: true });
+
+  expect(await sendClick(button)).toBe(false);
+});
+
+test("a finger that drifts on a team's row without the browser taking it for a scroll still opens the team, as a sloppy tap does", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+
+  await sendFinger(button, { moves: [6, 14] });
+
+  expect(await sendClick(button)).toBe(true);
+  await expect(page.locator("#teamSheet")).toBeVisible();
+});
+
+test("a second finger landing after the browser took the first for a scroll doesn't let the first one's click through", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await sendFinger(button, { moves: [12], isCancelled: true });
+
+  await sendSecondFinger(button, "pointerdown");
+
+  expect(await sendClick(button)).toBe(false);
+});
+
+test("a still tap right after a scroll, like one on the pill's Bracket, works", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await sendFinger(button, { moves: [12], isCancelled: true });
+  const bracket = findSeasonPill(page).getByRole("tab", { name: "Bracket", exact: true });
+
+  await sendFinger(bracket, { moves: [] });
+
+  expect(await sendClick(bracket)).toBe(true);
+  await expect(bracket).toHaveAttribute("aria-selected", "true");
+});
+
+test("a click a second after a scroll, like a screen reader's, still opens the team", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await sendFinger(button, { moves: [12], isCancelled: true });
+
+  await page.clock.runFor(1000);
+
+  expect(await sendClick(button)).toBe(true);
+  await expect(page.locator("#teamSheet")).toBeVisible();
+});
+
+test("a click right after a scroll on what takes no tap, like a sheet's backdrop, still does its job", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await button.click();
+  await expect(page.locator("#teamSheet")).toBeVisible();
+  await holdClock(page);
+  await sendFinger(page.locator("#teamTitle"), { moves: [12], isCancelled: true });
+
+  expect(await sendClick(page.locator("dialog:has(#teamSheet)"))).toBe(true);
+  await expect(page.locator("#teamSheet")).toBeHidden();
+});
+
+test("a finger the browser takes for a scroll on a player's name in a roster never opens her", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+  await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
+  const name = page.locator("#rosterSection .player-open").first();
+  await expect(name).toBeVisible();
+  await holdClock(page);
+
+  await sendFinger(name, { moves: [12], isCancelled: true });
+
+  expect(await sendClick(name)).toBe(false);
+  await expect(page.locator("#playerSheet")).toBeHidden();
+});
+
+test("a finger the browser takes for a scroll on a story in the News never opens it", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "News" }).click();
+  await expect(page.locator("#newsList")).toHaveText("No news yet");
+  await app.writeDocument("news/cards", {
+    cards: [
+      {
+        lead: {
+          id: "athletic",
+          url: "https://example.com/athletic",
+          title: "The Liberty's defense held the Dream to 30 percent",
+          outlet: "The Athletic",
+          source: "athletic",
+          summary: "What happened, in a sentence.",
+          author: "A Writer",
+          publishedAt: "2026-09-30T14:00:00.000Z",
+          teams: ["NYL", "ATL"],
+        },
+        more: [],
+      },
+    ],
+  });
+  const headline = page.locator(".news-card h3.news-title a");
+  await expect(headline).toBeVisible();
+  await holdClock(page);
+
+  await sendFinger(headline, { moves: [12], isCancelled: true });
+
+  expect(await sendClick(headline)).toBe(false);
+});
+
+test("a finger the browser takes for a scroll on an Appearance choice in settings never picks it", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSettings(page);
+  const maple = page.locator("#settingsDialog label.appearance-choice", { hasText: "Maple" });
+  await expect(maple).toBeVisible();
+  const theme = await page.evaluate(() => document.documentElement.dataset.theme);
+  await holdClock(page);
+
+  await sendFinger(maple, { moves: [12], isCancelled: true });
+
+  expect(await sendClick(maple)).toBe(false);
+  await expect(maple.locator("input")).not.toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
+});
+
+test("a finger the browser takes for a scroll on a Diagnostics section's name never opens or closes it", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await openSettings(page);
+  const record = page.locator("#settingsDialog details.diagnostics-record").first();
+  await expect(record).toBeAttached();
+  const isOpen = await record.evaluate(
+    (details) => /** @type {HTMLDetailsElement} */ (details).open,
+  );
+  await holdClock(page);
+
+  await sendFinger(record.locator("summary"), { moves: [12], isCancelled: true });
+
+  expect(await sendClick(record.locator("summary"))).toBe(false);
+  expect(await record.evaluate((details) => /** @type {HTMLDetailsElement} */ (details).open)).toBe(
+    isOpen,
+  );
+});
+
+test("a finger the browser takes for a scroll on a part of a row that takes no tap never opens the team the click lands on", async ({
+  page,
+}) => {
+  const { row, button } = await openStandings(page);
+  await holdClock(page);
+
+  await sendFinger(row, { moves: [12], isCancelled: true });
+
+  expect(await sendClick(button)).toBe(false);
+  await expect(page.locator("#teamSheet")).toBeHidden();
+});
+
+test("a second finger the browser cancels while the first taps a team's row doesn't stop the tap", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await sendFinger(button, { moves: [] });
+
+  await sendSecondFinger(button, "pointercancel");
+
+  expect(await sendClick(button)).toBe(true);
+  await expect(page.locator("#teamSheet")).toBeVisible();
+});
+
+test("a still tap on a team's row in the standings opens the team, and Enter after a drag does too", async ({
+  page,
+}) => {
+  const { row, button } = await openStandings(page);
+  const sheet = page.locator("#teamSheet");
+
+  await (
+    await drag(page, await findMiddle(row), {})
+  )();
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await holdClock(page);
+
+  await (
+    await drag(page, await findMiddle(row), { y: -30 })
+  )();
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(sheet).toBeVisible();
 });
 
 test("a quick tap on a suggestion tints it before its search replaces the list", async ({
@@ -129,7 +384,7 @@ test.describe("under a mouse", () => {
 
   test("a press tints a team's row in the standings at once", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const row = page.locator("#standings-league tr:has(.team-open)").nth(2);
     await expect(row).toBeVisible();
     const middle = await findMiddle(row);

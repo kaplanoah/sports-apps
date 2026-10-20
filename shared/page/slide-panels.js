@@ -9,13 +9,12 @@
 // and once it ends, or is cancelled, the panels settle: all but the shown one hidden and inert,
 // with nothing left animating.
 
+import { prefersReducedMotion } from "./reduced-motion.js";
 import { followSideSwipes } from "./side-swipe.js";
 
 // The phone's own sheets' pace and easing, as chrome.css's --sheet-motion has them.
 export const SHEET_MOTION_MS = 500;
 export const SHEET_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
-
-export const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Runs `settle` once the animation ends, whether it finished or was cancelled.
@@ -45,6 +44,8 @@ const readGap = (row) => parseFloat(getComputedStyle(row).getPropertyValue("--pa
  *   for a position, as a share of the row's width right of where the shown panel rests
  * @property {(direction: -1 | 1) => boolean} canGo whether a swipe can bring in the panel before
  *   (-1) or after (1) the shown one
+ * @property {() => void} [onSetOff] runs as the panels leave rest, once each shows and before any
+ *   moves
  * @property {(index: number) => void} [onSettle] runs once the panels rest on the one at `index`
  * @property {(index: number, isSliding: boolean) => void} [onShow] runs as the panels set off
  *   for the one at `index`, or jump to it
@@ -55,7 +56,10 @@ const readGap = (row) => parseFloat(getComputedStyle(row).getPropertyValue("--pa
  * @param {HTMLElement} row
  * @param {PanelRow} options
  */
-export function createSlidePanels(row, { listPanels, place, canGo, onSettle, onShow, onDrag }) {
+export function createSlidePanels(
+  row,
+  { listPanels, place, canGo, onSetOff, onSettle, onShow, onDrag },
+) {
   let shown = 0;
   let position = 0;
   /** @type {{ from: number, animations: Animation[] } | null} */
@@ -89,9 +93,11 @@ export function createSlidePanels(row, { listPanels, place, canGo, onSettle, onS
 
   /** @param {"finger" | "tap" | null} cause what moves the panels, or null once they rest */
   function revealPanels(cause) {
+    const isSettingOff = Boolean(cause) && !row.hasAttribute("data-sliding");
     if (cause) row.setAttribute("data-sliding", cause);
     else row.removeAttribute("data-sliding");
     for (const panel of listPanels()) panel.style.visibility = cause ? "visible" : "";
+    if (isSettingOff) onSetOff?.();
   }
 
   function rest() {

@@ -2,6 +2,7 @@ import {
   test,
   expect,
   openApp,
+  openBracket,
   openSettings,
   buildFixtureSnapshot,
   chooseSeason,
@@ -12,9 +13,11 @@ import {
   buildSeasonRecord,
 } from "./harness.mjs";
 import { listAnimations } from "../../../../tests/browser/animations.mjs";
-import { measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
+import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { LAPTOP } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -36,7 +39,7 @@ const PLAYOFF_FIELD_2026 = [
 test("renders the bracket, standings and stamp from the season's record the Worker saved", async ({
   page,
 }) => {
-  const app = await openApp(page);
+  await openApp(page);
 
   const bracket = page.locator("#bracketWrap");
   for (const club of PLAYOFF_FIELD_2026) await expect(bracket).toContainText(club);
@@ -44,17 +47,16 @@ test("renders the bracket, standings and stamp from the season's record the Work
   await expect(stampLines.first()).toHaveText(/^NOW\s*Reds @ Braves 5-5 in the 5th/);
   await expect(stampLines.nth(1)).toHaveText(/^Next first pitch /);
 
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap .div-block")).toHaveCount(8);
   await expect(page.locator("#standingsWrap")).toContainText("AL East");
-  expect(app.countSnapshotRequests()).toBe(0);
 });
 
 test("standings open on each league's playoff field, and every table lines up", async ({
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
 
   const fields = page.locator("#standingsWrap .field-grid .div-block");
   await expect(fields).toHaveCount(2);
@@ -71,12 +73,30 @@ test("standings open on each league's playoff field, and every table lines up", 
   expect(new Set(await readHeights("#standingsWrap .div-title")).size).toBe(1);
 });
 
+test("on a wide screen, every column of the standings shows inside its table", async ({ page }) => {
+  await page.setViewportSize(LAPTOP);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const tables = page.locator("#standingsWrap table.st");
+  await expect(tables).toHaveCount(8);
+
+  const cellsPastTheirTable = await tables.evaluateAll((all) =>
+    all.flatMap((table) => {
+      const right = table.closest(".st-scroll").getBoundingClientRect().right;
+      return [...table.querySelectorAll("th, td")]
+        .filter((cell) => cell.getBoundingClientRect().right > right + 0.5)
+        .map((cell) => cell.textContent.trim());
+    }),
+  );
+  expect(cellsPastTheirTable).toEqual([]);
+});
+
 test("the standings show each club's game under way, and a delay in gold", async ({ page }) => {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   const delayedGame = snapshot.slate.today.games.find((game) => game.home === "BOS");
   delayedGame.delay = "Delayed: Rain";
   await openApp(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const cells = page.locator("#standingsWrap td.next-cell");
 
   const leading = cells.filter({ hasText: /^Up 3 @ NYY in the 6th$/ });
@@ -93,7 +113,7 @@ test("the leagues' standings sit side by side only when a game under way fits", 
 }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   const fields = page.locator("#standingsWrap .field-grid .div-block");
   const readTops = () =>
     fields.evaluateAll((blocks) => blocks.map((block) => block.getBoundingClientRect().top));
@@ -156,9 +176,13 @@ test("switching to 2025 shows the finished bracket and its champion from its rec
 
   await chooseSeason(page, "2025");
 
-  await expect(page.locator("#bracketWrap")).toContainText("Dodgers win the World Series");
+  const worldSeries = page.locator('#bracketWrap .box[data-round="WS"]');
+  await expect(worldSeries.locator(".matchup-row.winner")).toContainText("Dodgers");
+  await expect(worldSeries.locator(".card-note")).toHaveCount(0);
+  const championships = page.locator('#bracketWrap .box[data-round="CS"]');
+  await expect(championships).toHaveCount(2);
+  await expect(championships.locator(".card-note")).toHaveCount(0);
   await expect(page.locator("#updates")).toBeHidden();
-  expect(app.countSnapshotRequests()).toBe(0);
 });
 
 test("warns under the title when MLB stops sending a field", async ({ page }) => {
@@ -185,17 +209,21 @@ test("a warning MLB's feed brings eases the header to its new height", async ({ 
   await app.updateFromWorker();
 
   await expect(page.locator("#stamp")).toContainText("MLB stopped sending wildCardRank");
-  const growth = (await readAnimations()).find(({ element }) => element === "stamp");
+  const growth = (await readAnimations()).find(({ classes }) => classes.includes("stamp"));
   expect(parseFloat(String(growth.last.height))).toBeGreaterThan(
     parseFloat(String(growth.first.height)),
   );
 });
 
 test("with no field yet, the bracket says it fills in once MLB projects one", async ({ page }) => {
-  await openApp(page, { liveAvailable: false });
+  await openBracket(page, { liveAvailable: false });
 
   await expect(page.getByRole("heading", { name: "No playoff field yet" })).toBeVisible();
   expect(await listStrayPeriods(page)).toEqual([]);
+  const note = page.locator("#noFieldNote");
+  await expect(note).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(note).toHaveCSS("border-top-style", "none");
+  await expect(note.locator("p")).toHaveCSS("text-wrap-style", "balance");
   await expect(page.getByRole("button", { name: "Set the field" })).toHaveCount(0);
   await openSettings(page);
   await expect(page.locator("#rankList")).toHaveText(
@@ -204,10 +232,10 @@ test("with no field yet, the bracket says it fills in once MLB projects one", as
 });
 
 test("the bracket and standings scroll from the keyboard, even in Safari", async ({ page }) => {
-  await openApp(page);
+  await openBracket(page);
   await expect(page.getByRole("region", { name: "Bracket" })).toHaveAttribute("tabindex", "0");
 
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.getByRole("region", { name: "AL East standings" })).toHaveAttribute(
     "tabindex",
     "0",
@@ -255,7 +283,7 @@ test("a stored field short a league says there's no field instead of breaking th
   const teams = Object.fromEntries(
     clubs.map((id, index) => [id, { league: index < 7 ? "AL" : "NL", seed: (index % 6) + 1 }]),
   );
-  await openApp(page, {
+  await openBracket(page, {
     liveAvailable: false,
     store: { "seasons/2026": { year: 2026, teams, series: {}, log: [] } },
   });
@@ -277,18 +305,18 @@ const buildEmptySeasonSnapshot = (season, springStart) => ({
   slate: null,
 });
 
-test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-glance", async ({
+test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's numbers", async ({
   page,
 }) => {
   await openApp(page);
-  const picker = page.locator("#yearSel");
+  const picker = page.locator("#seasonPicker");
   await expect(picker).toHaveCSS("font-size", "16px");
-  const widths = await measureFieldFace(picker, "--size-glance");
-  expect(widths.field).toBeCloseTo(widths.step, 0);
+  const widths = await measureFieldFace(picker, "--type-detail-size", "var(--numbers)");
+  expect(widths.field).toBeCloseTo(widths.role, 0);
 });
 
 test("the page shows the season the store says is current", async ({ page }) => {
-  await openApp(page, {
+  await openBracket(page, {
     now: "2027-02-19T15:00:00Z",
     store: {
       "live/current": { season: 2027 },
@@ -297,23 +325,23 @@ test("the page shows the season the store says is current", async ({ page }) => 
     snapshots: { 2027: buildEmptySeasonSnapshot(2027, "2027-02-19") },
   });
 
-  await expect(page.locator("#yearSel")).toHaveValue("2027");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2027");
   await expect(page.getByRole("heading", { name: "No playoff field yet" })).toBeVisible();
 });
 
 test("a page left open turns over when the store moves on to a new season", async ({ page }) => {
-  const app = await openApp(page, {
+  const app = await openBracket(page, {
     now: "2027-02-19T15:00:00Z",
     store: { "live/current": { season: 2026 } },
     snapshots: { 2027: buildEmptySeasonSnapshot(2027, "2027-02-19") },
   });
   await expect.poll(() => app.countOpenSockets()).toBe(1);
-  await expect(page.locator("#yearSel")).toHaveValue("2026");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2026");
 
   // What the Worker's update saves once spring training has started.
   await app.writeFromWorker("live/current", { season: 2027 });
 
-  await expect(page.locator("#yearSel")).toHaveValue("2027");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2027");
   await expect(page.getByRole("heading", { name: "No playoff field yet" })).toBeVisible();
 });
 
@@ -325,10 +353,10 @@ test("while the store says last year's season is current, the page shows it and 
     store: { "live/current": { season: 2026 } },
     snapshots: { 2027: buildEmptySeasonSnapshot(2027, "2027-02-19") },
   });
-  await expect(page.locator("#yearSel")).toHaveValue("2026");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2026");
 
   await page.clock.fastForward("02:00:00");
 
-  await expect(page.locator("#yearSel")).toHaveValue("2026");
-  expect(app.countSnapshotRequests()).toBe(0);
+  await expect(page.locator("#seasonPicker")).toHaveValue("2026");
+  expect(app.listStoreReads().filter((path) => path.includes("2027"))).toEqual([]);
 });

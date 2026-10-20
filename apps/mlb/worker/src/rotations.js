@@ -1,14 +1,20 @@
-import { addDays } from "#shared/days.js";
-import { readClubId, readGameState, readMlbTeamId } from "../../page/js/snapshot.js";
+import { addDays, readEasternDay } from "#shared/days.js";
+import {
+  listScheduleGames,
+  readClubId,
+  readGameState,
+  readMlbTeamId,
+} from "../../page/js/snapshot.js";
 import { DATE_RULE, fetchMlbJson, readDateParam } from "./mlb.js";
-import { listGameLogRequest, listStarts, noteLeagueRead } from "./pitchers.js";
-import { describeError, respondJson } from "../../../../shared/worker/responses.js";
+import { listGameLogRequest, listStarts } from "./pitchers.js";
+import { noteLeagueRead, readSeasonDocs } from "../../../../shared/worker/store-reads.js";
+import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 
 // A club that hasn't named a game's starter: who started its last games, how each of those starts
 // went, and the rest each pitcher would have by the game's day. The store keeps each club's
 // recent starts for the current season (pitcher-updater.js), so the sheet reads MLB itself only
-// for a day the store's starts don't reach back to, and the store counts each time it does for the
-// current season.
+// for a day whose last two weeks the store's starts don't reach, and the store counts each time it
+// does for the current season.
 
 // A club's starts change at most once a game.
 const ROTATION_CACHE_SECONDS = 10 * 60;
@@ -65,8 +71,7 @@ const findClubSide = (game, mlbTeamId) =>
  * @returns {{ date: string, id: number }[]}
  */
 function listClubStarts(scheduleResponse, mlbTeamId) {
-  return (scheduleResponse?.dates || [])
-    .flatMap((/** @type {any} */ day) => day.games || [])
+  return listScheduleGames(scheduleResponse)
     .filter((/** @type {any} */ game) => readGameState(game.status ?? {}) === "final")
     .map((/** @type {any} */ game) => ({
       date: game.officialDate,
@@ -95,8 +100,7 @@ export const listClubStarterIds = (scheduleResponse, club) => [
  */
 export const listScheduleClubs = (scheduleResponse) => [
   ...new Set(
-    (scheduleResponse?.dates || [])
-      .flatMap((/** @type {any} */ day) => day.games || [])
+    listScheduleGames(scheduleResponse)
       .flatMap((/** @type {any} */ game) => [game.teams?.away, game.teams?.home])
       .map((/** @type {any} */ side) => readClubId(side?.team?.id))
       .filter(Boolean),
@@ -113,18 +117,34 @@ export const listScheduleClubs = (scheduleResponse) => [
  */
 
 /**
- * A club's finished games in a schedule from `from` on, with who started each, and those pitchers'
- * starts: what its rotation on any day two weeks after `from` or later is made from.
+ * A club's finished games in a schedule from `from` through `through`, with who started each, and
+ * those pitchers' starts: what its rotation on any day from two weeks after `from` to the day after
+ * `through` is made from.
  * @param {object} parts
  * @param {string} parts.club
  * @param {string} parts.from
- * @param {any} parts.schedule MLB's schedule from `from` on
+ * @param {string} parts.through
+ * @param {any} parts.schedule MLB's schedule from `from` through `through`
  * @param {Map<number, RotationPitcher>} parts.pitchers each starter, by id
  */
-export function describeClubStarts({ club, from, schedule, pitchers }) {
+export function describeClubStarts({ club, from, through, schedule, pitchers }) {
   const games = listClubStarts(schedule, /** @type {number} */ (readMlbTeamId(club)));
   const ids = [...new Set(games.map((game) => game.id))];
-  return { club, from, games, pitchers: ids.map((id) => pitchers.get(id)).filter(Boolean) };
+  const kept = ids.map((id) => pitchers.get(id)).filter(Boolean);
+  return { club, from, through, games, pitchers: kept };
+}
+
+/**
+ * Whether a club's starts reach the two weeks before `date`, both back and up to its day before,
+ * or up to today for a later day, since no game after today has been played.
+ * @param {{ from: string, through?: string }} clubStarts
+ * @param {string} date
+ * @param {string} today MLB's day now
+ */
+function coversDay({ from, through }, date, today) {
+  const dayBefore = addDays(date, -1);
+  const lastPlayed = dayBefore < today ? dayBefore : today;
+  return from <= addDays(date, -LOOKBACK_DAYS) && !!through && through >= lastPlayed;
 }
 
 /**
@@ -197,8 +217,12 @@ export function describeRotation({ club, games, pitchers }, date) {
 /**
  * @param {object} [options]
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]
+ * @param {() => number} [options.now]
  */
-export function createRotationServer({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
+export function createRotationServer({
+  fetchImpl = (input, init) => fetch(input, init),
+  now = () => Date.now(),
+} = {}) {
   /** @param {string} path */
   const fetchJson = (path) => fetchMlbJson(fetchImpl, path, ROTATION_CACHE_SECONDS);
 
@@ -208,9 +232,8 @@ export function createRotationServer({ fetchImpl = (input, init) => fetch(input,
    */
   async function fetchClubStarts(club, date) {
     const from = addDays(date, -LOOKBACK_DAYS);
-    const schedule = await fetchJson(
-      listScheduleRequest(readMlbTeamId(club), from, addDays(date, -1)),
-    );
+    const through = addDays(date, -1);
+    const schedule = await fetchJson(listScheduleRequest(readMlbTeamId(club), from, through));
     const ids = listClubStarterIds(schedule, club);
     const gameLogs = ids.length
       ? await fetchJson(listGameLogRequest(Number(date.slice(0, 4)), ids))
@@ -221,30 +244,27 @@ export function createRotationServer({ fetchImpl = (input, init) => fetch(input,
         describeRotationPitcher(person),
       ]),
     );
-    return describeClubStarts({ club, from, schedule, pitchers });
+    return describeClubStarts({ club, from, through, schedule, pitchers });
   }
 
   /**
-   * The club's starts the store keeps, null when they don't reach back two weeks before `date`, and
-   * whether `date` is in the store's current season, each null when it can't be read.
+   * The club's starts the store keeps, null when they don't reach the two weeks before `date` or
+   * the store can't be read, and whether `date` is in the store's current season, false when the
+   * store can't be read.
    * @param {string} club
    * @param {string} date
-   * @param {(key: string) => Promise<any>} readDoc
+   * @param {((key: string) => Promise<any>) | undefined} readDoc
    */
   async function readSavedStarts(club, date, readDoc) {
-    try {
-      const [saved, current] = await Promise.all([
-        readDoc(nameRotationKey(Number(date.slice(0, 4)), club)),
-        readDoc("live/current"),
-      ]);
-      return {
-        clubStarts: saved && saved.from <= addDays(date, -LOOKBACK_DAYS) ? saved : null,
-        isCurrentSeason: Number(date.slice(0, 4)) === current?.season,
-      };
-    } catch (error) {
-      console.error(`Reading ${club}'s starts from the store failed: ${describeError(error)}`);
-      return { clubStarts: null, isCurrentSeason: false };
-    }
+    const season = Number(date.slice(0, 4));
+    const { docs, isCurrentSeason } = await readSeasonDocs(readDoc, season, [
+      nameRotationKey(season, club),
+    ]);
+    const saved = docs?.[0] ?? null;
+    return {
+      clubStarts: saved && coversDay(saved, date, readEasternDay(now()).date) ? saved : null,
+      isCurrentSeason,
+    };
   }
 
   /**
@@ -256,19 +276,20 @@ export function createRotationServer({ fetchImpl = (input, init) => fetch(input,
    */
   async function serveRotation(url, readDoc, countLeagueRead) {
     const club = url.searchParams.get("club") ?? "";
-    if (!readMlbTeamId(club)) return respondJson({ error: "club must be an MLB club" }, 400);
+    if (!readMlbTeamId(club))
+      return respondError(400, "invalid_argument", "club must be an MLB club");
     const date = readDateParam(url.searchParams);
-    if (date == null) return respondJson({ error: DATE_RULE }, 400);
+    if (date == null) return respondError(400, "invalid_argument", DATE_RULE);
     try {
-      const saved = readDoc ? await readSavedStarts(club, date, readDoc) : null;
-      const hasStoreGap = Boolean(saved?.isCurrentSeason && !saved.clubStarts);
+      const saved = await readSavedStarts(club, date, readDoc);
+      const hasStoreGap = saved.isCurrentSeason && !saved.clubStarts;
       const [clubStarts] = await Promise.all([
-        saved?.clubStarts ?? fetchClubStarts(club, date),
+        saved.clubStarts ?? fetchClubStarts(club, date),
         hasStoreGap && countLeagueRead && noteLeagueRead(`${club}'s starts`, countLeagueRead),
       ]);
       return respondJson(describeRotation(clubStarts, date));
     } catch (error) {
-      return respondJson({ error: `Couldn't read MLB: ${describeError(error)}` }, 502);
+      return respondError(502, "upstream_error", `Couldn't read MLB: ${describeError(error)}`);
     }
   }
 
