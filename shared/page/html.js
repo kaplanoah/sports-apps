@@ -1,3 +1,6 @@
+// Page markup built from templates, which escape every value but markup built the same way, and
+// written with setHtml, which changes only the nodes that differ from what an element shows.
+
 const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
 // Stored documents are writable by anyone the page is shared with, so their text is never markup.

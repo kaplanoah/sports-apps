@@ -1,7 +1,10 @@
 // The settings panel's appearance choice: the app's light look, its dark one, or System to follow
 // the phone. Each device keeps its own, since the page saves nothing to the store. pick-theme.js
 // sets the theme before the first paint; this keeps it, and the icons and bar color that go with
-// it, current. Each app hands it its looks' icons and bar colors.
+// it, current. Each app hands it its looks' icons and bar colors. It also draws settings' note on
+// updating the icon, with both icons and an X, whose link it keeps signed in with a fresh handoff
+// while settings shows it, and eases the note as the look changes, but for a change the phone
+// reports as the page comes back, which takes the note to its new state at once.
 
 // Every page that loads this runs pick-theme.js first.
 /* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, isLook, openThemeAddress,

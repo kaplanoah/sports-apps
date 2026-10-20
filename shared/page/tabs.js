@@ -1,3 +1,6 @@
+// A row of tabs, like the tab bar or a pill: which is picked, and a tap or the arrow keys, Home,
+// and End picking another.
+
 /** @param {HTMLButtonElement[]} buttons */
 export function selectTab(buttons, tab) {
   for (const button of buttons) {

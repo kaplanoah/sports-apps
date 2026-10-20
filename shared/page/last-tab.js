@@ -1,3 +1,5 @@
+// The tab the page shows, kept on the device, so a reload opens on it (open-last-tab.js).
+
 import { readStoredText, storeText } from "./local-storage.js";
 
 const LAST_TAB_KEY = "lastTab";

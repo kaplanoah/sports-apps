@@ -1,3 +1,6 @@
+// What every league's notifications share: a line of the page said as a notification, and a
+// night's capped so a busy one doesn't bury the phone.
+
 import { capitalize, convertToText } from "../page/html.js";
 
 const MAX_NOTIFIED = 4;
