@@ -9,6 +9,8 @@ import {
 import { LIST_HEADING } from "../worker/post-review.mjs";
 import { OFF_DIFF_HEADING } from "../worker/review-state.mjs";
 
+const BOT = { __typename: "Bot", login: "github-actions" };
+
 const thread = (/** @type {object} */ fields) => ({
   isResolved: false,
   isOutdated: false,
@@ -18,10 +20,15 @@ const thread = (/** @type {object} */ fields) => ({
   comments: {
     nodes: [
       {
-        author: { login: "github-actions" },
+        author: BOT,
+        authorAssociation: "NONE",
         body: "**Nit** The comment names a file that's gone.",
       },
-      { author: { login: "kaplanoah" }, body: "Stays: the file moves back in the next PR." },
+      {
+        author: { __typename: "User", login: "kaplanoah" },
+        authorAssociation: "OWNER",
+        body: "Stays: the file moves back in the next PR.",
+      },
     ],
   },
   ...fields,
@@ -74,6 +81,11 @@ test("a thread past the comments read keeps its first, which holds what it raise
   const [long, brief] = await readThreads(callGraphQL, { owner: "o", name: "n", number: 7 });
   assert.match(queries[0], /first: comments\(first: 1\)/);
   assert.match(queries[0], /comments\(last: 49\) \{ totalCount /);
+  assert.equal(
+    queries[0].match(/\{ author \{ __typename login \} authorAssociation body \}/g)?.length,
+    2,
+    "both the first comment and the last ones say who wrote them",
+  );
   assert.deepEqual(long.comments.nodes, [root, ...last]);
   assert.deepEqual(brief.comments.nodes, short);
   assert.ok(!("first" in long));
@@ -112,12 +124,54 @@ test("a thread that lists a review's Nits shows each of its items, so a later re
         path: "a.js",
         line: null,
         originalLine: null,
-        comments: { nodes: [{ author: { login: "github-actions" }, body: checklist }] },
+        comments: { nodes: [{ author: BOT, authorAssociation: "NONE", body: checklist }] },
       }),
     ],
     offDiff: [],
   });
   assert.ok(page.includes(`## a.js:file (open)\n\n**github-actions:**\n\n${checklist}\n`));
+});
+
+test("a thread shows what people with a say in the repo and the review wrote, and only a line for anyone else's comment", () => {
+  const comment = (
+    /** @type {string} */ login,
+    /** @type {string} */ authorAssociation,
+    typename = "User",
+  ) => ({
+    author: { __typename: typename, login },
+    authorAssociation,
+    body: `said by ${login}`,
+  });
+  const page = renderContext({
+    title: "fix: x",
+    description: "",
+    threads: [
+      thread({
+        comments: {
+          nodes: [
+            comment("kaplanoah", "OWNER"),
+            comment("member", "MEMBER"),
+            comment("collaborator", "COLLABORATOR"),
+            comment("github-actions", "NONE", "Bot"),
+            comment("contributor", "CONTRIBUTOR"),
+            comment("outsider", "NONE"),
+            comment("github-actions", "NONE"),
+            comment("other-bot", "NONE", "Bot"),
+          ],
+        },
+      }),
+    ],
+    offDiff: [],
+  });
+  for (const login of ["kaplanoah", "member", "collaborator"])
+    assert.ok(page.includes(`**${login}:**\n\nsaid by ${login}\n`), login);
+  assert.equal(page.match(/said by github-actions/g)?.length, 1, "only the review's bot");
+  for (const login of ["contributor", "outsider", "other-bot"])
+    assert.ok(!page.includes(login), login);
+  assert.equal(
+    page.match(/\*A comment from someone outside the repo was left out\.\*\n/g)?.length,
+    4,
+  );
 });
 
 test("a pull request with no description or threads says so", () => {

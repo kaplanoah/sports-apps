@@ -111,11 +111,14 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - CI reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
   Each review after the first reads only what changed since the last one that finished (the root's `worker/plan-review.mjs` and `worker/judge-review.mjs`).
   If the summary names something it couldn't judge, tell the user.
-- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`, which shows each try's turns and tool calls.
-  If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
+- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`.
+  An area's `find` and `review-across` show the action's own errors but not each try's turns and tool calls, since they'd be public,
+  and `review-post` shows the errors of the root's `worker/post-review.mjs`.
+  If an area's `find` or `review-across` stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
   Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and the check across areas once.
+  If `review-post` failed, re-run the failed jobs once yourself, since it starts no Claude and posts each finding only once.
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
-  where a review stalled, or a re-run that failed too.
+  an error from `worker/post-review.mjs`, like a GitHub API call that failed, or a re-run that failed too.
   `check` can't pass until the job does.
 
 ## Step 8: a red PR

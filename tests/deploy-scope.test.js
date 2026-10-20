@@ -59,6 +59,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/post-review.mjs",
     "worker/report-flaky-tests.mjs",
     "worker/review-context.mjs",
+    "worker/review-git.mjs",
     "worker/review-state.mjs",
     "worker/rule-files.mjs",
     "worker/set-app-key.mjs",
