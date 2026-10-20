@@ -248,7 +248,8 @@ finding GitHub takes on no file in a comment in the conversation, and keeps one
 summary comment up to date. The first review reads the whole change, and each
 review after it reads what changed since the last review that finished. The
 review is one of the checks that must pass: a ready pull request's `check`
-fails until a review of its latest commit has passed, and a review that can't
+fails until a review has passed on the code that merges, the pull request
+merged into `main`, and a review that can't
 run, that left a changed file or a rule file unread, or whose reviewers, check
 across areas, or posting step didn't finish, blocks the merge. A review's
 findings don't fail the check; answer all of them in one push, by fixing each

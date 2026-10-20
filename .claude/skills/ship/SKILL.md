@@ -83,6 +83,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Until then, tell the user it's ready and wait.
   An OK in chat never stands in for the label.
   Merge it yourself: the owner doesn't.
+- `check` holds the code that merges, the PR merged into `main` as `main` is then,
+  so when `main` moved after the PR's last review, the run `phone-ok` starts fails `check` for want of a review.
+  Add the `review` label then: the head was already read in full, so that review reads nothing new and costs no Claude run.
 
 ## Step 9: the deploy
 

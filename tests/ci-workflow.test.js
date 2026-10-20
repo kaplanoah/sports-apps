@@ -541,7 +541,7 @@ test("a label on code a run already passed the review on owes no review", () => 
 });
 
 // Each ask is a fresh label, which GitHub sends only when the label isn't on the pull request, so
-// the run it starts takes it off, the review job alone holding the token that can.
+// the run it starts takes it off in its review-label job.
 test("a run the review label started takes the label off, and the label is named in one place", () => {
   const workflow = readRepoFile(".github/workflows/ci.yml");
   assert.match(workflow, /\nenv:\n(?: {2}.*\n)* {2}REVIEW_LABEL: review\n/);
