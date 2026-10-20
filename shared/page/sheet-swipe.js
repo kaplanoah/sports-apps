@@ -12,7 +12,7 @@ const CLOSE_SPEED_PX_PER_MS = 0.5;
 // A touch has to move this far before it counts as a swipe, so a tap stays a tap.
 const SWIPE_START_PX = 6;
 
-// On a phone's width, where chrome.css lays dialogs out as sheets.
+// A phone's layout, where dialogs are sheets.
 const isSheetLayout = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
 /**

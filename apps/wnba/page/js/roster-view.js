@@ -8,6 +8,7 @@ import { html, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderPlayerButton } from "./player-button.js";
+import { formatAverage } from "./team-view.js";
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
 /** @typedef {{ reason: string | null, isForSeason: boolean, sentence: string | null, updated: string | null }} OutReason */
@@ -74,7 +75,7 @@ function describeStat(key, label, title) {
     read: (row) => {
       const value = sortValue(row);
       if (value === null) return NONE;
-      return key === "games" ? String(value) : value.toFixed(1);
+      return key === "games" ? String(value) : formatAverage(value);
     },
   };
 }

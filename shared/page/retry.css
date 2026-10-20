@@ -7,8 +7,8 @@
  * .filled form, and sets its words, the way the app's other buttons look, and sets the block's
  * title weight.
  *
- * Beside chrome.css's --ink and --ink-dim, and the detail role's size and weight, it reads no
- * tokens of its own.
+ * Beside chrome.css's --ink and --ink-dim, the page's --ink-hover, and the detail role's size and
+ * weight, it reads no tokens of its own.
  */
 
 .retry-button {
@@ -25,6 +25,12 @@
 }
 .retry-icon {
   flex: none;
+}
+/* Under the pointer, an outlined button's words take the hover's ink, as every link's do. */
+@media (hover: hover) {
+  .retry-button:not(.filled):hover {
+    color: var(--ink-hover);
+  }
 }
 
 .retry-block {

@@ -4,7 +4,9 @@ import { isPlayingNow } from "#shared/playing-now.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderPendingTapeRow, renderTapeRow } from "#shared/tape.js";
 import { renderClub } from "./clubs.js";
+import { findLoser } from "./games-view.js";
 import { measureBiggestLeads, renderLeadChart, renderPendingLeadChart } from "./lead-chart.js";
+import { nameOvertime, REGULATION_PERIODS } from "./periods.js";
 import { renderPlayerButton } from "./player-button.js";
 import {
   findLeader,
@@ -14,6 +16,7 @@ import {
   renderTapeTeams,
 } from "./sheet-parts.js";
 import { nameTeam } from "./series.js";
+import { formatPercentage } from "./team-view.js";
 
 // The game sheet's box score for a game that has started: points by quarter, the lead through the
 // game, the teams' stats side by side, and each team's top scorers. Until each loads, it holds its
@@ -26,7 +29,6 @@ import { nameTeam } from "./series.js";
 
 /** @type {("away" | "home")[]} */
 const SIDES = ["away", "home"];
-const REGULATION_PERIODS = 4;
 const TOP_PERFORMERS = 5;
 // A player fouls out on her sixth, so a fourth while the game is on puts her in trouble.
 const FOUL_TROUBLE = 4;
@@ -45,18 +47,10 @@ const COUNTS = [
   { key: "benchPoints", label: "Bench points" },
 ];
 
+// The line score heads each quarter with its number alone.
 /** @param {number} index */
-function namePeriod(index) {
-  if (index < REGULATION_PERIODS) return String(index + 1);
-  const overtime = index - REGULATION_PERIODS + 1;
-  return overtime === 1 ? "OT" : `${overtime}OT`;
-}
-
-/** @param {BoxScore} box */
-function findLoser(box) {
-  if (box.state !== "final") return null;
-  return box.away.score < box.home.score ? "away" : "home";
-}
+const nameLineScorePeriod = (index) =>
+  index < REGULATION_PERIODS ? String(index + 1) : nameOvertime(index + 1);
 
 // While the game is on, the quarter under way is marked, and the ones still to come are blank.
 /** @param {BoxScore} box */
@@ -81,7 +75,7 @@ function renderLineScore(box) {
     </tr>`;
   };
   const heads = indexes.map(
-    (index) => html`<th class="${isNow(index) ? "now" : ""}">${namePeriod(index)}</th>`,
+    (index) => html`<th class="${isNow(index) ? "now" : ""}">${nameLineScorePeriod(index)}</th>`,
   );
   return renderLineScoreTable(heads, SIDES.map(renderRow));
 }
@@ -114,7 +108,7 @@ function renderPendingLineScore(teams) {
       <td class="total">${renderPlaceholder("00")}</td>
     </tr>`;
   return renderLineScoreTable(
-    indexes.map((index) => html`<th>${namePeriod(index)}</th>`),
+    indexes.map((index) => html`<th>${nameLineScorePeriod(index)}</th>`),
     SIDES.map(renderRow),
   );
 }
@@ -131,7 +125,7 @@ function describeShooting(box, { key, label }) {
     const [made, attempted] = shots[index];
     const share = shares[index];
     return {
-      value: share == null ? "-" : `${(share * 100).toFixed(1)}%`,
+      value: `${formatPercentage(share)}${share == null ? "" : "%"}`,
       detail: `${made}-${attempted}`,
       bar: share == null ? null : Math.round(share * 100),
     };
@@ -179,12 +173,14 @@ function describeGameFlow(box, lead) {
   const leads = SIDES.filter((place) => biggest[place] > 0).map(
     (place) => `${nameTeam(box[place].team)} ${biggest[place]}`,
   );
-  const timeouts = SIDES.map((place) => `${nameTeam(box[place].team)} ${box[place].timeouts}`);
+  const timeouts = SIDES.filter((place) => box[place].timeouts != null).map(
+    (place) => `${nameTeam(box[place].team)} ${box[place].timeouts}`,
+  );
   return [
     leads.length > 0 && `Biggest lead: ${leads.join(", ")}`,
     box.leadChanges != null && `Lead changes: ${box.leadChanges}`,
     box.timesTied != null && `Ties: ${box.timesTied}`,
-    box.state === "live" && `Timeouts left: ${timeouts.join(", ")}`,
+    box.state === "live" && timeouts.length > 0 && `Timeouts left: ${timeouts.join(", ")}`,
   ].filter(Boolean);
 }
 

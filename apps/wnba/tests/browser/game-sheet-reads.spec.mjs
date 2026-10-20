@@ -111,10 +111,10 @@ test("a game that hasn't started previews the meetings, the season stats, and th
   await expect(sheet.getByRole("heading", { level: 2 })).toHaveText("First Round Game 3");
   await expect(sheet.locator(".faceoff .time")).toHaveText(/^9:00\sPM$/);
   await expect(sheet.locator(".sheet-part-head").first()).toHaveText(
-    /Meetings\s*Fever won the season series 2-1/,
+    /Season series\s*Fever won 2-1/,
   );
   await expect(sheet.locator(".meetings li")).toHaveCount(3);
-  await expect(sheet.locator(".meetings li").first()).toHaveText(/Aug 6\s*Aces\s*86-84\s*at Fever/);
+  await expect(sheet.locator(".meetings li").first()).toHaveText(/Jul 5\s*Fever\s*84-68\s*at Aces/);
   await expect(sheet.locator(".tape-label")).toHaveText([
     "Record",
     "PPG",
@@ -203,7 +203,7 @@ test("a final's box score and a preview's meetings open from what the store keep
   const preview = await openGameSheet(page, FEVER_AT_ACES);
   await expect(preview.locator(".meetings li")).toHaveCount(3);
   await expect(preview.locator(".meetings li").first()).toHaveText(
-    /Aug 6\s*Aces\s*86-84\s*at Fever/,
+    /Jul 5\s*Fever\s*84-68\s*at Aces/,
   );
 });
 
@@ -308,7 +308,7 @@ test("while its meetings load, the sheet holds their shape, with the season stat
   const sheet = await openGameSheet(page, FEVER_AT_ACES);
 
   await expect(sheet.locator(".sheet-part-head h3")).toHaveText([
-    "Meetings",
+    "Season series",
     "Season stats",
     "Leading scorers",
   ]);

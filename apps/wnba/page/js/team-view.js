@@ -14,7 +14,7 @@ import { renderTitles } from "#shared/team-sheet.js";
 import { renderDot, renderTeamName } from "./clubs.js";
 import { readGameDay } from "./days.js";
 import { describeLiveClock, describeStartTime } from "./games-view.js";
-import { findTeamNearestGames } from "./nearest-games.js";
+import { findTeamNearestGames, isToBePlayed, mapSeriesById } from "./nearest-games.js";
 import { nameTeam, readPlayoffRuns } from "./series.js";
 import { formatMarkColors } from "./sheet-colors.js";
 import { renderPlayerTable } from "./sheet-parts.js";
@@ -49,10 +49,10 @@ export const findTeamLeaders = (season, team) =>
 
 // A leader saved without her minutes or shooting shows a dash until the season's next update.
 /** @param {number | null | undefined} value */
-const formatAverage = (value) => (value == null ? "-" : value.toFixed(1));
+export const formatAverage = (value) => (value == null ? "-" : value.toFixed(1));
 
 /** @param {number | null | undefined} share */
-const formatPercentage = (share) => (share == null ? "-" : (share * 100).toFixed(1));
+export const formatPercentage = (share) => (share == null ? "-" : (share * 100).toFixed(1));
 
 // Points, rebounds, and assists, then how well each player shoots and how much she plays.
 /** @type {LeaderColumn[]} */
@@ -110,18 +110,15 @@ const renderLeadingScorers = (leaders) =>
 const OTHER_PLACE = { home: "away", away: "home" };
 
 /**
- * A team's playoff games: those it has finished, and the next one it plays, if any. A game left
- * over in a series that's already decided won't be played.
+ * A team's playoff games: those it has finished, and the next one it will play, if any.
  * @param {Season} season
  * @param {string} team
  */
 function listTeamGames(season, team) {
-  const decided = new Set(
-    (season.series ?? []).filter((series) => series.winner).map((series) => series.id),
-  );
+  const seriesById = mapSeriesById(season.series);
   const games = (season.games ?? []).filter((game) => findPlace(game, team));
   const finished = games.filter((game) => game.state === "final");
-  const next = games.find((game) => game.state !== "final" && !decided.has(game.series ?? ""));
+  const next = games.find((game) => game.state !== "final" && isToBePlayed(game, seriesById));
   return { finished, next: next ?? null };
 }
 
@@ -221,8 +218,11 @@ const readLeaguePlayoffs = (games) =>
       .map((game) => ({ home: game.home.score ?? 0, away: game.away.score ?? 0 })),
   );
 
-/** @param {number} margin */
-const formatPointMargin = (margin) => formatMargin(margin, 1);
+/**
+ * A points margin a game, with its sign, as +4.2, or 0.0 when it rounds to nothing.
+ * @param {number} margin
+ */
+export const formatPointMargin = (margin) => formatMargin(margin, 1);
 
 /** @type {Measure[]} */
 const MEASURES = [
@@ -323,7 +323,7 @@ function renderRegularSeason(code, standings) {
 }
 
 /**
- * The seasons a team won it all, newest first, the oldest it won under an earlier name saying so.
+ * The seasons a team won it all, newest first, each it won under an earlier name saying so.
  * @param {string} code
  * @param {{ before: number[], now: number[] }} titles
  */
@@ -331,9 +331,7 @@ function listTitleYears(code, titles) {
   const formerTeam = TEAMS[code].titlesAs;
   const before = [...titles.before]
     .sort((first, second) => second - first)
-    .map((year, index, years) =>
-      formerTeam && index === years.length - 1 ? `${year} (as ${formerTeam})` : String(year),
-    );
+    .map((year) => (formerTeam ? `${year} (as ${formerTeam})` : String(year)));
   return [...titles.now.map(String), ...before];
 }
 
@@ -429,12 +427,12 @@ function renderPlayoffs(team, { finished, next }, chip, { isPlaying, field, team
  * @param {Season} season
  * @param {string} team
  */
-function readNearestGames(season, team) {
-  const decided = new Set(
-    (season.series ?? []).filter((series) => series.winner).map((series) => series.id),
+const readNearestGames = (season, team) =>
+  findTeamNearestGames(
+    season.nearestGames ?? season.games ?? [],
+    team,
+    mapSeriesById(season.series),
   );
-  return findTeamNearestGames(season.nearestGames ?? season.games ?? [], team, decided);
-}
 
 /** @param {Game} game */
 function describeCardDay(game) {

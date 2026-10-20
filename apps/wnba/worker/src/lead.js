@@ -1,4 +1,5 @@
 import { readEasternDay } from "#shared/days.js";
+import { OVERTIME_SECONDS, QUARTER_SECONDS, REGULATION_PERIODS } from "../../page/js/periods.js";
 import { findTeamCodeByEspnId, TEAMS } from "../../page/js/teams.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { fetchUpstream } from "../../../../shared/worker/upstream.js";
@@ -18,9 +19,6 @@ const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba
 // A day's games change only as they start and end, and a live game's plays with every basket.
 const SCOREBOARD_CACHE_SECONDS = 60;
 const SUMMARY_CACHE_SECONDS = 15;
-const QUARTER_SECONDS = 10 * 60;
-const OVERTIME_SECONDS = 5 * 60;
-const REGULATION_PERIODS = 4;
 
 /** @param {string} start */
 export const nameScoreboardRequest = (start) =>
