@@ -53,20 +53,14 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 - CI reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
 - CI's review splits the change into areas by what the files are about, each test with its code (the root's `worker/plan-review.mjs`),
-  and one reviewer an area looks for every item in `REVIEW.md`'s "What to look for" and lists every problem it finds, each once with every place it shows.
+  and one reviewer an area looks for every item in `REVIEW.md`'s "What to look for" and lists every problem it finds.
   Each area's reviewer reads the rule files whose `paths` match its files, as well as its diffs.
   Each area's reviewer runs on its own (`.github/workflows/review-area.yml`), so no area waits on another's.
-  Then one check across every area, one area too, confirms each problem against the code, merges repeats, weighs each, and adds what spans areas,
-  and a step posts what it confirmed or left unsure: each Important or Unsure finding on the line it concerns, or its file,
-  and the review's Nits and Pre-existing findings together in a checklist, in one comment, or in more only past GitHub's limit on a comment's length,
-  each on the first of its items' files GitHub takes and each a thread of its own,
-  and any finding GitHub takes on no file in a comment in the PR's conversation.
+  How the check across areas then confirms what they find, and how each finding is posted, is under "How to report" in the root's `REVIEW.md`.
   The first review reads the whole change, and each review after it reads what changed since the last review that finished.
   A review asked for on the head the last finished review read in full reads nothing,
   and so does one whose pushes since change only what a merge of its base brings in.
-  The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
-  how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
-  and anything it read but couldn't judge (the root's `worker/judge-review.mjs`).
+  The `review` job checks what each reviewer actually read and writes the summary comment "How to report" describes (the root's `worker/judge-review.mjs`).
   It fails when any changed file went unread, or when a reviewer, the check across areas, or the posting step didn't finish, naming each,
   a reviewer that left one of its area's rule files unread among them.
   If the summary names something it couldn't judge, tell the user.
