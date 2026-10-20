@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { GAME_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import * as WNBASnapshot from "../page/js/snapshot.js";
 
 const AFTERNOON = JSON.parse(
@@ -82,12 +83,16 @@ const SEATTLE_AT_CHICAGO = {
   homeTeam: { teamTricode: "CHI", score: 58 },
 };
 
-/** @param {any} game */
-const addToScoreboard = (game) => {
+/** @param {any[]} games */
+const withScoreboardGames = (games) => {
   const { scoreboard } = AFTERNOON.responses;
-  const games = [...scoreboard.scoreboard.games, game];
   return { scoreboard: { ...scoreboard, scoreboard: { ...scoreboard.scoreboard, games } } };
 };
+
+const SCOREBOARD_GAMES = AFTERNOON.responses.scoreboard.scoreboard.games;
+
+/** @param {any} game */
+const addToScoreboard = (game) => withScoreboardGames([...SCOREBOARD_GAMES, game]);
 
 test("each team's nearest games come from its whole season, while the games are only the playoffs'", () => {
   const { games, nearestGames } = buildWithWholeSeason();
@@ -447,13 +452,12 @@ test("a game that hasn't started is followed closely at first, then less, and th
 });
 
 /** @param {string} gameId */
-const putOffOnScoreboard = (gameId) => {
-  const { scoreboard } = AFTERNOON.responses;
-  const games = scoreboard.scoreboard.games.map((game) =>
-    game.gameId === gameId ? { ...game, gameStatusText: "PPD" } : game,
+const putOffOnScoreboard = (gameId) =>
+  withScoreboardGames(
+    SCOREBOARD_GAMES.map((game) =>
+      game.gameId === gameId ? { ...game, gameStatusText: "PPD" } : game,
+    ),
   );
-  return { scoreboard: { ...scoreboard, scoreboard: { ...scoreboard.scoreboard, games } } };
-};
 
 // A regular-season game in Chicago tonight, which the league put off.
 const PUT_OFF_IN_CHICAGO = {
@@ -474,7 +478,7 @@ test("a game the league put off, playoff or regular season, isn't followed past 
   const playoffStart = Date.parse(lateGame.start);
   assert.equal(
     WNBASnapshot.choosePollDelay(quietPlayoff, playoffStart + 30 * 60 * 1000),
-    3 * 60 * 60 * 1000,
+    GAME_DAY_CHECK_MS,
   );
 
   const regularSeason = buildWithWholeSeason(addToScoreboard(PUT_OFF_IN_CHICAGO));
@@ -485,7 +489,7 @@ test("a game the league put off, playoff or regular season, isn't followed past 
       { putOffStarts: regularSeason.putOffStarts },
       regularStart + 30 * 60 * 1000,
     ),
-    3 * 60 * 60 * 1000,
+    GAME_DAY_CHECK_MS,
   );
 });
 

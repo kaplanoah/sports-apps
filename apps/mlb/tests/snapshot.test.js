@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { splitPostseasonGames } from "../page/js/feed-postseason.js";
 import * as MLBSnapshot from "../page/js/snapshot.js";
-import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
+import { GAME_DAY_CHECK_MS, OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 
 const readFixture = (name) =>
   JSON.parse(readFileSync(`${import.meta.dirname}/fixtures/${name}.json`, "utf8"));
@@ -616,8 +616,6 @@ test("a postseason game counts as next before its opponent is known", () => {
   assert.ok(slate.previous.some((game) => listClubsIn([game]).includes("TB")));
 });
 
-const GAME_DAY_CHECK_MS = 3 * 60 * 60 * 1000;
-
 test("when to ask again: closely during games, otherwise sleep until the next", () => {
   const computePollDelay = (games, now = "2026-09-24T22:00:00Z") =>
     MLBSnapshot.choosePollDelay({ slate: { today: { games }, nextDay: null } }, Date.parse(now));
@@ -683,14 +681,25 @@ test("a game with no start time doesn't make the next ask come at once", () => {
   );
 });
 
-test("a day whose only game was rained out stays a game day while its make-up is set", () => {
-  const rainedOut = { state: "off", start: "2026-09-24T23:05:00Z" };
-  const computePollDelay = (postponed) =>
+test("a rainout keeps a day either side a game day, past midnight too, while its make-up is set", () => {
+  const fixture = JSON.parse(JSON.stringify(EVENING));
+  const rainedOut = fixture.responses.schedule.dates.find(
+    (scheduleDate) => scheduleDate.date === "2026-09-24",
+  ).games[0];
+  rainedOut.status = {
+    abstractGameState: "Final",
+    codedGameState: "D",
+    detailedState: "Postponed",
+  };
+  const { putOffStarts } = buildSnapshot(fixture);
+  assert.deepEqual(putOffStarts, [rainedOut.gameDate]);
+  const afterMidnight = Date.parse("2026-09-25T06:35:00Z");
+  const computePollDelay = (starts) =>
     MLBSnapshot.choosePollDelay(
-      { slate: { today: { games: [], postponed }, nextDay: null } },
-      Date.parse("2026-09-24T23:35:00Z"),
+      { slate: { today: { games: [] }, nextDay: null }, putOffStarts: starts },
+      afterMidnight,
     );
-  assert.equal(computePollDelay([rainedOut]), GAME_DAY_CHECK_MS);
+  assert.equal(computePollDelay(putOffStarts), GAME_DAY_CHECK_MS);
   assert.equal(computePollDelay([]), OFF_DAY_CHECK_MS);
 });
 

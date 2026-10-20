@@ -5,6 +5,7 @@ import { renderRoundDots } from "#shared/round-dots.js";
 import { renderClub } from "./clubs.js";
 import { describeDayInSentence, readGameDay } from "./days.js";
 import { describeLiveMoment } from "./games-view.js";
+import { mapSeriesById } from "./nearest-games.js";
 import { BRACKET_ORDER } from "./series.js";
 import { ROUNDS } from "./snapshot.js";
 
@@ -128,7 +129,7 @@ export function renderBracket(season, now) {
       <h2>No playoff field yet</h2>
       <p>The bracket fills in once the playoff field is set</p>
     </div>`;
-  const seriesById = new Map(allSeries.map((series) => [series.id, series]));
+  const seriesById = mapSeriesById(allSeries);
   const games = season?.games ?? [];
   const rounds = Object.values(BRACKET_ORDER).map((ids) =>
     ids.map((id) => seriesById.get(id) ?? describeUnlisted(id)),

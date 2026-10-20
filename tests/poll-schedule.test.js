@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { choosePollDelay, OFF_DAY_CHECK_MS } from "../shared/page/poll-schedule.js";
+import {
+  choosePollDelay,
+  GAME_DAY_CHECK_MS,
+  OFF_DAY_CHECK_MS,
+} from "../shared/page/poll-schedule.js";
 
 const NOW = Date.parse("2026-09-24T22:00:00Z");
 const LIVE_MS = 30 * 1000;
@@ -21,7 +25,7 @@ test("the next update waits until fifteen minutes before the next start", () => 
 });
 
 test("on a game day, the schedule is checked every three hours until the lead", () => {
-  assert.equal(choose({ starts: [NOW + 19 * HOUR_MS] }), 3 * HOUR_MS);
+  assert.equal(choose({ starts: [NOW + 19 * HOUR_MS] }), GAME_DAY_CHECK_MS);
 });
 
 test("with no game within a day, or none at all, the schedule is checked once a day", () => {
@@ -40,8 +44,8 @@ test("a game put off within a day isn't followed as late, but keeps the day a ga
       liveMs: LIVE_MS,
       now: NOW,
     });
-  assert.equal(putOff(NOW - 30 * MINUTE_MS), 3 * HOUR_MS);
-  assert.equal(putOff(NOW + 5 * HOUR_MS), 3 * HOUR_MS);
+  assert.equal(putOff(NOW - 30 * MINUTE_MS), GAME_DAY_CHECK_MS);
+  assert.equal(putOff(NOW + 5 * HOUR_MS), GAME_DAY_CHECK_MS);
   assert.equal(putOff(NOW - 30 * HOUR_MS), OFF_DAY_CHECK_MS);
   assert.equal(putOff(NOW + 30 * HOUR_MS), OFF_DAY_CHECK_MS);
 });

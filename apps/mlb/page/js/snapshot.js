@@ -9,6 +9,7 @@ import * as PollSchedule from "#shared/poll-schedule.js";
 import {
   applyLiveGames,
   buildSlateWithAllStar,
+  hasBothClubs,
   hasClub,
   isLive,
   listScheduleGames,
@@ -151,6 +152,17 @@ const leaveOutPlayoffGames = (schedule) =>
       .filter(([, games]) => games.length > 0),
   );
 
+/**
+ * When each game the schedule holds that MLB put off or called off was to start, kept past the day
+ * the slate shows, since a rainout's make-up is often set after midnight.
+ * @param {any[]} games
+ * @returns {string[]}
+ */
+const listPutOffStarts = (games) =>
+  games
+    .filter((game) => game.state === "off" && hasBothClubs(game) && game.start)
+    .map((game) => game.start);
+
 export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
   const responses = {
     ...rawResponses,
@@ -183,6 +195,7 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
       ? buildStandings(responses.standings, clubGames, countScheduledGames(responses.seasonGames))
       : null,
     slate: slate && !isSeriesKnown ? leaveOutClubGames(slate) : slate,
+    putOffStarts: listPutOffStarts(games),
     schedule: schedule && !isSeriesKnown ? leaveOutPlayoffGames(schedule) : schedule,
     isSeriesKnown,
     missing: findMissingFields(responses),
@@ -204,7 +217,7 @@ export function choosePollDelay(snapshot, now = Date.now()) {
     starts: games
       .filter((game) => game.state === "pre" && !game.tbd)
       .map((game) => Date.parse(game.start)),
-    putOffStarts: (slate.today?.postponed ?? []).map((game) => Date.parse(game.start)),
+    putOffStarts: (snapshot.putOffStarts ?? []).map(Date.parse),
     liveMs: games.some(isClosingInning) ? POLL_CLOSING_MS : POLL_LIVE_MS,
     now,
   });

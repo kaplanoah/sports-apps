@@ -34,7 +34,9 @@ Delete it once the app's first PR merges.
 2. **The league's data.** `page/js/snapshot.js` names the league's feeds and turns their answers into one snapshot:
    `buildSnapshot(responses, { season, now })`, with the season's games,
    series, and standings and a `missing` list of feeds that didn't answer,
-   and `choosePollDelay(snapshot, now)`, which hands the shared one in `shared/page/poll-schedule.js` whether a game is live, the starts still to come, and the league's live pace.
+   and `choosePollDelay(snapshot, now)`.
+   That hands the shared one in `shared/page/poll-schedule.js` whether a game is live, the starts still to come,
+   the starts of games the league put off or called off, and the league's live pace.
    It runs in both the page and the Worker, so it uses no DOM and no globals.
 3. **Reading the feeds.** `worker/src/snapshot.js` fetches them with `createSnapshotLoader()`,
    reading each slow feed again only as a game ends or once it's old,
