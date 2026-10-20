@@ -70,6 +70,7 @@ test("with Diagnostics on, each page step names the look the stylesheets see, wh
 
   await setHidden(page, true);
   await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await setHidden(page, false);
   await page.clock.runFor(100);
   await openSettings(page);
