@@ -350,7 +350,8 @@ export async function checkNoteWithoutIcon({ page, openApp, openSettings, looks 
  * back, its opening played backward, and only then empties, never starting over for another pick
  * that keeps it away while it shrinks, growing back from wherever its close has reached for one
  * that wants it again, and shrinking from wherever its opening has reached, then growing back to
- * full for one that wants it again.
+ * full for one that wants it again. Until an opening takes hold, the note holds its first frame
+ * itself, as Safari can draw a frame first when the phone's look changes while the app is away.
  * @param {App} app
  */
 export async function checkReAddNoteEases({ page, openApp, openSettings, looks }) {
@@ -427,6 +428,24 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   await finishTimedAnimations(page);
   await expect(note).toBeHidden();
   await expect(note).toBeEmpty();
+
+  const unapplied = await note.evaluate((element) => {
+    /** @type {HTMLInputElement} */ (
+      document.querySelector('#settingsDialog input[name="appearance"][value="light"]')
+    ).click();
+    const easings = element.getAnimations();
+    const effects = easings.map((easing) => easing.effect);
+    for (const easing of easings) easing.effect = null;
+    const { height, opacity } = getComputedStyle(element);
+    easings.forEach((easing, index) => {
+      easing.effect = effects[index];
+    });
+    return { height, opacity };
+  });
+  expect(unapplied).toEqual({ height: "0px", opacity: "0" });
+  await finishTimedAnimations(page);
+  await expect(note).toHaveCSS("height", full);
+  expect(await note.getAttribute("style")).toBeFalsy();
 }
 
 /**

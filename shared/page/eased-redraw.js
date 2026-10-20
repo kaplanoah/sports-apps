@@ -15,6 +15,9 @@ const resizes = new WeakMap();
 /** @type {WeakSet<Element>} */
 const closings = new WeakSet();
 
+/** @type {WeakMap<Element, () => void>} */
+const heldFrames = new WeakMap();
+
 /** @type {Set<Animation> | null} */
 let startedInRedraw = null;
 
@@ -54,6 +57,48 @@ function readOpenFrame(element) {
   };
 }
 
+/** @param {Element} element */
+const releaseHeldFrame = (element) => heldFrames.get(element)?.();
+
+/**
+ * Sets `frame` in the part's own style until `easing` takes hold, then puts back what it had.
+ * @param {Element} element
+ * @param {Keyframe} frame
+ * @param {Animation} easing
+ */
+function holdFrame(element, frame, easing) {
+  releaseHeldFrame(element);
+  const style = /** @type {Record<string, string>} */ (
+    /** @type {unknown} */ (/** @type {HTMLElement} */ (element).style)
+  );
+  const properties = Object.keys(frame).filter((property) => property !== "offset");
+  const kept = properties.map((property) => [property, style[property]]);
+  for (const property of properties) style[property] = String(frame[property]);
+  const release = () => {
+    if (heldFrames.get(element) !== release) return;
+    heldFrames.delete(element);
+    for (const [property, value] of kept) style[property] = value;
+  };
+  heldFrames.set(element, release);
+  easing.ready.then(release, release);
+}
+
+// Safari can draw a frame before an easing it started in the middle of drawing one takes hold, as
+// one for the phone's look changing while the page was away, which would show the part at its end
+// for that frame. So the part holds the easing's first frame in its own style until then, which
+// the easing outranks once it runs.
+/**
+ * @param {Element} element
+ * @param {Keyframe[]} keyframes
+ * @param {KeyframeAnimationOptions} options
+ */
+function startEasing(element, keyframes, options) {
+  const easing = element.animate(keyframes, options);
+  const firstFrame = options.direction === "reverse" ? keyframes.at(-1) : keyframes[0];
+  if (firstFrame) holdFrame(element, firstFrame, easing);
+  return easing;
+}
+
 /**
  * @param {Element} element
  * @param {Animation} easing
@@ -69,12 +114,13 @@ function keepEasing(element, easing) {
  */
 function stopEasing(element) {
   resizes.get(element)?.cancel();
+  releaseHeldFrame(element);
   closings.delete(element);
 }
 
 /** @param {Element} element */
 function easeOpen(element) {
-  const opening = element.animate([COLLAPSED, readOpenFrame(element)], {
+  const opening = startEasing(element, [COLLAPSED, readOpenFrame(element)], {
     duration: EASE_MS,
     easing: EASING,
   });
@@ -102,7 +148,7 @@ export function easeClosed(element, hide) {
   }
   const reached = readOpenFrame(element);
   stopEasing(element);
-  const closing = element.animate([COLLAPSED, reached], {
+  const closing = startEasing(element, [COLLAPSED, reached], {
     duration: EASE_MS,
     easing: EASING,
     direction: "reverse",
@@ -131,7 +177,7 @@ export function easeBackOpen(element, redraw) {
   stopEasing(element);
   redraw();
   if (!canEase()) return;
-  const reopening = element.animate([reached, readOpenFrame(element)], {
+  const reopening = startEasing(element, [reached, readOpenFrame(element)], {
     duration: EASE_MS,
     easing: EASING,
   });
@@ -168,7 +214,7 @@ function easeHeight({ element, from, to }) {
     ...(isFading ? { opacity } : {}),
     ...clip,
   });
-  const resize = element.animate([buildKeyframe(from), buildKeyframe(to)], {
+  const resize = startEasing(element, [buildKeyframe(from), buildKeyframe(to)], {
     duration: EASE_MS,
     easing: EASING,
   });
@@ -185,7 +231,7 @@ function isOnScreen(element) {
 /** @param {Element} element */
 function fadeIn(element) {
   if (element.isConnected && isOnScreen(element))
-    element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: EASE_MS, easing: EASING });
+    startEasing(element, [{ opacity: 0 }, { opacity: 1 }], { duration: EASE_MS, easing: EASING });
 }
 
 /**
