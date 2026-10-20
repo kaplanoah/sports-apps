@@ -4,6 +4,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
+import { holdClock } from "../../../../tests/browser/stray-click.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -54,7 +55,7 @@ test("a page that loses its connection while it loads says it's offline", async 
   const note = page.locator("#loadNote");
   await waitForLoadWatch(page);
   // The note says the page is slow once it has waited, so the wait stops short of that.
-  await page.clock.pauseAt(Date.parse(NOW) + 1000);
+  await holdClock(page);
 
   await page.context().setOffline(true);
   await expect(note).toHaveText("You're offline. The page loads once you're back online.");
