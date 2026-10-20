@@ -93,15 +93,25 @@ function isGliding(scroller) {
   return scrolledAt !== undefined && performance.now() - scrolledAt < GLIDE_REST_MS;
 }
 
+/** @param {Element} element */
+const isFixed = (element) => getComputedStyle(element).position === "fixed";
+
 /**
  * Whether a finger landing on `target` lands on a list still gliding: the element under it, one
- * around it, or the page.
+ * around it, or the page. The page's glide never carries what's fixed over it, like the tab bar,
+ * which takes a tap mid-glide as an iPhone's does.
  * @param {EventTarget | null} target
  */
 export function isOnGlide(target) {
-  let element = target instanceof Element ? target : null;
-  while (element && !isGliding(element)) element = element.parentElement;
-  return Boolean(element) || isGliding(document);
+  for (
+    let element = target instanceof Element ? target : null;
+    element;
+    element = element.parentElement
+  ) {
+    if (isGliding(element)) return true;
+    if (isFixed(element)) return false;
+  }
+  return isGliding(document);
 }
 
 /**

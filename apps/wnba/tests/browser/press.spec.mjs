@@ -394,6 +394,21 @@ test("a still finger on a story in the News while the page glides never opens it
   expect(await sendClick(headline)).toBe(false);
 });
 
+test("a still tap on a tab while the News glides switches to it, as an iPhone's tab bar takes one mid-glide", async ({
+  page,
+}) => {
+  const headline = await openNewsStory(page);
+  await holdClock(page);
+  await sendFinger(headline, { moves: [12], isCancelled: true, isScrolling: true });
+  await sendScroll(page);
+  const games = page.getByRole("tab", { name: "Games" });
+
+  await sendFinger(games, { moves: [] });
+
+  expect(await sendClick(games)).toBe(true);
+  await expect(games).toHaveAttribute("aria-selected", "true");
+});
+
 test("a finger the browser takes for a scroll on an Appearance choice in settings never picks it", async ({
   page,
 }) => {

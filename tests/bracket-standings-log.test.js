@@ -39,6 +39,7 @@ class FakeElement {
 }
 globalThis.Element = /** @type {any} */ (FakeElement);
 globalThis.HTMLElement = /** @type {any} */ (class {});
+globalThis.getComputedStyle = /** @type {any} */ (() => ({ position: "static" }));
 
 bracketStandingsLog.watchSteps(
   () => true,
