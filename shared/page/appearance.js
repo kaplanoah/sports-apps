@@ -269,7 +269,9 @@ export function startAppearance(looks) {
     showChosenTheme();
     updateNote();
   });
-  // On System, the icon re-adding gives follows the phone's setting.
-  darkScheme.addEventListener("change", updateNote);
+  // On System, the icon re-adding gives follows the phone's setting. Safari reports a change of it
+  // in the middle of drawing a frame, which an easing started then misses, showing the note at its
+  // end for that frame, so the note eases in a task of its own, as for a pick.
+  darkScheme.addEventListener("change", () => setTimeout(updateNote));
   wireNote();
 }

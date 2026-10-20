@@ -16,6 +16,42 @@ const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
 };
 
+// Notes, for each easing the note starts, whether it started inside the event that reports a
+// change of the phone's look, in `lookChangeEasings`.
+const markLookChangeEasings = () => {
+  /** @type {boolean[]} */
+  const easings = [];
+  Reflect.set(window, "lookChangeEasings", easings);
+  let isInLookChange = false;
+  const { addEventListener } = MediaQueryList.prototype;
+  /** @type {any} */ (MediaQueryList.prototype).addEventListener = function (
+    /** @type {string} */ type,
+    /** @type {(event: Event) => void} */ listener,
+    /** @type {any} */ options,
+  ) {
+    /** @param {Event} event */
+    const reportedInLookChange = (event) => {
+      isInLookChange = true;
+      try {
+        listener.call(this, event);
+      } finally {
+        isInLookChange = false;
+      }
+    };
+    return addEventListener.call(
+      this,
+      type,
+      type === "change" ? reportedInLookChange : listener,
+      options,
+    );
+  };
+  const { animate } = Element.prototype;
+  Element.prototype.animate = function (keyframes, options) {
+    if (this.classList.contains("re-add-note")) easings.push(isInLookChange);
+    return animate.call(this, keyframes, options);
+  };
+};
+
 const NOTE_WORDS =
   "Apple only sets icons when you add a site to your home screen. To update your icon, re-add the site";
 
@@ -358,12 +394,13 @@ export async function checkNoteWithoutIcon({ page, openApp, openSettings, looks 
  * back, its opening played backward, and only then empties, never starting over for another pick
  * that keeps it away while it shrinks, growing back from wherever its close has reached for one
  * that wants it again, and shrinking from wherever its opening has reached, then growing back to
- * full for one that wants it again. Until an opening takes hold, the note holds its first frame
- * itself, as Safari can draw a frame first when the phone's look changes while the app is away.
+ * full for one that wants it again. On System, it eases in for a change of the phone's look in a
+ * task of its own, outside the event that reports the change, as for a pick.
  * @param {App} app
  */
 export async function checkReAddNoteEases({ page, openApp, openSettings, looks }) {
   await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.addInitScript(markLookChangeEasings);
   const readAnimations = await listAnimations(page);
   await openHomeScreenApp(page, openApp, "dark");
   await openSettings(page);
@@ -437,23 +474,13 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   await expect(note).toBeHidden();
   await expect(note).toBeEmpty();
 
-  const unapplied = await note.evaluate((element) => {
-    /** @type {HTMLInputElement} */ (
-      document.querySelector('#settingsDialog input[name="appearance"][value="light"]')
-    ).click();
-    const easings = element.getAnimations();
-    const effects = easings.map((easing) => easing.effect);
-    for (const easing of easings) easing.effect = null;
-    const { height, opacity } = getComputedStyle(element);
-    easings.forEach((easing, index) => {
-      easing.effect = effects[index];
-    });
-    return { height, opacity };
-  });
-  expect(unapplied).toEqual({ height: "0px", opacity: "0" });
+  await pick(page, "System");
   await finishTimedAnimations(page);
-  await expect(note).toHaveCSS("height", full);
-  expect(await note.getAttribute("style")).toBeFalsy();
+  await expect(note).toBeEmpty();
+  await page.evaluate(() => Reflect.get(window, "lookChangeEasings").splice(0));
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(note).toBeVisible();
+  expect(await page.evaluate(() => Reflect.get(window, "lookChangeEasings"))).toEqual([false]);
 }
 
 /**
