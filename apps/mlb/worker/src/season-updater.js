@@ -145,13 +145,13 @@ const keepPlayoffGames = (snapshot, games, doc) =>
         ...(doc?.games ?? []).filter((/** @type {any} */ game) => game.postseason),
       ]);
 
-// Each month of the season's games keeps a document of its own, saved only when its games change,
-// so a game's end sends open pages only its month.
-async function saveSchedule(docs, snapshot) {
-  if (!snapshot.schedule) return;
+/**
+ * @param {any} docs
+ * @param {any} snapshot
+ * @param {Map<string, any>} saved each month the store keeps, by its month
+ */
+async function writeListedMonths(docs, snapshot, saved) {
   const year = snapshot.season;
-  const collection = MLBSnapshot.nameScheduleCollection(year);
-  const saved = new Map((await docs.list(collection)).map((doc) => [doc.month, doc]));
   for (const [month, listed] of Object.entries(snapshot.schedule)) {
     const doc = saved.get(month);
     const games = keepPlayoffGames(snapshot, listed, doc);
@@ -165,6 +165,35 @@ async function saveSchedule(docs, snapshot) {
       updatedAt: snapshot.asOf,
     });
   }
+}
+
+/** @param {any} doc a month of the season's games as the store keeps it */
+const holdsOnlyPlayoffGames = (doc) =>
+  (doc.games ?? []).every((/** @type {any} */ game) => game.postseason);
+
+// Only playoff games are ever dropped, so a month of nothing else that the schedule no longer
+// lists lost every game it held, like a World Series' last games after a sweep, unless a read
+// without the standings left out its playoff games.
+/**
+ * @param {any} docs
+ * @param {any} snapshot
+ * @param {Map<string, any>} saved each month the store keeps, by its month
+ */
+async function removeEmptiedMonths(docs, snapshot, saved) {
+  if (!snapshot.isSeriesKnown) return;
+  for (const [month, doc] of saved)
+    if (!Object.hasOwn(snapshot.schedule, month) && holdsOnlyPlayoffGames(doc))
+      await docs.remove(MLBSnapshot.nameScheduleKey(snapshot.season, month));
+}
+
+// Each month of the season's games keeps a document of its own, saved only when its games change,
+// so a game's end sends open pages only its month.
+async function saveSchedule(docs, snapshot) {
+  if (!snapshot.schedule) return;
+  const collection = MLBSnapshot.nameScheduleCollection(snapshot.season);
+  const saved = new Map((await docs.list(collection)).map((doc) => [doc.month, doc]));
+  await writeListedMonths(docs, snapshot, saved);
+  await removeEmptiedMonths(docs, snapshot, saved);
 }
 
 /**

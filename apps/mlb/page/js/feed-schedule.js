@@ -185,16 +185,30 @@ function groupByMonth(games) {
   return months;
 }
 
+/** @param {any} response one of MLB's schedules */
+const hasDates = (response) => (response?.dates ?? []).length > 0;
+
 // The season's whole schedule is read once a day, so the days around today, read with each update,
-// and the postseason count over it.
-export function buildSchedule(responses, gamesBySeries, calledOff) {
-  if (!responses.seasonGames) return null;
+// and the postseason count over it. MLB drops a playoff game a series no longer needs from those
+// as soon as the series ends, while the whole schedule can still list it, so a playoff game is
+// listed only while they list it. A whole schedule MLB answers with no games saves nothing, and a
+// postseason MLB answers with none drops no game.
+/**
+ * @param {any} responses
+ * @param {{ games: { id: string }[], gamesBySeries: Record<string, any[]>, calledOff: Set<string> }} postseason
+ *   the playoff games those list, each series' games, and the games a decided series didn't need
+ */
+export function buildSchedule(responses, { games: playoffGames, gamesBySeries, calledOff }) {
+  if (!hasDates(responses.seasonGames)) return null;
   const seasonListings = listSeasonListings(responses.seasonGames);
   const people = listScheduledPeople(responses, seasonListings);
   const seriesIds = listSeriesIds(gamesBySeries);
   const homeBallparks = findHomeBallparks(seasonListings);
+  const playoffIds = new Set(playoffGames.map((game) => game.id));
+  const isStillListed = (game) =>
+    !game.postseason || !hasDates(responses.postseason) || playoffIds.has(game.id);
   const games = listSeasonListings(responses.seasonGames, responses.postseason, responses.schedule)
     .map((listing) => describeListedGame(listing, people, seriesIds, homeBallparks))
-    .filter((game) => !calledOff.has(game.id));
+    .filter((game) => isStillListed(game) && !calledOff.has(game.id));
   return groupByMonth(sortInScheduleOrder(games));
 }

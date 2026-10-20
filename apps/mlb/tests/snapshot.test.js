@@ -1572,6 +1572,31 @@ test("a decided series' games still to play aren't listed, and its games played 
   assert.ok(!ids.includes("849899"));
 });
 
+test("a playoff game MLB dropped from the postseason isn't listed, though the season's whole schedule still lists it", () => {
+  const fixture = structuredClone(SEASON_GAMES);
+  const decided = findListing(fixture.responses.seasonGames, 849838);
+  const dropped = {
+    ...structuredClone(decided),
+    gamePk: 849899,
+    gameDate: "2026-10-10T22:00:00Z",
+    officialDate: "2026-10-10",
+    seriesGameNumber: 5,
+    ifNecessary: "Y",
+    status: {
+      abstractGameState: "Preview",
+      codedGameState: "S",
+      detailedState: "Scheduled",
+      startTimeTBD: false,
+    },
+  };
+  delete dropped.teams.away.score;
+  delete dropped.teams.home.score;
+  fixture.responses.seasonGames.dates.push({ date: "2026-10-10", games: [dropped] });
+  const ids = listScheduled(buildSnapshot(fixture)).map((game) => game.id);
+  assert.ok(ids.includes("849838"));
+  assert.ok(!ids.includes("849899"));
+});
+
 test("without the season's whole schedule, there's no schedule to save", () => {
   assert.equal(buildSnapshot(EVENING).schedule, null);
   const responses = { ...SEASON_GAMES.responses, seasonGames: null };
