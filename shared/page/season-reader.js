@@ -53,7 +53,7 @@ export function createSeasonReader({
   /** @type {number | null} */
   let currentYear = null;
   // The season whose record the page shows, and the one it last asked for, which differ while a
-  // record is on its way.
+  // record is on its way, or, before any has loaded, after the current season's read failed.
   /** @type {number | null} */
   let shownYear = null;
   /** @type {number | null} */
@@ -124,9 +124,10 @@ export function createSeasonReader({
   }
 
   // A season that can't be read leaves the page on the season it shows, with any change to it that
-  // came while the read was out.
+  // came while the read was out. A page that shows none yet still asks for the current one, so it
+  // moves on when the store does.
   function stayOnShownYear() {
-    askedYear = shownYear ?? askedYear;
+    askedYear = shownYear ?? currentYear;
     const record = heldRecord;
     heldRecord = null;
     if (shownYear !== null && record !== null) showRecord(shownYear, record);
@@ -209,11 +210,9 @@ export function createSeasonReader({
 }
 
 /**
- * How a pick ended, and the season it leaves picked, null before any season has loaded.
- * @typedef {object} PickOutcome
- * @property {"shown" | "replaced" | "unread"} kind its season shown, a newer pick taking its
- *   place, or its record unread
- * @property {number | null} year
+ * How a pick ended: its season shown, a newer pick taking its place, or its record unread, which
+ * leaves another season picked, null before any season has loaded.
+ * @typedef {{ kind: "shown" | "replaced" } | { kind: "unread", year: number | null }} PickOutcome
  */
 
 /**
@@ -243,7 +242,7 @@ export function createSeasonPicks({ reader, readPick, keepPick, noteUnreachable 
     try {
       await reader.showYear(year);
     } catch {
-      if (latestPick !== year) return { kind: "replaced", year: latestPick };
+      if (latestPick !== year) return { kind: "replaced" };
       const kept = reader.readShownYear() ?? pickBefore;
       keepPick(kept);
       noteUnreachable();
@@ -251,6 +250,6 @@ export function createSeasonPicks({ reader, readPick, keepPick, noteUnreachable 
     } finally {
       picksOut--;
     }
-    return latestPick === year ? { kind: "shown", year } : { kind: "replaced", year: latestPick };
+    return { kind: latestPick === year ? "shown" : "replaced" };
   };
 }

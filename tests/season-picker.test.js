@@ -148,7 +148,7 @@ test("a pick shown redraws the page, with the picker's markup marking it", async
   const { answers, redraws } = watchRow(row);
 
   const chosen = choose("2025");
-  answers[0]({ kind: "shown", year: 2025 });
+  answers[0]({ kind: "shown" });
   await chosen;
 
   assert.deepEqual([picker.value, readMarked()], ["2025", "2025"]);
@@ -173,7 +173,7 @@ test("before any season has loaded, two picks that can't be read put the picker 
 
   const older = choose("2025");
   const newer = choose("2024");
-  answers[0]({ kind: "replaced", year: 2024 });
+  answers[0]({ kind: "replaced" });
   await older;
   answers[1]({ kind: "unread", year: null });
   await newer;
