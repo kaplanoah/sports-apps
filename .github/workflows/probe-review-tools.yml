@@ -41,6 +41,7 @@ jobs:
           claude_args: |
             --model claude-opus-5-5
             --max-turns 30
+            --setting-sources user
             --allowedTools "Bash(git log:*),Bash(git show:*)"
           prompt: |
             This is a permissions test of your tools. Make exactly these tool calls, one at a time, in this order, and nothing else. Do not retry a refused call another way, and do not read any other path.
@@ -56,6 +57,7 @@ jobs:
             10. Glob for the pattern "*.md" in the working directory.
             11. Bash: git log -1 --format=%h
             12. Bash: git show HEAD^1:README.md
+            13. Bash: gh pr list --label beta --state open
             Then stop.
       - name: Write what each call returned
         if: ${{ !cancelled() }}
@@ -75,6 +77,8 @@ jobs:
             return `| ${use.name} | \`${JSON.stringify(use.input).replace(/\|/g, "\\|")}\` | ${result?.is_error ? "refused or failed" : "returned"} | ${said} |`;
           });
           const denials = messages.at(-1)?.permission_denials ?? [];
-          appendFileSync(process.env.GITHUB_STEP_SUMMARY, [`## ${process.env.PROBE}`, "", "| Tool | Input | Outcome | What it said |", "| --- | --- | --- | --- |", ...rows, "", `Permission denials: ${denials.length}`, ""].join("\n"));
+          const table = [`## ${process.env.PROBE}`, "", "| Tool | Input | Outcome | What it said |", "| --- | --- | --- | --- |", ...rows, "", `Permission denials: ${denials.length}`, ""].join("\n");
+          console.log(table);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, table);
           '
         shell: bash

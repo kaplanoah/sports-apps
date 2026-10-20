@@ -746,32 +746,58 @@ test("no job that runs Claude can write to the pull request", () => {
  * @param {string} input
  */
 function readStepInput(workflow, step, input) {
-  const value = step.match(new RegExp(`^ {10}${input}: (.*(?:\\n {12}.*)*)`, "m"))?.[1] ?? "";
-  const alias = value.match(/^\*([\w-]+)$/)?.[1];
-  if (!alias) return value;
-  return workflow.match(new RegExp(`^ {10}[\\w-]+: &${alias} (.*(?:\\n {12}.*)*)`, "m"))?.[1] ?? "";
+  const value = step.match(new RegExp(`^ {10}${input}: (.*(?:\\n(?: {12}.*)?)*)`, "m"))?.[1] ?? "";
+  const alias = value.trim().match(/^\*([\w-]+)$/)?.[1];
+  if (!alias) return value.trim();
+  return (
+    workflow
+      .match(new RegExp(`^ {10}[\\w-]+: &${alias} (.*(?:\\n(?: {12}.*)?)*)`, "m"))?.[1]
+      ?.trim() ?? ""
+  );
 }
 
-// The repo is public, so a Claude step's transcript stays out of its log, and the reviewer, which
-// reads text anyone may have written, can reach nothing but the checkout and its history: Read,
-// Grep, and Glob need no rule within the checkout and are refused outside it, and git diff and git
-// blame, which read files outside it, aren't allowed.
-test("every Claude step keeps its transcript out of the log and reads only the checkout and its history", () => {
-  const steps = WORKFLOWS.flatMap((name) => {
+/**
+ * Each step that runs Claude in the named workflows, with the workflow's name and text.
+ * @param {string[]} names
+ */
+const listClaudeSteps = (names) =>
+  names.flatMap((name) => {
     const workflow = readRepoFile(`.github/workflows/${name}`);
     return workflow
       .split(/^ {6}- /m)
       .filter((step) => /uses: anthropics\/claude-code-action@/.test(step))
       .map((step) => ({ name, workflow, step }));
   });
+
+// The repo is public, so a Claude step's transcript stays out of its log, and the reviewer, which
+// reads text anyone may have written, can reach nothing but the checkout and its history: Read,
+// Grep, and Glob need no rule within the checkout and are refused outside it, git diff and git
+// blame, which read files outside it, aren't allowed, and the repo's own settings, whose allow
+// list and hooks are for sessions, aren't loaded.
+test("every Claude step keeps its transcript out of the log and reads only the checkout and its history", () => {
+  const steps = listClaudeSteps(WORKFLOWS);
   assert.ok(steps.length >= 3);
   for (const { name, workflow, step } of steps) {
     assert.equal(readStepInput(workflow, step, "show_full_output"), "false", name);
-    const tools = [
-      ...readStepInput(workflow, step, "claude_args").matchAll(/--allowedTools "([^"]*)"/g),
-    ].map(([, list]) => list);
+    const args = readStepInput(workflow, step, "claude_args");
+    const tools = [...args.matchAll(/--allowedTools "([^"]*)"/g)].map(([, list]) => list);
     assert.deepEqual(tools, ["Bash(git log:*),Bash(git show:*)"], name);
+    const sources = [...args.matchAll(/--setting-sources (\S+)/g)].map(([, list]) => list);
+    assert.deepEqual(sources, ["user"], name);
   }
+});
+
+// With only user settings loaded, CLAUDE.md doesn't load, so each reviewer is told to read
+// AGENTS.md, the rules the code keeps.
+test("every reviewer reads AGENTS.md whole along with the review guide", () => {
+  const steps = listClaudeSteps(["ci.yml", AREA_WORKFLOW]);
+  assert.equal(steps.length, 3);
+  for (const { name, workflow, step } of steps)
+    assert.match(
+      readStepInput(workflow, step, "prompt"),
+      /1\. Read `\.review\/REVIEW\.md`, the review guide as the default branch has it,(?: and follow it,)? and AGENTS\.md, each whole\./,
+      name,
+    );
 });
 
 // Each review job runs only once the jobs whose records it reads have finished.
