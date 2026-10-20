@@ -1,26 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  ACROSS_RECORD,
+  CANDIDATES_RECORD,
+  POST_RECORD,
   coversEveryLine,
   findUnreadParts,
   formatFindOutputs,
   gatherCandidates,
   judgeReview,
+  keepAcross,
   keepCandidates,
-  keepCheck,
-  listAreaRecords,
-  listDueStages,
   listReads,
   listUnchecked,
+  nameFindRecord,
   readAnswer,
   readRecords,
   recordFindTry,
   settleSummary,
 } from "../worker/judge-review.mjs";
-import { listStageKinds, writeReview } from "../worker/plan-review.mjs";
+import { writeReview } from "../worker/plan-review.mjs";
 import { SUMMARY_MARKER, readReviewedHead } from "../worker/review-state.mjs";
 
 /**
@@ -105,16 +107,16 @@ test("a part read in pieces over two tries is read, and one never opened isn't",
 });
 
 test("an answer is none when it gave none or gave something else", () => {
-  assert.equal(readAnswer(undefined, ["candidates"]), null);
-  assert.equal(readAnswer("not json", ["candidates"]), null);
-  assert.equal(readAnswer('{"candidates": "many"}', ["candidates"]), null);
-  assert.equal(readAnswer('{"duplicates": []}', ["duplicates", "added"]), null);
-  assert.deepEqual(readAnswer('{"candidates": [], "unjudged": "x"}', ["candidates"]), {
-    candidates: [],
+  assert.equal(readAnswer(undefined, "candidates"), null);
+  assert.equal(readAnswer("not json", "candidates"), null);
+  assert.equal(readAnswer('{"candidates": "many"}', "candidates"), null);
+  assert.equal(readAnswer('{"candidates": []}', "findings"), null);
+  assert.deepEqual(readAnswer('{"candidates": [], "unjudged": "x"}', "candidates"), {
+    items: [],
     unjudged: [],
   });
-  assert.deepEqual(readAnswer('{"findings": [{"verdict": "confirmed"}]}', ["findings"]), {
-    findings: [{ verdict: "confirmed" }],
+  assert.deepEqual(readAnswer('{"findings": [{"verdict": "confirmed"}]}', "findings"), {
+    items: [{ verdict: "confirmed" }],
     unjudged: [],
   });
 });
@@ -122,21 +124,22 @@ test("an answer is none when it gave none or gave something else", () => {
 test("the records read back are every job's the review needs, and nothing else in the folder", () => {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   for (const name of [
-    "find-first-1-bugs.json",
-    "candidates-first-1.json",
-    "check-first-1.json",
-    "across-first.json",
-    "post-first.json",
+    nameFindRecord(1),
+    nameFindRecord(12),
+    CANDIDATES_RECORD,
+    ACROSS_RECORD,
+    POST_RECORD,
     "plan.json",
-    "checked-first.json",
+    "find-notes.json",
+    "post.json.bak",
   ])
     writeFileSync(join(folder, name), "{}");
   assert.deepEqual([...readRecords(folder).keys()].sort(), [
-    "across-first.json",
-    "candidates-first-1.json",
-    "check-first-1.json",
-    "find-first-1-bugs.json",
-    "post-first.json",
+    "across.json",
+    "candidates.json",
+    "find-1.json",
+    "find-12.json",
+    "post.json",
   ]);
 });
 
@@ -180,20 +183,20 @@ test("a reviewer's tries are kept, and only the parts no try read stay unread", 
   const execution = join(folder, "execution.json");
   const runOn = (/** @type {string} */ part) =>
     writeFileSync(execution, JSON.stringify(runReading([{ file_path: resolve(folder, part) }])));
-  const reviewer = { stage: "first", area: 1, kind: "rules" };
   runOn("first/shared/page/a.js.diff");
   const candidate = { path: "shared/page/a.js", line: 1, claim: "a copy of b.js's rule" };
   const answer = JSON.stringify({ candidates: [candidate], unjudged: [] });
   assert.deepEqual(
-    recordFindTry(folder, reviewer, { EXECUTION_FILE: execution, STRUCTURED_OUTPUT: answer }),
+    recordFindTry(folder, 1, { EXECUTION_FILE: execution, STRUCTURED_OUTPUT: answer }),
     { unread: ["first/shared/page/b.js.diff"], isAnswered: true },
   );
   runOn("first/shared/page/b.js.diff");
   assert.deepEqual(
-    recordFindTry(folder, reviewer, { EXECUTION_FILE: execution, STRUCTURED_OUTPUT: answer }),
+    recordFindTry(folder, 1, { EXECUTION_FILE: execution, STRUCTURED_OUTPUT: answer }),
     { unread: [], isAnswered: true },
   );
-  const record = JSON.parse(readFileSync(join(folder, "find-first-1-rules.json"), "utf8"));
+  const record = JSON.parse(readFileSync(join(folder, nameFindRecord(1)), "utf8"));
+  assert.equal(record.area, 1);
   assert.equal(record.tries.length, 2);
   assert.deepEqual(record.tries[0].answer.items, [candidate]);
 });
@@ -202,12 +205,11 @@ test("a reviewer that read its diffs but not its area's rule file leaves the rul
   const rule = { path: ".claude/rules/page.md", text: '---\npaths:\n  - "shared/page/**"\n---\n' };
   const folder = planFirstReview(["shared/page/a.js"], [rule]);
   const execution = join(folder, "execution.json");
-  const reader = { stage: "first", area: 1, kind: "rules" };
   const answer = JSON.stringify({ candidates: [], unjudged: [] });
   const readOnly = (/** @type {string[]} */ parts) => {
     const reads = parts.map((part) => ({ file_path: resolve(folder, part) }));
     writeFileSync(execution, JSON.stringify(runReading(reads)));
-    return recordFindTry(folder, reader, { EXECUTION_FILE: execution, STRUCTURED_OUTPUT: answer });
+    return recordFindTry(folder, 1, { EXECUTION_FILE: execution, STRUCTURED_OUTPUT: answer });
   };
   assert.deepEqual(readOnly(["first/shared/page/a.js.diff"]), {
     unread: ["rules/page.md"],
@@ -223,10 +225,10 @@ test("a reviewer whose last try read everything but gave no answer hasn't finish
     execution,
     JSON.stringify(runReading([{ file_path: resolve(folder, "first/shared/page/a.js.diff") }])),
   );
-  assert.deepEqual(
-    recordFindTry(folder, { stage: "first", area: 1, kind: "bugs" }, { EXECUTION_FILE: execution }),
-    { unread: [], isAnswered: false },
-  );
+  assert.deepEqual(recordFindTry(folder, 1, { EXECUTION_FILE: execution }), {
+    unread: [],
+    isAnswered: false,
+  });
 });
 
 test("a reviewer's try hands its job its unread parts and whether it answered", () => {
@@ -239,158 +241,95 @@ test("a reviewer's try hands its job its unread parts and whether it answered", 
 
 test("a try that left no execution file read nothing", () => {
   const folder = planFirstReview(["shared/page/a.js"]);
-  assert.deepEqual(
-    recordFindTry(
-      folder,
-      { stage: "first", area: 1, kind: "bugs" },
-      { EXECUTION_FILE: join(folder, "none.json") },
-    ).unread,
-    ["first/shared/page/a.js.diff"],
-  );
+  assert.deepEqual(recordFindTry(folder, 1, { EXECUTION_FILE: join(folder, "none.json") }).unread, [
+    "first/shared/page/a.js.diff",
+  ]);
 });
 
 test("a reviewer of an area the plan doesn't have stops rather than reading as done", () => {
   const folder = planFirstReview(["shared/page/a.js"]);
   assert.throws(
-    () =>
-      recordFindTry(
-        folder,
-        { stage: "first", area: 2, kind: "bugs" },
-        { EXECUTION_FILE: join(folder, "none.json") },
-      ),
-    /The plan's first stage has no area 2/,
-  );
-  assert.throws(
-    () =>
-      recordFindTry(
-        folder,
-        { stage: "final", area: 1, kind: "all" },
-        { EXECUTION_FILE: join(folder, "none.json") },
-      ),
-    /The plan's final stage has no area 1/,
+    () => recordFindTry(folder, 2, { EXECUTION_FILE: join(folder, "none.json") }),
+    /The plan has no area 2/,
   );
 });
 
-test("an area's candidates are every reviewer's, over every try, each with an id of its own", () => {
+test("the candidates are every area's reviewer's, over every try, each with an id of its own", () => {
   const triesOf = (/** @type {object[][]} */ lists) => ({
     tries: lists.map((items) => ({ reads: [], answer: { items, unjudged: [] } })),
   });
   assert.deepEqual(
     gatherCandidates([
-      { kind: "bugs", ...triesOf([[{ claim: "one" }], [{ claim: "two" }]]) },
-      { kind: "rules", tries: [{ reads: [], answer: null }] },
-      { kind: "tests", ...triesOf([[{ claim: "three" }]]) },
+      { area: 1, ...triesOf([[{ claim: "one" }], [{ claim: "two" }]]) },
+      { area: 2, tries: [{ reads: [], answer: null }] },
+      { area: 3, ...triesOf([[{ claim: "three" }]]) },
     ]),
     [
-      { id: "bugs-1", claim: "one" },
-      { id: "bugs-2", claim: "two" },
-      { id: "tests-1", claim: "three" },
+      { id: "1.1", claim: "one" },
+      { id: "1.2", claim: "two" },
+      { id: "3.1", claim: "three" },
     ],
   );
 });
 
-test("an area's records are its own reviewers', never another area's whose number starts the same", () => {
-  const records = new Map([
-    ["find-first-1-bugs.json", { area: 1 }],
-    ["find-first-10-bugs.json", { area: 10 }],
-    ["find-push-1-bugs.json", { area: 1, stage: "push" }],
-    ["check-first-1.json", { items: [] }],
-  ]);
-  assert.deepEqual(listAreaRecords(records, "first", 1), [{ area: 1 }]);
-  assert.deepEqual(listAreaRecords(records, "first", 10), [{ area: 10 }]);
-});
-
-test("a candidate no finding of its checker names is unchecked", () => {
+test("a candidate no finding of the check across areas names is unchecked", () => {
   assert.deepEqual(
     listUnchecked(
-      [{ id: "bugs-1" }, { id: "bugs-2" }, { id: "tests-1" }],
-      [{ ids: ["bugs-1", "tests-1"] }, { ids: [] }],
+      [{ id: "1.1" }, { id: "1.2" }, { id: "2.1" }],
+      [{ ids: ["1.1", "2.1"] }, { ids: [] }],
     ),
-    ["bugs-2"],
+    ["1.2"],
   );
 });
 
-test("a checker's job counts the cases it left unchecked as the judge does, from the record it keeps", () => {
-  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
+test("the candidates kept for the check across areas are every planned area's, in area order", () => {
+  const folder = planFirstReview(["shared/page/a.js"]);
+  const plan = JSON.parse(readFileSync(join(folder, "plan.json"), "utf8"));
   writeFileSync(
-    join(folder, "candidates-first-2.json"),
-    JSON.stringify([{ id: "bugs-1" }, { id: "rules-1" }]),
+    join(folder, "plan.json"),
+    JSON.stringify({ ...plan, areas: [...plan.areas, { ...plan.areas[0], area: 2 }] }),
   );
-  const answer = { findings: [{ ids: ["bugs-1"], verdict: "rejected" }], unjudged: [] };
-  const unchecked = keepCheck(folder, { stage: "first", area: 2 }, JSON.stringify(answer));
-  assert.deepEqual(unchecked, ["rules-1"]);
+  const reviewer = (/** @type {number} */ area, /** @type {object[]} */ items) =>
+    JSON.stringify({ area, tries: [{ reads: [], answer: { items, unjudged: [] } }] });
+  writeFileSync(join(folder, nameFindRecord(2)), reviewer(2, [{ claim: "two" }]));
+  writeFileSync(join(folder, nameFindRecord(1)), reviewer(1, [{ claim: "one" }]));
+  writeFileSync(join(folder, nameFindRecord(3)), reviewer(3, [{ claim: "unplanned" }]));
+  assert.equal(keepCandidates(folder), 2);
+  assert.deepEqual(JSON.parse(readFileSync(join(folder, CANDIDATES_RECORD), "utf8")), [
+    { id: "1.1", claim: "one" },
+    { id: "2.1", claim: "two" },
+  ]);
+});
+
+test("the check across areas' job counts the cases it left unchecked as the judge does, from the record it keeps", () => {
+  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
+  writeFileSync(join(folder, CANDIDATES_RECORD), JSON.stringify([{ id: "1.1" }, { id: "2.1" }]));
+  const answer = { findings: [{ ids: ["1.1"], verdict: "rejected" }], unjudged: [] };
+  const unchecked = keepAcross(folder, JSON.stringify(answer));
+  assert.deepEqual(unchecked, ["2.1"]);
   const kept = readRecords(folder);
   assert.deepEqual(
-    listUnchecked(kept.get("candidates-first-2.json"), kept.get("check-first-2.json").items),
+    listUnchecked(kept.get(CANDIDATES_RECORD), kept.get(ACROSS_RECORD).items),
     unchecked,
   );
-  assert.throws(() => keepCheck(folder, { stage: "first", area: 2 }, ""), /gave no answer/);
+  assert.throws(() => keepAcross(folder, ""), /The check across areas gave no answer/);
 });
 
-test("a checker's answer keeps only its findings that are objects, and what it couldn't judge that names a file and why", () => {
+test("the check across areas' answer keeps only its findings that are objects, and what it couldn't judge that names a file and why", () => {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
-  writeFileSync(join(folder, "candidates-first-1.json"), JSON.stringify([{ id: "bugs-1" }]));
-  const finding = { ids: ["bugs-1"], verdict: "rejected" };
+  writeFileSync(join(folder, CANDIDATES_RECORD), JSON.stringify([{ id: "1.1" }]));
+  const finding = { ids: ["1.1"], verdict: "rejected" };
+  const added = { ids: [], verdict: "confirmed" };
   const unjudged = { file: "a.js", why: "too big" };
   const answer = {
-    findings: [null, "a string", finding],
+    findings: [null, "a string", finding, added],
     unjudged: [null, "a string", { why: "names no file" }, { file: "b.js" }, unjudged],
   };
-  assert.deepEqual(keepCheck(folder, { stage: "first", area: 1 }, JSON.stringify(answer)), []);
-  assert.deepEqual(readRecords(folder).get("check-first-1.json"), {
-    items: [finding],
+  assert.deepEqual(keepAcross(folder, JSON.stringify(answer)), []);
+  assert.deepEqual(readRecords(folder).get(ACROSS_RECORD), {
+    items: [finding, added],
     unjudged: [unjudged],
   });
-});
-
-test("an area's candidates are kept for its check and counted, so one with none skips its checker", () => {
-  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
-  const reviewer = (/** @type {string} */ kind, /** @type {object[]} */ items) =>
-    JSON.stringify({ kind, tries: [{ reads: [], answer: { items, unjudged: [] } }] });
-  for (const { kind } of listStageKinds("first")) {
-    writeFileSync(join(folder, `find-first-1-${kind}.json`), reviewer(kind, []));
-    const items = kind === "bugs" ? [{ claim: "one" }] : [];
-    writeFileSync(join(folder, `find-first-2-${kind}.json`), reviewer(kind, items));
-  }
-  assert.equal(keepCandidates(folder, { stage: "first", area: 1 }), 0);
-  assert.equal(readFileSync(join(folder, "candidates-first-1.json"), "utf8"), "[]");
-  assert.equal(keepCandidates(folder, { stage: "first", area: 2 }), 1);
-});
-
-test("an area a reviewer left no record for stops rather than counting its cases as none", () => {
-  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
-  writeFileSync(
-    join(folder, "find-first-1-bugs.json"),
-    JSON.stringify({ kind: "bugs", tries: [{ reads: [], answer: { items: [], unjudged: [] } }] }),
-  );
-  assert.throws(
-    () => keepCandidates(folder, { stage: "first", area: 1 }),
-    /No reviewer's record named find-first-1-bugs-from-end\.json, find-first-1-rules\.json/,
-  );
-  assert.ok(!existsSync(join(folder, "candidates-first-1.json")));
-});
-
-test("the last read's area has only its one reviewer's record to gather", () => {
-  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
-  const answer = { items: [{ claim: "one" }], unjudged: [] };
-  writeFileSync(
-    join(folder, "find-final-1-all.json"),
-    JSON.stringify({ kind: "all", tries: [{ reads: [], answer }] }),
-  );
-  assert.equal(keepCandidates(folder, { stage: "final", area: 1 }), 1);
-  assert.deepEqual(
-    JSON.parse(readFileSync(join(folder, "candidates-final-1.json"), "utf8")).map(
-      (/** @type {{ claim: string }} */ candidate) => candidate.claim,
-    ),
-    ["one"],
-  );
-});
-
-test("an area with no candidates keeps an empty check with no checker, which the judge counts as done", () => {
-  const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
-  writeFileSync(join(folder, "candidates-first-1.json"), "[]");
-  assert.deepEqual(keepCheck(folder, { stage: "first", area: 1 }, undefined), []);
-  assert.deepEqual(readRecords(folder).get("check-first-1.json"), { items: [], unjudged: [] });
 });
 
 const HEAD = "c".repeat(40);
@@ -422,72 +361,71 @@ const PLAN = {
   since: null,
   areas: AREAS,
   unread: [{ path: "package-lock.json", why: "the lockfile, which npm writes" }],
-  final: [],
-  finalUnread: [],
 };
 
 /**
- * Every record a stage's jobs keep once each finished, with these changes.
- * @param {string} stage
+ * A reviewer's record of an area that finished, with these changes.
+ * @param {number} area
+ * @param {Record<string, any>} [changes]
+ */
+const finishReviewer = (area, changes = {}) => ({
+  area,
+  tries: [{ reads: [], answer: { items: [], unjudged: [] } }],
+  unread: [],
+  isAnswered: true,
+  ...changes,
+});
+
+/**
+ * Every record the review's jobs keep once each finished, with these changes.
  * @param {typeof AREAS} areas
  * @param {Record<string, any>} [changes] by record name, undefined to leave one out
  */
-function finishStage(stage, areas, changes = {}) {
-  const kinds = listStageKinds(stage).map(({ kind }) => kind);
+function finishReview(areas, changes = {}) {
   /** @type {Record<string, any>} */
   const records = {
-    [`post-${stage}.json`]: { weights: [], unjudged: [] },
+    [CANDIDATES_RECORD]: [],
+    [ACROSS_RECORD]: { items: [], unjudged: [] },
+    [POST_RECORD]: { weights: [], repeated: 0 },
   };
-  if (areas.length > 1)
-    records[`across-${stage}.json`] = { duplicates: [], added: [], unjudged: [] };
-  for (const { area } of areas) {
-    records[`check-${stage}-${area}.json`] = { items: [], unjudged: [] };
-    for (const kind of kinds)
-      records[`find-${stage}-${area}-${kind}.json`] = {
-        stage,
-        area,
-        kind,
-        tries: [{ reads: [], answer: { items: [], unjudged: [] } }],
-        unread: [],
-        isAnswered: true,
-      };
-  }
+  for (const { area } of areas) records[nameFindRecord(area)] = finishReviewer(area);
   const merged = { ...records, ...changes };
   return new Map(Object.entries(merged).filter(([, record]) => record !== undefined));
 }
 
 test("a reviewer that left its area's rule file unread hasn't finished", () => {
-  const record = {
-    stage: "first",
-    area: 2,
-    kind: "rules",
-    tries: [{ reads: [], answer: { items: [], unjudged: [] } }],
-    unread: ["rules/page-look.md"],
-    isAnswered: true,
-  };
-  const records = finishStage("first", AREAS, { "find-first-2-rules.json": record });
+  const records = finishReview(AREAS, {
+    [nameFindRecord(2)]: finishReviewer(2, { unread: ["rules/page-look.md"] }),
+  });
   const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(!isComplete);
-  assert.match(
-    body,
-    /- the rules reviewer of shared page, which left rules\/page-look\.md unread\n/,
-  );
+  assert.match(body, /- the reviewer of shared page, which left rules\/page-look\.md unread\n/);
 });
 
-test("a stage of more than one area isn't finished until the check across them is", () => {
-  const records = finishStage("first", AREAS, { "across-first.json": undefined });
-  const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
-  assert.ok(!isComplete);
-  assert.match(body, /- the check across areas\n/);
+test("a review isn't finished until the check across areas is, even of one area", () => {
+  for (const areas of [AREAS, [AREAS[0]]]) {
+    const records = finishReview(areas, { [ACROSS_RECORD]: undefined });
+    const { isComplete, body } = judgeReview({ sha: HEAD, plan: { ...PLAN, areas }, records });
+    assert.ok(!isComplete);
+    assert.match(body, /- the check across areas\n/);
+  }
 });
 
+// The count of candidates turned down leaves out what the check across areas added itself, which
+// no reviewer listed.
 test("a review that read and checked everything passes, and moves the reviewed head on", () => {
-  const records = finishStage("first", AREAS, {
-    "check-first-2.json": {
-      items: [{ verdict: "confirmed" }, { verdict: "rejected" }, { verdict: "rejected" }],
+  const records = finishReview(AREAS, {
+    [ACROSS_RECORD]: {
+      items: [
+        { ids: ["1.1", "2.1"], verdict: "confirmed" },
+        { ids: ["2.2"], verdict: "rejected" },
+        { ids: ["2.3"], verdict: "rejected" },
+        { ids: [], verdict: "confirmed" },
+        { ids: [], verdict: "rejected" },
+      ],
       unjudged: [{ file: "c.js", why: "only an iPhone shows it" }],
     },
-    "post-first.json": { weights: ["Important", "Nit", "Important"], unjudged: [] },
+    [POST_RECORD]: { weights: ["Important", "Nit", "Important"], repeated: 0 },
   });
   const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(isComplete);
@@ -495,9 +433,9 @@ test("a review that read and checked everything passes, and moves the reviewed h
   assert.equal(readReviewedHead(body), HEAD);
   assert.match(
     body,
-    /Claude reviewed c{40}: it read the whole change in 2 areas, 4 reviewers an area, and posted 3 findings \(2 Important, 1 Nit\)\./,
+    /Claude reviewed c{40}: it read the whole change in 2 areas, and posted 3 findings \(2 Important, 1 Nit\)\./,
   );
-  assert.match(body, /the checkers turned down 2 of 3 candidates/);
+  assert.match(body, /the check across areas turned down 2 of 3 candidates/);
   assert.match(body, /Read in full: 3 of 3 changed files to read\./);
   assert.match(body, /- `package-lock.json`: the lockfile, which npm writes/);
   assert.match(body, /- `c.js`: only an iPhone shows it/);
@@ -505,23 +443,8 @@ test("a review that read and checked everything passes, and moves the reviewed h
 });
 
 test("a file a reviewer didn't read in full fails the review, keeping the earlier reviewed head", () => {
-  const records = finishStage("first", AREAS, {
-    "find-first-2-tests.json": {
-      stage: "first",
-      area: 2,
-      kind: "tests",
-      tries: [],
-      unread: ["first/b.js.part-2.diff"],
-      isAnswered: true,
-    },
-    "find-first-2-rules.json": {
-      stage: "first",
-      area: 2,
-      kind: "rules",
-      tries: [],
-      unread: ["first/b.js.part-2.diff"],
-      isAnswered: true,
-    },
+  const records = finishReview(AREAS, {
+    [nameFindRecord(2)]: finishReviewer(2, { tries: [], unread: ["first/b.js.part-2.diff"] }),
   });
   const { isComplete, body } = judgeReview({
     sha: HEAD,
@@ -536,195 +459,68 @@ test("a file a reviewer didn't read in full fails the review, keeping the earlie
   assert.doesNotMatch(body, /- `c.js`/);
 });
 
-test("a reviewer that gave no answer, or a checker that left a case unchecked, fails the review", () => {
-  const records = finishStage("first", AREAS, {
-    "find-first-1-tests.json": {
-      stage: "first",
-      area: 1,
-      kind: "tests",
+test("a reviewer that gave no answer, or a check across areas that left a case unchecked, fails the review", () => {
+  const records = finishReview(AREAS, {
+    [nameFindRecord(1)]: finishReviewer(1, {
       tries: [{ reads: [], answer: null }],
-      unread: [],
       isAnswered: false,
-    },
-    "candidates-first-2.json": [{ id: "bugs-1" }, { id: "rules-1" }],
-    "check-first-2.json": { items: [{ ids: ["bugs-1"], verdict: "rejected" }], unjudged: [] },
+    }),
+    [CANDIDATES_RECORD]: [{ id: "2.1" }, { id: "2.2" }],
+    [ACROSS_RECORD]: { items: [{ ids: ["2.1"], verdict: "rejected" }], unjudged: [] },
   });
   const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(!isComplete);
   assert.match(
     body,
-    /- the tests reviewer of mlb page\n- the checker of shared page, which left 1 case unchecked/,
+    /- the reviewer of mlb page\n- the check across areas, which left 1 case unchecked/,
   );
   assert.match(body, /Read in full: 3 of 3/);
 });
 
-test("what a reviewer, a checker, or the check across areas couldn't judge is named under its own stage", () => {
-  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
+test("what a reviewer or the check across areas couldn't judge is named", () => {
   const unjudged = (/** @type {string} */ file) => ({ file, why: "only an iPhone shows it" });
-  const records = new Map([
-    ...finishStage("push", [AREAS[0]], {
-      "find-push-1-rules.json": {
-        stage: "push",
-        area: 1,
-        kind: "rules",
-        tries: [{ reads: [], answer: { items: [], unjudged: [unjudged("push-reviewer.js")] } }],
-        unread: [],
-        isAnswered: true,
-      },
-      "post-push.json": { weights: [], repeated: 0, unjudged: [unjudged("across.js")] },
+  const records = finishReview(AREAS, {
+    [nameFindRecord(1)]: finishReviewer(1, {
+      tries: [{ reads: [], answer: { items: [], unjudged: [unjudged("reviewer.js")] } }],
     }),
-    ...finishStage("final", AREAS),
-  ]);
-  const { body } = judgeReview({ sha: HEAD, plan, records });
-  const [push, final] = body.split("Then it read the whole change once more");
-  assert.match(push, /- `push-reviewer\.js`: only an iPhone shows it\n- `across\.js`/);
-  assert.doesNotMatch(final, /push-reviewer\.js/);
+    [ACROSS_RECORD]: { items: [], unjudged: [unjudged("across.js")] },
+  });
+  const { body } = judgeReview({ sha: HEAD, plan: PLAN, records });
+  assert.match(body, /- `reviewer\.js`: only an iPhone shows it\n- `across\.js`/);
 });
 
-test("a reviewer, a checker, or the posting step that never finished fails the review, each named", () => {
-  const records = finishStage("first", AREAS, {
-    "find-first-1-bugs.json": undefined,
-    "check-first-2.json": undefined,
-    "post-first.json": undefined,
+test("a reviewer, the check across areas, or the posting step that never finished fails the review, each named", () => {
+  const records = finishReview(AREAS, {
+    [nameFindRecord(1)]: undefined,
+    [ACROSS_RECORD]: undefined,
+    [POST_RECORD]: undefined,
   });
   const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(!isComplete);
   assert.match(
     body,
-    /- the bugs reviewer of mlb page\n- the checker of shared page\n- the step that posts the findings/,
+    /- the reviewer of mlb page\n- the check across areas\n- the step that posts the findings/,
   );
   assert.match(body, /- `a.js`/);
   assert.equal(readReviewedHead(body), null);
 });
 
-test("the last read of the whole change names the files it left unread too, each once", () => {
-  const lockfile = { path: "package-lock.json", why: "the lockfile, which npm writes" };
-  const fixture = { path: "apps/mlb/tests/fixtures/day.json", why: "a test's recorded data" };
-  const plan = {
-    ...PLAN,
-    stage: "push",
-    since: EARLIER,
-    areas: [AREAS[0]],
-    unread: [lockfile],
-    final: AREAS,
-    finalUnread: [lockfile, fixture],
-  };
-  const records = new Map([...finishStage("push", [AREAS[0]]), ...finishStage("final", AREAS)]);
-  const { body } = judgeReview({ sha: HEAD, plan, records });
-  assert.match(
-    body,
-    /Left unread, as nothing to review:\n- `package-lock\.json`: the lockfile, which npm writes\n- `apps\/mlb\/tests\/fixtures\/day\.json`: a test's recorded data$/,
-  );
-  const posted = finishStage("push", [AREAS[0]], {
-    "post-push.json": { weights: ["Nit"], unjudged: [] },
-  });
-  const pushOnly = judgeReview({ sha: HEAD, plan, records: posted });
-  assert.doesNotMatch(pushOnly.body, /fixtures/);
-});
-
-test("a review of a push whose whole change has nothing left to read is due no last read", () => {
-  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: [] };
-  const pushed = finishStage("push", [AREAS[0]]);
-  assert.deepEqual(
-    listDueStages(plan, pushed).map((due) => due.stage),
-    ["push"],
-  );
-  assert.ok(judgeReview({ sha: HEAD, plan, records: pushed }).isComplete);
-});
-
-test("a review of a push that finished and posted nothing is due the last read of the whole change", () => {
-  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
-  const pushed = finishStage("push", [AREAS[0]]);
-  assert.deepEqual(
-    listDueStages(plan, pushed).map((due) => due.stage),
-    ["push", "final"],
-  );
-  const unfinished = judgeReview({ sha: HEAD, plan, records: pushed });
-  assert.ok(!unfinished.isComplete);
-  assert.match(unfinished.body, /- the last reviewer of mlb page/);
-  const records = new Map([
-    ...pushed,
-    ...finishStage("final", AREAS, { "post-final.json": { weights: ["Nit"], unjudged: [] } }),
-  ]);
+test("a review of a push says what it read since, and findings already on the pull request don't count as posted", () => {
+  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], unread: [] };
+  const records = finishReview([AREAS[0]], { [POST_RECORD]: { weights: [], repeated: 2 } });
   const { isComplete, body } = judgeReview({ sha: HEAD, plan, records });
   assert.ok(isComplete);
   assert.match(
     body,
-    /it read what the pushes since eeeeeee changed, in 1 area, and posted no findings/,
+    /it read what the pushes since eeeeeee changed, in 1 area, and posted no findings, and found 2 findings already on it\./,
   );
-  assert.match(
-    body,
-    /Then it read the whole change once more, 1 reviewer an area, to find what the earlier reads missed: 1 finding \(1 Nit\)\./,
-  );
-});
-
-test("findings found again that were already on the pull request don't count as posted", () => {
-  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
-  const records = finishStage("push", [AREAS[0]], {
-    "post-push.json": { weights: [], repeated: 2, unjudged: [] },
-  });
-  assert.deepEqual(
-    listDueStages(plan, records).map((due) => due.stage),
-    ["push", "final"],
-  );
-  assert.match(
-    judgeReview({ sha: HEAD, plan, records }).body,
-    /posted no findings, and found 2 findings already on it\./,
-  );
-});
-
-test("a review of a push whose checker didn't finish isn't due the last read, though it posted nothing", () => {
-  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
-  const records = finishStage("push", [AREAS[0]]);
-  records.delete(`check-push-${AREAS[0].area}.json`);
-  assert.deepEqual(
-    listDueStages(plan, records).map((due) => due.stage),
-    ["push"],
-  );
-});
-
-test("a review of a push that posted findings isn't due the last read", () => {
-  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
-  const records = finishStage("push", [AREAS[0]], {
-    "post-push.json": { weights: ["Important"], unjudged: [] },
-  });
-  assert.deepEqual(
-    listDueStages(plan, records).map((due) => due.stage),
-    ["push"],
-  );
-  assert.ok(judgeReview({ sha: HEAD, plan, records }).isComplete);
-});
-
-test("the last read's records, which it keeps alongside a push's review, count only once that review posted nothing", () => {
-  const plan = { ...PLAN, stage: "push", since: EARLIER, areas: [AREAS[0]], final: AREAS };
-  const unfinishedFinal = finishStage("final", AREAS, {
-    "find-final-2-all.json": {
-      stage: "final",
-      area: 2,
-      kind: "all",
-      tries: [],
-      unread: ["first/c.js.diff"],
-      isAnswered: false,
-    },
-    "across-final.json": undefined,
-    "post-final.json": undefined,
-  });
-  const records = new Map([
-    ...finishStage("push", [AREAS[0]], {
-      "post-push.json": { weights: ["Nit"], unjudged: [] },
-    }),
-    ...unfinishedFinal,
-  ]);
-  const { isComplete, body } = judgeReview({ sha: HEAD, plan, records });
-  assert.ok(isComplete);
-  assert.equal(readReviewedHead(body), HEAD);
-  assert.doesNotMatch(body, /once more|last reviewer|c\.js/);
+  assert.doesNotMatch(body, /Left unread/);
 });
 
 test("a push that changes only what a merge brings in passes and moves the reviewed head on", () => {
   const { isComplete, body } = judgeReview({
     sha: HEAD,
-    plan: { stage: "none", since: EARLIER, areas: [], unread: [], final: [], finalUnread: [] },
+    plan: { stage: "none", since: EARLIER, areas: [], unread: [] },
     records: new Map(),
   });
   assert.ok(isComplete);
@@ -739,7 +535,7 @@ test("a run on a head already read in full passes and leaves that read's summary
   assert.deepEqual(
     judgeReview({
       sha: HEAD,
-      plan: { stage: "reviewed", since: null, areas: [], unread: [], final: [], finalUnread: [] },
+      plan: { stage: "reviewed", since: null, areas: [], unread: [] },
       records: new Map(),
     }),
     { isComplete: true, body: null },

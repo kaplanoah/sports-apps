@@ -235,18 +235,22 @@ GitHub lints, checks formatting and types, looks for unused code, and runs the
 Node tests, and the browser tests of the apps a change reaches, on every pull
 request, so merge once those pass and the pull request has no conflicts with
 `main`. If the repo has a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`
-secret, Claude also reviews each pull request, as [REVIEW.md](REVIEW.md) says:
-it splits the change into areas by what the files are about, and has reviewers
-read each area in full, with the rule files in `.claude/rules/` whose paths
-match its files. REVIEW.md's [How to report](REVIEW.md#how-to-report) section
-says how the review checks and posts what it finds. The first review reads the
-whole change, and each review after it reads what changed since the last review
-that finished. The review is one of the checks that must pass, so a review that
-can't run, that left a changed file or a rule file unread, or whose reviewers,
-checkers, check across areas, or posting step didn't finish, blocks the merge.
-Its findings don't fail the check; answer all of a review's findings in one
-push, by fixing each or replying why not, and resolve each thread, since `main`
-merges only once every thread is resolved.
+secret, Claude also reviews each pull request, as [REVIEW.md](REVIEW.md) says,
+once it's ready for review, and again only when it's labeled `review`, never on
+a push alone. It splits the change into areas by what the files are about, and
+has one reviewer read each area in full, with the rule files in `.claude/rules/`
+whose paths match its files. REVIEW.md's [How to report](REVIEW.md#how-to-report)
+section says how the review checks and posts what it finds. The first review
+reads the whole change, and each review after it reads what changed since the
+last review that finished. The review is one of the checks that must pass. A
+ready pull request's `check` fails until a review has passed on the code that
+merges, the pull request merged into `main`. A review that can't run, that left
+a changed file or a rule file unread, or whose reviewers, check across areas, or
+posting step didn't finish, blocks the merge. Its findings don't fail the check;
+answer all of a review's findings in one push, by fixing each or replying why
+not. Then add the `review` label to have it reviewed again, which takes the
+label off, and resolve each thread, since `main` merges only once every thread
+is resolved.
 
 A change that only an iPhone can test, like one to how the page's parts slide or
 layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone`

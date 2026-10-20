@@ -30,7 +30,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Red changes
 
-- Take a red change to its branch and PR, open it as a draft, deploy it to beta once its CI passes, as "The beta channel" above says,
+- Take a red change to its branch and PR, deploy it to beta once its CI passes, as "The beta channel" above says,
   and stop there: tell the user what to use on the phone, and wait, keeping to steps 4 to 6 of AGENTS.md's list meanwhile.
   Its PR stays a draft while the owner tries its design on beta:
   CI tests a draft, and beta deploys it, as for any PR, but CI reviews it only once it's ready for review.
@@ -51,22 +51,22 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Step 7: what CI's review does
 
+- CI reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
 - CI's review splits the change into areas by what the files are about, each test with its code (the root's `worker/plan-review.mjs`),
-  and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests.
-  Each area's reviewers read the rule files whose `paths` match its files, as well as its diffs.
-  How a checker then confirms what they find, and how each finding is posted, is under "How to report" in the root's `REVIEW.md`.
-  Each area's reviewers and then its checker run on their own (`.github/workflows/review-area.yml`), so no area waits on another's.
+  and one reviewer an area looks for every item in `REVIEW.md`'s "What to look for" and lists every problem it finds.
+  Each area's reviewer reads the rule files whose `paths` match its files, as well as its diffs.
+  Each area's reviewer runs on its own (`.github/workflows/review-area.yml`), so no area waits on another's.
+  How the check across areas then confirms what they find, and how each finding is posted, is under "How to report" in the root's `REVIEW.md`.
   The first review reads the whole change, and each review after it reads what changed since the last review that finished.
-  A review of a push with anything to read reads the whole change once more alongside, one reviewer an area,
-  and posts what that read found only when the push's review finishes and posts nothing new, and the summary names it then.
-  A push that changes only what a merge of its base brings in isn't reviewed again.
+  A review asked for on the head the last finished review read in full reads nothing,
+  and so does one whose pushes since change only what a merge of its base brings in.
   The `review` job checks what each reviewer actually read and writes the summary comment "How to report" describes (the root's `worker/judge-review.mjs`).
-  It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each,
+  It fails when any changed file went unread, or when a reviewer, the check across areas, or the posting step didn't finish, naming each,
   a reviewer that left one of its area's rule files unread among them.
   If the summary names something it couldn't judge, tell the user.
-- If `review` fails, read its summary and the log of the failed job, an area's `find` or `check` under `review-area`, or `review-across` or `review-post`, or its `review-final-` twin, which shows each try's turns and tool calls.
+- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`, which shows each try's turns and tool calls.
   If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
-  Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and each checker and the check across areas once.
+  Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and the check across areas once.
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
   where a review stalled, or a re-run that failed too.
   `check` can't pass until the job does.
@@ -77,6 +77,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Until then, tell the user it's ready and wait.
   An OK in chat never stands in for the label.
   Merge it yourself: the owner doesn't.
+- `check` holds the code that merges, the PR merged into `main` as `main` is then,
+  so when `main` moved after the PR's last review, the run `phone-ok` starts fails `check` for want of a review.
+  Add the `review` label then.
 
 ## Step 9: the deploy
 
