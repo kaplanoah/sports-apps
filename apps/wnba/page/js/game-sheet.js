@@ -443,8 +443,6 @@ export function startGameSheet() {
   for (const holder of ["seasonGames", "gameSearch", "updates", "teamBody"])
     watchGameOpens(findElement(holder), { open: openFromRow, prepare: prepareFromRow });
   wireSheet(findSheet(), {
-    closeButton: findElement("gameCloseBtn"),
-    backButton: findElement("gameBackBtn"),
     findScroller: sections.findShownSection,
     keeper: { read: readShownGame, reopen: reopenGameSheet },
     name: "Game",

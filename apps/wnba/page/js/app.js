@@ -25,7 +25,7 @@ import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
-import { fillSeasonPicker } from "#shared/season-picker.js";
+import { fillSeasonPicker, keepSeasonYears, watchSeasonPicks } from "#shared/season-picker.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { startServiceWorker } from "#shared/service-worker.js";
 import { isSettingShown, openSettings, startSettingsSheet } from "#shared/settings-sheet.js";
@@ -128,10 +128,11 @@ const readLastSeenSchedule = (schedule) =>
 function drawLastSeen() {
   const lastSeen = readLastSeen();
   if (!lastSeen?.season || !isReadableSeason(lastSeen.season, SNAPSHOT_VERSION)) return;
-  const { year, season, schedule, news } = session;
+  const { year, pickedYear, season, schedule, news } = session;
   try {
     Object.assign(session, {
       year: lastSeen.year,
+      pickedYear: lastSeen.year,
       season: lastSeen.season,
       schedule: readLastSeenSchedule(lastSeen.schedule),
       news: readLastSeenNews(lastSeen.news),
@@ -139,7 +140,7 @@ function drawLastSeen() {
     renderAll();
     endLoadNote();
   } catch {
-    Object.assign(session, { year, season, schedule, news });
+    Object.assign(session, { year, pickedYear, season, schedule, news });
   }
 }
 
@@ -155,24 +156,20 @@ const readShown = () =>
     news: session.news,
   };
 
-const findSeasonPicker = () => /** @type {HTMLSelectElement} */ (findElement("seasonPicker"));
+const findSeasonRow = () => findElement("seasonRow");
 
-async function listSeasonYears() {
-  try {
-    return await loadSeasonYears();
-  } catch {
-    return [];
-  }
-}
+const readSeasonYears = keepSeasonYears(loadSeasonYears);
 
-/** @param {string[]} years */
+/** @param {string[] | null} years */
 const fillSeasonList = (years) =>
-  fillSeasonPicker(findSeasonPicker(), years, session.year, LEAGUE_WORDS);
+  fillSeasonPicker(
+    findSeasonRow(),
+    { years, pickedYear: session.pickedYear, currentYear: session.currentYear },
+    LEAGUE_WORDS,
+  );
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
-/** @param {number} year */
-async function switchSeason(year) {
-  await showYear(year);
+function drawPickedSeason() {
   startOverDayStrip();
   renderAll();
 }
@@ -181,7 +178,7 @@ async function switchSeason(year) {
 async function showNewCurrentYear() {
   startOverDayStrip();
   renderAll();
-  fillSeasonList(await listSeasonYears());
+  fillSeasonList(await readSeasonYears());
 }
 
 const readSearchPages = () =>
@@ -290,9 +287,11 @@ async function boot() {
   startChannelTag();
   startNewsRedraws(findElement("newsList"), drawNews, NEWS_LEAGUE);
   startHomeScreen();
-  findSeasonPicker().addEventListener("change", () =>
-    switchSeason(Number(findSeasonPicker().value)),
-  );
+  watchSeasonPicks(findSeasonRow(), {
+    pick: showYear,
+    showPicked: drawPickedSeason,
+    showUnread: () => redrawEased(renderStamp),
+  });
   startBracket();
   startBracketStandings();
   session.db = createWorkerStore();
@@ -305,11 +304,11 @@ async function boot() {
   keepLastSeen(readShown);
   startSeasonData({
     showChange: showNewData,
-    showStamp: renderStamp,
+    showStamp: () => redrawEased(renderStamp),
     showCurrentYear: showNewCurrentYear,
     showUnreadable: reloadIfReplaced,
   });
-  const [years] = await Promise.all([listSeasonYears(), loadSeason()]);
+  const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillSeasonList(years);
   redrawEased(drawLoadedSeason);
   watchNews(session.db, (news) => {

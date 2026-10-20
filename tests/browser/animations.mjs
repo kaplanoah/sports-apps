@@ -3,6 +3,10 @@
 // long as what it moves and never counts here.
 
 import { expect } from "@playwright/test";
+import { EASE_MS } from "../../shared/page/eased-redraw.js";
+
+/** Where a test holds the page's shared easing still, halfway through. */
+export const EASE_HALFWAY_MS = EASE_MS / 2;
 
 /**
  * Each animation on the page that plays over time, by what it animates and the element it moves,
@@ -36,22 +40,41 @@ export const waitForTimedAnimations = (page) =>
   expect.poll(async () => (await describeTimedAnimations(page)).length).toBe(0);
 
 /**
- * Keeps a list of each animation the page plays over time from then on, by the class of the
- * element it moves, with its first and last frames, and returns a way to read the list.
+ * Moves every animation on the page that plays over time to its end at once.
  * @param {import("@playwright/test").Page} page
- * @returns {Promise<() => Promise<{ element: string, first: Keyframe, last: Keyframe }[]>>}
+ */
+export const finishTimedAnimations = (page) =>
+  page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((animation) => animation.timeline === document.timeline)
+      .forEach((animation) => animation.finish()),
+  );
+
+/**
+ * An animation the page played over time: the classes of the element it moves, its first and last
+ * frames, and the way it plays them.
+ * @typedef {{ classes: string[], first: Keyframe, last: Keyframe, direction: string }} PlayedAnimation
+ */
+
+/**
+ * Keeps a list of each animation the page plays over time from then on, and returns a way to read
+ * the list.
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<() => Promise<PlayedAnimation[]>>}
  */
 export async function listAnimations(page) {
   await page.addInitScript(() => {
-    /** @type {{ element: string, first: Keyframe, last: Keyframe }[]} */
+    /** @type {PlayedAnimation[]} */
     const animations = [];
     Object.assign(window, { animations });
     const animate = Element.prototype.animate;
     Element.prototype.animate = function (frames, options) {
       const animation = animate.call(this, frames, options);
       const [first, last] = /** @type {Keyframe[]} */ (frames);
+      const direction = (typeof options === "object" ? options.direction : undefined) ?? "normal";
       if (animation.timeline === document.timeline)
-        animations.push({ element: this.getAttribute("class") ?? "", first, last });
+        animations.push({ classes: [...this.classList], first, last, direction });
       return animation;
     };
   });

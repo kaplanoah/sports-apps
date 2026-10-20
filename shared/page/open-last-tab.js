@@ -12,9 +12,13 @@ function readStored(key) {
   }
 }
 
-// After two minutes away, a part that starts hidden, like a search, is hidden again
-// (show-last-drawn.js), and a tab that shows nothing else goes back to the tab before it.
-const TAB_START_AFTER_AWAY_MS = 2 * 60 * 1000;
+// After two minutes away, a view goes back to where it starts, as the page's modules do
+// (long-away.js): a part that starts hidden, like a search, is hidden again (show-last-drawn.js),
+// and a tab that shows nothing else goes back to the tab before it.
+const START_AFTER_AWAY_MS = 2 * 60 * 1000;
+
+/** @param {unknown} savedAt */
+const isLongAwayFrom = (savedAt) => !(Date.now() - Number(savedAt) < START_AFTER_AWAY_MS);
 
 /**
  * The part a tab's view shows alone, when it starts hidden, as a search's own view does.
@@ -33,12 +37,11 @@ function isStartedOver(tab) {
   const part = findOnlyStartHiddenPart(tab);
   if (!part) return false;
   const saved = readSavedPart(part.id);
-  return (
-    !saved ||
-    saved.hidden === true ||
-    !(Date.now() - Number(saved.savedAt) < TAB_START_AFTER_AWAY_MS)
-  );
+  return !saved || saved.hidden === true || isLongAwayFrom(saved.savedAt);
 }
+
+// What last-seen.js saves the parts the page draws whole under, which show-last-drawn.js puts back.
+const LAST_DRAWN_KEY = "lastDrawn";
 
 /**
  * What the page saved of a part it draws whole as it last left the screen, or null.
@@ -46,7 +49,7 @@ function isStartedOver(tab) {
  */
 function readSavedPart(id) {
   try {
-    return JSON.parse(readStored("lastDrawn") ?? "null")?.[id] ?? null;
+    return JSON.parse(readStored(LAST_DRAWN_KEY) ?? "null")?.[id] ?? null;
   } catch {
     return null;
   }

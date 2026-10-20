@@ -118,8 +118,6 @@ export function startTeamSheet(teams) {
   const sheet = findSheet();
   sections = sheet.querySelector(".sheet-sections") ? wireSheetSections(sheet) : null;
   wireSheet(sheet, {
-    closeButton: findElement("teamCloseBtn"),
-    backButton: document.getElementById("teamBackBtn") ?? undefined,
     findScroller: sections?.findShownSection,
     keeper: { read: readShownTeam, reopen: reopenTeamSheet },
     name: "Team",

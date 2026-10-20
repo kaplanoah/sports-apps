@@ -73,7 +73,7 @@ test("the sliders button opens settings, and its close button, Escape, or the ba
 test("settings open on a reload show again, with the season, notifications, and ranking, before the page's code arrives", async ({
   page,
 }) => {
-  await openApp(page);
+  await openApp(page, WITH_A_PAST_SEASON);
   const settings = page.getByRole("dialog", { name: "Settings" });
   await openSettings(page);
   await expect(settings.locator("#rankList .rank-item")).toHaveCount(12);

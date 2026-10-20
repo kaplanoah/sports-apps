@@ -155,16 +155,33 @@ async function followPage(response) {
 
 /** @type {Promise<boolean> | null} */
 let refreshing = null;
+/** @type {Promise<boolean> | null} */
+let refreshingAfresh = null;
 
-// One read at a time, shared by every open and every page waiting on it.
-function refreshCopy() {
-  refreshing ??= fetch(findPageAddress())
+// One refresh at a time, shared by every open and every page waiting on it, so two never keep
+// their own page's files and forget each other's. An open the copy can't answer reads the page
+// itself, which refreshes the copy unless a refresh is already under way.
+/** @param {() => Promise<Response>} readPage */
+function refreshCopyFrom(readPage) {
+  refreshing ??= readPage()
     .then(followPage)
     .catch(() => false)
     .finally(() => {
       refreshing = null;
     });
   return refreshing;
+}
+
+const refreshCopy = () => refreshCopyFrom(() => fetch(findPageAddress()));
+
+// A release check needs a read that began after it asked, since one already under way may have
+// begun before the deploy reached this server, so it waits for that one and then reads again.
+function refreshCopyAfresh() {
+  refreshingAfresh ??= (refreshing ?? Promise.resolve()).then(() => {
+    refreshingAfresh = null;
+    return refreshCopy();
+  });
+  return refreshingAfresh;
 }
 
 /**
@@ -192,7 +209,8 @@ async function openPage(event) {
     return copy;
   }
   const response = await openPageFromWorker(event);
-  event.waitUntil(followPage(response.clone()).catch(() => {}));
+  const kept = response.clone();
+  event.waitUntil(refreshCopyFrom(async () => kept));
   return response;
 }
 
@@ -280,7 +298,7 @@ self.addEventListener("activate", () => {
 // open the copy it already runs.
 self.addEventListener("message", (event) => {
   if (event.data?.type !== "refreshPageCopy") return;
-  event.waitUntil(refreshCopy().then((isCurrent) => event.ports[0]?.postMessage(isCurrent)));
+  event.waitUntil(refreshCopyAfresh().then((isCurrent) => event.ports[0]?.postMessage(isCurrent)));
 });
 
 // A page leaving the screen names the pictures it shows, and only those stay.

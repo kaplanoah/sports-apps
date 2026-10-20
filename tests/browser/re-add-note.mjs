@@ -1,40 +1,164 @@
 import { expect } from "@playwright/test";
+import { EASE_HALFWAY_MS, finishTimedAnimations, listAnimations } from "./animations.mjs";
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
 import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
+import { listLowContrastText } from "./contrast.mjs";
 import { WELCOME } from "./home-screen-help.mjs";
 import { SETTINGS } from "./settings.mjs";
 import { holdRequests } from "./hold-requests.mjs";
+import { keepInOtherTab } from "./other-tab.mjs";
+import { listStrayPeriods } from "./stray-periods.mjs";
+import { listTapsOffButtons } from "./tap-states.mjs";
+import { listTextOffRoles } from "./type-roles.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
 
 const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
 };
 
+// Notes, for each easing the note starts, whether it started inside the event that reports a
+// change of the phone's look, in `lookChangeEasings`.
+const markLookChangeEasings = () => {
+  /** @type {boolean[]} */
+  const easings = [];
+  Reflect.set(window, "lookChangeEasings", easings);
+  let isInLookChange = false;
+  const { addEventListener } = MediaQueryList.prototype;
+  /** @type {any} */ (MediaQueryList.prototype).addEventListener = function (
+    /** @type {string} */ type,
+    /** @type {(event: Event) => void} */ listener,
+    /** @type {any} */ options,
+  ) {
+    /** @param {Event} event */
+    const reportedInLookChange = (event) => {
+      isInLookChange = true;
+      try {
+        listener.call(this, event);
+      } finally {
+        isInLookChange = false;
+      }
+    };
+    return addEventListener.call(
+      this,
+      type,
+      type === "change" ? reportedInLookChange : listener,
+      options,
+    );
+  };
+  const { animate } = Element.prototype;
+  Element.prototype.animate = function (keyframes, options) {
+    if (this.classList.contains("re-add-note")) easings.push(isInLookChange);
+    return animate.call(this, keyframes, options);
+  };
+};
+
+const NOTE_WORDS =
+  "Apple only sets icons when you add a site to your home screen. To update your icon, re-add the site";
+
 /**
- * Picks the dark look in Settings on an iPhone's Home Screen app and checks the note under the
- * icons says how to update the icon, with a link that opens Safari on that look, then checks
- * neither the browser nor an Android Home Screen app shows the note.
- * @param {{
+ * @typedef {{
  *   page: import("@playwright/test").Page,
- *   context: import("@playwright/test").BrowserContext,
- *   browser: import("@playwright/test").Browser,
  *   openApp: (page: import("@playwright/test").Page) => Promise<unknown>,
  *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
  *   looks: { light: string, dark: string },
- * }} app
+ * }} App
  */
-export async function checkReAddNote({ page, context, browser, openApp, openSettings, looks }) {
+
+/**
+ * Opens the page as a Home Screen app added on `look`, which opens at the address that names it.
+ * @param {import("@playwright/test").Page} page
+ * @param {App["openApp"]} openApp
+ * @param {"light" | "dark"} look
+ */
+async function openHomeScreenApp(page, openApp, look) {
   await page.addInitScript(markOnHomeScreen);
   await openApp(page);
+  await page.goto(`/?theme=${look}`);
+}
+
+/** @param {import("@playwright/test").Page} page */
+const findNote = (page) => page.locator("#appearanceNote");
+
+/**
+ * The looks of the icons the note draws, by the picture each shows: the one the app has, then the
+ * one adding it again gives.
+ * @param {import("@playwright/test").Page} page
+ */
+const readNoteIcons = (page) =>
+  findNote(page)
+    .locator(".home-screen-icon")
+    .evaluateAll((icons) => {
+      const probe = document.createElement("span");
+      document.body.append(probe);
+      /** @param {string} look */
+      const readPicture = (look) => {
+        probe.style.backgroundImage = `var(--home-screen-icon-${look})`;
+        return getComputedStyle(probe).backgroundImage;
+      };
+      const pictures = { light: readPicture("light"), dark: readPicture("dark") };
+      probe.remove();
+      return icons.map(
+        (icon) =>
+          Object.keys(pictures).find(
+            (look) => pictures[look] === getComputedStyle(icon).backgroundImage,
+          ) ?? "neither",
+      );
+    });
+
+/**
+ * Checks the page with the note showing, as each app's tests check every view: each text in its
+ * type role, readable, ending as its sentences call for, and each tap landing on a button.
+ * @param {import("@playwright/test").Page} page
+ */
+async function checkNoteReads(page) {
+  expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listLowContrastText(page)).toEqual([]);
+  expect(await listStrayPeriods(page)).toEqual([]);
+  expect(await listTapsOffButtons(page)).toEqual([]);
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {string} name
+ */
+const pick = (page, name) =>
+  page.locator("#settingsDialog").getByRole("radio", { name, exact: true }).check();
+
+/** @param {import("@playwright/test").Page} page */
+const closeSettings = (page) => page.locator("#settingsDialog .settings-body .sheet-close").click();
+
+/**
+ * In an iPhone's Home Screen app added on the dark look, picking the light one in settings shows
+ * the note `noteAbove` pixels under the icons' names, with the icon the app has, the one adding it
+ * again gives, and a link that opens Safari on the light look. Picking the dark look again takes
+ * it away, and it shows on each open of settings, and after a reload, while the light look stays
+ * picked, on System while the phone shows the light look, with a link on System, and follows a
+ * look picked in another tab, but never in the browser or in an Android Home Screen app.
+ * @param {App & {
+ *   context: import("@playwright/test").BrowserContext,
+ *   browser: import("@playwright/test").Browser,
+ *   noteAbove: number,
+ * }} app
+ */
+export async function checkReAddNote({
+  page,
+  context,
+  browser,
+  openApp,
+  openSettings,
+  looks,
+  noteAbove,
+}) {
+  await openHomeScreenApp(page, openApp, "dark");
   await openSettings(page);
-  const note = page.locator("#appearanceNote");
+  const note = findNote(page);
   await expect(note).toBeHidden();
-  await page.getByRole("radio", { name: looks.dark }).check();
-  await expect(note).toHaveText(
-    "Apple only sets icons when you add a site to your home screen. To update your icon, re-add the site",
-  );
+
+  await pick(page, looks.light);
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
   const safariAddress = new URL(page.url());
-  safariAddress.searchParams.set("app-theme", "dark");
+  safariAddress.searchParams.set("app-theme", "light");
   await expect(note.getByRole("link", { name: "re-add the site" })).toHaveAttribute(
     "href",
     `x-safari-${safariAddress.href}`,
@@ -46,25 +170,323 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
         .bottom,
     SETTINGS,
   );
-  // The row's 14px gap, less the 3px the note's tall lines and the names over it add.
-  expect(noteBelowIcons).toBe(11);
+  expect(noteBelowIcons).toBe(noteAbove);
+  await checkNoteReads(page);
+
+  await pick(page, looks.dark);
+  await expect(note).toBeHidden();
+  await pick(page, looks.light);
+  await closeSettings(page);
+  await openSettings(page);
+  await expect(note).toHaveText(NOTE_WORDS);
+  await closeSettings(page);
+  await page.reload();
+  await openSettings(page);
+  await expect(note).toBeVisible();
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  await page.emulateMedia({ colorScheme: "light" });
+  await pick(page, "System");
+  await expect(note).toBeVisible();
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  safariAddress.searchParams.set("app-theme", "auto");
+  await expect(note.getByRole("link", { name: "re-add the site" })).toHaveAttribute(
+    "href",
+    `x-safari-${safariAddress.href}`,
+  );
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(note).toBeHidden();
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(note).toBeVisible();
+  await keepInOtherTab(page, "appearance", "light");
+  await expect(note).toBeVisible();
+  await keepInOtherTab(page, "appearance", "dark");
+  await expect(note).toBeHidden();
 
   const browserTab = await context.newPage();
   await openApp(browserTab);
   await openSettings(browserTab);
-  await browserTab.getByRole("radio", { name: looks.light }).check();
+  await pick(browserTab, looks.light);
   await expect(browserTab.locator("html")).toHaveAttribute("data-theme", "light");
-  await expect(browserTab.locator("#appearanceNote")).toBeHidden();
+  await expect(findNote(browserTab)).toBeHidden();
 
   const android = await browser.newContext({ userAgent: ANDROID_AGENT, reducedMotion: "reduce" });
   const androidApp = await android.newPage();
-  await androidApp.addInitScript(markOnHomeScreen);
-  await openApp(androidApp);
+  await openHomeScreenApp(androidApp, openApp, "light");
   await openSettings(androidApp);
-  await androidApp.getByRole("radio", { name: looks.dark }).check();
+  await pick(androidApp, looks.dark);
   await expect(androidApp.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(androidApp.locator("#appearanceNote")).toBeHidden();
+  await expect(findNote(androidApp)).toBeHidden();
   await android.close();
+}
+
+/**
+ * A reload with settings open on the note shows the note as it was before the page's code arrives,
+ * so nothing under it moves once the code runs, and the code still takes it away once it's no longer
+ * due.
+ * @param {App} app
+ */
+export async function checkReAddNoteOnReload({ page, openApp, openSettings, looks }) {
+  await openHomeScreenApp(page, openApp, "dark");
+  await openSettings(page);
+  await pick(page, looks.light);
+  const note = findNote(page);
+  await expect(note).toHaveText(NOTE_WORDS);
+  const readHeight = () => note.evaluate((element) => element.getBoundingClientRect().height);
+  const height = await readHeight();
+  const release = await holdRequests(page, matchPath("/js/app.js"), { times: 1 });
+
+  await page.reload({ waitUntil: "commit" });
+
+  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  await expect.poll(readHeight).toBe(height);
+
+  release();
+  await page.waitForLoadState("domcontentloaded");
+  await expect(note).toHaveText(NOTE_WORDS);
+  await expect.poll(readHeight).toBe(height);
+
+  // The page's code, not the copy put back, decides: a look another tab picked while the page
+  // was away takes the note away once the code runs.
+  const releaseAgain = await holdRequests(page, matchPath("/js/app.js"), { times: 1 });
+  await page.reload({ waitUntil: "commit" });
+  await expect(note).toHaveText(NOTE_WORDS);
+  await page.evaluate(() => localStorage.setItem("appearance", JSON.stringify("dark")));
+  releaseAgain();
+  await page.waitForLoadState("domcontentloaded");
+  await expect(note).toBeEmpty();
+}
+
+/**
+ * The note's X takes it away for good in that install of the app: not on settings' next open, a
+ * pick that sets the icon off again, or a reload.
+ * @param {App} app
+ */
+export async function checkReAddNoteDismissal({ page, openApp, openSettings, looks }) {
+  await openHomeScreenApp(page, openApp, "dark");
+  await openSettings(page);
+  await pick(page, looks.light);
+  const note = findNote(page);
+  await expect(note).toBeVisible();
+  const dismiss = note.getByRole("button", { name: "Dismiss icon note" });
+  const { x, y, width, height } = await dismiss.boundingBox();
+  // A finger lands on the X itself, as an iPhone hands the page a tap only on a button.
+  expect(
+    await page.evaluate(
+      ([pointX, pointY]) => document.elementFromPoint(pointX, pointY)?.closest("button")?.id,
+      [x + width / 2, y + height / 2],
+    ),
+  ).toBe("dismissReAddNote");
+  await dismiss.click();
+  await expect(note).toBeHidden();
+
+  await pick(page, looks.dark);
+  await pick(page, looks.light);
+  await expect(note).toBeHidden();
+  await closeSettings(page);
+  await page.reload();
+  await openSettings(page);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(note).toBeHidden();
+}
+
+/**
+ * A Home Screen app added on System, whose address names no look, has the icon the phone's
+ * setting showed as it first opened, and keeps it when the phone's setting changes, so on System
+ * the note shows while the phone's setting isn't the icon's.
+ * @param {App} app
+ */
+export async function checkSystemInstallIcon({ page, openApp, openSettings, looks }) {
+  await page.addInitScript(markOnHomeScreen);
+  await page.emulateMedia({ colorScheme: "light" });
+  await openApp(page);
+  await openSettings(page);
+  await expect(findNote(page)).toBeHidden();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.reload();
+  if (!(await page.locator("#settingsDialog").isVisible())) await openSettings(page);
+  await expect(findNote(page)).toBeVisible();
+  expect(await readNoteIcons(page)).toEqual(["light", "dark"]);
+  await checkNoteReads(page);
+  await pick(page, looks.dark);
+  expect(await readNoteIcons(page)).toEqual(["light", "dark"]);
+  await pick(page, looks.light);
+  await expect(findNote(page)).toBeHidden();
+}
+
+/**
+ * A reload, as a new release brings, opens at the address the app's open before it left without
+ * the look it was added with, so an app that has yet to keep its icon keeps none until it next
+ * opens, rather than the phone's setting, and settings says nothing of it meanwhile.
+ * @param {App} app
+ */
+export async function checkIconKeptOnlyOnOpen({ page, openApp, openSettings }) {
+  const readIcon = await reloadWithoutIcon(page, openApp);
+
+  expect(await readIcon()).toBeNull();
+  await openSettings(page);
+  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(findNote(page)).toBeHidden();
+}
+
+/**
+ * Opens a Home Screen app added on the dark look, on a light phone, then reloads it, as a new
+ * release does, with its icon forgotten, as an app open when the note shipped never kept one.
+ * @param {import("@playwright/test").Page} page
+ * @param {App["openApp"]} openApp
+ * @returns {Promise<() => Promise<string | null>>} reads the icon the app keeps
+ */
+async function reloadWithoutIcon(page, openApp) {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openHomeScreenApp(page, openApp, "dark");
+  const readIcon = () => page.evaluate(() => localStorage.getItem("homeScreenIcon"));
+  expect(await readIcon()).toBe("dark");
+  await page.evaluate(() => localStorage.removeItem("homeScreenIcon"));
+  // The test's fake clock stands in for the page's timing, which says how the browser loaded it.
+  await page.addInitScript(() => {
+    performance.getEntriesByType = (type) =>
+      type === "navigation" ? [/** @type {any} */ ({ type: "reload" })] : [];
+  });
+  await page.reload();
+  return readIcon;
+}
+
+/**
+ * An app that doesn't know its icon shows the note from the first switch of looks, with the other
+ * look as the icon it has, and, on System, the phone's look, linking to Safari on System. It stays
+ * through further picks and a reload, until the X takes it away for good in that install.
+ * @param {App} app
+ */
+export async function checkNoteWithoutIcon({ page, openApp, openSettings, looks }) {
+  await reloadWithoutIcon(page, openApp);
+  await openSettings(page);
+  const note = findNote(page);
+  await expect(note).toBeHidden();
+
+  await pick(page, looks.light);
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  await pick(page, looks.dark);
+  expect(await readNoteIcons(page)).toEqual(["light", "dark"]);
+  await pick(page, "System");
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  const safariAddress = new URL(page.url());
+  safariAddress.searchParams.set("app-theme", "auto");
+  await expect(note.getByRole("link", { name: "re-add the site" })).toHaveAttribute(
+    "href",
+    `x-safari-${safariAddress.href}`,
+  );
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect.poll(() => readNoteIcons(page)).toEqual(["light", "dark"]);
+
+  await page.reload();
+  if (!(await page.locator("#settingsDialog").isVisible())) await openSettings(page);
+  await expect(note).toHaveText(NOTE_WORDS);
+  await note.getByRole("button", { name: "Dismiss icon note" }).click();
+  await expect(note).toBeHidden();
+  await pick(page, looks.light);
+  await expect(note).toBeHidden();
+}
+
+/**
+ * With motion on, the note grows in as a pick sets the icon off, and shrinks away as one brings it
+ * back, from its full frame to nothing on its opening's curve, quick at first and settling at its
+ * end, and only then empties, never starting over for another pick
+ * that keeps it away while it shrinks, growing back from wherever its close has reached for one
+ * that wants it again, and shrinking from wherever its opening has reached, then growing back to
+ * full for one that wants it again. On System, it eases in for a change of the phone's look in a
+ * task of its own, outside the event that reports the change, as for a pick.
+ * @param {App} app
+ */
+export async function checkReAddNoteEases({ page, openApp, openSettings, looks }) {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.addInitScript(markLookChangeEasings);
+  const readAnimations = await listAnimations(page);
+  await openHomeScreenApp(page, openApp, "dark");
+  await openSettings(page);
+  const note = findNote(page);
+  const readEasings = async () =>
+    (await readAnimations()).filter(({ classes }) => classes.includes("re-add-note"));
+  const readLastEasing = async () => (await readEasings()).at(-1);
+  // Picks the look and holds the note's easing still halfway, in one step, so the easing can't
+  // finish between them, and reads what the note shows there.
+  /** @param {"light" | "dark"} look */
+  const pickHeldHalfway = (look) =>
+    note.evaluate((element, [value, halfway]) => {
+      /** @type {HTMLInputElement} */ (
+        document.querySelector(`#settingsDialog input[name="appearance"][value="${value}"]`)
+      ).click();
+      for (const animation of element.getAnimations()) {
+        animation.pause();
+        animation.currentTime = halfway;
+      }
+      const { height, opacity } = getComputedStyle(element);
+      return { height, opacity, isFilled: element.childElementCount > 0 };
+    }, /** @type {const} */ ([look, EASE_HALFWAY_MS]));
+
+  await pick(page, looks.light);
+  await expect(note).toBeVisible();
+  const opening = await readLastEasing();
+  expect(opening).toMatchObject({ first: { height: "0px", opacity: 0 }, last: { opacity: "1" } });
+  expect(opening.direction).toBe("normal");
+  await finishTimedAnimations(page);
+  const full = await note.evaluate((element) => getComputedStyle(element).height);
+
+  const halfClosed = await pickHeldHalfway("dark");
+  expect(await readLastEasing()).toEqual({
+    ...opening,
+    first: opening.last,
+    last: opening.first,
+  });
+  expect(halfClosed.isFilled).toBe(true);
+  expect(parseFloat(halfClosed.height)).toBeLessThan(parseFloat(full));
+  await page.emulateMedia({ colorScheme: "dark" });
+  await pick(page, "System");
+  expect(await readEasings()).toHaveLength(2);
+
+  await pick(page, looks.light);
+  const reopening = await readLastEasing();
+  expect(reopening.direction).toBe("normal");
+  expect(reopening.first).toMatchObject({
+    height: halfClosed.height,
+    opacity: halfClosed.opacity,
+  });
+  expect(reopening.last).toMatchObject({ height: full, opacity: "1" });
+  await finishTimedAnimations(page);
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(NOTE_WORDS);
+
+  await pick(page, looks.dark);
+  await finishTimedAnimations(page);
+  await expect(note).toBeEmpty();
+  const halfOpen = await pickHeldHalfway("light");
+  const closedFromHalfOpen = await pickHeldHalfway("dark");
+  const closing = await readLastEasing();
+  expect(closing.direction).toBe("normal");
+  expect(closing.first.height).toBe(halfOpen.height);
+  expect(closing.last.height).toBe("0px");
+  expect(parseFloat(halfOpen.height)).toBeLessThan(parseFloat(full));
+  await pick(page, looks.light);
+  expect(await readLastEasing()).toMatchObject({
+    direction: "normal",
+    first: { height: closedFromHalfOpen.height, opacity: closedFromHalfOpen.opacity },
+    last: { height: full, opacity: "1" },
+  });
+  await finishTimedAnimations(page);
+  await expect(note).toHaveCSS("height", full);
+  await pick(page, looks.dark);
+  await finishTimedAnimations(page);
+  await expect(note).toBeHidden();
+  await expect(note).toBeEmpty();
+
+  await pick(page, "System");
+  await finishTimedAnimations(page);
+  await expect(note).toBeEmpty();
+  await page.evaluate(() => Reflect.get(window, "lookChangeEasings").splice(0));
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(note).toBeVisible();
+  expect(await page.evaluate(() => Reflect.get(window, "lookChangeEasings"))).toEqual([false]);
 }
 
 /**
@@ -86,8 +508,7 @@ const buildHandoffLink = (look) =>
   );
 
 /** @param {import("@playwright/test").Page} page */
-const findReAddLink = (page) =>
-  page.locator("#appearanceNote").getByRole("link", { name: "re-add the site" });
+const findReAddLink = (page) => findNote(page).getByRole("link", { name: "re-add the site" });
 
 // The page counts, in its own steps, each handoff it asks for as it asks, each answer as it
 // arrives, and each answer's body as it's read, so a test reads where the page is rather than
@@ -119,13 +540,15 @@ function countHandoffs(handoffPath) {
 const readHandoffs = (page) => page.evaluate(() => /** @type {any} */ (window).handoffs);
 
 /**
- * Signs in to an iPhone's Home Screen app behind its access code and opens settings, with the
- * page counting its handoffs.
+ * Signs in to an iPhone's Home Screen app behind its access code, added on System on a phone set
+ * to light, so its icon is the light look's, and opens settings, with the page counting its
+ * handoffs.
  * @param {LockedApp} app
  */
 async function openLockedSettings({ page, serveLockedApp, openSettings }) {
   await page.addInitScript(markOnHomeScreen);
   await page.addInitScript(countHandoffs, HANDOFF_PATH);
+  await page.emulateMedia({ colorScheme: "light" });
   await serveLockedApp(page, { accessCode: "FASTBREAK" });
   await page.goto(LOCKED_PAGE_PATH);
   await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
@@ -146,11 +569,14 @@ async function leaveFor(page, ms) {
 }
 
 /**
- * Picks the light look and then the dark one before the light one's handoff answers, and checks
- * the link stays on the dark one, then that the note renews its handoff halfway through, tries
- * again soon after a renewal fails, renews as it comes back from short trips away once that's
- * due but not while a renewal's answer is still out, leaves with settings, renewing no more, and
- * renews no more once the Worker makes none.
+ * Picks the dark look, which sets the light icon off, and checks the link opens Safari at the
+ * page's own address until its handoff answers, asking once however the picks go meanwhile, and
+ * at the handoff's from then on, then that the note renews its handoff halfway through, tries
+ * again soon after a renewal fails, renews as it comes back from short trips away once that's due
+ * but not while a renewal's answer is still out, stops with settings closing, asks again as
+ * settings opens with the note showing, its link back at the page's own address until that
+ * answers, stops once a pick brings the icon's look back, goes back to the page's own address
+ * once the Worker makes none, and stops once the X dismisses the note.
  * @param {LockedApp} app
  */
 export async function checkHandoffRenewal(app) {
@@ -160,57 +586,93 @@ export async function checkHandoffRenewal(app) {
   const readAsked = async () => (await readHandoffs(page)).asked;
   const readAnswered = async () => (await readHandoffs(page)).answered;
   const readRead = async () => (await readHandoffs(page)).read;
+  const pageAddress = new URL(page.url());
+  pageAddress.searchParams.set("app-theme", "dark");
+  const pageLink = `x-safari-${pageAddress.href}`;
 
   const releaseFirst = await holdRequests(page, HANDOFF_ROUTE, { times: 1 });
-  await page.getByRole("radio", { name: looks.light }).check();
-  await page.getByRole("radio", { name: looks.dark }).check();
-  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  await pick(page, looks.dark);
+  await expect(link).toHaveAttribute("href", pageLink);
+  await expect.poll(readAsked).toBe(1);
+  await pick(page, looks.light);
+  await pick(page, looks.dark);
+  await expect(link).toHaveAttribute("href", pageLink);
+  expect(await readAsked()).toBe(1);
   releaseFirst();
-  await expect.poll(readRead).toBe(2);
+  await expect.poll(readRead).toBe(1);
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
-  expect(await readAsked()).toBe(2);
+  expect(await readAsked()).toBe(1);
 
   await page.route(HANDOFF_ROUTE, (route) => route.fulfill({ status: 503 }), { times: 1 });
   await page.clock.runFor(5 * 60 * 1000);
-  expect(await readAsked()).toBe(3);
-  await expect.poll(readAnswered).toBe(3);
+  expect(await readAsked()).toBe(2);
+  await expect.poll(readAnswered).toBe(2);
   await page.clock.runFor(30 * 1000);
-  expect(await readAsked()).toBe(4);
-  await expect.poll(readRead).toBe(3);
+  expect(await readAsked()).toBe(3);
+  await expect.poll(readRead).toBe(2);
 
   // Each trip is short of the two minutes that close settings, and the third passes the renewal.
   await leaveFor(page, 110 * 1000);
   await leaveFor(page, 110 * 1000);
-  expect(await readAsked()).toBe(4);
+  expect(await readAsked()).toBe(3);
   await leaveFor(page, 110 * 1000);
-  expect(await readAsked()).toBe(5);
-  await expect.poll(readRead).toBe(4);
+  expect(await readAsked()).toBe(4);
+  await expect.poll(readRead).toBe(3);
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
 
   // A return while a renewal's answer is still out, past when it was due, asks no second time.
   const releaseRenewal = await holdRequests(page, HANDOFF_ROUTE, { times: 1 });
   await page.clock.runFor(5 * 60 * 1000);
-  expect(await readAsked()).toBe(6);
+  expect(await readAsked()).toBe(5);
   await leaveFor(page, 110 * 1000);
-  expect(await readAsked()).toBe(6);
+  expect(await readAsked()).toBe(5);
   releaseRenewal();
-  await expect.poll(readRead).toBe(5);
+  await expect.poll(readRead).toBe(4);
 
-  await page.locator("#settingsCloseBtn").click();
-  await expect(page.locator("#appearanceNote")).toBeEmpty();
+  await closeSettings(page);
+  await page.clock.runFor(15 * 60 * 1000);
+  expect(await readAsked()).toBe(5);
+
+  const releaseReopened = await holdRequests(page, HANDOFF_ROUTE, { times: 1 });
+  await openSettings(page);
+  await expect.poll(readAsked).toBe(6);
+  await expect(link).toHaveAttribute("href", pageLink);
+  releaseReopened();
+  await expect.poll(readRead).toBe(5);
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  await pick(page, looks.light);
   await page.clock.runFor(15 * 60 * 1000);
   expect(await readAsked()).toBe(6);
 
-  await openSettings(page);
-  await page.getByRole("radio", { name: looks.light }).check();
+  await pick(page, looks.dark);
   await expect.poll(readRead).toBe(6);
   await page.route(HANDOFF_ROUTE, (route) => route.fulfill({ status: 404 }), { times: 1 });
   await page.clock.runFor(5 * 60 * 1000);
   expect(await readAsked()).toBe(8);
   await expect.poll(readAnswered).toBe(8);
+  await expect(link).toHaveAttribute("href", pageLink);
   await page.clock.runFor(10 * 60 * 1000);
   await leaveFor(page, 110 * 1000);
   expect(await readAsked()).toBe(8);
+
+  // A look kept in another tab shows or hides the note, and its handoff follows.
+  await keepInOtherTab(page, "appearance", "light");
+  await expect(findNote(page)).toBeHidden();
+  await keepInOtherTab(page, "appearance", "dark");
+  await expect.poll(readRead).toBe(7);
+  await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
+  expect(await readAsked()).toBe(9);
+  await keepInOtherTab(page, "appearance", "light");
+  await expect(findNote(page)).toBeHidden();
+  await page.clock.runFor(15 * 60 * 1000);
+  expect(await readAsked()).toBe(9);
+
+  await pick(page, looks.dark);
+  await expect.poll(readRead).toBe(8);
+  await findNote(page).getByRole("button", { name: "Dismiss icon note" }).click();
+  await expect(findNote(page)).toBeHidden();
+  await page.clock.runFor(15 * 60 * 1000);
+  expect(await readAsked()).toBe(10);
 }
 
 /**
@@ -222,7 +684,7 @@ export async function checkHandoffRenewal(app) {
 export async function checkReAddHandoff(app) {
   const { page, browser, serveLockedApp, looks } = app;
   await openLockedSettings(app);
-  await page.getByRole("radio", { name: looks.dark }).check();
+  await pick(page, looks.dark);
   const link = findReAddLink(page);
   await expect(link).toHaveAttribute("href", buildHandoffLink("dark"));
   const safariAddress = (await link.getAttribute("href")).replace("x-safari-", "");

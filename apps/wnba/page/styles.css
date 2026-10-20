@@ -181,6 +181,7 @@
   --radius-sheet: 14px;
   /* Puts the channel tag's middle on the middle of the name's capitals. */
   --channel-tag-lift: 0.25px;
+  --re-add-note-above: 14px;
   --control-height: 36px;
   --control-room: 15px;
   --scoreboard: #24180e;
@@ -1869,8 +1870,9 @@ th[aria-sort="ascending"] .roster-caret {
   }
 }
 
-/* The Updates box is a card like any other, raised off the floor inside an edge. */
-.updates {
+/* The Updates box and settings' icon note are cards like any other, raised off the floor inside an
+   edge. */
+.dismissible-box {
   border-color: var(--edge);
   background: var(--raised);
 }

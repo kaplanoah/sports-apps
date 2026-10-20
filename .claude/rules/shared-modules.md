@@ -21,8 +21,10 @@ paths:
       an earlier one or the current one once its last game is final
     - `device-storage.js`: keeping what a viewer chooses on their own device,
       listing every such choice, and telling the page when another tab changes one
+    - `local-storage.js`: what the page keeps on the device, which storage that refuses access or is full never breaks
   - Opening, coming back, and catching up:
     - `show-last-drawn.js`: putting back what each part the page draws whole last showed,
+      the switches its settings showed and the look picked,
       and the sheets it had open, before the first paint,
       and hiding again a part marked `data-start-hidden`, like the search, after two minutes away
     - `sheet-memory.js`: closing, before the page draws as it comes back or loads again,
@@ -39,6 +41,7 @@ paths:
     - `pull-to-refresh.js`: pulling a page on the Home Screen down to catch up
     - `resume.js`: the release check and catching up on return
     - `last-seen.js`: what the page last showed, drawn first on its next load
+    - `element-path.js`: where a part sits under another, so a copy of the markup or a later load finds it
     - `stamp.js`: the header's lines on the latest score and the next game, in words like "last night"
   - Settings and Diagnostics:
     - `settings-sheet.js`: the settings sheet
@@ -83,6 +86,14 @@ paths:
       and which the Home Screen app keeps on its first open.
       An iPhone's app, which keeps the icon it was added with, hands Safari a link to add the site again,
       opening Safari's page on that theme and the welcome.
+      It keeps each install's icon, from the address it opens at or, added on System, the phone's setting as it first opened.
+    - `re-add-note.js`: deciding when settings shows the note on updating the icon, while the look picked, or on System the phone's, isn't the icon's,
+      or, for an app that doesn't know its icon, from the first switch of looks,
+      and keeping that switch and its dismissal for that install
+    - `appearance.js`: settings' Appearance choices and the welcome's copy of them,
+      and the note on updating the icon, with both icons and an X,
+      whose link it keeps signed in with a fresh handoff while settings shows it
+    - `dismiss-button.js`: the X in the corner of a box like the note or the Updates box
   - Standings and bracket:
     - `bracket-standings.js`: one tab for a season's standings and its bracket,
       named Standings and opening on them until the playoff field is set, and Bracket from then on.
@@ -144,7 +155,7 @@ paths:
       from the list of a season's players the store keeps for it:
       - a team's
       - its section's
-      - a player's, even with a letter wrong, or by a team's name and the number a player wears,
+      - a player's, by any run of her name's words, even with a letter wrong, or by a team's name and the number a player wears,
         or while it's typed each number it starts, over the suggestions
       - a place's
       - a game's part's, like a final's Highlights or the next game's Matchup
@@ -210,7 +221,9 @@ paths:
     - `season-reader.js`: reading the season the store says is current,
       its record, which a page reads only in the version it knows,
       reloading once a newer release is out, and the store's status,
-      and moving on to the next season when the store does
+      and moving on to the next season when the store does.
+      It keeps each season a viewer picks while its record is on its way,
+      and puts it back on the season shown when it can't be read (`createSeasonPicks`).
     - `poll-schedule.js`: how long a league's next update waits, from where its games stand
     - `kept-read.js`: a read worked out again only once what it reads from changes, like each app's season for its search
     - the store client
@@ -229,6 +242,7 @@ paths:
   which pages link before their own `styles.css` and theme with the tokens their top comments list:
   - `type.css` lists the type roles
   - `chrome.css` styles the tab bar, settings sheet and its Diagnostics, round dots, Home Screen welcome and box,
+    a card with an X in its corner and settings' note on updating the icon,
     the catching-up line and the sweep once caught up, and pull to refresh's spokes
   - `pager.css` styles a pill's names and the standings and bracket under one
   - `day-strip.css` styles a season's list of days and its strip

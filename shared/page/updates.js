@@ -10,15 +10,9 @@ import {
   nameDay,
 } from "./days.js";
 import { createViewerChoice } from "./device-storage.js";
-import { easeClosed, stopEasing } from "./eased-redraw.js";
+import { renderDismissButton } from "./dismiss-button.js";
+import { easeBackOpen, easeClosed, isEasingClosed } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
-
-// Phosphor's x, at its Light weight, like the page's other close buttons.
-const DISMISS_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
-  <path
-    d="M204.24,195.76a6,6,0,1,1-8.48,8.48L128,136.49,60.24,204.24a6,6,0,0,1-8.48-8.48L119.51,128,51.76,60.24a6,6,0,0,1,8.48-8.48L128,119.51l67.76-67.75a6,6,0,0,1,8.48,8.48L136.49,128Z"
-  />
-</svg>`;
 
 /** @typedef {import("./html.js").Markup} Markup */
 /**
@@ -220,7 +214,7 @@ export const watchNoteDismissals = (onChange) => noteClocks.watch(onChange);
 const renderHead = (title, isFirst) =>
   html`<div class="updates-head">
     <span class="updates-count">${title}</span>
-    ${isFirst && html`<button type="button" class="updates-x" id="dismissUpdates" aria-label="Dismiss updates" title="Dismiss">${DISMISS_ICON}</button>`}
+    ${isFirst && renderDismissButton({ id: "dismissUpdates", label: "Dismiss updates" })}
   </div>`;
 
 /** @param {number} extra */
@@ -287,25 +281,27 @@ function listenForDismiss(panel) {
   });
 }
 
-/** @type {WeakSet<HTMLElement>} */
-const closingPanels = new WeakSet();
-
 // A box that appears with new data grows open, pushing what's under it down smoothly, and one
-// that fills again as it shrinks away stays open.
+// that fills again as it shrinks away grows back open from wherever it had shrunk to.
 /**
  * @param {HTMLElement} panel
  * @param {Markup} markup
  */
 function openBox(panel, markup) {
-  if (closingPanels.delete(panel)) stopEasing(panel);
+  const fillBox = () => {
+    panel.hidden = false;
+    setHtml(panel, markup);
+  };
+  if (isEasingClosed(panel)) {
+    easeBackOpen(panel, fillBox);
+    return;
+  }
   if (panel.hidden) noteHeight(panel);
-  panel.hidden = false;
-  setHtml(panel, markup);
+  fillBox();
 }
 
 /** @param {HTMLElement} panel */
 function hideBox(panel) {
-  closingPanels.delete(panel);
   panel.hidden = true;
   setHtml(panel, html``);
 }
@@ -313,9 +309,7 @@ function hideBox(panel) {
 // A box that empties keeps what it said while it shrinks away.
 /** @param {HTMLElement} panel */
 function closeBox(panel) {
-  if (panel.hidden || closingPanels.has(panel)) return;
-  closingPanels.add(panel);
-  easeClosed(panel, () => hideBox(panel));
+  if (!panel.hidden) easeClosed(panel, () => hideBox(panel));
 }
 
 /**

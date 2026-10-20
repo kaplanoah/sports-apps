@@ -13,7 +13,7 @@ const OUTLINED_BOXES = [
   ".team-stats",
   ".out-box",
   ".news-card",
-  ".updates",
+  ".dismissible-box",
   ".home-screen-tip",
   ".diagnostics-record",
 ];
