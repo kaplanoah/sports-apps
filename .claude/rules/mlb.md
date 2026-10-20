@@ -94,7 +94,8 @@ paths:
     and saves only the months that changed, removing a month of playoff games that lost every game.
   - A playoff game is listed only while MLB's postseason or the days around today list it,
     since MLB drops one a series no longer needs from those first.
-  - A schedule MLB answers with no games counts as no read, so it changes no month.
+  - A whole schedule or postseason MLB answers with no games drops no game,
+    and a whole schedule with none saves nothing.
   - Each game has its ballpark,
     and a game away from its home club's own one says where in its label.
 - The slate (`page/js/slate.js`):

@@ -191,8 +191,8 @@ const hasDates = (response) => (response?.dates ?? []).length > 0;
 // The season's whole schedule is read once a day, so the days around today, read with each update,
 // and the postseason count over it. MLB drops a playoff game a series no longer needs from those
 // as soon as the series ends, while the whole schedule can still list it, so a playoff game is
-// listed only while they list it. A schedule MLB answers with no games is no read at all, so a
-// whole schedule without them saves nothing, and a postseason without them drops nothing.
+// listed only while they list it. A whole schedule MLB answers with no games saves nothing, and a
+// postseason MLB answers with none drops no game.
 /**
  * @param {any} responses
  * @param {{ games: { id: string }[], gamesBySeries: Record<string, any[]>, calledOff: Set<string> }} postseason
