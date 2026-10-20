@@ -656,6 +656,24 @@ test("a team's next game is marked with Phosphor's caret-right icon, which readi
   );
 });
 
+test("a team's playoff games never list one the league put off as its next, as its cards and the header don't", () => {
+  const isAtlanta = (/** @type {any} */ game) =>
+    game.away.team === "ATL" || game.home.team === "ATL";
+  const next = SEASON.games.find((game) => isAtlanta(game) && game.state === "pre");
+  const putOff = {
+    ...SEASON,
+    games: SEASON.games.map((game) => (game === next ? { ...game, status: "Postponed" } : game)),
+  };
+  /** @param {any} season */
+  const readNextRow = (season) =>
+    renderTeamSheet(season, "ATL", { year: 2026, now: NOW }).body.text.match(
+      /<div class="team-game next[^"]*">[\s\S]*?<\/div>/,
+    )?.[0] ?? "";
+  const nextNumber = new RegExp(`<span class="team-game-number">G${next.number}</span>`);
+  assert.match(readNextRow(SEASON), nextNumber);
+  assert.doesNotMatch(readNextRow(putOff), nextNumber);
+});
+
 test("a game later today stands out the same on the team's card and in its playoff games, and a game tomorrow in neither", () =>
   inEastern(() => {
     /** @param {string} code */

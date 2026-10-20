@@ -446,11 +446,47 @@ test("a game that hasn't started is followed closely at first, then less, and th
   assert.equal(WNBASnapshot.choosePollDelay(snapshot, start + 9 * HOUR_MS), 24 * HOUR_MS);
 });
 
-test("a playoff game the league put off isn't followed past its start as one about to tip off, but keeps its day a game day", () => {
-  const lateGame = buildAfternoon().games.find((game) => game.id === "1042600132");
-  const start = Date.parse(lateGame.start);
-  const putOff = { games: [{ ...lateGame, status: "Postponed" }] };
-  assert.equal(WNBASnapshot.choosePollDelay(putOff, start + 30 * 60 * 1000), 3 * 60 * 60 * 1000);
+/** @param {string} gameId */
+const putOffOnScoreboard = (gameId) => {
+  const { scoreboard } = AFTERNOON.responses;
+  const games = scoreboard.scoreboard.games.map((game) =>
+    game.gameId === gameId ? { ...game, gameStatusText: "PPD" } : game,
+  );
+  return { scoreboard: { ...scoreboard, scoreboard: { ...scoreboard.scoreboard, games } } };
+};
+
+// A regular-season game in Chicago tonight, which the league put off.
+const PUT_OFF_IN_CHICAGO = {
+  ...SEATTLE_AT_CHICAGO,
+  gameId: "1022600401",
+  gameStatus: 1,
+  gameStatusText: "PPD",
+  gameTimeUTC: "2026-09-30T23:30:00Z",
+  period: 0,
+  gameClock: "",
+};
+
+test("a game the league put off, playoff or regular season, isn't followed past its start as one about to tip off, but keeps its day a game day", () => {
+  const playoff = buildAfternoon(putOffOnScoreboard("1042600132"));
+  const lateGame = playoff.games.find((game) => game.id === "1042600132");
+  assert.deepEqual(playoff.putOffStarts, [lateGame.start]);
+  const quietPlayoff = { games: [lateGame], putOffStarts: playoff.putOffStarts };
+  const playoffStart = Date.parse(lateGame.start);
+  assert.equal(
+    WNBASnapshot.choosePollDelay(quietPlayoff, playoffStart + 30 * 60 * 1000),
+    3 * 60 * 60 * 1000,
+  );
+
+  const regularSeason = buildWithWholeSeason(addToScoreboard(PUT_OFF_IN_CHICAGO));
+  assert.deepEqual(regularSeason.putOffStarts, [PUT_OFF_IN_CHICAGO.gameTimeUTC]);
+  const regularStart = Date.parse(PUT_OFF_IN_CHICAGO.gameTimeUTC);
+  assert.equal(
+    WNBASnapshot.choosePollDelay(
+      { putOffStarts: regularSeason.putOffStarts },
+      regularStart + 30 * 60 * 1000,
+    ),
+    3 * 60 * 60 * 1000,
+  );
 });
 
 test("a game a decided series no longer needs isn't followed past its start", () => {

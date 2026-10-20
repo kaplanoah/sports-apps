@@ -204,6 +204,7 @@ export function choosePollDelay(snapshot, now = Date.now()) {
     starts: games
       .filter((game) => game.state === "pre" && !game.tbd)
       .map((game) => Date.parse(game.start)),
+    putOffStarts: (slate.today?.postponed ?? []).map((game) => Date.parse(game.start)),
     liveMs: games.some(isClosingInning) ? POLL_CLOSING_MS : POLL_LIVE_MS,
     now,
   });

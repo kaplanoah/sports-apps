@@ -683,6 +683,17 @@ test("a game with no start time doesn't make the next ask come at once", () => {
   );
 });
 
+test("a day whose only game was rained out stays a game day while its make-up is set", () => {
+  const rainedOut = { state: "off", start: "2026-09-24T23:05:00Z" };
+  const computePollDelay = (postponed) =>
+    MLBSnapshot.choosePollDelay(
+      { slate: { today: { games: [], postponed }, nextDay: null } },
+      Date.parse("2026-09-24T23:35:00Z"),
+    );
+  assert.equal(computePollDelay([rainedOut]), GAME_DAY_CHECK_MS);
+  assert.equal(computePollDelay([]), OFF_DAY_CHECK_MS);
+});
+
 test("an off day with the page open: one look every few hours, not a poll", () => {
   const snapshot = MLBSnapshot.buildSnapshot(EVENING.responses, {
     season: 2026,

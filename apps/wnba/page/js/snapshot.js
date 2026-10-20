@@ -9,7 +9,7 @@
 import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import { findTeamCode, findTeamCodeByEspnId, TEAMS } from "./teams.js";
-import { findTeamNearestGames, isPutOff, isToBePlayed } from "./nearest-games.js";
+import { findTeamNearestGames, isPutOff, isToBePlayed, mapSeriesById } from "./nearest-games.js";
 import { REGULATION_PERIODS } from "./periods.js";
 
 // The shape of a snapshot, and of the season record saved from it, which a page reads only when it
@@ -536,19 +536,31 @@ function addEspnListings(games, networkGames) {
 
 /**
  * Each team's nearest games, each game once, in order of start: its last, the one it's playing,
- * and its next. A game left over in a series that's already decided won't be played.
+ * and its next.
  * @param {any[]} games the season's games, in order of start
  * @param {any[]} series
  */
 function listNearestGames(games, series) {
-  const decided = new Set(series.filter((each) => each.winner).map((each) => each.id));
+  const seriesById = mapSeriesById(series);
   const nearest = new Set(
     Object.keys(TEAMS).flatMap((team) =>
-      Object.values(findTeamNearestGames(games, team, decided)).filter(Boolean),
+      Object.values(findTeamNearestGames(games, team, seriesById)).filter(Boolean),
     ),
   );
   return games.filter((game) => nearest.has(game));
 }
+
+/** @param {any} game */
+const isTimedToCome = (game) => game.state === "pre" && game.isTimeSet;
+
+/**
+ * When the league had each of the season's games it put off and hasn't played to start, regular
+ * season and playoffs, kept apart since the schedule's copy of a game to come leaves out its status.
+ * @param {any[]} games
+ * @returns {string[]}
+ */
+const listPutOffStarts = (games) =>
+  games.filter((game) => isTimedToCome(game) && isPutOff(game)).map((game) => game.start);
 
 /**
  * When each of the season's playoff games and each team's nearest games start, as the league's
@@ -593,6 +605,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     asOf: new Date(now).toISOString(),
     games,
     nearestGames: listNearestGames(seasonGames, series),
+    putOffStarts: listPutOffStarts(seasonGames),
     schedule: seasonGames.map(readScheduledGame),
     series,
     standings: readStandingsRows(responses.standings),
@@ -627,14 +640,13 @@ function isClosingStretch(game) {
 // A live game on a team's sheet is followed as closely as a playoff game.
 export function choosePollDelay(snapshot, now = Date.now()) {
   const games = [...(snapshot?.games ?? []), ...(snapshot?.nearestGames ?? [])];
-  const seriesById = new Map((snapshot?.series ?? []).map((series) => [series.id, series]));
-  const timed = games.filter((game) => game.state === "pre" && game.isTimeSet);
+  const seriesById = mapSeriesById(snapshot?.series);
   return PollSchedule.choosePollDelay({
     isLive: games.some((game) => game.state === "live"),
-    starts: timed
-      .filter((game) => isToBePlayed(game, seriesById))
+    starts: games
+      .filter((game) => isTimedToCome(game) && isToBePlayed(game, seriesById))
       .map((game) => Date.parse(game.start)),
-    putOffStarts: timed.filter(isPutOff).map((game) => Date.parse(game.start)),
+    putOffStarts: (snapshot?.putOffStarts ?? []).map(Date.parse),
     liveMs: games.some(isClosingStretch) ? POLL_CLOSING_MS : POLL_LIVE_MS,
     now,
   });

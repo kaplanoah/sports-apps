@@ -30,21 +30,27 @@ export const isCalledOff = (game, seriesById) =>
  */
 export const isToBePlayed = (game, seriesById) => !isCalledOff(game, seriesById) && !isPutOff(game);
 
+/**
+ * @template {{ id: string } & DecidedSeries} Series
+ * @param {Series[] | undefined} series
+ * @returns {Map<string, Series>}
+ */
+export const mapSeriesById = (series) => new Map((series ?? []).map((each) => [each.id, each]));
+
 /** @param {SeasonGame} game */
 const hasBothTeams = (game) => !!(game.away.team && game.home.team);
 
 /**
  * A team's last finished game, the one it's playing, and its next, each null when it has none. The
- * next is one whose other team is known, and never one put off or left over in a series that's
- * already decided, which won't be played then.
+ * next is one whose other team is known, and one that will be played.
  * @template {SeasonGame} Game
  * @param {Game[]} games in order of start
  * @param {string} team
- * @param {Set<string>} decidedSeries
+ * @param {Map<string, DecidedSeries>} seriesById
  * @returns {{ last: Game | null, now: Game | null, next: Game | null }}
  */
-export const findTeamNearestGames = (games, team, decidedSeries) =>
+export const findTeamNearestGames = (games, team, seriesById) =>
   findNearestGames(
     games.filter((game) => isPlaying(game, team)),
-    (game) => hasBothTeams(game) && !isPutOff(game) && !decidedSeries.has(game.series ?? ""),
+    (game) => hasBothTeams(game) && isToBePlayed(game, seriesById),
   );

@@ -12,7 +12,7 @@ import {
 } from "#shared/stamp.js";
 import { isGameToday, readGameDay } from "./days.js";
 import { describeLiveMoment, listSeasonGames } from "./games-view.js";
-import { isToBePlayed } from "./nearest-games.js";
+import { isToBePlayed, mapSeriesById } from "./nearest-games.js";
 import { nameTeam, orderBySeriesWins } from "./series.js";
 
 // The header's lines on the latest score and the next tip-off, or on why the page isn't current.
@@ -179,7 +179,7 @@ function renderNextTipOff(game, games, seriesById, now) {
  */
 export function renderStampLines(season, now) {
   const games = listSeasonGames(season, null);
-  const seriesById = new Map((season?.series ?? []).map((series) => [series.id, series]));
+  const seriesById = mapSeriesById(season?.series);
   const today = new Date(now);
   const latest = describeLatest(games, seriesById, today);
   const lines = latest ? [html`<span>${latest}</span>`] : [];

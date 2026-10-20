@@ -9,7 +9,7 @@ import { renderScoreboard } from "./scoreboard.js";
 import { describeSeriesAfterWin } from "#shared/series-text.js";
 import { nameTeam } from "./series.js";
 import { LEAGUE_WORDS } from "./league-words.js";
-import { isCalledOff } from "./nearest-games.js";
+import { isCalledOff, mapSeriesById } from "./nearest-games.js";
 import { countWinsNeeded, isCupFinal, ROUNDS } from "./snapshot.js";
 
 /** @typedef {import("./series.js").Series} Series */
@@ -274,7 +274,7 @@ function findLiveDay(games) {
  * @param {{ games?: Game[] } | null} schedule
  */
 export function listListedGames(season, schedule) {
-  const seriesById = new Map((season?.series ?? []).map((series) => [series.id, series]));
+  const seriesById = mapSeriesById(season?.series);
   return listSeasonGames(season, schedule).filter((game) => !isCalledOff(game, seriesById));
 }
 
