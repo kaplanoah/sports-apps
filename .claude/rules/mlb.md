@@ -91,7 +91,11 @@ paths:
   - The list comes from the season's whole schedule,
     which the store keeps a month to a document in `schedules-<year>`.
   - The store reads MLB's whole schedule once a day and the days around today with each update,
-    and saves only the months that changed.
+    and saves only the months that changed, removing a month of playoff games that lost every game.
+  - A playoff game is listed only while MLB's postseason or the days around today list it,
+    since MLB drops one a series no longer needs from those first.
+  - A whole schedule or postseason MLB answers with no games drops no game,
+    and a whole schedule with none saves nothing.
   - Each game has its ballpark,
     and a game away from its home club's own one says where in its label.
 - The slate (`page/js/slate.js`):
