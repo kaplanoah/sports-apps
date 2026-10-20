@@ -3,7 +3,8 @@ import { isSameJson } from "./compare.js";
 // Reads a league's season from the store, which says which season is current, so a page never goes
 // by its own clock, and pushes each change to the season's record. A page showing the current
 // season moves on to the next one when the store does. Each season a viewer picks is kept while its
-// record is on its way, and put back on the season shown when it can't be read.
+// record is on its way, and put back on the season the page asks for when it can't be read or the
+// page's own load takes its place.
 
 const CURRENT_PATH = "live/current";
 const STATUS_PATH = "live/status";
@@ -219,6 +220,11 @@ export function createSeasonReader({
     readCurrentYear: () => currentYear,
     /** The season whose record the page shows, or null before one has loaded. */
     readShownYear: () => shownYear,
+    /**
+     * The season the page last asked for, the one it shows or one whose record is on its way, or
+     * null before it has asked.
+     */
+    readAskedYear: () => askedYear,
   };
 }
 
@@ -226,19 +232,21 @@ export function createSeasonReader({
  * How a pick ended, and the season it leaves picked, null before any season has loaded.
  * @typedef {object} PickOutcome
  * @property {"shown" | "replaced" | "unread" | "overtaken"} kind its season shown, a newer pick
- *   taking its place, its record unread, or the reader showing another season meanwhile, as the
- *   page loading the current season again on its return
+ *   taking its place, its record unread, or the page's own load taking its place, as the page
+ *   loading the current season again on its return
  * @property {number | null} year
  */
 
 /**
  * Shows each season a viewer picks with `reader`, keeping the pick with `keepPick` while its record
- * is on its way. A pick whose record can't be read, unless a newer one has taken its place, keeps
- * the season the page shows instead, or, before one has loaded, the pick before the picks still on
- * their way, and says the store can't be reached with `noteUnreachable`.
+ * is on its way. A pick whose record can't be read, or that the page's own load takes the place of,
+ * unless a newer pick has, keeps the season the page asks for instead: the one it shows, or one its
+ * own load has on the way. Before the page has asked for one, it keeps the pick before the picks
+ * still on their way. A pick whose record can't be read says the store can't be reached with
+ * `noteUnreachable`.
  * @template {number | null} PickedYear
  * @param {{
- *   reader: Pick<ReturnType<typeof createSeasonReader>, "showYear" | "readShownYear">,
+ *   reader: Pick<ReturnType<typeof createSeasonReader>, "showYear" | "readAskedYear">,
  *   readPick: () => PickedYear,
  *   keepPick: (year: PickedYear | number) => void,
  *   noteUnreachable: () => void,
@@ -250,6 +258,11 @@ export function createSeasonPicks({ reader, readPick, keepPick, noteUnreachable 
   let latestPick = null;
   let picksOut = 0;
   let pickBefore = readPick();
+  const keepAskedYear = () => {
+    const year = reader.readAskedYear() ?? pickBefore;
+    keepPick(year);
+    return year;
+  };
   return async (year) => {
     if (picksOut === 0) pickBefore = readPick();
     picksOut++;
@@ -259,17 +272,13 @@ export function createSeasonPicks({ reader, readPick, keepPick, noteUnreachable 
       await reader.showYear(year);
     } catch {
       if (latestPick !== year) return { kind: "replaced", year: latestPick };
-      const kept = reader.readShownYear() ?? pickBefore;
-      keepPick(kept);
       noteUnreachable();
-      return { kind: "unread", year: kept };
+      return { kind: "unread", year: keepAskedYear() };
     } finally {
       picksOut--;
     }
     if (latestPick !== year) return { kind: "replaced", year: latestPick };
-    const shown = reader.readShownYear();
-    if (shown === year) return { kind: "shown", year };
-    keepPick(shown ?? pickBefore);
-    return { kind: "overtaken", year: shown ?? pickBefore };
+    if (reader.readAskedYear() === year) return { kind: "shown", year };
+    return { kind: "overtaken", year: keepAskedYear() };
   };
 }

@@ -180,3 +180,15 @@ test("before any season has loaded, two picks that can't be read put the picker 
 
   assert.deepEqual([picker.value, readMarked()], ["2026", "2026"]);
 });
+
+test("a pick the page's own load takes the place of puts the picker on that load's season, redrawing nothing", async () => {
+  const { row, picker, choose, readMarked } = createRow(["2026", "2025"], "2026");
+  const { answers, redraws } = watchRow(row);
+
+  const chosen = choose("2025");
+  answers[0]({ kind: "overtaken", year: 2026 });
+  await chosen;
+
+  assert.deepEqual([picker.value, readMarked()], ["2026", "2026"]);
+  assert.deepEqual(redraws, { picked: 0, unread: 0 });
+});

@@ -111,6 +111,21 @@ test("a redraw that grows a part still fading in fades it the rest of the way as
   expect(last.opacity).toBe("1");
 });
 
+test("a problem the store reports eases the header to its new height", async ({ page }) => {
+  const readAnimations = await listAnimations(page);
+  const app = await openApp(page);
+  const stamp = page.locator("#stamp");
+  await expect(stamp).toContainText("Next tip-off");
+
+  await app.writeDocument("live/status", { error: "upstream_error" });
+
+  await expect(stamp).toContainText("The WNBA isn't answering right now");
+  const growth = (await readAnimations()).find(({ classes }) => classes.includes("stamp"));
+  expect(parseFloat(String(growth.last.height))).toBeGreaterThan(
+    parseFloat(String(growth.first.height)),
+  );
+});
+
 test("the page draws what it opens with at once, rather than easing it in", async ({ page }) => {
   const readAnimations = await listAnimations(page);
 
