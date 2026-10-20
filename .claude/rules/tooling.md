@@ -41,6 +41,13 @@ paths:
 - Another hook there runs `npm ci` as every session starts, when `node_modules` is missing or was installed before `package-lock.json` last changed,
   judged by the `node_modules/.package-lock.json` npm writes on each install (`.claude/hooks/install-packages.mjs`).
   It says nothing when it skips, and never stops a session.
+- Another hook there runs `npm run lint`, `format:check`, `typecheck`, and `deadcode` at once before each `git push`,
+  in the folder the push runs in, the one a `git -C <dir> push` names too,
+  and blocks the push with the first failure's output (`.claude/hooks/check-push.mjs`).
+  It refuses a push while `git status --porcelain` lists anything, since the checks would judge the working tree rather than the commit,
+  and asks for `npm ci` when `node_modules` is missing.
+  It lets the beta force-push through unchecked, since its commit already passed,
+  and any push once the context limit's stop is reached, so a session handing off can always push.
 - `npm run rollback -- <app>` puts the app's previous version back at all of its traffic and prints which commit was live and which is now.
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
