@@ -51,6 +51,23 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
   });
 }
 
+for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  test(`the Updates box and settings' icon note are cards raised inside an edge, in ${colorScheme}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await openApp(page);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    const [raised, edge] = await Promise.all(
+      ["--raised", "--edge"].map((token) => readTokenColor(page, token)),
+    );
+    for (const box of ["#updates", "#appearanceNote"]) {
+      await expect(page.locator(box)).toHaveCSS("background-color", raised);
+      await expect(page.locator(box)).toHaveCSS("border-top-color", edge);
+    }
+  });
+}
+
 test("a Read button is raised like a card, a button's height, its words a button's, centered on their capitals", async ({
   page,
 }) => {

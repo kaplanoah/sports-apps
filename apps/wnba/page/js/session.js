@@ -8,6 +8,10 @@ export const session = {
   year: readCalendarYear(new Date()),
   /** @type {number | null} */
   currentYear: null,
+  // The season picked, which the page shows once its record arrives, null until the store or the
+  // page's last showing names one.
+  /** @type {number | null} */
+  pickedYear: null,
   /** @type {any} */
   season: null,
   // Every game of the season shown, which the Games view lists, null when the store has none.

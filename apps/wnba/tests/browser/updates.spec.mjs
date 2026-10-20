@@ -1,5 +1,9 @@
 import { test, expect, openApp } from "./harness.mjs";
-import { listAnimations } from "../../../../tests/browser/animations.mjs";
+import {
+  EASE_HALFWAY_MS,
+  finishTimedAnimations,
+  listAnimations,
+} from "../../../../tests/browser/animations.mjs";
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
@@ -387,15 +391,22 @@ test.describe("on a phone, in full motion", () => {
     contextOptions: { reducedMotion: "no-preference" },
   });
 
-  /** @param {{ element: string, first: Keyframe, last: Keyframe }} animation */
-  const isOpening = ({ element, first, last }) =>
-    element === "updates" &&
+  /** @typedef {import("../../../../tests/browser/animations.mjs").PlayedAnimation} PlayedAnimation */
+  /** @param {PlayedAnimation} animation */
+  const isOpening = ({ classes, first, last, direction }) =>
+    classes.includes("updates") &&
+    direction === "normal" &&
     first.height === "0px" &&
     first.marginBottom === "0px" &&
     parseFloat(String(last.height)) > 0;
-  /** @param {{ element: string, first: Keyframe, last: Keyframe }} animation */
-  const isClosing = ({ element, first, last }) =>
-    element === "updates" && parseFloat(String(first.height)) > 0 && last.height === "0px";
+  // The box shrinks away on its opening's curve, from where it is to nothing.
+  /** @param {PlayedAnimation} animation */
+  const isClosing = ({ classes, first, last, direction }) =>
+    classes.includes("updates") &&
+    direction === "normal" &&
+    last.height === "0px" &&
+    last.marginBottom === "0px" &&
+    parseFloat(String(first.height)) > 0;
 
   test("on the season tab, after a trip to the standings and back, a tap on an update still opens its game and a tap on the X still closes the box", async ({
     page,
@@ -443,21 +454,64 @@ test.describe("on a phone, in full motion", () => {
     expect((await readAnimations()).filter(isOpening)).toHaveLength(1);
   });
 
-  test("an Updates box that fills again as it shrinks away stays open", async ({ page }) => {
+  test("an Updates box that fills again as it shrinks away grows back open from where it had shrunk to, and shrinks away again from where it has grown back to", async ({
+    page,
+  }) => {
+    await serveReleaseNote(page);
+    const readAnimations = await listAnimations(page);
     const app = await openApp(page, { updatesBox: "shown" });
     const updates = page.locator("#updates");
-    await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
+    await expect(updates.locator(".updates-count").first()).toHaveText("2 updates since yesterday");
+    // Each easing of the box starts held halfway, so none can finish before the next step. The
+    // box's ride with the bracket's scroll isn't an easing.
+    await updates.evaluate((box, halfway) => {
+      const animate = box.animate.bind(box);
+      box.animate = (frames, options) => {
+        const animation = animate(frames, options);
+        if (animation.timeline === document.timeline) {
+          animation.pause();
+          animation.currentTime = halfway;
+        }
+        return animation;
+      };
+    }, EASE_HALFWAY_MS);
+    const readLastOfBox = async () =>
+      (await readAnimations()).filter(({ classes }) => classes.includes("updates")).at(-1);
+    const readBox = () =>
+      updates.evaluate((box) => {
+        const { height, opacity } = getComputedStyle(box);
+        const easings = box
+          .getAnimations()
+          .filter((animation) => animation.timeline === document.timeline);
+        return { height, opacity, easings: easings.length };
+      });
+
     await dismissUpdatesBox(page);
-    await page.evaluate(() => document.getAnimations().forEach((animation) => animation.pause()));
+    const halfClosed = await readBox();
 
+    // The release note leaves with the finals it was dismissed with, so the box's own parts
+    // change as it grows back.
     await app.changeSeason(finishDreamAtMystics);
-    await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
-    await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
+    // The box keeps the release note's heading while it's held shrinking, until the new final
+    // redraws it without one.
+    await expect(updates.locator(".updates-count")).toHaveText(["1 update since earlier today"]);
+    const reopening = await readLastOfBox();
+    expect(reopening.direction).toBe("normal");
+    expect(reopening.first).toMatchObject({
+      height: halfClosed.height,
+      opacity: halfClosed.opacity,
+    });
+    const halfReopened = await readBox();
+    expect(halfReopened.easings).toBe(1);
 
-    await expect(updates).toBeVisible();
-    await expect(updates.locator(".what")).toHaveText([
-      "Dream beat the Mystics 88-80 to win the First Round 2-0",
-    ]);
+    await dismissUpdatesBox(page);
+    const closing = await readLastOfBox();
+    expect(closing.direction).toBe("normal");
+    expect(closing.first.height).toBe(halfReopened.height);
+    expect(closing.last.height).toBe("0px");
+    expect((await readBox()).easings).toBe(1);
+    await finishTimedAnimations(page);
+    await expect(updates).toBeHidden();
   });
 });
 

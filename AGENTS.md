@@ -78,6 +78,7 @@
   Never start with `cd`, never join `cd` to a `git` command, and never pipe or chain after a command `.claude/settings.json` allows, like the beta force-push.
   When a command still asks, add it to the allow list in `.claude/settings.json` in the same PR if it's safe for any session to run, or say why it asks.
 - Refer to PRs by number, not branch.
+- Work decided but left for later goes in an issue, opened in the turn it's left out, as the `ship` skill says.
 - Start every PR title with a type.
   The squash merge carries it to `main`, where it sets the next version of each app it changes (the root's `worker/release.mjs`).
   A PR that changes nothing an app's deploy counts (the root's `worker/deploy-scope.mjs`),

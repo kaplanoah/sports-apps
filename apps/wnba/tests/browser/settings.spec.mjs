@@ -1,16 +1,20 @@
-import { test, expect, openApp, serveLockedApp } from "./harness.mjs";
+import { test, expect, matchPath, openApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
-import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 import {
-  checkHandoffRenewal,
-  checkReAddHandoff,
-  checkReAddNote,
-} from "../../../../tests/browser/re-add-note.mjs";
+  checkFailedPickPutBack,
+  checkNewCurrentSeasonListed,
+  checkPickKeptThroughRedraw,
+  checkSeasonsOnFailedList,
+  checkSettingsOnReload,
+  waitForSettingsFill,
+} from "../../../../tests/browser/settings-reload.mjs";
+import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
+import { ONE_PAST_SEASON } from "./past-season.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -64,6 +68,105 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
   await expect(picker).toHaveCSS("font-size", "16px");
   const widths = await measureFieldFace(picker, "--type-detail-size");
   expect(widths.field).toBeCloseTo(widths.role, 0);
+});
+
+test("a reload with settings open shows its seasons, switches, and look picked before the page's code arrives", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await checkSettingsOnReload({
+    page,
+    look: "Walnut",
+    switchName: "Include content from The Athletic",
+    pastSeason: "2025",
+    currentSeason: "2026",
+  });
+});
+
+test("a season picked while its record is on its way stays picked as the picker is drawn again meanwhile", async ({
+  page,
+}) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await checkPickKeptThroughRedraw({
+    page,
+    pastSeason: "2025",
+    newSeason: 2027,
+    moveCurrentTo: (year) => app.writeDocument("live/current", { season: year }),
+  });
+});
+
+test("a reload while the store can't be reached keeps the Season picker on the past season the page shows", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await picker.selectOption("2025");
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+  await page.route(matchPath("/store/"), (route) => route.abort());
+  const filling = waitForSettingsFill(page);
+
+  await page.reload();
+
+  await filling;
+  await expect(picker).toHaveValue("2025");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+});
+
+test("a reload while the store can't be reached, with nothing the page last showed to draw, leaves the Season picker as drawn, through a pick that can't be read too, never adding the year by the phone's clock", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+  await page.route(matchPath("/store/"), (route) => route.abort());
+  await page.addInitScript(() => localStorage.removeItem("lastSeen"));
+  await page.clock.setSystemTime(new Date("2027-01-15T17:00:00Z"));
+  const filling = waitForSettingsFill(page);
+
+  await page.reload();
+
+  await filling;
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+  await expect(picker).toHaveValue("2026");
+
+  await picker.selectOption("2025");
+
+  await expect(picker).toHaveValue("2026");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+});
+
+test("a past season picked whose record can't be read puts the Season picker back on the season shown, says so, and can be picked again", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await checkFailedPickPutBack({ page, pastSeason: "2025", currentSeason: "2026" });
+});
+
+test("while the store can't list its seasons, a new current season joins the Season picker, with the past season shown still chosen", async ({
+  page,
+}) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await checkNewCurrentSeasonListed({
+    page,
+    pastSeason: "2025",
+    newSeason: 2027,
+    moveCurrentTo: (year) => app.writeDocument("live/current", { season: year }),
+    seasons: ["2027", "2026", "2025"],
+  });
+});
+
+test("a reload with settings open while the store can't list its seasons lists the ones it listed, with the season shown, even one the store moved on to, chosen", async ({
+  page,
+}) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await checkSeasonsOnFailedList({
+    page,
+    beforeReload: () => app.moveSeasonTo(2027),
+    seasons: ["2027", "2026", "2025"],
+    shown: "2027",
+  });
 });
 
 test("settings list Notifications, the News switches, and Appearance, with lines only between the three", async ({
@@ -159,33 +262,6 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expectTheme(page, "dark");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("radio", { name: "Walnut" })).toBeChecked();
-});
-
-test.describe("in an iPhone's Home Screen app", () => {
-  test.use({ userAgent: IPHONE_AGENT });
-  const openSettings = (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click();
-  const looks = { light: "Maple", dark: "Walnut" };
-
-  test("changing the appearance says how to update the icon, under the icons, linking to Safari on the theme picked, which the browser and Android leave out", async ({
-    page,
-    context,
-    browser,
-  }) => {
-    await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
-  });
-
-  test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
-    page,
-    browser,
-  }) => {
-    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
-  });
-
-  test("the link's handoff follows the last pick, renews halfway through and on coming back once that's due, tries again after a failure, and stops once settings closes", async ({
-    page,
-  }) => {
-    await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });
-  });
 });
 
 test("settings end with the release, NBA.com's credit for the data, and the copyright", async ({

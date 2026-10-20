@@ -314,6 +314,55 @@ test("each month of the season's games is saved apart from its record, and only 
   assert.deepEqual(read("schedules-2026/2026-10").games, october);
 });
 
+test("a month whose every game MLB dropped goes, and tells open pages", async () => {
+  const { store, harness, sent, read, context, clock } = createUpdatingStore({
+    snapshot: WHOLE_SEASON,
+    now: SEASON_NOW,
+  });
+  await store.alarm();
+  assert.ok(read("schedules-2026/2026-10"));
+
+  sent.length = 0;
+  const schedule = Object.fromEntries(
+    Object.entries(WHOLE_SEASON.schedule).filter(([month]) => month !== "2026-10"),
+  );
+  harness.snapshot = { ...WHOLE_SEASON, asOf: "2026-10-10T23:40:00.000Z", schedule };
+  await updateSeasonAgain(store, context, clock);
+  assert.equal(read("schedules-2026/2026-10"), null);
+  assert.deepEqual(
+    sent.map((message) => message.path),
+    ["schedules-2026/2026-10"],
+  );
+});
+
+/**
+ * The ids of each month's games the store keeps, by its month.
+ * @param {(key: string) => any} read
+ */
+const readMonths = (read) =>
+  Object.fromEntries(
+    Object.keys(WHOLE_SEASON.schedule).map((month) => [
+      month,
+      read(`schedules-2026/${month}`)?.games.map((/** @type {any} */ game) => game.id),
+    ]),
+  );
+
+for (const feed of ["seasonGames", "postseason"])
+  test(`a ${feed} read MLB answers with no games keeps every game in its month`, async () => {
+    const { store, harness, read, context, clock } = createUpdatingStore({
+      snapshot: WHOLE_SEASON,
+      now: SEASON_NOW,
+    });
+    await store.alarm();
+    const months = readMonths(read);
+    assert.ok(Object.values(months).every(Boolean));
+
+    const responses = { ...SEASON_GAMES.responses, [feed]: { dates: [] } };
+    harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: SEASON_NOW });
+    await updateSeasonAgain(store, context, clock);
+    assert.deepEqual(readMonths(read), months);
+  });
+
 test("a read without the standings during the playoffs leaves the playoff games' months and each club's last and next games as they were", async () => {
   const { store, harness, read, context, clock } = createUpdatingStore({
     snapshot: WHOLE_SEASON,

@@ -198,6 +198,28 @@ test("a listing that arrives after a newer one is dropped", async () => {
   assert.deepEqual(seen, [["2026-09-25-01"]]);
 });
 
+test("a document the Worker removes leaves a watched collection, and its listeners hear it", async () => {
+  const { store, reads, sockets, openSocket } = startStore();
+  const seen = [];
+  store
+    .collection("schedules-2026")
+    .limit(12)
+    .onSnapshot(({ docs }) => seen.push(docs.map((doc) => doc.id)));
+  openSocket();
+  reads[0].answer({
+    docs: [
+      { id: "2026-10", data: { games: [] } },
+      { id: "2026-11", data: { games: [] } },
+    ],
+  });
+  await settle();
+
+  sockets
+    .at(-1)
+    .listeners.message({ data: JSON.stringify({ path: "schedules-2026/2026-11", data: null }) });
+  assert.deepEqual(seen, [["2026-10", "2026-11"], ["2026-10"]]);
+});
+
 test("catching up reads every watched document once, as the new socket opens", () => {
   const { store, reads, openSocket } = startStore();
   store.doc("seasons/2026").onSnapshot(() => {});
