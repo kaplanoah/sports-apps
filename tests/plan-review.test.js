@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   PART_BYTES,
   PART_LINES,
   chooseStage,
-  describeChange,
   explainUnread,
   findPushedRange,
   findTestedFile,
@@ -15,7 +15,6 @@ import {
   grepRepo,
   isReviewedOnBranch,
   listAreas,
-  listChangedSince,
   listDeletedFiles,
   listJobs,
   listStaleNames,
@@ -364,45 +363,6 @@ test("the review's matrix is handed to ci.yml under the names its review jobs re
   assert.equal(formatJobOutputs(listJobs([])), "areas=[]\narea-numbers={}\ncount=0");
 });
 
-test("a change reads the same wherever a merge of the base moved it, but not once a block moves within it", () => {
-  const before = diffFile("a.js", [2]);
-  const shifted = before.replace("@@ -1,0 +1,2 @@", "@@ -41,0 +41,2 @@");
-  assert.equal(describeChange(before), describeChange(shifted));
-  assert.notEqual(describeChange(before), describeChange(diffFile("a.js", [3])));
-  const guarded = (/** @type {string[]} */ context) =>
-    ["diff --git a/a.js b/a.js", "--- a/a.js", "+++ b/a.js", "@@ -1,2 +1,3 @@", ...context].join(
-      "\n",
-    );
-  assert.notEqual(
-    describeChange(guarded([" check();", "+if (!ok) return;", " work();"])),
-    describeChange(guarded([" work();", "+if (!ok) return;", " check();"])),
-  );
-});
-
-test("a binary file a push replaced reads as changed, and one it left alone doesn't", () => {
-  const logo = (/** @type {string} */ blob) =>
-    [
-      "diff --git a/shared/page/networks/abc.png b/shared/page/networks/abc.png",
-      `index 0000000..${blob} 100644`,
-      "Binary files /dev/null and b/shared/page/networks/abc.png differ",
-      "",
-    ].join("\n");
-  assert.deepEqual(listChangedSince(logo("1111111"), logo("2222222")), [
-    "shared/page/networks/abc.png",
-  ]);
-  assert.deepEqual(listChangedSince(logo("1111111"), logo("1111111")), []);
-});
-
-test("the files a push changed are those whose change differs, never those a merge only moved", () => {
-  const earlier = diffFile("a.js", [2]) + diffFile("b.js", [1]) + diffFile("gone.js", [1]);
-  const now =
-    diffFile("a.js", [2]).replace("@@ -1,0", "@@ -9,0") +
-    diffFile("b.js", [1, 1]) +
-    diffFile("new.js", [1]);
-  assert.deepEqual(listChangedSince(earlier, now), ["b.js", "gone.js", "new.js"]);
-  assert.deepEqual(listChangedSince(earlier, earlier), []);
-});
-
 test("the first review reads the whole change, a later one what changed, and a merge alone nothing", () => {
   const listChanged = () => ["a.js"];
   const [reviewed, head] = ["a".repeat(40), "b".repeat(40)];
@@ -671,7 +631,7 @@ test("a review of a push reads only what it changed", () => {
   const plan = writeReview(folder, {
     choice: { stage: "push", files: ["shared/page/sheet.js"] },
     since,
-    pushed: { range: ["merged-tree", "HEAD"], hasBase: false },
+    pushed: ["merged-tree", "HEAD"],
     readDiff,
     repoFiles: [],
     listStale: () => [],
@@ -692,29 +652,14 @@ test("a review of a push reads only what it changed", () => {
     ],
     unread: [],
   });
-  assert.match(readFileSync(join(folder, "push.md"), "utf8"), /hold only what the pushes since/);
+  const index = readFileSync(join(folder, "push.md"), "utf8");
+  assert.match(index, /hold only what the pushes since/);
+  assert.match(
+    index,
+    /starts from git's conflict markers, so it shows how the conflict was resolved/,
+  );
   assert.deepEqual(JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")), plan);
   assert.match(readFileSync(join(folder, "stale-names.md"), "utf8"), /Nothing the change removed/);
-});
-
-test("a push whose merge of the base git can't set apart says its diffs may hold the base's edits", () => {
-  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
-  writeReview(folder, {
-    choice: { stage: "push", files: ["shared/page/sheet.js"] },
-    since: "b".repeat(40),
-    pushed: { range: ["b".repeat(40), "HEAD^2"], hasBase: true },
-    readDiff: () => ({
-      numstat: "3\t0\tshared/page/sheet.js\n",
-      diff: diffFile("shared/page/sheet.js", [3]),
-    }),
-    repoFiles: [],
-    listStale: () => [],
-    rules: [],
-  });
-  assert.match(
-    readFileSync(join(folder, "push.md"), "utf8"),
-    /the base's own edits apart, those edits too/,
-  );
 });
 
 test("the first review reads the whole change", () => {
@@ -867,48 +812,13 @@ test("equal items still make no more groups than asked for", () => {
   assert.equal(splitEvenly([15, 15, 15, 15], (size) => size, 3).length, 3);
 });
 
-test("a line whose own text starts like a file header still counts as part of the change", () => {
-  const withComment = (/** @type {string} */ line) =>
-    ["diff --git a/q.sql b/q.sql", "--- a/q.sql", "+++ b/q.sql", "@@ -1 +1 @@", line].join("\n");
-  assert.notEqual(
-    describeChange(withComment("--- a comment")),
-    describeChange(withComment("--- another")),
-  );
-  assert.notEqual(
-    describeChange(withComment("+++ added")),
-    describeChange(withComment("+++ other")),
-  );
-});
-
-test("where the base's edits can't be set apart, the files a push changed compare the reviewed head's change with the whole change now", () => {
-  /** @type {string[][]} */
-  const ranges = [];
-  const files = listPushedFiles({
-    reviewedHead: "r".repeat(40),
-    pushed: { range: ["r".repeat(40), "HEAD^2"], hasBase: true },
-    findMergeBase: (one, other) => `base-of-${one}-and-${other.slice(0, 1)}`,
-    readDiff: (range) => {
-      ranges.push(range);
-      const diff = range[1] === "HEAD" ? diffFile("a.js", [3]) : diffFile("a.js", [2]);
-      return { numstat: "", diff };
-    },
-  });
-  assert.deepEqual(files, ["a.js"]);
-  assert.deepEqual(ranges, [["base-of-HEAD^1-and-r", "r".repeat(40)], WHOLE_CHANGE]);
-});
-
 test("the files a push changed are the ones its reviewers read, so a merge that only moved a file's context reads none", () => {
   /** @type {string[][]} */
   const ranges = [];
   const read = (/** @type {string} */ numstat) =>
-    listPushedFiles({
-      reviewedHead: "r".repeat(40),
-      pushed: { range: ["t".repeat(40), "HEAD"], hasBase: false },
-      findMergeBase: () => assert.fail("the pushed range alone says what changed"),
-      readDiff: (range) => {
-        ranges.push(range);
-        return { numstat, diff: "" };
-      },
+    listPushedFiles(["t".repeat(40), "HEAD"], (range) => {
+      ranges.push(range);
+      return { numstat };
     });
   assert.deepEqual(read("2\t1\tshared/page/a.js\n-\t-\tlogo.png\n"), [
     "shared/page/a.js",
@@ -996,17 +906,127 @@ test("a stage's index names each file left unread and why", () => {
   );
 });
 
-test("a push's range starts from the reviewed head merged onto the base, or from the head where that merge conflicts", () => {
+test("a push's range starts from the reviewed head merged onto the base, conflicts and all, and git failing otherwise fails the plan", () => {
   /** @type {string[][]} */
   const calls = [];
   const merged = findPushedRange("r".repeat(40), (args) => {
     calls.push(args);
-    return "t".repeat(40) + "\nmore output\n";
+    return "t".repeat(40) + "\n";
   });
-  assert.deepEqual(merged, { range: ["t".repeat(40), "HEAD"], hasBase: false });
+  assert.deepEqual(merged, ["t".repeat(40), "HEAD"]);
   assert.deepEqual(calls, [["merge-tree", "--write-tree", "HEAD^1", "r".repeat(40)]]);
-  assert.deepEqual(
-    findPushedRange("r".repeat(40), () => null),
-    { range: ["r".repeat(40), "HEAD^2"], hasBase: true },
-  );
+  const failWith = (/** @type {number} */ status) => () => {
+    throw Object.assign(new Error("git failed"), {
+      status,
+      stdout: `${"c".repeat(40)}\nconflicts\n`,
+    });
+  };
+  assert.deepEqual(findPushedRange("r".repeat(40), failWith(1)), ["c".repeat(40), "HEAD"]);
+  assert.throws(() => findPushedRange("r".repeat(40), failWith(128)), /git failed/);
+});
+
+/**
+ * A pull request in a git repository of its own, reviewed at `reviewedHead`: `moveMain` commits
+ * to main, `pushMerge` merges main into the pull request with each conflicted file resolved as
+ * given, `pushChange` commits to it, and `listPushed` checks out the pull request merged onto
+ * main, as CI does, and chooses the review's stage.
+ */
+function createPullRequest() {
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-git-"));
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  const git = (/** @type {string[]} */ args) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd: folder, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+  /** @param {Record<string, string>} files */
+  const commit = (files, message = "change") => {
+    for (const [path, text] of Object.entries(files)) writeFileSync(join(folder, path), text);
+    git(["add", "--all"]);
+    git(["commit", "--quiet", "--message", message]);
+    return git(["rev-parse", "HEAD"]).trim();
+  };
+  const lines = (/** @type {string} */ name) =>
+    Array.from({ length: 10 }, (_, index) => `${name} ${index + 1}`);
+  /** @param {string} name @param {Record<number, string>} edits */
+  const writeLines = (name, edits) =>
+    lines(name)
+      .map((line, index) => edits[index + 1] ?? line)
+      .join("\n") + "\n";
+  git(["init", "--quiet", "--initial-branch", "main"]);
+  commit({ "a.js": writeLines("a", {}), "b.js": writeLines("b", {}) });
+  git(["checkout", "--quiet", "-b", "pull"]);
+  const reviewedHead = commit({
+    "a.js": writeLines("a", { 2: "pull a 2" }),
+    "b.js": writeLines("b", { 2: "pull b 2" }),
+  });
+  return {
+    reviewedHead,
+    writeLines,
+    /** @param {Record<string, string>} files */
+    moveMain(files) {
+      git(["checkout", "--quiet", "main"]);
+      commit(files);
+      git(["checkout", "--quiet", "pull"]);
+    },
+    /** @param {Record<string, string>} resolved */
+    pushMerge(resolved) {
+      try {
+        git(["merge", "--quiet", "--no-edit", "main"]);
+      } catch {
+        commit(resolved, "Merge main");
+      }
+    },
+    /** @param {Record<string, string>} files */
+    pushChange: (files) => commit(files),
+    listPushed() {
+      git(["checkout", "--quiet", "--detach", "main"]);
+      git(["merge", "--quiet", "--no-ff", "--no-edit", "pull"]);
+      const head = git(["rev-parse", "HEAD^2"]).trim();
+      return chooseStage({
+        reviewedHead,
+        head,
+        isOnBranch: true,
+        listChanged: () =>
+          listPushedFiles(findPushedRange(reviewedHead, git), (range) => ({
+            numstat: git(["diff", "--numstat", "--no-renames", ...range]),
+          })),
+      });
+    },
+  };
+}
+
+test("a head whose only change since the last review is a merge of main plans no areas, even where main changed the same files", () => {
+  const pull = createPullRequest();
+  pull.moveMain({ "a.js": pull.writeLines("a", { 5: "main a 5" }), "c.js": "main c\n" });
+  pull.pushMerge({});
+  assert.deepEqual(pull.listPushed(), { stage: "none" });
+});
+
+test("a merge of main that conflicts has only how each conflict was resolved read, not what merged on its own", () => {
+  const pull = createPullRequest();
+  pull.moveMain({
+    "a.js": pull.writeLines("a", { 5: "main a 5" }),
+    "b.js": pull.writeLines("b", { 2: "main b 2" }),
+    "c.js": "main c\n",
+  });
+  pull.pushMerge({ "b.js": pull.writeLines("b", { 2: "pull and main b 2" }) });
+  assert.deepEqual(pull.listPushed(), { stage: "push", files: ["b.js"] });
+});
+
+test("a change pushed after a merge of main is read, and nothing the merge brought in", () => {
+  const pull = createPullRequest();
+  pull.moveMain({ "a.js": pull.writeLines("a", { 5: "main a 5" }) });
+  pull.pushMerge({});
+  pull.pushChange({ "d.js": "pull d\n" });
+  assert.deepEqual(pull.listPushed(), { stage: "push", files: ["d.js"] });
 });
