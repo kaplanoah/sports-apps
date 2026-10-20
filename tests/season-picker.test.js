@@ -131,16 +131,12 @@ test("an older read of the seasons that answers after a newer one leaves the new
   assert.deepEqual(await older, ["2027", "2026"]);
 });
 
-/**
- * @param {ReturnType<typeof createRow>["row"]} row
- * @param {{ year: number | null }} picked the season the app keeps picked
- */
-function watchRow(row, picked) {
+/** @param {ReturnType<typeof createRow>["row"]} row */
+function watchRow(row) {
   const { pick, answers } = createHeldPick();
   const redraws = { picked: 0, unread: 0 };
   watchSeasonPicks(row, {
     pick,
-    readPick: () => picked.year,
     showPicked: () => redraws.picked++,
     showUnread: () => redraws.unread++,
   });
@@ -149,22 +145,22 @@ function watchRow(row, picked) {
 
 test("a pick shown redraws the page, with the picker's markup marking it", async () => {
   const { row, picker, choose, readMarked } = createRow(["2026", "2025"], "2026");
-  const { answers, redraws } = watchRow(row, { year: 2025 });
+  const { answers, redraws } = watchRow(row);
 
   const chosen = choose("2025");
-  answers[0]("shown");
+  answers[0]({ kind: "shown", year: 2025 });
   await chosen;
 
   assert.deepEqual([picker.value, readMarked()], ["2025", "2025"]);
   assert.deepEqual(redraws, { picked: 1, unread: 0 });
 });
 
-test("a pick that can't be read puts the picker on the season the app keeps picked, and says so", async () => {
+test("a pick that can't be read puts the picker on the season it leaves picked, and says so", async () => {
   const { row, picker, choose, readMarked } = createRow(["2026", "2025", "2024"], "2024");
-  const { answers, redraws } = watchRow(row, { year: 2026 });
+  const { answers, redraws } = watchRow(row);
 
   const chosen = choose("2025");
-  answers[0]("unread");
+  answers[0]({ kind: "unread", year: 2026 });
   await chosen;
 
   assert.deepEqual([picker.value, readMarked()], ["2026", "2026"]);
@@ -173,13 +169,13 @@ test("a pick that can't be read puts the picker on the season the app keeps pick
 
 test("before any season has loaded, two picks that can't be read put the picker back on the season it marked before both", async () => {
   const { row, picker, choose, readMarked } = createRow(["2026", "2025", "2024"], "2026");
-  const { answers } = watchRow(row, { year: null });
+  const { answers } = watchRow(row);
 
   const older = choose("2025");
   const newer = choose("2024");
-  answers[0]("replaced");
+  answers[0]({ kind: "replaced", year: 2024 });
   await older;
-  answers[1]("unread");
+  answers[1]({ kind: "unread", year: null });
   await newer;
 
   assert.deepEqual([picker.value, readMarked()], ["2026", "2026"]);

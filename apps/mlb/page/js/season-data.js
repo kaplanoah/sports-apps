@@ -15,7 +15,7 @@ const UNREACHABLE = "Can't reach the page's server right now";
 /** @type {ReturnType<typeof createSeasonReader> | null} */
 let reader = null;
 /** @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>} */
-let pickSeason = async () => "replaced";
+let pickSeason = async () => ({ kind: "replaced", year: null });
 /** @type {{ year: number, record: any } | null} */
 let deferredSeason = null;
 /** @type {number | null} */

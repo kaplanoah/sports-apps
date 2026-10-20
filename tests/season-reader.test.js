@@ -220,7 +220,7 @@ test("a pick that can't be read keeps the season shown, and says the store can't
   await reader.loadCurrentSeason();
   const { picks, pickSeason } = startPicks(reader, 2026);
 
-  assert.equal(await pickSeason(2025), "unread");
+  assert.deepEqual(await pickSeason(2025), { kind: "unread", year: 2026 });
 
   assert.deepEqual(picks, { picked: 2026, unreachable: 1 });
 });
@@ -229,7 +229,7 @@ test("before any season has loaded, a pick that can't be read keeps the pick bef
   const { reader } = startReader({}, { unreadable: ["seasons/2025"] });
   const { picks, pickSeason } = startPicks(reader, null);
 
-  assert.equal(await pickSeason(2025), "unread");
+  assert.deepEqual(await pickSeason(2025), { kind: "unread", year: null });
 
   assert.deepEqual(picks, { picked: null, unreachable: 1 });
 });
@@ -243,9 +243,9 @@ test("before any season has loaded, two picks that can't be read keep the pick b
   const newer = pickSeason(2024);
 
   releaseOlder();
-  assert.equal(await older, "replaced");
+  assert.equal((await older).kind, "replaced");
   releaseNewer();
-  assert.equal(await newer, "unread");
+  assert.deepEqual(await newer, { kind: "unread", year: null });
 
   assert.deepEqual(picks, { picked: null, unreachable: 1 });
 });
@@ -285,10 +285,10 @@ test("a pick that fails after a newer one replaced it changes nothing", async ()
   const release = holdReads("seasons/2025");
 
   const replaced = pickSeason(2025);
-  assert.equal(await pickSeason(2024), "shown");
+  assert.deepEqual(await pickSeason(2024), { kind: "shown", year: 2024 });
   release();
 
-  assert.equal(await replaced, "replaced");
+  assert.equal((await replaced).kind, "replaced");
   assert.deepEqual(picks, { picked: 2024, unreachable: 0 });
 });
 
@@ -332,6 +332,23 @@ test("the store's status is handed on as it changes", async () => {
   deliver("live/status", { error: "upstream_error" });
 
   assert.deepEqual(shown.status, { error: "upstream_error" });
+});
+
+test("a page whose first load of the current season couldn't be read moves on when the store does", async () => {
+  const { reader, shown, deliver } = startReader(
+    {
+      "live/current": { season: 2026 },
+      "seasons/2026": SEASON_2026,
+      "seasons/2027": SEASON_2027,
+    },
+    { unreadable: ["seasons/2026"] },
+  );
+  await assert.rejects(reader.loadCurrentSeason());
+
+  deliver("live/current", { season: 2027 });
+  await settle();
+
+  assert.deepEqual([shown.year, shown.season], [2027, SEASON_2027]);
 });
 
 test("a load the store can't answer fails, and loading again reads the current season again", async () => {
