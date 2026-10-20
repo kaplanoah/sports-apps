@@ -180,7 +180,11 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
   const clubGames = [...games.filter((game) => game.type === "R"), ...needed];
   const isSeriesKnown = hasStandings || !postseasonGames.some(hasClub);
   const slate = responses.schedule ? buildSlateWithAllStar(responses, games, clubGames, now) : null;
-  const schedule = buildSchedule(responses, gamesBySeries, calledOffIds);
+  const schedule = buildSchedule(responses, {
+    games: postseasonGames,
+    gamesBySeries,
+    calledOff: calledOffIds,
+  });
 
   return {
     version: SNAPSHOT_VERSION,
