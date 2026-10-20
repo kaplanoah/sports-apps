@@ -12,11 +12,13 @@ const START_AFTER_AWAY_MS = 2 * 60 * 1000;
 const isAwayLong = (awayMs) => awayMs >= START_AFTER_AWAY_MS;
 
 /**
- * Whether the page left the screen at `savedAt` two minutes ago or more, or at a time it can't
- * tell.
+ * Whether the page left the screen at `savedAt` two minutes or more before `now`, or at a time it
+ * can't tell.
  * @param {unknown} savedAt
+ * @param {number} [now]
  */
-const isLongAwayFrom = (savedAt) => !(Date.now() - Number(savedAt) < START_AFTER_AWAY_MS);
+const isLongAwayFrom = (savedAt, now = Date.now()) =>
+  !(now - Number(savedAt) < START_AFTER_AWAY_MS);
 
 /**
  * Where a part the page draws whole shows again on a reload, from what the page saved of it as it
@@ -27,9 +29,10 @@ const isLongAwayFrom = (savedAt) => !(Date.now() - Number(savedAt) < START_AFTER
  * stays where it was as long as the sheet does (sheet-memory.js).
  * @param {{ scrolls?: unknown, holderTop?: unknown, pageTop?: unknown, classes?: unknown, savedAt?: unknown }} saved
  * @param {boolean} isInSheet
+ * @param {number} now when the page loads, read once for all its parts, so they start over together
  */
-function findPlaceToShow({ scrolls, holderTop, pageTop, classes, savedAt }, isInSheet) {
-  const isLongAway = isLongAwayFrom(savedAt);
+function findPlaceToShow({ scrolls, holderTop, pageTop, classes, savedAt }, isInSheet, now) {
+  const isLongAway = isLongAwayFrom(savedAt, now);
   const isStartedOver = isLongAway && !isInSheet;
   /** @param {{ path?: unknown, left?: unknown, top?: unknown, startTop?: unknown }} scroll */
   const placeScroll = ({ path, left, top, startTop }) => {

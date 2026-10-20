@@ -12,7 +12,8 @@ runInContext(readFileSync(new URL("long-away.js", PAGE_CODE), "utf8"), context);
 const isAwayLong = runInContext("isAwayLong", context);
 const findPlaceInPage = runInContext("findPlaceToShow", context);
 /** The place the page's script finds, in this test's own objects, as it compares them. */
-const findPlaceToShow = (saved, isInSheet) => structuredClone(findPlaceInPage(saved, isInSheet));
+const findPlaceToShow = (saved, isInSheet) =>
+  structuredClone(findPlaceInPage(saved, isInSheet, Date.now()));
 
 test("two minutes away or more is long enough to start over", () => {
   assert.equal(isAwayLong(2 * MINUTE_MS - 1), false);

@@ -96,12 +96,14 @@ const keepCustomProperties = (style) =>
  * page was scrolled while it showed.
  * @param {string} id
  * @param {{ markup: string, hidden: boolean, style?: unknown, savedAt?: unknown }} part
+ * @param {number} now
  */
-function showPart(id, part) {
+function showPart(id, part, now) {
   const element = /** @type {HTMLElement} */ (document.getElementById(id));
-  const place = findPlaceToShow(part, !!element.closest("dialog"));
+  const place = findPlaceToShow(part, !!element.closest("dialog"), now);
   element.innerHTML = part.markup;
-  const isBackToStart = element.hasAttribute("data-start-hidden") && isLongAwayFrom(part.savedAt);
+  const isBackToStart =
+    element.hasAttribute("data-start-hidden") && isLongAwayFrom(part.savedAt, now);
   element.hidden = part.hidden === true || isBackToStart;
   element.classList.add(...place.classes.split(" ").filter(Boolean));
   if (typeof part.style === "string")
@@ -216,7 +218,8 @@ function showLastSheets() {
 // goes with it.
 function showLastDrawn() {
   const parts = Object.entries(readLastDrawn()).filter(([id, part]) => isDrawnPart(id, part));
-  const pageTops = parts.map(([id, part]) => showPart(id, part));
+  const now = Date.now();
+  const pageTops = parts.map(([id, part]) => showPart(id, part, now));
   if (parts.length) document.getElementById("loadNote")?.remove();
   // The browser's own putting back of the page's scroll would undo a start over, and comes once
   // the page has loaded, after its parts have shown where they were.

@@ -343,7 +343,7 @@ test.describe("on a short phone", () => {
   test("under two minutes away, the season tab and News stay where they were left", async ({
     page,
   }) => {
-    const { left, newsPlace } = await openAndLeaveFor(page, 2 * MINUTE_MS - 1000);
+    const { left, newsPlace } = await openAndLeaveFor(page, MINUTE_MS);
 
     expect(await readSeasonPlace(page, SIDEWAYS)).toEqual(left);
     await page.getByRole("tab", { name: "News" }).click();

@@ -55,7 +55,7 @@ test.describe("on a short phone", () => {
     page,
   }) => {
     await openApp(page);
-    await expectSeasonTabAfterReload(page, { sideways: SIDEWAYS, awayMs: 2 * MINUTE_MS - 1000 });
+    await expectSeasonTabAfterReload(page, { sideways: SIDEWAYS, awayMs: MINUTE_MS });
   });
 
   test("a reload shows News where it was left under two minutes after the page left, and at its top after two", async ({

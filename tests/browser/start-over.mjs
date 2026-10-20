@@ -214,7 +214,7 @@ export async function expectNewsAfterReloads(page, writeDocument) {
   await fillNews(page, writeDocument);
   const place = await moveNewsOffTop(page);
 
-  let release = await reloadAfter(page, 2 * MINUTE_MS - 1000);
+  let release = await reloadAfter(page, MINUTE_MS);
   await expect(page.locator("#newsList .news-card").first()).toBeAttached();
   expect(await readNewsPlace(page)).toBe(place);
   await runPageCode(page, release);

@@ -14,7 +14,7 @@ declare const WELCOME_CLOSED_KEY: string;
 declare function forgetWelcomeClosed(): void;
 declare const START_AFTER_AWAY_MS: number;
 declare function isAwayLong(awayMs: number): boolean;
-declare function isLongAwayFrom(savedAt: unknown): boolean;
+declare function isLongAwayFrom(savedAt: unknown, now?: number): boolean;
 declare function findPlaceToShow(
   saved: {
     scrolls?: unknown;
@@ -24,6 +24,7 @@ declare function findPlaceToShow(
     savedAt?: unknown;
   },
   isInSheet: boolean,
+  now: number,
 ): {
   scrolls: { path: unknown; left: number; top: number; isOnStart: boolean }[];
   holderTop: number;
