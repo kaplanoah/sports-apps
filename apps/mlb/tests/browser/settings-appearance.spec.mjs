@@ -145,7 +145,7 @@ test.describe("in an iPhone's Home Screen app", () => {
     await checkSystemInstallIcon({ page, openApp, openSettings, looks });
   });
 
-  test("the icon note grows in as a pick sets the icon off and shrinks away as its opening played backward", async ({
+  test("the icon note grows in as a pick sets the icon off and shrinks away on its opening's curve", async ({
     page,
   }) => {
     await checkReAddNoteEases({ page, openApp, openSettings, looks });

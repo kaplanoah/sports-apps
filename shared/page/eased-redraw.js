@@ -88,9 +88,10 @@ function easeOpen(element) {
 export const isEasingClosed = (element) => closings.has(element);
 
 /**
- * Shrinks a part to nothing from wherever it is, as its opening played backward, and then calls
- * `hide`, or calls it at once when motion is off. A part already shrinking keeps on, never
- * starting over, and one whose easing stops meanwhile isn't hidden.
+ * Shrinks a part to nothing from wherever it is, on the opening's curve, quick at first and
+ * settling at its end as a phone's own parts close, and then calls `hide`, or calls it at once
+ * when motion is off. A part already shrinking keeps on, never starting over, and one whose easing
+ * stops meanwhile isn't hidden.
  * @param {Element} element
  * @param {() => void} hide
  */
@@ -102,10 +103,9 @@ export function easeClosed(element, hide) {
   }
   const reached = readOpenFrame(element);
   stopEasing(element);
-  const closing = element.animate([COLLAPSED, reached], {
+  const closing = element.animate([reached, COLLAPSED], {
     duration: EASE_MS,
     easing: EASING,
-    direction: "reverse",
     fill: "forwards",
   });
   keepEasing(element, closing);

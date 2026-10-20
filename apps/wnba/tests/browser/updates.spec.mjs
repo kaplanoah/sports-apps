@@ -393,16 +393,20 @@ test.describe("on a phone, in full motion", () => {
 
   /** @typedef {import("../../../../tests/browser/animations.mjs").PlayedAnimation} PlayedAnimation */
   /** @param {PlayedAnimation} animation */
-  const isGrowing = ({ classes, first, last }) =>
+  const isOpening = ({ classes, first, last, direction }) =>
     classes.includes("updates") &&
+    direction === "normal" &&
     first.height === "0px" &&
     first.marginBottom === "0px" &&
     parseFloat(String(last.height)) > 0;
+  // The box shrinks away on its opening's curve, from where it is to nothing.
   /** @param {PlayedAnimation} animation */
-  const isOpening = (animation) => isGrowing(animation) && animation.direction === "normal";
-  // The box shrinks away as its opening played backward.
-  /** @param {PlayedAnimation} animation */
-  const isClosing = (animation) => isGrowing(animation) && animation.direction === "reverse";
+  const isClosing = ({ classes, first, last, direction }) =>
+    classes.includes("updates") &&
+    direction === "normal" &&
+    last.height === "0px" &&
+    last.marginBottom === "0px" &&
+    parseFloat(String(first.height)) > 0;
 
   test("on the season tab, after a trip to the standings and back, a tap on an update still opens its game and a tap on the X still closes the box", async ({
     page,
@@ -502,8 +506,9 @@ test.describe("on a phone, in full motion", () => {
 
     await dismissUpdatesBox(page);
     const closing = await readLastOfBox();
-    expect(closing.direction).toBe("reverse");
-    expect(closing.last.height).toBe(halfReopened.height);
+    expect(closing.direction).toBe("normal");
+    expect(closing.first.height).toBe(halfReopened.height);
+    expect(closing.last.height).toBe("0px");
     expect((await readBox()).easings).toBe(1);
     await finishTimedAnimations(page);
     await expect(updates).toBeHidden();

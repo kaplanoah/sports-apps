@@ -391,7 +391,8 @@ export async function checkNoteWithoutIcon({ page, openApp, openSettings, looks 
 
 /**
  * With motion on, the note grows in as a pick sets the icon off, and shrinks away as one brings it
- * back, its opening played backward, and only then empties, never starting over for another pick
+ * back, from its full frame to nothing on its opening's curve, quick at first and settling at its
+ * end, and only then empties, never starting over for another pick
  * that keeps it away while it shrinks, growing back from wherever its close has reached for one
  * that wants it again, and shrinking from wherever its opening has reached, then growing back to
  * full for one that wants it again. On System, it eases in for a change of the phone's look in a
@@ -433,7 +434,11 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   const full = await note.evaluate((element) => getComputedStyle(element).height);
 
   const halfClosed = await pickHeldHalfway("dark");
-  expect(await readLastEasing()).toEqual({ ...opening, direction: "reverse" });
+  expect(await readLastEasing()).toEqual({
+    ...opening,
+    first: opening.last,
+    last: opening.first,
+  });
   expect(halfClosed.isFilled).toBe(true);
   expect(parseFloat(halfClosed.height)).toBeLessThan(parseFloat(full));
   await page.emulateMedia({ colorScheme: "dark" });
@@ -458,8 +463,9 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   const halfOpen = await pickHeldHalfway("light");
   const closedFromHalfOpen = await pickHeldHalfway("dark");
   const closing = await readLastEasing();
-  expect(closing.direction).toBe("reverse");
-  expect(closing.last.height).toBe(halfOpen.height);
+  expect(closing.direction).toBe("normal");
+  expect(closing.first.height).toBe(halfOpen.height);
+  expect(closing.last.height).toBe("0px");
   expect(parseFloat(halfOpen.height)).toBeLessThan(parseFloat(full));
   await pick(page, looks.light);
   expect(await readLastEasing()).toMatchObject({
