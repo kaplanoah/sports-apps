@@ -335,21 +335,33 @@ test("a month whose every game MLB dropped goes, and tells open pages", async ()
   );
 });
 
-test("a season's whole schedule MLB answers with no games leaves the regular season's months as they were", async () => {
-  const { store, harness, read, context, clock } = createUpdatingStore({
-    snapshot: WHOLE_SEASON,
-    now: SEASON_NOW,
-  });
-  await store.alarm();
-  const july = read("schedules-2026/2026-07");
-  assert.ok(july);
+/**
+ * The ids of each month's games the store keeps, by its month.
+ * @param {(key: string) => any} read
+ */
+const readMonths = (read) =>
+  Object.fromEntries(
+    Object.keys(WHOLE_SEASON.schedule).map((month) => [
+      month,
+      read(`schedules-2026/${month}`)?.games.map((/** @type {any} */ game) => game.id),
+    ]),
+  );
 
-  const responses = { ...SEASON_GAMES.responses, seasonGames: { dates: [] } };
-  harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: SEASON_NOW });
-  assert.equal(harness.snapshot.schedule["2026-07"], undefined);
-  await updateSeasonAgain(store, context, clock);
-  assert.deepEqual(read("schedules-2026/2026-07"), july);
-});
+for (const feed of ["seasonGames", "postseason"])
+  test(`a ${feed} read MLB answers with no games keeps every game in its month`, async () => {
+    const { store, harness, read, context, clock } = createUpdatingStore({
+      snapshot: WHOLE_SEASON,
+      now: SEASON_NOW,
+    });
+    await store.alarm();
+    const months = readMonths(read);
+    assert.ok(Object.values(months).every(Boolean));
+
+    const responses = { ...SEASON_GAMES.responses, [feed]: { dates: [] } };
+    harness.snapshot = MLBSnapshot.buildSnapshot(responses, { season: 2026, now: SEASON_NOW });
+    await updateSeasonAgain(store, context, clock);
+    assert.deepEqual(readMonths(read), months);
+  });
 
 test("a read without the standings during the playoffs leaves the playoff games' months and each club's last and next games as they were", async () => {
   const { store, harness, read, context, clock } = createUpdatingStore({
