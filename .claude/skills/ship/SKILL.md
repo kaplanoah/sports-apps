@@ -20,7 +20,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 ## Issues
 
 - An issue holds one thing a PR could do, as AGENTS.md's step 12 says, decided but left for later, written so a session can build it with no other prompt.
-- Open one in the turn the work is left out: a review finding outside the PR's one thing, something the owner chose not to build yet, or a bug seen on beta that isn't this PR's.
+- Open one in the turn the work is left out: a finding step 12 leaves out of a PR, something the owner chose not to build yet, or a bug seen on beta that isn't this PR's.
   A finding declined as not worth its code gets no issue: the reply on its thread says why.
 - First search the open issues, and comment on one that already covers the work rather than open a second.
 - Write it under these headings:
@@ -141,8 +141,8 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 
 ## Step 12: one thing a PR, and stacked PRs
 
-- A review finding outside the one thing AGENTS.md's step 12 names becomes an issue, linked from its thread, not a commit on the PR.
-- A PR built to fix review findings left for later takes one area's findings, or about five, never a whole review's.
+- A review finding outside the PR's one thing that AGENTS.md's step 12 names, or a place outside the change that shows a finding's problem, becomes an issue, linked from its thread, not a commit on the PR.
+- A PR built to fix review findings left for later takes findings that make one thing, like one area's or about five sharing a cause, never a whole review's.
 - When a change has red and non-red parts that can each stand alone, split them:
   the non-red PR first, and the red one stacked on it, so the non-red half ships without waiting for the owner's phone.
 - A PR that needs another PR's unmerged changes doesn't wait for it: stack it.
