@@ -44,7 +44,7 @@ const isInsideRepo = (root, path) => {
 function findRevisionRefusal(root, argument) {
   const colon = argument.indexOf(":");
   const path = colon === -1 ? argument : argument.slice(colon + 1);
-  return isInsideRepo(root, path) ? null : `${argument} reaches outside the repo`;
+  return isInsideRepo(root, path) ? null : "a revision reaches outside the repo";
 }
 
 /**
@@ -54,8 +54,8 @@ function findRevisionRefusal(root, argument) {
  */
 function findRangeRefusal(root, range) {
   const path = range?.match(LINE_RANGE)?.[1];
-  if (path === undefined) return `-L takes start,end:<path> or :<function>:<path>`;
-  return isInsideRepo(root, path) ? null : `-L ${range} reaches outside the repo`;
+  if (path === undefined) return "-L takes start,end:<path> or :<function>:<path>";
+  return isInsideRepo(root, path) ? null : "an -L path reaches outside the repo";
 }
 
 /**
@@ -64,8 +64,9 @@ function findRangeRefusal(root, range) {
  * @param {string[]} paths
  */
 function findPathRefusal(root, paths) {
-  const outside = paths.find((path) => !isInsideRepo(root, path));
-  return outside === undefined ? null : `${outside} is outside the repo`;
+  return paths.every((path) => isInsideRepo(root, path))
+    ? null
+    : "a path after -- is outside the repo";
 }
 
 /**
@@ -92,7 +93,7 @@ export function findRefusal(args, root) {
       if (refusal) return refusal;
       continue;
     }
-    if (argument.startsWith("-")) return `${argument} isn't an option the review uses`;
+    if (argument.startsWith("-")) return "an option isn't one the review uses";
     const refusal = findRevisionRefusal(root, argument);
     if (refusal) return refusal;
   }

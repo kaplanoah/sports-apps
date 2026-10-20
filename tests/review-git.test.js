@@ -54,6 +54,16 @@ test("refuses any option the review doesn't use, and any path outside the repo",
   for (const args of REFUSED) assert.notEqual(findRefusal(args, ROOT), null, args.join(" "));
 });
 
+test("never repeats a refused argument back", () => {
+  for (const args of REFUSED) {
+    const refusal = findRefusal(args, ROOT) ?? "";
+    const echoed = args
+      .slice(1)
+      .filter((argument) => argument.length > 2 && refusal.includes(argument));
+    assert.deepEqual(echoed, [], args.join(" "));
+  }
+});
+
 test("allows each form of git log and git show the review prompts name", () => {
   for (const args of ALLOWED) assert.equal(findRefusal(args, ROOT), null, args.join(" "));
 });
@@ -67,6 +77,6 @@ test("runs git with no shell, and refuses before git runs", () => {
   assert.throws(
     () => execFileSync("node", [script, "show", "--output=x", "HEAD"], { stdio: "pipe" }),
     (/** @type {any} */ error) =>
-      error.status === 2 && /refused: --output=x isn't an option/.test(error.stderr),
+      error.status === 2 && /refused: an option isn't one the review uses/.test(error.stderr),
   );
 });
