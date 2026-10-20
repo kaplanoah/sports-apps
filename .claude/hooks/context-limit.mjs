@@ -122,6 +122,21 @@ export function readRecentContextTokens(transcript) {
   return tokens;
 }
 
+/**
+ * The context the session's last two replies read, latest first, or none for a subagent's call,
+ * whose context is its own, or when there's no transcript or it can't be read.
+ * @param {HookInput} input
+ * @returns {number[]}
+ */
+export function readSessionTokens({ transcript_path: transcriptPath, agent_id: agentId }) {
+  if (agentId || !transcriptPath) return [];
+  try {
+    return readRecentContextTokens(readFileSync(transcriptPath, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
 /** @param {number} tokens */
 const countReminderSteps = (tokens) =>
   tokens < REMINDER_TOKENS ? 0 : 1 + Math.floor((tokens - REMINDER_TOKENS) / REMINDER_STEP_TOKENS);
@@ -259,14 +274,12 @@ export function decideHookOutput(input, [latest = 0, previous = 0], branch = "")
   return null;
 }
 
-/** Reads the hook's input and the transcript it names, and writes what the hook answers, if anything. */
+/** Reads the hook's input and the session's context, and writes what the hook answers, if anything. */
 function answerHookInput() {
   try {
     /** @type {HookInput} */
     const input = JSON.parse(readFileSync(0, "utf8"));
-    if (input.agent_id || !input.transcript_path) return;
-    const transcript = readFileSync(input.transcript_path, "utf8");
-    const recentTokens = readRecentContextTokens(transcript);
+    const recentTokens = readSessionTokens(input);
     const branch = recentTokens[0] >= STOP_TOKENS ? readCurrentBranch(input.cwd) : "";
     const output = decideHookOutput(input, recentTokens, branch);
     if (output) process.stdout.write(JSON.stringify(output));

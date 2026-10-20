@@ -5,12 +5,13 @@
 
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { readRecentContextTokens, STOP_TOKENS } from "./context-limit.mjs";
+import { readSessionTokens, STOP_TOKENS } from "./context-limit.mjs";
 
-const PUSH = /^git\s+push(?:\s|$)/;
+const PUSH = /^git((?:\s+-[Cc]\s+\S+)*)\s+push(?:\s|$)/;
+const FOLDER_OPTION = /-C\s+(\S+)/g;
 const BETA_PUSH = /^git\s+push\s+-f\s+origin\s+\S+:beta$/;
 const CHECK_SCRIPTS = ["lint", "format:check", "typecheck", "deadcode"];
 const OUTPUT_LINE_LIMIT = 40;
@@ -32,6 +33,18 @@ const OUTPUT_LINE_LIMIT = 40;
 function isCheckedPush(command) {
   const trimmed = command.trim();
   return PUSH.test(trimmed) && !BETA_PUSH.test(trimmed);
+}
+
+/**
+ * The folder a push runs in: the session's, moved by each `-C` git is given before `push`, as git
+ * moves for each in turn.
+ * @param {string} command a push
+ * @param {string} sessionFolder
+ */
+export function findPushFolder(command, sessionFolder) {
+  const options = PUSH.exec(command.trim())?.[1] ?? "";
+  const folders = Array.from(options.matchAll(FOLDER_OPTION), ([, folder]) => folder);
+  return resolve(sessionFolder, ...folders);
 }
 
 /**
@@ -101,27 +114,15 @@ async function runNpmScript(folder, script) {
 const isTreeCleanIn = (folder) =>
   execFileSync("git", ["status", "--porcelain"], { cwd: folder, encoding: "utf8" }).trim() === "";
 
-/**
- * The context of the transcript's last replies, or none for a subagent's call, whose context is
- * its own, or when the transcript can't be read.
- * @param {{ transcript_path?: string, agent_id?: string }} input
- * @returns {number[]}
- */
-export function readSessionTokens({ transcript_path: transcriptPath, agent_id: agentId }) {
-  if (agentId || !transcriptPath) return [];
-  try {
-    return readRecentContextTokens(readFileSync(transcriptPath, "utf8"));
-  } catch {
-    return [];
-  }
-}
-
 /** Reads the hook's input and blocks a push, with exit code 2 and the reason, when it shouldn't go. */
 async function checkHookInput() {
   const input = JSON.parse(readFileSync(0, "utf8"));
   const command = String(input.tool_input?.command ?? "");
   if (!isCheckedPush(command)) return;
-  const folder = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+  const folder = findPushFolder(
+    command,
+    input.cwd ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd(),
+  );
   const reason = await decidePush(
     {
       command,

@@ -42,6 +42,7 @@ paths:
   judged by the `node_modules/.package-lock.json` npm writes on each install (`.claude/hooks/install-packages.mjs`).
   It says nothing when it skips, and never stops a session.
 - Another hook there runs `npm run lint`, `format:check`, `typecheck`, and `deadcode` at once before each `git push`,
+  in the folder the push runs in, the one a `git -C <dir> push` names too,
   and blocks the push with the first failure's output (`.claude/hooks/check-push.mjs`).
   It refuses a push while `git status --porcelain` lists anything, since the checks would judge the working tree rather than the commit,
   and asks for `npm ci` when `node_modules` is missing.
