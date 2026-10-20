@@ -100,12 +100,12 @@ test("once the playoff field is set while the standings show far down, the brack
   const setField = await unsetField(app);
   await expect(page.locator("#standings-league")).toBeVisible();
   await scrollSeasonPartToEnd(page, "standings");
-  const reach = await readHeaderReach(page);
 
   await setField();
 
   await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
-  expect(await readSeasonPartScroll(page, "bracket")).toBe(reach);
+  expect(await readSeasonPartScroll(page, "bracket")).toBe(await readHeaderReach(page));
+  await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bheld\b/);
 });
 
 test("a tap on the pill switches between the bracket and the standings, leaving the tab's name and the pill's order", async ({
@@ -388,19 +388,24 @@ test("each part keeps its own place: the bracket chosen far down the standings s
   await expect(page.locator("#bracketStandingsPill")).toHaveClass(/\bstuck\b/);
 });
 
-test("the pill gives up its line once what's above it grows past where the standings sit still", async ({
+test("the pill stays held in its line as what's above it grows, the standings scrolling on by as much", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
   await waitForLoadToSettle(page);
   const pill = page.locator("#bracketStandingsPill");
-  await scrollSeasonPart(page, "standings", (await readHeaderReach(page)) + 20);
+  const reach = await readHeaderReach(page);
+  await scrollSeasonPart(page, "standings", reach + 20);
   await expect(pill).toHaveClass(/\bstuck\b/);
 
   await showTallUpdatesBox(page, 100);
 
-  await expect(pill).not.toHaveClass(/\bstuck\b/);
+  await expect.poll(() => readHeaderReach(page)).toBeGreaterThan(reach);
+  const growth = (await readHeaderReach(page)) - reach;
+  expect(await readSeasonPartScroll(page, "standings")).toBe(Math.round(reach + 20 + growth));
+  await expect(pill).toHaveClass(/\bheld\b/);
+  await expect(pill).toHaveClass(/\bstuck\b/);
 });
 
 test("with the header still partly showing, the bracket chosen shows scrolled as far as the standings, so the header stays where it is", async ({
