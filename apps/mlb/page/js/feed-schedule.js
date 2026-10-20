@@ -11,7 +11,7 @@ import {
   normalizeGame,
   summarizeGame,
 } from "./feed-games.js";
-import { listPostseasonGames, listSeriesIds } from "./feed-postseason.js";
+import { listSeriesIds } from "./feed-postseason.js";
 
 // The Games view lists every game of the season, which the store keeps a month to a document, apart
 // from the season's record that pages follow through every live game, and saves again only as a
@@ -189,13 +189,18 @@ function groupByMonth(games) {
 // and the postseason count over it. MLB drops a playoff game a series no longer needs from those
 // as soon as the series ends, while the whole schedule can still list it, so a playoff game is
 // listed only while they list it.
-export function buildSchedule(responses, gamesBySeries, calledOff) {
+/**
+ * @param {any} responses
+ * @param {{ games: { id: string }[], gamesBySeries: Record<string, any[]>, calledOff: Set<string> }} postseason
+ *   the playoff games those list, each series' games, and the games a decided series didn't need
+ */
+export function buildSchedule(responses, { games: playoffGames, gamesBySeries, calledOff }) {
   if (!responses.seasonGames) return null;
   const seasonListings = listSeasonListings(responses.seasonGames);
   const people = listScheduledPeople(responses, seasonListings);
   const seriesIds = listSeriesIds(gamesBySeries);
   const homeBallparks = findHomeBallparks(seasonListings);
-  const playoffIds = new Set(listPostseasonGames(responses).map((game) => game.id));
+  const playoffIds = new Set(playoffGames.map((game) => game.id));
   const isStillListed = (game) => !game.postseason || playoffIds.has(game.id);
   const games = listSeasonListings(responses.seasonGames, responses.postseason, responses.schedule)
     .map((listing) => describeListedGame(listing, people, seriesIds, homeBallparks))
