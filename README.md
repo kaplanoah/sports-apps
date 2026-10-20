@@ -363,7 +363,8 @@ since its live version's commit, since its Worker would be the same;
 `worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too
 once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
 CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
-always deploys. Without the token, merges deploy nothing.
+replaces whatever beta held, but only with the head of the pull request that holds beta, as
+"Trying a change on the phone" says. Without the token, merges deploy nothing.
 Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <app>` for
 one app. `npm run rollback -- <app>` puts the app's previous version back at all
 of its traffic and prints which commit was live and which is now; it refuses
@@ -376,13 +377,24 @@ Each app also has a beta Worker, `<app>-app-beta`, named in the `[env.beta]` of
 its `wrangler.toml`, with its own store, key, and address. Its page names itself
 "beta" on the Home Screen, in its settings' version line, and in a tag beside its
 name with the commit it runs and how long ago that went live, so it can sit beside
-the real one. To use a pull request's change on the phone before it merges:
+the real one. Beta holds one pull request at a time: the one labeled `beta`
+first. Others wait in line with `beta-wait`, and the `Beta` workflow comments on
+the one that has waited longest once beta is free. To use a pull request's
+change on the phone before it merges:
 
-1. Reset `beta` to the pull request's branch and push it:
+1. Merge `main` into its branch, push the branch, and label the pull request
+   `beta`, taking `beta` off first if it's still there from before the push,
+   since adding a label it already has changes nothing. Once it's the only open
+   pull request labeled `beta`, it holds beta.
+2. Reset `beta` to the pull request's branch and push it:
    `git push -f origin <branch>:beta`.
-2. Wait for the Deploy run for that push to finish. It deploys the beta Workers
-   at once, with the same checks and rollback as `main`'s deploy.
-3. Open the beta app from the Home Screen and use the change.
+3. Wait for the Deploy run for that push to finish. It deploys the beta Workers
+   at once, with the same checks and rollback as `main`'s deploy, and deploys
+   nothing for a commit that isn't the head of the pull request holding beta.
+4. Open the beta app from the Home Screen and use the change.
+
+A pull request gives beta up as it closes or merges, as its branch is pushed,
+and as it's labeled `phone-ok`.
 
 Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`,
 in Cloudflare's dashboard, since the `beta` token can change only the Workers it

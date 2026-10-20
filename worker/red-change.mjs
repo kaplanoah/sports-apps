@@ -26,7 +26,8 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createGitHub, readAllPages } from "./github-api.mjs";
+import { findChannel } from "./channels.mjs";
+import { PHONE_OK_LABEL, findLabeling, readPushTime, readTimeline } from "./labeling.mjs";
 import {
   LAYER_PROPERTIES,
   createWatchCheck,
@@ -40,8 +41,6 @@ import {
   isTransition,
   readMinifiedCode,
 } from "./red-change-styles.mjs";
-
-export const PHONE_OK_LABEL = "phone-ok";
 
 const RED_FILES = new Set(
   [
@@ -816,71 +815,9 @@ export function findRedReasons(
   return files.flatMap((file) => findFileReasons(file, styles));
 }
 
-/**
- * @typedef {object} TimelineEvent
- * @property {string} event
- * @property {string} [created_at] when GitHub recorded it
- * @property {{ name: string }} [label]
- * @property {{ login: string } | null} [actor]
- */
+/** @typedef {import('./labeling.mjs').Labeling} Labeling */
 
-/** @typedef {{ labeler: string | null, isAfterLastPush: boolean }} Labeling */
-
-/** @param {TimelineEvent} event */
-const readEventTime = (event) => Date.parse(event.created_at ?? "");
-
-/**
- * Who last added `label` to a pull request, and whether they added it after its head commit
- * reached GitHub and after its last force push, from its timeline. A commit's own date is when it
- * was made, which can be long before it was pushed, so the head's arrival comes from GitHub.
- * @param {TimelineEvent[]} events
- * @param {string} label
- * @param {number} headPushedAt when GitHub first saw the head commit, or NaN when it can't say
- * @returns {Labeling}
- */
-export function findLabeling(events, label, headPushedAt) {
-  const lastAdded = events
-    .filter((event) => event.event === "labeled" && event.label?.name === label)
-    .toSorted((first, second) => readEventTime(first) - readEventTime(second))
-    .at(-1);
-  if (!lastAdded) return { labeler: null, isAfterLastPush: false };
-  const forcePushes = events.filter((event) => event.event === "head_ref_force_pushed");
-  const lastPush = Math.max(headPushedAt, ...forcePushes.map(readEventTime));
-  return {
-    labeler: lastAdded.actor?.login ?? null,
-    isAfterLastPush: readEventTime(lastAdded) > lastPush,
-  };
-}
-
-/**
- * Every event on a pull request's timeline, page by page.
- * @param {object} options
- * @param {string} options.repository as owner/name
- * @param {string} options.pullNumber
- * @param {typeof fetch} [options.fetchImpl]
- * @param {NodeJS.ProcessEnv} [options.env] holds GH_TOKEN
- * @returns {Promise<TimelineEvent[]>}
- */
-export const readTimeline = ({ repository, pullNumber, fetchImpl = fetch, env = process.env }) =>
-  readAllPages(createGitHub({ repository, fetchImpl, env }), `/issues/${pullNumber}/timeline`);
-
-/**
- * When GitHub first saw a commit: its earliest check suite, which GitHub makes as the push that
- * brings the commit arrives, or NaN when it has none.
- * @param {object} options
- * @param {string} options.repository as owner/name
- * @param {string} options.sha
- * @param {typeof fetch} [options.fetchImpl]
- * @param {NodeJS.ProcessEnv} [options.env] holds GH_TOKEN
- */
-export async function readPushTime({ repository, sha, fetchImpl = fetch, env = process.env }) {
-  const github = createGitHub({ repository, fetchImpl, env });
-  const { check_suites: suites } = await github(`/commits/${sha}/check-suites?per_page=100`);
-  const times = suites.map((/** @type {{ created_at: string }} */ suite) =>
-    Date.parse(suite.created_at),
-  );
-  return times.length ? Math.min(...times) : Number.NaN;
-}
+const TO_BETA = `${findChannel("beta").howToShip}.`;
 
 /**
  * Why a red change labeled phone-ok is still held, or null when the label lets it through.
@@ -896,8 +833,7 @@ function findLabelProblem({ labeler, isAfterLastPush }, owner) {
   if (!isAfterLastPush)
     return (
       `A red change labeled ${PHONE_OK_LABEL} before its last push, which the owner hasn't used on the ` +
-      `phone. Deploy it to beta (git push -f origin <branch>:beta). The owner takes the label off and adds ` +
-      "it again after using it on the beta app."
+      `phone. ${TO_BETA} The owner takes the label off and adds it again after using it on the beta app.`
     );
   return null;
 }
@@ -911,7 +847,7 @@ function findLabelProblem({ labeler, isAfterLastPush }, owner) {
  */
 export function decideGate(
   diff,
-  { labels, labeling = { labeler: null, isAfterLastPush: false }, owner = "" },
+  { labels, labeling = { labeler: null, addedAt: Number.NaN, isAfterLastPush: false }, owner = "" },
 ) {
   const diffProblem = findDiffProblem(diff);
   const reasons = [...(diffProblem ? [diffProblem] : []), ...findRedReasons(readDiff(diff))];
@@ -922,8 +858,8 @@ export function decideGate(
       isHeld: true,
       message:
         `A red change: it needs the owner's iPhone, which no CI browser stands in for.\n${listed}\n` +
-        `Deploy it to beta (git push -f origin <branch>:beta). The owner adds the ${PHONE_OK_LABEL} ` +
-        "label after using it on the beta app, which runs this check again.",
+        `${TO_BETA} The owner adds the ${PHONE_OK_LABEL} label after using it on the beta app, ` +
+        "which runs this check again.",
     };
   const problem = findLabelProblem(labeling, owner);
   if (problem) return { isHeld: true, message: `${problem}\n${listed}` };
