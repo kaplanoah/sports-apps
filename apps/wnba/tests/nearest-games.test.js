@@ -29,22 +29,27 @@ const SEASON = [
 const listIds = ({ last, now, next }) => [last?.id ?? null, now?.id ?? null, next?.id ?? null];
 
 test("a team's nearest games are its latest final, the one it's playing, and its first still to come", () => {
-  assert.deepEqual(listIds(findTeamNearestGames(SEASON, "SEA", new Set())), ["2", "4", "5"]);
-  assert.deepEqual(listIds(findTeamNearestGames(SEASON, "PHX", new Set())), ["3", null, null]);
-  assert.deepEqual(listIds(findTeamNearestGames(SEASON, "NYL", new Set())), [null, null, null]);
+  assert.deepEqual(listIds(findTeamNearestGames(SEASON, "SEA", new Map())), ["2", "4", "5"]);
+  assert.deepEqual(listIds(findTeamNearestGames(SEASON, "PHX", new Map())), ["3", null, null]);
+  assert.deepEqual(listIds(findTeamNearestGames(SEASON, "NYL", new Map())), [null, null, null]);
 });
 
 test("a team's next game is never one left over in a decided series, or one whose other team isn't known", () => {
   const playoffs = [
     makeGame("10", "final", ["ATL", "WAS"], "1-3"),
-    makeGame("11", "pre", ["WAS", "ATL"], "1-3"),
+    { ...makeGame("11", "pre", ["WAS", "ATL"], "1-3"), isIfNeeded: true },
     makeGame("12", "pre", [null, "ATL"], "2-1"),
     makeGame("13", "pre", ["NYL", "ATL"], "2-1"),
   ];
-  assert.deepEqual(listIds(findTeamNearestGames(playoffs, "ATL", new Set(["1-3"]))), [
-    "10",
-    null,
-    "13",
-  ]);
-  assert.deepEqual(listIds(findTeamNearestGames(playoffs, "ATL", new Set())), ["10", null, "11"]);
+  const decided = new Map([["1-3", { winner: "ATL" }]]);
+  assert.deepEqual(listIds(findTeamNearestGames(playoffs, "ATL", decided)), ["10", null, "13"]);
+  assert.deepEqual(listIds(findTeamNearestGames(playoffs, "ATL", new Map())), ["10", null, "11"]);
+});
+
+test("a team's next game is never one the league put off, whatever words its status uses", () => {
+  for (const status of ["Postponed", "PPD", "Cancelled"]) {
+    const putOff = { ...makeGame("5", "pre", ["MIN", "SEA"]), status };
+    const season = SEASON.map((game) => (game.id === "5" ? putOff : game));
+    assert.deepEqual(listIds(findTeamNearestGames(season, "SEA", new Map())), ["2", "4", "6"]);
+  }
 });

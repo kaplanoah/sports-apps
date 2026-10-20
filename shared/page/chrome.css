@@ -53,7 +53,7 @@
  * from an app's icon PNGs, home-screen-icons.css, as --home-screen-icon-light, -dark, and, for an
  * app whose System icon is drawn to blend the two, -system.
  *
- * Phones are up to 779px wide, as settings-sheet.js also matches. Focus rings show
+ * Phones are up to 779px wide, which device.js names for the page's scripts. Focus rings show
  * only while the body has the kbd class, which keyboard-focus.js sets during keyboard navigation.
  */
 

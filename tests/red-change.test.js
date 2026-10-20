@@ -16,6 +16,7 @@ import {
   readPushTime,
   readTimeline,
 } from "../worker/red-change.mjs";
+import { readRepoFile } from "./repo-files.js";
 
 /**
  * A diff that adds `added` to `path` at line 10, after the lines it keeps, and takes out
@@ -1896,7 +1897,7 @@ test("a change that isn't red passes without the label", () => {
 });
 
 test("CI's check needs the gate, which a label change runs again without a push", () => {
-  const workflow = readFileSync(`${import.meta.dirname}/../.github/workflows/ci.yml`, "utf8");
+  const workflow = readRepoFile(".github/workflows/ci.yml");
   assert.match(workflow, /types: \[[^\]]*\blabeled, unlabeled\]/);
   assert.match(workflow, /\n {2}check:\n {4}if: always\(\)\n {4}needs:\s*\[[^\]]*\bgate\b/);
   assert.match(

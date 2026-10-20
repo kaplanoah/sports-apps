@@ -4,7 +4,7 @@
 
 import { html } from "#shared/html.js";
 import { describeSeriesGame, describeSeriesWin } from "#shared/series-text.js";
-import { ROUNDS } from "./snapshot.js";
+import { countWinsNeeded, ROUNDS } from "./snapshot.js";
 
 /** @typedef {import("./games-view.js").Game} Game */
 /** @typedef {(code: string | null) => unknown} RenderTeam */
@@ -62,11 +62,16 @@ export function describeResult(game, renderTeam) {
  */
 export function describeWin(game, games, renderTeam) {
   const { winner, loser } = findResult(game);
-  const round = ROUNDS[/** @type {number} */ (game.round)];
+  const round = /** @type {number} */ (game.round);
   const wins = countSeriesWins(games, game);
   const own = wins[winner.team ?? ""] ?? 0;
   const theirs = wins[loser.team ?? ""] ?? 0;
-  const sides = { result: describeResult(game, renderTeam), series: round.name, own, theirs };
-  if (own === Math.ceil(round.bestOf / 2)) return describeSeriesWin(sides);
+  const sides = {
+    result: describeResult(game, renderTeam),
+    series: ROUNDS[round].name,
+    own,
+    theirs,
+  };
+  if (own === countWinsNeeded(round)) return describeSeriesWin(sides);
   return describeSeriesGame({ ...sides, number: /** @type {number} */ (game.number) });
 }

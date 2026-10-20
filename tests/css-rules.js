@@ -121,7 +121,7 @@ const hasOwnShape = (rule) => rule.split(",").every((selector) => OWN_SHAPES.has
  */
 export const listStrayCorners = (path) =>
   readDeclarations(path)
-    .filter((declaration) => /^border(-[a-z]+)*-radius$/.test(declaration.property))
+    .filter((declaration) => /^(border(-[a-z]+)*-radius|rx|ry)$/.test(declaration.property))
     .filter((declaration) => !hasOwnShape(readRule(declaration)))
     .filter((declaration) => !isTokenCorner(declaration.value))
     .map(

@@ -1,21 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
+import { readRepoFile } from "./repo-files.js";
 
 const SCOPE = "https://mlb-app.example.workers.dev/k3y/";
 const OLD_ENDPOINT = "https://web.push.apple.com/old";
 const NEW_ENDPOINT = "https://web.push.apple.com/new";
 
-const REPO_ROOT = `${import.meta.dirname}/..`;
-
 // The Worker serves the shared page files under shared/, beside each app's own.
 const readPageFile = (app, path) =>
-  readFileSync(
+  readRepoFile(
     path.startsWith("shared/")
-      ? `${REPO_ROOT}/shared/page/${path.slice("shared/".length)}`
-      : `${REPO_ROOT}/apps/${app}/page/${path}`,
-    "utf8",
+      ? `shared/page/${path.slice("shared/".length)}`
+      : `apps/${app}/page/${path}`,
   );
 
 /**
