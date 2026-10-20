@@ -4,7 +4,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decideHookOutput, readRecentContextTokens } from "../.claude/hooks/context-limit.mjs";
+import {
+  decideHookOutput,
+  readRecentContextTokens,
+  readSessionTokens,
+} from "../.claude/hooks/context-limit.mjs";
 import { readRepoFile } from "./repo-files.js";
 
 const HOOK = `${import.meta.dirname}/../.claude/hooks/context-limit.mjs`;
@@ -329,6 +333,14 @@ test("a subagent's reply, a reply that read nothing, and a line that doesn't par
     '{"type":"assistant","message":{"usage"',
   ];
   assert.deepEqual(readRecentContextTokens(transcript.join("\n")), [310_000, 120_000]);
+});
+
+test("the session's context is read from its transcript, but not for a subagent or a transcript that can't be read", () => {
+  const transcript_path = writeTranscript(150_000, 310_000);
+  assert.deepEqual(readSessionTokens({ transcript_path }), [310_000, 150_000]);
+  assert.deepEqual(readSessionTokens({ transcript_path, agent_id: "agent-1" }), []);
+  assert.deepEqual(readSessionTokens({ transcript_path: join(folder, "missing.jsonl") }), []);
+  assert.deepEqual(readSessionTokens({}), []);
 });
 
 test("a subagent's call, a missing transcript, a transcript that doesn't parse, or input that doesn't, gets no answer", () => {

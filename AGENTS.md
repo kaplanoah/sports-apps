@@ -109,8 +109,8 @@ When a step says to go back to an earlier step, continue in order from there.
 
 1. Fetch `main` and start your branch from it, or, for a stacked PR (step 12), from the branch of the PR it builds on.
    If the branch's last PR has merged, reset the branch to `origin/main` first.
-2. Run `npm run lint`, `npm run format:check`, `npm run typecheck`,
-   and `npm run deadcode`, and the tests that cover what you changed: a test file with `node --test <file>`, or a browser spec with `npx playwright test <file>`.
+2. A hook runs `npm run lint`, `format:check`, `typecheck`, and `deadcode` before each push, and blocks the push when one fails.
+   Run the tests that cover what you changed: a test file with `node --test <file>`, or a browser spec with `npx playwright test <file>`.
    Name each spec that exercises the change, a change to shared code too, found by searching the tests for the module or what it draws; never pass a folder.
    Don't run the full test suite locally (`npm test`, `npm run test:browser`, or `npm run check`):
    CI runs the Node tests, and the browser tests a change reaches, on every push.
