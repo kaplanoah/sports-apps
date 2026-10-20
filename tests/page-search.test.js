@@ -59,6 +59,13 @@ const PAGES = {
     { id: "7", team: "HAW", firstName: "Ken", lastName: "Standish", number: "5" },
     { id: "8", team: "FOX", firstName: "Ada", lastName: "Stoner", number: "8" },
     { id: "9", team: "HAW", firstName: "Rex", lastName: "Finale", number: "1" },
+    { id: "10", team: "FOX", firstName: "Tess", lastName: "Willis", number: "14" },
+    { id: "11", team: "HAW", firstName: "Tess", lastName: "Foxworth", number: "15" },
+    { id: "12", team: "FOX", firstName: "Kay Lee", lastName: "Hart-Moss", number: "20" },
+    { id: "13", team: "HAW", firstName: "Bo", lastName: "Highsmith", number: "21" },
+    { id: "14", team: "FOX", firstName: "Ines", lastName: "Hurtado", number: "23" },
+    { id: "15", team: "HAW", firstName: "Hawk", lastName: "Rios", number: "24" },
+    { id: "16", team: "FOX", firstName: "Lu A.", lastName: "Ferro", number: "25" },
   ],
   section: { key: "roster", name: "Roster" },
   places: [
@@ -203,7 +210,7 @@ test("a place leaves the games to the words a search of games reads, and none wh
   assert.equal(listRows("east").gameText, "east");
 });
 
-test("a game part's name lists it for the latest final the rest of the words find, and no games", () => {
+test("a game part's name lists it for the latest final the rest of the words find, and no games, then any player whose name it starts", () => {
   assert.deepEqual(listRows("highlights"), { rows: ["highlights of the season"], gameText: null });
   assert.deepEqual(listRows("Hawks highlights"), {
     rows: ["highlights of hawks"],
@@ -213,7 +220,10 @@ test("a game part's name lists it for the latest final the rest of the words fin
     rows: ["highlights of hawks foxes"],
     gameText: null,
   });
-  assert.deepEqual(listRows("high", true).rows, ["highlights of the season"]);
+  assert.deepEqual(listRows("high", true).rows, [
+    "highlights of the season",
+    "player HAW Highsmith",
+  ]);
 });
 
 test("a final's part opens the last game that has ended, and a part before one the next game", () => {
@@ -243,10 +253,48 @@ test("a name a search of games knows, as a starter's, lists his sheet and still 
   assert.deepEqual(listRows("Quill"), { rows: ["player HAW Quill"], gameText: null });
 });
 
-test("words a search of games knows ask for something else, beside a name or as the start of one", () => {
+test("words a search of games knows beside a name ask for something else, so they name no player", () => {
   assert.deepEqual(listRows("eastern conference vale").rows, []);
-  assert.deepEqual(listRows("east", true).rows, ["place standings:east"]);
-  assert.deepEqual(listRows("Easto", true).rows, ["player FOX Vale"]);
+  assert.deepEqual(listRows("Hawks fox", true).rows, []);
+});
+
+test("a word a search of games knows, typed last, can also be the start of a name, after what it finds on its own", () => {
+  assert.deepEqual(listRows("east", true).rows, ["place standings:east", "player FOX Vale"]);
+  assert.deepEqual(listRows("Mar", true), { rows: ["player HAW Stone"], gameText: "Mar" });
+  assert.deepEqual(listRows("will", true), { rows: ["player FOX Willis"], gameText: null });
+  assert.deepEqual(listRows("the will", true).rows, ["player FOX Willis"]);
+  assert.deepEqual(listRows("Tess will", true).rows, ["player FOX Willis"]);
+  assert.deepEqual(listRows("fox", true).rows, ["team FOX", "section FOX", "player HAW Foxworth"]);
+  assert.deepEqual(listRows("Tess fox", true).rows, ["player HAW Foxworth"]);
+  assert.deepEqual(listRows("Tess", true).rows, ["player FOX Willis", "player HAW Foxworth"]);
+});
+
+test("a word a search of games knows is the start of a name only while it's typed, and never one with a letter wrong or a plural", () => {
+  assert.deepEqual(listRows("will"), { rows: [], gameText: "will" });
+  assert.deepEqual(listRows("fox").rows, ["team FOX", "section FOX"]);
+  assert.deepEqual(listRows("Mar"), { rows: [], gameText: "Mar" });
+  assert.deepEqual(listRows("Finals", true).rows, []);
+  assert.deepEqual(listRows("Hawks", true).rows, ["team HAW", "section HAW"]);
+  assert.deepEqual(listRows("hawk", true).rows, ["player HAW Rios"]);
+});
+
+test("a word a search of games knows, only begun, names no one beside a word it doesn't know", () => {
+  assert.deepEqual(listRows("big fox", true).rows, []);
+  assert.deepEqual(listRows("big foxw", true).rows, ["player HAW Foxworth"]);
+});
+
+test("each run of a name's words names her, but not a suffix or a word too short to start a name alone", () => {
+  for (const text of ["Lee", "Moss", "Hart", "Kay Lee", "Lee Hart", "Hart-Moss", "Kay Lee Hart"])
+    assert.deepEqual(listRows(text).rows, ["player FOX Hart-Moss"], text);
+  assert.deepEqual(listRows("Jr").rows, []);
+  assert.deepEqual(listRows("a").rows, []);
+  assert.deepEqual(listRows("Lu A. Ferro").rows, ["player FOX Ferro"]);
+});
+
+test("while words are typed, a later word of a name can be begun from its first letter", () => {
+  assert.deepEqual(listRows("Tess W", true).rows, ["player FOX Willis"]);
+  assert.deepEqual(listRows("lu a f", true).rows, ["player FOX Ferro"]);
+  assert.deepEqual(listRows("Kay L", true).rows, ["player FOX Hart-Moss"]);
 });
 
 test("a game's part before it opens the next game, and its name may be one a search of games passes over", () => {
@@ -350,6 +398,12 @@ test("words asking who is out list each player out, by team and then last name, 
     isTyping: false,
   });
   assert.ok(rows.every((row) => row.kind === "player" && row.out === "listed"));
+});
+
+test("words asking who is out list after who is the players whose names they start while typed", () => {
+  const out = ["player FOX Stone", "player HAW Rook", "player HAW Stone"];
+  assert.deepEqual(listRows("hurt", true, PAGES_WITH_NEWS).rows, [...out, "player FOX Hurtado"]);
+  assert.deepEqual(listRows("hurt", false, PAGES_WITH_NEWS).rows, out);
 });
 
 test("the start of a word asking who is out, from its third letter, asks it too", () => {

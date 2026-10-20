@@ -20,6 +20,8 @@ import { FORGIVING_LENGTH, isOneEditApart, normalizeText } from "#shared/search-
 // And it types each team's name beside each number its players wear, each way fans write it, and
 // lists where it doesn't list just the team's players who wear it, or, while the number is last,
 // each number it starts, over suggestions that each keep the number.
+// And it types each player's first, last, and whole name, and lists where a key from its third
+// letter on doesn't list the player.
 
 const SHORTEST_GUESS = 3;
 // A phone's keyboard, a row at a time, for the key a thumb lands on beside the one it meant.
@@ -301,6 +303,39 @@ export function sweepPlayerNumbers({ context, pages }) {
       });
       return [...typed, ...sent];
     });
+  });
+}
+
+/**
+ * Each player's first name, last name, and whole name, typed a key at a time, as "typed (of name)"
+ * where it doesn't list her from its third letter on.
+ * @param {{ context: SearchContext, pages: SearchPages }} search
+ */
+export function sweepPlayerNames({ context, pages }) {
+  /** @type {Map<string, Set<string>>} */
+  const listedByText = new Map();
+  /** @param {string} text */
+  const listListed = (text) => {
+    if (!listedByText.has(text)) {
+      const { rows } = readTypedSearch(text, {
+        context,
+        pages,
+        isTyping: true,
+        isGamesOnly: false,
+      });
+      const ids = rows.flatMap((row) => (row.kind === "player" ? [row.player.id] : []));
+      listedByText.set(text, new Set(ids));
+    }
+    return /** @type {Set<string>} */ (listedByText.get(text));
+  };
+  return pages.players.flatMap((player) => {
+    const names = [player.firstName, player.lastName, `${player.firstName} ${player.lastName}`];
+    return [...new Set(names.map(normalizeText))].flatMap((name) =>
+      Array.from({ length: name.length }, (_, index) => name.slice(0, index + 1))
+        .filter((typed) => typed.replace(/\s+/g, "").length >= SHORTEST_GUESS)
+        .filter((typed) => !listListed(typed).has(player.id))
+        .map((typed) => `${typed} (of ${name})`),
+    );
   });
 }
 
