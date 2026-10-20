@@ -1,6 +1,7 @@
 import { test, expect, expectDayAtTop, openApp, readWholeSeasonSchedule } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
+import { startValkyriesAtWings } from "./game-sheet-games.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -82,6 +83,45 @@ test("a team stays put as Bonus comes and goes, level with the score", async ({ 
   await expect(row.locator(".bonus")).toHaveCount(0);
   expect(await readTeamCenters()).toEqual(before);
   expect(Math.abs(before[0] - (await findCenter(row.locator(".score"))))).toBeLessThan(1);
+});
+
+test("a regular-season game's score and status sit where a playoff game's do, the score level with its teams", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await app.changeSeason((season) => {
+    startValkyriesAtWings(season);
+    const game = season.games.find((each) => each.id === "1042600132");
+    Object.assign(game, {
+      state: "live",
+      status: "Q2 5:10",
+      period: 2,
+      clock: "5:10",
+      round: null,
+    });
+    Object.assign(game.away, { score: 30, seed: null });
+    Object.assign(game.home, { score: 27, seed: null });
+    return season;
+  });
+  const readOffsets = (row) =>
+    row.evaluate((element) => {
+      const findMiddle = (part) => {
+        const box = /** @type {Element} */ (element.querySelector(part)).getBoundingClientRect();
+        return box.top + box.height / 2;
+      };
+      const middle = findMiddle(".game-middle");
+      return [".game-headline", ".game-status", ".game-side.away .club"].map(
+        (part) => findMiddle(part) - middle,
+      );
+    });
+  const regular = page.locator('[data-game="1042600132"]');
+  const playoff = page.locator('[data-game="1042600112"]');
+  await expect(regular.locator(".game-label")).toHaveCount(0);
+  await expect(playoff.locator(".game-label")).toHaveText(/^1st Rd/);
+  const [score, status, team] = await readOffsets(regular);
+  expect([score, status]).toEqual((await readOffsets(playoff)).slice(0, 2));
+  expect(score).toBeCloseTo(team, 0);
 });
 
 test("the Games lists' days, series labels, and statuses are in Barlow, apart from the team names", async ({
