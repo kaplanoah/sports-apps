@@ -58,8 +58,8 @@ const countWords = (lines) =>
 /** @param {string[]} lines */
 const isLong = (lines) => lines.length > MOST_ITEM_LINES || countWords(lines) > MOST_ITEM_WORDS;
 
-const text = readRepoFile(LIST_PATH);
-const listed = readListedModules(text);
+const listText = readRepoFile(LIST_PATH);
+const listed = readListedModules(listText);
 const modules = listTrackedFiles().filter(
   (path) => /^shared\/.+\.(?:js|css)$/.test(path) && !path.startsWith("shared/page/networks/"),
 );
@@ -82,7 +82,7 @@ test("the shared modules' list names no module that's gone", () => {
 // How a module works belongs in its top comment, so its item stays short enough to scan.
 test(`each of the list's items is ${MOST_ITEM_LINES} lines and ${MOST_ITEM_WORDS} words or fewer`, () => {
   assert.deepEqual(
-    listItems(text)
+    listItems(listText)
       .filter(isLong)
       .map((lines) => lines[0]),
     [],
