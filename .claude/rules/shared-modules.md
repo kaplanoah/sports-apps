@@ -72,6 +72,11 @@ paths:
       - `bracket-standings-log.js`: each touch on a season's standings and bracket, how far it moved,
         whether the page's code took it from the browser, whether the browser cancelled its pointer,
         and how far the part under it scrolled, and each click on them
+      - `phone-look-log.js`: each change the phone reports of its light or dark look,
+        what the page reads of it then and a task later,
+        and each time the page leaves the screen, comes back, or loses or gets focus,
+        with the look it reads and the theme it shows then,
+        also among the steps of the open or return under way
       - `error-log.js`: each error the page's code doesn't catch
   - The Home Screen welcome and theme:
     - `draw-home-screen-asks.js`: the welcome over the whole screen that a phone's or tablet's browser opens on,
@@ -92,7 +97,9 @@ paths:
       It keeps each install's icon, from the address it opens at or, added on System, the phone's setting as it first opened.
     - `re-add-note.js`: deciding when settings shows the note on updating the icon, while the look picked, or on System the phone's, isn't the icon's,
       or, for an app that doesn't know its icon, from the first switch of looks,
-      and keeping that switch and its dismissal for that install
+      and keeping that switch and its dismissal for that install.
+      A change of the phone's look that comes as the page comes back takes the note to its new state at once,
+      since the phone has already shown the app in its new look, and any other eases it.
     - `appearance.js`: settings' Appearance choices and the welcome's copy of them,
       and the note on updating the icon, with both icons and an X,
       whose link it keeps signed in with a fresh handoff while settings shows it

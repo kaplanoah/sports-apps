@@ -49,6 +49,21 @@ export function chooseReAddNote({ isIosApp, choice, icon, phoneLook, isSwitched,
   return { icon: findOtherLook(picked), picked, choice };
 }
 
+// A phone reports a change of its look made while the page was away 50 to 70ms after the page is
+// back, so a second leaves room for a slow one.
+const RETURN_SETTLE_MS = 1000;
+
+/**
+ * Whether a change of the phone's look came while the page was away, or as it came back. The phone
+ * has already shown the app in its new look by then, so the note takes its new state at once,
+ * rather than easing from the old one.
+ * @param {{ isHidden: boolean, changedAt: number, shownAt: number }} change
+ *   `changedAt` and `shownAt`, when the page last came back, on one clock in milliseconds
+ * @returns {boolean}
+ */
+export const isLookChangeOnReturn = ({ isHidden, changedAt, shownAt }) =>
+  isHidden || changedAt - shownAt < RETURN_SETTLE_MS;
+
 /** @param {string} key */
 const isKept = (key) => readStoredText(key) !== null;
 

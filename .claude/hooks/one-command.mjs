@@ -10,8 +10,11 @@ const RULE =
   "from the repo's root ... Never start with `cd`.\" Run each command in a call of its own, from the " +
   "repo's root, with paths relative to it.";
 
+const SUBSTITUTION = "a command substitution";
+
 /**
- * The delimiter a heredoc opened at `at` ends with, and where its operator ends, or null when `<<`
+ * The delimiter a heredoc opened at `at` ends with, where its operator ends, and whether the
+ * delimiter is quoted, which keeps the shell from running what its body holds, or null when `<<`
  * there isn't a heredoc.
  * @param {string} command
  * @param {number} at the index of `<<`
@@ -19,8 +22,21 @@ const RULE =
 function readHeredoc(command, at) {
   const match = /^<<-?\s*(['"]?)([\w.-]+)\1/.exec(command.slice(at));
   if (!match || command[at + 2] === "<") return null;
-  return { delimiter: match[2], end: at + match[0].length };
+  return { delimiter: match[2], end: at + match[0].length, isQuoted: match[1] !== "" };
 }
+
+/**
+ * Whether text the shell expands holds a command substitution, `$(...)` or backticks.
+ * @param {string} text
+ */
+const holdsSubstitution = (text) => /\$\(|`/.test(text);
+
+/**
+ * Whether a command substitution starts at `at`.
+ * @param {string} text
+ * @param {number} at
+ */
+const isSubstitutionAt = (text, at) => text.startsWith("$(", at) || text[at] === "`";
 
 /**
  * The index just past a heredoc's body, which starts on the line after `from`.
@@ -56,14 +72,17 @@ const SHELL_BEFORE_SCRIPT = /(?:^|[\s(|/])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\
  * The first operator outside quotes, heredocs, and `$(...)` that starts another command: `&&`,
  * `||`, `;`, a lone `&`, or a line break, or null when the command is one, and each quoted
  * script the command hands a shell before it. Text inside other quotes or a heredoc's body,
- * like a commit message, runs nothing.
+ * like a commit message, runs nothing. Also the first pipe, redirect, or command substitution
+ * before that operator, which the shell runs inside double quotes and an unquoted heredoc too.
  * @param {string} command
- * @returns {{ separator: string | null, scripts: string[] }}
+ * @returns {{ separator: string | null, scripts: string[], pipeOrRedirect: string | null }}
  */
 function scanCommand(command) {
   let quote = "";
   let scriptStart = -1;
   let depth = 0;
+  /** @type {string | null} */
+  let pipeOrRedirect = null;
   /** @type {string[]} */
   const scripts = [];
   const text = command.trim();
@@ -74,7 +93,7 @@ function scanCommand(command) {
       else if (char === quote) {
         if (scriptStart !== -1) scripts.push(text.slice(scriptStart, at));
         quote = "";
-      }
+      } else if (quote === '"' && isSubstitutionAt(text, at)) pipeOrRedirect ??= SUBSTITUTION;
       continue;
     }
     if (char === "\\") {
@@ -87,6 +106,7 @@ function scanCommand(command) {
       continue;
     }
     if (char === "$" && text[at + 1] === "(") {
+      pipeOrRedirect ??= SUBSTITUTION;
       depth += 1;
       at += 1;
       continue;
@@ -98,13 +118,28 @@ function scanCommand(command) {
     }
     const heredoc = text.startsWith("<<", at) ? readHeredoc(text, at) : null;
     if (heredoc) {
-      at = skipHeredocBody(text, heredoc.end, heredoc.delimiter) - 1;
+      const bodyEnd = skipHeredocBody(text, heredoc.end, heredoc.delimiter);
+      if (!heredoc.isQuoted && holdsSubstitution(text.slice(heredoc.end, bodyEnd)))
+        pipeOrRedirect ??= SUBSTITUTION;
+      at = bodyEnd - 1;
       continue;
     }
     const separator = readSeparatorAt(text, at);
-    if (separator) return { separator, scripts };
+    if (separator) return { separator, scripts, pipeOrRedirect };
+    pipeOrRedirect ??= readPipeOrRedirectAt(text, at);
   }
-  return { separator: null, scripts };
+  return { separator: null, scripts, pipeOrRedirect };
+}
+
+/**
+ * The pipe, redirect, or command substitution that starts at `at`, outside quotes, or null.
+ * @param {string} text
+ * @param {number} at
+ */
+function readPipeOrRedirectAt(text, at) {
+  if (text[at] === "|") return "a pipe";
+  if (text[at] === ">" || text[at] === "<") return "a redirect";
+  return isSubstitutionAt(text, at) ? SUBSTITUTION : null;
 }
 
 /**
@@ -129,6 +164,13 @@ export function findSeparator(command) {
   const { separator, scripts } = scanCommand(command);
   return separator ?? scripts.map(findSeparator).find(Boolean) ?? null;
 }
+
+/**
+ * The first pipe, redirect, or command substitution a single command holds, which hands what it
+ * reads or writes to a file or another program, or null when it holds none.
+ * @param {string} command
+ */
+export const findPipeOrRedirect = (command) => scanCommand(command).pipeOrRedirect;
 
 /**
  * Why a Bash command breaks the rule, or null when it keeps it.

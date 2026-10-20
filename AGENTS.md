@@ -63,8 +63,7 @@
   `renderGameRow`, and `listSeasonDays` calls do; never copy it into a second app.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" above and in `.claude/rules/tests.md` and `browser-tests.md`.
-- Commands: `npm ci` once.
-  `npm run check` runs everything CI does, but locally run only what step 2 of "Shipping a change" names.
+- Commands: `npm run check` runs everything CI does, but locally run only what step 2 of "Shipping a change" names.
   `npm run format` fixes formatting.
   Types are checked from JSDoc by `npm run typecheck`; the code stays plain JavaScript.
   `npm run deadcode` runs knip, which fails on unused files, exports, and dependencies: delete them rather than ignoring them.
@@ -73,7 +72,7 @@
 
 - `main` is the source of truth.
   Every change reaches it through a PR, by the steps in "Shipping a change" below.
-- Never push to another session's branch.
+- Never push to another session's branch, but for one the owner's handoff prompt names once the session that had it has stopped.
 - Run each command so it needs no approval: one command per call, from the repo's root, where every session starts.
   Never start with `cd`, never join `cd` to a `git` command, and never pipe or chain after a command `.claude/settings.json` allows, like the beta force-push.
   When a command still asks, add it to the allow list in `.claude/settings.json` in the same PR if it's safe for any session to run, or say why it asks.
