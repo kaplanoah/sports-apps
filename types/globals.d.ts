@@ -17,6 +17,7 @@ declare function readHomeScreenIcon(): string | null;
 declare const WELCOME_CLOSED_KEY: string;
 declare function readStored(key: string): string | null;
 declare const LAST_DRAWN_KEY: string;
+declare function isLongAwayFrom(savedAt: unknown): boolean;
 declare const OPEN_SHEETS_KEY: string;
 declare const LAST_SWITCHED_KEY: string;
 declare const KEPT_SWITCHES: string;

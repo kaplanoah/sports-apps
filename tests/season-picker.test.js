@@ -12,28 +12,28 @@ test("the seasons the store keeps list newest first, leaving out anything that i
   assert.deepEqual(listSeasonYears(docs), ["2027", "2026", "2025"]);
 });
 
-test("the picker names each season, newest first, with the shown one among them and chosen", () => {
+test("the picker names each season, newest first, with the picked one among them and chosen", () => {
   assert.deepEqual(
     listSeasonOptions(
       ["2024", "2025"],
-      { shownYear: 2026, currentYear: null },
+      { pickedYear: 2026, currentYear: null },
       { seasonSpansYears: true },
     ),
     [
-      { year: "2026", name: "2026-27", isShown: true },
-      { year: "2025", name: "2025-26", isShown: false },
-      { year: "2024", name: "2024-25", isShown: false },
+      { year: "2026", name: "2026-27", isPicked: true },
+      { year: "2025", name: "2025-26", isPicked: false },
+      { year: "2024", name: "2024-25", isPicked: false },
     ],
   );
   assert.deepEqual(
     listSeasonOptions(
       ["2026", "2025"],
-      { shownYear: 2025, currentYear: null },
+      { pickedYear: 2025, currentYear: null },
       { seasonSpansYears: false },
     ),
     [
-      { year: "2026", name: "2026", isShown: false },
-      { year: "2025", name: "2025", isShown: true },
+      { year: "2026", name: "2026", isPicked: false },
+      { year: "2025", name: "2025", isPicked: true },
     ],
   );
 });
@@ -59,12 +59,12 @@ test("the picker lists the current season even where the seasons it knows end be
   assert.deepEqual(
     listSeasonOptions(
       ["2025"],
-      { shownYear: 2025, currentYear: 2026 },
+      { pickedYear: 2025, currentYear: 2026 },
       { seasonSpansYears: false },
     ),
     [
-      { year: "2026", name: "2026", isShown: false },
-      { year: "2025", name: "2025", isShown: true },
+      { year: "2026", name: "2026", isPicked: false },
+      { year: "2025", name: "2025", isPicked: true },
     ],
   );
 });

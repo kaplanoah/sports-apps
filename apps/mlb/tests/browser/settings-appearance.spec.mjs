@@ -2,6 +2,7 @@ import { test, expect, openApp, openSettings, serveLockedApp } from "./harness.m
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import {
+  checkFailedPickMatchesTitle,
   checkNewCurrentSeasonListed,
   checkPickKeptThroughRedraw,
   checkSeasonsOnFailedList,
@@ -178,6 +179,13 @@ test("a season picked while its record is on its way stays picked as the picker 
     newSeason: 2027,
     moveCurrentTo: (year) => app.writeFromWorker("live/current", { season: year }),
   });
+});
+
+test("a season picked whose record can't be read leaves the Season picker on the season shown", async ({
+  page,
+}) => {
+  await openApp(page, WITH_A_PAST_SEASON);
+  await checkFailedPickMatchesTitle({ page, pastSeason: "2025", currentSeason: "2026" });
 });
 
 test("while the store can't list its seasons, a new current season joins the Season picker, with the past season shown still chosen", async ({

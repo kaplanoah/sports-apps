@@ -86,7 +86,7 @@ export async function checkSettingsOnReload({ page, look, switchName, pastSeason
  * since it watches the news right after.
  * @param {import("@playwright/test").Page} page
  */
-const waitForSettingsFill = (page) => page.waitForRequest(matchPath("/store/news/cards"));
+export const waitForSettingsFill = (page) => page.waitForRequest(matchPath("/store/news/cards"));
 
 /**
  * A reload with settings open while the store can't list the seasons it keeps lists the ones the
@@ -168,4 +168,31 @@ export async function checkPickKeptThroughRedraw({ page, pastSeason, newSeason, 
   await expect(page.locator("#titleYear")).toHaveText(pastSeason);
   await expect(picker).toHaveValue(pastSeason);
   await expect(page.locator("#seasonPicker option[selected]")).toHaveAttribute("value", pastSeason);
+}
+
+/**
+ * A season picked whose record can't be read leaves the picker on the season the page shows,
+ * which the title names, or, with none named, the current one.
+ * @param {{ page: import("@playwright/test").Page, pastSeason: string, currentSeason: string }} options
+ */
+export async function checkFailedPickMatchesTitle({ page, pastSeason, currentSeason }) {
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await expect(picker.locator("option")).not.toHaveCount(0);
+  await page.route(matchPath(`/store/seasons/${pastSeason}`), (route) => route.abort());
+
+  await picker.selectOption(pastSeason);
+
+  const readShown = async () => [
+    await picker.inputValue(),
+    await page.locator("#seasonPicker option[selected]").getAttribute("value"),
+  ];
+  const title = page.locator("#titleYear");
+  const readTitled = async () => {
+    const year = (await title.isVisible()) ? await title.textContent() : currentSeason;
+    return [year, year];
+  };
+  await expect
+    .poll(async () => (await readShown()).join() === (await readTitled()).join())
+    .toBe(true);
 }

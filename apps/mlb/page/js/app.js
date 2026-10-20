@@ -87,7 +87,7 @@ const readSeasonYears = keepSeasonYears(loadSeasonList);
 const fillYearPicker = (years) =>
   fillSeasonPicker(
     findSeasonRow(),
-    { years, shownYear: session.activeYear, currentYear: session.currentSeason },
+    { years, pickedYear: session.activeYear, currentYear: session.currentSeason },
     LEAGUE_WORDS,
   );
 

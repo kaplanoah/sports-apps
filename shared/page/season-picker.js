@@ -1,8 +1,8 @@
-import { html, setHtml } from "./html.js";
+import { forgetWrittenMarkup, html, setHtml } from "./html.js";
 import { nameSeason } from "./league-words.js";
 
 // The settings' Season picker: the seasons the store keeps, or those it last listed, newest first,
-// with the current one and the shown one always among them. It shows only once there's another
+// with the current one and the picked one always among them. It shows only once there's another
 // season to pick. Its row is drawn whole, so a reload shows it as it was before the page's code
 // arrives.
 
@@ -20,18 +20,18 @@ export const listSeasonYears = (docs) =>
 
 /**
  * The picker's options, newest first, each a season's year and its name, with the current one and
- * the shown one always among them.
+ * the picked one always among them.
  * @param {string[]} years
- * @param {{ shownYear: number, currentYear: number | null }} seasons
+ * @param {{ pickedYear: number, currentYear: number | null }} seasons
  * @param {Pick<import("./league-words.js").LeagueWords, "seasonSpansYears">} words
  */
-export function listSeasonOptions(years, { shownYear, currentYear }, words) {
-  const shown = String(shownYear);
+export function listSeasonOptions(years, { pickedYear, currentYear }, words) {
+  const picked = String(pickedYear);
   const current = currentYear === null ? [] : [String(currentYear)];
-  return [...new Set([shown, ...current, ...years])]
+  return [...new Set([picked, ...current, ...years])]
     .sort()
     .reverse()
-    .map((year) => ({ year, name: nameSeason(Number(year), words), isShown: year === shown }));
+    .map((year) => ({ year, name: nameSeason(Number(year), words), isPicked: year === picked }));
 }
 
 /**
@@ -68,20 +68,23 @@ const readListedYears = (row) =>
 
 /**
  * Lists the seasons the store keeps, or, where it hasn't said, the ones the row lists as the page
- * last drew it, with the current one, and the shown one chosen.
+ * last drew it, with the current one, and the picked one chosen. Until the page knows a season to
+ * pick, from the store or its last showing, it leaves the row as drawn, since the page never picks
+ * a season by its own clock.
  * @param {HTMLElement} row the picker's row, `#seasonRow`, whose select is `#seasonPicker`
- * @param {{ years: string[] | null, shownYear: number, currentYear: number | null }} seasons
+ * @param {{ years: string[] | null, pickedYear: number | null, currentYear: number | null }} seasons
  * @param {Pick<import("./league-words.js").LeagueWords, "seasonSpansYears">} words
  */
-export function fillSeasonPicker(row, { years, shownYear, currentYear }, words) {
+export function fillSeasonPicker(row, { years, pickedYear, currentYear }, words) {
+  if (pickedYear === null) return;
   const listed = listSeasonOptions(
     years ?? readListedYears(row),
-    { shownYear, currentYear },
+    { pickedYear, currentYear },
     words,
   );
   const options = listed.map(
-    ({ year, name, isShown }) =>
-      html`<option value="${year}" ${isShown ? "selected" : ""}>${name}</option>`,
+    ({ year, name, isPicked }) =>
+      html`<option value="${year}" ${isPicked ? "selected" : ""}>${name}</option>`,
   );
   setHtml(
     row,
@@ -109,6 +112,7 @@ export function watchSeasonPicks(row, pick) {
   row.addEventListener("change", (event) => {
     const picker = /** @type {HTMLSelectElement} */ (event.target);
     markPicked(picker);
+    forgetWrittenMarkup(row);
     pick(Number(picker.value));
   });
 }

@@ -164,14 +164,20 @@ const readSeasonYears = keepSeasonYears(loadSeasonYears);
 const fillSeasonList = (years) =>
   fillSeasonPicker(
     findSeasonRow(),
-    { years, shownYear: session.pickedYear, currentYear: session.currentYear },
+    { years, pickedYear: session.pickedYear, currentYear: session.currentYear },
     LEAGUE_WORDS,
   );
 
-// Another season's Games view opens on its start day: today, or a season over's last day.
+// Another season's Games view opens on its start day: today, or a season over's last day. A pick
+// whose season can't be read puts the picker back on the season shown, so picking it again retries.
 /** @param {number} year */
 async function switchSeason(year) {
-  await showYear(year);
+  if (!(await showYear(year))) {
+    fillSeasonList(null);
+    renderStamp();
+    return;
+  }
+  if (session.pickedYear !== year) return;
   startOverDayStrip();
   renderAll();
 }

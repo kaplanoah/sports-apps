@@ -6,7 +6,7 @@
 // openLastTab(), before anything is painted, since a part on a hidden tab can't take back where it
 // was scrolled.
 
-/* global LAST_DRAWN_KEY -- from open-last-tab.js */
+/* global LAST_DRAWN_KEY, isLongAwayFrom -- from open-last-tab.js */
 /* global checkPickedChoice, readPickedAppearance -- from pick-theme.js */
 
 // What last-seen.js saves the page's open sheets and settings' switches under.
@@ -48,13 +48,6 @@ function findByPath(part, path) {
   for (const index of path) element = element?.children[index];
   return element;
 }
-
-// After two minutes away, a list goes back to where it starts, as the Games view's list does
-// (long-away.js), and a part that starts hidden, like the Games view's search, is hidden again.
-const START_AFTER_AWAY_MS = 2 * 60 * 1000;
-
-/** @param {unknown} savedAt */
-const isLongAwayFrom = (savedAt) => !(Date.now() - Number(savedAt) < START_AFTER_AWAY_MS);
 
 /**
  * @param {Element} part

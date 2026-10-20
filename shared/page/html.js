@@ -296,6 +296,15 @@ function patchMarkup(element, text) {
 }
 
 /**
+ * Marks an element's markup as changed outside `setHtml`, as a picker's choice marked as it's
+ * picked, so the next `setHtml` writes its markup even where it's the markup written last.
+ * @param {Element} element
+ */
+export function forgetWrittenMarkup(element) {
+  writtenMarkup.delete(element);
+}
+
+/**
  * The page's only way to write markup, so nothing reaches it unescaped.
  * @param {Element} element
  * @param {Markup | string} markup plain text is escaped

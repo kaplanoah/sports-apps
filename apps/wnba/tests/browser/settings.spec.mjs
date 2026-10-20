@@ -6,10 +6,12 @@ import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
 import {
+  checkFailedPickMatchesTitle,
   checkNewCurrentSeasonListed,
   checkPickKeptThroughRedraw,
   checkSeasonsOnFailedList,
   checkSettingsOnReload,
+  waitForSettingsFill,
 } from "../../../../tests/browser/settings-reload.mjs";
 import {
   checkHandoffRenewal,
@@ -112,14 +114,39 @@ test("a reload while the store can't be reached keeps the Season picker on the p
   await picker.selectOption("2025");
   await expect(page.locator("#titleYear")).toHaveText("2025");
   await page.route(matchPath("/store/"), (route) => route.abort());
-  // The page watches the news right after it fills settings.
-  const filling = page.waitForRequest(matchPath("/store/news/cards"));
+  const filling = waitForSettingsFill(page);
 
   await page.reload();
 
   await filling;
   await expect(picker).toHaveValue("2025");
   await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+});
+
+test("a reload while the store can't be reached, with nothing the page last showed to draw, leaves the Season picker as drawn, never adding the year by the phone's clock", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+  await page.route(matchPath("/store/"), (route) => route.abort());
+  await page.addInitScript(() => localStorage.removeItem("lastSeen"));
+  await page.clock.setSystemTime(new Date("2027-01-15T17:00:00Z"));
+  const filling = waitForSettingsFill(page);
+
+  await page.reload();
+
+  await filling;
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
+  await expect(picker).toHaveValue("2026");
+});
+
+test("a season picked whose record can't be read leaves the Season picker on the season shown", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await checkFailedPickMatchesTitle({ page, pastSeason: "2025", currentSeason: "2026" });
 });
 
 test("while the store can't list its seasons, a new current season joins the Season picker, with the past season shown still chosen", async ({

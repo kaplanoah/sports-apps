@@ -108,13 +108,20 @@ export async function loadSeason() {
   }
 }
 
-/** @param {number} year */
+/**
+ * Shows the season picked, resolving false where its record couldn't be read, which leaves the
+ * season shown picked, unless a newer pick has taken this one's place.
+ * @param {number} year
+ */
 export async function showYear(year) {
   session.pickedYear = year;
   try {
     await reader?.showYear(year);
+    return true;
   } catch {
     noteUnreachable();
+    if (session.pickedYear === year) session.pickedYear = session.year;
+    return false;
   }
 }
 
