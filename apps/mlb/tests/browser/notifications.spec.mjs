@@ -1,3 +1,4 @@
+import { IPHONE_AGENT, takeAwayPush } from "../../../../tests/browser/devices.mjs";
 import { test, expect, matchPath, openApp, openSettings } from "./harness.mjs";
 
 // The switch subscribes through the page's service worker.
@@ -227,12 +228,10 @@ test("blocked notifications point to the browser's site settings", async ({ page
 });
 
 test("on an iPhone, blocked notifications point to Settings", async ({ page }) => {
-  await page.addInitScript(() => {
+  await page.addInitScript((agent) => {
     Object.defineProperty(Notification, "permission", { get: () => "denied" });
-    Object.defineProperty(navigator, "userAgent", {
-      get: () => "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
-    });
-  });
+    Object.defineProperty(navigator, "userAgent", { get: () => agent });
+  }, IPHONE_AGENT);
   await openApp(page);
   await openSettings(page);
 
@@ -241,15 +240,13 @@ test("on an iPhone, blocked notifications point to Settings", async ({ page }) =
 });
 
 test("on an iPhone outside the Home Screen, the page says to add it there", async ({ page }) => {
-  await page.addInitScript(() => {
-    delete window.PushManager;
-    Object.defineProperty(navigator, "userAgent", {
-      get: () => "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
-    });
-  });
+  await takeAwayPush(page);
+  await page.addInitScript((agent) => {
+    Object.defineProperty(navigator, "userAgent", { get: () => agent });
+  }, IPHONE_AGENT);
   await openApp(page);
   await openSettings(page);
 
-  await expect(page.locator("#notifyNote")).toHaveText(/add this page to your Home Screen/);
+  await expect(page.locator("#notifyNote")).toHaveText(/add this site to your home screen/);
   await expect(page.getByRole("switch", { name: "Notifications" })).toBeHidden();
 });

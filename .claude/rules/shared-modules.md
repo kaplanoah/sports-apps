@@ -71,11 +71,14 @@ paths:
       - `error-log.js`: each error the page's code doesn't catch
   - The Home Screen welcome and theme:
     - `draw-home-screen-asks.js`: the welcome over the whole screen that a phone's or tablet's browser opens on,
-      and the box at the bottom of settings that keeps the steps, both drawn before the first paint,
+      and the box at the top of settings that keeps the steps, both drawn before the first paint,
       so the welcome never arrives over the page and its pick and close work at once.
       The welcome's numbered steps pick the theme the Home Screen icon takes and say how to add the page there,
       until the page is added or the viewer goes on in the browser, which keeps it closed on that device.
-    - `home-screen.js`: Chrome's Install in the welcome and the box
+    - `home-screen.js`: Chrome's Install in the welcome and the box,
+      and the welcome opened again from the ? that ends settings' Notifications note where only the Home Screen gets notifications,
+      wherever the page asks to be added there,
+      rising and closing as settings does
     - `pick-theme.js`: the theme picked, shown before the first paint and named in the browser's address,
       where Safari reloads the page after a pick,
       since it takes the Home Screen app's address and its own bars' color from the page as it loaded,

@@ -53,7 +53,7 @@ const OTHER_PLACES = [
     name: "the Home Screen welcome",
     device: ON_A_PHONE,
     open: (page) => openApp(page, { isShowingWelcome: true }),
-    shown: (page) => page.getByRole("heading", { name: "Add WNBA to your Home Screen" }),
+    shown: (page) => page.getByRole("heading", { name: "Add WNBA to your home screen" }),
   },
   {
     name: "the bracket before the playoff field is set",

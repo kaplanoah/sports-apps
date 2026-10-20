@@ -1,3 +1,4 @@
+import { takeAwayPush } from "../../../../tests/browser/devices.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
 test.use({ serviceWorkers: "allow", contextOptions: { reducedMotion: "reduce" } });
@@ -13,8 +14,8 @@ const waitForCopy = (page) =>
 test("a page opened offline opens from its copy and shows what it last showed", async ({
   page,
 }) => {
-  // A browser without push, like Safari outside the Home Screen, keeps the copy all the same.
-  await page.addInitScript(() => delete window.PushManager);
+  // A browser without push keeps the copy all the same.
+  await takeAwayPush(page);
   await openApp(page);
   await expect(page.locator("#bracketWrap .matchup-row")).toHaveCount(22);
   await waitForCopy(page);

@@ -27,7 +27,7 @@
 
 import { followPath, readPath } from "./element-path.js";
 import { noteSheetStep } from "./sheet-log.js";
-import { closeOnSwipeDown, closeSheet } from "./sheet-swipe.js";
+import { closeOnCancel, closeOnSwipeDown, closeSheet } from "./sheet-swipe.js";
 import { createSlidePanels } from "./slide-panels.js";
 
 /**
@@ -423,14 +423,6 @@ function forgetDialog(dialog) {
   for (const sheet of sheets) letGoOf(sheet);
   if (sheets.length === 0) forgetSheet(dialog);
   placeRow(dialog);
-}
-
-/** @param {HTMLDialogElement} dialog */
-function closeOnCancel(dialog) {
-  dialog.addEventListener("cancel", (event) => {
-    event.preventDefault();
-    closeSheet(dialog);
-  });
 }
 
 // A click on the backdrop lands on the dialog itself; its content fills it edge to edge. The

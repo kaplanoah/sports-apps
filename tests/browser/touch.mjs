@@ -13,13 +13,16 @@ export const openFromHomeScreen = (page) =>
 /**
  * Starts a touch at the first of `points` and moves it through the rest, returning a way to lift
  * the finger. The moves come as fast as the browser takes them, a flick, unless `durationMs`
- * spreads their times out, as a slow drag that comes to rest before the finger lifts.
+ * spreads their times out, as a slow drag that comes to rest before the finger lifts. With
+ * `isFrameByFrame`, each move waits for the page's next frame, so the page draws where each one
+ * leaves what it moves, which spaces their times a frame apart too, so a test that checks each
+ * frame sets the drag's speed with `durationMs`.
  * @param {import("@playwright/test").Page} page
  * @param {{ x: number, y: number }[]} points
- * @param {{ durationMs?: number }} [options]
+ * @param {{ durationMs?: number, isFrameByFrame?: boolean }} [options]
  * @returns {Promise<() => Promise<void>>}
  */
-export async function dragAlong(page, points, { durationMs } = {}) {
+export async function dragAlong(page, points, { durationMs, isFrameByFrame = false } = {}) {
   const session = await page.context().newCDPSession(page);
   await session.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   const startSeconds = Date.now() / 1000;
@@ -34,12 +37,15 @@ export async function dragAlong(page, points, { durationMs } = {}) {
     touchPoints: [points[0]],
     ...readTimestamp(0),
   });
-  for (let step = 1; step <= steps; step += 1)
+  for (let step = 1; step <= steps; step += 1) {
+    if (isFrameByFrame)
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
     await session.send("Input.dispatchTouchEvent", {
       type: "touchMove",
       touchPoints: [points[step]],
       ...readTimestamp(step),
     });
+  }
   return async () => {
     await session.send("Input.dispatchTouchEvent", {
       type: "touchEnd",
@@ -57,7 +63,7 @@ const DRAG_STEPS = 10;
  * @param {import("@playwright/test").Page} page
  * @param {{ x: number, y: number }} from
  * @param {{ x?: number, y?: number }} by
- * @param {{ durationMs?: number }} [options]
+ * @param {{ durationMs?: number, isFrameByFrame?: boolean }} [options]
  */
 export const drag = (page, from, { x = 0, y = 0 }, options) =>
   dragAlong(

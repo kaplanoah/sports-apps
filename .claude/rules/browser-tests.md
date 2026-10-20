@@ -57,7 +57,10 @@ paths:
   A gesture, like a swipe, is tested both ways too: its full-motion test drives it with the root's `tests/browser/touch.mjs`,
   as a finger does, and checks what moves and what doesn't once the finger lifts,
   since a motion that replays or jumps then shows only in full motion.
-  A drag's moves come as a flick unless its `durationMs` spreads them out, so a test of a drag that comes to rest before the finger lifts gives one.
+  A drag's moves come as a flick unless its `durationMs` spreads their times out, so a test of a drag that comes to rest before the finger lifts gives one.
+  Its moves still go out within a frame or two, so a test that checks a drag on each frame also passes `isFrameByFrame`,
+  which spaces their times a frame apart too, so it sets the drag's speed with `durationMs`,
+  as the root's `tests/browser/home-screen-help.mjs` does for the welcome's swipe down.
   A swipe is checked frame by frame: where what it moves is on each frame,
   never stepping back, and that the page changes nothing while the finger moves it but where that is,
   as the WNBA's `sheet-stack.spec.mjs` does for a sheet's swipe back.
