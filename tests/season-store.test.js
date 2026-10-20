@@ -15,7 +15,7 @@ const QUIET_LEAGUE = {
   createLoadSnapshot: () => async () => ({}),
   loadCurrentSnapshot: async () => ({ season: 2026 }),
   readUpdates: async () => null,
-  saveSnapshot: async () => {},
+  saveSnapshot: /** @type {(docs: any, snapshot: any) => Promise<void>} */ (async () => {}),
   describeSnapshotStatus: () => ({ error: "" }),
   choosePollDelay: () => 60_000,
   listNotifications: () => [],
@@ -238,6 +238,25 @@ test("a page that opens as its update comes due hears it's coming, and hears whe
 
   await fireNextAlarm(store, context, clock);
   assert.deepEqual(heard[0], [{ updating: true }, { updating: false }]);
+});
+
+test("a page that opens as its update comes due hears what the update saves before it hears the update is done", async () => {
+  const { context, clock, store, openPage, heard } = createWatchedStore({
+    choosePollDelay: () => 15_000,
+    saveSnapshot: async (docs) => {
+      await docs.write("seasons/2026", { inning: clock.now });
+    },
+  });
+  await store.alarm();
+
+  clock.now = NOW + 20_000;
+  await openPage();
+  await fireNextAlarm(store, context, clock);
+
+  assert.deepEqual(
+    heard[0].map((message) => message.path ?? message.updating),
+    [true, "seasons/2026", false],
+  );
 });
 
 test("a page that opens before its update comes due hears none is coming", async () => {

@@ -1,4 +1,5 @@
 import { TEAMS } from "../../page/js/teams.js";
+import { finishFirstRound } from "./bracket-rounds.mjs";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
 import {
   findSeasonPill,
@@ -11,32 +12,6 @@ import { readRole } from "../../../../tests/browser/type-roles.mjs";
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const PHONE = { width: 390, height: 844 };
-
-/**
- * The afternoon's season with every first-round series over: the 8-seed Liberty win the upper
- * series and play the Semifinals under the 4-seed Dream, who host.
- * @param {any} season
- */
-function finishFirstRound(season) {
-  const findSeries = (id) => season.series.find((series) => series.id === id);
-  const finish = (id, side) => {
-    const series = findSeries(id);
-    series.winner = series[side].team;
-    series[side].wins = 2;
-  };
-  finish("1-1", "top");
-  finish("1-2", "bottom");
-  finish("1-3", "top");
-  Object.assign(findSeries("2-0"), {
-    top: { team: "ATL", seed: 4, wins: 0 },
-    bottom: { team: "NYL", seed: 8, wins: 0 },
-  });
-  Object.assign(findSeries("2-1"), {
-    top: { team: "GSV", seed: 2, wins: 0 },
-    bottom: { team: "IND", seed: 6, wins: 0 },
-  });
-  return season;
-}
 
 /**
  * The season with both Semifinals over too, so the Finals are the round still playing.

@@ -2,7 +2,7 @@
 // scroll moves by as much, so the rows on the screen stay where they are, as Chrome's scroll
 // anchoring does and Safari's doesn't, frame by frame as it eases. A list at its top stays there,
 // so what opens above it shows. Each list the page keeps in place opts out of the browser's own
-// anchoring (chrome.css and pager.css), so it moves once, the same in every browser.
+// anchoring (pager.css, and keepPagePlace here), so it moves once, the same in every browser.
 
 /**
  * Where a list scrolled to `top` goes when what's above it moves its rows down by `change`, or up
@@ -25,13 +25,28 @@ export function findShortfall(wanted, landed) {
 }
 
 /**
+ * How far a pull to refresh holds `element` down, by the relative offset it gives the page's parts
+ * (pull-to-refresh.js), which isn't where it sits on the page.
+ * @param {HTMLElement} element
+ */
+function readPulledBy(element) {
+  let pulled = 0;
+  for (let part = /** @type {HTMLElement | null} */ (element); part; part = part.parentElement)
+    pulled += parseFloat(part.style.top) || 0;
+  return pulled;
+}
+
+/**
  * Keeps the rows of `view`, a tab the page scrolls, where they are on the screen as what's above
  * it grows or shrinks while it shows.
  * @param {HTMLElement} view
  */
 export function keepPagePlace(view) {
   const readTop = () =>
-    view.classList.contains("active") ? view.getBoundingClientRect().top + scrollY : null;
+    view.classList.contains("active")
+      ? view.getBoundingClientRect().top + scrollY - readPulledBy(view)
+      : null;
+  view.style.overflowAnchor = "none";
   let keptTop = readTop();
   const watcher = new ResizeObserver(() => {
     const top = readTop();

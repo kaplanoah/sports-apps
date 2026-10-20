@@ -25,27 +25,33 @@ const isLongAwayFrom = (savedAt, now = Date.now()) =>
  * left the screen (last-seen.js): as it was, or, two minutes or more later, from its start, with
  * what it holds scrolled to its start, its holder and the page at their tops, its tabs on the
  * first, and only the classes its markup gives it, since its code's say where it was scrolled. A
- * list that names where it starts, like the Games list's start day, goes there. A part in a sheet
- * stays where it was as long as the sheet does (sheet-memory.js).
- * @param {{ scrolls?: unknown, holderTop?: unknown, pageTop?: unknown, classes?: unknown, savedAt?: unknown }} saved
- * @param {boolean} isInSheet
+ * list that names where it starts, like the Games list's start day or a sideways bracket's
+ * opening round, goes there, and a part that starts hidden, like a search, is hidden again. A part
+ * in a sheet stays where it was as long as the sheet does (sheet-memory.js).
+ * @param {{ hidden?: unknown, scrolls?: unknown, holderTop?: unknown, pageTop?: unknown, classes?: unknown, savedAt?: unknown }} saved
+ * @param {{ isInSheet: boolean, isStartHidden: boolean }} where
  * @param {number} now when the page loads, read once for all its parts, so they start over together
  */
-function findPlaceToShow({ scrolls, holderTop, pageTop, classes, savedAt }, isInSheet, now) {
+function findPlaceToShow(
+  { hidden, scrolls, holderTop, pageTop, classes, savedAt },
+  { isInSheet, isStartHidden },
+  now,
+) {
   const isLongAway = isLongAwayFrom(savedAt, now);
   const isStartedOver = isLongAway && !isInSheet;
-  /** @param {{ path?: unknown, left?: unknown, top?: unknown, startTop?: unknown }} scroll */
-  const placeScroll = ({ path, left, top, startTop }) => {
+  /** @param {{ path?: unknown, left?: unknown, top?: unknown, startLeft?: unknown, startTop?: unknown }} scroll */
+  const placeScroll = ({ path, left, top, startLeft, startTop }) => {
     const isOnStart = isLongAway && startTop !== undefined;
-    const shownTop = isOnStart ? startTop : top;
+    const shownTop = isOnStart ? startTop : isStartedOver ? 0 : top;
     return {
       path,
-      left: isStartedOver ? 0 : Number(left) || 0,
-      top: isStartedOver && !isOnStart ? 0 : Number(shownTop) || 0,
+      left: Number(isStartedOver ? startLeft : left) || 0,
+      top: Number(shownTop) || 0,
       isOnStart,
     };
   };
   return {
+    hidden: hidden === true || (isStartHidden && isLongAway),
     scrolls: Array.isArray(scrolls) ? scrolls.map(placeScroll) : [],
     holderTop: isStartedOver ? 0 : Number(holderTop) || 0,
     pageTop: isStartedOver ? 0 : Number(pageTop) || 0,

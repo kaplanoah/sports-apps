@@ -29,11 +29,18 @@ export const readLastSeen = () => readStoredJson(LAST_SEEN_KEY);
 /** Has the sheets the page showed when it was last on screen show again what they showed. */
 export const reopenLastSheets = () => reopenSheets(readStoredJson(OPEN_SHEETS_KEY));
 
-// A list or bracket that scrolls shows where it was, rather than its start, and a list that names
-// where it starts, as a season's days do, keeps that too, for a page left long enough ago.
+// A list or bracket that scrolls shows where it was, rather than its start, and one that names
+// where it starts, as a season's days and a sideways bracket do, keeps that too, for a page left
+// long enough ago.
 /** @param {HTMLElement} element */
 const hasScroll = (element) =>
-  element.scrollLeft > 0 || element.scrollTop > 0 || "startTop" in element.dataset;
+  element.scrollLeft > 0 ||
+  element.scrollTop > 0 ||
+  "startLeft" in element.dataset ||
+  "startTop" in element.dataset;
+
+/** @param {string | undefined} start */
+const readStart = (start) => (start === undefined ? undefined : Number(start));
 
 /** @param {Element} part */
 const readScrolls = (part) =>
@@ -43,7 +50,8 @@ const readScrolls = (part) =>
       path: readPath(part, element),
       left: element.scrollLeft,
       top: element.scrollTop,
-      startTop: Number(element.dataset.startTop ?? element.scrollTop),
+      startLeft: readStart(element.dataset.startLeft),
+      startTop: readStart(element.dataset.startTop),
     }));
 
 // A part drawn inside the season's standings or bracket, which each scroll on their own (pager.css),

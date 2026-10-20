@@ -366,6 +366,14 @@ export async function openApp(
       await context.ctx.storage.put("seasons/2026", change(await readSeason()));
     },
     holdStore: () => holdStore(page),
+    // What the Worker's alarm does on its own schedule.
+    updateFromWorker: () => testStore.fireAlarm(),
+    // Time passing for the Worker while the page sleeps, which brings its next update due.
+    /** @param {number} ms */
+    passTimeAtWorker: (ms) => testStore.passTime(ms),
+    // How many sockets the store has accepted, each once it has told the page whether an update
+    // is coming.
+    countWatchersHeard: () => testStore.countAccepted(),
     /**
      * The saved season as the store would hold it in the next year's off-season.
      * @param {number} year

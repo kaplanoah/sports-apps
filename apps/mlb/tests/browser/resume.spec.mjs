@@ -3,6 +3,8 @@ import {
   retryReleaseCheck,
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
+import { trackTextChanges } from "../../../../tests/browser/text-changes.mjs";
+import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import {
   test,
   expect,
@@ -262,26 +264,6 @@ test("a page coming back to nothing new lets a faded band pass through the heade
   await expect(stamp).toHaveCSS("mask-image", /rgba\(0, 0, 0, 0\.75\)/);
 });
 
-/**
- * Notes the header's lines each time what they say changes, until the returned function reads the
- * notes.
- * @param {import("@playwright/test").Page} page
- */
-async function trackStampTexts(page) {
-  await page.evaluate(() => {
-    const stamp = /** @type {HTMLElement} */ (document.getElementById("stamp"));
-    const texts = /** @type {string[]} */ ([]);
-    let shown = stamp.textContent;
-    new MutationObserver(() => {
-      if (stamp.textContent === shown) return;
-      shown = stamp.textContent;
-      texts.push(shown ?? "");
-    }).observe(stamp, { subtree: true, childList: true, characterData: true });
-    Object.assign(window, { stampTexts: texts });
-  });
-  return () => page.evaluate(() => /** @type {string[]} */ (Reflect.get(window, "stampTexts")));
-}
-
 test("a page coming back as the store updates draws once, with the update, never the copy the store held", async ({
   page,
 }) => {
@@ -294,7 +276,7 @@ test("a page coming back as the store updates draws once, with the update, never
   await app.writeWhileAway("live/status", { error: "upstream_error", detail: "", write: "" });
   app.changeSnapshots((snapshot) => ({ ...snapshot, missing: ["wildCardRank"] }));
   app.passTimeAtWorker(31 * MINUTE_MS);
-  const readStampTexts = await trackStampTexts(page);
+  const readStampTexts = await trackTextChanges(page, "stamp");
   const watchers = app.countWatchersHeard();
 
   // The page's clock holds still, and then moves on without running its timers, as a phone that
@@ -310,6 +292,42 @@ test("a page coming back as the store updates draws once, with the update, never
   const texts = await readStampTexts();
   expect(texts).toHaveLength(1);
   expect(texts[0]).toContain("MLB stopped sending wildCardRank");
+});
+
+/**
+ * The Cardinals' final rescored, in a copy of the season the page's socket never hears of.
+ * @param {any} season
+ */
+function rescoreFinal(season) {
+  const game = season.slate.today.games.find((/** @type {any} */ each) => each.away === "STL");
+  game.score = [11, 2];
+  return season;
+}
+
+test("a page whose load failed, coming back as the store updates, never draws the copy the store held", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await app.updateFromWorker();
+  await page.getByRole("tab", { name: "Games" }).click();
+  const final = page
+    .locator("#seasonGames .game-day.is-today .game-row")
+    .filter({ hasText: "Cardinals" });
+  await expect(final).toContainText("1-2Final");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
+  // Unrouting by the handler too leaves the store's own route, which has the same pattern.
+  const failStore = (route) => route.fulfill({ status: 503, body: "" });
+  await page.route(matchPath("/store/"), failStore);
+  await page.reload();
+  await expect(page.locator("#stamp")).toContainText("Can't reach the page's server");
+
+  const texts = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: rescoreFinal,
+    onWake: () => page.unroute(matchPath("/store/"), failStore),
+  });
+
+  expect(texts.filter((text) => text.includes("11-2Final"))).toEqual([]);
+  await expect(final).toContainText("1-2Final");
 });
 
 test.describe("on a short phone", () => {

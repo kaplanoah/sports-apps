@@ -3,6 +3,7 @@ import { expectReloadOpensOn, RELOAD_STATES } from "../../../../tests/browser/re
 import {
   MINUTE_MS,
   SHORT_PHONE,
+  expectDayStripAfterReload,
   expectNewsAfterReloads,
   expectSeasonTabAfterReload,
 } from "../../../../tests/browser/start-over.mjs";
@@ -38,6 +39,14 @@ for (const { name, opensOn } of RELOAD_STATES) {
     });
   }
 }
+
+test("a reload two minutes or more after the page left the Games list on another day shows its strip of dates on today, before the page's code arrives and once it runs", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
+  await openApp(page, { isWholeSeason: true });
+  await expectDayStripAfterReload(page, "2026-09-10");
+});
 
 test.describe("on a short phone", () => {
   test.use({ viewport: SHORT_PHONE });

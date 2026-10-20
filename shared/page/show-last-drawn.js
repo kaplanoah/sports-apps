@@ -6,7 +6,7 @@
 // openLastTab(), before anything is painted, since a part on a hidden tab can't take back where it
 // was scrolled. After two minutes away, what a viewer moved starts over (long-away.js).
 
-/* global findPlaceToShow, isLongAwayFrom -- from long-away.js */
+/* global findPlaceToShow -- from long-away.js */
 /* global LAST_DRAWN_KEY -- from open-last-tab.js */
 /* global checkPickedChoice, readPickedAppearance -- from pick-theme.js */
 
@@ -62,7 +62,8 @@ function restoreScrolls(part, scrolls) {
     element.scrollTop = top;
     // A part inside the season's standings or bracket is laid out only once season-header.js
     // places them, right after this, which can widen it past where it could first be scrolled.
-    if (left > 0) requestAnimationFrame(() => (element.scrollLeft = left));
+    if (left > 0 && element.closest(".season-part"))
+      requestAnimationFrame(() => (element.scrollLeft = left));
     if (!(element instanceof HTMLElement)) continue;
     // A list put back on its start day goes to the start day its code finds, which can have moved.
     if (isOnStart) element.dataset.putBackStart = "true";
@@ -107,11 +108,13 @@ const keepCustomProperties = (style) =>
  */
 function showPart(id, part, now) {
   const element = /** @type {HTMLElement} */ (document.getElementById(id));
-  const place = findPlaceToShow(part, !!element.closest("dialog"), now);
+  const where = {
+    isInSheet: !!element.closest("dialog"),
+    isStartHidden: element.hasAttribute("data-start-hidden"),
+  };
+  const place = findPlaceToShow(part, where, now);
   element.innerHTML = part.markup;
-  const isBackToStart =
-    element.hasAttribute("data-start-hidden") && isLongAwayFrom(part.savedAt, now);
-  element.hidden = part.hidden === true || isBackToStart;
+  element.hidden = place.hidden;
   element.classList.add(...place.classes.split(" ").filter(Boolean));
   if (typeof part.style === "string")
     element.setAttribute("style", keepCustomProperties(part.style));

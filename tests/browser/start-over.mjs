@@ -186,22 +186,46 @@ async function runPageCode(page, release) {
 
 /**
  * Checks that a reload `awayMs` after the page left with the season tab off its start shows it
- * where it was left, under two minutes, or from its start, before the page's code arrives and once
- * it runs. The bracket goes to its opening round only once the code finds it.
+ * where it was left, under two minutes, or from its start, with the bracket on its opening round,
+ * the same before the page's code arrives as once it runs.
  * @param {import("@playwright/test").Page} page
  * @param {{ sideways: string, awayMs: number }} options
  */
 export async function expectSeasonTabAfterReload(page, { sideways, awayMs }) {
   const { start, left } = await moveSeasonTabOffStart(page, sideways);
-  const isStartedOver = awayMs >= 2 * MINUTE_MS;
+  const shown = awayMs >= 2 * MINUTE_MS ? start : left;
+  expect(start.bracketLeft).toBeLessThan(left.bracketLeft);
 
   const release = await reloadAfter(page, awayMs);
 
   await expect(page.locator("#standingsWrap table").first()).toBeAttached();
-  const shown = isStartedOver ? { ...start, bracketLeft: 0 } : left;
   await expect.poll(() => readSeasonPlace(page, sideways)).toEqual(shown);
   await runPageCode(page, release);
-  expect(await readSeasonPlace(page, sideways)).toEqual(isStartedOver ? start : left);
+  expect(await readSeasonPlace(page, sideways)).toEqual(shown);
+}
+
+/**
+ * Checks that a reload two minutes after the page left the Games list on `otherDay` shows its
+ * strip of dates on the day the list opens on, the same before the page's code arrives as once it
+ * runs.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} otherDay
+ */
+export async function expectDayStripAfterReload(page, otherDay) {
+  const strip = page.locator("#seasonGames .day-strip");
+  const readLeft = () => strip.evaluate((element) => Math.round(element.scrollLeft));
+  await waitForLoadToSettle(page);
+  await page.locator(`#seasonGames .day-cell[data-day="${otherDay}"]`).click();
+  await expect(page.locator(`#seasonGames .listed-day[data-day="${otherDay}"]`)).toBeInViewport();
+  const leftOnOtherDay = await readLeft();
+
+  const release = await reloadAfter(page, 2 * MINUTE_MS);
+
+  await expect(strip).toBeAttached();
+  const shownLeft = await readLeft();
+  expect(shownLeft).not.toBe(leftOnOtherDay);
+  await runPageCode(page, release);
+  expect(await readLeft()).toBe(shownLeft);
 }
 
 /**

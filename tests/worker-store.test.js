@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
+import { UPDATING_WAIT_MS } from "../shared/page/catch-up-note.js";
 import { createWorkerStore } from "../shared/page/worker-store.js";
 
 // Stand-ins for the browser: each read waits until the test answers it, and the socket opens
@@ -580,8 +581,6 @@ test("waiting for a store that doesn't catch up gives up after ten seconds", asy
   assert.equal(await waiting, false);
 });
 
-const UPDATING_WAIT_MS = 2000;
-
 /**
  * A store showing a drawing, caught up on the season, that comes back after time away to a store
  * that says its update is coming: the season it last had, the season the store held, and each
@@ -639,6 +638,21 @@ test("a page coming back waits no longer for the store's update than it takes to
 
   hear({ path: "seasons/2026", data: { inning: 9 } });
   assert.deepEqual(seen, [3, 8, 9]);
+});
+
+test("a page that opens with nothing drawn takes what it watches at once, even once it has drawn from a read of its own", async () => {
+  let isDrawn = false;
+  const { store, reads, openSocket, hear } = startStore({ isShowing: () => isDrawn });
+  const news = [];
+  store.doc("news/cards").onSnapshot((snapshot) => news.push(snapshot.data().count));
+  openSocket();
+  hear({ updating: true });
+  isDrawn = true;
+
+  reads[0].answer({ data: { count: 5 } });
+  await settle();
+
+  assert.deepEqual(news, [5]);
 });
 
 test("a page with nothing drawn yet takes what the store holds at once, and catches up without waiting for the store's update", async () => {

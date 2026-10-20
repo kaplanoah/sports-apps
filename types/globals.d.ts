@@ -21,15 +21,17 @@ declare function isAwayLong(awayMs: number): boolean;
 declare function isLongAwayFrom(savedAt: unknown, now?: number): boolean;
 declare function findPlaceToShow(
   saved: {
+    hidden?: unknown;
     scrolls?: unknown;
     holderTop?: unknown;
     pageTop?: unknown;
     classes?: unknown;
     savedAt?: unknown;
   },
-  isInSheet: boolean,
+  where: { isInSheet: boolean; isStartHidden: boolean },
   now: number,
 ): {
+  hidden: boolean;
   scrolls: { path: unknown; left: number; top: number; isOnStart: boolean }[];
   holderTop: number;
   pageTop: number;

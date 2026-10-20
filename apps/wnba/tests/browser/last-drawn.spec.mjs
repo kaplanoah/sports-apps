@@ -1,3 +1,4 @@
+import { finishFirstRound } from "./bracket-rounds.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { measureStoredBytes, SAVED_COPY_BYTES } from "../../../../tests/browser/saved-copy.mjs";
@@ -348,10 +349,11 @@ test.describe("on a phone", () => {
 
     const SIDEWAYS = "#bracketWrap .bracket";
 
-    test("a reload two minutes or more after the page left starts the season tab over, on the part it's named for, each part at its top with the header back, before the page's code arrives, and the bracket on its opening round once it runs", async ({
+    test("a reload two minutes or more after the page left starts the season tab over, on the part it's named for, each part at its top with the header back and the bracket on its opening round, before the page's code arrives and once it runs", async ({
       page,
     }) => {
-      await openApp(page);
+      const app = await openApp(page);
+      await app.changeSeason(finishFirstRound);
       await expectSeasonTabAfterReload(page, { sideways: SIDEWAYS, awayMs: 2 * MINUTE_MS });
     });
 

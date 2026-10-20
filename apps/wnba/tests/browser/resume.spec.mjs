@@ -5,6 +5,7 @@ import {
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
+import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import {
   SHORT_PHONE,
   leaveScrolledFor,
@@ -155,6 +156,51 @@ test("a page shown again without saying so keeps the socket it opens", async ({ 
   });
 
   await expect(row.locator(".game-status .clock")).toHaveText("Q2 5:10");
+});
+
+/**
+ * A game started, in a copy of the season the page's socket never hears of.
+ * @param {any} season
+ */
+function startGame(season) {
+  const game = season.games.find((/** @type {any} */ each) => each.id === "1042600132");
+  Object.assign(game, { state: "live", status: "Q2 5:10", period: 2, clock: "5:10" });
+  return season;
+}
+
+test("a page coming back as the store updates draws once, with the update, never the copy the store held", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator('[data-game="1042600132"]')).toBeVisible();
+  await waitForCatchUp(page);
+
+  const texts = await wakeAsStoreUpdates(page, app, { changeWhileAway: startGame });
+
+  expect(texts).toEqual([]);
+});
+
+test("a page whose load failed, coming back as the store updates, never draws the copy the store held", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator('[data-game="1042600132"]')).toBeVisible();
+  await waitForCatchUp(page);
+  // Unrouting by the handler too leaves the store's own route, which has the same pattern.
+  const failStore = (route) => route.fulfill({ status: 503, body: "" });
+  await page.route(matchPath("/store/"), failStore);
+  await page.reload();
+  await expect(page.locator("#stamp")).toContainText("Can't reach the page's server");
+
+  const texts = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: startGame,
+    onWake: () => page.unroute(matchPath("/store/"), failStore),
+  });
+
+  expect(texts.filter((text) => text.includes("5:10"))).toEqual([]);
+  await expect(page.locator("#stamp")).not.toContainText("Can't reach the page's server");
 });
 
 test("a page whose first load failed loads the last season once the store answers", async ({

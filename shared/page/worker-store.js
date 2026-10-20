@@ -91,7 +91,7 @@ export function createWorkerStore({
   // While the page catches up with a drawing on the screen, it holds what the store sends until
   // the update the store brought forward has come too, so it draws once, with the latest, rather
   // than what the store held and then the update. It holds no longer than it takes the header to
-  // say the page is getting the latest scores, and not at all with nothing drawn.
+  // say the page is getting the latest scores, and not at all with nothing drawn as it begins.
   /** @type {ReturnType<typeof setTimeout> | null} */
   let holdTimer = null;
   /** @type {Map<string, () => void>} */
@@ -113,7 +113,7 @@ export function createWorkerStore({
   const findListUrl = (name, count) => new URL(`store/${name}?limit=${count}`, baseUrl);
   const hasWatchers = () => listenersByPath.size > 0 || collectionWatches.size > 0;
 
-  const isHolding = () => holdTimer !== null && isShowing();
+  const isHolding = () => holdTimer !== null;
 
   /**
    * Hands what the store sent to the page, or holds it, keeping only the latest of each.
@@ -121,8 +121,8 @@ export function createWorkerStore({
    * @param {() => void} deliver
    */
   function handOver(key, deliver) {
-    if (!isHolding()) deliver();
-    else held.set(key, deliver);
+    if (isHolding()) held.set(key, deliver);
+    else deliver();
   }
 
   function deliverSnapshot(path, snapshot) {
@@ -180,6 +180,7 @@ export function createWorkerStore({
   // Set before the page says it's behind, so a hold that runs out does before the header's line
   // that it's getting the latest scores would show.
   function startHolding() {
+    if (!isShowing()) return;
     clearTimeout(holdTimer ?? undefined);
     holdTimer = setTimeout(() => {
       releaseHeld();

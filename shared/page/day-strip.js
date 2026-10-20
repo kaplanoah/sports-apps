@@ -527,12 +527,15 @@ function placeDay({ day, offset }) {
   if (list && listed) list.scrollTop = listed.offsetTop - offset;
 }
 
-// Where the list stands at the start day, which a page that loads again after two minutes away
-// opens on (show-last-drawn.js).
-function noteStartTop() {
+// Where the list and its strip stand at the start day, which a page that loads again after two
+// minutes away opens on (show-last-drawn.js).
+function noteStartPlace() {
   const list = findList();
   const top = shown && findDayTop(shown.startDay);
   if (list && typeof top === "number") list.dataset.startTop = String(top);
+  const strip = findStrip();
+  const cell = shown && findCell(shown.startDay);
+  if (strip && cell) strip.dataset.startLeft = String(findCellLeft(strip, cell));
 }
 
 /**
@@ -758,7 +761,7 @@ function placeList(putBackDay) {
   else if (placement === "put back" && putBackDay) placeDay(putBackDay);
   else showDay(shown.startDay, "instant");
   isPlaced = true;
-  noteStartTop();
+  noteStartPlace();
   markStuck();
   const top = findTopDay();
   if (top && !isStillHeld()) chooseDay(top, "instant");

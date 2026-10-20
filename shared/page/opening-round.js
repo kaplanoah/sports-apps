@@ -31,19 +31,30 @@ function isShownFromStart(scroller, target) {
 const isPhone = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
 /**
- * Starts at the bracket's beginning when it isn't on a phone or that already shows the target's
- * round, so the rounds before it stay in view; otherwise brings the target to the left edge.
+ * Where the bracket opens: at its beginning when it isn't on a phone or that already shows the
+ * target's round, so the rounds before it stay in view; otherwise with the target at the left edge.
+ * @param {HTMLElement} scroller @param {HTMLElement} target
+ */
+function findTargetLeft(scroller, target) {
+  if (!isPhone() || isShownFromStart(scroller, target)) return 0;
+  const padding = parseFloat(getComputedStyle(scroller).scrollPaddingLeft) || 0;
+  const offset = target.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
+  return scroller.scrollLeft + offset - padding;
+}
+
+/**
  * @param {HTMLElement} scroller @param {HTMLElement} target
  * @param {ScrollBehavior} [behavior]
  */
 function scrollToTarget(scroller, target, behavior = "instant") {
-  if (!isPhone() || isShownFromStart(scroller, target)) {
-    scroller.scrollTo({ left: 0, behavior });
-    return;
-  }
-  const padding = parseFloat(getComputedStyle(scroller).scrollPaddingLeft) || 0;
-  const offset = target.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
-  scroller.scrollTo({ left: scroller.scrollLeft + offset - padding, behavior });
+  scroller.scrollTo({ left: findTargetLeft(scroller, target), behavior });
+}
+
+// Where the bracket opens, which a page that loads again after two minutes away opens on
+// (show-last-drawn.js).
+/** @param {HTMLElement} scroller @param {HTMLElement} target */
+function noteStartLeft(scroller, target) {
+  scroller.dataset.startLeft = String(Math.round(findTargetLeft(scroller, target)));
 }
 
 /** @type {Set<(behavior: ScrollBehavior) => void>} */
@@ -72,6 +83,7 @@ export function watchOpeningRound(wrap) {
   new ResizeObserver(() => {
     const isShown = wrap.getClientRects().length > 0;
     if (isShown && !wasShown && drawn) scrollToTarget(drawn.scroller, drawn.target);
+    if (isShown && drawn) noteStartLeft(drawn.scroller, drawn.target);
     wasShown = isShown;
   }).observe(wrap);
   openingRoundReturns.add((behavior) => {
@@ -85,5 +97,6 @@ export function watchOpeningRound(wrap) {
     drawn = { scroller, target, round };
     if (isNewRound && !isPutBack) scrollToTarget(scroller, target);
     else scroller.scrollLeft = keptLeft;
+    noteStartLeft(scroller, target);
   };
 }

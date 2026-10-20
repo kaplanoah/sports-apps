@@ -245,13 +245,16 @@ const listSearchDays = (found, now) =>
     now,
   );
 
-async function reloadSeason() {
-  await loadSeason();
-  showNewData();
+function reloadSeason() {
+  session.db.afterHandOver(async () => {
+    await loadSeason();
+    showNewData();
+  });
 }
 
-// A page whose load failed loads its season again. Otherwise what changed while it was away
-// comes in one redraw, with the store's latest.
+// A page whose load failed loads its season again, once the store's update is in, so it draws
+// that rather than what the store held. Otherwise what changed while it was away comes in one
+// redraw, with the store's latest.
 /** @param {number} awayMs */
 function catchUp(awayMs) {
   session.db.catchUp(awayMs);
