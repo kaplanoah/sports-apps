@@ -47,13 +47,10 @@ function listItems(text) {
  * The words of an item's lines, each code span counting as one.
  * @param {string[]} lines
  */
-const countWords = (lines) =>
-  lines
-    .join(" ")
-    .replace(LIST_ITEM, "")
-    .replaceAll(CODE_SPAN, "code")
-    .split(/\s+/)
-    .filter(Boolean).length;
+function countWords(lines) {
+  const words = lines.join(" ").replace(LIST_ITEM, "").replaceAll(CODE_SPAN, "code").split(/\s+/);
+  return words.filter(Boolean).length;
+}
 
 /** @param {string[]} lines */
 const isLong = (lines) => lines.length > MOST_ITEM_LINES || countWords(lines) > MOST_ITEM_WORDS;
