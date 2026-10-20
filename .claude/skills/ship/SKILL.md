@@ -141,7 +141,8 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 
 ## Step 12: one thing a PR, and stacked PRs
 
-- A review finding outside the PR's one thing that AGENTS.md's step 12 names, or a place outside the change that shows a finding's problem, becomes an issue, linked from its thread, not a commit on the PR.
+- A review finding outside the PR's one thing that AGENTS.md's step 12 names becomes an issue, linked from its thread, not a commit on the PR.
+  The same problem in the other app, or in another view, sheet, or theme, is part of the one thing, and is fixed on the PR.
 - A PR built to fix review findings left for later takes findings that make one thing, like one area's or about five sharing a cause, never a whole review's.
 - When a change has red and non-red parts that can each stand alone, split them:
   the non-red PR first, and the red one stacked on it, so the non-red half ships without waiting for the owner's phone.
