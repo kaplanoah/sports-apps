@@ -64,7 +64,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   so deploy it to beta and ask.
   Merge `main` into the branch just before each deploy to beta, so the commit the owner labels is the one that merges, since a PR merges while behind `main` as long as it has no conflicts.
 - One red change goes live per deploy.
-  While a red change is on beta, or has merged and the owner hasn't confirmed it on the phone, no other red PR merges, and none replaces it on beta.
+  Until a red change on beta has merged and gone live, no other red PR merges, and none replaces it on beta.
+  Its `phone-ok` is the owner's check of the commit that merges,
+  so once it's live, tell the user so and never ask them to check it again.
 
 ## Step 4: conflicts
 
