@@ -44,6 +44,8 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "tests/deploy.test.js",
     "apps/mlb/tests/store.test.js",
     "apps/mlb/tests/browser/page.spec.mjs",
+    ".claude/hooks/context-limit.mjs",
+    ".claude/settings.json",
     ".github/workflows/beta.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
