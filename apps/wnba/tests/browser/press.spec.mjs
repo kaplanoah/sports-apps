@@ -8,11 +8,12 @@ import {
   holdClock,
   sendClick,
   sendFinger,
+  sendScroll,
   sendSecondFinger,
 } from "../../../../tests/browser/stray-click.mjs";
 
-// A row that opens something tints while it's pressed, and a touch the browser takes for a scroll
-// never taps what it landed on, as on an iPhone (press.js).
+// A row that opens something tints while it's pressed, and a touch that's part of a scroll, as one
+// that stops a list still gliding is, never taps what it landed on, as on an iPhone (press.js).
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -165,6 +166,74 @@ test("a still tap right after a scroll, like one on the pill's Bracket, works", 
   await expect(bracket).toHaveAttribute("aria-selected", "true");
 });
 
+/**
+ * Flings the standings from a team's row, as a finger does that lifts while they glide on, and
+ * sends the first frame of their glide.
+ * @param {import("@playwright/test").Page} page
+ * @param {import("@playwright/test").Locator} button
+ */
+async function flingStandings(page, button) {
+  await sendFinger(button, { moves: [12], isCancelled: true });
+  await sendScroll(page, page.locator('.season-part[data-part="standings"]'));
+}
+
+test("a still finger on a team's row while the standings glide never opens the team, even when iOS sends the tap, and never tints the row", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await flingStandings(page, button);
+  await notePresses(page);
+
+  await sendFinger(button, { moves: [] });
+  await page.clock.runFor(200);
+
+  expect(await readPresses(page)).toEqual([]);
+  expect(await sendClick(button)).toBe(false);
+  await expect(page.locator("#teamSheet")).toBeHidden();
+});
+
+test("a still tap on a team's row once the standings have come to rest opens the team", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await flingStandings(page, button);
+  await page.clock.runFor(200);
+
+  await sendFinger(button, { moves: [] });
+
+  expect(await sendClick(button)).toBe(true);
+  await expect(page.locator("#teamSheet")).toBeVisible();
+});
+
+test("a still tap on a team's row right after the page's own code scrolls the standings opens the team", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await sendScroll(page, page.locator('.season-part[data-part="standings"]'));
+
+  await sendFinger(button, { moves: [] });
+
+  expect(await sendClick(button)).toBe(true);
+  await expect(page.locator("#teamSheet")).toBeVisible();
+});
+
+test("a still tap beside the standings while they glide, like one on the pill's Bracket, works", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await flingStandings(page, button);
+  const bracket = findSeasonPill(page).getByRole("tab", { name: "Bracket", exact: true });
+
+  await sendFinger(bracket, { moves: [] });
+
+  expect(await sendClick(bracket)).toBe(true);
+  await expect(bracket).toHaveAttribute("aria-selected", "true");
+});
+
 test("a click a second after a scroll, like a screen reader's, still opens the team", async ({
   page,
 }) => {
@@ -208,9 +277,11 @@ test("a finger the browser takes for a scroll on a player's name in a roster nev
   await expect(page.locator("#playerSheet")).toBeHidden();
 });
 
-test("a finger the browser takes for a scroll on a story in the News never opens it", async ({
-  page,
-}) => {
+/**
+ * Opens the News on one story, and returns its headline.
+ * @param {import("@playwright/test").Page} page
+ */
+async function openNewsStory(page) {
   const app = await openApp(page);
   await page.getByRole("tab", { name: "News" }).click();
   await expect(page.locator("#newsList")).toHaveText("No news yet");
@@ -234,9 +305,29 @@ test("a finger the browser takes for a scroll on a story in the News never opens
   });
   const headline = page.locator(".news-card h3.news-title a");
   await expect(headline).toBeVisible();
+  return headline;
+}
+
+test("a finger the browser takes for a scroll on a story in the News never opens it", async ({
+  page,
+}) => {
+  const headline = await openNewsStory(page);
   await holdClock(page);
 
   await sendFinger(headline, { moves: [12], isCancelled: true });
+
+  expect(await sendClick(headline)).toBe(false);
+});
+
+test("a still finger on a story in the News while the page glides never opens it", async ({
+  page,
+}) => {
+  const headline = await openNewsStory(page);
+  await holdClock(page);
+  await sendFinger(headline, { moves: [12], isCancelled: true });
+  await sendScroll(page);
+
+  await sendFinger(headline, { moves: [] });
 
   expect(await sendClick(headline)).toBe(false);
 });

@@ -1,5 +1,5 @@
-// The events iOS sends for a touch, sent by hand, since no CI browser sends a click after a touch
-// it took for a scroll, as iOS sometimes does.
+// The events iOS sends for a touch and a list's glide, sent by hand, since no CI browser glides on
+// after a finger lifts or sends a click after a touch it took for a scroll, as iOS sometimes does.
 
 /**
  * Clicks an element, as iOS can after a finger left it, and says whether the click went through.
@@ -58,6 +58,17 @@ export const sendSecondFinger = (target, type) =>
       ),
     type,
   );
+
+/**
+ * Sends a scroll on an element, or on the page itself without one, as the browser does on each
+ * frame of a glide.
+ * @param {import("@playwright/test").Page} page
+ * @param {import("@playwright/test").Locator} [target]
+ */
+export const sendScroll = (page, target) =>
+  target
+    ? target.evaluate((element) => element.dispatchEvent(new Event("scroll")))
+    : page.evaluate(() => document.dispatchEvent(new Event("scroll")));
 
 /**
  * Holds the page's clock still, so a click sent after a finger comes as soon after its lift as

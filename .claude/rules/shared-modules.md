@@ -67,6 +67,7 @@ paths:
         any day that changes height as it's drawn whole or as a stand-in,
         and a strip that doesn't scroll where it's told.
       - `bracket-standings-log.js`: each touch on a season's standings and bracket, how far it moved,
+        whether it landed on a list still gliding, by `press.js`'s reading,
         whether the page's code took it from the browser, whether the browser cancelled its pointer,
         and how far the part under it scrolled, and each click on them
       - `error-log.js`: each error the page's code doesn't catch
@@ -165,8 +166,10 @@ paths:
     - `press.js`: a row that opens something tinting while a finger or the mouse presses it,
       a moment after a finger lands so a scroll never tints one,
       and a tapped search row's search waiting for its tint to show.
-      A touch the browser takes for a scroll never taps what it landed on,
-      even when iOS still sends its click, as an iPhone's lists do.
+      A touch that's part of a scroll never taps or tints what it landed on,
+      even when iOS still sends its click, as an iPhone's lists do:
+      one the browser takes for a scroll,
+      and one whose finger lands on a list still gliding from a finger's fling, which it only stops.
     - `eased-redraw.js`: easing the page's parts to their new heights, fading in what's new,
       when new data redraws them
     - `slide-panels.js`: panels side by side, one shown,

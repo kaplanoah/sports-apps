@@ -19,7 +19,12 @@ import {
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
-import { holdClock, sendClick, sendFinger } from "../../../../tests/browser/stray-click.mjs";
+import {
+  holdClock,
+  sendClick,
+  sendFinger,
+  sendScroll,
+} from "../../../../tests/browser/stray-click.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
@@ -341,6 +346,23 @@ test.describe("on a phone, tapping an update", () => {
     await holdClock(page);
 
     await sendFinger(standIn, { moves: [12], isCancelled: true });
+
+    expect(await sendClick(standIn)).toBe(false);
+    await expect(page.locator("#gameSheet")).toBeHidden();
+  });
+
+  test("on the season tab, a still finger on an update's stand-in while the bracket glides never opens its game, even when iOS still sends the tap", async ({
+    page,
+  }) => {
+    await openBracketWithUpdates(page);
+    await scrollSeasonPart(page, "bracket", 30);
+    const standIn = page.locator('[data-part="bracket"] .rider-tap').first();
+    await expect(standIn).toBeAttached();
+    await holdClock(page);
+    await sendFinger(standIn, { moves: [12], isCancelled: true });
+    await sendScroll(page, page.locator('.season-part[data-part="bracket"]'));
+
+    await sendFinger(standIn, { moves: [] });
 
     expect(await sendClick(standIn)).toBe(false);
     await expect(page.locator("#gameSheet")).toBeHidden();
