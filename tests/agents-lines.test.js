@@ -39,17 +39,21 @@ const SECOND_SENTENCE = new RegExp(`${SENTENCE_END}\\s+["'(*]*[A-Z]`);
 const BOLD_LABEL_STOP = /^(\*\*[^*]+)[.?!](?=\*\*)/;
 
 /**
- * A line's prose, without its list or heading mark, and with each code span as one word.
+ * A line's prose, without its list or heading mark or its bold label's stop, and with each code
+ * span as one word.
  * @param {string} line
  */
-const readProse = (line) => line.replace(LEADING_MARK, "").replaceAll(/`[^`]*`/g, "Code");
+const readProse = (line) =>
+  line
+    .replace(LEADING_MARK, "")
+    .replace(BOLD_LABEL_STOP, "$1")
+    .replaceAll(/`[^`]*`/g, "Code");
 
 /**
  * Whether a line starts a second sentence after its first.
  * @param {string} line
  */
-const startsSecondSentence = (line) =>
-  SECOND_SENTENCE.test(readProse(line).replace(BOLD_LABEL_STOP, "$1"));
+const startsSecondSentence = (line) => SECOND_SENTENCE.test(readProse(line));
 
 /** @param {string} piece */
 const countWords = (piece) => piece.split(/\s+/).filter(Boolean).length;
@@ -149,7 +153,7 @@ test("a sentence ends at any stop past a closing mark, but not inside a code spa
     "Is it? Yes! Done (really.)",
     "Run `a. b` now. Wait... then",
     "go on.",
-    '**Bugs.** Look "here."',
+    '**Bugs.** Look at **this.** Then "here."',
     "Say 'yes.'",
     "Then stop.",
   ].join("\n");
@@ -159,7 +163,7 @@ test("a sentence ends at any stop past a closing mark, but not inside a code spa
     { line: 1, words: 2 },
     { line: 2, words: 3 },
     { line: 2, words: 4 },
-    { line: 4, words: 1 },
+    { line: 4, words: 4 },
     { line: 4, words: 2 },
     { line: 5, words: 2 },
     { line: 6, words: 2 },
@@ -178,8 +182,18 @@ test("a line starts a second sentence after any stop past a closing mark, but no
     "Do it. **Then** go.",
     "Run it. (Then go.)",
     "Run it. `npm test` runs.",
+    'Run it. "Then go."',
+    "Run it. 'Then go.'",
+    "**Bugs. Then** go.",
   ])
     assert.ok(startsSecondSentence(line), line);
-  for (const line of ["**Bugs.** State the cases.", "Wait... Then go.", "Run `a. B` now.", "One."])
+  for (const line of [
+    "**Bugs.** State the cases.",
+    "**Why?** Because it is.",
+    "**Stop!** Then wait.",
+    "Wait... Then go.",
+    "Run `a. B` now.",
+    "One.",
+  ])
     assert.ok(!startsSecondSentence(line), line);
 });
