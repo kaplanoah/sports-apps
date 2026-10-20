@@ -1,6 +1,6 @@
 // The Worker's routing: the page, its store, and its sheets' reads, only under the page's key, or
-// without it at the address PAGE_HOST names, behind the access code (access-gate.js), and health
-// with neither (health.js). Each release's files are served from a folder named for its commit,
+// without it at the address PAGE_HOST names, behind the access code (access-gate.js), and
+// robots.txt and health with neither (health.js). Each release's files are served from a folder named for its commit,
 // which browsers keep for good.
 
 import {

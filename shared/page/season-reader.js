@@ -4,7 +4,8 @@ import { isSameJson } from "./compare.js";
 // by its own clock, and pushes each change to the season's record. A page showing the current
 // season moves on to the next one when the store does. Each season a viewer picks is kept while its
 // record is on its way, and put back on the season shown when it can't be read. A page reads a
-// record only in the version it knows, and reloads once the newer release that saved one is out.
+// record in the version it knows, or one saved before records had a version, and reloads once the
+// newer release that saved one is out.
 
 const CURRENT_PATH = "live/current";
 const STATUS_PATH = "live/status";

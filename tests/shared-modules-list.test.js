@@ -1,14 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { countWords, isListItem, readProse, startsUnit } from "./guidance-text.js";
 import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 
 const LIST_PATH = ".claude/rules/shared-modules.md";
 const MOST_ITEM_LINES = 2;
 const MOST_ITEM_WORDS = 20;
-
-const CODE_SPAN = /`[^`]+`/g;
-const LIST_ITEM = /^\s*-\s/;
-const ENDS_ITEM = /^\s*$|^#|^---$/;
 
 /** @param {string} text */
 function readListedModules(text) {
@@ -34,10 +31,10 @@ function listItems(text) {
   /** @type {string[] | null} */
   let item = null;
   for (const line of text.split("\n")) {
-    if (LIST_ITEM.test(line)) {
+    if (isListItem(line)) {
       item = [line];
       items.push(item);
-    } else if (ENDS_ITEM.test(line)) item = null;
+    } else if (startsUnit(line)) item = null;
     else item?.push(line);
   }
   return items;
@@ -47,13 +44,11 @@ function listItems(text) {
  * The words of an item's lines, each code span counting as one.
  * @param {string[]} lines
  */
-function countWords(lines) {
-  const words = lines.join(" ").replace(LIST_ITEM, "").replaceAll(CODE_SPAN, "code").split(/\s+/);
-  return words.filter(Boolean).length;
-}
+const countItemWords = (lines) =>
+  lines.reduce((words, line) => words + countWords(readProse(line)), 0);
 
 /** @param {string[]} lines */
-const isLong = (lines) => lines.length > MOST_ITEM_LINES || countWords(lines) > MOST_ITEM_WORDS;
+const isLong = (lines) => lines.length > MOST_ITEM_LINES || countItemWords(lines) > MOST_ITEM_WORDS;
 
 const listText = readRepoFile(LIST_PATH);
 const listed = readListedModules(listText);
@@ -86,7 +81,7 @@ test(`each of the list's items is ${MOST_ITEM_LINES} lines and ${MOST_ITEM_WORDS
   );
 });
 
-test("an item's words count each code span as one, across its lines", () => {
+test("an item's words count each code span as one, across its lines, until any list mark starts the next", () => {
   const items = listItems(
     [
       "- `a.js`: one `two three` four",
@@ -98,10 +93,12 @@ test("an item's words count each code span as one, across its lines", () => {
       "- `c.js`: one",
       "  two",
       "  three",
+      "* `d.js`: one",
+      "1. `e.js`: one two",
     ].join("\n"),
   );
-  assert.deepEqual(items.map(countWords), [5, 2, 4]);
-  assert.deepEqual(items.map(isLong), [false, false, true]);
+  assert.deepEqual(items.map(countItemWords), [5, 2, 4, 2, 3]);
+  assert.deepEqual(items.map(isLong), [false, false, true, false, false]);
 });
 
 test("a module is listed by the item it starts, under the heading of its folder", () => {
