@@ -44,9 +44,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "tests/deploy.test.js",
     "apps/mlb/tests/store.test.js",
     "apps/mlb/tests/browser/page.spec.mjs",
-    ".claude/hooks/check-push.mjs",
     ".claude/hooks/context-limit.mjs",
-    ".claude/hooks/install-packages.mjs",
     ".claude/settings.json",
     ".github/workflows/beta.yml",
     ".github/workflows/ci.yml",
@@ -73,6 +71,19 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     /^Nothing the Worker runs changed since the live version, so nothing was deployed\./,
   );
   assert.match(decision.reason, /AGENTS\.md, README\.md/);
+});
+
+test("anything in the root's .claude/ folder skips the deploy, a hook no list names too", () => {
+  for (const path of [
+    ".claude/settings.json",
+    ".claude/hooks/one-command.mjs",
+    ".claude/hooks/install-packages.mjs",
+    ".claude/hooks/a-hook-yet-to-come.mjs",
+    ".claude/skills/ship/SKILL.md",
+  ]) {
+    assert.equal(decideDeploy([path]).isNeeded, false, path);
+  }
+  assert.equal(decideDeploy(["shared/page/.claude/hooks/a-hook.mjs"]).isNeeded, true);
 });
 
 test("a merge that changes what the Worker runs, or how it deploys, deploys", () => {
