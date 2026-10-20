@@ -85,7 +85,11 @@ async function runNpmScript(folder, script) {
     });
     return { isPassed: true, output: `${stdout}${stderr}` };
   } catch (error) {
-    const { stdout = "", stderr = "", message } = /** @type {any} */ (error);
+    const {
+      stdout = "",
+      stderr = "",
+      message,
+    } = /** @type {{ stdout?: string, stderr?: string, message: string }} */ (error);
     return { isPassed: false, output: `${stdout}${stderr}` || message };
   }
 }
@@ -99,11 +103,18 @@ const isTreeCleanIn = (folder) =>
 
 /**
  * The context of the transcript's last replies, or none for a subagent's call, whose context is
- * its own, or when there's no transcript.
+ * its own, or when the transcript can't be read.
  * @param {{ transcript_path?: string, agent_id?: string }} input
+ * @returns {number[]}
  */
-const readSessionTokens = ({ transcript_path: transcriptPath, agent_id: agentId }) =>
-  agentId || !transcriptPath ? [] : readRecentContextTokens(readFileSync(transcriptPath, "utf8"));
+export function readSessionTokens({ transcript_path: transcriptPath, agent_id: agentId }) {
+  if (agentId || !transcriptPath) return [];
+  try {
+    return readRecentContextTokens(readFileSync(transcriptPath, "utf8"));
+  } catch {
+    return [];
+  }
+}
 
 /** Reads the hook's input and blocks a push, with exit code 2 and the reason, when it shouldn't go. */
 async function checkHookInput() {

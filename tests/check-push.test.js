@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decidePush } from "../.claude/hooks/check-push.mjs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { decidePush, readSessionTokens } from "../.claude/hooks/check-push.mjs";
 import { STOP_TOKENS } from "../.claude/hooks/context-limit.mjs";
 import { readRepoFile } from "./repo-files.js";
 
@@ -76,6 +79,19 @@ test("a push at or past the context limit's stop goes unchecked, even with uncom
 test("a push just under the stop is checked", async () => {
   const { scripts } = await decide("git push", { recentTokens: [STOP_TOKENS - 1] });
   assert.deepEqual(scripts, CHECKS);
+});
+
+test("the session's context is read from its transcript, but not for a subagent or a transcript that can't be read", () => {
+  const transcriptPath = join(mkdtempSync(join(tmpdir(), "check-push-")), "transcript.jsonl");
+  const usage = { input_tokens: 2, cache_read_input_tokens: 310_000 };
+  writeFileSync(
+    transcriptPath,
+    `${JSON.stringify({ type: "assistant", message: { id: "msg_1", usage } })}\n`,
+  );
+  assert.deepEqual(readSessionTokens({ transcript_path: transcriptPath }), [310_002]);
+  assert.deepEqual(readSessionTokens({ transcript_path: transcriptPath, agent_id: "a1" }), []);
+  assert.deepEqual(readSessionTokens({ transcript_path: `${transcriptPath}.missing` }), []);
+  assert.deepEqual(readSessionTokens({}), []);
 });
 
 test("a failing check blocks the push with its output", async () => {
