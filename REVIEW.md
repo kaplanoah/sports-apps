@@ -6,8 +6,8 @@ AGENTS.md and the rule files in `.claude/rules/` hold the rules the code keeps; 
 ## Read all of it
 
 - Read in full every diff your review hands you:
-  the whole change in a first review and in the last read of it,
-  and what the pushes since the last finished review changed in a review of a later push.
+  the whole change in a first review,
+  and what the pushes since the last finished review changed in a review asked for after them.
   A recorded fixture (`tests/fixtures/`) or `package-lock.json` needs only its name and size,
   and whether a test reads it.
 - Read past the diff: each caller of a function the change touches,
@@ -90,12 +90,9 @@ Don't run the tests: CI runs them all.
 
 ## How to report
 
-In CI, each area's reviewers each look for one kind of problem
-(in the last read of the whole change, one reviewer an area looks for every kind)
-and list every problem they find,
-a checker confirms each against the code before anything is posted and merges repeats,
-a check across areas, when there's more than one, names repeats across them and adds what spans them,
-and a step posts what they confirmed or left unsure.
+In CI, one reviewer an area looks for every item above and lists every problem it finds,
+one check across every area confirms each against the code before anything is posted, merges repeats, weighs each, and adds what spans areas,
+and a step posts what it confirmed or left unsure.
 
 - Report every problem you find, not a sample, each as one finding that names every place it shows,
   in both apps too, rather than one finding for each place.
@@ -123,6 +120,6 @@ and a step posts what they confirmed or left unsure.
   unless its answer is wrong or a fix it claims didn't hold, and then say so.
 - No praise.
 - The review ends with one summary comment: the commit reviewed, what it read, the findings by weight,
-  how many of the problems the reviewers listed the checkers turned down, how many of the changed files were read in full out of how many,
+  how many of the problems the reviewers listed the check across areas turned down, how many of the changed files were read in full out of how many,
   each one that wasn't and why, and anything read but not judged.
   In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge.
