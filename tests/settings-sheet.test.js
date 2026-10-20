@@ -4,7 +4,12 @@ import { describeRelease } from "../shared/page/settings-sheet.js";
 import { normalizeSpaces, stripTags } from "./text.js";
 import { EASTERN, checkInTimeZone } from "./time-zone.js";
 
-const RELEASE = { version: "2.13.0", commit: "abc1234", builtAt: "2026-09-24T15:00:00Z" };
+const RELEASE = {
+  version: "2.13.0",
+  commit: "abc1234",
+  builtAt: "2026-09-24T15:00:00Z",
+  label: null,
+};
 
 /** @param {import("../shared/page/release.js").Release} release */
 const readReleaseLine = (release) =>
@@ -37,5 +42,8 @@ test("a release without a version names its commit", () => {
 });
 
 test("a release the Worker no longer has, named only by its commit, has no line to show", () => {
-  assert.equal(readReleaseLine({ version: null, commit: "abc1234", builtAt: null }), null);
+  assert.equal(
+    readReleaseLine({ version: null, commit: "abc1234", builtAt: null, label: null }),
+    null,
+  );
 });

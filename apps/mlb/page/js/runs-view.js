@@ -5,7 +5,7 @@
 // field with each runner by his base and how he got on, and who's up against whom, or, between
 // halves, the empty field and who's due up. Once the game is final, it's the game's Runs.
 
-import { html } from "#shared/html.js";
+import { html, joinNames } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTeamDot } from "./clubs.js";
@@ -99,12 +99,6 @@ const NAME_PADDING_PX = 3;
 /** @param {string} name */
 const makePossessive = (name) => (name.endsWith("s") ? `${name}'` : `${name}'s`);
 
-/** @param {string[]} items */
-function joinWithAnd(items) {
-  if (items.length <= 2) return items.join(" and ");
-  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
-}
-
 /**
  * A runner who scored, and whom he ran for if he came in to pinch run.
  * @param {Scorer} scorer
@@ -123,7 +117,7 @@ const describeWhatBatterDid = (play) =>
  * @param {boolean} isLoadedSaid whether the line already says the bases got loaded
  */
 function describeDrivenIn(play, names, isLoadedSaid) {
-  const runners = joinWithAnd(names);
+  const runners = joinNames(names, "and");
   if (play.event === "Home Run") return [`${play.batter} homered`, runners && `scoring ${runners}`];
   if (play.event in DROVE_HOME) return [`${play.batter} ${DROVE_HOME[play.event]} ${runners}`];
   if (FORCES.has(play.event)) {
@@ -153,9 +147,9 @@ export function describeScoringPlay(play, isLoadedSaid = false) {
       : play.reached && `${play.batter} ${describeWhatBatterDid(play)}`;
   const others = [...scoredOn].map(
     ([event, scorers]) =>
-      `${joinWithAnd(scorers.map(nameScorer))} scored on ${SCORED_ON[event] ?? event.toLowerCase()}`,
+      `${joinNames(scorers.map(nameScorer), "and")} scored on ${SCORED_ON[event] ?? event.toLowerCase()}`,
   );
-  return joinWithAnd([batter, ...others].filter(Boolean));
+  return joinNames([batter, ...others].filter(Boolean), "and");
 }
 
 /**
@@ -174,11 +168,12 @@ export function describeSetup(plays) {
       last.filledBases = play.filledBases;
     } else groups.push({ way, names: [play.batter], filledBases: play.filledBases });
   }
-  return joinWithAnd(
+  return joinNames(
     groups.map(
       ({ way, names, filledBases }) =>
-        `${joinWithAnd(names)} ${way}${filledBases ? ", loading the bases" : ""}`,
+        `${joinNames(names, "and")} ${way}${filledBases ? ", loading the bases" : ""}`,
     ),
+    "and",
   );
 }
 

@@ -1,7 +1,15 @@
-import { test, expect, openApp } from "./harness.mjs";
+import { test, expect, openApp, serveLockedApp } from "./harness.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
-import { measureFieldFace } from "../../../../tests/browser/type-scale.mjs";
+import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
+import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import {
+  checkHandoffRenewal,
+  checkReAddHandoff,
+  checkReAddNote,
+} from "../../../../tests/browser/re-add-note.mjs";
+import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { chooseAppearance } from "./theme.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -32,14 +40,29 @@ async function expectTheme(page, theme) {
   );
 }
 
-test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the text at --size-glance", async ({
+test("settings' header holds its title, its close button, and the room under them alike on a phone and a wide screen", async ({
+  page,
+}) => {
+  const top = page.locator("#settingsDialog .sheet-top");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(top).toBeVisible();
+  const onPhone = await readTopSpacing(top);
+
+  await page.setViewportSize({ width: 1280, height: 844 });
+
+  expect(await readTopSpacing(top)).toEqual(onPhone);
+});
+
+test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's text", async ({
   page,
 }) => {
   await openApp(page);
   const picker = page.locator("#seasonPicker");
   await expect(picker).toHaveCSS("font-size", "16px");
-  const widths = await measureFieldFace(picker, "--size-glance");
-  expect(widths.field).toBeCloseTo(widths.step, 0);
+  const widths = await measureFieldFace(picker, "--type-detail-size");
+  expect(widths.field).toBeCloseTo(widths.role, 0);
 });
 
 test("settings list Notifications, the News switches, and Appearance, with lines only between the three", async ({
@@ -137,14 +160,31 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Walnut" })).toBeChecked();
 });
 
-test("changing the appearance says how to match the home-screen icon", async ({ page }) => {
-  await openApp(page);
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const note = page.locator("#appearanceNote");
-  await expect(note).toBeHidden();
-  await page.getByRole("radio", { name: "Walnut" }).check();
-  await expect(note).toBeVisible();
-  await expect(note).toHaveText(/Apple sets a home-screen icon only when the page is added/);
+test.describe("in an iPhone's Home Screen app", () => {
+  test.use({ userAgent: IPHONE_AGENT });
+  const openSettings = (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click();
+  const looks = { light: "Maple", dark: "Walnut" };
+
+  test("changing the appearance says how to update the icon, under the icons, linking to Safari on the theme picked, which the browser and Android leave out", async ({
+    page,
+    context,
+    browser,
+  }) => {
+    await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
+  });
+
+  test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
+    page,
+    browser,
+  }) => {
+    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
+  });
+
+  test("the link's handoff follows the last pick, renews halfway through and on coming back once that's due, tries again after a failure, and stops once settings closes", async ({
+    page,
+  }) => {
+    await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });
+  });
 });
 
 test("settings end with the release, NBA.com's credit for the data, and the copyright", async ({
@@ -171,7 +211,7 @@ async function openSettingsWithRelease(page) {
   await openApp(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.locator("#versionNote")).toBeVisible();
-  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await waitForTimedAnimations(page);
 }
 
 /** @param {import("@playwright/test").Page} page */
@@ -242,12 +282,20 @@ test.describe("on a phone", () => {
   }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const readSize = (locator) => locator.evaluate((element) => getComputedStyle(element).fontSize);
+    const readSize = (locator) =>
+      locator.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    const [setting, note, body, detail] = await Promise.all(
+      ["setting", "setting-note", "body", "detail"].map(
+        async (role) => (await readRole(page, role)).size,
+      ),
+    );
 
-    expect(await readSize(page.getByText("Include content from The Athletic"))).toBe("17px");
-    expect(await readSize(page.getByText("Most stories need a subscription"))).toBe("15px");
-    expect(await readSize(page.locator(".appearance-choice").first())).toBe("15px");
-    const icon = await page.locator(".appearance-icon").first().boundingBox();
+    expect(await readSize(page.getByText("Include content from The Athletic"))).toBe(setting);
+    expect(await readSize(page.getByText("Most stories need a subscription"))).toBe(note);
+    expect(await readSize(page.locator("#settingsDialog .appearance-choice").first())).toBe(note);
+    expect(setting).toBeGreaterThan(body);
+    expect(note).toBeGreaterThan(detail);
+    const icon = await page.locator("#settingsDialog .appearance-icon").first().boundingBox();
     expect(icon.width).toBe(60);
   });
 

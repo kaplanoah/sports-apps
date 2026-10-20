@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { session } from "../page/js/session.js";
 import { listFreshUpdates, listPlayoffWins } from "../page/js/updates.js";
+import { useDeniedStorage, useKeptChoices, useSavedStorage } from "../../../tests/saved-storage.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
 
 const AFTERNOON = JSON.parse(
@@ -12,11 +13,7 @@ const AFTERNOON = JSON.parse(
 const SEASON = buildSnapshot(AFTERNOON.responses, { season: 2026, now: Date.parse(AFTERNOON.now) });
 
 /** @param {{ text: { text: string } }} update */
-const readText = (update) =>
-  update.text.text
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&ndash;/g, "-");
+const readText = (update) => update.text.text.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
 
 /** @param {any} season */
 const readWins = (season) => listPlayoffWins(season).map(readText);
@@ -27,32 +24,18 @@ function readFreshWins(season) {
   return listFreshUpdates().map(readText);
 }
 
-/** @param {Partial<Storage>} storage */
-const useStorage = (storage) =>
-  Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
-
-/** @param {Map<string, string>} saved */
-const useSavedStorage = (saved) =>
-  useStorage({
-    getItem: (key) => saved.get(key) ?? null,
-    setItem: (key, value) => saved.set(key, value),
-  });
-
-const refuseAccess = () => {
-  throw new Error("Access denied");
-};
-
 const TUESDAY_WINS = [
   "Liberty beat the Lynx 87-71 to win the First Round 2-0",
   "Fever beat the Aces 99-89 in Game 2, tie the First Round 1-1",
 ];
 
-const SUNDAY_WINS = [
-  "Valkyries beat the Wings 104-80 in Game 1, lead the First Round 1-0",
-  "Dream beat the Mystics 92-77 in Game 1, lead the First Round 1-0",
-  "Aces beat the Fever 102-85 in Game 1, lead the First Round 1-0",
-  "Liberty beat the Lynx 91-75 in Game 1, lead the First Round 1-0",
-];
+/** @param {any} game */
+const isLibertyGame2 = (game) =>
+  game.away.team === "MIN" && game.home.team === "NYL" && game.number === 2;
+
+/** @param {any} game */
+const isFeverGame2 = (game) =>
+  game.number === 2 && [game.away.team, game.home.team].includes("IND");
 
 test("each finished playoff game is an update, newest first, with where its series stood after it", () => {
   assert.deepEqual(readWins(SEASON), [
@@ -65,7 +48,7 @@ test("each finished playoff game is an update, newest first, with where its seri
   ]);
 });
 
-test("a game goes by when the Worker found it final, or by its start when it wasn't seen live", () => {
+test("a game goes by its end, ESPN's last play or when the Worker saw it end live, or by its start when it has none", () => {
   const isFeverGame1 = (game) => game.home.team === "LVA" && game.away.team === "IND";
   const games = SEASON.games.map((game) =>
     isFeverGame1(game) && game.number === 1 ? { ...game, end: "2026-10-01T03:00:00Z" } : game,
@@ -93,9 +76,7 @@ test("each update's winner and loser open their teams' sheets", () => {
 
 test("each update opens its game's sheet, named for a screen reader", () => {
   const [newest] = listPlayoffWins(SEASON);
-  const game = SEASON.games.find(
-    (each) => each.away.team === "MIN" && each.home.team === "NYL" && each.number === 2,
-  );
+  const game = SEASON.games.find(isLibertyGame2);
 
   assert.equal(
     newest.action && newest.action.text,
@@ -123,51 +104,86 @@ test("a team down in a longer series trails it after a win, and games still to f
   ]);
 });
 
-test("a device that has never dismissed the box starts it at the latest day's finals", () => {
+const THROUGH_SUNDAY = {
+  ...SEASON,
+  games: SEASON.games.filter((game) => Date.parse(game.start) < Date.parse("2026-09-29")),
+};
+
+test("a device's first look lists none of the finals already out", () => {
   useSavedStorage(new Map());
 
+  assert.deepEqual(readFreshWins(SEASON), []);
+});
+
+test("a device keeps its first look's start, so every final after it shows until it's dismissed", () => {
+  useSavedStorage(new Map());
+
+  assert.deepEqual(readFreshWins(THROUGH_SUNDAY), []);
   assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
 });
 
-test("a device keeps its first start, so every final after it shows until it's dismissed", () => {
+test("a game live at a device's first look shows once it's final, though its last play came before that look", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-02T12:00:00Z") });
   useSavedStorage(new Map());
-  const throughSunday = {
+  const libertyLive = {
     ...SEASON,
-    games: SEASON.games.filter((game) => Date.parse(game.start) < Date.parse("2026-09-29")),
+    games: SEASON.games.map((game) =>
+      isLibertyGame2(game) ? { ...game, state: "live", end: undefined } : game,
+    ),
   };
 
-  assert.deepEqual(readFreshWins(throughSunday), SUNDAY_WINS);
-  assert.deepEqual(readFreshWins(SEASON), [...TUESDAY_WINS, ...SUNDAY_WINS]);
+  assert.deepEqual(readFreshWins(libertyLive), []);
+  assert.deepEqual(readFreshWins(SEASON), [TUESDAY_WINS[0]]);
+});
+
+test("a game live at a device's first look shows once the Worker finds it final, though it ended before a final already out", () => {
+  useSavedStorage(new Map());
+  const feverFinal = { end: "2026-09-30T02:10:00Z", finalAt: "2026-09-30T02:12:00Z" };
+  const withTimes = (libertyGame2) => ({
+    ...SEASON,
+    games: SEASON.games.map((game) => {
+      if (isFeverGame2(game)) return { ...game, ...feverFinal };
+      return isLibertyGame2(game) ? { ...game, ...libertyGame2 } : game;
+    }),
+  });
+
+  assert.deepEqual(readFreshWins(withTimes({ state: "live" })), []);
+  const libertyFinal = { end: "2026-09-30T02:05:00Z", finalAt: "2026-09-30T02:20:00Z" };
+  assert.deepEqual(readFreshWins(withTimes(libertyFinal)), [
+    "Liberty beat the Lynx 87-71 to win the First Round 2-0",
+  ]);
+});
+
+test("a device's first look before any playoff final lists every final after it", () => {
+  useSavedStorage(new Map());
+
+  assert.deepEqual(readFreshWins({ ...SEASON, games: [] }), []);
+  assert.deepEqual(readFreshWins(THROUGH_SUNDAY).length, 4);
+});
+
+test("a device's first look before the page has read the season keeps no start", () => {
+  const saved = new Map();
+  useSavedStorage(saved);
+
+  assert.deepEqual(readFreshWins(null), []);
+  assert.equal(saved.has("updatesSeenAt"), false);
 });
 
 test("after a dismissal the box lists only the finals since", () => {
-  useSavedStorage(new Map([["updatesSeenAt", String(Date.parse("2026-09-28T01:00:00Z"))]]));
+  useKeptChoices([["updatesSeenAt", Date.parse("2026-09-28T01:00:00Z")]]);
 
   assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
 });
 
-test("a device whose storage refuses access starts at the latest day's finals on every load", () => {
-  useStorage({ getItem: refuseAccess, setItem: refuseAccess });
+test("a device whose storage refuses access keeps its first look's start while the page is open", () => {
+  useDeniedStorage();
 
+  assert.deepEqual(readFreshWins(THROUGH_SUNDAY), []);
   assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
-  assert.deepEqual(readFreshWins(SEASON), TUESDAY_WINS);
-});
-
-test("a final that ends after midnight counts on the day it started", () => {
-  useSavedStorage(new Map());
-  const isFeverGame2 = (game) =>
-    game.number === 2 && [game.away.team, game.home.team].includes("IND");
-  const games = SEASON.games.map((game) =>
-    isFeverGame2(game) ? { ...game, end: "2026-09-30T04:30:00Z" } : game,
-  );
-
-  assert.deepEqual(readFreshWins({ ...SEASON, games }), [...TUESDAY_WINS].reverse());
 });
 
 test("a final names the viewer's day it started on, and says when it ended past midnight", () =>
   checkInTimeZone(EASTERN, () => {
-    const isFeverGame2 = (game) =>
-      game.number === 2 && [game.away.team, game.home.team].includes("IND");
     const feverGame2 = SEASON.games.find(isFeverGame2);
     const startDay = new Date(feverGame2.start).toDateString();
     const games = SEASON.games.map((game) =>

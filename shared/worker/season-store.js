@@ -3,11 +3,13 @@ import { createPushService } from "./push.js";
 import { describeError, respondError, respondJson } from "./responses.js";
 
 // An app's saved data, kept in one Durable Object so every device reads the latest write.
-// Documents come back with sorted keys, and a missing one reads as null. The page can read
-// any document but writes none: what a viewer chooses stays on their own device. An alarm keeps the current season up to date from the league while no page is
-// open, and tells subscribed devices about new updates. With no page open, only notifications need
-// the updates, and those can wait a little, so updates come less often until a page opens. Each
-// page says which documents it watches, and hears only of changes to those. A league can keep
+// Documents come back with sorted keys, and a missing one reads as null. The page can read any
+// document but writes none, since what a viewer chooses stays on their own device.
+//
+// An alarm keeps the current season up to date from the league while no page is open, and tells
+// subscribed devices about new updates. With no page open, only notifications need the updates,
+// and those can wait a little, so updates come less often until a page opens. Each page says
+// which documents it watches, and hears only of changes to those. A league can keep
 // details of the games pages have open, like a box score, read with each update while they need
 // it, and run work of its own beside the season's updates, like reading the news. The Worker, and
 // never the page, can add to a count a job keeps, like how often a sheet had to read the league.
@@ -17,7 +19,9 @@ import { describeError, respondError, respondJson } from "./responses.js";
  * store's paths can't name, the store's reading of the league, the Worker's secrets, and the clock.
  * @typedef {object} JobContext
  * @property {any} docs
- * @property {(season: number) => Promise<any>} loadSnapshot
+ * @property {(fetchImpl: typeof fetch) => (season: number) => Promise<any>} createLoadSnapshot
+ *   the store's reading of the league, made on the fetch it's handed, so a run that counts its
+ *   requests counts these too
  * @property {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<boolean>, list: (prefix: string) => Promise<Map<string, any>> }} storage
  * @property {Record<string, any>} env
  * @property {typeof fetch} fetchImpl
@@ -36,8 +40,8 @@ import { describeError, respondError, respondJson } from "./responses.js";
 /**
  * What a league hands the store.
  * @typedef {object} League
- * @property {(storage: import("./feed-keeper.js").FeedStorage) => (season: number) => Promise<any>} createLoadSnapshot
- *   reads the league, keeping what it may read again in `storage`
+ * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => (season: number) => Promise<any>} createLoadSnapshot
+ *   reads the league through `fetchImpl`, keeping what it may read again in `storage`
  * @property {(loadSnapshot: (season: number) => Promise<any>, now: number) => Promise<any>} loadCurrentSnapshot
  * @property {(docs: any, season: number) => Promise<any>} readUpdates
  * @property {(docs: any, snapshot: any) => Promise<void>} saveSnapshot
@@ -69,6 +73,12 @@ const STALE_MS = 15 * 60e3;
 // store's paths can't name.
 const SCHEDULE_KEY = "poll:schedule";
 const MAX_WATCHED = 50;
+
+/**
+ * Where the store marks a job's run as under way, until it ends.
+ * @param {string} name
+ */
+const nameRunningKey = (name) => `job-running:${name}`;
 
 /**
  * Where a job's storage keeps a count the Worker adds to.
@@ -136,6 +146,7 @@ function isWatching(socket, path) {
 const createFeedStorage = (storage) => ({
   get: (key) => storage.get(`feed:${key}`),
   put: (key, value) => storage.put(`feed:${key}`, value),
+  delete: (key) => storage.delete(`feed:${key}`),
 });
 
 function openWatchSocket(ctx) {
@@ -157,9 +168,10 @@ export function createSeasonStore(league) {
       env,
       {
         openSocket = openWatchSocket,
-        loadSnapshot = league.createLoadSnapshot(createFeedStorage(ctx.storage)),
         now = () => Date.now(),
         fetchImpl = (input, init) => fetch(input, init),
+        createLoadSnapshot = (/** @type {typeof fetch} */ fetchWith) =>
+          league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith),
         loadDetails = league.createLoadDetails?.() ?? null,
       } = {},
     ) {
@@ -169,18 +181,22 @@ export function createSeasonStore(league) {
       /** @type {Map<string, Promise<void>>} */
       this.jobRuns = new Map();
       this.openSocket = openSocket;
-      this.loadSnapshot = loadSnapshot;
+      this.createLoadSnapshot = createLoadSnapshot;
+      this.loadSnapshot = createLoadSnapshot(fetchImpl);
       this.loadDetails = loadDetails;
       this.now = now;
       this.hasAlarm = false;
       this.failures = 0;
       this.push = createPushService({ storage: ctx.storage, now, fetchImpl });
+      /** @type {Map<string, Promise<void>>} */
+      this.docUpdates = new Map();
       this.docs = {
         read: async (key) => (await ctx.storage.get(key)) ?? null,
         list: async (collection) => [
           ...(await ctx.storage.list({ prefix: `${collection}/` })).values(),
         ],
         write: (key, doc) => this.putDoc(key, doc),
+        update: (key, change) => this.updateDoc(key, change),
         remove: (key) => this.deleteDoc(key),
       };
     }
@@ -253,6 +269,26 @@ export function createSeasonStore(league) {
       this.announceChange(key, data);
     }
 
+    // Changes to a document more than one of the store's runs write, like a season's record, which
+    // its updates and a job both write, go one at a time, each on what the one before left, so a
+    // run never writes back a copy it read before another's change. `change` answers the document
+    // to save, or null to leave it as it is.
+    /**
+     * @param {string} key
+     * @param {(doc: any) => any} change
+     */
+    updateDoc(key, change) {
+      const updating = (this.docUpdates.get(key) ?? Promise.resolve()).then(async () => {
+        const doc = change((await this.ctx.storage.get(key)) ?? null);
+        if (doc) await this.putDoc(key, doc);
+      });
+      this.docUpdates.set(
+        key,
+        updating.catch(() => {}),
+      );
+      return updating;
+    }
+
     async deleteDoc(key) {
       await this.ctx.storage.delete(key);
       this.announceChange(key, null);
@@ -282,12 +318,20 @@ export function createSeasonStore(league) {
       return dueTimes.some((dueAt) => dueAt === undefined);
     }
 
-    // One alarm serves the season and every background job, each when it's due.
+    // One alarm serves the season and every background job, each when it's due. An alarm whose
+    // storage failed is set again for a retry, since one never set would stop every update.
     async alarm() {
       const now = this.now();
-      const seasonDueAt = await this.updateSeasonWhenDue(now);
-      const jobDueTimes = await this.startDueJobs(now);
-      await this.ctx.storage.setAlarm(Math.min(seasonDueAt, ...jobDueTimes));
+      let nextAt = now + RETRY_MS[0];
+      try {
+        const seasonDueAt = await this.updateSeasonWhenDue(now);
+        const jobDueTimes = await this.startDueJobs(now);
+        nextAt = Math.min(seasonDueAt, ...jobDueTimes);
+      } catch (error) {
+        console.error(`The store's alarm failed: ${describeError(error)}`);
+      } finally {
+        await this.ctx.storage.setAlarm(nextAt);
+      }
     }
 
     // A schedule saved before it had a due time reads as due, as does one an earlier release saved,
@@ -313,32 +357,48 @@ export function createSeasonStore(league) {
       return Promise.all(jobs.map(([name, job]) => this.startJobWhenDue(name, job, now)));
     }
 
-    // The next run is set before this one starts, so a run that never ends can't stop the next.
+    // The next run is set before this one starts, so a run that never ends can't stop the next. A
+    // run marked as under way that this object isn't running was lost with an earlier one, as when
+    // a deploy restarts it, so it runs again at once rather than at its next turn, but only once,
+    // so a run that takes the object down each time waits for its turns.
     async startJobWhenDue(name, job, now) {
       const dueKey = `job-due:${name}`;
       const dueAt = (await this.ctx.storage.get(dueKey)) ?? now;
-      if (dueAt > now) return dueAt;
+      const isLost = await this.isRunLost(name);
+      if (dueAt > now && !isLost) return dueAt;
       const nextAt = now + job.chooseDelay(now);
       await this.ctx.storage.put(dueKey, nextAt);
-      if (!this.jobRuns.has(name)) this.jobRuns.set(name, this.runJob(name, job));
+      if (!this.jobRuns.has(name))
+        this.jobRuns.set(name, this.runJob(name, job, { isRerun: dueAt > now }));
       return nextAt;
     }
 
-    async runJob(name, job) {
+    // A lost run that was itself the rerun of a lost one waits for the job's next turn.
+    async isRunLost(name) {
+      if (this.jobRuns.has(name)) return false;
+      const running = await this.ctx.storage.get(nameRunningKey(name));
+      return running !== undefined && !running.isRerun;
+    }
+
+    async runJob(name, job, { isRerun }) {
+      const runningKey = nameRunningKey(name);
       try {
+        await this.ctx.storage.put(runningKey, { at: this.now(), isRerun });
         await job.updateStore({
           docs: this.docs,
           storage: this.createJobStorage(name),
-          loadSnapshot: this.loadSnapshot,
+          createLoadSnapshot: this.createLoadSnapshot,
           env: this.env,
           fetchImpl: this.fetchImpl,
           now: this.now,
         });
       } catch (error) {
         console.error(`The ${name} job failed: ${describeError(error)}`);
-      } finally {
-        this.jobRuns.delete(name);
       }
+      await this.ctx.storage
+        .delete(runningKey)
+        .catch((error) => console.error(`Ending the ${name} job failed: ${describeError(error)}`));
+      this.jobRuns.delete(name);
     }
 
     createJobStorage(name) {

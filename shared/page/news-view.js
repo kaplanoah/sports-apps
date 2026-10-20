@@ -1,7 +1,8 @@
 import { formatShortDate, formatShortWeekday, nameDay } from "./days.js";
-import { html, joinWithSeparator } from "./html.js";
+import { hasImageFailed } from "./failed-images.js";
+import { html, isWebAddress, joinWithSeparator } from "./html.js";
 import { framePhoto, WIDEST_FRAME } from "./news-photo.js";
-import { isWebAddress, pickReadCards } from "./news-picks.js";
+import { pickReadCards } from "./news-picks.js";
 
 // The News view: a card for each piece of news, newest first, led by the story that tells it best,
 // with the others that add to it in a quiet list under it. A story shows only its headline, a short
@@ -72,20 +73,25 @@ function renderCredit(credit) {
 }
 
 /** @param {NewsStory["photo"]} photo */
-const findPhotoUrl = (photo) => (photo && isWebAddress(photo.url) ? photo.url : null);
+const findPhotoUrl = (photo) =>
+  photo && isWebAddress(photo.url) && !hasImageFailed(photo.url) ? photo.url : null;
 
 /**
+ * A link that opens the story, or what it holds alone when its address isn't a web address.
  * @param {NewsStory} story
  * @param {import("#shared/html.js").Markup | string} content
  */
 const renderStoryLink = (story, content) =>
-  html`<a href="${story.url}" target="_blank" rel="noopener noreferrer">${content}</a>`;
+  isWebAddress(story.url)
+    ? html`<a href="${story.url}" target="_blank" rel="noopener noreferrer">${content}</a>`
+    : content;
 
 /**
- * The button that opens the story.
+ * The button that opens the story, or nothing when its address isn't a web address.
  * @param {Pick<NewsStory, "url" | "outlet" | "title">} story
  */
 export function renderReadButton(story) {
+  if (!isWebAddress(story.url)) return html``;
   const label = `Read on ${story.outlet}`;
   return html`<div class="news-foot">
     <a

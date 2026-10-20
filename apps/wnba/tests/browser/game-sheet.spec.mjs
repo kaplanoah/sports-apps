@@ -8,12 +8,10 @@ import {
   matchPath,
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
-import {
-  recordSheetMotions,
-  waitForTimedMotions,
-} from "../../../../tests/browser/sheet-motions.mjs";
+import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-row.mjs";
-import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { comeBackTo, passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 import {
   ACES_AT_FEVER,
   FEVER_AT_ACES,
@@ -22,6 +20,7 @@ import {
   finishValkyriesAtWings,
   countBoxScoreReads,
 } from "./game-sheet-games.mjs";
+import { readRole, readType } from "../../../../tests/browser/type-roles.mjs";
 
 // Most of these tests are about what a sheet shows, so they skip the eased scrolling between the
 // Games lists. The ones about how a sheet moves ask for full motion.
@@ -183,14 +182,6 @@ test("a sheet whose game the season no longer has closes once the page's code ar
 const MINUTE_MS = 60 * 1000;
 const SHEET_KEPT_MS = 6 * 60 * MINUTE_MS;
 
-/**
- * Moves the page's clock on by `ms` without running its timers, as a phone that suspends it does.
- * @param {import("@playwright/test").Page} page
- * @param {number} ms
- */
-const passTime = async (page, ms) =>
-  page.clock.setSystemTime((await page.evaluate(() => Date.now())) + ms);
-
 test("a sheet left off the screen six hours is closed as the page comes back, before it draws, and one left for less is still open", async ({
   page,
 }) => {
@@ -310,7 +301,7 @@ test.describe("on a phone", () => {
   }) => {
     await openApp(page);
     const sheet = await openGameSheet(page, ACES_AT_FEVER);
-    await waitForTimedMotions(page);
+    await waitForTimedAnimations(page);
     const close = await sheet.getByRole("button", { name: "Close" }).boundingBox();
     expect([Math.round(close.x), close.width]).toEqual([6, 44]);
     expect(await sheet.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
@@ -349,7 +340,7 @@ test.describe("on a phone", () => {
         part: "sheet",
         name: "sheet-rise",
       });
-      await waitForTimedMotions(page);
+      await waitForTimedAnimations(page);
       await readMotions();
       const backdrop = await page
         .locator("#sheetDialog")
@@ -373,7 +364,7 @@ test("a game's row names its teams in their own type, and a tap anywhere on it, 
   const row = gameButton.locator("xpath=..");
   const fever = row.locator(".game-side.home .team-name");
   await expect(fever).toHaveCSS("font-family", /^"Barlow Condensed"/);
-  await expect(fever).toHaveCSS("font-weight", "600");
+  await expect(fever).toHaveCSS("font-weight", String((await readRole(page, "team")).weight));
   await expect(row.getByRole("button", { name: /^Team details/ })).toHaveCount(0);
 
   // The row's button lies over its names, so a click on a name lands on it.
@@ -465,7 +456,7 @@ test("going back from a team's sheet to a game's leaves no focus ring around the
   await expect(gameSheet).toHaveCSS("outline-style", "none");
 });
 
-test("a final's sheet offers Game and Highlights pills, and its Highlights show ESPN's recap video, its story, and each clip", async ({
+test("a final's sheet offers Game and Highlights pills, and its Highlights show ESPN's recap video, its title as heavy as each clip's, its story, and each clip", async ({
   page,
 }) => {
   const app = await openApp(page);
@@ -488,6 +479,9 @@ test("a final's sheet offers Game and Highlights pills, and its Highlights show 
   await expect(body.locator(".clip-row")).toHaveCount(13);
   await expect(body.locator(".clip-row").first().locator(".clip-title")).toHaveText(
     "Chelsea Gray knocks down the mid-range jumper",
+  );
+  expect((await readType(body.locator(".clip-feature .clip-title"))).weight).toBe(
+    (await readType(body.locator(".clip-row .clip-title").first())).weight,
   );
   await expect(body.locator(".clip-meta")).toHaveCount(0);
 });

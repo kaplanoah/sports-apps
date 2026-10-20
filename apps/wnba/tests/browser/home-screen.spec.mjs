@@ -1,11 +1,19 @@
+import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
+import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp } from "./harness.mjs";
+import { PHONE, WELCOME, CONTINUE, openSettings } from "./home-screen.mjs";
+import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
+import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 
-const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
-const IPHONE_AGENT =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-const openSettings = (page) => page.getByRole("button", { name: "Settings", exact: true }).click();
+const PAGE_FOLDER = new URL("../../page/", import.meta.url);
 
 /**
  * Chrome's install dialog, offered as Chrome offers it, answered with `outcome`. The page counts
@@ -26,63 +34,230 @@ const offerInstall = (page, outcome) =>
     return offer.defaultPrevented;
   }, outcome);
 
+/** @param {import("@playwright/test").Page} page */
+const listWelcomeSteps = (page) => page.locator(`${WELCOME} .welcome-steps > li:visible`);
+
+const PICK_STEP = "Pick your theme You can change it later in Settings System Maple Walnut";
+
 test.describe("on an iPhone, in the browser", () => {
   test.use({ ...PHONE, userAgent: IPHONE_AGENT });
 
-  test("a bar across the top of the screen says how to add the page to the Home Screen", async ({
+  test("the page opens on the welcome, which picks a theme and says how to add the page to the Home Screen", async ({
     page,
   }) => {
-    await openApp(page);
-    const bar = page.locator("#homeScreenBar");
-    await expect(bar).toBeVisible();
-    await expect(bar).toHaveText("Use this site like an app Tap Share, then Add to Home Screen");
-    await expect(bar.getByRole("button", { name: "Install" })).toHaveCount(0);
-
-    const barBox = await bar.boundingBox();
-    const headerBox = await page.locator("header.top").boundingBox();
-    expect(barBox.y).toBe(0);
-    expect(barBox.width).toBe(390);
-    expect(headerBox.y).toBeGreaterThanOrEqual(barBox.height);
+    await openApp(page, { isShowingWelcome: true });
+    const welcome = page.locator(WELCOME);
+    await expect(welcome).toBeVisible();
+    await expect(welcome.getByRole("heading")).toHaveText("Add WNBA to your Home Screen");
+    await expect(listWelcomeSteps(page)).toHaveText([
+      PICK_STEP,
+      "Tap Share",
+      "Tap Add to Home Screen",
+    ]);
+    await expect(welcome.getByRole("radio", { name: "System" })).toBeChecked();
+    await expect(welcome.getByRole("button", CONTINUE)).toBeVisible();
+    expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listLowContrastText(page)).toEqual([]);
+    expect(await listStrayPeriods(page)).toEqual([]);
+    expect(await listTapsOffButtons(page)).toEqual([]);
+    expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   });
 
-  test("Settings ends with the same steps, in a box under the settings", async ({ page }) => {
-    await openApp(page);
+  test("the welcome lays out the same in Walnut as in Maple, which change only colors", async ({
+    page,
+  }) => {
+    await openApp(page, { isShowingWelcome: true });
+    await expect(page.locator(WELCOME)).toBeVisible();
+    expect(await listThemeLayoutChanges(page)).toEqual([]);
+  });
+
+  test("each step's number sits in the middle of its circle", async ({ page }) => {
+    await openApp(page, { isShowingWelcome: true });
+    expect(Math.abs(await measureStepNumbers(page))).toBeLessThan(MIDDLE_ALLOWANCE);
+  });
+
+  test("the heading opens the welcome's room", async ({ page }) => {
+    await openApp(page, { isShowingWelcome: true });
+    const headingGap = await page.locator(WELCOME).evaluate((welcome) => {
+      const roomTop =
+        welcome.getBoundingClientRect().top + parseFloat(getComputedStyle(welcome).paddingTop);
+      return welcome.querySelector(".welcome-title").getBoundingClientRect().top - roomTop;
+    });
+    expect(headingGap).toBe(0);
+  });
+
+  // An iPhone's bottom inset, which keeps its home bar clear, is 34px, and Android's Chrome has none.
+  test("Continue's text sits 24px over the welcome's bottom, on an iPhone and where there's no inset", async ({
+    page,
+  }) => {
+    await openApp(page, { isShowingWelcome: true });
+    const textOverBottom = await page.locator(WELCOME).evaluate((welcome) => {
+      const rule = /** @type {CSSStyleRule} */ (
+        [...document.styleSheets]
+          .flatMap((sheet) => [...sheet.cssRules])
+          .find((each) => each instanceof CSSStyleRule && each.selectorText === ".welcome")
+      );
+      const declared = rule.style.paddingBottom;
+      const halfButton =
+        welcome.querySelector(".welcome-continue").getBoundingClientRect().height / 2;
+      return [34, 0].map((inset) => {
+        const probe = document.createElement("div");
+        probe.style.paddingBottom = declared.replace("env(safe-area-inset-bottom)", `${inset}px`);
+        welcome.append(probe);
+        const padding = parseFloat(getComputedStyle(probe).paddingBottom);
+        probe.remove();
+        return padding + halfButton;
+      });
+    });
+    expect(textOverBottom).toEqual([24, 24]);
+  });
+
+  test("the welcome is there before the page's code runs, so it never arrives over the page", async ({
+    page,
+  }) => {
+    await page.route(/\/js\/app\.js(?:[?#]|$)/, (route) =>
+      route.fulfill({ contentType: "text/javascript", body: "" }),
+    );
+    await openApp(page, { isShowingWelcome: true });
+    await expect(page.locator(WELCOME)).toBeVisible();
+    await expect(listWelcomeSteps(page)).toHaveText([
+      PICK_STEP,
+      "Tap Share",
+      "Tap Add to Home Screen",
+    ]);
+  });
+
+  test("where Safari refuses the page its storage, a theme picked on the welcome still shows, without loading the page again", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => false });
+      Object.defineProperty(window, "localStorage", {
+        get: () => {
+          throw new DOMException("The operation is insecure.", "SecurityError");
+        },
+      });
+    });
+    await page.emulateMedia({ colorScheme: "light" });
+    // The harness would keep the Updates box dismissed in the storage this test takes away.
+    await openApp(page, { isShowingWelcome: true, updatesBox: "new" });
+    await expect(page.locator("#stamp")).toBeVisible();
+    await page.evaluate(() => Object.assign(window, { isBeforePick: true }));
+    await page.locator(WELCOME).getByRole("radio", { name: "Walnut" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator("#homeScreenIcon")).toHaveAttribute("href", "icon-180.png");
+    expect(await page.evaluate(() => "isBeforePick" in window)).toBe(true);
+  });
+
+  test("before the page's code arrives, the welcome already picks the theme and closes for good", async ({
+    page,
+  }) => {
+    await page.route(/\/js\/app\.js(?:[?#]|$)/, (route) =>
+      route.fulfill({ contentType: "text/javascript", body: "" }),
+    );
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page, { isShowingWelcome: true });
+    const welcome = page.locator(WELCOME);
+    await welcome.getByRole("radio", { name: "Walnut" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+    await welcome.getByRole("button", CONTINUE).click();
+    await expect(welcome).toBeHidden();
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(welcome).toBeHidden();
+  });
+
+  test("a theme picked on the welcome is the page's theme, its Home Screen icon, and Appearance's pick in Settings", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page, { isShowingWelcome: true });
+    const welcome = page.locator(WELCOME);
+    await welcome.getByRole("radio", { name: "Walnut" }).check();
+
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator("#homeScreenIcon")).toHaveAttribute("href", "icon-180.png");
+    await expect(welcome.getByRole("radio", { name: "Walnut" })).toBeChecked();
+    expect(await listLowContrastText(page)).toEqual([]);
+    await welcome.getByRole("button", CONTINUE).click();
     await openSettings(page);
-    const tip = page.locator("#homeScreenTip");
-    await expect(tip).toBeVisible();
-    await expect(tip).toHaveText(
-      "Use this site like an app Tap Share, then Add to Home Screen. It opens full screen, without the browser's bars.",
-    );
-    // Read together, since the sheet may still be rising.
-    const gap = await tip.evaluate(
-      (element) =>
-        element.getBoundingClientRect().top -
-        document.querySelector(".settings-controls").getBoundingClientRect().bottom,
-    );
-    expect(gap).toBeGreaterThan(0);
+    await expect(page.locator('input[name="appearance"][value="dark"]')).toBeChecked();
   });
 
-  test("closing the bar keeps it closed on the next visit, and Settings keeps the steps", async ({
+  // Safari opens a Home Screen app at the page's address as it stood when it was added.
+  test("going on in the browser closes the welcome for good on this device, and Settings keeps the steps", async ({
     page,
   }) => {
-    await openApp(page);
-    await page.locator("#homeScreenBar").getByRole("button", { name: "Close" }).click();
-    await expect(page.locator("#homeScreenBar")).toBeHidden();
+    await openApp(page, { isShowingWelcome: true });
+    await page.locator(WELCOME).getByRole("button", CONTINUE).click();
+    await expect(page.locator(WELCOME)).toBeHidden();
 
     await page.reload();
     await expect(page.locator("#stamp")).toBeVisible();
-    await expect(page.locator("#homeScreenBar")).toBeHidden();
+    await expect(page.locator(WELCOME)).toBeHidden();
     await openSettings(page);
-    await expect(page.locator("#homeScreenTip")).toBeVisible();
+    await expect(page.locator("#homeScreenTip")).toHaveText(
+      "Use this site like an app Tap Share, then Add to Home Screen. It opens full screen, without the browser's bars.",
+      { useInnerText: true },
+    );
+  });
+
+  test("the settings' box's Share icon sits as set by eye for Barlow, 1.5px over the other icons' place", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSettings(page);
+    await expect(page.locator("#homeScreenTip .home-screen-steps svg")).toHaveCSS(
+      "vertical-align",
+      "-0.5px",
+    );
+  });
+
+  test("the settings' box sets its buttons' names a step over its caption's weight", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSettings(page);
+    const caption = await readRole(page, "caption");
+    const names = page.locator("#homeScreenTip .home-screen-steps b");
+    await expect(names).toHaveText(["Share", "Add to Home Screen"]);
+    for (const name of await names.all())
+      await expect(name).toHaveCSS("font-weight", String(caption.weight + 100));
+  });
+
+  test("the settings' box shows the icon the Home Screen takes in the theme on screen, and each theme choice its own, from the page's stylesheet", async ({
+    page,
+  }) => {
+    const icon = page.locator("#homeScreenTip .home-screen-icon");
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page);
+    await openSettings(page);
+    await expect(icon).toHaveCSS("background-image", drawIcon(PAGE_FOLDER, "icon-light-180.png"));
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(icon).toHaveCSS("background-image", drawIcon(PAGE_FOLDER, "icon-180.png"));
+    const choiceIcons = page.locator("#settingsDialog .appearance-icon");
+    await expect(choiceIcons.nth(0)).toHaveCSS(
+      "background-image",
+      drawIcon(PAGE_FOLDER, "icon-system-180.png"),
+    );
+    await expect(choiceIcons.nth(1)).toHaveCSS(
+      "background-image",
+      drawIcon(PAGE_FOLDER, "icon-light-180.png"),
+    );
+    await expect(choiceIcons.nth(2)).toHaveCSS(
+      "background-image",
+      drawIcon(PAGE_FOLDER, "icon-180.png"),
+    );
   });
 
   test("opened from the Home Screen, the page asks for nothing", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "standalone", { get: () => true });
     });
-    await openApp(page);
+    await openApp(page, { isShowingWelcome: true });
     await expect(page.locator("#stamp")).toBeVisible();
-    await expect(page.locator("#homeScreenBar")).toBeHidden();
+    await expect(page.locator(WELCOME)).toBeHidden();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeHidden();
   });
@@ -91,44 +266,49 @@ test.describe("on an iPhone, in the browser", () => {
 test.describe("on an Android phone, in the browser", () => {
   test.use(PHONE);
 
-  test("without Chrome's install dialog, the bar and Settings point to the browser's menu", async ({
+  test("without Chrome's install dialog, the welcome and Settings point to the browser's menu", async ({
     page,
   }) => {
-    await openApp(page);
-    await expect(page.locator("#homeScreenBar")).toHaveText(
-      "Use this site like an app Tap Menu, then Add to Home screen",
-    );
+    await openApp(page, { isShowingWelcome: true });
+    await expect(listWelcomeSteps(page)).toHaveText([
+      PICK_STEP,
+      "Tap Menu",
+      "Tap Add to Home screen",
+    ]);
+    await page.locator(WELCOME).getByRole("button", CONTINUE).click();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toHaveText(
       "Use this site like an app Tap Menu, then Add to Home screen. It opens full screen, without the browser's bars.",
+      { useInnerText: true },
     );
   });
 
-  test("Chrome's install dialog takes the place of the steps, and Chrome's own banner", async ({
+  test("Chrome's install dialog takes the place of the steps in the welcome and Settings, and of Chrome's own banner", async ({
     page,
   }) => {
-    await openApp(page);
+    await openApp(page, { isShowingWelcome: true });
     expect(await offerInstall(page, "accepted")).toBe(true);
 
-    const bar = page.locator("#homeScreenBar");
-    await expect(bar.getByRole("button", { name: "Install" })).toBeVisible();
-    await expect(bar).not.toContainText("Tap");
+    await expect(listWelcomeSteps(page)).toHaveText([PICK_STEP, "Tap to install Install"]);
+    expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listStrayPeriods(page)).toEqual([]);
+    await page.locator(WELCOME).getByRole("button", CONTINUE).click();
     await openSettings(page);
-    const tip = page.locator("#homeScreenTip");
-    await expect(tip).toHaveText(
-      "Use this site like an app It opens full screen, without the browser's bars Install",
+    await expect(page.locator("#homeScreenTip")).toHaveText(
+      "Use this site like an app It opens full screen, without the browser's bars INSTALL",
+      { useInnerText: true },
     );
     expect(await listStrayPeriods(page)).toEqual([]);
   });
 
-  test("installing from the bar opens Chrome's dialog, and then the page asks no more", async ({
+  test("installing from the welcome opens Chrome's dialog, and then the page asks no more", async ({
     page,
   }) => {
-    await openApp(page);
+    await openApp(page, { isShowingWelcome: true });
     await offerInstall(page, "accepted");
-    await page.locator("#homeScreenBar").getByRole("button", { name: "Install" }).click();
+    await page.locator(WELCOME).getByRole("button", { name: "Install" }).click();
 
-    await expect(page.locator("#homeScreenBar")).toBeHidden();
+    await expect(page.locator(WELCOME)).toBeHidden();
     expect(await page.evaluate(() => /** @type {any} */ (window).installShown)).toBe(1);
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeHidden();
@@ -145,50 +325,21 @@ test.describe("on an Android phone, in the browser", () => {
     expect(await page.evaluate(() => /** @type {any} */ (window).installShown)).toBe(1);
   });
 
-  test("the standings' pill holds just under the bar as the page scrolls", async ({ page }) => {
-    await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
-    const barHeight = (await page.locator("#homeScreenBar").boundingBox()).height;
-
-    await page.evaluate(() => scrollTo({ top: 400, behavior: "instant" }));
-    await expect(page.locator("#standings-bar")).toHaveClass(/stuck/);
-    const pillBar = await page.locator("#standings-bar").boundingBox();
-    expect(Math.round(pillBar.y)).toBe(Math.round(barHeight));
-  });
-
-  test("the Games view fits under the bar, its games reaching the screen's bottom without the page scrolling", async ({
-    page,
-  }) => {
-    await openApp(page);
-    await page.getByRole("tab", { name: "Games" }).click();
-    await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
-    const barHeight = (await page.locator("#homeScreenBar").boundingBox()).height;
-    const header = await page.locator("header.top").boundingBox();
-    const list = await page.locator("#seasonGames .day-list").boundingBox();
-    expect(header.y).toBeGreaterThanOrEqual(barHeight);
-    expect(Math.round(list.y + list.height)).toBeGreaterThanOrEqual(844);
-    expect(Math.round(list.y + list.height)).toBeLessThanOrEqual(845);
-    const room = await page.evaluate(
-      () => document.documentElement.scrollHeight - document.documentElement.clientHeight,
-    );
-    expect(room).toBeLessThanOrEqual(1);
-  });
-
   test("once installed from the browser's menu, the page asks no more", async ({ page }) => {
-    await openApp(page);
-    await expect(page.locator("#homeScreenBar")).toBeVisible();
+    await openApp(page, { isShowingWelcome: true });
+    await expect(page.locator(WELCOME)).toBeVisible();
     await page.evaluate(() => window.dispatchEvent(new Event("appinstalled")));
 
-    await expect(page.locator("#homeScreenBar")).toBeHidden();
+    await expect(page.locator(WELCOME)).toBeHidden();
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeHidden();
   });
 });
 
 test("on a computer, the page asks for nothing", async ({ page }) => {
-  await openApp(page);
+  await openApp(page, { isShowingWelcome: true });
   await expect(page.locator("#stamp")).toBeVisible();
-  await expect(page.locator("#homeScreenBar")).toBeHidden();
+  await expect(page.locator(WELCOME)).toBeHidden();
   await openSettings(page);
   await expect(page.locator("#homeScreenTip")).toBeHidden();
 });

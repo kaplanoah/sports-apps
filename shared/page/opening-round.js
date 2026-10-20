@@ -1,3 +1,5 @@
+import { PHONE_WIDTH_QUERY } from "./device.js";
+
 // A bracket too wide for the screen scrolls sideways, and opens on the earliest round that still
 // has a series to finish, so the games still to come are what the reader sees first.
 
@@ -26,21 +28,33 @@ function isShownFromStart(scroller, target) {
 }
 
 // Only a phone opens partway along: a wider screen shows the bracket from its start.
-const isPhone = () => matchMedia("(max-width: 779px)").matches;
+const isPhone = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
 /**
  * Starts at the bracket's beginning when it isn't on a phone or that already shows the target's
  * round, so the rounds before it stay in view; otherwise brings the target to the left edge.
  * @param {HTMLElement} scroller @param {HTMLElement} target
+ * @param {ScrollBehavior} [behavior]
  */
-function scrollToTarget(scroller, target) {
+function scrollToTarget(scroller, target, behavior = "instant") {
   if (!isPhone() || isShownFromStart(scroller, target)) {
-    scroller.scrollTo({ left: 0, behavior: "instant" });
+    scroller.scrollTo({ left: 0, behavior });
     return;
   }
   const padding = parseFloat(getComputedStyle(scroller).scrollPaddingLeft) || 0;
   const offset = target.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
-  scroller.scrollTo({ left: scroller.scrollLeft + offset - padding, behavior: "instant" });
+  scroller.scrollTo({ left: scroller.scrollLeft + offset - padding, behavior });
+}
+
+/** @type {Set<(behavior: ScrollBehavior) => void>} */
+const openingRoundReturns = new Set();
+
+/**
+ * Brings the bracket back to its opening round, as it opens, from wherever the reader scrolled it.
+ * @param {ScrollBehavior} behavior
+ */
+export function showOpeningRound(behavior) {
+  for (const returnToOpeningRound of openingRoundReturns) returnToOpeningRound(behavior);
 }
 
 /**
@@ -59,6 +73,9 @@ export function watchOpeningRound(wrap) {
     if (isShown && !wasShown && drawn) scrollToTarget(drawn.scroller, drawn.target);
     wasShown = isShown;
   }).observe(wrap);
+  openingRoundReturns.add((behavior) => {
+    if (drawn) scrollToTarget(drawn.scroller, drawn.target, behavior);
+  });
 
   /** @param {{ scroller: HTMLElement, target: HTMLElement, round: number, keptLeft: number }} draw */
   return ({ scroller, target, round, keptLeft }) => {

@@ -2,10 +2,11 @@ import { test, expect, openApp, openGameSheet, matchPath, formatRgb } from "./ha
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -13,7 +14,7 @@ const PHONE = { width: 390, height: 844 };
 
 /** @param {import("@playwright/test").Page} page */
 async function openLibertyRoster(page) {
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
   await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
   const roster = page.locator("#rosterSection");
@@ -54,7 +55,7 @@ test("a player's name on her roster opens her sheet over it: her facts, her last
   await expect(sheet.locator(".player-rank-row")).toHaveCount(8);
   await expect(sheet.locator(".player-rank-row").first()).toHaveText(/Pts\s*20.8\s*7th of 125/);
   await expect(sheet.locator(".player-curve b")).toHaveCount(8);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -205,10 +206,13 @@ test.describe("a player who is out", () => {
       expect(await measureOutLines(box)).toEqual({ sentence: 6, source: 4 });
       await expect(box.locator(".foul-chip")).toHaveCSS("margin-right", "7px");
       await expect(box.locator(".out-words")).toHaveCSS("top", "-1px");
-      await expect(box.locator(".out-line")).toHaveCSS("font-size", "15px");
-      await expect(box.locator(".out-sentence")).toHaveCSS("font-size", "14.5px");
-      await expect(box.locator(".out-source")).toHaveCSS("font-size", "13px");
-      expect(await listOffScaleText(page)).toEqual([]);
+      const [body, detail, caption] = await Promise.all(
+        ["body", "detail", "caption"].map(async (role) => `${(await readRole(page, role)).size}px`),
+      );
+      await expect(box.locator(".out-line")).toHaveCSS("font-size", body);
+      await expect(box.locator(".out-sentence")).toHaveCSS("font-size", detail);
+      await expect(box.locator(".out-source")).toHaveCSS("font-size", caption);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
     });
@@ -322,7 +326,7 @@ test("a top scorer's name in a box score opens her sheet over the game's, and a 
   await sheet.getByRole("button", { name: "Back to Game" }).click();
   await expect(sheet).toBeHidden();
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
   await page.locator("#teamSection").getByRole("button", { name: "Breanna Stewart" }).click();
   await expect(sheet.locator("#playerTitle")).toHaveText("Breanna Stewart");
@@ -351,14 +355,15 @@ test("her sheet that didn't load says so over Try again, which holds its shape a
   await openApp(page);
   const roster = await openLibertyRoster(page);
   /** @param {import("@playwright/test").Route} route */
-  const refuse = (route) => route.fulfill({ status: 502, json: { error: "test" } });
+  const refuse = (route) =>
+    route.fulfill({ status: 502, json: { error: { code: "upstream_error", message: "test" } } });
   await page.route(matchPath("/player"), refuse);
   await roster.getByRole("button", { name: "Breanna Stewart" }).click();
   const sheet = page.locator("#playerSheet");
   const block = sheet.locator("#playerBody .retry-block");
   await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
   await expect(block.locator(".retry-next")).toHaveText("Try again to load her numbers");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 

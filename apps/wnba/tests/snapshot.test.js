@@ -6,7 +6,7 @@ import * as WNBASnapshot from "../page/js/snapshot.js";
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
 );
-// The afternoon's recording has no players' averages, so the next day's stand in for them.
+// The next day's games, with the whole season's schedule.
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
@@ -14,7 +14,7 @@ const GAMES = JSON.parse(
 const ESPN_SCOREBOARD = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-02-espn-scoreboard.json`, "utf8"),
 );
-const RESPONSES = { ...AFTERNOON.responses, players: GAMES.preview.players };
+const RESPONSES = AFTERNOON.responses;
 const buildAfternoon = (responses = RESPONSES) =>
   WNBASnapshot.buildSnapshot(responses, {
     season: AFTERNOON.season,
@@ -387,64 +387,6 @@ test("each team's standing has its points a game, for and against, and its home 
       lastTen: "6-4",
     },
   );
-});
-
-test("each team's five leading scorers are those with the most points a game who played most of its games", () => {
-  const { leaders } = buildAfternoon();
-  assert.equal(leaders.length, 75);
-  const indiana = leaders.filter((leader) => leader.team === "IND");
-  assert.deepEqual(
-    indiana.map((leader) => `${leader.firstName} ${leader.lastName}`),
-    ["Kelsey Mitchell", "Caitlin Clark", "Aliyah Boston", "Sophie Cunningham", "Monique Billings"],
-  );
-  assert.deepEqual(
-    leaders.find((leader) => leader.team === "LVA"),
-    {
-      team: "LVA",
-      id: 1628932,
-      firstName: "A'ja",
-      lastName: "Wilson",
-      games: 41,
-      minutes: 32,
-      points: 26.2,
-      rebounds: 9.4,
-      assists: 3.2,
-      fieldGoalShare: 0.527,
-    },
-  );
-
-  const players = structuredClone(RESPONSES.players);
-  const table = players.resultSets[0];
-  const column = Object.fromEntries(table.headers.map((header, index) => [header, index]));
-  const mitchell = table.rowSet.find((row) => row[column.PLAYER_NAME] === "Kelsey Mitchell");
-  mitchell[column.GP] = 10;
-  const fewGames = buildAfternoon({ ...RESPONSES, players }).leaders;
-  assert.ok(!fewGames.some((leader) => leader.lastName === "Mitchell"));
-  assert.equal(fewGames.filter((leader) => leader.team === "IND").length, 5);
-});
-
-test("every player on a team has her averages a game, for her team's roster", () => {
-  const { averages } = buildAfternoon();
-  assert.equal(averages.length, 239);
-  assert.deepEqual(
-    averages.find((player) => player.lastName === "Stewart"),
-    {
-      team: "NYL",
-      id: 1627668,
-      firstName: "Breanna",
-      lastName: "Stewart",
-      games: 42,
-      minutes: 32.9,
-      points: 20.8,
-      rebounds: 8.3,
-      assists: 3.3,
-    },
-  );
-});
-
-test("without the players' averages, there are no top scorers or averages, and the feed is missing", () => {
-  const { leaders, averages, missing } = buildAfternoon({ ...RESPONSES, players: null });
-  assert.deepEqual([leaders, averages, missing], [[], [], ["players"]]);
 });
 
 test("polling waits until 15 minutes before the next set start, and runs every 15 seconds in a game", () => {

@@ -49,7 +49,11 @@ const FOLLOWED_2025 = {
   log: [],
 };
 
+// How many of MLB's feeds a season's snapshot reads.
+const SNAPSHOT_READS = 5;
+
 /**
+ * The job's run, whose reading of MLB reads its feeds through the fetch the run hands it.
  * @param {Record<string, any>} stored
  * @param {any} [snapshot] what MLB answers for 2025, or for each season
  */
@@ -57,16 +61,19 @@ async function runJob(stored, snapshot = SNAPSHOT_2025) {
   const docs = createDocs(stored);
   const loads = [];
   const answer = typeof snapshot === "function" ? snapshot : () => snapshot;
-  const loadSnapshot = async (season) => {
+  /** @param {typeof fetch} fetchImpl */
+  const createLoadSnapshot = (fetchImpl) => async (season) => {
     loads.push(season);
+    for (let read = 0; read < SNAPSHOT_READS; read += 1)
+      await fetchImpl(`https://statsapi.mlb.com/api/v1/feed-${read}?season=${season}`);
     return structuredClone(answer(season));
   };
   await createPastSeasonsJob().updateStore({
     docs,
-    loadSnapshot,
+    createLoadSnapshot,
     storage: createJobStorage(),
     env: {},
-    fetchImpl: () => assert.fail("The job reads MLB only through loadSnapshot."),
+    fetchImpl: async () => Response.json({}),
     now: () => Date.parse("2026-10-05T12:00:00Z"),
   });
   return { documents: docs.stored, loads };
@@ -107,6 +114,27 @@ test("a past season MLB answers only in part is left for the next run", async ()
   );
 
   assert.deepEqual(documents.get("seasons/2025"), FOLLOWED_2025);
+});
+
+test("each run saves its status, naming a past season MLB answered only in part", async () => {
+  const { documents } = await runJob(
+    { "live/current": { season: 2026 }, "seasons/2025": FOLLOWED_2025 },
+    { ...SNAPSHOT_2025, missing: ["standings"] },
+  );
+
+  const status = documents.get("pastSeasons/status");
+  assert.equal(status.ranAt, "2026-10-05T12:00:00.000Z");
+  assert.equal(status.lastFailure.message, "Reading 2025 failed: MLB didn't answer it whole");
+});
+
+test("each run's status counts the requests its reading of MLB made", async () => {
+  const { documents } = await runJob({
+    "live/current": { season: 2026 },
+    "seasons/2025": FOLLOWED_2025,
+    "seasons/2026": { year: 2026 },
+  });
+
+  assert.equal(documents.get("pastSeasons/status").requests, SNAPSHOT_READS);
 });
 
 test("until the store names the current season, no season counts as past", async () => {

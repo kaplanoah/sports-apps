@@ -1,8 +1,9 @@
 /*
  * The chrome every app's page shares: the settings button, the tabs (a floating tinted bar on
  * phones), the settings dialog (the whole screen on phones), its Appearance choices, and the lines
- * at its foot, a sideways bracket's round dots (pinned above the tab bar on phones), the bar and
- * settings box that ask a phone's browser to add the page to the Home Screen, the note a slow load
+ * at its foot, a sideways bracket's round dots (pinned above the tab bar on phones), the welcome
+ * and settings box that ask a phone's browser to add the page to the Home Screen, with the title
+ * and button the access code's page takes from gate.css, which apps link too, the note a slow load
  * shows, the header's line while the page catches up and the sweep through its lines once it has,
  * the spokes a pull to refresh shows. Diagnostics, at the very end of settings, are diagnostics.css's. Apps link it
  * before their own styles.css, which lays out the rest of the page and may refine these rules.
@@ -12,33 +13,45 @@
  *   --sheet                                    a sheet's and the settings dialog's color
  *   --sheet-shadow                             their shadow on wide screens, or none
  *   --ink, --ink-mid, --ink-dim                text, from brightest to dimmest
- *   --accent, --accent-ink                     the selected tab and a switch that is on, and text on it
+ *   --ink-hover                                text under a mouse, the one change a hover makes
+ *   --accent, --accent-ink                     a sheet's close and back buttons, a switch that is on,
+ *                                              the Home Screen asks' buttons and step numbers, and
+ *                                              text on them
  *   --focus-ring                               the keyboard focus ring
  *   --radius-card                              a card's corners, like the Updates box's
  *   --radius-chip                              a chip's corners, like a status beside a title
- *   --radius-control                           a button's or a field's corners, and the hover square
- *                                              behind an icon button
+ *   --radius-control                           a button's or a field's corners
+ *   --radius-tabs                              the corners of a wide screen's track of tabs
  *   --radius-sheet                             a sheet's corners, and the settings dialog's, on wide
  *                                              screens; on phones they fill the screen
+ *   --control-height, --control-room           a button's height, and the room beside its words
+ *   --tabs-track, --tabs-track-edge            a wide screen's track of tabs, and the line inside it
+ *   --tabs-chosen, --tabs-chosen-edge          the open tab's fill, and the line inside it
+ *   --tabs-chosen-ink                          the open tab's words
  *   --switch-knob                              a switch's knob, one light color in every theme, as the
  *                                              phone keeps its own
  *   --select-arrow                             a url() of a select field's down arrow, in --ink-dim, if
  *                                              the app has one
- *   --select-face                              a select field's face, drawn at --size-field as big as
- *                                              the page's text at --size-glance
+ *   --select-face                              a select field's face, drawn at --type-field-size as big
+ *                                              as the page's text at --type-detail-size
  *   --tab-bar-tint                             the tab bar's fill
  *   --tab-bar-edge                             the tab bar's edge
  *   --tab-bar-ink                              the tab bar's icons and labels
  *   --tab-bar-pill                             the selected tab's pill
  *   --catch-up-fade                            the opacity the header's lines fade to as a sweep
  *                                              passes once the page catches up, like 0.75
- * and on phones this sets:
+ *   --step-number-lift                         how far a Home Screen step's number rises in its
+ *                                              circle, so the app's digits sit in its middle
+ * and this sets:
+ *   --view-end-room                            the room at the end of the page, or of a view that
+ *                                              scrolls in itself, past the tab bar on a phone
+ * and on phones:
  *   --tab-bar-bottom                           how far the tab bar floats above the screen's bottom
  *   --tab-bar-height                           the tab bar's height
- *   --tab-bar-clearance                        the space an app's body leaves at its bottom for the bar
  *
- * An app's styles.css also gives .home-screen-icon the icon the Home Screen gets, as its
- * background-image, so the url() is read from the app's own folder.
+ * The icons each look gives the Home Screen come from the stylesheet worker/page-files.mjs builds
+ * from an app's icon PNGs, home-screen-icons.css, as --home-screen-icon-light, -dark, and, for an
+ * app whose System icon is drawn to blend the two, -system.
  *
  * Phones are up to 779px wide, as settings-sheet.js also matches. Focus rings show
  * only while the body has the kbd class, which keyboard-focus.js sets during keyboard navigation.
@@ -61,21 +74,15 @@
   margin: -8px -10px -8px -14px;
   padding: 4px;
   border: 0;
-  /* The padding trims this to a control's rounding on the hover square. */
-  border-radius: calc(var(--radius-control) + 4px);
+  border-radius: var(--radius-control);
   background: none;
-  /* The hover square stays inside the padding, smaller than the tap area. */
-  background-clip: content-box;
   color: var(--ink-mid);
   cursor: pointer;
-  transition:
-    color 0.15s,
-    background 0.15s;
+  transition: color 0.15s;
 }
 @media (hover: hover) {
   .settings-btn:hover {
-    color: var(--ink);
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink-hover);
   }
 }
 .settings-btn svg {
@@ -85,18 +92,13 @@
 
 nav.tabs {
   display: flex;
-  gap: 8px;
   margin-bottom: 28px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 .tab-bar {
   display: contents;
 }
 .tab-list {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 .tab-backing,
 .tab-pill,
@@ -104,26 +106,45 @@ nav.tabs {
 .edge-fade {
   display: none;
 }
+/* A tab named for what it opens on, like Standings or Bracket, holds a face for each, its icon and
+   name, which lays them out as the tab's own while it shows (bracket-standings.js). */
+.tab-face:not([hidden]) {
+  display: contents;
+}
 /* Only the tabs themselves, and search, a tab beside them: the tabs' row can hold other buttons
-   too. */
+   too. An app's styles.css sets their words as its other buttons'. */
 .tab-list button,
 nav.tabs .search-tab {
   font: inherit;
-  font-size: var(--size-glance);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: none;
-  border: 1px solid var(--card-border);
-  color: var(--ink-dim);
-  padding: 6px 18px;
-  border-radius: var(--radius-control);
   cursor: pointer;
 }
-.tab-list button.active,
-nav.tabs .search-tab.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+/* On a wide screen, the tabs are one segmented control: each as tall as any other button, in a
+   track just around them, the open one filled. */
+@media (min-width: 780px) {
+  nav.tabs {
+    width: max-content;
+    padding: 2px;
+    border-radius: var(--radius-tabs);
+    background: var(--tabs-track);
+    box-shadow: inset 0 0 0 1px var(--tabs-track-edge);
+  }
+  .tab-list button,
+  nav.tabs .search-tab {
+    height: var(--control-height);
+    padding: 0 var(--control-room);
+    border: 0;
+    border-radius: var(--radius-control);
+    background: none;
+    color: var(--ink);
+    align-content: center;
+    text-box: trim-both cap alphabetic;
+  }
+  .tab-list button.active,
+  nav.tabs .search-tab.active {
+    background: var(--tabs-chosen);
+    box-shadow: inset 0 0 0 1px var(--tabs-chosen-edge);
+    color: var(--tabs-chosen-ink);
+  }
 }
 
 /* A sideways bracket's round dots, as round-dots.js draws them, sit under it. */
@@ -168,11 +189,43 @@ section.view {
 section.view.active {
   display: block;
 }
+/* A view that scrolls in itself, like a season's days (day-strip.css) or its standings and bracket
+   (pager.css), holds the page still: the page and the view fill the screen, and the view takes
+   what's left under the header. A phone on the Home Screen lays the page out short of the screen
+   by the top safe area unless the page is taller than it, so there the page stays that much
+   taller. Safari doesn't lay the page out again when a tab changes only the root's height, so the
+   root keeps it on every tab, where what's taller than it still scrolls the page. */
+:root {
+  --view-end-room: max(48px, env(safe-area-inset-bottom));
+  height: 100%;
+}
+:root:has(.view.active > :is(.day-view, .season-parts)) body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-bottom: 0;
+}
+@media (max-width: 779px) {
+  :root {
+    height: calc(100% + env(safe-area-inset-top) + 1px);
+  }
+}
+/* The view grows from nothing into the room left, rather than shrink from all it holds, which
+   rounds to a slightly different height as it draws and would resize it for no change on the
+   screen. It keeps most of the screen, though, so a tall Updates box over it (updates.js) never
+   leaves it a sliver: the page then scrolls the rest of it into view. A season's parts the header
+   rides up with (season-header.js) take the whole page instead. */
+section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 60svh;
+}
 
 .load-note {
   margin: 8px 0 18px;
   color: var(--ink-dim);
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
 }
 
 /* The header's first line while the page catches up, as catch-up-note.js draws it: its icon at the
@@ -301,7 +354,7 @@ section.view.active {
    swipe down at the top moves the sheet instead. An app that fills the whole sheet sizes its
    sections from --section-gap and --bottom-padding. */
 .settings-panel {
-  --head-height: 64px;
+  --head-height: 63px;
   --section-gap: 14px;
   --bottom-padding: 22px;
   width: calc(100% - 24px);
@@ -336,13 +389,15 @@ section.view.active {
   min-height: 100%;
   padding: 0 22px var(--bottom-padding);
 }
+/* A sheet's or settings' header has the same room above and below on every screen. On a phone,
+   where it reaches the screen's top, it also clears the status bar by --top-inset. */
 .sheet-top {
+  --top-inset: 0px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   min-height: var(--head-height);
   margin-inline: -22px;
-  padding: 10px 22px;
+  padding: calc(var(--top-inset) + 8px) 22px 6px;
   background: var(--sheet);
 }
 /* A sheet's title is centered, clear of the close or back button at the head's left. */
@@ -363,14 +418,15 @@ section.view.active {
   text-align: center;
 }
 .sheet-head h2 {
-  font-size: 1.05rem;
-  font-weight: 500;
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--type-heading-tracking);
 }
 .settings-version {
   margin: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   letter-spacing: 0.02em;
   color: var(--ink-dim);
   white-space: nowrap;
@@ -388,21 +444,22 @@ section.view.active {
   text-align: center;
 }
 .settings-footer .settings-version {
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   white-space: normal;
 }
 /* A sheet's close button, a caret down, or its back button, an arrow, in place of it on a sheet
-   opened from another: just the icon, in --accent, its words only for screen readers. */
+   opened from another: just the icon, in --accent, its words only for screen readers. It holds the
+   head's top 44px, whatever the title under it holds. */
 .sheet-close,
 .sheet-back {
   position: absolute;
   left: -12px;
-  top: 50%;
+  top: 0;
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  margin-top: -22px;
   padding: 0;
   border: 0;
   background: none;
@@ -440,7 +497,8 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
   gap: 12px;
   min-height: 56px;
   padding-block: 8px;
-  font-size: var(--size-setting);
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
 }
 .control-row:not([hidden]) ~ .control-row {
   border-top: 1px solid var(--divider);
@@ -467,30 +525,40 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
 }
 .settings-group-label {
   margin: 0;
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
 
 /* Settings: the appearance choices show the home-screen icon each one offers. System shows
-   both, the light look's on the left half and the dark look's on the right. */
+   both, the light look's on the left half and the dark look's on the right, from the two icons
+   or, where their halves would meet with a seam, from one icon drawn to blend them. */
 .appearance-row {
   flex-direction: column;
   align-items: stretch;
   gap: 14px;
 }
+/* As on the Home Screen, each icon sits a set step from the next, its name centered under it and
+   reaching past its sides when longer, so a long name never pushes an icon along. */
 .appearance-choices {
-  display: flex;
+  --appearance-icon-size: 60px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--appearance-icon-size);
+  justify-content: start;
   gap: 18px;
 }
 .appearance-choice {
   position: relative;
+  justify-self: center;
+  width: max-content;
   display: grid;
   justify-items: center;
   gap: 6px;
-  font-size: var(--size-setting-note);
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
   color: var(--ink-dim);
   cursor: pointer;
 }
@@ -507,19 +575,29 @@ body.kbd :is(.sheet-close, .sheet-back):focus {
 .appearance-icon {
   position: relative;
   display: block;
-  width: 60px;
-  height: 60px;
+  width: var(--appearance-icon-size);
+  height: var(--appearance-icon-size);
   overflow: hidden;
   border-radius: 14px;
+  background: center / cover no-repeat;
   box-shadow: 0 0 0 1px var(--card-border);
 }
-.appearance-icon img {
+.appearance-icon-light,
+.appearance-icon-halves {
+  background-image: var(--home-screen-icon-light);
+}
+.appearance-icon-dark,
+.appearance-icon-halves::after {
+  background-image: var(--home-screen-icon-dark);
+}
+.appearance-icon-system {
+  background-image: var(--home-screen-icon-system);
+}
+.appearance-icon-halves::after {
+  content: "";
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.appearance-icon-auto img + img {
+  background-size: cover;
   clip-path: inset(0 0 0 50%);
 }
 .appearance-choice:has(input:checked) {
@@ -541,17 +619,32 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   min-width: 0;
 }
 .control-note {
-  font-size: var(--size-setting-note);
-  line-height: 1.45;
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
+  line-height: calc(1.45 * var(--leading));
   color: var(--ink-dim);
 }
 .control-note:empty {
   display: none;
 }
+/* The note's tall lines and the names over it add their own room, so it comes up to sit as far
+   under the names as the icons sit under the title. */
+.appearance-row .control-note {
+  margin-top: -3px;
+}
+.control-note a {
+  color: var(--accent);
+  text-decoration: none;
+}
+@media (hover: hover) {
+  .control-note a:hover {
+    color: var(--ink-hover);
+  }
+}
 .select-field {
   font: inherit;
   font-family: var(--select-face);
-  font-size: var(--size-field);
+  font-size: var(--type-field-size);
   color: var(--ink);
   background: var(--bg) var(--select-arrow) no-repeat right 10px center / 10px 6px;
   border: 1px solid var(--card-border);
@@ -563,7 +656,7 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 }
 @media (hover: hover) {
   .select-field:hover {
-    border-color: var(--ink-dim);
+    color: var(--ink-hover);
   }
 }
 .switch {
@@ -601,34 +694,8 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   cursor: default;
   opacity: 0.5;
 }
-/* home-screen.js fills these. The bar stays at the top of the screen while the page scrolls under
-   it, and the page starts below it, so it never covers the settings button. */
-.home-screen-bar {
-  position: fixed;
-  z-index: 21;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  height: var(--home-screen-bar-height);
-  padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0
-    max(16px, env(safe-area-inset-left));
-  background: var(--card);
-  border-bottom: 1px solid var(--card-border);
-  box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.5);
-  color: var(--ink);
-}
-/* Whatever else holds to the top of the screen, and a scroll to bring something into view, stop
-   under the bar. */
-:root:has(.home-screen-bar:not([hidden])) {
-  --home-screen-bar-height: calc(44px + env(safe-area-inset-top));
-  scroll-padding-top: var(--home-screen-bar-height);
-}
-body:has(> .home-screen-bar:not([hidden])) {
-  margin-top: var(--home-screen-bar-height);
-}
+/* The box at the bottom of settings that keeps the steps to add the page to the Home Screen
+   (draw-home-screen-asks.js). */
 .home-screen-tip {
   display: flex;
   align-items: flex-start;
@@ -638,39 +705,43 @@ body:has(> .home-screen-bar:not([hidden])) {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-card);
 }
-.home-screen-bar[hidden],
 .home-screen-tip[hidden] {
   display: none;
 }
 .home-screen-icon {
   flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  background-position: center;
-  background-size: cover;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: center / cover no-repeat;
+  background-image: var(--home-screen-icon-light);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+/* The Home Screen box shows the icon the theme showing would give the Home Screen. */
+:root[data-theme="dark"] .home-screen-icon {
+  background-image: var(--home-screen-icon-dark);
 }
 .home-screen-copy {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1px;
+  gap: 3px;
   min-width: 0;
 }
 .home-screen-title {
-  font-size: var(--size-glance);
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 200);
+  line-height: calc(1.2 * var(--leading));
 }
 .home-screen-steps {
-  font-size: var(--size-small);
-  line-height: 1.3;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: calc(1.45 * var(--leading));
   color: var(--ink-dim);
 }
 .home-screen-steps b {
-  font-weight: 600;
+  font-weight: calc(var(--type-caption-weight) + 100);
   color: var(--ink);
 }
 .home-screen-steps svg {
@@ -682,56 +753,133 @@ body:has(> .home-screen-bar:not([hidden])) {
 }
 .home-screen-install {
   flex: none;
-  padding: 5px 9px;
+  margin-top: 7px;
+  padding: 7px 12px;
   border: 0;
   border-radius: var(--radius-control);
   background: var(--accent);
   color: var(--accent-ink);
   font: inherit;
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   cursor: pointer;
 }
-/* The icon sits near the page's edge, and its tap area runs past it. */
-.home-screen-close {
-  flex: none;
+
+/* The welcome a phone's or tablet's browser opens on (draw-home-screen-asks.js), over the whole
+   screen, whose numbered steps pick the theme the Home Screen icon takes and add the page there.
+   Its title and Install are the access code page's own, from gate.css. */
+.welcome {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding-top: max(24px, env(safe-area-inset-top));
+  /* On a wide screen, it keeps to a column as wide as a phone's, in the middle, as the gate does. */
+  padding-inline: max(24px, env(safe-area-inset-left), (100% - 360px) / 2)
+    max(24px, env(safe-area-inset-right), (100% - 360px) / 2);
+  /* Continue sits in the room the bottom inset keeps clear above the iPhone's home bar, where
+     Safari's own bar floats, its text half its height over the bottom. */
+  padding-bottom: max(2px, env(safe-area-inset-bottom) - 32px);
+  border: 0;
+  background: var(--bg);
+  color: var(--ink);
+  overscroll-behavior: none;
+}
+.welcome[open] {
+  display: flex;
+  flex-direction: column;
+}
+.welcome::backdrop {
+  background: var(--bg);
+}
+.welcome .gate-title {
+  margin: 0 0 22px;
+}
+.welcome-steps {
+  display: grid;
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.welcome-steps > li {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  column-gap: 12px;
+  counter-increment: step;
+}
+.welcome-steps > li[hidden] {
+  display: none;
+}
+/* Words read centered on their lowercase letters, which sit below the middle of their line, so
+   the circle beside them sits a pixel lower. */
+.welcome-steps > li::before {
+  content: counter(step);
+  position: relative;
+  top: 1px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding-bottom: calc(2 * var(--step-number-lift));
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 200);
+}
+.welcome-step {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin: -6px -12px -6px -4px;
-  padding: 0;
+  min-height: 28px;
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
+  line-height: calc(1.3 * var(--leading));
+}
+.welcome-step svg {
+  width: 16px;
+  height: 16px;
+  margin: 0 4px;
+}
+.welcome-note {
+  grid-column: 2;
+  margin-top: -4px;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.4 * var(--leading));
+  color: var(--ink-dim);
+}
+.welcome-step-body {
+  grid-column: 2;
+  display: grid;
+  justify-items: start;
+  margin-top: 8px;
+}
+.welcome .appearance-choices {
+  gap: 22px;
+}
+.welcome-continue {
+  align-self: center;
+  margin-top: auto;
+  min-height: 44px;
+  padding: 0 12px;
   border: 0;
   background: none;
-  color: var(--ink-dim);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
   cursor: pointer;
 }
-.home-screen-close svg {
-  width: 15px;
-  height: 15px;
-}
-.home-screen-tip .home-screen-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-}
-.home-screen-tip .home-screen-copy {
-  gap: 3px;
-}
-.home-screen-tip .home-screen-title {
-  font-size: var(--size-glance);
-}
-.home-screen-tip .home-screen-steps {
-  font-size: var(--size-small);
-  line-height: 1.45;
-}
-.home-screen-tip .home-screen-install {
-  margin-top: 7px;
-  padding: 7px 12px;
-  font-size: var(--size-small);
+body.kbd .welcome-continue:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 /* A sheet rises and slides away at the pace and easing of the phone's own sheets, as
@@ -771,7 +919,7 @@ body:has(> .home-screen-bar:not([hidden])) {
   :root {
     --tab-bar-bottom: max(calc(env(safe-area-inset-bottom) - 12px), 16px);
     --tab-bar-height: 62px;
-    --tab-bar-clearance: calc(var(--tab-bar-bottom) + 86px);
+    --view-end-room: calc(var(--tab-bar-bottom) + 86px);
   }
   /* The tab bar floats over the page, so the tabs' row leaves no space under the header. */
   nav.tabs {
@@ -781,7 +929,6 @@ body:has(> .home-screen-bar:not([hidden])) {
   /* On phones, settings rise from the bottom to fill the screen, and a swipe down closes them.
      sheet-swipe.js moves them with the finger. */
   .settings-panel {
-    --head-height: 63px;
     --bottom-padding: max(22px, env(safe-area-inset-bottom));
     width: 100%;
     max-width: none;
@@ -803,12 +950,9 @@ body:has(> .home-screen-bar:not([hidden])) {
   }
   /* A sheet's top clears the status bar, which a Home Screen page draws over it. */
   .sheet-top {
-    justify-content: flex-start;
+    --top-inset: env(safe-area-inset-top);
     margin-inline: -18px;
-    padding: calc(env(safe-area-inset-top) + 8px) 18px 6px;
-  }
-  .sheet-head h2 {
-    font-size: 0.9rem;
+    padding-inline: 18px;
   }
 
   /*
@@ -891,8 +1035,6 @@ body:has(> .home-screen-bar:not([hidden])) {
     position: absolute;
     z-index: 1;
     inset: 0;
-    flex-wrap: nowrap;
-    gap: 0;
     padding: 5px 9px;
     touch-action: none;
     user-select: none;
@@ -962,15 +1104,28 @@ body:has(> .home-screen-bar:not([hidden])) {
       transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
     }
   }
-  /* The round dots stay just above the tab bar, wherever the bracket ends, over the scroll edge. */
+  /* At rest, the round dots stay just above the tab bar, wherever the bracket ends, over the scroll
+     edge. */
   .round-dots {
+    --above-tab-bar: 6px;
     position: fixed;
     z-index: 20;
     left: 0;
     right: 0;
-    bottom: calc(var(--tab-bar-bottom) + var(--tab-bar-height) + 6px);
+    bottom: calc(var(--tab-bar-bottom) + var(--tab-bar-height) + var(--above-tab-bar));
     margin: 0;
     pointer-events: none;
+  }
+  /* A part that slides is where what's fixed inside it is placed from, so while the standings and
+     bracket slide, the dots are placed from the top of what the bracket's part scrolls at the tab
+     bar's top, as round-dots.js found it, and lifted by their own height and --above-tab-bar. They
+     leave with the bracket sideways at the same height, passing under the scroll edge with the rest
+     of it. */
+  .season-parts[data-sliding] .round-dots {
+    position: absolute;
+    top: var(--tab-bar-top-in-part);
+    bottom: auto;
+    translate: 0 calc(-100% - var(--above-tab-bar));
   }
 
   /* The bottom scroll edge: content dims under the bar but stays readable. */

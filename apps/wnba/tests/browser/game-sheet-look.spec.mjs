@@ -9,7 +9,7 @@ import {
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { readOklab } from "../../../../shared/page/team-colors.js";
 import { TEAMS } from "../../page/js/teams.js";
@@ -21,11 +21,10 @@ import {
   finishValkyriesAtWings,
   liveBoxScore,
 } from "./game-sheet-games.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 // A players table's number column, while the names leave it room.
 const NUMBER_COLUMN_PX = 52;
-// The type scale's smallest size, which the lead chart's words show at with no room above or below.
-const SMALLEST_TEXT_PX = 13;
 // The room between the band's line and the first part's title, above each later title, below each
 // title, below By quarter's, and between a tape's rows.
 const FIRST_TITLE_SPACE_PX = 20;
@@ -75,15 +74,17 @@ const readPaintedBackground = (locator) =>
     return `#${[red, green, blue].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
   });
 
-test("a game's title is 16.5px at the sheets' title weight, over its series and day at the glance size", async ({
-  page,
-}) => {
+test("a game's title is a heading, over its series and day as details", async ({ page }) => {
   await openApp(page);
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
 
-  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-size", "16.5px");
-  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-weight", "500");
-  await expect(sheet.locator("#gameWhen")).toHaveCSS("font-size", "14px");
+  const heading = await readRole(page, "heading");
+  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-size", `${heading.size}px`);
+  await expect(sheet.locator("#gameTitle")).toHaveCSS("font-weight", String(heading.weight));
+  await expect(sheet.locator("#gameWhen")).toHaveCSS(
+    "font-size",
+    `${(await readRole(page, "detail")).size}px`,
+  );
 });
 
 test("only the team rows of By quarter have a line above them, not its heading row", async ({
@@ -168,7 +169,9 @@ for (const { screen, viewport } of [
   test.describe(`on ${screen}`, () => {
     test.use({ viewport });
 
-    test("the lead chart's words show at the type scale's smallest size", async ({ page }) => {
+    test("the lead chart's words sit on lines as tall as their text, with no room above or below", async ({
+      page,
+    }) => {
       const app = await openApp(page);
       await app.changeSeason(finishValkyriesAtWings);
       const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
@@ -176,10 +179,13 @@ for (const { screen, viewport } of [
         ".lead-chart :is(.lead-side, .lead-reach, .lead-peak-label, .lead-period)",
       );
       await expect(words).toHaveCount(11);
-      const heights = await words.evaluateAll((elements) =>
-        elements.map((element) => element.getBoundingClientRect().height),
+      const lines = await words.evaluateAll((elements) =>
+        elements.map((element) => ({
+          height: element.getBoundingClientRect().height,
+          size: parseFloat(getComputedStyle(element).fontSize),
+        })),
       );
-      for (const height of heights) expect(height).toBeCloseTo(SMALLEST_TEXT_PX, 0);
+      for (const { height, size } of lines) expect(height).toBeCloseTo(size, 0);
     });
   });
 }
@@ -431,7 +437,7 @@ test("a team's sheet marks the team in its mark color on each theme, on its curv
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
   const sheet = page.locator("#teamSheet");
   const ownDot = sheet.locator(".placed-line .own").first();
@@ -465,7 +471,7 @@ for (const { screen, viewport } of [
   test.describe(`on ${screen}`, () => {
     test.use({ viewport });
 
-    test("every piece of text in a live game's row, its sheet, a final's sheet and its Highlights, and a preview keeps to the type scale", async ({
+    test("every piece of text in a live game's row, its sheet, a final's sheet and its Highlights, and a preview keeps to its type role", async ({
       page,
     }) => {
       const app = await openApp(page, { league: { boxScores: { 1042600112: liveBoxScore } } });
@@ -474,29 +480,29 @@ for (const { screen, viewport } of [
       const sheet = await openGameSheet(page, VALKYRIES_AT_WINGS);
       await expect(page.locator(".bonus").first()).toBeAttached();
       await expect(sheet.locator(".line-score th.now")).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator(".clock").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       const final = await openGameSheet(page, ACES_AT_FEVER);
       await expect(final.locator(".line-score")).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await final.getByRole("tab", { name: "Highlights" }).click();
       await expect(final.locator("#highlightsBody .clip-row").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(final).toBeHidden();
       const preview = await openGameSheet(page, FEVER_AT_ACES);
       await expect(preview.locator(".meeting-score").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
     });
@@ -612,7 +618,7 @@ test("a game yet to end whose channels aren't listed yet says to check back, und
   await expect(note).toHaveText("Check back for where to watch");
   const faceOff = await sheet.locator(".faceoff-score").boundingBox();
   expect((await note.boundingBox()).y).toBeGreaterThan(faceOff.y + faceOff.height);
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });

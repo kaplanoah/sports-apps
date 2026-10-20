@@ -3,7 +3,14 @@
 // address, from the environment of the same name in the app's wrangler.toml.
 import { parseArgs } from "node:util";
 
-/** @typedef {{ branch: string, environment: string | null, label: string | null, howToShip: string }} Channel */
+/**
+ * @typedef {object} Channel
+ * @property {string} branch
+ * @property {string | null} environment
+ * @property {string | null} label
+ * @property {string} howToShip
+ * @property {boolean} isForcePushed whether each push replaces what the branch held
+ */
 
 /** @type {Record<string, Channel>} */
 const CHANNELS = {
@@ -12,12 +19,14 @@ const CHANNELS = {
     environment: null,
     label: null,
     howToShip: "Merge through a pull request",
+    isForcePushed: false,
   },
   beta: {
     branch: "beta",
     environment: "beta",
     label: "beta",
     howToShip: "Push it with git push -f origin <branch>:beta",
+    isForcePushed: true,
   },
 };
 

@@ -136,7 +136,7 @@ function createRun() {
     job.updateStore({
       docs,
       storage,
-      loadSnapshot: async () => null,
+      createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: mlb.fetchImpl,
       now: () => clock.now,
@@ -190,6 +190,14 @@ async function fillRosters(run) {
 /** @param {string[]} requests */
 const listLeagueRequests = (requests) =>
   requests.filter((path) => !path.includes("/roster") && !isGameLogRequest(path));
+
+const STATUS_KEY = "rosters/status";
+
+/**
+ * The documents the job saved, apart from its status.
+ * @param {{ writes: string[] }} docs
+ */
+const listDataWrites = (docs) => docs.writes.filter((key) => key !== STATUS_KEY);
 
 test("each club's roster has its active players and its injured list, each with his season so far", () => {
   const answers = FIXTURE.answers;
@@ -250,13 +258,13 @@ test("every club's roster fills six a run, after one read of every player's numb
     [],
   );
   assert.deepEqual(new Set(listRosterClubs(runs.flat())), new Set(listClubs()));
-  assert.equal(run.docs.writes.filter((key) => key.startsWith("rosters/")).length, 30);
+  assert.equal(listDataWrites(run.docs).filter((key) => key.startsWith("rosters/")).length, 30);
   assert.equal(run.docs.stored.get(nameRosterKey("LAD")).players.length, 33);
   const rostered = ["CLE", "NYY", "LAD"].map(
     (club) => run.docs.stored.get(nameRosterKey(club)).players.length,
   );
   assert.equal(
-    run.docs.writes.filter((key) => key.startsWith("players/")).length,
+    listDataWrites(run.docs).filter((key) => key.startsWith("players/")).length,
     rostered.reduce((total, count) => total + count, 0),
   );
   assert.deepEqual(
@@ -371,7 +379,7 @@ test("a game's end reads every player's numbers again, and saves only the roster
   assert.deepEqual(new Set(listLeagueRequests(requests)), new Set(NUMBERS));
   assert.deepEqual(requests.filter(isGameLogRequest).map(readGameLogIds), [[680757]]);
   assert.deepEqual(
-    run.docs.writes.filter((key) => !key.startsWith("seasons/")),
+    listDataWrites(run.docs).filter((key) => !key.startsWith("seasons/")),
     [nameRosterKey("CLE"), namePlayerKey(SEASON, 680757)],
   );
 });
@@ -384,7 +392,7 @@ test("runs with nothing new read only the day's transactions, once they're old, 
     run.wait(5);
   }
   assert.deepEqual(run.takeRequests(), [TRANSACTIONS, TRANSACTIONS]);
-  assert.deepEqual(run.docs.writes, []);
+  assert.deepEqual(listDataWrites(run.docs), []);
 });
 
 test("each club's roster is read again once a day, six a run", async () => {
@@ -420,16 +428,46 @@ test("rosters don't wait on every player's numbers, which save once MLB answers 
   run.refused.add(HITTING);
   await run.runJob();
   assert.equal(listRosterClubs(run.takeRequests()).length, 6);
-  assert.deepEqual(run.docs.writes, []);
+  assert.deepEqual(listDataWrites(run.docs), []);
   run.refused.clear();
   run.wait(5);
   await run.runJob();
   assert.equal(
-    run.docs.writes.filter((key) => key.startsWith("rosters/")).length,
+    listDataWrites(run.docs).filter((key) => key.startsWith("rosters/")).length,
     12,
     "the twelve read so far",
   );
-  assert.ok(run.docs.writes.includes(namePlayerKey(SEASON, 680757)));
+  assert.ok(listDataWrites(run.docs).includes(namePlayerKey(SEASON, 680757)));
+});
+
+test("each run saves its status: when it ran, how many requests it made, and what MLB didn't answer", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const run = createRun();
+  run.refused.add(HITTING);
+  await run.runJob();
+
+  const status = run.docs.stored.get(STATUS_KEY);
+  assert.equal(status.ranAt, new Date(NOW).toISOString());
+  assert.ok(status.requests >= run.takeRequests().length);
+  assert.match(status.lastFailure.message, /^Reading every player's numbers failed: /);
+});
+
+test("a run that fails as a whole saves its status, naming the season's rosters", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const run = createRun();
+  const readStored = run.storage.get;
+  run.storage.get = async (/** @type {string} */ key) => {
+    if (key === `roster-reads:${SEASON}`) throw new Error("The store answered 500");
+    return readStored(key);
+  };
+  await run.runJob();
+
+  const status = run.docs.stored.get(STATUS_KEY);
+  assert.equal(status.ranAt, new Date(NOW).toISOString());
+  assert.equal(
+    status.lastFailure.message,
+    `Keeping ${SEASON}'s rosters failed: The store answered 500`,
+  );
 });
 
 test("each rostered player's last games are read as his club's roster arrives, a few batches a run, and once more as they settle", async () => {
@@ -462,7 +500,7 @@ test("last games read before they kept each game's pitches are read once more, a
   await fillRosters(run);
   const settled = await run.storage.get(nameGameLogReadsKey(SEASON));
   await run.storage.delete(nameGameLogReadsKey(SEASON));
-  await run.storage.put(`game-log-reads:${SEASON}`, settled);
+  await run.storage.put(nameGameLogReadsKey(SEASON, 1), settled);
 
   await run.runJob();
   const reread = run.takeRequests().filter(isGameLogRequest).flatMap(readGameLogIds);
@@ -473,6 +511,17 @@ test("last games read before they kept each game's pitches are read once more, a
   );
   const bibee = run.docs.stored.get(namePlayerKey(SEASON, 676440));
   assert.equal(bibee.lastGames.pitching[0].numberOfPitches, 94);
+});
+
+test("the last games' reads kept under an earlier version are forgotten as the job saves its own", async () => {
+  const run = createRun();
+  await run.storage.put(`game-log-reads:${SEASON}`, { 1: { games: 1, at: 0, isSettled: true } });
+
+  await fillRosters(run);
+
+  assert.equal(nameGameLogReadsKey(SEASON, 1), `game-log-reads:${SEASON}`);
+  assert.equal(await run.storage.get(`game-log-reads:${SEASON}`), undefined);
+  assert.ok(await run.storage.get(nameGameLogReadsKey(SEASON)));
 });
 
 test("a batch of last games MLB doesn't answer is read on the next run", async () => {
@@ -687,7 +736,7 @@ test("ESPN's report is read once for the whole league each hour, and one that fa
   assert.equal(run.espn.requests, 3);
   assert.equal(run.docs.stored.get(TREINEN).out?.reason, "Right shoulder inflammation");
   assert.deepEqual(
-    run.docs.writes.filter((key) => key.startsWith("players/")),
+    listDataWrites(run.docs).filter((key) => key.startsWith("players/")),
     [],
     "nothing changed",
   );
@@ -711,7 +760,7 @@ test("a reason ESPN changes saves again only the player it's about", async () =>
     "Treinen (shoulder) threw a bullpen session Sunday.",
   );
   assert.deepEqual(
-    run.docs.writes.filter((key) => key.startsWith("players/")),
+    listDataWrites(run.docs).filter((key) => key.startsWith("players/")),
     [TREINEN],
   );
 });

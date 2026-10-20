@@ -1,5 +1,6 @@
 import { renderCatchUpLines, startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
+import { startChannelTag } from "#shared/channel-tag.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
 import { setHtml } from "#shared/html.js";
@@ -10,7 +11,7 @@ import {
   watchNews,
 } from "#shared/news.js";
 import { readNewsChoices } from "#shared/news-choices.js";
-import { pickReadCards } from "#shared/news-picks.js";
+import { listShownStories } from "#shared/page-places.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
@@ -33,11 +34,18 @@ import { fillStamp } from "#shared/stamp.js";
 import { chooseTitleYear, showTitleYear } from "#shared/title-year.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { startAppearance } from "#shared/appearance.js";
+import {
+  showSeasonPart,
+  showSeasonPhase,
+  startBracketStandings,
+} from "#shared/bracket-standings.js";
+import { BACKGROUND_JOBS } from "./background-jobs.js";
 import { LOOKS } from "./looks.js";
 import { placeBracket, readBracketScroll, startBracket } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
 import { openGameSection, refreshGameSheet, startGameSheet } from "./game-sheet.js";
 import { renderDot } from "./clubs.js";
+import { LEAGUE_WORDS } from "./league-words.js";
 import { listFoundGameDays, listListedGames, listSeasonDays } from "./games-view.js";
 import { NEWS_LEAGUE } from "./news-league.js";
 import { refreshPlayerSheet, startPlayerSheet } from "./player-sheet.js";
@@ -45,14 +53,14 @@ import { fillRoster, readShownRoster, reopenRoster, startRosterSection } from ".
 import { loadSeason, loadSeasonYears, showYear, startSeasonData } from "./season-data.js";
 import { isPastSeason, session } from "./session.js";
 import { SNAPSHOT_VERSION } from "./snapshot.js";
-import { isPlayoffsOver } from "./series.js";
+import { isFieldSet, isPlayoffsOver } from "./series.js";
 import { describeStampProblem, renderStampLines } from "./stamp.js";
-import { drawStandings, showStandingsList, startStandings } from "./standings-view.js";
+import { drawStandings, showStandingsList } from "./standings-view.js";
 import { listSearchPages } from "./search-pages.js";
 import { createSearchTerms, readSearchGame } from "./search-terms.js";
 import { renderTeamSheet } from "./team-view.js";
 import { TEAMS } from "./teams.js";
-import { drawUpdates, watchDismissals } from "./updates.js";
+import { drawUpdates, watchUpdatesSeen } from "./updates.js";
 
 const CLOCK_REFRESH_MS = 60 * 1000;
 
@@ -76,11 +84,12 @@ function drawNews() {
 function renderTitleYear() {
   const { year: shownYear, currentYear } = session;
   const isSeasonOver = isPlayoffsOver(session.season?.series ?? []);
-  showTitleYear(chooseTitleYear({ shownYear, currentYear, isSeasonOver }));
+  showTitleYear(chooseTitleYear({ shownYear, currentYear, isSeasonOver }), LEAGUE_WORDS);
 }
 
 function renderAll() {
   const now = Date.now();
+  showSeasonPhase(isFieldSet(session.season?.series ?? []));
   const keptLeft = readBracketScroll();
   setHtml(findElement("bracketWrap"), renderBracket(session.season, now));
   placeBracket(keptLeft);
@@ -157,7 +166,8 @@ async function listSeasonYears() {
 }
 
 /** @param {string[]} years */
-const fillSeasonList = (years) => fillSeasonPicker(findSeasonPicker(), years, session.year);
+const fillSeasonList = (years) =>
+  fillSeasonPicker(findSeasonPicker(), years, session.year, LEAGUE_WORDS);
 
 // Another season's Games view opens on its start day: today, or a season over's last day.
 /** @param {number} year */
@@ -174,36 +184,30 @@ async function showNewCurrentYear() {
   fillSeasonList(await listSeasonYears());
 }
 
-// As on iPhone, choosing the Games tab while it shows goes back to where it starts: today.
-function returnGamesToToday() {
-  showStartDay();
-  return true;
-}
-
-// Every story the News tab shows, for search to list a team's newest.
-const listReadStories = () =>
-  pickReadCards(session.news?.cards ?? [], readNewsChoices(), NEWS_LEAGUE.outletSwitches).flatMap(
-    (card) => [card.lead, ...card.more],
-  );
-
 const readSearchPages = () =>
   listSearchPages({
     index: session.playerIndex,
     isSettingShown,
     standings: session.season?.standings ?? [],
-    stories: listReadStories(),
+    stories: listShownStories(session.news, readNewsChoices(), NEWS_LEAGUE.outletSwitches),
   });
 
 /**
- * Opens a place a search lists: a tab, one of the Standings tab's lists, a game's section, or
- * settings at one of its rows.
+ * Opens a place a search lists: a tab, the bracket or standings in theirs, one of the standings'
+ * lists, a game's section, or settings at one of its rows.
  * @param {string} key
  */
 function openSearchPlace(key) {
   const [place, detail] = key.split(":");
   if (place === "tab") openPageTab(detail);
-  else if (place === "standings") {
-    openPageTab("standings");
+  else if (place === "season") {
+    openPageTab("bracket-standings");
+    showSeasonPart(/** @type {import("#shared/bracket-standings.js").SeasonPart} */ (detail), {
+      isInstant: true,
+    });
+  } else if (place === "standings") {
+    openPageTab("bracket-standings");
+    showSeasonPart("standings", { isInstant: true });
     showStandingsList(detail);
   } else if (place === "highlights") openGameSection(detail, "highlights");
   else openSettings(key);
@@ -263,7 +267,7 @@ async function boot() {
   trackKeyboardFocus();
   watchPresses([".team-line .team-open"]);
   startPageTabs();
-  setTabStart("games", returnGamesToToday);
+  setTabStart("games", showStartDay);
   startDayStrip(findElement("seasonGames"));
   startGameSearch(findElement("gameSearch"), {
     readSeason: readSearchSeason,
@@ -283,15 +287,16 @@ async function boot() {
   startRosterSection();
   startPlayerSheet();
   startSettingsSheet();
+  startChannelTag();
   startNewsRedraws(findElement("newsList"), drawNews, NEWS_LEAGUE);
   startHomeScreen();
   findSeasonPicker().addEventListener("change", () =>
     switchSeason(Number(findSeasonPicker().value)),
   );
   startBracket();
-  startStandings();
+  startBracketStandings();
   session.db = createWorkerStore();
-  showJobStatuses(session.db, ["news", "players"]);
+  showJobStatuses(session.db, BACKGROUND_JOBS);
   drawLastSeen();
   reopenLastSheets();
   startCatchUpNote(session.db, renderStamp);
@@ -312,7 +317,7 @@ async function boot() {
     redrawEased(drawNews);
     refreshGameSearch();
   });
-  watchDismissals(() => redrawEased(drawUpdates));
+  watchUpdatesSeen(() => redrawEased(drawUpdates));
   refreshClockEveryMinute();
   startServiceWorker();
   startNotifications({ about: "Final scores" });

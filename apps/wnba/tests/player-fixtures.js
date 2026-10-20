@@ -1,3 +1,29 @@
+import { readFileSync } from "node:fs";
+import { buildSnapshot } from "../page/js/snapshot.js";
+import { describeAverages, listLeaders } from "../worker/src/season-averages.js";
+
+// Every player's totals as the league answered the morning after the Liberty's last game.
+const PLAYERS = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-06-players.json`, "utf8"),
+);
+
+/** Every player's averages in 2026, and each team's leading scorers, from the season's totals. */
+export function readSeasonAverages() {
+  const averages = describeAverages(PLAYERS.totals[2026]);
+  return { averages, leaders: listLeaders(averages) };
+}
+
+/**
+ * The season as the store keeps it: the snapshot the feeds make, with the season's leaders, which
+ * the store saves beside it.
+ * @param {Record<string, any>} responses
+ * @param {{ season: number, now: number }} options
+ */
+export const buildSeasonWithLeaders = (responses, options) => ({
+  ...buildSnapshot(responses, options),
+  leaders: readSeasonAverages().leaders,
+});
+
 /**
  * Every player's game logs in a season as the league answers them in one read, from the few
  * players' logs a fixture recorded, keyed as 1627668:2026:Playoffs.

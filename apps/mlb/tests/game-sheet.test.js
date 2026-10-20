@@ -82,7 +82,24 @@ test("a box score the store kept without its pitchers' pitches shows a dash for 
   for (const pitcher of boxScore.away.pitchers) delete pitcher.pitches;
   const markup = String(renderBoxScore({ away: "LAD", home: "ATL" }, boxScore));
   const [, pitchers] = readRows(markup, "box-table");
-  assert.deepEqual(pitchers[1], ["Yamamoto W", "7.0", "-", "4", "1", "1", "1", "10"]);
+  assert.deepEqual(pitchers[1], ["Yamamoto W", "7", "-", "4", "1", "1", "1", "10"]);
+});
+
+test("a pitcher's innings read as the rest of the app writes them, in thirds", () => {
+  const boxScore = describeGame("849819");
+  boxScore.away.pitchers[0].inningsPitched = "5.2";
+  const markup = String(renderBoxScore({ away: "LAD", home: "ATL" }, boxScore));
+  const [, pitchers] = readRows(markup, "box-table");
+  assert.equal(pitchers[1][1], "5 2/3");
+});
+
+test("a club's total shows a dash where a batter has none of a number, as his own row does", () => {
+  const boxScore = describeGame("849819");
+  delete boxScore.away.batters[0].walks;
+  const markup = String(renderBoxScore({ away: "LAD", home: "ATL" }, boxScore));
+  const [batters] = readRows(markup, "box-table");
+  assert.deepEqual(batters[1], ["Betts SS", "5", "0", "2", "0", "-", "1"]);
+  assert.deepEqual(batters.at(-1), ["Team", "36", "3", "8", "3", "-", "12"]);
 });
 
 test("a final's Innings show each club's runs in each, an x where the home club never batted, and its runs, hits, and errors", () => {
@@ -120,7 +137,7 @@ test("each club's batters, with their team's totals, come before its pitchers, w
   assert.deepEqual(batters[1], ["Betts SS", "5", "0", "2", "0", "0", "1"]);
   assert.deepEqual(batters.at(-1), ["Team", "36", "3", "8", "3", "2", "12"]);
   assert.deepEqual(pitchers[0], ["Pitchers", "IP", "P", "H", "R", "ER", "BB", "K"]);
-  assert.deepEqual(pitchers[1], ["Yamamoto W", "7.0", "98", "4", "1", "1", "1", "10"]);
+  assert.deepEqual(pitchers[1], ["Yamamoto W", "7", "98", "4", "1", "1", "1", "10"]);
   assert.deepEqual(pitchers.map((row) => row[0]).slice(1), ["Yamamoto W", "Scott", "Díaz S"]);
   assert.match(
     markup,
@@ -254,7 +271,7 @@ function findSeasonGame(date, away) {
 function readWhen(game) {
   mock.timers.enable({ apis: ["Date"], now: Date.parse(SEASON.now) });
   try {
-    return convertToText(renderWhen(game)).replace(/&bull;/g, " \u2022 ");
+    return convertToText(renderWhen(game));
   } finally {
     mock.timers.reset();
   }

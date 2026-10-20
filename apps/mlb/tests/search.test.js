@@ -7,15 +7,14 @@ import {
   describeNoGames,
   describeSearch,
   findSearchGames,
-  listSearchGames,
   readSearch,
 } from "#shared/game-search.js";
 import { findPages, findPartGame } from "#shared/page-search.js";
 import { listExamples, listOtherReadings, listSuggestions } from "#shared/search-suggestions.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
-import { listSeasonGames } from "../page/js/games-view.js";
+import { listSeasonGames, nameGameKey } from "../page/js/season-games.js";
 import { listSearchPages } from "../page/js/search-pages.js";
-import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
+import { createSearchTerms, readSearchGames } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 
 useTimeZone(EASTERN);
@@ -39,7 +38,7 @@ function createContext(change = (game) => game) {
   return createSearchContext({
     terms,
     dictionary: createSearchDictionary(terms),
-    games: listSearchGames(games, readSearchGame),
+    games: readSearchGames(games),
     now: NOW,
   });
 }
@@ -192,8 +191,8 @@ test("day and night games go by the clock at the ballpark", () => {
   );
   const findDayGames = (/** @type {ReturnType<typeof createSearchContext>} */ context) =>
     findSearchGames(readSearch("day games", context), context).games;
-  assert.ok(findDayGames(atNoon).some((game) => game.id === "823244"));
-  assert.ok(!findDayGames(CONTEXT).some((game) => game.id === "823244"));
+  assert.ok(findDayGames(atNoon).some((game) => game.game.id === "823244"));
+  assert.ok(!findDayGames(CONTEXT).some((game) => game.game.id === "823244"));
   assert.equal(search("Mets day games").line, "Mets | Day games | 64 games | 1 with no time yet");
 });
 
@@ -379,6 +378,31 @@ test("Highlights find the latest final, and the Matchup the next game, of the se
   assert.equal(findPartGame(CONTEXT.games, matchup)?.state, "pre");
 });
 
+test("a game search opens a game by its listing's key, so a makeup opens itself and never the called-off listing that shares its id", () => {
+  const listed = listSeasonGames(SNAPSHOT.slate, Object.values(SNAPSHOT.schedule).flat());
+  const listings = listed.filter((game) => game.id === "823471");
+  assert.deepEqual(
+    listings.map((game) => [game.date, game.state]),
+    [
+      ["2026-04-29", "off"],
+      ["2026-04-30", "final"],
+    ],
+  );
+  const found = CONTEXT.games.filter((game) => game.game.id === "823471");
+  assert.equal(found.length, 1);
+  const opened = listed.find((game) => nameGameKey(game) === found[0].id);
+  assert.deepEqual([opened?.date, opened?.state], ["2026-04-30", "final"]);
+});
+
+test("a club's season counts each game once: a game suspended and finished the next day on the day it started, and one postponed where it's made up", () => {
+  const giants = CONTEXT.games.filter((game) => game.away === "SF" || game.home === "SF");
+  const days = (/** @type {string} */ id) =>
+    giants.filter((game) => game.game.id === id).map((game) => game.day);
+  assert.deepEqual(days("824912"), ["2026-06-16"]);
+  assert.deepEqual(days("823471"), ["2026-04-30"]);
+  assert.equal(giants.filter((game) => game.kind === "regular").length, 162);
+});
+
 test("settings and each setting are found by their words, and only the settings shown", () => {
   assert.deepEqual(listPages("night game").rows, ["Settings Appearance"]);
   assert.deepEqual(listPages("prospectus").rows, [
@@ -401,6 +425,80 @@ test("settings and each setting are found by their words, and only the settings 
   assert.ok(!hidden.places.some((place) => place.key === "settings:season"));
 });
 
+/** @param {string} id @param {string} title @param {string} publishedAt @param {string[]} teams */
+const describeStory = (id, title, publishedAt, teams) => ({
+  id,
+  url: `https://www.mlb.com/news/${id}`,
+  title,
+  summary: "",
+  author: "",
+  outlet: "MLB.com",
+  source: "mlb",
+  publishedAt,
+  photo: null,
+  teams,
+});
+const STORIES = [
+  describeStory("lindor", "Lindor's homer lifts the Mets", "2026-09-27T02:00:00Z", ["NYM"]),
+  describeStory("soto", "Soto's four hits power the Mets", "2026-09-28T02:00:00Z", ["NYM"]),
+  describeStory("skenes", "Skenes caps his season", "2026-09-28T03:00:00Z", ["PIT"]),
+];
+
+/**
+ * What search lists for a season's pages, with each club's record and the News tab's stories.
+ * @param {string} text
+ */
+const findListedPages = (text) =>
+  findPages(text, {
+    dictionary: CONTEXT.dictionary,
+    pages: listSearchPages({
+      index: INDEX,
+      isSettingShown: () => true,
+      divisions: SNAPSHOT.standings.divisions,
+      stories: STORIES,
+    }),
+    isTyping: false,
+  });
+
+test("asked who is out, search never says a player isn't, since MLB's list of players doesn't say who is", () => {
+  const named = findListedPages("lindor injured");
+  assert.deepEqual(
+    named.rows.map((row) => row.kind === "player" && row.player.lastName),
+    ["Lindor"],
+  );
+  assert.equal(named.read, undefined);
+  const club = findListedPages("mets injured");
+  assert.deepEqual(
+    club.rows.map((row) => row.kind),
+    ["section"],
+  );
+  assert.equal(club.read, undefined);
+  for (const text of ["injured", "out", "injury report"]) {
+    const found = findListedPages(text);
+    assert.deepEqual([found.rows, found.read], [[], undefined], text);
+  }
+});
+
+test("every club's row has its record from the standings, and its record's words list it over its games", () => {
+  const mets = Object.values(SNAPSHOT.standings.divisions)
+    .flat()
+    .find((row) => row.id === "NYM");
+  const found = findListedPages("Mets record");
+  assert.deepEqual(
+    found.rows.map((row) => (row.kind === "team" ? row.team.record : row.kind)),
+    [`${mets.w}-${mets.l}`, "section"],
+  );
+});
+
+test("a club's news lists the News tab for the club and its newest stories", () => {
+  assert.deepEqual(
+    findListedPages("Mets news").rows.map((row) =>
+      row.kind === "story" ? row.story.title : row.kind === "place" && row.detail,
+    ),
+    ["Mets", "Soto's four hits power the Mets", "Lindor's homer lifts the Mets"],
+  );
+});
+
 test("the examples are three searches for games, then a player and a club's Roster", () => {
   const { examples } = listSearchPages({ index: INDEX, isSettingShown: () => true });
   assert.deepEqual(
@@ -414,13 +512,16 @@ test("the examples are three searches for games, then a player and a club's Rost
 // out. A new one fails the test below until it's here, so it's made searchable, or left out on
 // purpose.
 const COVERAGE = {
-  "tab:bracket": { search: "bracket", opens: "tab:bracket" },
+  "tab:bracket-standings": { search: "bracket", opens: "season:bracket" },
   "tab:games": { leftOut: "Typing games already searches every game" },
-  "tab:standings": { search: "standings", opens: "standings:playoffs" },
   "tab:news": { search: "news", opens: "tab:news" },
   "tab:search": { leftOut: "It's the search itself" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },
   "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
+  "dialog:homeScreenWelcome": {
+    leftOut:
+      "It shows once, before the page is added, and the box at the bottom of Settings keeps its steps",
+  },
   "sheet:gameSheet": { games: "Mets at Phillies" },
   "section:game": { games: "Mets at Phillies" },
   "section:matchup": { search: "Mets matchup", opens: "matchup" },
@@ -436,7 +537,8 @@ const COVERAGE = {
   "settings:paywalled": { search: "the athletic", opens: "settings:paywalled" },
   "settings:prospectus": { search: "prospectus", opens: "settings:prospectus" },
   "settings:home-screen": {
-    leftOut: "Shows only in a phone's browser, whose bar at the top also asks to add the page",
+    leftOut:
+      "Shows only in a phone's or tablet's browser, at the bottom of Settings, which search finds",
   },
   "settings:ranking": { search: "ranking", opens: "settings:ranking" },
   "settings:diagnostics": { search: "diagnostics", opens: "settings:diagnostics" },

@@ -2,7 +2,8 @@ import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -13,17 +14,18 @@ test.describe("on a phone, a team's sheet", () => {
     isMobile: true,
   });
 
-  test("sets its name like every team's at 20px, its numbers in Barlow Condensed like a game preview's, its text in medium but None yet a step lighter, and its title on the sheet's own color with no line under it, like a game's, with the titles of its nearest games 11.5px under it and its first part 16px under their cards", async ({
+  test("sets its name like every team's sheet, its numbers in Barlow Condensed like a game preview's, its text in medium but None yet a step lighter, and its title on the sheet's own color with no line under it, like a game's, with the titles of its nearest games 11.5px under it and its first part 16px under their cards", async ({
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator("table.players")).toBeVisible();
 
-    await expect(sheet.locator("#teamTitle")).toHaveCSS("font-weight", "600");
-    await expect(sheet.locator("#teamTitle")).toHaveCSS("font-size", "20px");
+    const teamLarge = await readRole(page, "team-large");
+    await expect(sheet.locator("#teamTitle")).toHaveCSS("font-weight", String(teamLarge.weight));
+    await expect(sheet.locator("#teamTitle")).toHaveCSS("font-size", `${teamLarge.size}px`);
     await expect(sheet.locator("#teamNote")).toHaveCSS("font-weight", "500");
     await expect(sheet.locator(".tape-value").first()).toHaveCSS(
       "font-family",
@@ -74,7 +76,7 @@ test.describe("a team's sheet in each theme", () => {
     }) => {
       await page.emulateMedia({ colorScheme });
       await openApp(page);
-      await page.getByRole("tab", { name: "Standings" }).click();
+      await openSeasonPart(page, "Standings");
       await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
       const titles = page.locator("#teamSheet .team-titles");
       await expect(titles).toHaveText("None yet");
@@ -107,7 +109,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     const app = await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="LVA"] .team-open').click();
     const sheet = page.locator("#teamSheet");
 
@@ -124,11 +126,11 @@ test.describe("a team's sheet", () => {
     await expect(sheet).toBeHidden();
   });
 
-  test("a team's sheet names the sides over its numbers at 16px, and sets Last 10 and Streak like its measures", async ({
+  test("a team's sheet names the sides over its numbers as teams, and sets Last 10 and Streak like its measures", async ({
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator("table.players")).toBeVisible();
@@ -152,7 +154,7 @@ test.describe("a team's sheet", () => {
     expect(styles.formNumber).toEqual(styles.number);
     await expect(sheet.locator(".team-numbers .tape-teams .club").first()).toHaveCSS(
       "font-size",
-      "16px",
+      `${(await readRole(page, "team")).size}px`,
     );
   });
 
@@ -160,7 +162,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
     const next = page.locator("#teamSheet .team-game.next");
     const icon = next.locator(".next-game-icon");
@@ -177,7 +179,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     const rows = await sheet
@@ -201,7 +203,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const club = page.locator("#teamSheet .team-numbers .tape-teams .club").first();
     const record = club.locator(".team-record");
@@ -219,15 +221,16 @@ test.describe("a team's sheet", () => {
     expect(
       Math.round(recordBox.top + recordBox.height / 2 - (nameBox.top + nameBox.height / 2)),
     ).toBe(1);
-    await expect(record).toHaveCSS("font-size", "14px");
-    await expect(record).toHaveCSS("font-weight", "500");
+    const detail = await readRole(page, "detail");
+    await expect(record).toHaveCSS("font-size", `${detail.size}px`);
+    await expect(record).toHaveCSS("font-weight", String(detail.weight + 100));
   });
 
   test("Last 10 sits 20px under the regular season's ranks, and Streak 14px under Last 10", async ({
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     const numbers = await sheet.locator(".team-ranks").last().boundingBox();
@@ -244,7 +247,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="NYL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator(".team-ranks .player-curve svg").first()).toBeVisible();
@@ -292,7 +295,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator(".placed-legend")).toHaveText(
@@ -308,7 +311,7 @@ test.describe("a team's sheet", () => {
       expect(dash.meets).toBeCloseTo(0, 1);
       expect(dash.isGapFirst).toBe(true);
     }
-    expect(await listOffScaleText(page)).toEqual([]);
+    expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
   });
@@ -320,16 +323,17 @@ test.describe("a team's sheet", () => {
 
     await expect(title).toHaveText("New York Liberty");
     await expect(title).toHaveCSS("font-family", /^"Barlow Condensed"/);
-    await expect(title).toHaveCSS("font-weight", "600");
+    const teamLarge = await readRole(page, "team-large");
+    await expect(title).toHaveCSS("font-weight", String(teamLarge.weight));
     await expect(title).toHaveCSS("text-transform", "none");
-    await expect(title).toHaveCSS("font-size", "20px");
+    await expect(title).toHaveCSS("font-size", `${teamLarge.size}px`);
   });
 
   test("a team's name under the pointer shifts its color a little toward the accent, with no underline", async ({
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const name = page
       .locator('#standings-league tr[data-team="LVA"] .team-open')
       .locator(".team-name");
@@ -358,7 +362,7 @@ test.describe("a team's sheet", () => {
 
   test("a team's name in the standings opens its sheet from the keyboard", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const fever = page.locator("#standings-league").getByRole("button", {
       name: "Team details: Indiana Fever",
     });
@@ -372,7 +376,7 @@ test.describe("a team's sheet", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const aces = page.locator("#standings-league").getByRole("button", {
       name: "Team details: Las Vegas Aces",
     });
@@ -387,7 +391,7 @@ test("a team's leading scorers set their shooting and minutes a step back, a sma
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await page.locator('#standings-league tr[data-team="ATL"] .team-open').click();
   const quiet = page
     .locator("#teamSheet table.players tbody tr:not(.players-head)")
@@ -435,7 +439,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("tab", { name: "Standings" }).click();
+    await openSeasonPart(page, "Standings");
     const sheet = page.locator("#teamSheet");
     for (const code of ["LVA", "LAS", "CON", "CHI"]) {
       await page.locator(`#standings-league tr[data-team="${code}"] .team-open`).click();

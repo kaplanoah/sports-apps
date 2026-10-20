@@ -29,17 +29,31 @@
 }
 @font-face {
   font-family: "Barlow";
+  font-weight: 300;
+  font-display: swap;
+  src: url(fonts/barlow-300.woff2) format("woff2");
+}
+@font-face {
+  font-family: "Barlow";
   font-weight: 400;
   font-display: swap;
   src: url(fonts/barlow-400.woff2) format("woff2");
 }
-/* The Season picker sets 16px, which an iPhone doesn't zoom into when it's tapped, so this draws
-   Barlow smaller to look as it does at --size-glance's 14px (14 / 16). */
+/* Fields set 16px, which an iPhone doesn't zoom into when they're tapped, so these draw Barlow
+   smaller to look as it does at their role: the search at the body's 14.75px (14.75 / 16) and the
+   Season picker at the detail's 13.5px (13.5 / 16). */
+@font-face {
+  font-family: "Barlow Search";
+  font-weight: 300;
+  font-display: swap;
+  size-adjust: 92.1875%;
+  src: url(fonts/barlow-300.woff2) format("woff2");
+}
 @font-face {
   font-family: "Barlow Select";
   font-weight: 400;
   font-display: swap;
-  size-adjust: 87.5%;
+  size-adjust: 84.375%;
   src: url(fonts/barlow-400.woff2) format("woff2");
 }
 @font-face {
@@ -96,12 +110,14 @@
  * screen both lift off the page by a soft shadow. A bar held at the top of the page is the floor's
  * color, with a line under it only once something scrolls under it, never a fade.
  *
- * Buttons say what they do in sentence case, as capitals are only for labels and chips. The one
- * that's on, like the list a pill shows, is filled orange, inside a darker edge, and the rest are
- * raised and outlined, in ink, with any icon in orange, but for a pill's other names, which are
- * plain words, and a sheet's close and back buttons, which are just their orange icons. A switch
- * stays round, like the phone's own.
- * Each is --control-height tall at --control-weight, its words centered on their capitals.
+ * Buttons say what they do in sentence case, as capitals are only for labels and chips, and for the
+ * tabs a wide screen shows, which sit in one track of the divider's color faded into the floor, as a
+ * segmented control.
+ * The one that's on, like the list a pill shows or the open tab, is filled orange, inside a darker
+ * edge, and the rest are raised and outlined, in ink, with any icon in orange, but for a pill's
+ * other names and the other tabs, which are plain words, and a sheet's close and back buttons,
+ * which are just their orange icons. A switch stays round, like the phone's own.
+ * Each is --control-height tall, its words the setting role's, centered on their capitals.
  *
  * Text stops at 600.
  */
@@ -115,6 +131,9 @@
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
+  /* Barlow's digits sit low in their line, which would leave each step's number under its
+     circle's middle. */
+  --step-number-lift: 0.5px;
   --orange: #a23a0a;
   --orange-ink: #ffffff;
   --teal: #0b6860;
@@ -153,10 +172,12 @@
   --radius-card: 2px;
   --radius-chip: 2px;
   --radius-control: 3px;
+  --radius-tabs: 3px;
   --radius-sheet: 14px;
-  --control-height: 30px;
-  --control-weight: 500;
-  --control-room: 13px;
+  /* Puts the channel tag's middle on the middle of the name's capitals. */
+  --channel-tag-lift: 0.25px;
+  --control-height: 36px;
+  --control-room: 15px;
   --scoreboard: #24180e;
   --led: #f84434;
   --led-dim: #e8291c;
@@ -180,22 +201,46 @@
   --switch-knob: #f1e9df;
   --display: "Barlow", system-ui, sans-serif;
   --numbers: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --heading: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --title-face: "Barlow Condensed", "Arial Narrow", sans-serif;
   --team-name: "Barlow Condensed", "Arial Narrow", sans-serif;
-  /* Barlow Condensed reads a little smaller than Barlow in a sentence, so it takes its own size there,
-     matched by eye. */
-  --size-read-condensed: 1.03125rem;
-  /* Today's note when it has no games, a half step under a sentence. */
-  --size-empty-day: 0.96875rem;
-  /* A player's Out box sets why she is out a step over a short fact, so it leads, and RotoWire's
-     sentence on it half a pixel over one. */
-  --size-out-reason: 0.9375rem;
-  --size-out-sentence: 0.90625rem;
-  --gate-heading-font: var(--heading);
+  /* Each type role's size and weight in Barlow, and Barlow Condensed where a role sets it
+     (shared/page/type.css). */
+  --type-title-size: calc(23.5rem / 16);
+  --type-title-weight: 500;
+  --type-headline-size: calc(17.75rem / 16);
+  --type-headline-weight: 600;
+  --type-heading-size: calc(16.5rem / 16);
+  --type-heading-weight: 500;
+  --type-heading-tracking: 0.03em;
+  --type-team-large-size: calc(17.75rem / 16);
+  --type-team-large-weight: 500;
+  --type-team-size: calc(15.5rem / 16);
+  --type-team-weight: 500;
+  --type-team-compact-size: calc(15.25rem / 16);
+  --type-team-compact-weight: 500;
+  --type-score-size: calc(22rem / 16);
+  --type-score-weight: 500;
+  --type-stat-large-size: calc(18.25rem / 16);
+  --type-stat-large-weight: 600;
+  --type-stat-size: calc(15.75rem / 16);
+  --type-stat-weight: 500;
+  --type-body-size: calc(14.75rem / 16);
+  --type-body-weight: 300;
+  --type-detail-size: calc(13.5rem / 16);
+  --type-detail-weight: 400;
+  --type-label-size: calc(13rem / 16);
+  --type-label-weight: 600;
+  --type-label-tracking: 0.075em;
+  --type-caption-size: calc(13rem / 16);
+  --type-caption-weight: 400;
+  --type-setting-size: calc(15.75rem / 16);
+  --type-setting-weight: 400;
+  --type-setting-note-size: calc(13.75rem / 16);
+  --type-setting-note-weight: 400;
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --text: "Barlow", system-ui, sans-serif;
-  --search-face: var(--text);
+  --search-face: "Barlow Search", system-ui, sans-serif;
   /* Barlow's capitals sit low in a line, so a search row's words rise 1.25px to look centered. */
   --search-words-lift: 2.5px;
   --select-face: "Barlow Select", system-ui, sans-serif;
@@ -203,6 +248,11 @@
   --header-gap: 14px;
   --pager-label: var(--ink);
   --pager-chosen-edge: color-mix(in srgb, var(--action) 70%, var(--shadow-ink));
+  --tabs-track: color-mix(in oklab, var(--divider) 45%, var(--bg));
+  --tabs-track-edge: var(--edge);
+  --tabs-chosen: var(--action);
+  --tabs-chosen-edge: var(--pager-chosen-edge);
+  --tabs-chosen-ink: var(--action-ink);
   --strip-month: var(--structure);
   --strip-today: var(--now);
   --strip-chosen: var(--action);
@@ -211,14 +261,14 @@
   --strip-action: var(--action);
   --strip-edge-inset: 2px;
   --day-gap: 8px;
-  --held-bar-fade: 0px;
+  --date-one-shift: 0.065em;
   --held-bar-line: var(--divider);
   --updates-head: var(--structure);
   --sheet-part-head: var(--structure);
   --game-card-edge: var(--edge);
   /* A player's Out box takes the floor's edge a little lighter, richer, and toward the orange. */
   --out-box-edge: #e6c89f;
-  --game-card-live: var(--now);
+  --game-card-now: var(--now);
   --game-card-won: var(--result);
   --game-card-team-font: var(--team-name);
   --game-row-height: 90px;
@@ -280,7 +330,7 @@ body {
   font-size: 16px;
   /* Insets are zero except in the home-screen app, which draws under the status bar and notch. */
   padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
-  padding-block: calc(17px + env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
+  padding-block: calc(17px + env(safe-area-inset-top)) var(--view-end-room);
 }
 h1,
 h2,
@@ -310,25 +360,27 @@ header.top {
   gap: 10px;
 }
 .season-year {
-  font-weight: 400;
+  font-weight: calc(var(--type-title-weight) - 200);
+  letter-spacing: 0.04em;
   color: var(--ink-dim);
 }
 header.top h1 {
-  font-family: var(--heading);
-  font-size: 1.72rem;
-  font-weight: 600;
-  line-height: 1;
+  --title-tracking: 0.06em;
+  font-family: var(--title-face);
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--title-tracking);
 }
-/* On a wide screen, the tabs that aren't open read as buttons, with a firmer outline and darker
-   text than the shared chrome gives them. Phones keep their floating tab bar. */
-@media (min-width: 780px) {
-  .tab-list button:not(.active),
-  nav.tabs .search-tab:not(.active) {
-    border-color: color-mix(in srgb, var(--card-border), var(--ink) 35%);
-    color: color-mix(in srgb, var(--ink-dim), var(--ink) 60%);
-  }
+/* The name is kerned pair by pair: a letter's margin moves the space after it from the title's
+   spacing to its own, which keeps the font's kerning where a letter's own spacing would drop it. */
+header.top h1 .title-letter:nth-child(1),
+header.top h1 .title-letter:nth-child(2) {
+  margin-right: calc(0.025em - var(--title-tracking));
+}
+header.top h1 .title-letter:nth-child(3) {
+  margin-right: calc(0.065em - var(--title-tracking));
 }
 .head-right {
   display: flex;
@@ -342,8 +394,9 @@ header.top h1 {
   align-items: flex-end;
   gap: 4px;
   min-width: 0;
-  font-size: var(--size-glance);
-  line-height: 1.35;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.35 * var(--leading));
   color: var(--ink-dim);
   text-align: right;
 }
@@ -351,19 +404,25 @@ header.top h1 {
   display: none;
 }
 .stamp b {
-  font-weight: 500;
+  font-weight: calc(var(--type-detail-weight) + 100);
   color: var(--ink);
 }
+/* The smaller Now and PM sit inside their line's height, so the header keeps its height as they
+   come and go. */
 .stamp b.now {
   margin-right: 0.25ch;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: calc(var(--type-caption-weight) + 100);
+  line-height: var(--leading);
 }
 .stamp .sep {
   margin: 0 3px;
 }
 .stamp .ap {
   margin-left: 0.5ch;
-  font-size: 0.95em;
+  font-size: var(--type-caption-size);
+  font-weight: calc(var(--type-caption-weight) + 100);
+  line-height: var(--leading);
 }
 .stamp-err {
   color: var(--now);
@@ -372,16 +431,17 @@ header.top h1 {
 .section-label {
   margin: 0 0 6px;
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--structure);
 }
 .empty-note {
   margin: 8px 0 18px;
   color: var(--ink-dim);
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
 }
 /* The season's games sit under a strip of its days, whose month's capitals start 14.5px under the
    header's line. Today's date is orange, as it is in the strip. */
@@ -398,8 +458,9 @@ header.top h1 {
 /* Centered beside today's date, its capitals 41.9px down the day, a touch above the middle of the
    date's number, where they look level to the eye. */
 .no-games .empty-note {
-  margin: calc(41.9px - 0.35 * var(--size-empty-day)) 0 0;
-  font-size: var(--size-empty-day);
+  margin: calc(41.9px - 0.35 * var(--type-body-size)) 0 0;
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
   text-align: center;
   text-box: trim-both cap alphabetic;
 }
@@ -413,7 +474,8 @@ header.top h1 {
 .no-games.quiet-day .empty-note {
   margin: 0;
   padding-left: var(--day-inset);
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   text-align: left;
 }
@@ -447,7 +509,7 @@ header.top h1 {
   gap: 6px;
   min-width: 0;
   font-family: var(--team-name);
-  font-weight: 600;
+  font-weight: var(--type-team-weight);
   letter-spacing: 0.02em;
 }
 .club .team-name {
@@ -457,13 +519,13 @@ header.top h1 {
 }
 .club.tbd {
   color: var(--ink-dim);
-  font-weight: 500;
+  font-weight: calc(var(--type-team-weight) - 100);
 }
 /* A little below the name's middle, where it sits level with the name's baseline. */
 .seed {
   translate: 0 1px;
-  font-size: var(--size-small);
-  font-weight: 400;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 /* In a game's row, the names, seeds, and time center on their capitals, so they sit level with each
@@ -497,6 +559,12 @@ header.top h1 {
 .game-side .club {
   gap: 8px;
 }
+.team-line .club {
+  font-weight: var(--type-team-large-weight);
+}
+.team-line .club.tbd {
+  font-weight: calc(var(--type-team-large-weight) - 100);
+}
 .team-line .dot,
 .game-side .dot {
   width: 16px;
@@ -523,28 +591,28 @@ header.top h1 {
 }
 .day-month {
   font-family: var(--text);
-  font-size: var(--size-small);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--structure);
 }
 .day-number {
   margin-top: 3px;
   font-family: var(--display);
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 0.8;
+  font-size: var(--type-score-size);
+  font-weight: var(--type-score-weight);
+  line-height: calc(0.8 * var(--leading));
 }
 .day-name {
   margin-top: 4.5px;
   font-family: var(--text);
-  font-size: var(--size-small);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .game-day .game-list {
@@ -599,7 +667,8 @@ header.top h1 {
     --day-inset: 4px;
   }
   .game-day .game-side .club {
-    font-size: 0.925rem;
+    font-size: var(--type-team-compact-size);
+    font-weight: var(--type-team-compact-weight);
   }
   .game-day .score {
     gap: 4px;
@@ -613,7 +682,8 @@ header.top h1 {
 }
 .game-side .club {
   max-width: 100%;
-  font-size: 0.97rem;
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
 .game-side.home .club {
   flex-direction: row-reverse;
@@ -687,26 +757,25 @@ header.top h1 {
 }
 .game-status,
 .series-label {
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
-  line-height: 1;
+  line-height: var(--leading);
 }
 .game-status {
   font-family: var(--display);
-  font-weight: 600;
-  letter-spacing: 0.08em;
 }
 /* A game that may never happen reads a weight lighter than one that's over. */
 .if-needed {
-  font-weight: 500;
+  font-weight: calc(var(--type-label-weight) - 100);
   color: var(--ink-dim);
 }
 /* Labels in the text face stand apart from the condensed team names around them. */
 .series-label {
   font-family: var(--text);
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-weight: calc(var(--type-label-weight) - 100);
 }
 .series-count {
   color: var(--ink-mid);
@@ -717,8 +786,8 @@ header.top h1 {
 }
 .clock {
   font-family: var(--numbers);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 200);
   text-transform: none;
   letter-spacing: normal;
   color: var(--now);
@@ -730,8 +799,8 @@ header.top h1 {
 }
 .time {
   font-family: var(--numbers);
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: var(--type-stat-large-size);
+  font-weight: var(--type-stat-large-weight);
 }
 /* Bonus is happening now, so it's outlined in orange, like foul trouble. */
 .bonus {
@@ -740,11 +809,11 @@ header.top h1 {
   border-radius: var(--radius-chip);
   color: var(--now);
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   line-height: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
 }
 
 /* The game sheet: the two teams across the score in its band, then the game's parts, each under a
@@ -818,7 +887,7 @@ header.top h1 {
 .sheet-page .sheet-top {
   position: relative;
   min-height: 0;
-  padding-top: calc(env(safe-area-inset-top) + var(--band-room-above));
+  padding-top: calc(var(--top-inset) + var(--band-room-above));
   padding-bottom: var(--band-room-below);
 }
 .sheet-page .sheet-top:has(> .pager-tabs:not([hidden])) {
@@ -845,9 +914,8 @@ header.top h1 {
   position: static;
 }
 .sheet-page .sheet-top :is(.sheet-close, .sheet-back) {
-  top: calc(env(safe-area-inset-top) + var(--band-button-top));
+  top: calc(var(--top-inset) + var(--band-button-top));
   left: 6px;
-  margin-top: 0;
 }
 /* The teams and the score hold one row, so they sit the same under every game's title, each team
    --faceoff-teams-drop lower than the score's middle, and what shows under them only adds rows:
@@ -897,7 +965,8 @@ header.top h1 {
 }
 .faceoff-side .club {
   max-width: 100%;
-  font-size: 1.15rem;
+  font-size: var(--type-team-large-size);
+  font-weight: var(--type-team-large-weight);
 }
 .faceoff-side.home .club {
   flex-direction: row-reverse;
@@ -906,14 +975,9 @@ header.top h1 {
   color: var(--ink-dim);
 }
 .faceoff-record {
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
-}
-.game-sheet .sheet-head h2 {
-  font-size: 1.03125rem;
-}
-.sheet-note {
-  font-size: var(--size-glance);
 }
 .faceoff-score {
   grid-area: score;
@@ -927,7 +991,8 @@ header.top h1 {
   --digit-height: 28px;
 }
 .faceoff .time {
-  font-size: 1.3rem;
+  font-size: var(--type-score-size);
+  font-weight: var(--type-score-weight);
   white-space: nowrap;
 }
 .faceoff-side .bonus {
@@ -952,15 +1017,16 @@ header.top h1 {
   justify-self: center;
   margin-top: var(--faceoff-status-gap);
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
 .sheet-message {
   margin: 0;
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
   color: var(--ink-dim);
 }
 .tape-teams {
@@ -969,13 +1035,11 @@ header.top h1 {
   gap: 10px;
 }
 .tape-teams .club {
-  font-size: 0.85rem;
+  font-size: var(--type-team-compact-size);
+  font-weight: var(--type-team-compact-weight);
 }
 .tape-teams .club + .club {
   flex-direction: row-reverse;
-}
-.tape-label {
-  font-size: var(--size-small);
 }
 /* Road on the visitors' side and Home on the hosts', with a thin rule between. */
 .label-split {
@@ -991,27 +1055,28 @@ header.top h1 {
 }
 .tape-value {
   font-family: var(--numbers);
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
 }
 .tape-detail {
   font-family: var(--text);
-  font-size: var(--size-small);
 }
 .tape-note {
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 
 /*
  * The lead through the game: a fine step line on a tile, each team's half shaded faintly in its
- * color, and named and its biggest lead marked in it. The words sit over the drawing at the type
- * scale's size, placed by the shares of its width and height that lead-chart.js hands them.
+ * color, and named and its biggest lead marked in it. The words sit over the drawing at their
+ * roles' sizes, placed by the shares of its width and height that lead-chart.js hands them.
  */
 .lead-chart {
   display: grid;
   gap: 6px;
-  font-size: var(--size-small);
-  line-height: 1;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--leading);
 }
 .lead-plot {
   position: relative;
@@ -1067,8 +1132,9 @@ header.top h1 {
   margin: 0;
   padding-left: var(--plot-left);
   font-family: var(--numbers);
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--side-name);
 }
@@ -1083,7 +1149,7 @@ header.top h1 {
   right: calc(100% - var(--plot-left) + 5px);
   translate: 0 -50%;
   font-family: var(--numbers);
-  font-weight: 500;
+  font-weight: calc(var(--type-caption-weight) + 100);
   color: var(--ink-dim);
 }
 /* A label about half its length from the tile's edges, in Barlow Condensed's average width, so
@@ -1097,7 +1163,7 @@ header.top h1 {
     calc(100% - var(--plot-right) - var(--half))
   );
   font-family: var(--numbers);
-  font-weight: 600;
+  font-weight: calc(var(--type-caption-weight) + 200);
   color: var(--side-name);
 }
 .lead-peak-label.away {
@@ -1115,7 +1181,7 @@ header.top h1 {
   top: 0;
   left: var(--x);
   translate: -50%;
-  font-weight: 600;
+  font-weight: calc(var(--type-caption-weight) + 200);
   letter-spacing: 0.05em;
   color: var(--ink-dim);
 }
@@ -1134,9 +1200,9 @@ table.line-score th,
 table.players .players-head th {
   padding: 0 0 5px;
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   text-align: center;
   color: var(--ink-dim);
@@ -1146,8 +1212,8 @@ table.line-score tbody th {
   padding: 6px 0;
   border-top: 1px solid var(--divider);
   font-family: var(--numbers);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
   text-align: center;
 }
 table.line-score tbody th {
@@ -1157,7 +1223,8 @@ table.line-score tbody th {
   color: var(--ink);
 }
 table.line-score tbody th .club {
-  font-size: 0.9rem;
+  font-size: var(--type-team-compact-size);
+  font-weight: var(--type-team-compact-weight);
 }
 table.line-score td {
   width: 11%;
@@ -1166,14 +1233,14 @@ table.line-score .now {
   color: var(--now);
 }
 table.line-score th.now {
-  font-weight: 600;
+  font-weight: var(--type-label-weight);
 }
 table.line-score .ahead {
   color: var(--ink-dim);
   opacity: 0.5;
 }
 table.line-score .total {
-  font-weight: 600;
+  font-weight: var(--type-stat-weight);
 }
 table.line-score .lost {
   color: var(--ink-dim);
@@ -1191,7 +1258,8 @@ table.players tbody + tbody .players-head th {
   padding-top: 14px;
 }
 table.players .players-head th .club {
-  font-size: 0.85rem;
+  font-size: var(--type-team-compact-size);
+  font-weight: var(--type-team-compact-weight);
   letter-spacing: 0.02em;
   text-transform: none;
   color: var(--ink);
@@ -1201,16 +1269,16 @@ table.players th[scope="row"] {
   padding: 6px 0 6px 8px;
   border-top: 1px solid var(--divider);
   font-family: var(--numbers);
-  font-size: 0.98rem;
-  font-weight: 600;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
   text-align: right;
   white-space: nowrap;
 }
 table.players th[scope="row"] {
   padding-left: 0;
   font-family: var(--text);
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
   text-align: left;
 }
 /* Barlow sits low beside Barlow Condensed's numbers, so a player's name rises a pixel, and a chip
@@ -1224,14 +1292,14 @@ table.players th[scope="row"] .foul-chip {
   top: 1px;
 }
 table.players td.quiet-stat {
-  font-weight: 500;
+  font-weight: calc(var(--type-stat-weight) - 100);
   color: var(--quiet-stat-ink);
 }
 /* A lighter first name beside a bolder last name reads closer than a word space, so it takes a
    pixel more. */
 .first-name {
   margin-right: 1px;
-  font-weight: 400;
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 .foul-chip {
@@ -1241,9 +1309,9 @@ table.players td.quiet-stat {
   border: 1px solid currentColor;
   border-radius: var(--radius-chip);
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   vertical-align: 1px;
   white-space: nowrap;
@@ -1312,9 +1380,9 @@ table.roster thead {
 table.roster thead th {
   padding: 0 0 5px 14px;
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   text-align: right;
   white-space: nowrap;
@@ -1350,8 +1418,8 @@ table.roster tbody tr:first-child > * {
 }
 table.roster tbody td {
   font-family: var(--text);
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
   text-align: right;
   color: var(--ink);
 }
@@ -1359,7 +1427,7 @@ table.roster .roster-text {
   text-align: left;
 }
 table.roster td.roster-text {
-  font-weight: 400;
+  font-weight: var(--type-detail-weight);
 }
 .roster-country {
   color: var(--ink-mid);
@@ -1393,10 +1461,9 @@ table.roster .roster-number {
   padding-right: var(--roster-number-gap);
   text-align: center;
 }
-/* A half step over the facts beside it, so a player's number reads at a glance. */
 table.roster td.roster-number {
-  font-size: 14.5px;
-  font-weight: 400;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 /* The line at the names' edge keeps clear of the longest name and its Out chip. */
@@ -1425,7 +1492,7 @@ table.roster .roster-bands .roster-player::after {
   top: calc(-1 * var(--roster-space-above));
 }
 table.roster tbody th.roster-player {
-  line-height: 1.2;
+  line-height: calc(1.2 * var(--leading));
 }
 .roster-first,
 .roster-last {
@@ -1433,16 +1500,16 @@ table.roster tbody th.roster-player {
 }
 .roster-first {
   margin-bottom: 1px;
-  font-size: var(--size-glance);
-  font-weight: 400;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-mid);
 }
 /* A last name's line is one line tall, so an Out chip, which rises a little past it, doesn't make
    its row taller than the rest. */
 .roster-last {
   height: 1lh;
-  font-size: var(--size-read);
-  font-weight: 600;
+  font-size: var(--type-body-size);
+  font-weight: calc(var(--type-body-weight) + 200);
   color: var(--ink);
 }
 .roster-sort {
@@ -1483,16 +1550,16 @@ th[aria-sort="ascending"] .roster-caret {
   border-top: 1px solid var(--divider);
 }
 .roster-coach dt {
-  font-size: var(--size-small);
-  font-weight: 500;
-  letter-spacing: 0.07em;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
 .roster-coach dd {
   margin: 0;
-  font-size: var(--size-glance);
-  font-weight: 400;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink);
 }
 
@@ -1509,7 +1576,8 @@ th[aria-sort="ascending"] .roster-caret {
   gap: 8px;
   padding: 7px 0;
   border-bottom: 1px solid var(--divider);
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 .meeting-result {
@@ -1519,13 +1587,14 @@ th[aria-sort="ascending"] .roster-caret {
   min-width: 0;
 }
 .meeting-result .club {
-  font-size: 0.9rem;
+  font-size: var(--type-team-compact-size);
+  font-weight: var(--type-team-compact-weight);
   color: var(--ink);
 }
 .meeting-score {
   font-family: var(--numbers);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
   color: var(--ink);
 }
 
@@ -1550,11 +1619,11 @@ th[aria-sort="ascending"] .roster-caret {
   display: grid;
   grid-template-columns: repeat(3, var(--round-width));
   grid-template-rows:
-    auto 14px auto var(--card-gap) auto var(--card-gap) auto var(--card-gap)
+    auto 16px auto var(--card-gap) auto var(--card-gap) auto var(--card-gap)
     auto;
   column-gap: var(--round-gap);
   margin-inline: calc(-1 * var(--page-gutter));
-  padding: 2px calc((100cqw - var(--round-width)) / 2 + var(--page-gutter)) 20px
+  padding: 10px calc((100cqw - var(--round-width)) / 2 + var(--page-gutter)) 20px
     calc(var(--page-gutter) + var(--seed-room));
   scroll-padding-inline: var(--page-gutter);
   overflow-x: auto;
@@ -1580,30 +1649,28 @@ th[aria-sort="ascending"] .roster-caret {
 .bracket-turns {
   clip-path: inset(0 0 0 calc(var(--scroll-left, 0px) + var(--page-gutter)));
 }
-/* A round's name, with Best of in the text face just after it, on the name's baseline but lifted
-   half a pixel, which looks level beside the name's heavier capitals. */
+/* A round's name, set as a sheet's title is, with Best of just after it on the name's baseline but
+   lifted half a pixel, which looks level beside the name's larger capitals. */
 .round-name {
   grid-row: 1;
   display: flex;
   align-items: baseline;
   gap: 10px;
   padding-inline: 2px;
-  font-family: var(--heading);
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  line-height: var(--leading);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--type-heading-tracking);
   white-space: nowrap;
   color: var(--ink);
   scroll-snap-align: start;
 }
 .round-name .best-of {
   translate: 0 -0.5px;
-  font-family: var(--text);
-  font-size: var(--size-small);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-mid);
 }
 .round-name.round-1 {
@@ -1659,9 +1726,9 @@ th[aria-sort="ascending"] .roster-caret {
   padding-left: 1px;
   overflow: hidden;
   font-family: var(--text);
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
   font-style: italic;
-  font-weight: 500;
+  font-weight: calc(var(--type-detail-weight) + 100);
   letter-spacing: 0.01em;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1678,7 +1745,8 @@ th[aria-sort="ascending"] .roster-caret {
   gap: 8px;
   height: 42px;
   padding: 0 10px;
-  font-size: 1.12rem;
+  font-size: var(--type-team-large-size);
+  font-weight: var(--type-team-large-weight);
 }
 .team-line + .team-line {
   border-top: 1px solid var(--divider);
@@ -1712,18 +1780,18 @@ th[aria-sort="ascending"] .roster-caret {
   display: flex;
   align-items: flex-end;
   gap: 0.45em;
-  font-size: var(--size-small);
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.06em;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
+  line-height: var(--leading);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ink-dim);
 }
 .seed-number {
-  font-size: 1.25em;
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
+  line-height: var(--leading);
   letter-spacing: 0;
   color: var(--ink);
 }
@@ -1748,9 +1816,9 @@ th[aria-sort="ascending"] .roster-caret {
     drop-shadow(1.06px 1.06px 8.5px color-mix(in srgb, var(--shadow-ink) 8%, transparent));
   color: var(--ink-mid);
   font-family: var(--numbers);
-  font-size: 1.45rem;
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-score-size);
+  font-weight: var(--type-score-weight);
+  line-height: var(--leading);
   text-shadow: 0.57px 0.57px 0 var(--engrave-light);
 }
 .team-line .wins > span {
@@ -1822,15 +1890,12 @@ th[aria-sort="ascending"] .roster-caret {
   }
   .team-line {
     height: 46px;
-    font-size: 1.25rem;
   }
   .round-dots {
     display: none;
   }
 }
 
-/* The Updates box's count is a label like the sheets' titles, and its team names are in the team
-   font, a step lighter than elsewhere, so they stand out in the sentence without outweighing it. */
 /* The Updates box is a card like any other, raised off the floor inside an edge. */
 .updates {
   border-color: var(--edge);
@@ -1838,72 +1903,99 @@ th[aria-sort="ascending"] .roster-caret {
 }
 .updates-count {
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: var(--type-label-weight);
 }
 .updates-list .what {
-  line-height: 1.3;
+  line-height: calc(1.3 * var(--leading));
 }
-.updates > .updates-list .what b {
-  font-family: var(--team-name);
-  font-size: var(--size-read-condensed);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-/* A release note's word that should stand out stays in its text's font, a step heavier. */
-.updates-notes .what b {
-  font-weight: 500;
+/* A final's team names and a release note's word that should stand out stay in the line's font, at
+   500, as MLB's do. */
+.updates-list .what b {
+  font-weight: calc(var(--type-body-weight) + 200);
 }
 
-/* A pill's names are buttons, so they're in sentence case at a button's weight and height, their
-   words a pixel above center on their capitals, where they look centered in the fill. The pill sits
-   a little closer under the header than a view's first card, as the control it is, with the bar's
-   reach up under the status bar kept inside it. */
-.pager {
-  display: flow-root;
+/* The pill sits a little closer under the header than a view's first card, as the control it is. */
+section.bracket-standings.active {
   margin-top: calc(10px - var(--header-gap));
 }
 .pager-bar {
   padding-bottom: 9px;
 }
-.pager-tabs button {
-  height: var(--control-height);
-  padding: 0 var(--control-room) 2px;
-  align-content: center;
-  font-size: var(--size-glance);
-  font-weight: var(--control-weight);
+/* Every button's words, from a wide screen's tabs to the gate's Open, in sentence case but for the
+   tabs. */
+.tab-list button,
+nav.tabs .search-tab,
+.pager-tabs button,
+.read-button,
+.retry-button,
+.open-button {
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
   letter-spacing: 0.01em;
-  text-transform: none;
-  text-box: trim-both cap alphabetic;
+}
+.tab-list button,
+nav.tabs .search-tab {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
-/* Standings: one table at a phone's width for the league and each conference, side by side under
-   a pill like the Games view's. W-L and GB lead as the season; L10 and Strk follow as recent
-   form, until the playoffs' first round and where each team's run stands take their place. The
-   column names sit on the page, like a day's date beside its games, and the teams on one card. */
+/* Standings: one table at a phone's width for the league and each conference, one under another,
+   each named in its team column's head, where its teams' names start, in the teal of the column
+   groups above it. W-L and GB lead as the season; L10 and Strk follow as recent form, until the
+   playoffs' first round and where each team's run stands take their place. The column names sit on
+   the page, like a day's date beside its games, and the teams on one card. */
+#standingsWrap {
+  max-width: 560px;
+  padding-top: 3.5px;
+}
+/* Each table lays out in a grid, where its clip, at least as wide as the table at its narrowest, fits
+   the table to the list's width.
+   A table wider than the room reaches into the gutter and is cut off at the screen's edge, rather
+   than scrolling the page sideways. */
+.standings-list {
+  display: grid;
+  margin-right: calc(-1 * var(--page-gutter));
+  padding-right: var(--page-gutter);
+  overflow-x: clip;
+}
+.standings-list + .standings-list {
+  margin-top: 30px;
+}
+/* The gaps before each column, before the second of a pair, and before the playoffs. */
 table.standings {
+  --column-gap: 12px;
+  --pair-gap: 16px;
+  --group-gap: 21px;
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.85rem;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 table.standings th {
-  padding: 0 0 6px 12px;
+  padding: 0 0 6px var(--column-gap);
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   text-align: center;
   color: var(--ink-dim);
 }
 table.standings tr.groups th {
   padding-bottom: 6px;
-  font-size: var(--size-small);
-  letter-spacing: 0.1em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
+  color: var(--structure);
+}
+table.standings th.list-title {
+  padding-left: 0;
+  text-align: left;
   color: var(--structure);
 }
 table.standings td {
-  padding: 10px 0 10px 12px;
+  padding: 10px 0 10px var(--column-gap);
   border-top: 1px solid var(--divider);
   background: var(--raised);
   text-align: center;
@@ -1956,37 +2048,38 @@ table.standings th:last-child {
   padding-right: 11px;
 }
 table.standings .pair-end {
-  padding-left: 16px;
+  padding-left: var(--pair-gap);
 }
 table.standings .recent-start {
-  padding-left: 21px;
+  padding-left: var(--group-gap);
+}
+/* On a phone narrower than 390px, the gaps close so every table ends inside the screen. */
+@media (max-width: 389px) {
+  table.standings {
+    --column-gap: 8px;
+    --pair-gap: 11px;
+    --group-gap: 14px;
+  }
 }
 table.standings td.season {
-  font-size: 0.92rem;
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
 }
 table.standings td.recent {
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-caption-size);
+  font-weight: calc(var(--type-caption-weight) + 100);
   color: var(--ink-mid);
 }
 table.standings th.recent {
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
 }
 table.standings tr.below td {
   color: var(--ink-dim);
 }
-.streak-won,
-.series-won,
-.still-in {
-  font-weight: 600;
-}
 .playoff-out {
   color: var(--ink-dim);
-}
-/* Bold reads darker, so a winning streak below the line steps paler to sit with its row. */
-tr.below .streak-won {
-  color: color-mix(in srgb, var(--ink-dim) 65%, var(--bg));
 }
 /* The chip centers on the name, rather than sharing its baseline. */
 .team-cell {
@@ -1997,7 +2090,8 @@ tr.below .streak-won {
   vertical-align: middle;
 }
 table.standings td.team .club {
-  font-size: 1rem;
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
 /* Barlow's line runs well above its capitals, so the letter is trimmed to its capital and centers
    by what's drawn. */
@@ -2006,16 +2100,16 @@ table.standings td.team .club {
   border: 1px solid currentColor;
   border-radius: var(--radius-chip);
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--type-caption-size);
+  font-weight: calc(var(--type-caption-weight) + 200);
+  line-height: var(--leading);
   text-box: trim-both cap alphabetic;
   color: var(--ink-mid);
 }
 .seed-note {
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-caption-size);
+  font-weight: calc(var(--type-caption-weight) + 200);
   letter-spacing: 0.06em;
   color: var(--structure);
 }
@@ -2040,11 +2134,9 @@ table.standings tr.playoff-line + tr td {
    name and its parts under teal titles. A team's name or dot opens it wherever it shows, and in
    the standings and the bracket so does the rest of its row. */
 @media (hover: hover) {
-  table.standings tr[data-team]:hover td {
-    background: color-mix(in srgb, var(--ink) 5%, var(--raised));
-  }
-  .team-line[data-team]:hover {
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  table.standings tr[data-team]:hover :is(.team-open, .team-name),
+  .team-line[data-team]:hover :is(.team-open, .team-name) {
+    color: var(--ink-hover);
   }
 }
 .sheet-head h2.team-title {
@@ -2053,15 +2145,13 @@ table.standings tr.playoff-line + tr td {
 }
 /* A team's sheet's parts are spaced like the game sheet's: --part-space-first under the band, --part-space-above each later title, and
    --part-space-below each title. Last 10 and Streak sit --form-space-above under the numbers
-   before them, --form-space-between apart, and the two sides over its playoff numbers are named at
-   --side-name-size. */
+   before them, --form-space-between apart. */
 .team-sheet-body {
   --part-space-first: 20px;
   --part-space-above: 29px;
   --part-space-below: 11px;
   --form-space-above: 20px;
   --form-space-between: 14px;
-  --side-name-size: 16px;
   --game-row-height: 25px;
   --field-space-above: 13px;
   --field-space-below: 10px;
@@ -2116,20 +2206,20 @@ table.standings tr.playoff-line + tr td {
   grid-template-columns: 26px 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
 }
 .team-game-number {
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-mid);
 }
 .team-result {
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: calc(var(--type-detail-weight) + 200);
   text-align: center;
 }
 .team-result.won {
@@ -2139,14 +2229,14 @@ table.standings tr.playoff-line + tr td {
   color: var(--ink-dim);
 }
 .team-round {
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
   color: var(--ink-dim);
 }
 .team-score {
   font-family: var(--numbers);
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
 }
 /* The next game's caret sits where its result will, at the size of the text beside it. */
 .next-game-icon {
@@ -2160,12 +2250,13 @@ table.standings tr.playoff-line + tr td {
   color: var(--ink-dim);
 }
 .team-when {
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
 }
 .team-game.soon .team-result,
 .team-game.soon .team-when {
   color: var(--now);
-  font-weight: 600;
+  font-weight: calc(var(--type-detail-weight) + 200);
 }
 .team-numbers {
   display: grid;
@@ -2182,13 +2273,14 @@ table.standings tr.playoff-line + tr td {
    team, and --record-nudge down from the name's middle. */
 .team-numbers .tape-teams .club {
   gap: var(--record-gap);
-  font-size: var(--side-name-size);
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
 .team-record {
   translate: 0 var(--record-nudge);
   font-family: var(--display);
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
   letter-spacing: 0;
   color: var(--ink-dim);
 }
@@ -2211,15 +2303,15 @@ table.standings tr.playoff-line + tr td {
 }
 .team-titles {
   margin: 0;
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
 }
 .team-titles b {
-  font-weight: 600;
+  font-weight: calc(var(--type-detail-weight) + 200);
 }
 /* A team with no titles reads a step lighter than the seasons another team lists. */
 .team-titles-none {
-  font-weight: 400;
+  font-weight: var(--type-detail-weight);
 }
 
 /* The News view, as shared/news.css lays it out, in Hardwood's raised cards inside an edge. */
@@ -2241,36 +2333,34 @@ table.standings tr.playoff-line + tr td {
 .news-teams .club {
   gap: 7px;
   font-family: var(--text);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: var(--type-label-weight);
 }
 .news-teams .dot {
   width: 14px;
   height: 14px;
 }
 .news-title {
-  font-size: 1.15rem;
-  font-weight: 600;
-  line-height: 1.28;
+  font-size: var(--type-headline-size);
+  font-weight: var(--type-headline-weight);
+  line-height: calc(1.28 * var(--leading));
 }
 .news-more {
   gap: 8px;
 }
 .news-more-label {
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-weight: calc(var(--type-label-weight) - 100);
 }
 .news-more-list {
   gap: 10px;
 }
 .news-more-title {
   margin: 0 0 2px;
-  font-weight: 500;
-  line-height: 1.35;
+  font-weight: calc(var(--type-detail-weight) + 100);
+  line-height: calc(1.35 * var(--leading));
 }
 /* A step darker than mid ink, since Barlow's Regular reads thin through a few lines. */
 .news-summary {
-  line-height: 1.45;
+  line-height: calc(1.45 * var(--leading));
   color: color-mix(in srgb, var(--ink-dim) 45%, var(--ink));
 }
 .news-foot {
@@ -2281,8 +2371,6 @@ table.standings tr.playoff-line + tr td {
   padding: 0 calc(var(--control-room) - 5.5px) 0 var(--control-room);
   background: var(--raised);
   box-shadow: inset 0 0 0 1px var(--edge);
-  font-size: var(--size-glance);
-  font-weight: var(--control-weight);
   color: var(--ink);
 }
 .read-arrow {
@@ -2302,11 +2390,6 @@ table.standings tr.playoff-line + tr td {
   background: var(--raised);
   box-shadow: inset 0 0 0 1px var(--edge);
   color: var(--ink);
-  font-size: var(--size-glance);
-  font-weight: var(--control-weight);
-}
-.retry-button span {
-  text-box: trim-both cap alphabetic;
 }
 .retry-button .retry-icon {
   width: 16px;
@@ -2327,71 +2410,31 @@ table.standings tr.playoff-line + tr td {
   }
 }
 .retry-block .retry-title {
-  font-weight: 500;
-}
-
-/* On a wide screen, Walnut's selected tab reads a step heavier on its bright orange. Each tab's
-   label keeps room for itself at both weights, in hidden copies under it, in both themes, so
-   choosing a tab never changes its width and the tabs lay out the same in each. */
-@media (min-width: 780px) {
-  :root[data-theme="dark"] .tab-list button.active,
-  :root[data-theme="dark"] nav.tabs .search-tab.active {
-    font-weight: 500;
-  }
-  /* Its hidden copies come first and last, so the label lines up by its top, not their baselines. */
-  .tab-label {
-    display: inline-grid;
-    vertical-align: top;
-  }
-  .tab-label::before,
-  .tab-label::after {
-    content: attr(data-label);
-    height: 0;
-    overflow: hidden;
-    visibility: hidden;
-  }
-  .tab-label::before {
-    font-weight: 400;
-  }
-  .tab-label::after {
-    font-weight: 500;
-  }
-}
-
-/* The Home Screen bar and box show the icon the theme showing would give the Home Screen. */
-.home-screen-icon {
-  background-image: url(icon-light-180.png);
-}
-:root[data-theme="dark"] .home-screen-icon {
-  background-image: url(icon-180.png);
+  font-weight: calc(var(--type-detail-weight) + 100);
 }
 
 .settings-footer .sep {
-  font-size: 95%;
   opacity: 0.9;
+}
+/* The Home Screen box's Share icon, raised to sit with Barlow's words, as set by eye. */
+.home-screen-steps .share-glyph {
+  vertical-align: -0.5px;
 }
 /* Settings stay the floor's own color, without a band. */
 .settings-panel {
   --sheet: var(--bg);
 }
-/* On a phone the title stands alone in the header, close over the first setting. */
+/* The title stands alone in the header, close over the first setting. */
+.settings-panel .sheet-top {
+  min-height: 0;
+}
 @media (max-width: 779px) {
   .settings-panel {
     --bottom-padding: max(17px, env(safe-area-inset-bottom));
   }
-  .settings-panel .sheet-top {
-    min-height: 0;
-    padding-bottom: 7px;
-  }
-  .settings-panel .sheet-head h2 {
-    font-size: 17.9px;
-  }
 }
 
 @media (max-width: 779px) {
-  body {
-    padding-bottom: var(--tab-bar-clearance);
-  }
   header.top {
     flex-wrap: wrap;
     row-gap: 8px;
@@ -2453,16 +2496,16 @@ body.kbd .player-open:focus {
   text-align: center;
 }
 .player-fact dt {
-  font-size: var(--size-small);
-  font-weight: 500;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .player-fact dd {
   margin: 0;
-  font-size: var(--size-glance);
-  font-weight: 500;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
   color: var(--ink);
 }
 
@@ -2483,8 +2526,8 @@ body.kbd .player-open:focus {
 }
 .out-line {
   margin: 0;
-  font-size: var(--size-out-reason);
-  font-weight: 500;
+  font-size: var(--type-body-size);
+  font-weight: calc(var(--type-body-weight) + 100);
   color: var(--now);
 }
 .out-line .foul-chip {
@@ -2499,13 +2542,15 @@ body.kbd .player-open:focus {
 }
 .out-sentence {
   margin: 6px 0 0;
-  font-size: var(--size-out-sentence);
-  line-height: 1.35;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.35 * var(--leading));
   color: var(--ink);
 }
 .out-source {
   margin: 4px 0 0;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
 
@@ -2524,10 +2569,10 @@ table.player-game {
 }
 table.player-game th {
   padding: 0 4px 5px;
-  font-size: var(--size-small);
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
   text-align: center;
 }
@@ -2539,13 +2584,13 @@ table.player-game td {
 .player-game-line td {
   padding: 10px 4px 5px;
   border-top: 1px solid var(--divider);
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: var(--type-stat-large-size);
+  font-weight: var(--type-stat-large-weight);
 }
 .player-average td {
   padding: 5px 4px 6px;
-  font-size: var(--size-glance);
-  font-weight: 400;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
 }
 .player-average td:first-child {
   position: relative;
@@ -2555,10 +2600,10 @@ table.player-game td {
   top: 5px;
   right: calc(100% + 2px);
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 500;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .player-lines {
@@ -2569,7 +2614,7 @@ table.player-game td {
   margin-right: 8px;
 }
 .player-count {
-  font-weight: 600;
+  font-weight: calc(var(--type-detail-weight) + 200);
 }
 
 /* Her points in each playoff game sit at the end of its row, over a small unit. */
@@ -2578,16 +2623,16 @@ table.player-game td {
   align-items: baseline;
   gap: 4px;
   font-family: var(--numbers);
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
 }
 .player-points small,
 .player-dnp {
   font-family: var(--display);
-  font-size: var(--size-small);
-  font-weight: 500;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 
@@ -2609,22 +2654,23 @@ table.player-game td {
   gap: 10px;
 }
 .player-rank-label {
-  font-size: var(--size-small);
-  font-weight: 500;
+  font-size: var(--type-label-size);
+  font-weight: calc(var(--type-label-weight) - 100);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
 }
 .player-rank-value {
   font-family: var(--numbers);
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
 }
 .player-curve {
   margin-left: 7px;
 }
 .player-rank {
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   text-align: right;
   white-space: nowrap;
@@ -2666,8 +2712,8 @@ table.player-game td {
 }
 .placed-other {
   padding-left: 33px;
-  font-size: var(--size-glance);
-  font-weight: 400;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink);
   white-space: nowrap;
 }
@@ -2680,8 +2726,9 @@ table.player-game td {
 }
 .player-rank-note {
   margin: 0;
-  font-size: var(--size-glance);
-  line-height: 1.35;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+  line-height: calc(1.35 * var(--leading));
   color: var(--ink-dim);
   text-align: center;
   text-wrap: balance;

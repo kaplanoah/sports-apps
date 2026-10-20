@@ -11,8 +11,8 @@
  *   --game-headline-offset   the time or score
  *   --game-status-offset     the status under the time or score
  * Without a label, the time or score and its status center as a pair, as far apart as under one.
- * Its lines, and the tint on a row that opens under a mouse or a press, take chrome.css's --divider
- * and --ink.
+ * Its lines, and the tint on a row that opens under a press, take chrome.css's --divider and --ink,
+ * and its team names under a mouse take --ink-hover.
  *
  * An All-Star team's star (all-star.js) takes these, each a color but the last:
  *   --all-star-shadow        its shadow inside
@@ -122,13 +122,13 @@
     background 0.15s,
     box-shadow 0.15s;
 }
+/* Under a mouse, the row's team names take some of the accent, as a team's name does on its own. */
 @media (hover: hover) {
-  .game-row:has(> .game-open:hover) {
-    --row-highlight: color-mix(in srgb, var(--ink) 5%, transparent);
+  .game-row:has(> .game-open:hover) :is(.team-open, .team-name) {
+    color: var(--ink-hover);
   }
 }
-/* While a press holds it (press.js), the row tints a little deeper than under a mouse, at once, and
-   fades as the press lets go. */
+/* While a press holds it (press.js), the row tints at once, and fades as the press lets go. */
 .game-row:has(> .game-open.is-pressed) {
   --row-highlight: color-mix(in srgb, var(--ink) 7%, transparent);
   transition: none;

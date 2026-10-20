@@ -59,6 +59,37 @@ export function createSavedDocs() {
 }
 
 /**
+ * Where a job keeps a version of what it keeps under `key`, the first version under `key` itself,
+ * since each record's first version was saved under the bare key, before records had versions.
+ * @param {string} key
+ * @param {number} version
+ */
+export const nameVersionedKey = (key, version) => (version === 1 ? key : `${key}:v${version}`);
+
+/**
+ * Forgets what a job kept under a key's earlier versions, each once while the store stays in
+ * memory, so raising a version leaves nothing behind in the job's storage.
+ */
+export function createVersionForgetter() {
+  /** @type {Set<string>} */
+  const forgotten = new Set();
+
+  /**
+   * @param {JobContext["storage"]} storage
+   * @param {(version: number) => string} nameKey the key a version is kept under
+   * @param {number} version the current one, which stays
+   */
+  return async function forgetEarlierVersions(storage, nameKey, version) {
+    for (let earlier = 1; earlier < version; earlier += 1) {
+      const key = nameKey(earlier);
+      if (forgotten.has(key)) continue;
+      forgotten.add(key);
+      await storage.delete(key);
+    }
+  };
+}
+
+/**
  * The seasons the store keeps from before the current one, newest first.
  * @param {JobContext["docs"]} docs
  * @param {number} current

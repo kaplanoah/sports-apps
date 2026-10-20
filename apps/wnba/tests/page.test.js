@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { renderBracket } from "../page/js/bracket-view.js";
 import { renderDot } from "../page/js/clubs.js";
 import { readGameDay } from "../page/js/days.js";
@@ -11,10 +11,11 @@ import {
   renderHeadline,
 } from "../page/js/games-view.js";
 import { renderScoreboard } from "../page/js/scoreboard.js";
-import { describeSeriesStanding, isPlayoffsOver } from "../page/js/series.js";
+import { describeSeriesStanding, isFieldSet, isPlayoffsOver } from "../page/js/series.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSeasonWithLeaders } from "./player-fixtures.js";
 import { describeStampProblem, renderStampLines } from "../page/js/stamp.js";
-import { renderStandings } from "../page/js/standings-view.js";
+import { renderStandings, renderStandingsLists } from "../page/js/standings-view.js";
 import { renderTeamSheet } from "../page/js/team-view.js";
 import { placeOnRange } from "../../../shared/page/rank-curve.js";
 import { TEAMS } from "../page/js/teams.js";
@@ -29,10 +30,8 @@ const NOW = Date.parse(AFTERNOON.now);
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
-const SEASON = buildSnapshot(
-  { ...AFTERNOON.responses, players: GAMES.preview.players },
-  { season: 2026, now: NOW },
-);
+// The afternoon, with the leading scorers the store works out from the season's totals.
+const SEASON = buildSeasonWithLeaders(AFTERNOON.responses, { season: 2026, now: NOW });
 
 // Each tag reads as a space, and the page's separator as a bar.
 const readText = (markup) =>
@@ -239,7 +238,7 @@ test("a date without games a tap brings into the list says so beside its date, n
 test("the All-Star Game's row names it, and shows each team's name beside its star, the visitors' orange and the home team's white, and opens nothing", () =>
   inEastern(() => {
     const whole = buildSnapshot(
-      { ...AFTERNOON.responses, schedule: GAMES.preview.schedule, players: GAMES.preview.players },
+      { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
       { season: 2026, now: NOW },
     );
     const { days } = listDays(whole, { schedule: { games: whole.schedule } });
@@ -315,9 +314,9 @@ test("a game a finished series no longer needs is left off, and a season without
   }));
 
 test("the bracket and standings say in a short note when they have nothing yet", () => {
-  assert.equal(
-    readText(renderBracket(null, NOW)),
-    "The bracket fills in once the playoff field is set",
+  assert.match(
+    String(renderBracket(null, NOW)),
+    /^<div class="no-field-note">\s*<h2>No playoff field yet<\/h2>\s*<p>The bracket fills in once the playoff field is set<\/p>\s*<\/div>$/,
   );
   assert.equal(readText(renderStandings(null)), "No standings yet");
 });
@@ -537,7 +536,7 @@ test("through the regular season, the league's standings show the season, then r
   const text = readText(renderStandings(REGULAR_SEASON));
   assert.match(
     text,
-    /^Season Recent Team W-L GB L10 Strk 1 Lynx W 33-11 - 6-4 W 1 2 Valkyries W 32-12 1\.0 7-3 W 1 /,
+    /^Season Recent League W-L GB L10 Strk 1 Lynx W 33-11 - 6-4 W 1 2 Valkyries W 32-12 1\.0 7-3 W 1 /,
   );
   const rows = readStandingsRows(renderStandings(REGULAR_SEASON));
   const line = rows.findIndex((row) => row.className === "playoff-line");
@@ -567,20 +566,20 @@ test("a conference's standings rank its own teams, note each playoff team's leag
 
 test("once the playoff field is set, each team's first round and where its run stands replace recent form", () => {
   const text = readText(renderStandings(SEASON));
-  assert.match(text, /^Season Playoffs Team W-L GB Rd 1 Now 1 Lynx W 33-11 - L 0-2 Out /);
+  assert.match(text, /^Season Playoffs League W-L GB Rd 1 Now 1 Lynx W 33-11 - L 0-2 Out /);
   assert.match(text, / Aces W 31-13 2\.0 1-1 Game 3 /, "a first round still being played");
   assert.match(text, / Liberty E 26-18 7\.0 W 2-0 Semis /);
   const rows = readStandingsRows(renderStandings(SEASON));
   assert.match(rows[9].text, /^9 Fire W 17-27 16\.0$/, "nothing for a team that missed them");
 });
 
-test("a won first round and a team still in are marked, and a team that's out shows paler", () => {
+test("a won first round and a team still in read as the rest of their column, and a team that's out shows paler", () => {
   const rows = renderStandings(SEASON).text.split("<tr").slice(1);
   const liberty = rows.find((row) => row.includes(">Liberty<"));
   const lynx = rows.find((row) => row.includes(">Lynx<"));
   assert.match(
     liberty,
-    /<span class="series-won">W 2-0<\/span>[\s\S]*<span class="still-in">Semis<\/span>/,
+    /<td class="tabular recent recent-start">W 2-0<\/td>\s*<td class="tabular recent pair-end">Semis<\/td>/,
   );
   assert.match(lynx, /<td class="tabular recent recent-start">L 0-2<\/td>/);
   assert.match(lynx, /<span class="playoff-out">Out<\/span>/);
@@ -614,6 +613,25 @@ test("each standings table names the view it shows", () => {
   assert.match(renderStandings(SEASON, "West").text, /aria-label="West standings"/);
 });
 
+test("the league's table, then the East's and the West's, one under another, each named in its team column's head, where its teams' names start", () => {
+  const { text } = renderStandingsLists(SEASON);
+  assert.deepEqual(
+    [...text.matchAll(/<div class="standings-list" id="([^"]+)">/g)].map(([, id]) => id),
+    ["standings-league", "standings-east", "standings-west"],
+  );
+  assert.deepEqual(
+    [...text.matchAll(/<th colspan="2" class="list-title">(\w+)<\/th>/g)].map(([, name]) => name),
+    ["League", "East", "West"],
+  );
+  assert.doesNotMatch(text, />Team</);
+  assert.equal(readText(renderStandingsLists(null)), "No standings yet");
+});
+
+test("the playoff field is set once the league's series name their teams", () => {
+  assert.equal(isFieldSet(REGULAR_SEASON.series), false);
+  assert.equal(isFieldSet(SEASON.series), true);
+});
+
 test("a team's next game is marked with Phosphor's caret-right icon, which reading the sheet aloud skips", () => {
   const { body } = renderTeamSheet(SEASON, "ATL", { year: 2026, now: NOW });
   const next = body.text.match(/<div class="team-game next[^"]*">[\s\S]*?<\/div>/)?.[0] ?? "";
@@ -623,12 +641,27 @@ test("a team's next game is marked with Phosphor's caret-right icon, which readi
   );
 });
 
-test("a winning streak is marked, so one below the line can show paler than one above it", () => {
+test("a game later today stands out the same on the team's card and in its playoff games, and a game tomorrow in neither", () =>
+  inEastern(() => {
+    /** @param {string} code */
+    const readNext = (code) => {
+      const { body } = renderTeamSheet(SEASON, code, { year: 2026, now: NOW });
+      const row = body.text.match(/<div class="team-game next[^"]*">/)?.[0] ?? "";
+      return {
+        isCardSet: body.text.includes('class="game-card-now"'),
+        isRowSet: row.includes(" soon"),
+      };
+    };
+    assert.deepEqual(readNext("ATL"), { isCardSet: true, isRowSet: true });
+    assert.deepEqual(readNext("LVA"), { isCardSet: false, isRowSet: false });
+  }));
+
+test("a winning streak reads as the rest of its column, below the line as the rest of its row", () => {
   const rows = renderStandings(REGULAR_SEASON).text.split("<tr").slice(1);
   const fire = rows.find((row) => row.includes(">Fire<"));
   const lynx = rows.find((row) => row.includes(">Lynx<"));
-  assert.match(fire, /^ class="below"[\s\S]*<span class="streak-won">W 1<\/span>/);
-  assert.match(lynx, /^ class=""[\s\S]*<span class="streak-won">W 1<\/span>/);
+  assert.match(fire, /^ class="below"[\s\S]*<td class="tabular recent pair-end">W 1<\/td>/);
+  assert.match(lynx, /^ class=""[\s\S]*<td class="tabular recent pair-end">W 1<\/td>/);
 });
 
 /**
@@ -642,8 +675,8 @@ function readTeam(season, code) {
 }
 
 // The afternoon, with the whole season's schedule from the next day, its regular season and all.
-const WHOLE_SEASON = buildSnapshot(
-  { ...AFTERNOON.responses, schedule: GAMES.preview.schedule, players: GAMES.preview.players },
+const WHOLE_SEASON = buildSeasonWithLeaders(
+  { ...AFTERNOON.responses, schedule: GAMES.preview.schedule },
   { season: 2026, now: NOW },
 );
 const SEATTLES_LAST = WHOLE_SEASON.nearestGames.find((game) => game.id === "1022600325");
@@ -689,7 +722,7 @@ test("a team's sheet opens on its last game, the one it's playing, and its next,
     );
     assert.equal(
       readGameCards(addSeattleAtChicago({ state: "pre" })),
-      "Last game Sep 23 L 91-103 vs Wings Next game Sep 30 7:00 PM @ Sky",
+      "Last game Sep 23 L 91-103 vs Wings Next game Today 7:00 PM @ Sky",
     );
     assert.match(readTeam(WHOLE_SEASON, "ATL").body, /^Last game Sep 27 W 92-77 vs Mystics /);
   }));
@@ -700,6 +733,26 @@ test("a game being played says whether the team is up, down, or tied, and betwee
     assert.match(readGameCards(playSeattleAtChicago(60, 60)), / Now Q3 4:12 TIED 60-60 @ Sky$/);
     const halftime = { period: 2, clock: "0.0", status: "Half" };
     assert.match(readGameCards(playSeattleAtChicago(40, 38, halftime)), / Now Half UP 40-38 /);
+  }));
+
+test("a card names yesterday, today, and tomorrow, and only a game still to come today takes the color of one being played", () =>
+  inEastern(() => {
+    const tomorrow = addSeattleAtChicago({ state: "pre", start: "2026-10-01T23:00:00Z" });
+    assert.match(readGameCards(tomorrow), / Next game Tomorrow 7:00 PM @ Sky$/);
+    const final = addSeattleAtChicago({
+      state: "final",
+      away: { ...SEATTLES_LAST.home, score: 80 },
+      home: { ...SEATTLES_LAST.away, team: "CHI", score: 75 },
+    });
+    assert.match(readGameCards(final), /^Last game Today W 80-75 @ Sky$/);
+
+    const readMarkup = (/** @type {object} */ season) =>
+      renderTeamSheet(season, "SEA", { year: 2026, now: NOW }).body.text;
+    assert.match(
+      readMarkup(addSeattleAtChicago({ state: "pre" })),
+      /<span class="game-card-now">Today<\/span>/,
+    );
+    assert.doesNotMatch(readMarkup(final), /game-card-now/);
   }));
 
 test("a next game whose time isn't set says TBD", () =>
@@ -743,7 +796,7 @@ test("a season saved before it kept each team's nearest games takes them from it
     assert.ok(nearestGames.length > 0);
     assert.match(
       readTeam(saved, "ATL").body,
-      /^Last game Sep 27 W 92-77 vs Mystics Next game Sep 30 7:00 PM @ Mystics Playoffs /,
+      /^Last game Sep 27 W 92-77 vs Mystics Next game Today 7:00 PM @ Mystics Playoffs /,
     );
   }));
 
@@ -777,7 +830,7 @@ test("a team's sheet shows its nearest games, its playoffs across from the field
   inEastern(() => {
     assert.equal(
       readTeam(SEASON, "ATL").body,
-      "Last game Sep 27 W 92-77 vs Mystics Next game Sep 30 7:00 PM @ Mystics " +
+      "Last game Sep 27 W 92-77 vs Mystics Next game Today 7:00 PM @ Mystics " +
         "Playoffs 1st Rd G1 W vs Mystics 1st Rd 92-77 G2 at Mystics 1st Rd Today 7:00 PM " +
         "Dream 1-0 Playoff field PPG 92.0 87.7 Opp PPG 77.0 87.7 Margin +15.0 0.0 " +
         "Home 1-0 5-1 Road 0-0 1-5 " +
@@ -794,7 +847,7 @@ test("a team's sheet shows its nearest games, its playoffs across from the field
     );
     assert.match(
       readTeam(SEASON, "MIN").body,
-      /^Last game Sep 29 L 71-87 @ Liberty Playoffs Out 1st Rd G1 L vs Liberty 1st Rd 75-91 G2 L at Liberty 1st Rd 71-87 Lynx 0-2 Playoff field .* Regular season /,
+      /^Last game Yesterday L 71-87 @ Liberty Playoffs Out 1st Rd G1 L vs Liberty 1st Rd 75-91 G2 L at Liberty 1st Rd 71-87 Lynx 0-2 Playoff field .* Regular season /,
     );
     assert.match(readTeam(SEASON, "SEA").body, /^Regular season .* Playoffs Missed Titles /);
   }));
@@ -1330,21 +1383,19 @@ test("each game's score shows in scoreboard digits, the loser's dimmed", () =>
     assert.match(markup, /class="scoreboard"\s*><span class="scoreboard-text">87<\/span>/);
   }));
 
-test("each appearance choice shows the home-screen icon it offers, and the page has each one", () => {
+test("each appearance choice shows the home-screen icon it offers", () => {
   const page = readFileSync(`${import.meta.dirname}/../page/index.html`, "utf8");
   const choices = Object.fromEntries(
     [...page.matchAll(/<label class="appearance-choice">([\s\S]*?)<\/label>/g)].map(
       ([, choice]) => [
         choice.match(/<span>([^<]+)<\/span>\s*$/)[1],
-        [...choice.matchAll(/<img src="([^"]+)"/g)].map(([, source]) => source),
+        choice.match(/class="appearance-icon (appearance-icon-[a-z]+)"/)[1],
       ],
     ),
   );
   assert.deepEqual(choices, {
-    System: ["icon-light-180.png", "icon-180.png"],
-    Maple: ["icon-light-180.png"],
-    Walnut: ["icon-180.png"],
+    System: "appearance-icon-system",
+    Maple: "appearance-icon-light",
+    Walnut: "appearance-icon-dark",
   });
-  for (const source of Object.values(choices).flat())
-    assert.ok(existsSync(`${import.meta.dirname}/../page/${source}`), source);
 });

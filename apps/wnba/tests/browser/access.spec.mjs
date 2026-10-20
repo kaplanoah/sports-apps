@@ -1,7 +1,11 @@
 import { test, expect, openLockedApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
+import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
+import { readTokenColor } from "./theme.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 const findCodeField = (page) => page.getByRole("textbox", { name: "Access code" });
@@ -27,12 +31,12 @@ async function signIn(page) {
 /** @param {import("@playwright/test").Page} page */
 const findGate = (page) => page.getByRole("heading", { name: "Enter your access code" });
 
-test("the gate's text keeps to the type scale, with its code light only because it's large", async ({
+test("the gate's text keeps to its type roles, with its code light only because it's large", async ({
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expect(findGate(page)).toBeVisible();
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   await expect(page.locator(".code-field")).toHaveCSS("font-size", "24px");
@@ -44,7 +48,7 @@ test("the page asks for its code, and the right one, however it's typed, opens t
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expect(findGate(page)).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Bracket" })).toHaveCount(0);
+  await expect(findSeasonTab(page)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Open" }).click();
   await expect(page.getByRole("alert")).toHaveText("Type the code first");
@@ -60,10 +64,10 @@ test("the page asks for its code, and the right one, however it's typed, opens t
 
   await findCodeField(page).fill("fast break");
   await findCodeField(page).press("Enter");
-  await expect(page.getByRole("tab", { name: "Bracket" })).toBeVisible();
+  await expect(findSeasonTab(page)).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("tab", { name: "Bracket" })).toBeVisible();
+  await expect(findSeasonTab(page)).toBeVisible();
   await expect(findGate(page)).toHaveCount(0);
 });
 
@@ -79,7 +83,7 @@ test("a new code signs the phone out, and the gate says the code has changed", a
     "The code has changed. Ask whoever sent you the link for the new one.",
   );
   await sendCode(page, "layup");
-  await expect(page.getByRole("tab", { name: "Bracket" })).toBeVisible();
+  await expect(findSeasonTab(page)).toBeVisible();
 });
 
 test("a page left open when the code changes goes back to the gate on its next read", async ({
@@ -143,21 +147,45 @@ test("the code field shows it's ready with its cursor, not an outline", async ({
   await expect(findCodeField(page)).toHaveCSS("outline-style", "none");
 });
 
-test("the gate's heading, code, and Open each draw in their own weight of Barlow Condensed", async ({
+test("the gate's heading is set as a sheet's title, Open as the app's other buttons, and the code field raised inside an outlined button's edge", async ({
   page,
 }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
-  await expect(findGate(page)).toHaveCSS("font-weight", "500");
-  await expect(findCodeField(page)).toHaveCSS("font-weight", "300");
-  await expect(page.getByRole("button", { name: "Open" })).toHaveCSS("font-weight", "600");
+  const heading = await readRole(page, "heading");
+  const setting = await readRole(page, "setting");
+  await expect(findGate(page)).toHaveCSS("font-family", /^Barlow,/);
+  await expect(findGate(page)).toHaveCSS("font-size", `${heading.size}px`);
+  await expect(findGate(page)).toHaveCSS("font-weight", String(heading.weight));
+  await expect(findGate(page)).toHaveCSS("text-transform", "uppercase");
+  const spacing = await findGate(page).evaluate((element) =>
+    parseFloat(getComputedStyle(element).letterSpacing),
+  );
+  expect(spacing).toBeCloseTo(heading.spacing);
 
-  const loadedWeights = await page.evaluate(async () => {
-    await document.fonts.ready;
-    return [...document.fonts]
-      .filter((face) => face.family.includes("Barlow Condensed") && face.status === "loaded")
-      .map((face) => face.weight);
-  });
-  expect(loadedWeights).toEqual(expect.arrayContaining(["300", "500", "600"]));
+  const open = page.getByRole("button", { name: "Open" });
+  await expect(open).toHaveCSS("font-family", /^Barlow,/);
+  await expect(open).toHaveCSS("font-size", `${setting.size}px`);
+  await expect(open).toHaveCSS("font-weight", String(setting.weight));
+  await expect(open).toHaveCSS("text-transform", "none");
+  await expect(open).toHaveCSS("height", "36px");
+  const box = /** @type {{ y: number, height: number }} */ (await open.boundingBox());
+  expect((await readCapitals(open)).middle - (box.y + box.height / 2)).toBeCloseTo(0, 0);
+
+  const field = findCodeField(page);
+  await expect(field).toHaveCSS("background-color", await readTokenColor(page, "--raised"));
+  await expect(field).toHaveCSS(
+    "box-shadow",
+    `${await readTokenColor(page, "--edge")} 0px 0px 0px 1px inset`,
+  );
+});
+
+test("the gate's code draws in light Barlow Condensed, and every face it draws is loaded up front", async ({
+  page,
+}) => {
+  await openLockedApp(page, { accessCode: "FASTBREAK" });
+  await expect(findCodeField(page)).toHaveCSS("font-family", /^"Barlow Condensed"/);
+  await expect(findCodeField(page)).toHaveCSS("font-weight", "300");
+  expect(await listFontsNotPreloaded(page)).toEqual([]);
 });
 
 /**

@@ -3,8 +3,10 @@ import {
   choosePlacement,
   chooseTrip,
   describeWhyNoSlide,
+  findCellScrollLeft,
   findDayScrollTop,
   isFollowingStartDay,
+  isLedByOne,
   isRowOutOfSight,
   listShownDays,
   listStripDays,
@@ -19,9 +21,11 @@ import {
   readDayOfMonth,
 } from "./days.js";
 import { dayStripLog } from "./day-strip-log.js";
+import { markBarStuck } from "./held-bar.js";
 import { html, setHtml } from "./html.js";
 import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
+import { prefersReducedMotion } from "./reduced-motion.js";
 import { watchTimeAway } from "./resume.js";
 import { scrollWithSpring } from "./spring-scroll.js";
 import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
@@ -31,7 +35,8 @@ import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
 // follows it as it scrolls, passing to the next day once none of a day's text shows; a tap on a day, or on Today, brings that day to the top, a day's gap
 // under the bar, so nothing of the day before shows. A tap on a date without games brings in its
 // No games row, which leaves once it's out of sight, and a tap on Today while the list is already
-// there pulses the date. While a finger moves the strip, the month names the day in its middle.
+// there brings the date back to the strip's middle, or, with the strip there too, pulses it. While
+// a finger moves the strip, the month names the day in its middle.
 // The list opens on its start day, today or the day the app names, and goes back there once
 // someone has been away two minutes, following it for a few seconds as the store catches up. A league hands it each game day's markup, as it draws a day
 // elsewhere, and a date without games' markup. A league with many games a day can also hand over
@@ -136,7 +141,7 @@ function renderCell(day, { today, isListed, isChosen }) {
   ]
     .filter(Boolean)
     .join(" ");
-  const content = html`${label}<span class="cell-number tabular">${readDayOfMonth(day)}</span>`;
+  const content = html`${label}<span class="cell-number${isLedByOne(day) ? " leads-with-one" : ""}">${readDayOfMonth(day)}</span>`;
   return html`<button type="button" class="${classes}" data-day="${day}" aria-label="${formatLongDate(date)}"${isToday ? html` aria-current="date"` : ""}>${content}</button>`;
 }
 
@@ -211,14 +216,44 @@ const findListedDay = (day) =>
 const findCell = (day) =>
   /** @type {HTMLElement | null} */ (findStrip()?.querySelector(`[data-day="${day}"]`) ?? null);
 
+/**
+ * @param {HTMLElement} strip
+ * @param {HTMLElement} cell
+ */
+const findCellLeft = (strip, cell) =>
+  findCellScrollLeft({
+    cellLeft: cell.offsetLeft,
+    cellWidth: cell.offsetWidth,
+    scrollWidth: strip.scrollWidth,
+    clientWidth: strip.clientWidth,
+  });
+
 /** @param {ScrollBehavior} behavior */
 function centerChosenCell(behavior) {
   const strip = findStrip();
   const cell = chosenDay && findCell(chosenDay);
   if (!strip || !cell) return;
-  const left = cell.offsetLeft - (strip.clientWidth - cell.offsetWidth) / 2;
+  const left = findCellLeft(strip, cell);
   strip.scrollTo({ left, behavior });
   if (behavior === "instant") noteStripMissed(strip, left);
+}
+
+function isStripOnChosenDay() {
+  const strip = findStrip();
+  const cell = chosenDay && findCell(chosenDay);
+  return !!strip && !!cell && Math.abs(strip.scrollLeft - findCellLeft(strip, cell)) < 2;
+}
+
+// A day sent to the list's top while it's already chosen brings its date back to the strip's
+// middle, and its month back over it, from wherever a finger left the strip.
+/** @param {ScrollBehavior} behavior */
+function bringBackChosenCell(behavior) {
+  endStripSlide();
+  if (!chosenDay || isStripOnChosenDay()) return;
+  dayStripLog.noteStep(`the strip comes back to ${chosenDay}`);
+  isStripSwiped = false;
+  showMonth(chosenDay);
+  centerChosenCell(behavior);
 }
 
 /** @param {string} day */
@@ -260,7 +295,7 @@ function followTopDay(day) {
   const cannotSlide = describeWhyNoSlide({
     hasCells: !!strip && !!from && !!to,
     isListInHand,
-    isReducedMotion: isReducedMotion(),
+    isReducedMotion: prefersReducedMotion(),
   });
   dayStripLog.noteStep(
     `top day ${day}, ${cannotSlide ? `chosen at once: ${cannotSlide}` : "slide"}`,
@@ -345,9 +380,8 @@ function findTopDay() {
   return listed[isPassed ? low + 1 : low].dataset.day ?? null;
 }
 
-const isReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 /** @returns {ScrollBehavior} */
-const chooseMotion = () => (isReducedMotion() ? "instant" : "smooth");
+const chooseMotion = () => (prefersReducedMotion() ? "instant" : "smooth");
 
 // The list keeps the gap between its days above its first, which is the gap a day brought to the
 // top keeps under the bar.
@@ -389,7 +423,7 @@ function showDay(day, motion) {
     motion,
     distance: top - list.scrollTop,
     screenHeight: list.clientHeight,
-    isReducedMotion: isReducedMotion(),
+    isReducedMotion: prefersReducedMotion(),
   });
   const isJump = trip === "jump";
   dayStripLog.noteStep(
@@ -397,7 +431,9 @@ function showDay(day, motion) {
   );
   if (isJump) list.scrollTo({ top, behavior: "instant" });
   else scrollWithSpring(list, top);
-  chooseDay(day, motion === "instant" ? "instant" : chooseMotion());
+  const behavior = motion === "instant" ? "instant" : chooseMotion();
+  if (day === chosenDay) bringBackChosenCell(behavior);
+  else chooseDay(day, behavior);
 }
 
 // The day's place is read again each time, since the list's end can move as its days draw.
@@ -443,10 +479,7 @@ function keepHeldDay() {
   if (list && typeof top === "number") list.scrollTop = top;
 }
 
-// The bar ends in a line once a day has scrolled under it.
-function markStuck() {
-  findBar()?.classList.toggle("stuck", (findList()?.scrollTop ?? 0) > 0);
-}
+const markStuck = () => markBarStuck(findBar(), findList());
 
 let isFramePending = false;
 function followList() {
@@ -838,17 +871,19 @@ function isOnStartDay() {
     !!shown &&
     chosenDay === shown.startDay &&
     typeof top === "number" &&
-    Math.abs(list.scrollTop - top) < 2
+    Math.abs(list.scrollTop - top) < 2 &&
+    isStripOnChosenDay()
   );
 }
 
-// A tap on Today where the list already is has nowhere to go, so the date says it's there.
+// A tap on Today where the list and the strip already are has nowhere to go, so the date says
+// it's there.
 function pulseStartDay() {
   const cell = shown && findCell(shown.startDay);
   dayStripLog.noteStep(
-    `already on ${shown?.startDay}, ${isReducedMotion() ? "less motion, no pulse" : "pulse"}`,
+    `already on ${shown?.startDay}, ${prefersReducedMotion() ? "less motion, no pulse" : "pulse"}`,
   );
-  if (!cell || isReducedMotion()) return;
+  if (!cell || prefersReducedMotion()) return;
   cell.animate(
     [
       { transform: "scale(1)" },

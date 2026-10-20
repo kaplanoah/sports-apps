@@ -3,16 +3,21 @@
  * updates.js draws it. Apps link it after chrome.css, before their own styles.css, which may
  * refine these rules.
  *
- * Beside chrome.css's --card, --card-border, --divider, --ink, --ink-dim, --radius-card, and
+ * Beside chrome.css's --card, --card-border, --ink, --ink-dim, --ink-hover, --radius-card, and
  * --radius-control, an app's :root defines this token:
  *   --updates-head         the count across the top of the box
  */
 
 .updates {
+  --updates-pad-start: 13px;
+  --updates-pad-end: 22px;
+  --updates-pad-block: 10px;
+  --updates-list-gap: 10px;
   border: 1px solid var(--card-border);
   background: var(--card);
   border-radius: var(--radius-card);
-  padding: 10px 22px 10px 13px;
+  padding: var(--updates-pad-block) var(--updates-pad-end) var(--updates-pad-block)
+    var(--updates-pad-start);
   margin: 0 0 18px;
   max-width: 900px;
 }
@@ -29,10 +34,10 @@
   gap: 14px;
 }
 .updates-count {
-  font-weight: 500;
-  font-size: var(--size-small);
+  font-weight: calc(var(--type-label-weight) - 100);
+  font-size: var(--type-label-size);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--type-label-tracking);
   color: var(--updates-head);
 }
 .updates-x {
@@ -58,20 +63,20 @@
 }
 @media (hover: hover) {
   .updates-x:hover {
-    color: var(--ink-dim);
-    background: var(--divider);
+    color: var(--ink-hover);
   }
 }
 .updates-list {
   list-style: none;
-  margin: 10px 0 0;
+  margin: var(--updates-list-gap) 0 0;
   padding: 0;
 }
 .updates-list li {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
   padding: 5px 0;
 }
 .updates-list li:first-child {
@@ -83,14 +88,15 @@
 .updates-list .when {
   flex: none;
   width: 80px;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
 }
 .updates-list .what {
   color: var(--ink);
   min-width: 0;
-  line-height: 1.45;
+  line-height: calc(1.45 * var(--leading));
 }
 .updates-list .series-score {
   white-space: nowrap;
@@ -105,7 +111,8 @@
 }
 /* The .when column's 80px plus the row's 12px gap. */
 .updates-list .more {
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   padding-left: 92px;
 }
@@ -117,23 +124,37 @@
    under a mouse, which opens the team's sheet. */
 .updates-list li:has(> .game-open) {
   position: relative;
-  --row-highlight: transparent;
-  background: var(--row-highlight);
-  box-shadow:
-    -8px 0 var(--row-highlight),
-    8px 0 var(--row-highlight);
-  transition:
-    background 0.15s,
-    box-shadow 0.15s;
 }
-@media (hover: hover) {
-  .updates-list li:has(> .game-open:hover) {
-    --row-highlight: color-mix(in srgb, var(--ink) 5%, transparent);
-  }
+/* While a press holds it (press.js), the line tints across the box's whole width, halfway to what
+   is above and below it: the next update, whose padding meets its own halfway, the count, or the
+   box's bottom, whose corners it keeps inside the border. It tints at once and fades as the press
+   lets go. */
+.updates-list li:has(> .game-open)::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc(-1 * var(--updates-pad-end)) 0 calc(-1 * var(--updates-pad-start));
+  background: var(--row-highlight, transparent);
+  pointer-events: none;
+  transition: background 0.15s;
+}
+.updates-list li:has(> .game-open):first-child::before {
+  top: calc(var(--updates-list-gap) / -2);
+}
+.updates-list li:has(> .game-open):last-child::before {
+  bottom: calc(-1 * var(--updates-pad-block));
+  border-radius: 0 0 max(0px, calc(var(--radius-card) - 1px))
+    max(0px, calc(var(--radius-card) - 1px));
 }
 .updates-list li:has(> .game-open.is-pressed) {
   --row-highlight: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.updates-list li:has(> .game-open.is-pressed)::before {
   transition: none;
+}
+@media (hover: hover) {
+  .updates-list li:has(> .game-open:hover) :is(.what, .team-open, .team-name) {
+    color: var(--ink-hover);
+  }
 }
 .updates-list li:has(> .game-open) > :not(.game-open) {
   z-index: 1;

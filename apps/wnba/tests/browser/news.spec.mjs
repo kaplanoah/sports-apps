@@ -1,6 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
@@ -133,7 +133,7 @@ test("the News tab shows a card for each story the Worker saves", async ({ page 
   await expect(
     findCard(page, "Film review").getByRole("link", { name: /^Read on ESPN/ }),
   ).toHaveAttribute("href", "https://example.com/espn");
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });
@@ -184,6 +184,22 @@ test("a card's photo runs its full width", async ({ page }) => {
   expect(Math.abs(photoBox.width - (cardBox.width - 2))).toBeLessThan(1);
 });
 
+test("a photo that doesn't load leaves its card with its credit, and the others keep theirs", async ({
+  page,
+}) => {
+  await page.route("https://photos.example/**", (route) => route.fulfill({ status: 404 }));
+  await openNewsWithStories(page, (photoUrl) => {
+    const [athletic, espn, post] = createStories(photoUrl);
+    const moved = { ...post.photo, url: "https://photos.example/moved.jpg" };
+    return [{ ...post, photo: moved }, athletic, espn];
+  });
+
+  const post = findCard(page, "Stewart sat out practice");
+  await expect(post.locator("img")).toHaveCount(0);
+  await expect(post.locator(".news-photo-credit")).toHaveCount(0);
+  await expect(page.locator(".news-photo")).toHaveCount(2);
+});
+
 test("a photo's frame takes the shape the Worker read, from 16:9 to 3:2, whatever the photo's own", async ({
   page,
 }) => {
@@ -229,7 +245,7 @@ test("under its lead, a card lists the stories that add to it, quieter than the 
   expect(await readSize(more.locator(".news-more-title").first())).toBeLessThan(
     await readSize(page.locator("h3.news-title")),
   );
-  expect(await listOffScaleText(page)).toEqual([]);
+  expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });

@@ -1,16 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createStepLog, writeStepsAsText } from "../shared/page/step-log.js";
+import { createStepLog, nameFile, writeStepsAsText } from "../shared/page/step-log.js";
+import { useSavedStorage } from "./saved-storage.js";
 import { normalizeSpaces } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
 /** @type {Map<string, string>} */
 const stored = new Map();
-globalThis.localStorage = /** @type {any} */ ({
-  getItem: (/** @type {string} */ key) => stored.get(key) ?? null,
-  setItem: (/** @type {string} */ key, /** @type {string} */ value) => stored.set(key, value),
-  removeItem: (/** @type {string} */ key) => stored.delete(key),
-});
+useSavedStorage(stored);
 /** @type {Map<string, (event: Event) => void>} */
 const listeners = new Map();
 globalThis.document = /** @type {any} */ ({
@@ -64,6 +61,40 @@ test("a step is logged only while Diagnostics is on", () => {
   assert.equal(logged, 1);
   log.forgetLines();
   assert.deepEqual(log.readLines(), []);
+});
+
+test("no line holds an address, which holds the page's key, even one kept before: a file goes by its name, and the page by page", () => {
+  const page = "https://example-subdomain.workers.dev/k3y/";
+  stored.set("addressLog", JSON.stringify([{ at: 1, text: `an error at ${page}:0:0` }]));
+  const log = createStepLog({ key: "addressLog", title: "Errors", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+
+  log.noteStep(`Failed to fetch dynamically imported module: ${page}c9c63e6/js/games-view.js`);
+  log.noteStep(`a promise failed: Load failed for ${page}`);
+
+  assert.deepEqual(
+    log.readLines().map((line) => line.text),
+    [
+      "an error at page",
+      "Failed to fetch dynamically imported module: games-view.js",
+      "a promise failed: Load failed for page",
+    ],
+  );
+  assert.doesNotMatch(stored.get("addressLog") ?? "", /k3y|example-subdomain/);
+});
+
+test("a file is named on a phone without URL.canParse, as on iOS 16", (context) => {
+  const canParse = /** @type {PropertyDescriptor} */ (
+    Object.getOwnPropertyDescriptor(URL, "canParse")
+  );
+  Reflect.deleteProperty(URL, "canParse");
+  context.after(() => Object.defineProperty(URL, "canParse", canParse));
+  assert.equal(nameFile("https://example-subdomain.workers.dev/k3y/c9c63e6/js/app.js"), "app.js");
+  assert.equal(nameFile("https://example-subdomain.workers.dev/k3y/"), "page");
+  assert.equal(nameFile("https://"), "page");
 });
 
 test("a touch or click on the log's part is logged with where it landed and on what, and one elsewhere isn't", () => {

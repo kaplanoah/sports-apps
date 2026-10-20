@@ -1,12 +1,12 @@
-import { html } from "#shared/html.js";
+import { capitalize, html } from "#shared/html.js";
 import { nameTeam } from "./series.js";
 
 // The game sheet's chart of the lead through a game: the visitors' lead above the middle line and
 // the home team's below it, in the order the box score above it lists them, after each basket, on
 // a tile with each team named just outside its own half and each side's biggest lead marked, each
 // side in its team's color, which the game sheet sets. A live game's line stops at its latest
-// basket. The chart's words are laid over the drawing rather than drawn in it, so they keep the
-// type scale's size however wide it shows.
+// basket. The chart's words are laid over the drawing rather than drawn in it, so they keep their
+// type role's size however wide it shows.
 
 /** @typedef {{ periods: number, isOver: boolean, scores: [number, number, number][] }} Lead each score's seconds from tip-off, then the away and home scores */
 
@@ -230,7 +230,7 @@ export function renderLeadChart(lead, teams) {
     describeBiggestLead(homeName, -homeBest.margin),
   ].join(", ");
 
-  const plot = html`<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${label.charAt(0).toUpperCase()}${label.slice(1)}">
+  const plot = html`<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${capitalize(label)}">
       ${renderTile("lead-tile")}
       ${reachLines}
       <path class="lead-area away" d="${awayArea}"></path>

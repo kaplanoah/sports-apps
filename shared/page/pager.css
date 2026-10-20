@@ -1,54 +1,155 @@
 /*
- * A pill over lists side by side, like the Games view's, as pager.js builds them. Apps link it
- * after chrome.css, before their own styles.css, which styles what the lists hold.
+ * A pill whose names choose what shows under it, like a sheet's sections (sheet-sections.js) or a
+ * season's standings and bracket (bracket-standings.js), each beside the other as it slides in.
+ * Apps link it after chrome.css, before their own styles.css, which styles what shows under it.
  *
  * Beside chrome.css's --bg, --accent, and --accent-ink, an app's :root defines these tokens:
- *   --page-gutter          the body's side padding, which the lists reach past to the screen's edges
- *   --pager-label          the names of the lists not showing
- *   --pager-chosen-edge    the outline inside the shown list's name's fill, or transparent for none
- *   --held-bar-fade        how far the page's color fades out under the pill's bar while it's held
- *                          at the top, or 0px for a bar that ends sharply
- *   --held-bar-line        the line under the held bar, or transparent for none
- * and chrome.css's --radius-control for each name's corners.
+ *   --page-gutter          the body's side padding, which the pill's bar reaches past to the
+ *                          screen's edges
+ *   --pager-label          the names not chosen
+ *   --pager-chosen-edge    the outline inside the chosen name's fill, or transparent for none
+ *   --held-bar-line        the line under the pill once what it shows has scrolled under it
+ * and chrome.css's --radius-control for each name's corners, and --control-height and
+ * --control-room for its size. An app's styles.css sets the names' words as its other buttons'.
  */
 
-/* The pill and the lists keep to a phone's width, centered on a wider screen. Their bar and the
-   lists reach past the body's gutter to the screen's edges, and on the left past the 1px chrome.css
-   pads each view with too. */
-.pager {
-  max-width: 560px;
-  margin-inline: auto;
+/* A season's standings and bracket under one pill, as wide as the view, the pill under the header.
+   Where the header rides, the page holds still while they show (chrome.css); where it stays put,
+   the page scrolls only to bring a view a tall Updates box squeezes into sight. The pill's bar and
+   the parts reach past the body's gutter to the screen's edges, and on the left past the 1px
+   chrome.css pads each view with too. */
+.bracket-standings {
   --reach-left: calc(var(--page-gutter) + 1px);
   --reach-right: var(--page-gutter);
+  flex-direction: column;
+}
+/* The parts sit side by side, as slide-panels.js moves them, so a part slides off the screen
+   rather than the gutter. Each scrolls on its own, past the tab bar at its end, as a sheet's
+   sections do (sheet.css), so it keeps its place while the other shows and a slide never scrolls
+   the page. Where the header stays put, they fill the room under the pill. */
+.season-parts {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
+  overflow: hidden;
+}
+.season-part {
+  position: absolute;
+  inset: 0;
+  padding: 0 var(--reach-right) var(--view-end-room) var(--reach-left);
+  overflow: hidden auto;
+  overscroll-behavior-y: contain;
+}
+/* At rest, the part whose name isn't chosen doesn't show, so the pill a reload puts back
+   (show-last-drawn.js) shows the part it names before the first paint. While the parts slide,
+   both show. */
+.bracket-standings:has([data-tab="standings"][aria-selected="false"])
+  .season-parts:not([data-sliding])
+  > [data-part="standings"],
+.bracket-standings:has([data-tab="bracket"][aria-selected="false"])
+  .season-parts:not([data-sliding])
+  > [data-part="bracket"] {
+  visibility: hidden;
 }
 
-/* The pill stays at the top of the screen while the lists scroll under it, under the Home Screen
-   bar while chrome.css shows one. Its bar reaches up under the status bar and fills with the page's color once the pill is held in place, and lets
-   touches through to whatever it overlaps. */
+/* The pill's bar ends in a line once the part shown has scrolled under it, drawn over the parts'
+   top. */
 .pager-bar {
-  --bar-top: calc(env(safe-area-inset-top) + 10px);
-  position: sticky;
+  position: relative;
   z-index: 5;
-  top: var(--home-screen-bar-height, 0px);
-  margin: calc(-1 * var(--bar-top)) calc(-1 * var(--reach-right)) 0 calc(-1 * var(--reach-left));
-  padding: var(--bar-top) var(--reach-right) 18px var(--reach-left);
-  pointer-events: none;
+  margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
+  padding: 0 var(--reach-right) 18px var(--reach-left);
 }
 .pager-bar.stuck {
-  background: linear-gradient(to bottom, var(--bg) calc(100% - var(--held-bar-fade)), transparent);
   box-shadow: 0 1px 0 var(--held-bar-line);
 }
+
+/* While the header rides up with the part shown (season-header.js), the parts are placed from the
+   tab's view and reach up to the page's top, as tall as the page, each padded down to start under
+   the pill, with room to scroll at least as far as the header rides. The view's padding box starts
+   at the body's gutter, a pixel left of its content. */
+.bracket-standings[data-follows] {
+  position: relative;
+}
+.bracket-standings[data-follows] .season-parts {
+  position: absolute;
+  inset: calc(-1 * var(--view-top)) calc(-1 * var(--reach-right)) auto calc(-1 * var(--page-gutter));
+  height: var(--page-height);
+  margin: 0;
+}
+.bracket-standings[data-follows] .season-part {
+  padding-top: var(--parts-top);
+}
+.bracket-standings[data-follows] .season-part::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: calc(100% + var(--header-reach));
+  visibility: hidden;
+}
+/* What rides above the pill (season-header.js marks it) draws over all the parts hold, just under
+   the pill, since a browser takes whatever draws over a moving part as overlapping it and gives it
+   a layer. It lets a finger that drags anywhere but on a button scroll the part under it, as the
+   page does on every other tab, and the Updates box, which is all rows a tap opens, lets its
+   buttons' touches through too, to their stand-ins in the part's empty top right under them
+   (rider-taps.js), so a finger that drags from a row scrolls the part as well. */
+:root:has(.bracket-standings.active[data-follows]) [data-rides] {
+  position: relative;
+  z-index: 4;
+  pointer-events: none;
+}
+:root:has(.bracket-standings.active[data-follows])
+  :is([data-rides]:not(.updates), .pager-bar)
+  button {
+  pointer-events: auto;
+}
+/* The pill holds with its bar at the top of the screen and a band above it under the status bar,
+   both in the page's color, so the header ridden up and what scrolls under them stay out of sight,
+   and its bar too lets a drag through to the part. */
+.bracket-standings[data-follows] .pager-bar {
+  background: var(--bg);
+  pointer-events: none;
+}
+.bracket-standings[data-follows] .pager-bar::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 100%;
+  height: calc(env(safe-area-inset-top) + 10px);
+  background: var(--bg);
+  visibility: hidden;
+}
+.bracket-standings[data-follows] .pager-bar.held::before {
+  visibility: visible;
+}
+/* The Updates box's stand-ins, each over its button but drawn under it, take its touches only
+   while the box shows: not once the pill holds, with the box out of sight under the band. */
+.rider-taps {
+  position: absolute;
+  inset: 0 auto auto 0;
+}
+.bracket-standings:has(.pager-bar.held) .rider-taps {
+  display: none;
+}
+.rider-tap {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
 /*
- * The lists' names sit in a row as plain words, the shown list's filled with the accent. The fill
- * never travels between names: once the lists set off for another, which pager.js and
- * sheet-sections.js mark with .is-handing-off, the shown name's fill fades out as the new one's
+ * The names sit in a row as plain words, the chosen one's filled with the accent. The fill never
+ * travels between names: once what shows sets off for another, which sheet-sections.js and
+ * bracket-standings.js mark with .is-handing-off, the chosen name's fill fades out as the new one's
  * fades in, both easing in and out, and the new name takes the color on the accent a beat behind
  * its fill, as Pocket Casts' pill does. A pill shown at once, as for a sheet that's opening, jumps.
  */
 .pager-tabs {
   display: flex;
   gap: 4px;
-  pointer-events: auto;
 }
 /* A sheet hides the pills it doesn't offer, like a game's Highlights before it ends. */
 .pager-tabs[hidden],
@@ -57,16 +158,15 @@
 }
 .pager-tabs button {
   font: inherit;
-  font-size: var(--size-small);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  height: var(--control-height);
   border: 0;
   border-radius: var(--radius-control);
   background-color: transparent;
   box-shadow: inset 0 0 0 1px transparent;
   color: var(--pager-label);
-  padding: 8px 14px;
+  padding: 0 var(--control-room);
+  align-content: center;
+  text-box: trim-both cap alphabetic;
   cursor: pointer;
 }
 .pager-tabs button[aria-selected="true"] {
@@ -87,31 +187,4 @@
       box-shadow 0.18s ease-in-out,
       color 0.2s ease-in-out 25ms;
   }
-}
-/* A swiped list slides off the screen, not off the gutter. The lists' row is as tall as the shown
-   list, and never shorter than the room under the pill that pager.js measures. */
-.pager-pages {
-  display: flex;
-  align-items: flex-start;
-  min-height: var(--room-under-bar, 0px);
-  margin-inline: calc(-1 * var(--reach-left)) calc(-1 * var(--reach-right));
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-.pager-pages::-webkit-scrollbar {
-  display: none;
-}
-.pager-page {
-  flex: 0 0 100%;
-  min-width: 0;
-  padding-inline: var(--reach-left) var(--reach-right);
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-}
-/* A list not shown takes no height in the row, though a swipe still shows it. */
-.pager-page[inert] {
-  height: 0;
 }

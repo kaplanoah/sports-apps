@@ -317,13 +317,16 @@ test("the examples are three searches for games, then a player and a team's Rost
 // out. A new one fails the test below until it's here, so it's made searchable, or left out on
 // purpose.
 const COVERAGE = {
-  "tab:bracket": { search: "bracket", opens: "tab:bracket" },
+  "tab:bracket-standings": { search: "bracket", opens: "season:bracket" },
   "tab:games": { leftOut: "Typing games already searches every game" },
-  "tab:standings": { search: "standings", opens: "standings:league" },
   "tab:news": { search: "news", opens: "tab:news" },
   "tab:search": { leftOut: "It's the search itself" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },
   "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
+  "dialog:homeScreenWelcome": {
+    leftOut:
+      "It shows once, before the page is added, and the box at the bottom of Settings keeps its steps",
+  },
   "sheet:gameSheet": { games: "Liberty at Lynx" },
   "section:game": { games: "Liberty at Lynx" },
   "section:highlights": { search: "highlights", opens: "highlights" },
@@ -337,7 +340,8 @@ const COVERAGE = {
   "settings:paywalled": { search: "the athletic", opens: "settings:paywalled" },
   "settings:appearance": { search: "dark mode", opens: "settings:appearance" },
   "settings:home-screen": {
-    leftOut: "Shows only in a phone's browser, whose bar at the top also asks to add the page",
+    leftOut:
+      "Shows only in a phone's or tablet's browser, at the bottom of Settings, which search finds",
   },
   "settings:diagnostics": { search: "diagnostics", opens: "settings:diagnostics" },
 };
@@ -557,7 +561,7 @@ test("the playoff picture lists the Bracket and the league's standings beside th
   for (const text of ["playoff picture", "seeds", "who clinched"])
     assert.deepEqual(
       findListedPages(text).rows.map((row) => (row.kind === "place" ? row.place.key : row.kind)),
-      ["tab:bracket", "standings:league"],
+      ["season:bracket", "standings:league"],
       text,
     );
   assert.equal(findListedPages("playoff picture").gameText, "playoff");

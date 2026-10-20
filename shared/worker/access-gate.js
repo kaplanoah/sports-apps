@@ -25,10 +25,10 @@ function encodeBase64Url(buffer) {
 }
 
 /**
- * @param {string} code
+ * @param {string} text
  * @param {string} signingKey
  */
-async function signCode(code, signingKey) {
+async function signText(text, signingKey) {
   const key = await crypto.subtle.importKey(
     "raw",
     textEncoder.encode(signingKey),
@@ -36,9 +36,14 @@ async function signCode(code, signingKey) {
     false,
     ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(normalizeCode(code)));
-  return encodeBase64Url(signature);
+  return encodeBase64Url(await crypto.subtle.sign("HMAC", key, textEncoder.encode(text)));
 }
+
+/**
+ * @param {string} code
+ * @param {string} signingKey
+ */
+const signCode = (code, signingKey) => signText(normalizeCode(code), signingKey);
 
 // Every character is compared, so how long a check takes says nothing about how close a guess was.
 /**
@@ -80,12 +85,13 @@ export async function readAccess(request, env) {
 /**
  * @param {Request} request
  * @param {any} env
+ * @param {string} prefix what the page's paths start with at the address the phone used
  */
-export async function createAccessCookie(request, env) {
+export async function createAccessCookie(request, env, prefix) {
   const isSecure = new URL(request.url).protocol === "https:";
   return [
     `${COOKIE_NAME}=${await signCode(env.ACCESS_CODE, env.ACCESS_SIGNING_KEY)}`,
-    `Path=/${env.APP_KEY}/`,
+    `Path=${prefix}/`,
     `Max-Age=${COOKIE_MAX_AGE_SECONDS}`,
     "HttpOnly",
     // Lax, not Strict, so a link tapped in another site's page still opens the app.
@@ -117,8 +123,9 @@ async function readSentCode(request) {
 /**
  * @param {Request} request
  * @param {any} env
+ * @param {string} prefix
  */
-async function checkSentCode(request, env) {
+async function checkSentCode(request, env, prefix) {
   const code = await readSentCode(request);
   if (code === null) return respondError(400, "bad_request", "Send the code as { code }.");
   if (!env.ACCESS_SIGNING_KEY)
@@ -130,8 +137,79 @@ async function checkSentCode(request, env) {
     return respondError(401, "wrong_code", "That code isn't right.");
   return new Response(null, {
     status: 204,
-    headers: { "set-cookie": await createAccessCookie(request, env) },
+    headers: { "set-cookie": await createAccessCookie(request, env, prefix) },
   });
+}
+
+// A Home Screen app keeps its cookies apart from the browser's, so its link that opens the page in
+// the browser carries a handoff: an address that signs the browser in for a few minutes, long
+// enough to tap the link, and only while the code it was made under is still the one asked for.
+export const HANDOFF_PATH = `${ACCESS_PATH}/handoff`;
+const HANDOFF_SECONDS = 10 * 60;
+const HANDOFF_TOKEN_KEY = "token";
+
+// Its text holds spaces, which a normalized code never does, so a cookie can't stand in for it.
+/**
+ * @param {string} expiresAt seconds since 1970
+ * @param {any} env
+ */
+const signHandoff = (expiresAt, env) =>
+  signText(`handoff ${expiresAt} ${normalizeCode(env.ACCESS_CODE)}`, env.ACCESS_SIGNING_KEY);
+
+/**
+ * @param {Request} request
+ * @param {any} env
+ * @param {string} prefix
+ */
+async function createHandoff(request, env, prefix) {
+  if (!env.ACCESS_CODE) return respondNeedsNoCode();
+  if ((await readAccess(request, env)) !== "open") return respondAccessRequired();
+  const expiresAt = String(Math.floor(Date.now() / 1000) + HANDOFF_SECONDS);
+  const address = new URL(`${prefix}${HANDOFF_PATH}`, request.url);
+  address.searchParams.set(HANDOFF_TOKEN_KEY, `${expiresAt}.${await signHandoff(expiresAt, env)}`);
+  return respondJson({ address: address.href, expiresInMs: HANDOFF_SECONDS * 1000 });
+}
+
+/**
+ * @param {string | null} token
+ * @param {any} env
+ */
+async function isValidHandoff(token, env) {
+  if (token === null || !env.ACCESS_CODE || !env.ACCESS_SIGNING_KEY) return false;
+  const [expiresAt, signature = ""] = token.split(".");
+  if (!(Number(expiresAt) >= Date.now() / 1000)) return false;
+  return isSameText(signature, await signHandoff(expiresAt, env));
+}
+
+// The page opens at its own address, keeping the rest of the handoff's, and never the token, so
+// neither the browser's history nor a Home Screen app added from it keeps one.
+/**
+ * @param {Request} request
+ * @param {any} env
+ * @param {string} prefix
+ */
+async function redeemHandoff(request, env, prefix) {
+  const url = new URL(request.url);
+  const page = new URL(`${prefix}/`, url);
+  for (const [name, value] of url.searchParams)
+    if (name !== HANDOFF_TOKEN_KEY) page.searchParams.append(name, value);
+  const headers = new Headers({ location: page.href, "cache-control": "no-store" });
+  if (await isValidHandoff(url.searchParams.get(HANDOFF_TOKEN_KEY), env))
+    headers.set("set-cookie", await createAccessCookie(request, env, prefix));
+  return new Response(null, { status: 302, headers });
+}
+
+/**
+ * The handoff's route: a POST from a phone signed in makes one, and a GET of the address it
+ * makes signs the browser in and opens the page.
+ * @param {Request} request
+ * @param {any} env
+ * @param {string} prefix what the page's paths start with at the address the phone used
+ */
+export function serveHandoff(request, env, prefix) {
+  if (request.method === "POST") return createHandoff(request, env, prefix);
+  if (request.method === "GET") return redeemHandoff(request, env, prefix);
+  return respondMethodNotAllowed();
 }
 
 /**
@@ -139,14 +217,19 @@ async function checkSentCode(request, env) {
  * code signs the phone in.
  * @param {Request} request
  * @param {any} env
+ * @param {string} prefix what the page's paths start with at the address the phone used
  */
-export async function serveAccess(request, env) {
-  if (!env.ACCESS_CODE) return respondError(404, "not_found", "This page needs no code.");
+export async function serveAccess(request, env, prefix) {
+  if (!env.ACCESS_CODE) return respondNeedsNoCode();
   if (request.method === "GET")
     return respondJson({ isChanged: (await readAccess(request, env)) === "changed" });
-  if (request.method === "POST") return checkSentCode(request, env);
-  return respondError(405, "method_not_allowed", "GET or POST only.");
+  if (request.method === "POST") return checkSentCode(request, env, prefix);
+  return respondMethodNotAllowed();
 }
 
 export const respondAccessRequired = () =>
   respondError(401, "access_required", "This page needs its access code.");
+
+const respondNeedsNoCode = () => respondError(404, "not_found", "This page needs no code.");
+
+const respondMethodNotAllowed = () => respondError(405, "method_not_allowed", "GET or POST only.");

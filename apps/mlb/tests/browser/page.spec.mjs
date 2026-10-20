@@ -9,10 +9,14 @@ import {
   PLAYER_DOCS,
   RECORDED_HIGHLIGHTS,
   ROSTER_DOCS,
+  readColor,
 } from "./harness.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
-import { listOffScaleText } from "../../../../tests/browser/type-scale.mjs";
+import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
@@ -21,11 +25,29 @@ import {
   listTapsOffButtons,
   listTouchHoverRules,
 } from "../../../../tests/browser/tap-states.mjs";
-import { PHONE } from "./screen-sizes.mjs";
+import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
+import {
+  findSeasonPill,
+  findSeasonTab,
+  openSeasonPart,
+  scrollTabsIntoView,
+} from "../../../../tests/browser/season-tab.mjs";
+import {
+  findCenter,
+  findSeasonPart,
+  findTouchTargets,
+  holdHeaderStill,
+  readPillHoldTop,
+  readSeasonPartScroll,
+  readSeasonRide,
+  scrollSeasonPart,
+  scrollSeasonPartToEnd,
+  wheelPastSeasonPartEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-test("the page's font comes from its own server, in every weight from one file", async ({
+test("the page's fonts come from its own server, each in every weight from one file", async ({
   page,
 }) => {
   const fontRequests = [];
@@ -37,13 +59,15 @@ test("the page's font comes from its own server, in every weight from one file",
   const loadedWeights = await page.evaluate(async () => {
     await document.fonts.ready;
     return [...document.fonts]
-      .filter(
-        (font) => font.family.replaceAll('"', "") === "Chivo Mono" && font.status === "loaded",
-      )
-      .map((font) => font.weight);
+      .filter((font) => font.status === "loaded")
+      .map((font) => `${font.family.replaceAll('"', "")} ${font.weight}`);
   });
-  expect(loadedWeights).toContain("100 900");
-  expect(fontRequests).toEqual(["/fonts/chivo-mono-latin.woff2"]);
+  expect(loadedWeights).toContain("Libre Franklin 100 900");
+  expect(loadedWeights).toContain("Chivo Mono 100 900");
+  expect(fontRequests).toEqual([
+    "/fonts/libre-franklin-latin.woff2",
+    "/fonts/chivo-mono-latin.woff2",
+  ]);
 });
 
 test("on a phone, the tabs float at the bottom and stay there while the page scrolls", async ({
@@ -57,12 +81,9 @@ test("on a phone, the tabs float at the bottom and stay there while the page scr
   expect(gapBelow).toBeGreaterThanOrEqual(16);
   expect(gapBelow).toBeLessThan(32);
 
-  await page.getByRole("tab", { name: "Standings" }).click();
-  await expect(page.getByRole("tab", { name: "Standings" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(page.locator("#view-standings")).toBeVisible();
+  await openSeasonPart(page, "Standings");
+  await expect(findSeasonTab(page)).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#standingsWrap")).toBeVisible();
 
   await page.mouse.wheel(0, 800);
   await expect
@@ -83,7 +104,7 @@ test("on a phone, a screen reader's bare click still switches tabs", async ({ pa
 test("on a phone, even a page shorter than the screen can scroll", async ({ page }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await expect(page.locator("#view-bracket")).toBeVisible();
+  await expect(page.locator("#view-bracket-standings")).toBeVisible();
 
   const { scrollHeight, clientHeight } = await page.evaluate(() => ({
     scrollHeight: document.scrollingElement.scrollHeight,
@@ -92,17 +113,195 @@ test("on a phone, even a page shorter than the screen can scroll", async ({ page
   expect(scrollHeight).toBeGreaterThan(clientHeight);
 });
 
-test("on a phone, tapping the tab that's showing scrolls back to the top", async ({ page }) => {
+test("on a phone, tapping the tab that's showing scrolls its part back to the top, and then takes it back to the part it's named for", async ({
+  page,
+}) => {
+  // A screen short enough for the bracket to scroll.
+  await page.setViewportSize({ width: PHONE.width, height: 500 });
+  await openApp(page);
+  await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
+  await openSeasonPart(page, "Bracket");
+  await expect(page.locator("#bracketWrap")).toBeVisible();
+  await waitForLoadToSettle(page);
+  await page.mouse.move(PHONE.width / 2, 300);
+  await page.mouse.wheel(0, 800);
+  await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBeGreaterThan(0);
+
+  await findSeasonTab(page).click();
+
+  await expect.poll(() => readSeasonPartScroll(page, "bracket")).toBe(0);
+  await expect(page.locator("#bracketWrap")).toBeVisible();
+
+  await findSeasonTab(page).click();
+
+  await expect(page.locator("#standingsWrap")).toBeVisible();
+  await expect(page.locator("#bracketWrap")).toBeHidden();
+  expect(await readSeasonPartScroll(page, "standings")).toBe(0);
+});
+
+test("on a phone, each tab comes back where it was left, and a tab not shown yet opens at its top", async ({
+  page,
+}) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
-  await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  await scrollSeasonPartToEnd(page, "standings");
+  const left = await readSeasonPartScroll(page, "standings");
+  expect(left).toBeGreaterThan(0);
 
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await page.getByRole("tab", { name: "News" }).click();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await findSeasonTab(page).click();
 
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
-  await expect(page.locator("#view-standings")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeVisible();
+  expect(await readSeasonPartScroll(page, "standings")).toBe(left);
+});
+
+test("on a phone, the header and the pill ride up as far as the standings scroll, the page holding still", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  const before = await readSeasonRide(page);
+
+  await scrollSeasonPart(page, "standings", 40);
+
+  await expect
+    .poll(() => readSeasonRide(page))
+    .toEqual({ ...before, headerTop: before.headerTop - 40, pillTop: before.pillTop - 40 });
+  await expect(page.locator("#bracketStandingsPill")).toHaveCSS("box-shadow", "none");
+});
+
+test("on a phone, once the header is gone, the pill holds at the top and ends in a line as the standings scroll under it, even past their end", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  const pill = page.locator("#bracketStandingsPill");
+
+  await scrollSeasonPartToEnd(page, "standings");
+  await page.mouse.move(PHONE.width / 2, 500);
+
+  expect(await wheelPastSeasonPartEnd(page, "standings")).toBe(0);
+  expect(await readSeasonRide(page)).toMatchObject({
+    pillTop: await readPillHoldTop(page),
+    pageScroll: 0,
+  });
+  const header = await page.locator("header.top").boundingBox();
+  expect(header.y + header.height).toBeLessThanOrEqual(await readPillHoldTop(page));
+  await expect(pill).toHaveCSS(
+    "box-shadow",
+    `${await readColor(page, "--divider")} 0px 1px 0px 0px`,
+  );
+  await expect(pill).toHaveCSS("background-image", "none");
+});
+
+test("on a phone, a touch on the header lands on the part under it, so a drag there scrolls it, while the header's button still takes its tap", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
+  const header = await page.locator("header.top").boundingBox();
+
+  const found = await findTouchTargets(page, {
+    onHeader: { x: header.x + 40, y: header.y + header.height / 2 },
+    onSettings: findCenter(await page.locator("#settingsBtn").boundingBox()),
+  });
+
+  expect(found).toEqual({ onHeader: "standings", onSettings: "settingsBtn" });
+});
+
+test("on a wide screen, where the tabs ride with the header, a touch on their track between the tabs lands on the part under it, while each tab still takes its tap", async ({
+  page,
+}) => {
+  await page.setViewportSize(WIDE_SCREEN);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await waitForLoadToSettle(page);
+  const track = await page.locator("nav.tabs").boundingBox();
+
+  const found = await findTouchTargets(page, {
+    onTrack: { x: track.x + 1, y: track.y + track.height / 2 },
+    onTab: findCenter(await page.getByRole("tab", { name: "Games" }).boundingBox()),
+  });
+
+  expect(found).toEqual({ onTrack: "standings", onTab: "tab-games" });
+});
+
+test("a screen that narrows to a phone's on the season tab keeps the bottom fade fixed to the screen rather than riding with the header", async ({
+  page,
+}) => {
+  await page.setViewportSize(WIDE_SCREEN);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const fade = page.locator(".edge-fade");
+
+  await page.setViewportSize(PHONE);
+
+  await expect(page.locator("nav.tabs")).not.toHaveAttribute("data-rides");
+  await expect(fade).not.toHaveAttribute("data-rides");
+  await expect(fade).toHaveCSS("position", "fixed");
+});
+
+test("a screen that widens from a phone's on the season tab has the tabs ride with the header", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("nav.tabs")).not.toHaveAttribute("data-rides");
+
+  await page.setViewportSize(WIDE_SCREEN);
+
+  await expect(page.locator("nav.tabs")).toHaveAttribute("data-rides");
+});
+
+test("on a phone where the browser has no scroll-driven animations, the header stays put and the parts scroll under the pill", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await holdHeaderStill(page);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  const before = await readSeasonRide(page);
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  expect(await readSeasonRide(page)).toEqual(before);
+  const pill = await page.locator("#bracketStandingsPill").boundingBox();
+  const partTop = await findSeasonPart(page, "standings").evaluate(
+    (part) => part.getBoundingClientRect().top,
+  );
+  expect(partTop).toBeCloseTo(pill.y + pill.height, 0);
+});
+
+test("on a phone, the standings' last row ends above the tab bar once they're scrolled to their end", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+
+  await scrollSeasonPartToEnd(page, "standings");
+
+  const lastRow = await page.locator("#standingsWrap tbody tr").last().boundingBox();
+  const tabBar = await page.locator("#tabBar").boundingBox();
+  expect(lastRow.y + lastRow.height).toBeLessThanOrEqual(tabBar.y);
 });
 
 test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing animates", async ({
@@ -130,38 +329,43 @@ test("on a phone, a tap slides the tab bar's pill to its tab, and then nothing a
   await expect
     .poll(readPillTransitions)
     .toEqual(["transitionrun transform", "transitionend transform"]);
-  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await waitForTimedAnimations(page);
   const pillBox = await pill.boundingBox();
   const tabBox = await page.getByRole("tab", { name: "Games" }).boundingBox();
   expect(pillBox.x + pillBox.width / 2).toBeCloseTo(tabBox.x + tabBox.width / 2, 0);
   expect(pillBox.height).toBeCloseTo(tabBox.height, 0);
 });
 
-test("clicking the tab that's showing scrolls back to the top", async ({ page }) => {
+test("clicking the tab that's showing scrolls its part back to the top", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 500 });
   await openApp(page);
   await expect(page.locator("#bracketWrap")).toContainText("Dodgers");
+  await expect(findSeasonTab(page)).toHaveAccessibleName("Standings");
+  await page.mouse.move(640, 400);
   await page.mouse.wheel(0, 800);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBeGreaterThan(0);
 
-  await page.getByRole("tab", { name: "Bracket" }).dispatchEvent("click");
+  await findSeasonTab(page).dispatchEvent("click");
 
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect.poll(() => readSeasonPartScroll(page, "standings")).toBe(0);
 });
 
-test("the page reopens on the tab it was last on", async ({ page }) => {
+test("the page reopens on the tab it was last on, showing the part of it last chosen", async ({
+  page,
+}) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Bracket");
 
   await page.reload();
 
-  await expect(page.getByRole("tab", { name: "Standings" })).toHaveAttribute(
+  await expect(findSeasonTab(page)).toHaveAttribute("aria-selected", "true");
+  await expect(findSeasonPill(page).getByRole("tab", { name: "Bracket" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  await expect(page.locator("#view-standings")).toHaveCSS("display", "block");
-  await expect(page.locator("#view-bracket")).toHaveCSS("display", "none");
+  await expect(page.locator("#bracketWrap")).toBeVisible();
+  await expect(page.locator("#standingsWrap")).toBeHidden();
 });
 
 test("the page shows the tab it was last on before its modules have loaded", async ({ page }) => {
@@ -174,7 +378,39 @@ test("the page shows the tab it was last on before its modules have loaded", asy
   await expect(tab).toHaveAttribute("aria-selected", "true");
   await expect(tab).toHaveClass(/\bactive\b/);
   await expect(page.locator("#view-games")).toHaveCSS("display", "flex");
-  await expect(page.locator("#view-bracket")).toHaveCSS("display", "none");
+  await expect(page.locator("#view-bracket-standings")).toHaveCSS("display", "none");
+});
+
+test("on a wide screen, the tabs are one segmented control, each as tall as a pill's names in a track of the divider's color just around them, the open one raised in the card's color, and every name centered on its capitals", async ({
+  page,
+}) => {
+  await openApp(page);
+  const track = page.locator("nav.tabs");
+  const pillName = findSeasonPill(page).getByRole("tab").first();
+  await page.evaluate(() => document.fonts.ready);
+  const pillHeight = /** @type {{ height: number }} */ (await pillName.boundingBox()).height;
+  expect(pillHeight).toBe(36);
+  expect(/** @type {{ height: number }} */ (await track.boundingBox()).height).toBe(pillHeight + 4);
+  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    await expect(track).toHaveCSS("background-color", await readColor(page, "--divider"));
+    const chosen = page.locator("nav.tabs [role=tab][aria-selected=true]");
+    await expect(chosen).toHaveCSS("background-color", await readColor(page, "--card"));
+    await expect(chosen).toHaveCSS(
+      "box-shadow",
+      `${await readColor(page, "--card-border")} 0px 0px 0px 1px inset`,
+    );
+    for (const other of await page.locator("nav.tabs [role=tab][aria-selected=false]").all()) {
+      await expect(other).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(other).toHaveCSS("color", await readColor(page, "--ink"));
+    }
+  }
+  for (const name of [...(await track.getByRole("tab").all()), pillName]) {
+    const box = /** @type {{ y: number, height: number }} */ (await name.boundingBox());
+    expect(box.height).toBe(pillHeight);
+    expect((await readCapitals(name)).middle - (box.y + box.height / 2)).toBeCloseTo(0, 0);
+  }
 });
 
 test("a tap shows only the page's own states: no gray flash, and no hover left behind", async ({
@@ -312,29 +548,30 @@ for (const { screen, viewport } of [
   test.describe(`on ${screen}`, () => {
     test.use({ viewport });
 
-    test("every piece of text keeps to the type scale, in every view", async ({ page }) => {
+    test("every piece of text keeps to its type role, in every view", async ({ page }) => {
       await openApp(page, {
         snapshots: { 2026: buildSnapshotWithStarters() },
         store: { ...ROSTER_DOCS, ...PLAYER_DOCS, ...NEWS_DOCS },
         pitchers: PITCHER_SIDES,
         highlights: SEP_23_HIGHLIGHTS,
       });
+      await openSeasonPart(page, "Bracket");
       await expect(page.locator("#bracketWrap .card-note").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.getByRole("tab", { name: "Games" }).click();
       for (const day of SHOWN_DAYS) {
         await showDay(page, day);
-        expect(await listOffScaleText(page)).toEqual([]);
+        expect(await listTextOffRoles(page)).toEqual([]);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listStrayPeriods(page)).toEqual([]);
         expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       }
       for (const state of listSearchStates(page)) {
         await state();
-        expect(await listOffScaleText(page)).toEqual([]);
+        expect(await listTextOffRoles(page)).toEqual([]);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listStrayPeriods(page)).toEqual([]);
         expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -342,33 +579,33 @@ for (const { screen, viewport } of [
       await page.locator("#gameSearch button.search-cancel").click();
       for (const section of await showGameSections(page)) {
         await section();
-        expect(await listOffScaleText(page)).toEqual([]);
+        expect(await listTextOffRoles(page)).toEqual([]);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listStrayPeriods(page)).toEqual([]);
         expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       }
-      await page.getByRole("tab", { name: "Standings" }).click();
+      await openSeasonPart(page, "Standings");
       await expect(page.locator("table.st tbody tr").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
       await expect(page.locator("#teamSheet .leader-stat").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
       await expect(page.locator("#rosterBody .box-table").first()).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       for (const player of ["Steven Kwan", "Tanner Bibee"]) {
         await page.locator("#rosterBody").getByRole("button", { name: player }).click();
         await expect(page.locator("#playerBody .sheet-part").first()).toBeVisible();
-        expect(await listOffScaleText(page)).toEqual([]);
+        expect(await listTextOffRoles(page)).toEqual([]);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listStrayPeriods(page)).toEqual([]);
         expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -376,21 +613,22 @@ for (const { screen, viewport } of [
         await expect(page.locator("#playerSheet")).toBeHidden();
       }
       await openInjuredPlayer(page);
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator("#teamSheet")).toBeHidden();
+      await scrollTabsIntoView(page);
       await page.getByRole("tab", { name: "News" }).click();
       await expect(page.locator(".news-more-title")).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await openSettings(page);
       await expect(page.locator("#settingsDialog")).toBeVisible();
-      expect(await listOffScaleText(page)).toEqual([]);
+      expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -403,6 +641,7 @@ for (const { screen, viewport } of [
         pitchers: PITCHER_SIDES,
         highlights: SEP_23_HIGHLIGHTS,
       });
+      await openSeasonPart(page, "Bracket");
       await expect(page.locator("#bracketWrap .card-note").first()).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);
       await page.getByRole("tab", { name: "Games" }).click();
@@ -419,7 +658,7 @@ for (const { screen, viewport } of [
         await section();
         expect(await listTapsOffButtons(page)).toEqual([]);
       }
-      await page.getByRole("tab", { name: "Standings" }).click();
+      await openSeasonPart(page, "Standings");
       await expect(page.locator("table.st tbody tr").first()).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);
       await page.locator('.div-grid tr[data-team="CLE"] .team-open').click();
@@ -439,6 +678,7 @@ for (const { screen, viewport } of [
       expect(await listTapsOffButtons(page)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.locator("#teamSheet")).toBeHidden();
+      await scrollTabsIntoView(page);
       await page.getByRole("tab", { name: "News" }).click();
       await expect(page.locator(".news-more-title")).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);
@@ -451,10 +691,11 @@ for (const { screen, viewport } of [
 
 test("every font the page's views draw with is preloaded", async ({ page }) => {
   await openApp(page, { snapshots: { 2026: buildSnapshotWithStarters() } });
+  await openSeasonPart(page, "Bracket");
   await expect(page.locator("#bracketWrap .card-note").first()).toBeVisible();
   await page.getByRole("tab", { name: "Games" }).click();
   for (const day of SHOWN_DAYS) await showDay(page, day);
-  await page.getByRole("tab", { name: "Standings" }).click();
+  await openSeasonPart(page, "Standings");
   await expect(page.locator("table.st tbody tr").first()).toBeVisible();
   await page.getByRole("tab", { name: "News" }).click();
   await expect(page.locator("#newsList")).toHaveText("No news yet");
@@ -462,12 +703,16 @@ test("every font the page's views draw with is preloaded", async ({ page }) => {
   expect(await listFontsNotPreloaded(page)).toEqual([]);
 });
 
-test("Chivo Mono takes its own size at each step: sentences 14.5px, facts and labels 13px", async ({
+test("the header's words are in Libre Franklin and its times in Chivo Mono, both at the detail's size, on whole-pixel lines", async ({
   page,
 }) => {
   await openApp(page);
-  await expect(page.locator("#stamp")).toBeVisible();
-  await expect(page.locator("#stamp")).toHaveCSS("font-size", "13px");
-  await expect(page.locator("#stamp")).toHaveCSS("line-height", "18px");
-  await expect(page.locator("#bracketWrap .card-note").first()).toHaveCSS("font-size", "13px");
+  const stamp = page.locator("#stamp");
+  await expect(stamp).toBeVisible();
+  const detail = `${(await readRole(page, "detail")).size}px`;
+  await expect(stamp).toHaveCSS("font-family", /^"Libre Franklin"/);
+  await expect(stamp).toHaveCSS("font-size", detail);
+  await expect(stamp).toHaveCSS("line-height", "18px");
+  await expect(stamp.locator("b:not(.now)").first()).toHaveCSS("font-family", /^"Chivo Mono"/);
+  await expect(stamp.locator("b:not(.now)").first()).toHaveCSS("font-size", detail);
 });

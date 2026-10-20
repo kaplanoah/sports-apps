@@ -72,18 +72,37 @@ function restoreScrolls(part, scrolls, savedAt) {
   }
 }
 
+// A part's style comes back only for the colors its code hands it as custom properties, like a game
+// sheet's teams'. The rest was the page's for a moment, like the hold of a pull to refresh that
+// reloaded the page, and would stay for good.
+/** @param {string} style */
+const keepCustomProperties = (style) =>
+  style
+    .split(";")
+    .map((declaration) => declaration.trim())
+    .filter((declaration) => declaration.startsWith("--"))
+    .join("; ");
+
 /**
  * @param {string} id
- * @param {{ markup: string, hidden: boolean, classes?: unknown, style?: unknown, scrolls?: unknown, savedAt?: unknown }} part
+ * @param {{ markup: string, hidden: boolean, classes?: unknown, style?: unknown, scrolls?: unknown, holderTop?: unknown, savedAt?: unknown }} part
  */
-function showPart(id, { markup, hidden, classes, style, scrolls, savedAt }) {
+function showPart(id, { markup, hidden, classes, style, scrolls, holderTop, savedAt }) {
   const element = /** @type {HTMLElement} */ (document.getElementById(id));
   element.innerHTML = markup;
   const isBackToStart = element.hasAttribute("data-start-hidden") && isLongAwayFrom(savedAt);
   element.hidden = hidden === true || isBackToStart;
   if (typeof classes === "string") element.classList.add(...classes.split(" ").filter(Boolean));
-  if (typeof style === "string") element.setAttribute("style", style);
+  if (typeof style === "string") element.setAttribute("style", keepCustomProperties(style));
   restoreScrolls(element, scrolls, savedAt);
+  // A part drawn inside the season's standings or bracket, which each scroll on their own, goes
+  // back to where its holder was scrolled, which season-header.js takes again once it knows the
+  // holder's room.
+  const holder = element.parentElement;
+  if (Number(holderTop) > 0 && holder) {
+    holder.scrollTop = Number(holderTop);
+    holder.dataset.putBackTop = String(holderTop);
+  }
 }
 
 /** @param {any} saved */

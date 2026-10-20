@@ -1,13 +1,19 @@
-// What a search shows for its words, before the view draws it: the suggestions while they're
-// typed, the pages the words name, the other ways to read them, and the games they find, with the
-// line saying how it read them. A word still being typed is read as the team or place the first
-// suggestion finishes it into, once three letters of its name are typed, or five with one wrong, and
-// otherwise left out until it's whole. Runs in the page and in Node, so it uses no DOM.
+// What a search shows for its words, before the view draws it: the examples before anything is
+// typed, the suggestions while words are, the pages the words name, the other ways to read them,
+// and the games they find, with the line saying how it read them, and the day the list opens on.
+// A word still being typed is read as the team or place the first suggestion finishes it into, once
+// three letters of its name are typed, or five with one wrong, and otherwise left out until it's
+// whole, even typed with an accent or a period. Runs in the page and in Node, so it uses no DOM.
 
 import { describeSearch, findSearchGames, isAskingNothing, readSearch } from "./game-search.js";
 import { SHORTEST_PREFIX, findPages, findPartGame, startsPlayerName } from "./page-search.js";
-import { listOtherReadings, listSuggestions } from "./search-suggestions.js";
-import { splitWords } from "./search-words.js";
+import {
+  EXAMPLE_COUNT,
+  listExamples,
+  listOtherReadings,
+  listSuggestions,
+} from "./search-suggestions.js";
+import { normalizeText, splitWords } from "./search-words.js";
 
 /** @typedef {import("./game-search.js").SearchContext} SearchContext */
 /** @typedef {import("./game-search.js").SearchGame} SearchGame */
@@ -25,9 +31,6 @@ import { splitWords } from "./search-words.js";
  * @typedef {{ context: SearchContext, pages: SearchPages | null, isTyping: boolean, isGamesOnly: boolean }} SearchState
  */
 
-/** @param {string} text */
-const readWords = (text) => splitWords(text).join(" ");
-
 /**
  * Whether the last word is one the search can't read yet, as a word still being typed is, or is too
  * short to ask for anything yet, as "a" on its way to "Astros" passes over.
@@ -38,7 +41,7 @@ function isLastWordHalfTyped(text, context) {
   const last = text.split(/\s+/).at(-1) ?? "";
   const search = readSearch(text, context);
   const isTooShort = last.length < SHORTEST_PREFIX && isAskingNothing(search);
-  return search.skipped.includes(last.toLowerCase()) || isTooShort;
+  return search.skipped.includes(splitWords(last).at(-1) ?? "") || isTooShort;
 }
 
 /**
@@ -51,14 +54,14 @@ function isLastWordHalfTyped(text, context) {
  * @param {Suggestion[]} suggestions
  */
 function finishName(text, [first]) {
-  const typed = readWords(first?.finished ?? "");
-  const words = readWords(text);
+  const typed = normalizeText(first?.finished ?? "");
+  const words = normalizeText(text);
   const head = words.slice(0, words.length - typed.length).trim();
   const isNameFinished =
     typed.replace(/\s+/g, "").length >= SHORTEST_PREFIX &&
     words.endsWith(typed) &&
     (first?.mark.kind === "team" || first?.mark.kind === "place") &&
-    readWords(first.text).startsWith(head);
+    normalizeText(first.text).startsWith(head);
   if (!isNameFinished) return null;
   return {
     words: first.text,
@@ -186,10 +189,40 @@ export const orderListedDays = (days, isNewestFirst) =>
   isNewestFirst ? [...days].reverse() : days;
 
 /**
+ * Where a new search places the list, and the day it rests on, which the days drawn whole are
+ * around: at its top on its first day when rows sit over the games, on its first day from today,
+ * or at its end on its last day when every one is past.
+ * @param {{ day: string }[]} days in the order the list shows them
+ * @param {string} today
+ * @param {boolean} isOverGames
+ * @returns {{ at: "top" | "day" | "end", day: string | null }}
+ */
+export function findListPlace(days, today, isOverGames) {
+  if (isOverGames) return { at: "top", day: days[0]?.day ?? null };
+  const ahead = days.find(({ day }) => day >= today);
+  if (ahead) return { at: "day", day: ahead.day };
+  return { at: "end", day: days.at(-1)?.day ?? null };
+}
+
+/**
+ * The examples to offer before anything is typed: the league's searches of games that find a
+ * game, then its pages' that find a page, as many as there's room for.
+ * @param {SearchContext} context
+ * @param {SearchPages | null} pages
+ */
+export function listShownExamples(context, pages) {
+  const pageExamples = (pages?.examples ?? []).filter(
+    (example) =>
+      findPages(example, { dictionary: context.dictionary, pages, isTyping: false }).rows.length,
+  );
+  return [...listExamples(context, EXAMPLE_COUNT - pageExamples.length), ...pageExamples];
+}
+
+/**
  * What the search shows for words in the field: while they're typed, suggestions over the pages
- * they name, other readings, and a line over the games they find from today on, or, when none are
- * left, every one, the latest first; otherwise, or once nothing sits over them, every game they
- * find.
+ * they name, or under them when the words name them as typed, other readings, and a line over the
+ * games they find from today on, or, when none are left, every one, the latest first; otherwise,
+ * or once nothing sits over them, every game they find.
  * @param {string} query the words as typed
  * @param {SearchState} state
  */
@@ -199,7 +232,7 @@ export function readTypedSearch(query, state) {
   const typed = isTyping ? suggest(query, context, state.pages) : [];
   const reading = isTyping ? readWhileTyping(text, typed, context) : { readText: text, name: null };
   const { readText } = reading;
-  const { rows: pageRows, gameText, read: answer } = readPages(text, reading, state);
+  const { rows: pageRows, gameText, read: answer, isFirst } = readPages(text, reading, state);
   const rows = placeGameParts(pageRows, context);
   const suggestions = dropTeamsShown(typed, rows);
   const others = gameText && !isGamesOnly ? listOtherReadings(gameText, context) : [];
@@ -215,6 +248,7 @@ export function readTypedSearch(query, state) {
     suggestions,
     readText,
     rows,
+    isRowsFirst: !!isFirst,
     answer,
     others,
     search,

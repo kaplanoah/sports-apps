@@ -1,3 +1,4 @@
+import { watchFailedImages } from "./failed-images.js";
 import { setHtml } from "./html.js";
 import { readNewsChoices, startNewsChoices } from "./news-choices.js";
 import { renderNews } from "./news-view.js";
@@ -24,8 +25,8 @@ export function drawNews(list, news, league) {
 }
 
 /**
- * Calls `redraw` after a News switch changes or the screen widens or narrows,
- * and fits the photos' credits again whenever the list's width changes.
+ * Calls `redraw` after a News switch changes, the screen widens or narrows, or a photo fails to
+ * load, and fits the photos' credits again whenever the list's width changes.
  * @param {HTMLElement} list
  * @param {() => void} redraw
  * @param {import("./news-view.js").NewsLeague} league
@@ -33,6 +34,7 @@ export function drawNews(list, news, league) {
 export function startNewsRedraws(list, redraw, league) {
   startNewsChoices(redraw, Object.keys(league.outletSwitches));
   matchMedia(WIDE_SCREEN).addEventListener("change", redraw);
+  watchFailedImages(list, redraw);
   watchPhotoCredits(list);
 }
 

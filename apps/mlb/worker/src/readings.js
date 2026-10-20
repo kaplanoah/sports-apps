@@ -10,7 +10,8 @@ const KEPT_DAYS = 14;
 
 export const nameReadingsCollection = (year) => `readings-${year}`;
 
-// Well under the Worker store's 64 KiB, so a busy day moves on to a new part before a write fails.
+// Each update rewrites only the part it adds to, so a busy day moves on to a new part while that
+// write is still small, far under the 2 MB a value in the store may hold.
 const MAX_PART_LENGTH = 40 * 1024;
 
 // A change before 6am Eastern comes from last night's games, even once the slate has moved on.
@@ -31,9 +32,10 @@ export function createReading(snapshot) {
   for (const [division, clubs] of Object.entries(snapshot.standings?.divisions || {})) {
     for (const { next, then, ...row } of clubs) rows[row.id] = { ...row, div: division };
   }
+  // Kept by MLB's id, since two games between the same clubs can share a day, as a resumed game
+  // and the day's own do.
   const games = {};
-  for (const game of listDayFinals(snapshot.slate, readReadingDay(snapshot)))
-    games[`${game.away}-${game.home}-${game.doubleheader || 1}`] = game;
+  for (const game of listDayFinals(snapshot.slate, readReadingDay(snapshot))) games[game.id] = game;
   return {
     at: snapshot.asOf,
     projected: snapshot.projected,

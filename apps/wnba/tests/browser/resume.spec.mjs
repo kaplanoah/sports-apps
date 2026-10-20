@@ -5,10 +5,21 @@ import {
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
+import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
-const LAST_RELEASE = { version: "1.4.0", commit: "abc1234", builtAt: "2026-10-01T22:00:00Z" };
-const NEW_RELEASE = { version: "1.4.1", commit: "def5678", builtAt: "2026-10-01T23:00:00Z" };
+const LAST_RELEASE = {
+  version: "1.4.0",
+  commit: "abc1234",
+  builtAt: "2026-10-01T22:00:00Z",
+  label: null,
+};
+const NEW_RELEASE = {
+  version: "1.4.1",
+  commit: "def5678",
+  builtAt: "2026-10-01T23:00:00Z",
+  label: null,
+};
 
 // A reload clears whatever the test left on the window.
 /** @param {import("@playwright/test").Page} page */
@@ -39,8 +50,7 @@ const waitForTick = (page) => page.clock.runFor(15 * 1000);
  * @param {number} minutes
  */
 async function sleepUnannounced(page, minutes) {
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.setSystemTime(now + minutes * MINUTE_MS);
+  await passTime(page, minutes * MINUTE_MS);
   await page.clock.runFor(15 * 1000);
 }
 
@@ -97,16 +107,6 @@ test("a page asleep half an hour reads what it missed when it wakes, without rel
   await expect(row.locator(".game-status .clock")).toHaveText("Q2 5:10");
   expect(await isSameLoad(page)).toBe(true);
 });
-
-/**
- * @param {import("@playwright/test").Page} page
- * @param {boolean} hidden
- */
-const setHidden = (page, hidden) =>
-  page.evaluate((isHidden) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => isHidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  }, hidden);
 
 test("a page hidden a minute closes its socket, and opens another when it's shown", async ({
   page,

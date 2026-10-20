@@ -1,7 +1,8 @@
 name: CI
 
 # Every pull request is checked, including one stacked on another pull request's branch. A label
-# change checks it again, so the phone-ok label lets a red change through without a push.
+# change checks it again, so the phone-ok label lets a red change through without a push, and the
+# review label asks for a review.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
@@ -10,6 +11,13 @@ on:
 
 permissions:
   contents: read
+
+# The status a held red change waits on, which the phone job sets and check looks for in main's
+# rules.
+env:
+  PHONE_CONTEXT: phone
+  # The label that asks CI to review a pull request again, which the review takes off.
+  REVIEW_LABEL: review
 
 # A new push to a pull request stops the checks still running on the one before it. A label
 # change waits for them instead, since it brings no new code and reuses what they find.
@@ -20,7 +28,7 @@ concurrency:
 jobs:
   # On main, a pull request's CI that passed on exactly this code has already run every check, so
   # they're skipped. A label change brings no new code, so once a run passed every test on exactly
-  # this code, only the gate runs again (worker/find-passed-ci.mjs).
+  # this code with no review owed, only the gate runs again (worker/find-passed-ci.mjs).
   passed:
     if: github.event_name == 'push' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     runs-on: ubuntu-latest
@@ -32,9 +40,11 @@ jobs:
       run: ${{ steps.find.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - &setup-node
         id: node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
       - name: Find the CI run that passed on this code
@@ -45,8 +55,15 @@ jobs:
         run: node worker/find-passed-ci.mjs $SEARCH
 
   # A red change merges only once the owner has used it on the beta app and labeled it phone-ok
-  # (worker/red-change.mjs), which reads the pull request's events for who added the label. The
-  # merge commit's first parent is the base branch.
+  # (worker/red-change.mjs), which reads the pull request's timeline for who added the label, and
+  # the head commit's check suites for whether the label came after the head was pushed, so a push
+  # after phone-ok holds the pull request again. The merge commit's first parent is the base branch,
+  # whose copy of the gate's code, run on the Node and modules the base names, judges the pull
+  # request's files, so a change to the gate's code can't let the pull request's own red change
+  # through; a change to this job, the phone job, or check is the review's to weigh, as REVIEW.md
+  # says. The diff shows every file's text, whatever .gitattributes says of it. It holds the change
+  # on the phone job's status rather than by failing, and check holds it whenever main's rules
+  # don't require that status, or the pull request comes from a fork, whose token can't post it.
   gate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -54,18 +71,60 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # A pull request's timeline is an issue's, which the issues scope reads.
+      issues: read
+      checks: read
+    outputs:
+      held: ${{ steps.hold.outputs.held }}
+      # Whether the pull request comes from a fork, whose token can't post the phone status.
+      forked: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 2
-      - *setup-node
+          persist-credentials: false
+      - name: Check out the base's gate
+        run: git worktree add "$RUNNER_TEMP/base" HEAD^1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: ${{ runner.temp }}/base/.nvmrc
+      # The gate parses a page's scripts and stylesheets with esbuild, to tell what a change does
+      # from how it's written. Its modules are installed fresh from the base's lockfile, never
+      # restored from a cache, since a pull request's own run can save a cache its later runs
+      # restore first. No module the base installs runs a script of its own.
+      - name: Install the base's modules
+        working-directory: ${{ runner.temp }}/base
+        run: npm ci --ignore-scripts
       - name: Hold a red change for the owner's phone
+        id: hold
         shell: bash
         env:
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
-        run: git diff --no-renames HEAD^1 HEAD | node worker/red-change.mjs "$LABELS"
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git diff --text --no-textconv --no-ext-diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"
+
+  # The status a held red change waits on, pending until phone-ok, which main's rules require. It
+  # runs none of the pull request's code, since its token can set the status. A fork's pull
+  # request gets a token that can't, so it skips this and gets no phone status at all: check holds
+  # its red change itself, and while main's rules require the status, it merges only past them.
+  phone:
+    needs: gate
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.gate.outputs.forked != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - name: Show on the head whether the owner's phone still has to try it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STATE: ${{ needs.gate.outputs.held == 'true' && 'pending' || 'success' }}
+          DESCRIPTION: ${{ needs.gate.outputs.held == 'true' && 'A red change, waiting for phone-ok from beta' || 'Nothing left for the phone' }}
+        run: gh api --method POST "repos/$REPO/statuses/$HEAD_SHA" -f context="$PHONE_CONTEXT" -f state="$STATE" -f description="$DESCRIPTION"
 
   # The quick checks share one machine, which leaves more of the account's runners for the browser
   # tests.
@@ -79,6 +138,9 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
       - *setup-node
       - &restore-modules
         id: modules
@@ -102,28 +164,68 @@ jobs:
       - name: Find dead code
         if: ${{ !cancelled() }}
         run: npm run deadcode
+      # The dot reporter prints each failure in full at the end of the run, where a reader of the
+      # log's last lines finds it, while TAP's five lines a test put it thousands of lines back.
       - name: Test
         if: ${{ !cancelled() }}
+        env: &test-reporter
+          NODE_OPTIONS: --test-reporter=dot
         run: npm test
       # The runner is on UTC, ahead of MLB's Eastern day; this zone is behind it.
       - name: Test in another time zone
         if: ${{ !cancelled() }}
+        env: *test-reporter
         run: TZ=Pacific/Honolulu npm test
       # A pull request's title sets the next version once it's squash merged (worker/release.mjs).
-      # The title comes from GitHub rather than the event, so a re-run checks an edited title.
-      # Naming the shell adds pipefail, so a failed diff can't pass as no changes.
+      # The title comes from GitHub rather than the event, so a re-run checks an edited title. The
+      # files come from git, which lists a change of any size, where GitHub's diff stops at 20,000
+      # lines; the merge commit's first parent is the base branch. Naming the shell adds pipefail,
+      # so a failed diff can't pass as no changes.
       - name: Check the title
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh pr diff "$PR" --name-only | node worker/check-pr-title.mjs "$(gh pr view "$PR" --json title --jq .title)"
+        run: git diff --name-only --no-renames HEAD^1 HEAD | node worker/check-pr-title.mjs "$(gh pr view "$PR" --json title --jq .title)"
 
-  # The browser tests take most of CI's time, so they run split across machines.
-  browser:
+  # Which apps' browser tests the change reaches (worker/browser-scope.mjs), and which browser specs
+  # burn-in repeats (worker/burn-in-specs.mjs). The merge commit's first parent is the base branch.
+  scope:
     needs: passed
     if: ${{ !cancelled() && !needs.passed.outputs.run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      apps: ${{ steps.apps.outputs.apps }}
+      specs: ${{ steps.specs.outputs.specs }}
+    steps:
+      # The whole history, to read what changed since the last head that passed burn-in.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - *setup-node
+      # Naming the shell adds pipefail, so a failed diff fails the job rather than reading as no
+      # change.
+      - id: apps
+        shell: bash
+        run: git diff --name-only --no-renames HEAD^1 HEAD | node worker/browser-scope.mjs
+      - id: specs
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: node worker/burn-in-specs.mjs
+
+  # The browser tests take most of CI's time, so they run split across machines, for the apps the
+  # change reaches.
+  browser:
+    needs: [passed, scope]
+    if: ${{ !cancelled() && !needs.passed.outputs.run && needs.scope.outputs.apps != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -132,6 +234,8 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - *setup-node
       - *restore-modules
       - *install-modules
@@ -148,16 +252,21 @@ jobs:
         run: npx playwright install --only-shell chromium
       # A failed try's trace leaves out the page at each step, a sixth of every test's time, which
       # burn-in and the nightly run keep.
-      - run: npm run test:browser -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+      - shell: bash
         env:
           TRACE_SNAPSHOTS: "off"
+          APPS: ${{ needs.scope.outputs.apps }}
+        run: |
+          projects=()
+          for app in $APPS; do projects+=(--project "$app"); done
+          npm run test:browser -- --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${projects[@]}"
       - &find-flaky
         id: flaky
         if: ${{ !cancelled() && hashFiles('test-results/report.json') != '' }}
         run: echo "found=$(node -p 'require("./test-results/report.json").stats.flaky > 0')" >> "$GITHUB_OUTPUT"
-      # A test that passed only on its retry keeps its failed try's trace, and the check job names
-      # it in the issue Flaky browser tests.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      # A test that passed only on its retry keeps its failed try's trace, and the next nightly run
+      # names it in the issue Flaky browser tests (worker/report-flaky-tests.mjs).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure() || steps.flaky.outputs.found == 'true'
         with:
           name: browser-report-${{ matrix.shard }}
@@ -165,42 +274,21 @@ jobs:
             playwright-report/
             test-results/
 
-  # The browser specs a pull request adds or changes, which burn-in repeats, so it starts its
-  # machines only when there are some. The merge commit's first parent is the base branch.
-  changed-specs:
-    needs: passed
-    if: ${{ !cancelled() && github.event_name == 'pull_request' && !needs.passed.outputs.run }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      specs: ${{ steps.find.outputs.specs }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 2
-      # Naming the shell adds pipefail, so a failed diff fails the job rather than reading as no
-      # spec changed.
-      - id: find
-        shell: bash
-        run: |
-          specs=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | tr '\n' ' ')
-          echo "specs=$specs" >> "$GITHUB_OUTPUT"
-
-  # A browser spec a pull request adds or changes runs ten times over, with no retry, so a test
-  # that passes only some of the time fails on the pull request that brings it, rather than on
-  # later ones. Only a test the pull request wrote or edited fails it: any other that failed goes
-  # to the issue Flaky browser tests from the check job (worker/judge-burn-in.mjs). Ten runs of
-  # every spec a large pull request changes take longer than one machine's limit, so they're split
-  # across machines too, and a machine whose share holds no test passes. It runs in Playwright's
-  # own image, as the webkit job does, so the at-rest specs repeat in WebKit too, where they've
+  # Each browser spec scope lists, the ones a pull request adds or changes but for one that passed
+  # burn-in in an earlier run and hasn't changed since, with what it runs with unchanged too
+  # (worker/burn-in-specs.mjs), runs ten times over, with no retry, so a test that passes only some
+  # of the time fails on the pull request that brings it, rather than on later ones. Only a test
+  # the pull request wrote or edited fails it: any other that failed goes to the issue Flaky
+  # browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten runs of every spec a
+  # large pull request changes take longer than one machine's limit, so they're split across
+  # machines too, and a machine whose share holds no test passes. When an at-rest spec is among
+  # them, it installs WebKit too, as the webkit job does, so they repeat in WebKit, where they've
   # failed most.
   burn-in:
-    needs: changed-specs
-    if: ${{ !cancelled() && needs.changed-specs.result == 'success' && needs.changed-specs.outputs.specs != '' }}
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.specs != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble
     strategy:
       fail-fast: false
       matrix:
@@ -209,31 +297,39 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 2
+          persist-credentials: false
       - *setup-node
       - *restore-modules
       - *install-modules
+      # Only restored, never saved, since a cache saved with WebKit in it would have the browser
+      # job, whose machines lack WebKit's system libraries, run the WebKit projects.
+      - id: browsers
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: *browsers-key
+      - *install-browsers
+      - if: contains(needs.scope.outputs.specs, 'at-rest.spec.mjs')
+        run: npx playwright install --with-deps webkit
       # Every test runs all ten times, however many fail, and the next step decides which
       # failures fail the pull request, so a failed test doesn't fail this one.
-      - name: Repeat each browser spec this pull request changes
+      - name: Repeat each browser spec scope lists
         shell: bash
         env:
-          SPECS: ${{ needs.changed-specs.outputs.specs }}
+          SPECS: ${{ needs.scope.outputs.specs }}
         run: |
           read -ra specs <<< "$SPECS"
           npm run test:browser -- --repeat-each=10 --retries=0 --max-failures=0 --pass-with-no-tests \
             --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}" || true
-      # The image's user doesn't own the checkout, so git trusts it only once it's named safe.
       - name: Fail only on a test this pull request wrote or edited
         shell: bash
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        run: git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
         with:
           name: burn-in-flaky-${{ matrix.shard }}
           path: test-results/burn-in-flaky.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
           name: playwright-report-burn-in-${{ matrix.shard }}
@@ -241,25 +337,31 @@ jobs:
             playwright-report/
             test-results/
 
-  # iPhones run the pages in WebKit, which runs only the at-rest specs, so one machine runs it, in
-  # Playwright's own image, which holds WebKit and the system libraries it needs rather than
-  # installing them from a mirror on every run. Its tag is the Playwright version package.json pins
-  # (tests/ci-workflow.test.js).
+  # iPhones run the pages in WebKit, which runs only the at-rest specs, so one machine runs it. The
+  # installed Playwright installs the WebKit it runs, with the system libraries GitHub's runners
+  # lack, so the browser always matches the lockfile (tests/ci-workflow.test.js).
   webkit:
-    needs: passed
-    if: ${{ !cancelled() && !needs.passed.outputs.run }}
+    needs: [passed, scope]
+    if: ${{ !cancelled() && !needs.passed.outputs.run && needs.scope.outputs.apps != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - *setup-node
       - *restore-modules
       - *install-modules
-      - run: npm run test:browser -- --project '*-webkit'
+      - run: npx playwright install --with-deps webkit
+      - shell: bash
+        env:
+          APPS: ${{ needs.scope.outputs.apps }}
+        run: |
+          projects=()
+          for app in $APPS; do projects+=(--project "$app-webkit"); done
+          npm run test:browser -- "${projects[@]}"
       - *find-flaky
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure() || steps.flaky.outputs.found == 'true'
         with:
           name: browser-report-webkit
@@ -277,6 +379,8 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - *setup-node
       - id: modules
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -305,203 +409,414 @@ jobs:
           path: ~/.cache/ms-playwright
           key: *browsers-key
 
-  # Reviews every push to a pull request, so fixes for its comments are reviewed too. It
-  # passes when there's nothing to review, such as a push to main, since check fails on a
-  # skipped job.
-  review:
+  # A pull request is reviewed once it's ready, when it's opened ready or marked ready, and again
+  # only when the review label asks, never on a push alone, so a session answers a review's
+  # findings in one push and then asks. Its change is split into areas, by what its files are
+  # about, each test with its code (worker/plan-review.mjs). In each area one reviewer reads every
+  # line and lists each problem it finds once, with every place it shows; one check across every
+  # area confirms each against the code, merges repeats, weighs each, and looks for what spans
+  # areas; and one step with no Claude posts what it confirmed or left unsure
+  # (worker/post-review.mjs), so no job that runs Claude can write to the pull request. The first
+  # review reads the whole change, and a review after it what the pushes since the last full read
+  # changed. A run on the head the last full read ended on reads nothing and leaves that read's
+  # summary as it is.
+  # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
+  # nothing to review, such as a push to main or to a pull request, it plans nothing and passes,
+  # since check fails on a skipped job, and says whether a review is still owed on the code, which
+  # check holds a ready pull request on. A run on exactly the code a run already passed the review
+  # on reviews nothing and owes none.
+  review-plan:
+    needs: passed
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write
-      id-token: write
-    concurrency:
-      group: review-${{ github.event.pull_request.number || github.sha }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+      pull-requests: read
+    outputs:
+      labeled: ${{ steps.decision.outputs.labeled }}
+      owed: ${{ steps.decision.outputs.owed }}
+      stage: ${{ steps.plan.outputs.stage }}
+      areas: ${{ steps.plan.outputs.areas }}
+      area-numbers: ${{ steps.plan.outputs.area-numbers }}
+      count: ${{ steps.plan.outputs.count }}
     steps:
       - name: Decide whether to review
         id: decision
         env:
           EVENT: ${{ github.event_name }}
           ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          PASSED_RUN: ${{ needs.passed.outputs.run }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          labeled=false
+          if [ "$ACTION:$LABEL" = "labeled:$REVIEW_LABEL" ]; then
+            labeled=true
+          fi
+          echo "labeled=$labeled" >> "$GITHUB_OUTPUT"
+          case "$ACTION" in
+            opened | ready_for_review) asked=true ;;
+            *) asked=$labeled ;;
+          esac
           reason=""
+          owed=false
           if [ "$EVENT" != "pull_request" ]; then
             reason="only pull requests are reviewed"
-          elif [ "$ACTION" = "labeled" ] || [ "$ACTION" = "unlabeled" ]; then
-            reason="a label change brings no new code"
-          elif [ "$IS_DRAFT" = "true" ]; then
-            reason="a draft is reviewed once it's ready for review"
           elif [ "$AUTHOR" = "dependabot[bot]" ]; then
             reason="Dependabot's pull requests aren't reviewed"
           elif [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
             reason="there's no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY secret"
+          elif [ -n "$PASSED_RUN" ]; then
+            reason="a run on exactly this code already passed its review"
+          elif [ "$asked" != "true" ]; then
+            reason="a pull request is reviewed once it's ready, and again only when it's labeled $REVIEW_LABEL"
+            owed=true
+          elif [ "$IS_DRAFT" = "true" ]; then
+            reason="a draft is reviewed once it's ready for review"
+            owed=true
           fi
+          echo "owed=$owed" >> "$GITHUB_OUTPUT"
           if [ -n "$reason" ]; then
             echo "::notice::Nothing was reviewed: $reason."
             echo "review=false" >> "$GITHUB_OUTPUT"
           else
             echo "review=true" >> "$GITHUB_OUTPUT"
           fi
-
       - if: steps.decision.outputs.review == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 1
-          # Claude can read files, and the review needs no git credentials on disk.
+          # The whole history, to read since the last review's head and to look back as reviewers
+          # do.
+          fetch-depth: 0
+          # Claude reads the checkout, and the review needs no git credentials on disk.
           persist-credentials: false
-
-      # A review takes about four minutes, so one still going at eight has stalled, and it gets
-      # one more try. The full output logs each turn and tool call as it happens, so a stall shows
-      # where it stopped; the review only reads this public repo and its pull request.
-      - name: Review
-        id: review
+      - if: steps.decision.outputs.review == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+      # The review guide comes from the default branch, so a pull request can't change what its
+      # reviewers look for.
+      - name: Split the change into areas, and write what the reviewers read
+        id: plan
         if: steps.decision.outputs.review == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          DESCRIPTION: ${{ github.event.pull_request.body }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          node worker/plan-review.mjs .review >> "$GITHUB_OUTPUT"
+          node worker/review-context.mjs .review
+          git show "origin/$DEFAULT_BRANCH:REVIEW.md" > .review/REVIEW.md
+      - if: steps.decision.outputs.review == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: review-plan
+          path: .review/
+          include-hidden-files: true
+          retention-days: 14
+          overwrite: true
+
+  # Takes the review label off once the plan is written, so the next ask is a fresh label, which
+  # starts a run of its own. It runs none of the pull request's code, since its token can write to
+  # the pull request. A fork's pull request gets a token that can't, so it skips this. A label
+  # already gone is what it wants, so GitHub's answer that it's not there passes.
+  review-label:
+    needs: [gate, review-plan]
+    if: ${{ !cancelled() && needs.review-plan.outputs.labeled == 'true' && needs.gate.outputs.forked == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Take off the review label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if ! gh api --method DELETE "repos/$REPO/issues/$PR/labels/$REVIEW_LABEL" --silent 2> removal-error.txt; then
+            cat removal-error.txt
+            grep -q "HTTP 404" removal-error.txt
+          fi
+
+  # Each area's reviewer, as one unit that waits for no other area (review-area.yml).
+  review-area:
+    needs: review-plan
+    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.review-plan.outputs.areas || '[]') }}
+    uses: ./.github/workflows/review-area.yml
+    with:
+      stage: ${{ needs.review-plan.outputs.stage }}
+      area: ${{ fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name] }}
+      name: ${{ matrix.name }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  # Confirms each problem the areas' reviewers listed against the code, merges repeats in one area
+  # or across them, and weighs each, before anything is posted, and adds what no one area can see:
+  # a change one area's files rely on in another's, the same fix due in the other app, and one
+  # fact or rule now in two places. It leaves its answer for the posting step.
+  review-across:
+    needs: [review-plan, review-area]
+    if: ${{ !cancelled() && needs.review-area.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      STAGE: ${{ needs.review-plan.outputs.stage }}
+    steps:
+      - &review-checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - *setup-node
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-plan
+          path: .review/
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: review-find-*
+          path: .review/
+          merge-multiple: true
+      - name: Gather the reviewers' candidates
+        run: node worker/judge-review.mjs candidates .review
+      - name: Check across the areas
+        id: across
         continue-on-error: true
-        timeout-minutes: 8
-        uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
-        with: &review-inputs
+        timeout-minutes: 30
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
+        with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
           show_full_output: true
+          settings: '{"disableAllHooks": true}'
           claude_args: |
-            --max-turns 60
-            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments:*)"
+            --model claude-opus-5-5
+            --max-turns 200
+            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
+            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}},"verdict":{"type":"string","enum":["confirmed","rejected","unsure"]},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"why":{"type":"string"}},"required":["ids","verdict","weight","path","line","body","why"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["findings","unjudged"]}'
           prompt: |
-            Review pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
-            The PR branch is checked out in the working directory. Read the diff with `gh pr diff`,
-            and read any surrounding code you need to judge it.
+            You check what the reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, across every area of its change, before anything is posted. Its change is split into areas by what the files are about, and one reviewer read each area and listed every problem it found, unsure ones included. Their candidates are in `.review/candidates.json`, each with an id.
 
-            Report only these five kinds of finding:
+            1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md and the rule files `.review/${{ env.STAGE }}.md` lists for each area hold the rules the code keeps.
+            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, `.review/${{ env.STAGE }}.md`, which lists each area's diff files and rule files, which you read as you need, and `.review/candidates.json`.
+            3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with git show HEAD^1:<path>. Use Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects.
+            4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
+            5. Merge candidates that are the same problem into one finding, in one area or across areas, whether they name one place or several, naming every id it merges: one problem is one finding, however many places it shows, in both apps too. Every candidate's id appears in exactly one finding, rejected ones too: a step after you checks.
+            6. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each the same way, and add each you confirm or can't settle that no candidate already says as a finding of its own, with no ids.
+            7. Weigh each as the guide says: Important for a bug, meaning a wrong result someone can see, wrong data kept, or a failure, and for a security hole or a broken rule from AGENTS.md or a rule file; Nit for something worth fixing that doesn't block; Pre-existing for a problem in code the change didn't make worse.
+            8. Write each finding's body as the guide's "How to report" says: what is wrong, when it goes wrong, and how to fix it, in a few sentences, without its weight, which a later step adds, naming every place it shows. Put it on the line the diff changes nearest its first place, naming that place if it's another.
+            9. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
+      - name: Keep the check's answer
+        id: keep
+        if: steps.across.outcome == 'success'
+        env:
+          STRUCTURED_OUTPUT: ${{ steps.across.outputs.structured_output }}
+        run: node worker/judge-review.mjs across .review >> "$GITHUB_OUTPUT"
+      - if: steps.keep.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: review-across
+          path: |
+            .review/across.json
+            .review/candidates.json
+          retention-days: 14
+          overwrite: true
+      # So that re-running the failed jobs checks across the areas again. A check that didn't
+      # finish keeps no answer, whose unchecked GitHub would compare as 0, so it fails here on that
+      # alone.
+      - name: Fail when the check across areas didn't finish
+        if: steps.keep.outcome != 'success' || steps.keep.outputs.unchecked != '0'
+        run: |
+          echo "::error::The check across areas didn't finish, or left problems unchecked."
+          exit 1
 
-            1. Bugs: logic errors, unhandled edge cases, and broken assumptions that would make the
-               code behave wrongly.
-            2. AGENTS.md violations: any rule in AGENTS.md that the changed lines break.
-            3. Security: unescaped text reaching the page, anything that weakens the APP_KEY
-               check, and secrets, keys, account IDs, or real Worker addresses in code or docs.
-            4. Missing tests, with a high bar: flag this only when the PR changes behavior a user
-               would notice and the existing tests would still pass if that change were reverted.
-               Never ask for tests of refactors, renames, comments, docs, styling, or
-               configuration.
-            5. Browser tests that would pass only some of the time: one that reads or measures the
-               page right after an action without first waiting, with expect or expect.poll, for
-               what that action shows; one that depends on how fast the machine is; or one that
-               measures while a press, hover, transition, or scroll it started may still be going.
+  # Posts what the check across areas confirmed or left unsure (worker/post-review.mjs). It's the
+  # only review job but the summary that can write to the pull request, and runs no Claude.
+  review-post:
+    needs: [review-plan, review-across]
+    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - *review-checkout
+      - *setup-node
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-across
+          path: .review/
+      - name: Post the findings
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: node worker/post-review.mjs .review
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: review-post
+          path: .review/post.json
+          retention-days: 14
+          overwrite: true
 
-            This may not be the first review of this PR. Read the comments already on it with
-            `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments --paginate`,
-            and never post a finding that is already there, whether it was fixed, answered, or left open.
-
-            Skip anything lint, Prettier, TypeScript, or knip already enforce, and anything that
-            is a matter of taste. Only report what you are confident is real; when unsure, leave
-            it out. Don't run the tests or other checks: this workflow's other jobs run them all,
-            and a failure there fails the PR without you.
-
-            Post each finding as an inline comment on the line it concerns, with confirmed=true.
-            Say what is wrong, when it goes wrong, and how to fix it, in a few sentences.
-            Don't post praise.
-
-            Last, leave one summary comment, which replaces the one from your previous review:
-            `gh pr comment ${{ github.event.pull_request.number }} --edit-last --create-if-none --body "<summary>"`.
-            Start it with "Claude reviewed ${{ github.event.pull_request.head.sha }}:", then say
-            how many findings you posted inline, or that you found none. If a tool you needed to
-            read the PR or its code wasn't allowed, name it and say what you couldn't check.
-
-      - name: Review again
-        if: steps.review.outcome == 'failure'
-        timeout-minutes: 8
-        uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
-        with: *review-inputs
+  # Fails a review that left anything due unread or unchecked, naming it in the one summary comment
+  # it keeps up to date on the pull request. A run a newer push cancelled leaves the summary as it
+  # was, until the review label asks again.
+  review:
+    needs: [review-plan, review-area, review-across, review-post]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Fail when the review couldn't be planned
+        if: needs.review-plan.result != 'success'
+        run: |
+          echo "::error::The review's plan didn't finish, so nothing was reviewed."
+          exit 1
+      - if: needs.review-plan.outputs.count != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - if: needs.review-plan.outputs.count != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+      - if: needs.review-plan.outputs.count != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: review-*
+          path: .review/
+          merge-multiple: true
+      - name: Post the summary, and fail if anything due went unread or unchecked
+        if: needs.review-plan.outputs.count != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: node worker/judge-review.mjs summary .review
 
   # The one check to require. It runs even when a job fails, because GitHub counts a
   # skipped required check as passing.
   check:
     if: always()
-    needs: [passed, gate, checks, browser, changed-specs, burn-in, webkit, review]
+    needs:
+      [
+        passed,
+        gate,
+        phone,
+        checks,
+        scope,
+        browser,
+        burn-in,
+        webkit,
+        review-plan,
+        review-label,
+        review-area,
+        review-across,
+        review-post,
+        review,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      issues: write
     steps:
       # Every test passed when passed found a run that passed them on exactly this code, or when
-      # every job but the gate passed.
+      # every job but the gate passed, the browser tests only where the change reaches them.
       - name: Tell whether every test passed
         id: tested
         env:
           TESTED: >-
             ${{ needs.passed.outputs.run != '' || (needs.checks.result == 'success' &&
-            needs.browser.result == 'success' && needs.webkit.result == 'success' &&
-            needs.review.result == 'success' &&
-            (github.event_name != 'pull_request' || needs.changed-specs.result == 'success') &&
-            (needs.changed-specs.outputs.specs == '' || needs.burn-in.result == 'success')) }}
-        run: echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
-      # Checks out even when a job failed, to name the tests its retry passed.
+            needs.scope.result == 'success' && needs.review.result == 'success' &&
+            (needs.scope.outputs.apps == '' || (needs.browser.result == 'success' &&
+            needs.webkit.result == 'success')) &&
+            (needs.scope.outputs.specs == '' || needs.burn-in.result == 'success')) }}
+          # A run that wasn't asked to review, like a push's or a draft's, leaves a review owed on
+          # its code, so it doesn't stand in for one. Any other run reviewed, or skips a review that
+          # would never run or already passed.
+          REVIEWED: >-
+            ${{ needs.passed.outputs.run != '' || needs.review-plan.outputs.owed == 'false' }}
+        run: |
+          echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
+          echo "reviewed=$REVIEWED" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: github.event_name == 'pull_request'
-      # Records the code this pull request's checks passed on: once every test passed, so a label
-      # change runs only the gate again, and once the gate passed too, so that once it merges, main
-      # deploys at once if it has exactly that code (worker/find-passed-ci.mjs).
+        with:
+          persist-credentials: false
+      # The phone status holds a merge only while main's rules require it and the pull request can
+      # post it, so check holds a red change itself whenever they don't or it comes from a fork. The
+      # lookup runs none of the pull request's code.
+      - name: Tell whether main's rules hold a red change on the phone status
+        id: phone
+        if: needs.gate.outputs.held == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          required=$(gh api "repos/$REPO/rules/branches/main" --jq 'any(.[]; .type == "required_status_checks" and any(.parameters.required_status_checks[]?; .context == $ENV.PHONE_CONTEXT))')
+          echo "Main's rules require the phone status: $required"
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+      # Records the code this pull request's checks passed on: once every test passed with no
+      # review owed, so a label change runs only the gate again, and once the gate let it through
+      # too, so that once it merges, main deploys at once if it has exactly that code
+      # (worker/find-passed-ci.mjs).
       - name: Record the code the checks ran on
         id: code
         if: github.event_name == 'pull_request'
         run: |
           git rev-parse HEAD > passed-commit.txt
           echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: >-
+          github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true' &&
+          steps.tested.outputs.reviewed == 'true'
         with:
           name: ci-tested-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
+      # A ready pull request's code merges only once a review of exactly that code passed, so a run
+      # that wasn't asked to review, a push's or a label's, holds it until the review label asks.
+      # A draft is reviewed once it's ready, so it isn't held.
+      - name: Require a review of this code
+        if: needs.review-plan.outputs.owed == 'true' && !github.event.pull_request.draft
+        run: |
+          echo "::error::No review has passed on this code yet: add the $REVIEW_LABEL label to the pull request to have it reviewed."
+          exit 1
       - name: Require every job to pass
         if: >-
           steps.tested.outputs.tested != 'true' ||
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
-          (github.event_name == 'pull_request' && needs.gate.result != 'success')
+          (github.event_name == 'pull_request' && needs.gate.result != 'success') ||
+          (needs.gate.outputs.held == 'true' && (steps.phone.outputs.required != 'true' ||
+          needs.gate.outputs.forked == 'true'))
         run: exit 1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: github.event_name == 'pull_request'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: github.event_name == 'pull_request' && needs.gate.outputs.held != 'true'
         with:
           name: ci-passed-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
-      # The browser jobs' reports go to the issue from this one job, so two of them can't both
-      # rewrite its table at once. Naming a flaky test never fails the pull request, whose own
-      # token may not write issues, as Dependabot's can't.
-      - id: node
-        if: ${{ always() && github.event_name == 'pull_request' }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .nvmrc
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        if: ${{ always() && github.event_name == 'pull_request' }}
-        continue-on-error: true
-        with:
-          pattern: browser-report-*
-          path: browser-reports/
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        if: ${{ always() && github.event_name == 'pull_request' }}
-        continue-on-error: true
-        with:
-          pattern: burn-in-flaky-*
-          path: burn-in-flaky/
-      # A test new to the issue starts the routine that fixes flaky tests, through its API trigger.
-      - name: Name each test its retry passed, or burn-in found failing, in the issue Flaky browser tests
-        if: ${{ always() && github.event_name == 'pull_request' && (hashFiles('browser-reports/**/report.json') != '' || hashFiles('burn-in-flaky/**/burn-in-flaky.json') != '') }}
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          FLAKY_ROUTINE_URL: ${{ secrets.FLAKY_ROUTINE_URL }}
-          FLAKY_ROUTINE_TOKEN: ${{ secrets.FLAKY_ROUTINE_TOKEN }}
-        run: |
-          shopt -s globstar nullglob
-          listed=()
-          for file in burn-in-flaky/**/burn-in-flaky.json; do listed+=(--listed "$file"); done
-          node worker/report-flaky-tests.mjs --retried "${listed[@]}" browser-reports/**/report.json

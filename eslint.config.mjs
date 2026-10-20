@@ -147,7 +147,10 @@ export default [
   {
     // A plain script the page loads before its modules, whose functions the page calls.
     files: [
+      "shared/page/draw-home-screen-asks.js",
       "shared/page/open-last-tab.js",
+      "shared/page/pick-theme.js",
+      "shared/page/season-header.js",
       "shared/page/show-last-drawn.js",
       "shared/page/slow-load.js",
     ],
@@ -202,7 +205,7 @@ export default [
   },
   {
     // Callbacks passed to page.evaluate run in the page.
-    files: ["apps/*/tests/browser/*.mjs", "tests/browser/*.mjs"],
+    files: ["apps/*/tests/browser/**/*.mjs", "tests/browser/**/*.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
     rules: {
       // A fixed wait, or one for the network to go quiet, is too short on a slow machine and wasted

@@ -13,6 +13,7 @@ import {
   listUpcomingMeetings,
   nameMeetingsKey,
 } from "../worker/src/preview.js";
+import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
@@ -160,8 +161,10 @@ test("a game without a box score yet is a 404, and a league that fails is a 502"
     createBoxScoreServer({ fetchImpl: createLeague().fetchImpl }),
     "id=1042600123",
   );
-  assert.equal(notStarted.status, 404);
-  assert.match((await notStarted.json()).error, /no box score for that game yet/);
+  assert.match(
+    await assertErrorAnswer(notStarted, 404, "not_found"),
+    /no box score for that game yet/,
+  );
 
   const url = nameBoxScoreRequest(ACES_AT_FEVER);
   for (const refusal of /** @type {(number | "page" | "empty")[]} */ ([503, "page", "empty"])) {
@@ -170,8 +173,10 @@ test("a game without a box score yet is a 404, and a league that fails is a 502"
       createBoxScoreServer({ fetchImpl: league.fetchImpl }),
       `id=${ACES_AT_FEVER}`,
     );
-    assert.equal(response.status, 502);
-    assert.match((await response.json()).error, /^Couldn't read the WNBA: /);
+    assert.match(
+      await assertErrorAnswer(response, 502, "upstream_error"),
+      /^Couldn't read the WNBA: /,
+    );
   }
 });
 
@@ -179,7 +184,7 @@ test("a box score id that isn't a game's is refused before reading the league", 
   const league = createLeague();
   const server = createBoxScoreServer({ fetchImpl: league.fetchImpl });
   for (const query of ["", "id=12", "id=../../x", "id=1042600122x"]) {
-    assert.equal((await askBoxScore(server, query)).status, 400);
+    await assertErrorAnswer(await askBoxScore(server, query), 400, "invalid_argument");
   }
   assert.equal(league.reads.length, 0);
 });
@@ -272,7 +277,10 @@ test("a preview whose schedule didn't answer is a 502", async () => {
     now: () => NOW,
   });
   const response = await askPreview(server, "season=2026&away=IND&home=LVA");
-  assert.equal(response.status, 502);
+  assert.match(
+    await assertErrorAnswer(response, 502, "upstream_error"),
+    /^Couldn't read the WNBA: /,
+  );
 });
 
 test("a preview needs two different teams and a season, and is refused before reading otherwise", async () => {
@@ -284,7 +292,7 @@ test("a preview needs two different teams and a season, and is refused before re
     "away=IND&home=XYZ",
     "away=IND&home=LVA&season=x",
   ]) {
-    assert.equal((await askPreview(server, query)).status, 400, query);
+    await assertErrorAnswer(await askPreview(server, query), 400, "invalid_argument");
   }
   assert.equal(league.reads.length, 0);
 });

@@ -1,7 +1,6 @@
 /* The News view: a card for each piece of news, its lead's photo across the top, and the stories
-   that add to it in a quiet list under the lead. A story's Read button turns quieter, with a check in
-   place of its arrow, once this device has opened it. This lays the view out; each app's own
-   styles set its cards' colors, type, spacing, and Read button. */
+   that add to it in a quiet list under the lead. This lays the view out; each app's own styles set
+   its cards' colors, type, spacing, and Read button. */
 /* The columns news-view.js fills, one on a phone and two on a wide screen, each stacking its own
    cards as far apart as the page's sides. */
 .news-cards {
@@ -46,7 +45,8 @@
 .news-photo-credit {
   grid-column: 2;
   text-align: right;
-  font-size: var(--size-small);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   text-wrap: balance;
 }
@@ -63,7 +63,9 @@
   margin: 0;
 }
 .news-teams .club {
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -78,7 +80,8 @@
 }
 .news-meta {
   margin: 0;
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-mid);
 }
 /* The stories under a card's lead, quieter than it: a headline and its outlet each. */
@@ -90,7 +93,9 @@
 }
 .news-more-label {
   margin: 0;
-  font-size: var(--size-small);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
 }
@@ -101,12 +106,14 @@
   list-style: none;
 }
 .news-more-title {
-  font-size: var(--size-glance);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   text-wrap: pretty;
 }
 .news-summary {
   margin: 2px 0 0;
-  font-size: var(--size-read);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
 }
 .news-foot {
   display: flex;
@@ -118,6 +125,10 @@
   border-radius: var(--radius-control);
   text-decoration: none;
   white-space: nowrap;
+}
+/* The Read button's words center on their capitals, as every button's do. */
+.read-label {
+  text-box: trim-both cap alphabetic;
 }
 @media (hover: hover) {
   .news-title a,

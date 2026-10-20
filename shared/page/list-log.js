@@ -1,10 +1,8 @@
-// While Diagnostics is on, each record ends with where each pager's lists are: how far their row
-// is scrolled, whether scrollend or the fallback timer last settled it, the list they last went
-// back from after a move no one made, and for each list where it sits on the screen, how it's
-// styled, and its first item's opacity and what a tap on it would land on, and with every
-// animation on the page that hasn't finished. A list the phone laid out but didn't draw still
-// names its item. A season's list of days (day-strip.js) says the same of the day at its top, and
-// which day its strip has chosen, where that date sits, and the day a tap or Today sent it to.
+// While Diagnostics is on, each record ends with where each season's list of days (day-strip.js)
+// is: how far it's scrolled, the day at its top, where that day sits on the screen, its opacity,
+// and what a tap on it would land on, which day its strip has chosen, where that date sits, and the
+// day a tap or Today sent it to, and with every animation on the page that hasn't finished. A day
+// the phone laid out but didn't draw still names its item.
 
 /** @param {DOMRect} rect */
 const describeRect = ({ left, top, width, height }) =>
@@ -32,36 +30,6 @@ function describeFirstItem(item) {
   return `first item at ${describeRect(rect)}, opacity ${opacity}, a tap there lands on ${nameElement(document.elementFromPoint(x, y))}`;
 }
 
-/** @param {HTMLElement} list */
-function describeList(list) {
-  const style = getComputedStyle(list);
-  return [
-    `${list.id} at ${describeRect(list.getBoundingClientRect())}`,
-    `opacity ${style.opacity}`,
-    style.visibility,
-    `transform ${style.transform}`,
-    list.inert && "inert",
-    describeFirstItem(list.firstElementChild),
-  ]
-    .filter(Boolean)
-    .join(", ");
-}
-
-/** @param {HTMLElement} pages */
-function describeSettle(pages) {
-  const { settledBy, putBackFrom } = pages.dataset;
-  if (!settledBy) return "not yet settled";
-  const putBack = putBackFrom ? `, last put back from ${putBackFrom}, a move no one made` : "";
-  return `last settled by ${settledBy}${putBack}`;
-}
-
-/** @param {HTMLElement} pages */
-const describePages = (pages) =>
-  [
-    `${pages.id} scrolled ${Math.round(pages.scrollLeft)} of ${pages.scrollWidth}, ${pages.clientWidth} wide, ${describeSettle(pages)}`,
-    .../** @type {HTMLElement[]} */ ([...pages.children]).map(describeList),
-  ].join("; ");
-
 /** @param {Animation} animation */
 function describeAnimation(animation) {
   const target = /** @type {KeyframeEffect | null} */ (animation.effect)?.target ?? null;
@@ -70,24 +38,20 @@ function describeAnimation(animation) {
 }
 
 /**
- * Every animation on the page that hasn't finished, as one that never moves on leaves what it
- * moves where it started, like a fade-in at nothing.
+ * Every animation on the page that plays over time and hasn't finished, as one that never moves on
+ * leaves what it moves where it started, like a fade-in at nothing. One a scroll drives, like the
+ * season tab's header riding up with its part, moves only as its scroller does.
  */
 export function describeAnimations() {
-  const unfinished = document.getAnimations().filter(({ playState }) => playState !== "finished");
+  const unfinished = document
+    .getAnimations()
+    .filter(
+      ({ timeline, playState }) => timeline === document.timeline && playState !== "finished",
+    );
   return unfinished.length
     ? `Animations: ${unfinished.map(describeAnimation).join("; ")}`
     : "Animations: none";
 }
-
-/**
- * A line for each pager showing on the screen.
- * @returns {string[]}
- */
-export const describeShownPagers = () =>
-  /** @type {HTMLElement[]} */ ([...document.querySelectorAll(".pager-pages")])
-    .filter((pages) => pages.clientWidth > 0)
-    .map(describePages);
 
 /** @param {HTMLElement} list */
 function findDayAtTop(list) {

@@ -1,6 +1,8 @@
 // Days and times on the viewer's own calendar and clock, and a league's own day, which is Eastern.
 // A league's day, written "YYYY-MM-DD", is a date on a calendar, not an instant, so it's read as one.
 
+import { capitalize } from "./html.js";
+
 const MS_PER_DAY = 86400000;
 
 const EASTERN_PARTS = new Intl.DateTimeFormat("en-US", {
@@ -168,6 +170,14 @@ export const countDaysBetween = (earlier, later) =>
   Math.round((readStartOfDay(later).getTime() - readStartOfDay(earlier).getTime()) / MS_PER_DAY);
 
 /**
+ * Whether a game is still to come today, which a page sets apart as it does one being played.
+ * @param {{ state: string, day: Date | null }} game
+ * @param {Date} now
+ */
+export const isStillToComeToday = ({ state, day }, now) =>
+  state === "pre" && day !== null && countDaysBetween(now, day) === 0;
+
+/**
  * Midnight on the viewer's calendar of the day a game is played, or null without a start or a
  * league's day. Until its time is set, a game's start is a placeholder that can fall on another
  * day where the viewer is, so the league's day stands in for it.
@@ -255,9 +265,6 @@ export const formatWeekdayAndDate = (date) =>
  */
 export const formatWeekdayOrDate = (date, daysAway) =>
   Math.abs(daysAway) < 7 ? formatWeekday(date) : formatShortDate(date);
-
-/** @param {string} text */
-const capitalize = (text) => text.charAt(0).toLocaleUpperCase() + text.slice(1);
 
 /**
  * A day as the viewer would say it from now: "yesterday", "today", or "tomorrow" when it's one of
