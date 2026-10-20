@@ -16,7 +16,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Issues
 
-- An issue holds one thing a PR could do, as AGENTS.md's step 12 says, decided but left for later, written so a session can build it with no other prompt.
+- An issue holds one thing a PR could do, as AGENTS.md's step 12 says, a finding or bug left out of a PR, written so a session can build it with no other prompt.
 - Open one in the turn the work is left out: a finding step 12 leaves out of a PR, or a bug seen on beta that isn't this PR's.
   A finding declined as not worth its code gets no issue: the reply on its thread says why.
 - First search the open issues, and comment on one that already covers the work rather than open a second.
