@@ -70,7 +70,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 - `sheet-log.js`: what each dialog's sheets do
 - `day-strip-log.js`: what a season's list of days does
 - `list-log.js`: where each list of days stands, at each record's end
-- `bracket-standings-log.js`: each touch on the standings and bracket
+- `bracket-standings-log.js`: each touch on the standings and bracket, and whether it landed on a list still gliding
 - `phone-look-log.js`: each change of the phone's light or dark look,
   and each time the page leaves, comes back, or changes focus, with the look the stylesheets see then
 - `error-log.js`: each error the page's code doesn't catch
@@ -126,7 +126,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 
 - `spring-scroll.js`: a scroll that eases into place on a spring
 - `reduced-motion.js`: whether the device asks for less motion
-- `press.js`: a row's tint while pressed, and a scroll never tapping
+- `press.js`: a row's tint while pressed, and a scroll, or a finger stopping a list still gliding, never tapping
 - `kept-place.js`: keeping rows in place as what's above them changes
 - `eased-redraw.js`: easing parts to their new heights on a redraw
 - `slide-panels.js`: side-by-side panels a finger drags
