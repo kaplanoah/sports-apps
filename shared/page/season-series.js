@@ -5,6 +5,7 @@
 
 import { formatShortDate } from "./days.js";
 import { html } from "./html.js";
+import { renderPlaceholder } from "./placeholder.js";
 import { describeSeriesLead } from "./series-text.js";
 import { renderSheetPart } from "./sheet-part.js";
 
@@ -29,16 +30,29 @@ function readResult(meeting) {
 }
 
 /**
+ * One meeting's row: its day, its winner and score, and where it was played.
+ * @param {Markup | string} day
+ * @param {Markup} result
+ * @param {Markup | string} place
+ */
+const renderMeetingRow = (day, result, place) =>
+  html`<li>
+    <span class="meeting-day tabular">${day}</span>
+    <span class="meeting-result">${result}</span>
+    <span>${place}</span>
+  </li>`;
+
+/**
  * @param {Meeting} meeting
  * @param {TeamLooks} looks
  */
 function renderMeeting(meeting, looks) {
   const { winner, loser, place } = readResult(meeting);
-  return html`<li>
-    <span class="meeting-day tabular">${formatShortDate(meeting.day)}</span>
-    <span class="meeting-result">${looks.renderWinner(winner.team)}<span class="meeting-score tabular">${winner.score}-${loser.score}</span></span>
-    <span>${place} ${looks.renderLoser(loser.team)}</span>
-  </li>`;
+  return renderMeetingRow(
+    formatShortDate(meeting.day),
+    html`${looks.renderWinner(winner.team)}<span class="meeting-score tabular">${winner.score}-${loser.score}</span>`,
+    html`${place} ${looks.renderLoser(loser.team)}`,
+  );
 }
 
 /**
@@ -81,3 +95,21 @@ export function renderSeasonSeries(meetings, series, looks) {
     describeSeasonSeries(ordered, { ...series, nameTeam: looks.nameTeam }),
   );
 }
+
+/**
+ * The season series part while its meetings load, its rows placeholders shaped as meetings are.
+ * @param {number} count how many rows to hold
+ */
+export const renderPendingSeasonSeries = (count) =>
+  renderSheetPart(
+    SEASON_SERIES_TITLE,
+    html`<ul class="meetings">
+      ${Array.from({ length: count }, () =>
+        renderMeetingRow(
+          renderPlaceholder("Sep 00"),
+          renderPlaceholder("Team 00-00"),
+          renderPlaceholder("at Opponent"),
+        ),
+      )}
+    </ul>`,
+  );

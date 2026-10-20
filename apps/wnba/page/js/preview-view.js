@@ -1,7 +1,10 @@
 import { html } from "#shared/html.js";
-import { renderPlaceholder } from "#shared/placeholder.js";
 import { renderRetryNote } from "#shared/retry.js";
-import { renderSeasonSeries, SEASON_SERIES_TITLE } from "#shared/season-series.js";
+import {
+  renderPendingSeasonSeries,
+  renderSeasonSeries,
+  SEASON_SERIES_TITLE,
+} from "#shared/season-series.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTapeRow } from "#shared/tape.js";
 import { renderClub, renderTeamName } from "./clubs.js";
@@ -60,21 +63,6 @@ function renderMeetings(meetings, teams, isSeriesOver) {
     );
   return renderSeasonSeries(meetings.map(readMeeting), { ...teams, isOver: isSeriesOver }, LOOKS);
 }
-
-const renderPendingMeeting = () =>
-  html`<li>
-    <span class="meeting-day">${renderPlaceholder("Sep 00")}</span>
-    <span class="meeting-result">${renderPlaceholder("Team 00-00")}</span>
-    <span>${renderPlaceholder("at Mystics")}</span>
-  </li>`;
-
-const renderPendingMeetings = () =>
-  renderSheetPart(
-    SEASON_SERIES_TITLE,
-    html`<ul class="meetings">
-      ${Array.from({ length: PENDING_MEETINGS }, renderPendingMeeting)}
-    </ul>`,
-  );
 
 // The visitors play on the road and the hosts at home, so each is measured where it plays.
 /**
@@ -154,5 +142,5 @@ function renderLeadingScorers(teams, season) {
  *   `isSeriesOver` says the regular season is over, as it is for a playoff game
  */
 export const renderPreview = ({ teams, season, meetings, isLoading, isSeriesOver }) =>
-  html`${isLoading ? renderPendingMeetings() : renderMeetings(meetings, teams, isSeriesOver)}
+  html`${isLoading ? renderPendingSeasonSeries(PENDING_MEETINGS) : renderMeetings(meetings, teams, isSeriesOver)}
   ${renderSeasons(teams, season)} ${renderLeadingScorers(teams, season)}`;

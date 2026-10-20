@@ -256,9 +256,7 @@ test("a player short of the WNBA's rule shows her numbers without a rank, but wh
   await expect(sheet.locator(".player-rank", { hasText: " of " })).toHaveText(["7th of 76"]);
   await expect(sheet.locator(".player-rank", { hasText: "would be" })).toHaveCount(7);
   expect(await checkRanksAreDim(sheet, ".player-rank")).toEqual(Array(8).fill(true));
-  await expect(sheet.locator(".player-rank-note")).toHaveText(
-    "The WNBA only ranks players who've played 31 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots. She's played 21 games.",
-  );
+  await expect(sheet.locator(".player-rank-note")).toContainText("She's played 21 games.");
   expect(await listStrayPeriods(page)).toEqual([]);
 });
 

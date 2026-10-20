@@ -69,7 +69,7 @@ export const isWholeSlate = (games, state) =>
 
 /**
  * A full day's games, as the header counts them after the one it names: "slate of 5 under way",
- * or, before any has begun, "starts slate of 5".
+ * "slate of 5 over" once every game is final, or, before any has begun, "starts slate of 5".
  * @param {number} count
  * @param {"starts" | "under way" | "over"} stage
  */
