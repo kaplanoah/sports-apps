@@ -73,6 +73,19 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
   assert.match(decision.reason, /AGENTS\.md, README\.md/);
 });
 
+test("anything in the root's .claude/ folder skips the deploy, a hook no list names too", () => {
+  for (const path of [
+    ".claude/settings.json",
+    ".claude/hooks/one-command.mjs",
+    ".claude/hooks/install-packages.mjs",
+    ".claude/hooks/a-hook-yet-to-come.mjs",
+    ".claude/skills/ship/SKILL.md",
+  ]) {
+    assert.equal(decideDeploy([path]).isNeeded, false, path);
+  }
+  assert.equal(decideDeploy(["shared/page/.claude/hooks/a-hook.mjs"]).isNeeded, true);
+});
+
 test("a merge that changes what the Worker runs, or how it deploys, deploys", () => {
   for (const path of [
     "apps/mlb/page/js/app.js",
