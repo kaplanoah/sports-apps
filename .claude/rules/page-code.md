@@ -36,6 +36,4 @@ paths:
 - When you add a place, make it searchable in the app's `page/js/search-pages.js`,
   with its row, its words, and what it opens, and add it to `COVERAGE` in the app's `tests/search.test.js`,
   with the search that finds it, or with why search leaves it out.
-  That test reads the page's markup and fails on any tab, sheet,
-  sheet section, or setting `COVERAGE` doesn't name, on any setting's row without the `data-setting` its search opens, and on any search that no longer finds its place.
   A kind of thing whose pages share one sheet, like a player's, is named once, by a search that finds one of them.
