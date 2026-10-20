@@ -74,10 +74,10 @@ paths:
         whether the page's code took it from the browser, whether the browser cancelled its pointer,
         and how far the part under it scrolled, and each click on them
       - `phone-look-log.js`: each change the phone reports of its light or dark look,
-        what the page reads of it then and a task later,
+        with what the page reads of it then and a task later,
         and each time the page leaves the screen, comes back, or loses or gets focus,
-        with the look it reads and the theme it shows then,
-        also among the steps of the open or return under way
+        with the look it reads, the theme it shows, and the look the stylesheets see then (`diagnostics.css`).
+        Each line also joins the steps of the open or return under way.
       - `error-log.js`: each error the page's code doesn't catch
   - The Home Screen welcome and theme:
     - `draw-home-screen-asks.js`: the welcome over the whole screen that a phone's or tablet's browser opens on,
@@ -257,9 +257,11 @@ paths:
 - `shared/page/` also holds the stylesheets,
   which pages link before their own `styles.css` and theme with the tokens their top comments list:
   - `type.css` lists the type roles
-  - `chrome.css` styles the tab bar, settings sheet and its Diagnostics, round dots, Home Screen welcome and box,
+  - `chrome.css` styles the tab bar, settings sheet, round dots, Home Screen welcome and box,
     a card with an X in its corner and settings' note on updating the icon,
     the catching-up line and the sweep once caught up, and pull to refresh's spokes
+  - `diagnostics.css` styles the Diagnostics at settings' end,
+    and gives the Phone look log the look the stylesheets see
   - `pager.css` styles a pill's names and the standings and bracket under one
   - `day-strip.css` styles a season's list of days and its strip
   - `game-search.css` styles the search's view

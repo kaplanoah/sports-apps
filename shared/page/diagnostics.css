@@ -131,6 +131,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The look the stylesheets see, for the Phone look log to read beside what the page's code reads
+   of the phone's setting, since a phone can tell the two at different moments. */
+:root {
+  --stylesheet-look: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --stylesheet-look: dark;
+  }
+}
+
 @media (max-width: 779px) {
   .diagnostics-area {
     padding-inline: var(--sheet-side);

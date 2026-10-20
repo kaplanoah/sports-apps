@@ -5,8 +5,9 @@ import { createStepLog } from "./step-log.js";
 
 // Each change the phone reports of its light or dark look, with what the page reads of it then and
 // a task later, as the note on the icon reads it, and each time the page leaves the screen, comes
-// back, or loses or gets focus, with the look it reads and the theme it shows then, since a phone
-// can change its look while the page is away and report it only once the page is back.
+// back, or loses or gets focus, with the look it reads, the theme it shows, and the look the
+// stylesheets see then (diagnostics.css), since a phone can change its look while the page is away
+// and report it only once the page is back, and may tell the stylesheets before the code.
 export const phoneLookLog = createStepLog({
   key: "diagnosticsPhoneLook",
   title: "Phone look",
@@ -54,11 +55,15 @@ const namePageEvent = (event) => {
 };
 
 /**
- * @param {{ step: string, phoneLook: PhoneLook, theme: string | undefined }} pageStep
+ * @param {{ step: string, phoneLook: PhoneLook, theme: string | undefined, stylesheetLook: string }} pageStep
  * @returns {string}
  */
-export const describePageStep = ({ step, phoneLook, theme }) =>
-  `${step}; reads ${phoneLook}, shows ${theme ?? "no theme"}`;
+export const describePageStep = ({ step, phoneLook, theme, stylesheetLook }) =>
+  `${step}; reads ${phoneLook}, shows ${theme ?? "no theme"}, stylesheet ${stylesheetLook}`;
+
+/** The look the stylesheets' own media query gives at this moment. */
+const readStylesheetLook = () =>
+  getComputedStyle(document.documentElement).getPropertyValue("--stylesheet-look").trim();
 
 const readPage = () => ({ isHidden: document.hidden, hasFocus: document.hasFocus() });
 
@@ -110,6 +115,7 @@ export function watchPhoneLook(noteInRecord) {
       step: namePageEvent(event),
       phoneLook: readPhoneLook(),
       theme: document.documentElement.dataset.theme,
+      stylesheetLook: readStylesheetLook(),
     });
     if (isReturnSign(event)) setTimeout(() => noteChange(text));
     else noteChange(text);
