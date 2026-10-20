@@ -32,6 +32,10 @@ class FakeElement {
   closest(selector) {
     return selector === ".season-part" && this.dataset.part ? this : null;
   }
+  /** @param {FakeElement} element */
+  contains(element) {
+    return element === this;
+  }
 }
 globalThis.Element = /** @type {any} */ (FakeElement);
 globalThis.HTMLElement = /** @type {any} */ (class {});
@@ -218,6 +222,7 @@ test("a still finger on the standings while a fling still glides them says it la
     sendToDocument("pointercancel", finger);
     sendPointerCancel({ isPrimary: true });
     target.scrollTop = 74;
+    sendToDocument("scroll", { target });
     sendTouch("touchend", { target, points: [] });
     sendToDocument("touchend", {});
     sendToDocument("scroll", { target });

@@ -37,12 +37,12 @@ export const TAPPABLE = "button, a[href], label, summary, select, input, textare
 
 /** @type {{ button: Element, x: number, y: number, timer: number | null } | null} */
 let press = null;
-// The last finger down, until its click: its pointer, whether it's part of a scroll, and when it
-// lifted.
-/** @type {{ pointerId: number, isScroll: boolean, liftedAt: number | null } | null} */
+// The last finger down, until its click: its pointer, what it landed on, whether it's part of a
+// scroll, and when it lifted.
+/** @type {{ pointerId: number, target: EventTarget | null, isScroll: boolean, liftedAt: number | null } | null} */
 let touch = null;
-// When each element that scrolls, and the page, last scrolled, apart, since one can scroll along
-// with another, as the Games list's strip of dates does with its list.
+// When a finger's scroll last moved each element, and the page, apart, since the page's code can
+// scroll another along with it, as the Games list's strip of dates slides with its list.
 /** @type {WeakMap<EventTarget, number>} */
 const lastScrolledAt = new WeakMap();
 
@@ -56,11 +56,27 @@ function letGo() {
   press = null;
 }
 
-// Only a finger's scroll glides on once the finger lifts, so a scroll the page's code runs, as a
-// tap on Today does, leaves a tap right after it alone.
+/**
+ * @param {EventTarget} scroller
+ * @param {EventTarget | null} target
+ */
+const holds = (scroller, target) =>
+  scroller === document ||
+  (scroller instanceof Element && target instanceof Element && scroller.contains(target));
+
+// A finger's scroll moves what holds where it landed, and glides on frame by frame once it lifts,
+// so a scroll the page's code runs elsewhere, as the strip's dates sliding with the list, or after
+// the glide has come to rest, as a tap on Today flying the list, leaves a tap right after it alone.
+/** @param {EventTarget} scroller */
+const isFingersScroll = (scroller) =>
+  !!touch?.isScroll &&
+  holds(scroller, touch.target) &&
+  (touch.liftedAt === null || isGliding(scroller));
+
 /** @param {Event} event */
 function noteScroll(event) {
-  if (touch?.isScroll && event.target) lastScrolledAt.set(event.target, performance.now());
+  if (event.target && isFingersScroll(event.target))
+    lastScrolledAt.set(event.target, performance.now());
   letGo();
 }
 
@@ -107,7 +123,12 @@ function startTouch(event) {
   if (!event.isPrimary || isPassedOn(event)) return;
   touch =
     event.pointerType === "touch"
-      ? { pointerId: event.pointerId, isScroll: isOnGlide(event.target), liftedAt: null }
+      ? {
+          pointerId: event.pointerId,
+          target: event.target,
+          isScroll: isOnGlide(event.target),
+          liftedAt: null,
+        }
       : null;
 }
 

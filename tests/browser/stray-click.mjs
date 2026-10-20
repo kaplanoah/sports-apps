@@ -13,13 +13,26 @@ export const sendClick = (target) =>
 /**
  * Sends a finger's pointer on an element as the browser does: down at its middle, each move down
  * the screen by `moves`, then up, or cancelled once the browser takes the touch for a scroll, and
- * the touch's end, a lift or, as iOS ends some, a cancel.
+ * the touch's end, a lift or, as iOS ends some, a cancel. A finger that `isScrolling` scrolls what
+ * holds the element, or the page, before it lifts, as one that flings a list does.
  * @param {import("@playwright/test").Locator} target
- * @param {{ moves: number[], isCancelled?: boolean, isTouchCancelled?: boolean }} finger
+ * @param {{ moves: number[], isCancelled?: boolean, isTouchCancelled?: boolean, isScrolling?: boolean }} finger
  */
-export const sendFinger = (target, { moves, isCancelled = false, isTouchCancelled = false }) =>
+export const sendFinger = (
+  target,
+  { moves, isCancelled = false, isTouchCancelled = false, isScrolling = false },
+) =>
   target.evaluate(
     (element, finger) => {
+      /** @param {Element} start */
+      const findScroller = (start) => {
+        for (let node = start.parentElement; node; node = node.parentElement) {
+          const { overflowY } = getComputedStyle(node);
+          const isScrollable = overflowY === "auto" || overflowY === "scroll";
+          if (isScrollable && node.scrollHeight > node.clientHeight) return node;
+        }
+        return document;
+      };
       const box = element.getBoundingClientRect();
       /**
        * @param {string} type
@@ -38,10 +51,11 @@ export const sendFinger = (target, { moves, isCancelled = false, isTouchCancelle
       send("pointerdown", 0);
       for (const down of finger.moves) send("pointermove", down);
       send(finger.isCancelled ? "pointercancel" : "pointerup", finger.moves.at(-1) ?? 0);
+      if (finger.isScrolling) findScroller(element).dispatchEvent(new Event("scroll"));
       const end = finger.isTouchCancelled ? "touchcancel" : "touchend";
       element.dispatchEvent(new TouchEvent(end, { bubbles: true }));
     },
-    { moves, isCancelled, isTouchCancelled },
+    { moves, isCancelled, isTouchCancelled, isScrolling },
   );
 
 /**

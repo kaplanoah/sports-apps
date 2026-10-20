@@ -362,7 +362,7 @@ test.describe("on a phone, tapping an update", () => {
     const standIn = page.locator('[data-part="bracket"] .rider-tap').first();
     await expect(standIn).toBeAttached();
     await holdClock(page);
-    await sendFinger(standIn, { moves: [12], isCancelled: true });
+    await sendFinger(standIn, { moves: [12], isCancelled: true, isScrolling: true });
     await sendScroll(page, page.locator('.season-part[data-part="bracket"]'));
 
     await sendFinger(standIn, { moves: [] });
