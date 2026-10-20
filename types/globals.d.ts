@@ -15,6 +15,7 @@ declare function isLook(value: unknown): value is "light" | "dark";
 declare function readPhoneLook(): "light" | "dark";
 declare function readHomeScreenIcon(): string | null;
 declare const WELCOME_CLOSED_KEY: string;
+declare function forgetWelcomeClosed(): void;
 declare function readStored(key: string): string | null;
 declare const LAST_DRAWN_KEY: string;
 declare function isLongAwayFrom(savedAt: unknown): boolean;

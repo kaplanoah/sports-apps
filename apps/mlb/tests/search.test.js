@@ -520,7 +520,7 @@ const COVERAGE = {
   "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
   "dialog:homeScreenWelcome": {
     leftOut:
-      "It shows once, before the page is added, and the box at the bottom of Settings keeps its steps",
+      "It shows before the page is added, and the box at the top of Settings and the Notifications note's ? keep its steps",
   },
   "sheet:gameSheet": { games: "Mets at Phillies" },
   "section:game": { games: "Mets at Phillies" },
@@ -538,7 +538,7 @@ const COVERAGE = {
   "settings:prospectus": { search: "prospectus", opens: "settings:prospectus" },
   "settings:home-screen": {
     leftOut:
-      "Shows only in a phone's or tablet's browser, at the bottom of Settings, which search finds",
+      "Shows only in a phone's or tablet's browser, at the top of Settings, which search finds",
   },
   "settings:ranking": { search: "ranking", opens: "settings:ranking" },
   "settings:diagnostics": { search: "diagnostics", opens: "settings:diagnostics" },

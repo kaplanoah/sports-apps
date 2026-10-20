@@ -70,11 +70,14 @@ paths:
       - `error-log.js`: each error the page's code doesn't catch
   - The Home Screen welcome and theme:
     - `draw-home-screen-asks.js`: the welcome over the whole screen that a phone's or tablet's browser opens on,
-      and the box at the bottom of settings that keeps the steps, both drawn before the first paint,
+      and the box at the top of settings that keeps the steps, both drawn before the first paint,
       so the welcome never arrives over the page and its pick and close work at once.
       The welcome's numbered steps pick the theme the Home Screen icon takes and say how to add the page there,
       until the page is added or the viewer goes on in the browser, which keeps it closed on that device.
-    - `home-screen.js`: Chrome's Install in the welcome and the box
+    - `home-screen.js`: Chrome's Install in the welcome and the box,
+      and the welcome opened again from the ? that ends settings' Notifications note where only the Home Screen gets notifications,
+      wherever the page asks to be added there,
+      rising and closing as settings does
     - `pick-theme.js`: the theme picked, shown before the first paint and named in the browser's address,
       where Safari reloads the page after a pick,
       since it takes the Home Screen app's address and its own bars' color from the page as it loaded,
@@ -198,6 +201,8 @@ paths:
     - `game-cards.js`: the cards of a team's nearest games across its sheet's top,
       each as wide as the row's widest line
     - `nearest-games.js`: which games those are
+    - `season-series.js`: the season series of a game's two teams before it starts,
+      each meeting first to last under who leads or won it
     - `rank-curve.js`: a player's number in a stat beside its rank, on a curve of every ranked player's,
       or a number beside another's,
       each a dot on a line solid across a range and dashed past it as far as a number reaches
@@ -241,15 +246,16 @@ paths:
   - `game-search.css` styles the search's view
   - `game-row.css` lays out a game row and colors an All-Star team's star
   - `sheet.css` styles a sheet a tap opens, like MLB's pitching matchup,
-    with its face-off rows and line of channels, titled parts, and status chips
-  - `team-sheet.css` styles a team's sheet and the buttons that open it
+    with its face-off rows and line of channels, titled parts, status chips,
+    the meetings of a season series, and a player's facts
+  - `team-sheet.css` styles a team's sheet and the buttons that open a team's or a player's sheet
   - `row-button.css` styles a table's row that opens wherever it's tapped
   - `game-cards.css` styles the cards of a team's nearest games
   - `updates.css` styles the Updates box
   - `news.css` styles the News view's layout
   - `retry.css` styles what a sheet shows where a read failed
   - `highlights.css` styles a final's Highlights
-  - `rank-curve.css` styles a rank curve and each player's mark on it
+  - `rank-curve.css` styles a rank curve, each player's mark on it, and the notes on how a player is ranked
   - `no-field-note.css` styles the bracket before the playoff field is set
   - `channel-tag.css` styles the tag beside the app's name on beta
   - `gate.css` styles the access code's gate, whose title and button the welcome takes too

@@ -13,6 +13,7 @@ import {
   checkSettingsOnReload,
   waitForSettingsFill,
 } from "../../../../tests/browser/settings-reload.mjs";
+import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import {
   checkHandoffRenewal,
   checkIconKeptOnlyOnOpen,
@@ -366,6 +367,7 @@ const readSettingsBoxes = (page) =>
       head: readBox(".sheet-head"),
       title: readBox("h2"),
       close: readBox(".sheet-close"),
+      tip: readBox("#homeScreenTip"),
       controls: readBox(".settings-controls"),
       footer: readBox(".settings-footer"),
     };
@@ -381,16 +383,28 @@ test.describe("on a phone, settings", () => {
     expect([sheet.top, sheet.height]).toEqual([0, 844]);
   });
 
-  test("set their title level with their close button and 32px over the first setting, and end 17px over the bottom", async ({
+  // A phone's browser, unlike the Home Screen app, draws the Home Screen box.
+  test("set their title level with their close button and 32px over the Home Screen box, then the first setting, and end 17px over the bottom", async ({
     page,
   }) => {
     await openSettingsWithRelease(page);
-    const { sheet, top, head, title, close, controls, footer } = await readSettingsBoxes(page);
+    const { sheet, top, head, title, close, tip, controls, footer } = await readSettingsBoxes(page);
     const findMiddle = (box) => box.top + box.height / 2;
     expect(Math.abs(findMiddle(title) - findMiddle(close))).toBeLessThan(1);
     expect(head.bottom).toBeLessThanOrEqual(top.bottom);
-    expect(Math.round(controls.top - title.bottom)).toBe(32);
+    expect(Math.round(tip.top - title.bottom)).toBe(32);
+    expect(Math.round(controls.top - tip.bottom)).toBe(14);
     expect(Math.round(sheet.bottom - footer.bottom)).toBe(17);
+  });
+
+  test("in the Home Screen app, which has no Home Screen box, set the first setting 32px under their title", async ({
+    page,
+  }) => {
+    await openFromHomeScreen(page);
+    await openSettingsWithRelease(page);
+    await expect(page.locator("#homeScreenTip")).toBeHidden();
+    const { title, controls } = await readSettingsBoxes(page);
+    expect(Math.round(controls.top - title.bottom)).toBe(32);
   });
 });
 

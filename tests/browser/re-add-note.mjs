@@ -3,6 +3,8 @@ import { EASE_HALFWAY_MS, finishTimedAnimations, listAnimations } from "./animat
 import { ANDROID_AGENT, IPHONE_AGENT } from "./devices.mjs";
 import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
 import { listLowContrastText } from "./contrast.mjs";
+import { WELCOME } from "./home-screen-help.mjs";
+import { SETTINGS } from "./settings.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { keepInOtherTab } from "./other-tab.mjs";
 import { listStrayPeriods } from "./stray-periods.mjs";
@@ -117,9 +119,11 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
     `x-safari-${safariAddress.href}`,
   );
   const noteBelowIcons = await page.evaluate(
-    () =>
+    (settingsSelector) =>
       document.querySelector("#appearanceNote").getBoundingClientRect().top -
-      document.querySelector("#settingsDialog .appearance-choices").getBoundingClientRect().bottom,
+      document.querySelector(`${settingsSelector} .appearance-choices`).getBoundingClientRect()
+        .bottom,
+    SETTINGS,
   );
   // The row's gap, as the icons sit under the title.
   expect(noteBelowIcons).toBe(14);
@@ -576,7 +580,7 @@ export async function checkReAddHandoff(app) {
   // Playwright routes only the first request of a redirect, so the page it leads to is opened
   // again through the Worker, with the cookie the redirect set.
   await safariPage.goto(redirected.href);
-  await expect(safariPage.locator("#homeScreenWelcome")).toBeVisible();
+  await expect(safariPage.locator(WELCOME)).toBeVisible();
   await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(safariPage.getByRole("textbox", { name: "Access code" })).toHaveCount(0);
   await safari.close();

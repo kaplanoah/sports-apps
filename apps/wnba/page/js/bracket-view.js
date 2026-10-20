@@ -4,7 +4,8 @@ import { findOpeningRound } from "#shared/opening-round.js";
 import { renderRoundDots } from "#shared/round-dots.js";
 import { renderClub } from "./clubs.js";
 import { describeDayInSentence, readGameDay } from "./days.js";
-import { describePeriod } from "./games-view.js";
+import { describeLiveMoment } from "./games-view.js";
+import { mapSeriesById } from "./nearest-games.js";
 import { BRACKET_ORDER } from "./series.js";
 import { ROUNDS } from "./snapshot.js";
 
@@ -47,17 +48,6 @@ function describeLiveScore(series, game) {
     [game.away, game.home].find((gameSide) => gameSide.team === side?.team)?.score;
   const scores = [readScore(series.top), readScore(series.bottom)];
   return scores.every((score) => score != null) ? scores.join("-") : "";
-}
-
-/**
- * Where a live game is, as a broadcaster says it: "with 3:18 in Q2", "at halftime", or "after Q3".
- * Between periods the clock stops at zero.
- * @param {Game} game
- */
-function describeLiveMoment({ period, clock }) {
-  if (!period) return "";
-  if (clock && clock !== "0.0") return `with ${clock} in ${describePeriod(period)}`;
-  return period === 2 ? "at halftime" : `after ${describePeriod(period)}`;
 }
 
 /**
@@ -139,7 +129,7 @@ export function renderBracket(season, now) {
       <h2>No playoff field yet</h2>
       <p>The bracket fills in once the playoff field is set</p>
     </div>`;
-  const seriesById = new Map(allSeries.map((series) => [series.id, series]));
+  const seriesById = mapSeriesById(allSeries);
   const games = season?.games ?? [];
   const rounds = Object.values(BRACKET_ORDER).map((ids) =>
     ids.map((id) => seriesById.get(id) ?? describeUnlisted(id)),

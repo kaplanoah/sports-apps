@@ -97,6 +97,8 @@ paths:
 - The slate (`page/js/slate.js`):
   - The slate, each club's last, today's, and next games kept apart from the season's whole schedule,
     is what the header, the Updates box, and the store follow.
+  - The store also follows the starts of games MLB put off or called off,
+    kept on the snapshot from the schedule's days around today, since a rainout's make-up is often set after midnight.
   - Each device keeps the slate's ranking for itself, in name order until its first drag (`page/js/kept-on-device.js`).
   - Each device also keeps when its Updates box counts from, its first look or last dismissal (`page/js/kept-on-device.js`).
   - Only phones and tablets show the Updates box (`page/js/updates.js`).

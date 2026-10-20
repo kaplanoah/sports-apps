@@ -424,7 +424,7 @@ export const writeHeader = (facts) =>
   [
     describeRelease(facts),
     `Device: ${describeDevice(facts.userAgent)}`,
-    facts.isOnHomeScreen ? "Runs from the Home Screen" : "Runs in the browser",
+    facts.isOnHomeScreen ? "Runs from the home screen" : "Runs in the browser",
     `Viewport ${facts.width}x${facts.height} at ${facts.pixelRatio}x`,
     `Reduced motion ${facts.prefersReducedMotion ? "on" : "off"}`,
     facts.theme && `Theme ${facts.theme}`,

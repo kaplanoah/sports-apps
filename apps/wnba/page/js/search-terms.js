@@ -6,7 +6,8 @@ import { formatCalendarDate, readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listVenuePlaces } from "#shared/game-search.js";
 import { readGameDay } from "./days.js";
 import { LEAGUE_WORDS } from "./league-words.js";
-import { ROUNDS } from "./snapshot.js";
+import { isPutOff } from "./nearest-games.js";
+import { isCupFinal, ROUNDS } from "./snapshot.js";
 import { TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/game-search.js").SearchTerms} SearchTerms */
@@ -36,16 +37,15 @@ const HOME_CITIES = {
 // What fans call a team besides its name, its city, and its code, which a search reads but never
 // writes.
 const NICKNAMES = {
-  ATL: ["atl", "atl dream"],
+  ATL: ["atl dream"],
   CON: ["ct sun"],
-  DAL: ["dallas", "arlington wings"],
-  GSV: ["valks", "golden state", "gs", "san francisco valkyries", "sf valkyries"],
+  DAL: ["arlington wings"],
+  GSV: ["valks", "gs", "san francisco valkyries", "sf valkyries"],
   IND: ["indianapolis fever"],
-  LAS: ["la", "los angeles"],
+  LAS: ["la"],
   LVA: ["vegas", "lv", "vegas aces", "lv aces"],
   MIN: ["minneapolis lynx"],
   NYL: ["ny", "nyc", "ny liberty", "nyc liberty", "brooklyn liberty"],
-  PHX: ["phx"],
   WAS: ["dc", "dc mystics", "washington dc mystics"],
 };
 
@@ -141,12 +141,10 @@ export function createSearchTerms({ games, standings = [] }) {
   };
 }
 
-const CUP_GAME_ID = /^105/;
-
 /** @param {Game} game */
 function readKind(game) {
   if (game.allStar) return "all-star";
-  if (CUP_GAME_ID.test(game.id)) return "cup";
+  if (isCupFinal(game)) return "cup";
   return game.round ? "playoffs" : "regular";
 }
 
@@ -167,7 +165,8 @@ function readStartMinutes(game) {
 }
 
 /**
- * A WNBA game as a search reads it, or null for one without a day.
+ * A WNBA game as a search reads it, or null for one without a day or one the league put off or
+ * called off, which won't be played that day.
  * @param {Game} game
  * @param {Record<string, number> | null} overtimes how many overtimes each final that went past
  *   regulation played, by its id, as the store keeps them
@@ -175,7 +174,7 @@ function readStartMinutes(game) {
  */
 export function readSearchGame(game, overtimes) {
   const day = readGameDay(game);
-  if (!day) return null;
+  if (!day || isPutOff(game)) return null;
   return {
     id: game.id,
     day: formatCalendarDate(day),

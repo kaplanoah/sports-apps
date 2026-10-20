@@ -1,7 +1,10 @@
-import { formatShortDate } from "#shared/days.js";
 import { html } from "#shared/html.js";
-import { renderPlaceholder } from "#shared/placeholder.js";
 import { renderRetryNote } from "#shared/retry.js";
+import {
+  renderPendingSeasonSeries,
+  renderSeasonSeries,
+  SEASON_SERIES_TITLE,
+} from "#shared/season-series.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTapeRow } from "#shared/tape.js";
 import { renderClub, renderTeamName } from "./clubs.js";
@@ -12,12 +15,17 @@ import {
   renderSheetMessage,
   renderTapeTeams,
 } from "./sheet-parts.js";
-import { findTeamLeaders, renderLeaderTable } from "./team-view.js";
+import {
+  findTeamLeaders,
+  formatAverage,
+  formatPointMargin,
+  renderLeaderTable,
+} from "./team-view.js";
 
-// The game sheet's preview for a game that hasn't started: the two teams' meetings this regular
-// season, from the Worker, then their seasons side by side and each team's leading scorers, from
-// the season the page already has. Until the meetings load, they hold their shape with placeholders,
-// and meetings that didn't load say so over a Try again button.
+// The game sheet's preview for a game that hasn't started: the two teams' season series, from their
+// meetings this regular season, which the Worker reads, then their seasons side by side and each
+// team's leading scorers, from the season the page already has. Until the meetings load, they hold
+// their shape with placeholders, and meetings that didn't load say so over a Try again button.
 
 /** @typedef {{ team: string, score: number }} MeetingSide */
 /** @typedef {{ id: string, start: string, away: MeetingSide, home: MeetingSide }} Meeting */
@@ -32,80 +40,29 @@ const SEASON_ROW_LABELS = ["Record", "PPG", "Opp PPG", "Margin", ROAD_HOME, "Las
 // Teams in a playoff series have usually met a few times by then.
 const PENDING_MEETINGS = 3;
 
+/** @type {import("#shared/season-series.js").TeamLooks} */
+const LOOKS = { renderWinner: renderClub, renderLoser: renderTeamName, nameTeam };
+
 /** @param {Meeting} meeting */
-const findWinner = (meeting) => (meeting.home.score > meeting.away.score ? "home" : "away");
-
-/**
- * A meeting's winner and score, then where it was played: at the other team's place, or vs them
- * at home.
- * @param {Meeting} meeting
- */
-function renderMeeting(meeting) {
-  const winnerPlace = findWinner(meeting);
-  const winner = meeting[winnerPlace];
-  const loser = meeting[winnerPlace === "home" ? "away" : "home"];
-  return html`<li>
-    <span class="meeting-day tabular">${formatShortDate(new Date(meeting.start))}</span>
-    <span class="meeting-result"
-      >${renderClub(winner.team)}<span class="meeting-score tabular"
-        >${winner.score}-${loser.score}</span
-      ></span
-    >
-    <span>${winnerPlace === "home" ? "vs" : "at"} ${renderTeamName(loser.team)}</span>
-  </li>`;
-}
-
-/**
- * @param {Meeting[]} meetings
- * @param {Teams} teams
- */
-function describeSeasonSeries(meetings, teams) {
-  const countWins = (team) =>
-    meetings.filter((meeting) => meeting[findWinner(meeting)].team === team).length;
-  const [away, home] = SIDES.map((place) => countWins(teams[place]));
-  if (away === home) return `Season series split ${away}-${home}`;
-  const leader = away > home ? teams.away : teams.home;
-  return `${nameTeam(leader)} won the season series ${Math.max(away, home)}-${Math.min(away, home)}`;
-}
+const readMeeting = (meeting) => ({
+  day: new Date(meeting.start),
+  away: meeting.away,
+  home: meeting.home,
+});
 
 /**
  * @param {Meeting[] | null} meetings
  * @param {Teams} teams
+ * @param {boolean} isSeriesOver whether the regular season, and so its series, is over
  */
-function renderMeetings(meetings, teams) {
+function renderMeetings(meetings, teams, isSeriesOver) {
   if (!meetings)
     return renderSheetPart(
-      "Meetings",
+      SEASON_SERIES_TITLE,
       renderRetryNote("Couldn't load this season's meetings", "sheet-message"),
     );
-  if (!meetings.length)
-    return renderSheetPart("Meetings", renderSheetMessage("They haven't met this season"));
-  return renderSheetPart(
-    "Meetings",
-    html`<ul class="meetings">
-      ${meetings.map(renderMeeting)}
-    </ul>`,
-    describeSeasonSeries(meetings, teams),
-  );
+  return renderSeasonSeries(meetings.map(readMeeting), { ...teams, isOver: isSeriesOver }, LOOKS);
 }
-
-const renderPendingMeeting = () =>
-  html`<li>
-    <span class="meeting-day">${renderPlaceholder("Sep 00")}</span>
-    <span class="meeting-result">${renderPlaceholder("Team 00-00")}</span>
-    <span>${renderPlaceholder("at Mystics")}</span>
-  </li>`;
-
-const renderPendingMeetings = () =>
-  renderSheetPart(
-    "Meetings",
-    html`<ul class="meetings">
-      ${Array.from({ length: PENDING_MEETINGS }, renderPendingMeeting)}
-    </ul>`,
-  );
-
-const formatAverage = (value) => value.toFixed(1);
-const formatMargin = (value) => `${value > 0 ? "+" : ""}${value.toFixed(1)}`;
 
 // The visitors play on the road and the hosts at home, so each is measured where it plays.
 /**
@@ -121,7 +78,7 @@ const describeSeasonRows = (away, home) => {
       format: formatAverage,
       isLowerBetter: true,
     }),
-    describeNumbers(margin, [away.margin, home.margin], { format: formatMargin }),
+    describeNumbers(margin, [away.margin, home.margin], { format: formatPointMargin }),
     describeRecords(roadHome, [away.road, home.home]),
     describeRecords(lastTen, [away.lastTen, home.lastTen]),
   ];
@@ -179,10 +136,11 @@ function renderLeadingScorers(teams, season) {
 }
 
 /**
- * The preview: the meetings, or their placeholders while they load, then the two seasons and the
- * leading scorers.
- * @param {{ teams: Teams, season: Season | null, meetings: Meeting[] | null, isLoading: boolean }} parts
+ * The preview: the season series, or its placeholders while its meetings load, then the two
+ * seasons and the leading scorers.
+ * @param {{ teams: Teams, season: Season | null, meetings: Meeting[] | null, isLoading: boolean, isSeriesOver: boolean }} parts
+ *   `isSeriesOver` says the regular season is over, as it is for a playoff game
  */
-export const renderPreview = ({ teams, season, meetings, isLoading }) =>
-  html`${isLoading ? renderPendingMeetings() : renderMeetings(meetings, teams)}
+export const renderPreview = ({ teams, season, meetings, isLoading, isSeriesOver }) =>
+  html`${isLoading ? renderPendingSeasonSeries(PENDING_MEETINGS) : renderMeetings(meetings, teams, isSeriesOver)}
   ${renderSeasons(teams, season)} ${renderLeadingScorers(teams, season)}`;

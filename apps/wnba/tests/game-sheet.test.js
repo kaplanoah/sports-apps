@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderBoxScore, renderPendingBoxScore } from "../page/js/box-score-view.js";
-import { isEarlierBoxScore } from "../page/js/game-sheet.js";
+import { isEarlierBoxScore, isSeasonSeriesOver } from "../page/js/game-sheet.js";
 import { listSeasonDays } from "../page/js/games-view.js";
 import { renderPreview } from "../page/js/preview-view.js";
 import { buildSeasonWithLeaders } from "./player-fixtures.js";
@@ -192,6 +192,16 @@ test("each team's top five scorers show in one table, minutes last, a tie going 
   assert.ok(!finalWings.some((row) => /fouls/.test(row)));
 });
 
+test("a live game's timeouts left name only a team the league counts them for, and none leaves the line out", () => {
+  const live = readLiveBoxScore();
+  live.home.timeouts = null;
+  assert.match(readText(renderBoxScore(live)), /Timeouts left: Valkyries 0(?!,)/);
+  live.away.timeouts = null;
+  const text = readText(renderBoxScore(live));
+  assert.doesNotMatch(text, /Timeouts left/);
+  assert.doesNotMatch(text, /null/);
+});
+
 /** @param {any} markup */
 const countPlaying = (markup) => (markup.text.match(/data-player-playing="1"/g) ?? []).length;
 
@@ -213,7 +223,7 @@ test("a box score of a game under way or ended today marks each top scorer who h
 });
 
 /**
- * The preview of the Fever at the Aces, with the season and meetings it would have.
+ * The preview of the Fever at the Aces in the playoffs, with the season and meetings it would have.
  * @param {Partial<Parameters<typeof renderPreview>[0]>} [parts]
  */
 const renderFeverAtAces = (parts = {}) =>
@@ -222,8 +232,13 @@ const renderFeverAtAces = (parts = {}) =>
     season: SEASON,
     meetings: describePreview(GAMES.preview.schedule, { season: 2026, ...FEVER_AT_ACES }).meetings,
     isLoading: false,
+    isSeriesOver: true,
     ...parts,
   });
+
+/** @param {any} markup */
+const listMeetingRows = (markup) =>
+  [...markup.text.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, row]) => readText({ text: row }));
 
 test("each team in a preview opens its sheet: each meeting's winner and the team it beat, the season stats, and the leading scorers", () =>
   checkInTimeZone(EASTERN, () => {
@@ -235,16 +250,21 @@ test("each team in a preview opens its sheet: each meeting's winner and the team
       renderFeverAtAces().text.match(/<ul class="meetings">[\s\S]*?<\/ul>/)?.[0] ?? "";
     assert.deepEqual(
       [...meetings.matchAll(/class="team-open" data-team="(\w+)"/g)].map(([, team]) => team),
-      ["IND", "LVA", "LVA"],
+      ["LVA", "LVA", "IND"],
     );
   }));
 
-test("a preview lists the regular season's meetings, each by its winner and where it was played, with the season series", () =>
+test("a preview lists the regular season's meetings, first to last, each by its winner and where it was played, under who won the season series", () =>
   checkInTimeZone(EASTERN, () => {
-    const text = readText(renderFeverAtAces());
-    assert.match(text, /Meetings Fever won the season series 2-1/);
-    assert.match(text, /Aug 6 Aces 86-84 at Fever/);
-    assert.match(text, /Jul 12 Fever 109-75 at Aces/);
+    const markup = renderFeverAtAces();
+    assert.match(readText(markup), /Season series Fever won 2-1/);
+    const rows = listMeetingRows(markup);
+    assert.deepEqual(rows, [
+      "Jul 5 Fever 84-68 at Aces",
+      "Jul 12 Fever 109-75 at Aces",
+      "Aug 6 Aces 86-84 at Fever",
+    ]);
+    const text = readText(markup);
     const homeWin = {
       id: "1022600001",
       start: "2026-06-01T23:00:00Z",
@@ -266,6 +286,16 @@ test("a preview compares the season stats from the saved standings, the visitors
   assert.match(text, /8-2 Leading scorers/);
   assert.deepEqual(readTapeBars(markup, "Opp PPG"), ["100", "lead 95"]);
   assert.deepEqual(readTapeBars(markup, "Road Home"), ["59", "lead 68"]);
+});
+
+test("a preview's margin that rounds to nothing shows no sign, as a team's sheet shows it", () => {
+  const standings = SEASON.standings.map((row) =>
+    row.team === "IND" ? { ...row, margin: -0.04 } : row,
+  );
+  assert.match(
+    readText(renderFeverAtAces({ season: { ...SEASON, standings } })),
+    / 0\.0 Margin \+5\.7/,
+  );
 });
 
 test("a preview lists each team's five saved leading scorers, as its team sheet does, in one table, best first, with how well each shoots and how much she plays", () => {
@@ -297,7 +327,18 @@ test("a preview missing a part says so, with Try again for the meetings it reads
 
   const { meetings } = describePreview(GAMES.preview.schedule, { season: 2026, ...FEVER_AT_ACES });
   const split = meetings.filter((meeting) => meeting.id !== "1022600153");
-  assert.match(readText(renderFeverAtAces({ meetings: split })), /Season series split 1-1/);
+  assert.match(readText(renderFeverAtAces({ meetings: split })), /Season series Split 1-1/);
+});
+
+test("before the playoffs, a preview's season series says who leads it, or that it's tied, since more meetings may come", () => {
+  const { meetings } = describePreview(GAMES.preview.schedule, { season: 2026, ...FEVER_AT_ACES });
+  const midSeason = { isSeriesOver: false };
+  assert.match(readText(renderFeverAtAces(midSeason)), /Season series Fever lead 2-1/);
+  const tied = meetings.filter((meeting) => meeting.id !== "1022600153");
+  assert.match(
+    readText(renderFeverAtAces({ ...midSeason, meetings: tied })),
+    /Season series Tied 1-1/,
+  );
 });
 
 test("a preview of teams yet to meet says so in a short note", () => {
@@ -347,4 +388,9 @@ test("a pushed box score with fewer points than the one the sheet shows is from 
   assert.equal(isEarlierBoxScore(scoring(42, 38), scoring(40, 38)), false);
   assert.equal(isEarlierBoxScore(scoring(40, 38), scoring(40, 38)), false);
   assert.equal(isEarlierBoxScore(scoring(40, 38), null), false);
+});
+
+test("a regular season game's preview has its season series still going, and a playoff game's has it over", () => {
+  assert.equal(isSeasonSeriesOver({ round: null }), false);
+  assert.equal(isSeasonSeriesOver({ round: 1 }), true);
 });

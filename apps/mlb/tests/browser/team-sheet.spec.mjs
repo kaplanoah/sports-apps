@@ -350,13 +350,22 @@ test("a club's name under the pointer shifts its color a little toward the accen
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  const name = page.locator('.div-grid tr[data-team="SEA"] .team-open').locator(".team-name");
+  const row = page.locator('.div-grid tr[data-team="SEA"]');
+  const name = row.locator(".team-open .team-name");
   const readNameColor = () => name.evaluate((element) => getComputedStyle(element).color);
   const before = await readNameColor();
   await name.hover();
 
   await expect.poll(readNameColor).not.toBe(before);
   await expect(name).toHaveCSS("text-decoration-line", "none");
+
+  await page.mouse.move(0, 0);
+  await expect.poll(readNameColor).toBe(before);
+  const wins = row.locator("td.tabular").first();
+  await wins.scrollIntoViewIfNeeded();
+  const box = await wins.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await expect.poll(readNameColor).not.toBe(before);
 });
 
 test.describe("on a phone", () => {

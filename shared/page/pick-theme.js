@@ -107,6 +107,15 @@ function buildSafariAddress(choice, address) {
 // A device keeps the Home Screen welcome closed under this key once the viewer closes it.
 const WELCOME_CLOSED_KEY = "homeScreenWelcomeClosed";
 
+// The welcome then opens on each load, as a first visit's does, until it closes again.
+function forgetWelcomeClosed() {
+  try {
+    localStorage.removeItem(WELCOME_CLOSED_KEY);
+  } catch {
+    /* without storage, the welcome opens on every visit */
+  }
+}
+
 // The browser keeps the theme the app's link names as its own and drops it from the address at
 // once. It opens the welcome again, even where it was closed before, to show the steps that add
 // the site again, on this page or past the gate, whose sign-in reloads the address it leaves.
@@ -119,10 +128,10 @@ function takeThemeFromApp() {
   if (!isAppearanceChoice(fromApp)) return;
   try {
     localStorage.setItem("appearance", JSON.stringify(fromApp));
-    localStorage.removeItem(WELCOME_CLOSED_KEY);
   } catch {
-    /* without storage, the browser follows the phone, and the welcome opens on every visit */
+    /* without storage, the browser follows the phone */
   }
+  forgetWelcomeClosed();
 }
 
 // A Home Screen app keeps the icon the page offered as it was added: the look its address names,

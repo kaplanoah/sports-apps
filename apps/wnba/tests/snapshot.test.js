@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { GAME_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import * as WNBASnapshot from "../page/js/snapshot.js";
 
 const AFTERNOON = JSON.parse(
@@ -82,12 +83,16 @@ const SEATTLE_AT_CHICAGO = {
   homeTeam: { teamTricode: "CHI", score: 58 },
 };
 
-/** @param {any} game */
-const addToScoreboard = (game) => {
+/** @param {any[]} games */
+const withScoreboardGames = (games) => {
   const { scoreboard } = AFTERNOON.responses;
-  const games = [...scoreboard.scoreboard.games, game];
   return { scoreboard: { ...scoreboard, scoreboard: { ...scoreboard.scoreboard, games } } };
 };
+
+const SCOREBOARD_GAMES = AFTERNOON.responses.scoreboard.scoreboard.games;
+
+/** @param {any} game */
+const addToScoreboard = (game) => withScoreboardGames([...SCOREBOARD_GAMES, game]);
 
 test("each team's nearest games come from its whole season, while the games are only the playoffs'", () => {
   const { games, nearestGames } = buildWithWholeSeason();
@@ -444,6 +449,61 @@ test("a game that hasn't started is followed closely at first, then less, and th
   assert.equal(WNBASnapshot.choosePollDelay(snapshot, start + HOUR_MS / 2), 15 * 1000);
   assert.equal(WNBASnapshot.choosePollDelay(snapshot, start + 4 * HOUR_MS), 5 * 60 * 1000);
   assert.equal(WNBASnapshot.choosePollDelay(snapshot, start + 9 * HOUR_MS), 24 * HOUR_MS);
+});
+
+/** @param {string} gameId */
+const putOffOnScoreboard = (gameId) =>
+  withScoreboardGames(
+    SCOREBOARD_GAMES.map((game) =>
+      game.gameId === gameId ? { ...game, gameStatusText: "PPD" } : game,
+    ),
+  );
+
+// A regular-season game in Chicago tonight, which the league put off.
+const PUT_OFF_IN_CHICAGO = {
+  ...SEATTLE_AT_CHICAGO,
+  gameId: "1022600401",
+  gameStatus: 1,
+  gameStatusText: "PPD",
+  gameTimeUTC: "2026-09-30T23:30:00Z",
+  period: 0,
+  gameClock: "",
+};
+
+test("a game the league put off, playoff or regular season, isn't followed past its start as one about to tip off, but keeps its day a game day", () => {
+  const playoff = buildAfternoon(putOffOnScoreboard("1042600132"));
+  const lateGame = playoff.games.find((game) => game.id === "1042600132");
+  assert.deepEqual(playoff.putOffStarts, [lateGame.start]);
+  const quietPlayoff = { games: [lateGame], putOffStarts: playoff.putOffStarts };
+  const playoffStart = Date.parse(lateGame.start);
+  assert.equal(
+    WNBASnapshot.choosePollDelay(quietPlayoff, playoffStart + 30 * 60 * 1000),
+    GAME_DAY_CHECK_MS,
+  );
+
+  const regularSeason = buildWithWholeSeason(addToScoreboard(PUT_OFF_IN_CHICAGO));
+  assert.deepEqual(regularSeason.putOffStarts, [PUT_OFF_IN_CHICAGO.gameTimeUTC]);
+  const regularStart = Date.parse(PUT_OFF_IN_CHICAGO.gameTimeUTC);
+  assert.equal(
+    WNBASnapshot.choosePollDelay(
+      { putOffStarts: regularSeason.putOffStarts },
+      regularStart + 30 * 60 * 1000,
+    ),
+    GAME_DAY_CHECK_MS,
+  );
+});
+
+test("a game a decided series no longer needs isn't followed past its start", () => {
+  const lateGame = buildAfternoon().games.find((game) => game.id === "1042600132");
+  const start = Date.parse(lateGame.start);
+  const calledOff = {
+    games: [{ ...lateGame, isIfNeeded: true }],
+    series: [{ id: lateGame.series, winner: lateGame.home.team }],
+  };
+  assert.equal(
+    WNBASnapshot.choosePollDelay(calledOff, start + 30 * 60 * 1000),
+    24 * 60 * 60 * 1000,
+  );
 });
 
 test("each game keeps the arena the schedule names, through the scoreboard's copy of today's games, and none while the league hasn't set it", () => {

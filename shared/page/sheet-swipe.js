@@ -2,18 +2,18 @@
 // down whichever way it closes. Each slide writes where it ends into the sheet's style and leaves
 // no animation behind once it ends.
 
+import { PHONE_WIDTH_QUERY } from "./device.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { SHEET_EASING, SHEET_MOTION_MS, settleAfter } from "./slide-panels.js";
 
-// Matches chrome.css's phone layout, where dialogs are sheets.
-const SHEET_MEDIA = "(max-width: 779px)";
 // A swipe down closes the sheet once it goes this far or this fast; anything less springs back.
 const CLOSE_DISTANCE_PX = 110;
 const CLOSE_SPEED_PX_PER_MS = 0.5;
 // A touch has to move this far before it counts as a swipe, so a tap stays a tap.
 const SWIPE_START_PX = 6;
 
-const isSheetLayout = () => matchMedia(SHEET_MEDIA).matches;
+// A phone's layout, where dialogs are sheets.
+const isSheetLayout = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
 /**
  * Moves a sheet from where a finger left it to `to`, which its style holds from the start.
@@ -65,6 +65,17 @@ function slideSheetClosed(dialog) {
 export function closeSheet(dialog) {
   if (isSheetLayout()) slideSheetClosed(dialog);
   else dialog.close();
+}
+
+/**
+ * Has Escape, Android's back, and a close the page requests slide the sheet down too.
+ * @param {HTMLDialogElement} dialog
+ */
+export function closeOnCancel(dialog) {
+  dialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeSheet(dialog);
+  });
 }
 
 /**
