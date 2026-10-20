@@ -125,8 +125,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   It fails when any changed file went unread, or when a reviewer, the check across areas, or the posting step didn't finish, naming each,
   a reviewer that left one of its area's rule files unread among them.
   If the summary names something it couldn't judge, tell the user.
-- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`,
-  which shows the action's own errors but not each try's turns and tool calls, since they'd be public.
+- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`.
+  An area's `find` and `review-across` show the action's own errors but not each try's turns and tool calls, since they'd be public,
+  and `review-post` shows the errors of the root's `worker/post-review.mjs`.
   If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
   Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and the check across areas once.
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,

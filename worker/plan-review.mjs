@@ -544,7 +544,7 @@ export function writeRuleCopies(folder, rules) {
   });
 }
 
-const SHOW_WHOLE_FILE = `\`git show --diff-merges=first-parent ${WHOLE_CHANGE[1]} -- <path>\` shows a file's whole change.`;
+const SHOW_WHOLE_FILE = `\`node worker/review-git.mjs show --diff-merges=first-parent ${WHOLE_CHANGE[1]} -- <path>\` shows a file's whole change.`;
 
 const STAGE_WORDS = {
   first: "The first review of this pull request: each area's diffs hold its whole change.",

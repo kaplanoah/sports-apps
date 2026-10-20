@@ -771,10 +771,10 @@ const listClaudeSteps = (names) =>
 
 // The repo is public, so a Claude step's transcript stays out of its log, and the reviewer, which
 // reads text anyone may have written, can reach nothing but the checkout and its history: Read,
-// Grep, and Glob need no rule within the checkout and are refused outside it, git diff and git
-// blame, which read files outside it, aren't allowed, git log and git show can't write a file with
-// --output, and the repo's own settings, whose allow list and hooks are for sessions, aren't
-// loaded.
+// Grep, and Glob need no rule within the checkout and are refused outside it, the only command it
+// may run is worker/review-git.mjs, whose allowed options can't read or write outside the
+// checkout, as a shell's quoting could spell an option past a rule refusing it, and the repo's own
+// settings, whose allow list and hooks are for sessions, aren't loaded.
 test("every Claude step keeps its transcript out of the log and reads only the checkout and its history", () => {
   const steps = listClaudeSteps(WORKFLOWS);
   assert.ok(steps.length >= 3);
@@ -782,9 +782,8 @@ test("every Claude step keeps its transcript out of the log and reads only the c
     assert.equal(readStepInput(workflow, step, "show_full_output"), "false", name);
     const args = readStepInput(workflow, step, "claude_args");
     const tools = [...args.matchAll(/--allowedTools "([^"]*)"/g)].map(([, list]) => list);
-    assert.deepEqual(tools, ["Bash(git log:*),Bash(git show:*)"], name);
-    const denied = [...args.matchAll(/--disallowedTools "([^"]*)"/g)].map(([, list]) => list);
-    assert.deepEqual(denied, ["Bash(git log *--output*),Bash(git show *--output*)"], name);
+    assert.deepEqual(tools, ["Bash(node worker/review-git.mjs:*)"], name);
+    assert.doesNotMatch(args, /--disallowedTools/, name);
     const sources = [...args.matchAll(/--setting-sources (\S+)/g)].map(([, list]) => list);
     assert.deepEqual(sources, ["user"], name);
   }
