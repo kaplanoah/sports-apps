@@ -7,7 +7,8 @@ Answer every review finding, a Nit or Pre-existing one too, as below; the `ship`
 
 - Answer all of a review's findings in one push: fix each and go back to step 2 of "Shipping a change" in AGENTS.md, or reply on its thread, only when you won't fix it, saying why.
 - End that push by adding the `review` label to the PR, which asks CI to review what it changed, and takes the label off itself, so the next ask is a fresh label.
-  A push alone starts no review, and a push while a review is running stops it, so ask again after it.
+  A push alone starts no review, and a push while a review is running or waiting stops it, so ask again after it,
+  taking the label off first if the stopped run left it on.
 - Fix a finding in every place the PR's own change shows the same problem, not only on its line,
   and name a place outside the change that shows it in a line of the PR's description, rather than widening the PR.
 - Once the push is up, resolve the thread of each finding you fixed, with no reply, since GitHub marks it outdated once its line changes,
