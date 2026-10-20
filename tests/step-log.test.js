@@ -1,19 +1,64 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createStepLog, nameFile, writeStepsAsText } from "../shared/page/step-log.js";
-import { useSavedStorage } from "./saved-storage.js";
 import { normalizeSpaces } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
 /** @type {Map<string, string>} */
 const stored = new Map();
-useSavedStorage(stored);
+// How often a log asks the device for what it keeps, and keeps it there.
+const storageCalls = { reads: 0, writes: 0 };
+globalThis.localStorage = /** @type {any} */ ({
+  getItem: (/** @type {string} */ key) => {
+    storageCalls.reads += 1;
+    return stored.get(key) ?? null;
+  },
+  setItem: (/** @type {string} */ key, /** @type {string} */ value) => {
+    storageCalls.writes += 1;
+    stored.set(key, value);
+  },
+  removeItem: (/** @type {string} */ key) => stored.delete(key),
+});
 /** @type {Map<string, (event: Event) => void>} */
 const listeners = new Map();
 globalThis.document = /** @type {any} */ ({
   addEventListener: (/** @type {string} */ type, /** @type {any} */ listener) =>
     listeners.set(type, listener),
 });
+/** @type {(() => void)[]} */
+const onPageHide = [];
+/** @type {((event: any) => void)[]} */
+const onStorage = [];
+globalThis.addEventListener = /** @type {any} */ (
+  (/** @type {string} */ type, /** @type {() => void} */ listener) => {
+    if (type === "pagehide") onPageHide.push(listener);
+    if (type === "storage") onStorage.push(listener);
+  }
+);
+const hidePage = () => onPageHide.forEach((listener) => listener());
+/**
+ * Tells every log that another tab changed storage under `key`, as a browser does.
+ * @param {string} key
+ */
+const changeInOtherTab = (key) =>
+  onStorage.forEach((listener) => listener({ key, newValue: stored.get(key) ?? null }));
+
+/**
+ * Two tabs' copies of one log, kept under `key`, each logging while `isOn` says to.
+ * @param {string} key
+ * @param {() => boolean} isOn
+ */
+function openTwoTabs(key, isOn) {
+  return [1, 2].map(() => {
+    const log = createStepLog({ key, title: "Errors", isWatched: () => false });
+    log.watchSteps(isOn, () => {});
+    return log;
+  });
+}
+
+/** @param {string} key */
+const readStoredTexts = (key) =>
+  JSON.parse(stored.get(key) ?? "[]").map((/** @type {{ text: string }} */ line) => line.text);
 
 /** A stand-in for an element, inside the part when `isInPart`. */
 class FakeElement {
@@ -74,6 +119,8 @@ test("no line holds an address, which holds the page's key, even one kept before
 
   log.noteStep(`Failed to fetch dynamically imported module: ${page}c9c63e6/js/games-view.js`);
   log.noteStep(`a promise failed: Load failed for ${page}`);
+  log.noteStep("The store's socket to wss://example-subdomain.workers.dev/k3y/watch closed");
+  hidePage();
 
   assert.deepEqual(
     log.readLines().map((line) => line.text),
@@ -81,9 +128,148 @@ test("no line holds an address, which holds the page's key, even one kept before
       "an error at page",
       "Failed to fetch dynamically imported module: games-view.js",
       "a promise failed: Load failed for page",
+      "The store's socket to page closed",
     ],
   );
   assert.doesNotMatch(stored.get("addressLog") ?? "", /k3y|example-subdomain/);
+});
+
+test("lines kept with only their time and text each stay as the log saves again", () => {
+  stored.set(
+    "keptWithoutIdsLog",
+    JSON.stringify([
+      { at: 1, text: "the first step" },
+      { at: 2, text: "the second step" },
+      { at: 3, text: "the third step" },
+    ]),
+  );
+  const log = createStepLog({ key: "keptWithoutIdsLog", title: "Errors", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+
+  log.noteStep("a new step");
+  hidePage();
+
+  assert.deepEqual(readStoredTexts("keptWithoutIdsLog"), [
+    "the first step",
+    "the second step",
+    "the third step",
+    "a new step",
+  ]);
+});
+
+test("a log holds its lines as it logs, reading the device once, and keeps them there as the page leaves the screen", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const log = createStepLog({ key: "heldLog", title: "Games list", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+  const before = { ...storageCalls };
+
+  for (let tap = 1; tap <= 50; tap += 1) log.noteStep(`tap ${tap}`);
+  assert.deepEqual(storageCalls, { reads: before.reads + 1, writes: before.writes });
+  assert.equal(stored.has("heldLog"), false);
+  hidePage();
+
+  assert.equal(JSON.parse(stored.get("heldLog") ?? "[]").length, 50);
+});
+
+test("a log keeps a steady stream of lines on the device while they still come, as a fling's", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const log = createStepLog({ key: "streamLog", title: "Games list", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+
+  for (let line = 1; line <= 6; line += 1) {
+    log.noteStep(`top day ${line}`);
+    context.mock.timers.tick(500);
+  }
+
+  assert.ok(JSON.parse(stored.get("streamLog") ?? "[]").length >= 2);
+});
+
+test("a log turned off, which forgets its lines, never keeps them again as the page leaves the screen", () => {
+  const log = createStepLog({ key: "offLog", title: "Errors", isWatched: () => false });
+  let isOn = true;
+  log.watchSteps(
+    () => isOn,
+    () => {},
+  );
+  log.noteStep("an error");
+
+  isOn = false;
+  log.forgetLines();
+  hidePage();
+
+  assert.equal(stored.has("offLog"), false);
+});
+
+test("two tabs logging at once keep each other's lines", (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  const [first, second] = openTwoTabs("twoTabsLog", () => true);
+
+  first.noteStep("first tab's step");
+  context.mock.timers.tick(1);
+  second.noteStep("second tab's step");
+  hidePage();
+
+  assert.deepEqual(readStoredTexts("twoTabsLog"), ["first tab's step", "second tab's step"]);
+});
+
+test("two lines that say the same at the same moment are both kept, in one tab and across two", (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  const [first, second] = openTwoTabs("sameMomentLog", () => true);
+
+  first.noteStep("the same error");
+  first.noteStep("the same error");
+  second.noteStep("the same error");
+  hidePage();
+
+  assert.deepEqual(readStoredTexts("sameMomentLog"), [
+    "the same error",
+    "the same error",
+    "the same error",
+  ]);
+});
+
+test("a tab never keeps lines again from before another tab turned Diagnostics off and on", (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  let isOn = true;
+  const [first, second] = openTwoTabs("offInOtherTabLog", () => isOn);
+  first.noteStep("before it was off");
+
+  isOn = false;
+  second.forgetLines();
+  changeInOtherTab("offInOtherTabLog");
+  isOn = true;
+  context.mock.timers.tick(1);
+  second.noteStep("after it was on again");
+  hidePage();
+
+  assert.deepEqual(readStoredTexts("offInOtherTabLog"), ["after it was on again"]);
+});
+
+test("a log keeps its lines on the device a moment after a line comes, once for a burst, as a page that crashes never hides", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const log = createStepLog({ key: "burstLog", title: "Errors", isWatched: () => false });
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+  const before = storageCalls.writes;
+
+  for (let tap = 1; tap <= 50; tap += 1) log.noteStep(`tap ${tap}`);
+  context.mock.timers.tick(999);
+  assert.equal(storageCalls.writes, before);
+  context.mock.timers.tick(1);
+
+  assert.equal(storageCalls.writes, before + 1);
+  assert.equal(JSON.parse(stored.get("burstLog") ?? "[]").length, 50);
 });
 
 test("a file is named on a phone without URL.canParse, as on iOS 16", (context) => {

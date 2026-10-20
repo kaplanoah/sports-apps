@@ -7,10 +7,18 @@ const SPRING_OMEGA = (2 * Math.PI) / SPRING_RESPONSE_SECONDS;
 const ARRIVED_WITHIN_PX = 0.5;
 
 // Any touch, click, wheel or key stops the scroll where it is, as a touch does on a phone.
-const INTERRUPTING_EVENTS = ["pointerdown", "touchstart", "wheel", "keydown"];
+export const INTERRUPTING_EVENTS = ["pointerdown", "touchstart", "wheel", "keydown"];
 
 // Each scroller eases on a spring of its own, so the page and a list inside it can move at once.
-/** @type {Map<Element, { frame: number, startTop: number, endTop: number, startTime: number }>} */
+/**
+ * @type {Map<Element, {
+ *   frame: number,
+ *   startTop: number,
+ *   endTop: number,
+ *   startTime: number,
+ *   onInterrupt: (event: Event) => void,
+ * }>}
+ */
 const springs = new Map();
 
 /** @param {number} seconds */
@@ -30,11 +38,14 @@ function stopSpring(scroller) {
   cancelAnimationFrame(spring.frame);
   springs.delete(scroller);
   if (springs.size) return;
-  for (const type of INTERRUPTING_EVENTS) removeEventListener(type, stopScrolling, true);
+  for (const type of INTERRUPTING_EVENTS) removeEventListener(type, interruptScrolling, true);
 }
 
-function stopScrolling() {
+/** @param {Event} event */
+function interruptScrolling(event) {
+  const interrupted = [...springs.values()];
   for (const scroller of [...springs.keys()]) stopSpring(scroller);
+  for (const { onInterrupt } of interrupted) onInterrupt(event);
 }
 
 /**
@@ -82,8 +93,9 @@ export const isAsFarAs = (scrollTop, top) => top - scrollTop < ARRIVED_WITHIN_PX
  * Scrolls `scroller` to `top` on the spring, or at once for someone who asks for less motion.
  * @param {Element} scroller
  * @param {number} top
+ * @param {(event: Event) => void} [onInterrupt] told of the event that stopped the scroll short
  */
-export function scrollWithSpring(scroller, top) {
+export function scrollWithSpring(scroller, top, onInterrupt = () => {}) {
   stopSpring(scroller);
   if (!isAwayFrom(scroller, top)) return;
   if (prefersReducedMotion()) {
@@ -91,11 +103,12 @@ export function scrollWithSpring(scroller, top) {
     return;
   }
   for (const type of INTERRUPTING_EVENTS)
-    addEventListener(type, stopScrolling, { capture: true, passive: true });
+    addEventListener(type, interruptScrolling, { capture: true, passive: true });
   springs.set(scroller, {
     startTop: scroller.scrollTop,
     endTop: top,
     startTime: performance.now(),
+    onInterrupt,
     frame: requestAnimationFrame((time) => stepScroll(scroller, time)),
   });
 }

@@ -280,7 +280,7 @@ test.describe("on a phone, tapping an update", () => {
     await tapTeamName(page, 0, "Minnesota Lynx");
     await expect(sheet.locator("#gameWhen")).toContainText("Liberty won");
     await expect(page.locator("#teamSheet")).toBeHidden();
-    await page.locator("#gameCloseBtn").dispatchEvent("click");
+    await page.locator("#gameSheet .sheet-close").dispatchEvent("click");
     await expect(sheet).toBeHidden();
 
     await tapTeamName(page, 1, "Indiana Fever");
@@ -323,7 +323,7 @@ test.describe("on a phone, tapping an update", () => {
     await page.touchscreen.tap(at.x, at.y);
 
     await expect(page.locator("#gameSheet #gameWhen")).toContainText("Liberty won");
-    await page.locator("#gameCloseBtn").dispatchEvent("click");
+    await page.locator("#gameSheet .sheet-close").dispatchEvent("click");
     await expect(page.locator("#gameSheet")).toBeHidden();
 
     await scrollSeasonPart(page, "bracket", await readHeaderReach(page));
@@ -424,7 +424,7 @@ test.describe("on a phone, in full motion", () => {
     await page.touchscreen.tap(at.x, at.y);
 
     await expect(page.locator("#gameSheet #gameWhen")).toContainText("Liberty won");
-    await page.locator("#gameCloseBtn").dispatchEvent("click");
+    await page.locator("#gameSheet .sheet-close").dispatchEvent("click");
     await expect(page.locator("#gameSheet")).toBeHidden();
 
     await dismissUpdatesBox(page);

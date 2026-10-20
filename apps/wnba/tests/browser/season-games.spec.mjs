@@ -9,6 +9,34 @@ import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
+/**
+ * Opens the Games view while today's last game is under way, leaves for a night in which it ends,
+ * and comes back, with the store held, so the page hasn't caught up, when `holdStore` says so.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ holdStore?: boolean }} [options]
+ */
+async function returnAfterNightAway(page, { holdStore = false } = {}) {
+  const app = await openSeasonGames(page);
+  await app.changeSeason((season) => {
+    const game = season.games.find((each) => each.id === "1042600132");
+    Object.assign(game, { state: "live", status: "Q4 0:40", period: 4, clock: "0:40" });
+    return season;
+  });
+  await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
+  await expectDayAtTop(page, "2026-09-30");
+  await setHidden(page, true);
+  await page.clock.fastForward("12:00:00");
+  await app.changeSeasonWhileAway((season) => {
+    const game = season.games.find((each) => each.id === "1042600132");
+    Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
+    return season;
+  });
+  const release = holdStore ? await app.holdStore() : () => {};
+  await setHidden(page, false);
+  await page.clock.runFor(100);
+  return { release };
+}
+
 test.describe("with reduced motion", () => {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -265,23 +293,7 @@ test.describe("with reduced motion", () => {
   test("after a night away, the list follows its start day to today once the store says the game it opened on has ended", async ({
     page,
   }) => {
-    const app = await openSeasonGames(page);
-    await app.changeSeason((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "live", status: "Q4 0:40", period: 4, clock: "0:40" });
-      return season;
-    });
-    await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
-    await expectDayAtTop(page, "2026-09-30");
-    await setHidden(page, true);
-    await page.clock.fastForward("12:00:00");
-    await app.changeSeasonWhileAway((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
-      return season;
-    });
-    await setHidden(page, false);
-    await page.clock.runFor(100);
+    await returnAfterNightAway(page);
 
     await expect(page.locator('[data-game="1042600132"] .game-status')).toContainText("Final");
     await expectDayAtTop(page, "2026-10-01");
@@ -290,24 +302,7 @@ test.describe("with reduced motion", () => {
   test("after a night away, a swipe on the strip before the store catches up keeps the list where it is", async ({
     page,
   }) => {
-    const app = await openSeasonGames(page);
-    await app.changeSeason((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "live", status: "Q4 0:40", period: 4, clock: "0:40" });
-      return season;
-    });
-    await expect(page.locator('[data-game="1042600132"] .clock')).toHaveText("Q4 0:40");
-    await expectDayAtTop(page, "2026-09-30");
-    await setHidden(page, true);
-    await page.clock.fastForward("12:00:00");
-    await app.changeSeasonWhileAway((season) => {
-      const game = season.games.find((each) => each.id === "1042600132");
-      Object.assign(game, { state: "final", status: "Final", period: 4, clock: "" });
-      return season;
-    });
-    const release = await app.holdStore();
-    await setHidden(page, false);
-    await page.clock.runFor(100);
+    const { release } = await returnAfterNightAway(page, { holdStore: true });
     await expectDayAtTop(page, "2026-09-30");
 
     await page.locator("#seasonGames .day-strip").evaluate((strip) => {
@@ -319,6 +314,24 @@ test.describe("with reduced motion", () => {
     await expect(page.locator('[data-game="1042600132"] .game-status')).toContainText("Final");
     await page.clock.runFor(100);
     await expectDayAtTop(page, "2026-09-30");
+  });
+
+  test("after a night away, a click or key outside the list before the store catches up still has the list follow its start day", async ({
+    page,
+  }) => {
+    const { release } = await returnAfterNightAway(page, { holdStore: true });
+    await expectDayAtTop(page, "2026-09-30");
+
+    await page
+      .locator("#seasonGames .strip-month")
+      .dispatchEvent("pointerdown", { bubbles: true, pointerType: "mouse" });
+    await page.locator("#seasonGames .go-today").focus();
+    await page.keyboard.press("Shift");
+    release();
+
+    await expect(page.locator('[data-game="1042600132"] .game-status')).toContainText("Final");
+    await page.clock.runFor(100);
+    await expectDayAtTop(page, "2026-10-01");
   });
 
   test("after two minutes away on another tab, the Games list opens on today once it's shown", async ({
@@ -558,36 +571,45 @@ for (const { screen, viewport } of [
   });
 }
 
-test("a scroll the page makes itself, without a finger or wheel on the list, swaps the strip's chosen day at once, without sliding its dates", async ({
-  page,
-}) => {
-  await openSeasonGames(page);
-  await page.clock.runFor(1000);
-  await expectDayAtTop(page, "2026-09-30");
-  const dayBefore = await findDay(page, "2026-09-30").evaluate(
-    (today) => /** @type {HTMLElement} */ (today.previousElementSibling).dataset.day,
-  );
+for (const { before, isClicked } of [
+  { before: "without a finger or wheel on the list", isClicked: false },
+  { before: "after a click and a key on the list", isClicked: true },
+]) {
+  test(`a scroll the page makes itself, ${before}, swaps the strip's chosen day at once, without sliding its dates`, async ({
+    page,
+  }) => {
+    await openSeasonGames(page);
+    await page.clock.runFor(1000);
+    await expectDayAtTop(page, "2026-09-30");
+    const dayBefore = await findDay(page, "2026-09-30").evaluate(
+      (today) => /** @type {HTMLElement} */ (today.previousElementSibling).dataset.day,
+    );
 
-  // Each frame comes only as the test moves the clock, so a slide would still be under way.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
-  // The list chooses its top day from its scroll event, which comes when the browser draws, so the
-  // clock moves on only once it has.
-  await findDay(page, dayBefore).evaluate((listed) => {
-    const list = /** @type {HTMLElement} */ (listed.parentElement);
-    const scrolled = new Promise((resolve) => {
-      list.addEventListener("scroll", resolve, { once: true });
-    });
-    listed.scrollIntoView();
-    return scrolled;
+    // Each frame comes only as the test moves the clock, so a slide would still be under way.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+    // The list chooses its top day from its scroll event, which comes when the browser draws, so
+    // the clock moves on only once it has. A click or key moves nothing of its own.
+    await findDay(page, dayBefore).evaluate((listed, clicked) => {
+      const list = /** @type {HTMLElement} */ (listed.parentElement);
+      if (clicked) {
+        list.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        list.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      }
+      const scrolled = new Promise((resolve) => {
+        list.addEventListener("scroll", resolve, { once: true });
+      });
+      listed.scrollIntoView();
+      return scrolled;
+    }, isClicked);
+    await page.clock.runFor(100);
+
+    const strip = await page.evaluate(() => ({
+      chosen: document.querySelector("#seasonGames .day-cell.is-chosen")?.getAttribute("data-day"),
+      isSliding: !!document.querySelector("#seasonGames .day-strip.is-sliding, .strip-lens"),
+    }));
+    expect(strip).toEqual({ chosen: dayBefore, isSliding: false });
   });
-  await page.clock.runFor(100);
-
-  const strip = await page.evaluate(() => ({
-    chosen: document.querySelector("#seasonGames .day-cell.is-chosen")?.getAttribute("data-day"),
-    isSliding: !!document.querySelector("#seasonGames .day-strip.is-sliding, .strip-lens"),
-  }));
-  expect(strip).toEqual({ chosen: dayBefore, isSliding: false });
-});
+}
 
 test("a redraw that makes the list shorter as it adds a day leaves the day at the top where it is while the change eases in", async ({
   page,

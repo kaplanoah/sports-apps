@@ -9,6 +9,8 @@
 /* global LAST_DRAWN_KEY -- from open-last-tab.js */
 /* global KEPT_SWITCHES, LAST_SWITCHED_KEY, OPEN_SHEETS_KEY -- from show-last-drawn.js */
 
+import { readPath } from "./element-path.js";
+import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
 import { isSeasonPart } from "./season-part.js";
 import { keepImages } from "./service-worker.js";
 import { closeForgottenDialogs, noteShownEndsSeen } from "./sheet-memory.js";
@@ -19,36 +21,10 @@ const LAST_SEEN_KEY = "lastSeen";
 // so only the first ones, which a load opens on, are kept.
 const KEPT_IMAGE_COUNT = 12;
 
-// Storage can be empty or refuse access, as in a private window, so the page never depends on it.
-
-/**
- * @param {string} key
- * @returns {any}
- */
-function readItem(key) {
-  try {
-    return JSON.parse(localStorage.getItem(key) ?? "null");
-  } catch {
-    return null;
-  }
-}
-
-export const readLastSeen = () => readItem(LAST_SEEN_KEY);
+export const readLastSeen = () => readStoredJson(LAST_SEEN_KEY);
 
 /** Has the sheets the page showed when it was last on screen show again what they showed. */
-export const reopenLastSheets = () => reopenSheets(readItem(OPEN_SHEETS_KEY));
-
-/**
- * The child indexes that lead from `part` down to `element`.
- * @param {Element} part
- * @param {Element} element
- */
-function readPath(part, element) {
-  const path = [];
-  for (let node = element; node !== part; node = /** @type {Element} */ (node.parentElement))
-    path.unshift([.../** @type {Element} */ (node.parentElement).children].indexOf(node));
-  return path;
-}
+export const reopenLastSheets = () => reopenSheets(readStoredJson(OPEN_SHEETS_KEY));
 
 // A list or bracket that scrolls shows where it was, rather than its start, and a list that names
 // where it starts, as a season's days do, keeps that too, for a page left long enough ago.
@@ -132,27 +108,14 @@ function listDrawnImages() {
   return [...new Set(urls)].slice(0, KEPT_IMAGE_COUNT);
 }
 
+// A copy the page couldn't replace, as when storage is full, shows what the page showed long ago,
+// so it goes, and the next load waits for the store instead.
 /**
  * @param {string} key
  * @param {unknown} value
  */
 function saveItem(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    dropItem(key);
-  }
-}
-
-// A copy the page couldn't replace, as when storage is full, shows what the page showed long ago,
-// so it goes, and the next load waits for the store instead.
-/** @param {string} key */
-function dropItem(key) {
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    /* storage that refuses access holds no copy to show */
-  }
+  if (!storeJson(key, value)) forgetStored(key);
 }
 
 /**

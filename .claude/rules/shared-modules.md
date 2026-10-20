@@ -21,6 +21,7 @@ paths:
       an earlier one or the current one once its last game is final
     - `device-storage.js`: keeping what a viewer chooses on their own device,
       listing every such choice, and telling the page when another tab changes one
+    - `local-storage.js`: what the page keeps on the device, which storage that refuses access or is full never breaks
   - Opening, coming back, and catching up:
     - `show-last-drawn.js`: putting back what each part the page draws whole last showed,
       the switches its settings showed and the look picked,
@@ -40,6 +41,7 @@ paths:
     - `pull-to-refresh.js`: pulling a page on the Home Screen down to catch up
     - `resume.js`: the release check and catching up on return
     - `last-seen.js`: what the page last showed, drawn first on its next load
+    - `element-path.js`: where a part sits under another, so a copy of the markup or a later load finds it
     - `stamp.js`: the header's lines on the latest score and the next game, in words like "last night"
   - Settings and Diagnostics:
     - `settings-sheet.js`: the settings sheet
@@ -157,7 +159,7 @@ paths:
       from the list of a season's players the store keeps for it:
       - a team's
       - its section's
-      - a player's, even with a letter wrong, or by a team's name and the number a player wears,
+      - a player's, by any run of her name's words, even with a letter wrong, or by a team's name and the number a player wears,
         or while it's typed each number it starts, over the suggestions
       - a place's
       - a game's part's, like a final's Highlights or the next game's Matchup

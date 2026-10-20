@@ -21,6 +21,13 @@ import {
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
 import { capitalize, html, joinWithSeparator, setHtml } from "./html.js";
 import { describeAnimations, describeShownDayLists } from "./list-log.js";
+import {
+  forgetStored,
+  readStoredJson,
+  readStoredText,
+  storeJson,
+  storeText,
+} from "./local-storage.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { loadRelease } from "./release.js";
 import { watchTimeAway } from "./resume.js";
@@ -31,7 +38,7 @@ import { dayStripLog } from "./day-strip-log.js";
 import { errorLog, watchErrors } from "./error-log.js";
 import { phoneLookLog, watchPhoneLook } from "./phone-look-log.js";
 import { sheetLog } from "./sheet-log.js";
-import { writeStepsAsText } from "./step-log.js";
+import { hideAddresses, writeStepsAsText } from "./step-log.js";
 import {
   forgetViewportLines,
   readViewportLines,
@@ -109,49 +116,30 @@ let serviceWorkerSteps = [];
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
-// Storage can be empty or refuse access, as in a private window, so the page never depends on it.
-
-function isRecording() {
-  try {
-    return localStorage.getItem(SWITCH_KEY) === "on";
-  } catch {
-    return false;
-  }
-}
+const isRecording = () => readStoredText(SWITCH_KEY) === "on";
 
 /** @returns {OpenRecord[]} */
 function readRecords() {
-  try {
-    const records = JSON.parse(localStorage.getItem(RECORDS_KEY) ?? "[]");
-    return Array.isArray(records) ? records : [];
-  } catch {
-    return [];
-  }
+  const records = readStoredJson(RECORDS_KEY);
+  return Array.isArray(records) ? records : [];
 }
 
+// A record storage won't take is lost, and the next one tries again.
 /** @param {OpenRecord[]} records */
-function saveRecords(records) {
-  try {
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(records.slice(-KEPT_RECORDS)));
-  } catch {
-    /* the record is lost, and the next one tries again */
-  }
-}
+const saveRecords = (records) => storeJson(RECORDS_KEY, records.slice(-KEPT_RECORDS));
 
+// A switch storage won't take stays as it was.
 /** @param {boolean} isOn */
 function saveSwitch(isOn) {
-  try {
-    if (isOn) localStorage.setItem(SWITCH_KEY, "on");
-    else {
-      localStorage.removeItem(SWITCH_KEY);
-      localStorage.removeItem(RECORDS_KEY);
-      forgetViewportLines();
-      for (const log of STEP_LOGS) log.forgetLines();
-      forgetServiceWorkerSteps();
-    }
-  } catch {
-    /* the switch stays as it was */
+  if (isOn) {
+    storeText(SWITCH_KEY, "on");
+    return;
   }
+  if (!forgetStored(SWITCH_KEY)) return;
+  forgetStored(RECORDS_KEY);
+  forgetViewportLines();
+  for (const log of STEP_LOGS) log.forgetLines();
+  forgetServiceWorkerSteps();
 }
 
 /**
@@ -650,12 +638,25 @@ function renderRecords() {
     ${STEP_LOGS.map(renderStepLog)}`;
 }
 
+const findSettings = () =>
+  /** @type {HTMLDialogElement | null} */ (findElement("diagnostics").closest("dialog"));
+
+// The records are drawn only while settings shows them, and again as it opens, since a log can
+// take a line many times a second.
 function drawRecords() {
   const isOn = isRecording();
   findElement("diagnosticsSwitch").setAttribute("aria-checked", String(isOn));
   const section = findElement("diagnostics");
   section.hidden = !isOn;
-  setHtml(section, isOn ? renderRecords() : html``);
+  if (findSettings()?.open) setHtml(section, isOn ? renderRecords() : html``);
+}
+
+function drawRecordsAsSettingsOpens() {
+  const settings = findSettings();
+  if (!settings) return;
+  new MutationObserver(() => settings.open && drawRecords()).observe(settings, {
+    attributeFilter: ["open"],
+  });
 }
 
 function toggleRecording() {
@@ -667,6 +668,13 @@ function toggleRecording() {
   drawRecords();
 }
 
+/**
+ * A report from its parts, each that has anything, with no address in any of its lines, wherever
+ * a line came from, like a job's failure or the service worker's steps.
+ * @param {string[]} parts
+ */
+export const joinReport = (parts) => hideAddresses(parts.filter(Boolean).join("\n\n"));
+
 /** @param {OpenRecord} pageNow */
 function writeReport(pageNow) {
   const header = writeHeader(readPageFacts());
@@ -674,7 +682,7 @@ function writeReport(pageNow) {
   const worker = writeStepsAsText(SERVICE_WORKER_TITLE, listServiceWorkerSteps());
   const viewport = writeViewportAsText(readViewportLines().toReversed());
   const steps = STEP_LOGS.map((log) => log.writeLinesAsText(log.readLines().toReversed()));
-  return [header, records, worker, viewport, ...steps].filter(Boolean).join("\n\n");
+  return joinReport([header, records, worker, viewport, ...steps]);
 }
 
 /** @param {ReportStep | null} step */
@@ -750,6 +758,7 @@ export function startDiagnostics() {
   findElement("diagnosticsSwitch").addEventListener("click", toggleRecording);
   findElement("diagnostics").addEventListener("click", followSectionClick);
   findElement("settingsBtn").addEventListener("click", refreshJobStatusesWhileRecording);
+  drawRecordsAsSettingsOpens();
   drawRecords();
   startRecord(describeLoad(readNavigationType()));
   watchTimings();
