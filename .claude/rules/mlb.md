@@ -92,6 +92,8 @@ paths:
     which the store keeps a month to a document in `schedules-<year>`.
   - The store reads MLB's whole schedule once a day and the days around today with each update,
     and saves only the months that changed.
+  - A playoff game is listed only while MLB's postseason or the days around today list it,
+    since MLB drops one a series no longer needs from those first.
   - Each game has its ballpark,
     and a game away from its home club's own one says where in its label.
 - The slate (`page/js/slate.js`):
