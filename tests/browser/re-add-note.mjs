@@ -95,9 +95,9 @@ const closeSettings = (page) => page.locator("#settingsCloseBtn").click();
  * In an iPhone's Home Screen app added on the dark look, picking the light one in settings shows
  * the note under the icons, with the icon the app has, the one adding it again gives, and a link
  * that opens Safari on the light look. Picking the dark look again takes it away, and it shows on
- * each open of settings, and after a reload, while the light look stays picked, and follows a
- * look picked in another tab, but never on System, in the browser, or in an Android Home Screen
- * app.
+ * each open of settings, and after a reload, while the light look stays picked, on System while
+ * the phone shows the light look, with a link on System, and follows a look picked in another
+ * tab, but never in the browser or in an Android Home Screen app.
  * @param {App & {
  *   context: import("@playwright/test").BrowserContext,
  *   browser: import("@playwright/test").Browser,
@@ -140,8 +140,19 @@ export async function checkReAddNote({ page, context, browser, openApp, openSett
   await openSettings(page);
   await expect(note).toBeVisible();
   expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  await page.emulateMedia({ colorScheme: "light" });
   await pick(page, "System");
+  await expect(note).toBeVisible();
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  safariAddress.searchParams.set("app-theme", "auto");
+  await expect(note.getByRole("link", { name: "re-add the site" })).toHaveAttribute(
+    "href",
+    `x-safari-${safariAddress.href}`,
+  );
+  await page.emulateMedia({ colorScheme: "dark" });
   await expect(note).toBeHidden();
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(note).toBeVisible();
   await keepInOtherTab(page, "appearance", "light");
   await expect(note).toBeVisible();
   await keepInOtherTab(page, "appearance", "dark");
@@ -238,20 +249,24 @@ export async function checkReAddNoteDismissal({ page, openApp, openSettings, loo
 
 /**
  * A Home Screen app added on System, whose address names no look, has the icon the phone's
- * setting showed as it first opened, and keeps it when the phone's setting changes.
+ * setting showed as it first opened, and keeps it when the phone's setting changes, so on System
+ * the note shows while the phone's setting isn't the icon's.
  * @param {App} app
  */
 export async function checkSystemInstallIcon({ page, openApp, openSettings, looks }) {
   await page.addInitScript(markOnHomeScreen);
   await page.emulateMedia({ colorScheme: "light" });
   await openApp(page);
-  await page.emulateMedia({ colorScheme: "dark" });
-  await page.reload();
   await openSettings(page);
   await expect(findNote(page)).toBeHidden();
-  await pick(page, looks.dark);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.reload();
+  if (!(await page.locator("#settingsDialog").isVisible())) await openSettings(page);
+  await expect(findNote(page)).toBeVisible();
   expect(await readNoteIcons(page)).toEqual(["light", "dark"]);
   await checkNoteReads(page);
+  await pick(page, looks.dark);
+  expect(await readNoteIcons(page)).toEqual(["light", "dark"]);
   await pick(page, looks.light);
   await expect(findNote(page)).toBeHidden();
 }
@@ -263,6 +278,22 @@ export async function checkSystemInstallIcon({ page, openApp, openSettings, look
  * @param {App} app
  */
 export async function checkIconKeptOnlyOnOpen({ page, openApp, openSettings }) {
+  const readIcon = await reloadWithoutIcon(page, openApp);
+
+  expect(await readIcon()).toBeNull();
+  await openSettings(page);
+  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(findNote(page)).toBeHidden();
+}
+
+/**
+ * Opens a Home Screen app added on the dark look, on a light phone, then reloads it, as a new
+ * release does, with its icon forgotten, as an app open when the note shipped never kept one.
+ * @param {import("@playwright/test").Page} page
+ * @param {App["openApp"]} openApp
+ * @returns {Promise<() => Promise<string | null>>} reads the icon the app keeps
+ */
+async function reloadWithoutIcon(page, openApp) {
   await page.emulateMedia({ colorScheme: "light" });
   await openHomeScreenApp(page, openApp, "dark");
   const readIcon = () => page.evaluate(() => localStorage.getItem("homeScreenIcon"));
@@ -273,13 +304,45 @@ export async function checkIconKeptOnlyOnOpen({ page, openApp, openSettings }) {
     performance.getEntriesByType = (type) =>
       type === "navigation" ? [/** @type {any} */ ({ type: "reload" })] : [];
   });
+  await page.reload();
+  return readIcon;
+}
+
+/**
+ * An app that doesn't know its icon shows the note from the first switch of looks, with the other
+ * look as the icon it has, and, on System, the phone's look, linking to Safari on System. It stays
+ * through further picks and a reload, until the X takes it away for good in that install.
+ * @param {App} app
+ */
+export async function checkNoteWithoutIcon({ page, openApp, openSettings, looks }) {
+  await reloadWithoutIcon(page, openApp);
+  await openSettings(page);
+  const note = findNote(page);
+  await expect(note).toBeHidden();
+
+  await pick(page, looks.light);
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  await pick(page, looks.dark);
+  expect(await readNoteIcons(page)).toEqual(["light", "dark"]);
+  await pick(page, "System");
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  const safariAddress = new URL(page.url());
+  safariAddress.searchParams.set("app-theme", "auto");
+  await expect(note.getByRole("link", { name: "re-add the site" })).toHaveAttribute(
+    "href",
+    `x-safari-${safariAddress.href}`,
+  );
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect.poll(() => readNoteIcons(page)).toEqual(["light", "dark"]);
 
   await page.reload();
-
-  expect(await readIcon()).toBeNull();
-  await openSettings(page);
-  await expect(page.locator("#settingsDialog")).toBeVisible();
-  await expect(findNote(page)).toBeHidden();
+  if (!(await page.locator("#settingsDialog").isVisible())) await openSettings(page);
+  await expect(note).toHaveText(NOTE_WORDS);
+  await note.getByRole("button", { name: "Dismiss icon note" }).click();
+  await expect(note).toBeHidden();
+  await pick(page, looks.light);
+  await expect(note).toBeHidden();
 }
 
 /**
@@ -327,6 +390,7 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   expect(await readLastEasing()).toEqual({ ...opening, direction: "reverse" });
   expect(halfClosed.isFilled).toBe(true);
   expect(parseFloat(halfClosed.height)).toBeLessThan(parseFloat(full));
+  await page.emulateMedia({ colorScheme: "dark" });
   await pick(page, "System");
   expect(await readEasings()).toHaveLength(2);
 

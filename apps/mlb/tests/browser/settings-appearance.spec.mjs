@@ -14,6 +14,7 @@ import { WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
 import {
   checkHandoffRenewal,
   checkIconKeptOnlyOnOpen,
+  checkNoteWithoutIcon,
   checkReAddHandoff,
   checkReAddNote,
   checkReAddNoteDismissal,
@@ -108,7 +109,7 @@ test.describe("in an iPhone's Home Screen app", () => {
   test.use({ userAgent: IPHONE_AGENT });
   const looks = { light: "Ball", dark: "Night Game" };
 
-  test("while the look picked isn't the icon's, settings shows both icons and how to update it, linking to Safari on the look picked, which System, the browser, and Android leave out", async ({
+  test("while the look picked, or on System the phone's, isn't the icon's, settings shows both icons and how to update it, linking to Safari on the choice picked, which the browser and Android leave out", async ({
     page,
     context,
     browser,
@@ -126,10 +127,16 @@ test.describe("in an iPhone's Home Screen app", () => {
     await checkReAddNoteOnReload({ page, openApp, openSettings, looks });
   });
 
-  test("a reload keeps no icon for an app that has none yet, rather than the phone's setting, and settings says nothing of it", async ({
+  test("a reload keeps no icon for an app that has none yet, rather than the phone's setting, and settings says nothing of it until the viewer switches looks", async ({
     page,
   }) => {
     await checkIconKeptOnlyOnOpen({ page, openApp, openSettings, looks });
+  });
+
+  test("an app that doesn't know its icon shows the note from the first switch of looks, System too, until the X", async ({
+    page,
+  }) => {
+    await checkNoteWithoutIcon({ page, openApp, openSettings, looks });
   });
 
   test("an app added on System has the icon the phone's setting showed as it first opened", async ({

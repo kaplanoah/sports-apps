@@ -85,8 +85,9 @@ paths:
       An iPhone's app, which keeps the icon it was added with, hands Safari a link to add the site again,
       opening Safari's page on that theme and the welcome.
       It keeps each install's icon, from the address it opens at or, added on System, the phone's setting as it first opened.
-    - `re-add-note.js`: deciding when settings shows the note on updating the icon, while the look picked isn't the icon's,
-      and keeping its dismissal for that install
+    - `re-add-note.js`: deciding when settings shows the note on updating the icon, while the look picked, or on System the phone's, isn't the icon's,
+      or, for an app that doesn't know its icon, from the first switch of looks,
+      and keeping that switch and its dismissal for that install
     - `appearance.js`: settings' Appearance choices and the welcome's copy of them,
       and the note on updating the icon, with both icons and an X,
       whose link it keeps signed in with a fresh handoff while settings shows it

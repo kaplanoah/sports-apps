@@ -12,7 +12,13 @@ import { createViewerChoice } from "./device-storage.js";
 import { renderDismissButton } from "./dismiss-button.js";
 import { easeBackOpen, easeClosed, isEasingClosed, redrawEased } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
-import { chooseReAddNote, isReAddNoteDismissed, keepReAddNoteDismissed } from "./re-add-note.js";
+import {
+  chooseReAddNote,
+  isLookSwitched,
+  isReAddNoteDismissed,
+  keepLookSwitched,
+  keepReAddNoteDismissed,
+} from "./re-add-note.js";
 import { watchTimeAway } from "./resume.js";
 
 /**
@@ -74,11 +80,15 @@ const checkSavedChoice = (choices) => checkPickedChoice(choices, appearance.read
 const findSettings = () => findElement("settingsDialog");
 const findNote = () => findElement("appearanceNote");
 
+const isIosApp = () => isOnHomeScreen() && isIos();
+
 const readNote = () =>
   chooseReAddNote({
-    isIosApp: isOnHomeScreen() && isIos(),
-    picked: appearance.read(),
+    isIosApp: isIosApp(),
+    choice: appearance.read(),
     icon: readHomeScreenIcon(),
+    phoneLook: readPhoneLook(),
+    isSwitched: isLookSwitched(),
     isDismissed: isReAddNoteDismissed(),
   });
 
@@ -96,9 +106,9 @@ let handoffAddress = null;
 // changes its icon only once the site is added again, from Safari, which opens on the same theme.
 // Safari keeps its cookies apart from the app's, so the link signs it in with a handoff from the
 // Worker (access-gate.js), and until one arrives, or where none does, Safari asks for the code.
-/** @param {{ icon: "light" | "dark", picked: "light" | "dark" }} note */
-const renderNote = ({ icon, picked }) => {
-  const reAddAddress = buildSafariAddress(picked, handoffAddress ?? location.href);
+/** @param {{ icon: "light" | "dark", picked: "light" | "dark", choice: string }} note */
+const renderNote = ({ icon, picked, choice }) => {
+  const reAddAddress = buildSafariAddress(choice, handoffAddress ?? location.href);
   return html`<span class="re-add-icons" aria-hidden="true"
       ><span class="home-screen-icon" data-look="${icon}"></span>${ARROW}<span
         class="home-screen-icon"
@@ -245,6 +255,7 @@ export function startAppearance(looks) {
   const showChosenTheme = followTheme(looks, appearance.read);
   for (const choice of choices) {
     choice.addEventListener("change", () => {
+      if (isIosApp()) keepLookSwitched();
       appearance.keep(choice.value);
       openThemeAddress(choice.value);
       checkSavedChoice(choices);
@@ -258,5 +269,7 @@ export function startAppearance(looks) {
     showChosenTheme();
     updateNote();
   });
+  // On System, the icon re-adding gives follows the phone's setting.
+  darkScheme.addEventListener("change", updateNote);
   wireNote();
 }

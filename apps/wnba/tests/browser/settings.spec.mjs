@@ -1,9 +1,8 @@
-import { test, expect, matchPath, openApp, serveLockedApp } from "./harness.mjs";
+import { test, expect, matchPath, openApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
 import {
   checkFailedPickPutBack,
@@ -14,16 +13,6 @@ import {
   waitForSettingsFill,
 } from "../../../../tests/browser/settings-reload.mjs";
 import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
-import {
-  checkHandoffRenewal,
-  checkIconKeptOnlyOnOpen,
-  checkReAddHandoff,
-  checkReAddNote,
-  checkReAddNoteDismissal,
-  checkReAddNoteEases,
-  checkReAddNoteOnReload,
-  checkSystemInstallIcon,
-} from "../../../../tests/browser/re-add-note.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { ONE_PAST_SEASON } from "./past-season.mjs";
 import { chooseAppearance } from "./theme.mjs";
@@ -273,60 +262,6 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expectTheme(page, "dark");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("radio", { name: "Walnut" })).toBeChecked();
-});
-
-test.describe("in an iPhone's Home Screen app", () => {
-  test.use({ userAgent: IPHONE_AGENT });
-  const looks = { light: "Maple", dark: "Walnut" };
-
-  test("while the look picked isn't the icon's, settings shows both icons and how to update it, linking to Safari on the look picked, which System, the browser, and Android leave out", async ({
-    page,
-    context,
-    browser,
-  }) => {
-    await checkReAddNote({ page, context, browser, openApp, openSettings, looks });
-  });
-
-  test("the icon note's X takes it away for good in that install", async ({ page }) => {
-    await checkReAddNoteDismissal({ page, openApp, openSettings, looks });
-  });
-
-  test("a reload with settings open on the icon note shows the note before the page's code arrives", async ({
-    page,
-  }) => {
-    await checkReAddNoteOnReload({ page, openApp, openSettings, looks });
-  });
-
-  test("a reload keeps no icon for an app that has none yet, rather than the phone's setting, and settings says nothing of it", async ({
-    page,
-  }) => {
-    await checkIconKeptOnlyOnOpen({ page, openApp, openSettings, looks });
-  });
-
-  test("an app added on System has the icon the phone's setting showed as it first opened", async ({
-    page,
-  }) => {
-    await checkSystemInstallIcon({ page, openApp, openSettings, looks });
-  });
-
-  test("the icon note grows in as a pick sets the icon off and shrinks away as its opening played backward", async ({
-    page,
-  }) => {
-    await checkReAddNoteEases({ page, openApp, openSettings, looks });
-  });
-
-  test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({
-    page,
-    browser,
-  }) => {
-    await checkReAddHandoff({ page, browser, serveLockedApp, openSettings, looks });
-  });
-
-  test("the link's handoff renews halfway through and on coming back once that's due, tries again after a failure, stops once settings closes or the icon's look is picked, and starts again as settings opens on the note", async ({
-    page,
-  }) => {
-    await checkHandoffRenewal({ page, serveLockedApp, openSettings, looks });
-  });
 });
 
 test("settings end with the release, NBA.com's credit for the data, and the copyright", async ({
