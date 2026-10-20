@@ -490,6 +490,42 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
 }
 
 /**
+ * On System, a change of the phone's look that comes as the app comes back, as a phone reports one
+ * made while the app was away, takes the note to its new state at once, both ways, since the phone
+ * has already shown the app in its new look. One that comes a second after eases it.
+ * @param {App} app
+ */
+export async function checkReAddNoteOnReturn({ page, openApp, openSettings }) {
+  await page.emulateMedia({ reducedMotion: "no-preference", colorScheme: "dark" });
+  await page.addInitScript(markLookChangeEasings);
+  await openHomeScreenApp(page, openApp, "dark");
+  await openSettings(page);
+  await pick(page, "System");
+  const note = findNote(page);
+  await finishTimedAnimations(page);
+  await expect(note).toBeEmpty();
+  const countEasings = () => page.evaluate(() => Reflect.get(window, "lookChangeEasings").length);
+  const easingsBefore = await countEasings();
+  /** @param {"light" | "dark"} look */
+  const comeBackOn = async (look) => {
+    await setHidden(page, true);
+    await setHidden(page, false);
+    await page.emulateMedia({ colorScheme: look });
+  };
+
+  await comeBackOn("light");
+  await expect(note).toHaveText(NOTE_WORDS);
+  await comeBackOn("dark");
+  await expect(note).toBeEmpty();
+  expect(await countEasings()).toBe(easingsBefore);
+
+  await page.clock.runFor(1000);
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await countEasings()).toBe(easingsBefore + 1);
+}
+
+/**
  * @typedef {{
  *   page: import("@playwright/test").Page,
  *   serveLockedApp: (page: import("@playwright/test").Page, options: { accessCode: string }) => Promise<unknown>,
