@@ -2,12 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   findPassedRun,
-  findReviewedRun,
   findTestedRun,
   namePassedArtifact,
-  nameReviewedArtifact,
   nameTestedArtifact,
-  readSearchKind,
 } from "../worker/find-passed-ci.mjs";
 
 const TREE = "a".repeat(40);
@@ -129,37 +126,6 @@ test("for a label change, a fork's run, another workflow, another event, or an e
   });
   assert.equal(runId, null);
   assert.ok(!github.paths.some((path) => path.endsWith("/actions/runs/4")));
-});
-
-// A label that asks for a review skips it only where a run passed the review on this exact code,
-// never where a run only passed its tests, as a push's run does, which reviews nothing.
-test("a run whose review passed on this exact code is found for a label that asks for one, and a tested run isn't", async () => {
-  const reviewed = createFakeGitHub([buildArtifact(7)], [PASSED_RUN], nameReviewedArtifact(TREE));
-  assert.equal(
-    await findReviewedRun({ tree: TREE, repository: REPOSITORY, fetchImpl: reviewed.fetchImpl }),
-    7,
-  );
-  assert.deepEqual(reviewed.paths, [
-    `/repos/${REPOSITORY}/actions/artifacts?name=ci-reviewed-${TREE}&per_page=100`,
-    `/repos/${REPOSITORY}/actions/runs/7`,
-  ]);
-  const tested = createFakeGitHub([buildArtifact(7)], [PASSED_RUN], nameTestedArtifact(TREE));
-  assert.equal(
-    await findReviewedRun({ tree: TREE, repository: REPOSITORY, fetchImpl: tested.fetchImpl }),
-    null,
-  );
-  const fork = { ...PASSED_RUN, head_repository: FORK };
-  const forked = createFakeGitHub([buildArtifact(7)], [fork], nameReviewedArtifact(TREE));
-  assert.equal(
-    await findReviewedRun({ tree: TREE, repository: REPOSITORY, fetchImpl: forked.fetchImpl }),
-    null,
-  );
-});
-
-test("each flag picks the record it looks for, main's deploy's when it names none", () => {
-  assert.equal(readSearchKind(["node", "find-passed-ci.mjs"]), "passed");
-  assert.equal(readSearchKind(["node", "find-passed-ci.mjs", "--tested"]), "tested");
-  assert.equal(readSearchKind(["node", "find-passed-ci.mjs", "--reviewed"]), "reviewed");
 });
 
 // Main deploys only code whose gate passed too.
