@@ -63,6 +63,13 @@ export const describePageStep = ({ step, phoneLook, theme }) =>
 const readPage = () => ({ isHidden: document.hidden, hasFocus: document.hasFocus() });
 
 /**
+ * Whether an event is a sign of the page coming back: it getting focus, or showing again.
+ * @param {Event} event
+ */
+const isReturnSign = (event) =>
+  event.type === "focus" || (event.type === "visibilitychange" && !document.hidden);
+
+/**
  * Logs each change of the phone's look, and of the page's visibility and focus, while
  * Diagnostics is on, to the log and to `noteInRecord`, which puts it among the steps of the open or
  * return under way.
@@ -94,16 +101,18 @@ export function watchPhoneLook(noteInRecord) {
       );
     });
   };
+  // A return's record starts in listeners resume.js adds after these, so a sign of the page
+  // coming back, read as it comes, joins the record a task later.
   /** @param {Event} event */
   const notePageEvent = (event) => {
     if (!phoneLookLog.isLogging()) return;
-    noteChange(
-      describePageStep({
-        step: namePageEvent(event),
-        phoneLook: readPhoneLook(),
-        theme: document.documentElement.dataset.theme,
-      }),
-    );
+    const text = describePageStep({
+      step: namePageEvent(event),
+      phoneLook: readPhoneLook(),
+      theme: document.documentElement.dataset.theme,
+    });
+    if (isReturnSign(event)) setTimeout(() => noteChange(text));
+    else noteChange(text);
   };
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", noteLookChange);
   document.addEventListener("visibilitychange", notePageEvent);

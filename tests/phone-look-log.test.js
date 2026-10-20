@@ -90,7 +90,7 @@ test("a page step says what the page reads of the phone's look and the theme it 
   );
 });
 
-test("the page leaving, coming back, and losing and getting focus are logged among the changes, with the look read and the theme shown then", () => {
+test("the page leaving and losing focus are logged at once, and its coming back and getting focus a task later, each with the look read and the theme shown as it came", async () => {
   phoneLookLog.forgetLines();
   page.hidden = true;
   fire("visibilitychange");
@@ -100,11 +100,17 @@ test("the page leaving, coming back, and losing and getting focus are logged amo
   fire("blur");
   global.document.documentElement.dataset.theme = "dark";
   fire("focus");
+  global.document.documentElement.dataset.theme = "light";
 
   assert.deepEqual(readLogged(), [
     "the page left the screen; reads light, shows light",
-    "the page came back; reads dark, shows light",
     "the page lost focus; reads dark, shows light",
+  ]);
+  await waitFor(5);
+  assert.deepEqual(readLogged(), [
+    "the page left the screen; reads light, shows light",
+    "the page lost focus; reads dark, shows light",
+    "the page came back; reads dark, shows light",
     "the page got focus; reads dark, shows dark",
   ]);
 });

@@ -1,7 +1,8 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
-import { RECORD_MS, findRecords, reloadToRecord } from "./diagnostics-records.mjs";
+import { setHidden } from "../../../../tests/browser/visibility.mjs";
+import { RECORD_MS, findRecords, reloadAndRecord, reloadToRecord } from "./diagnostics-records.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -58,4 +59,22 @@ test("with Diagnostics on, the page leaving the screen is kept on the device as 
   const line = "the page left the screen; reads light, shows light";
   expect(kept.log).toContain(line);
   expect(kept.records).toContain(line);
+});
+
+test("with Diagnostics on, the page coming back is among the steps of the return's own record", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await reloadAndRecord(page);
+
+  await setHidden(page, true);
+  await setHidden(page, false);
+  await page.clock.runFor(100);
+  await openSettings(page);
+
+  const comeBack = findRecords(page)
+    .locator(".diagnostics-record", { hasText: "Back after" })
+    .first();
+  await expect(comeBack.locator("li", { hasText: "the page came back" })).toHaveCount(1);
 });
