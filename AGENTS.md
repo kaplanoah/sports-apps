@@ -137,11 +137,10 @@ When a step says to go back to an earlier step, continue in order from there.
 7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
    Answer its findings as the `steward` skill says, and read a failed `review` job as the `ship` skill says.
    Once you've answered a review's findings in one push, add the `review` label to the PR, which asks CI to review it again.
-   A push alone starts no review.
+   A push alone starts no review, and `check` fails on a ready PR until a review of its latest commit passes.
    `main` merges a PR only once every thread on it is resolved.
 8. Squash-merge the PR once all of these are true:
-   `check` passed on the latest commit, the review summary names that commit and its `review` job passed,
-   the PR has no merge conflicts, every review thread is resolved, and its base is `main`.
+   `check` passed on the latest commit, the PR has no merge conflicts, every review thread is resolved, and its base is `main`.
    If GitHub refuses the merge, go back to step 4.
 9. Don't deploy.
    Merging starts the Deploy workflow at once, and CI on `main`.

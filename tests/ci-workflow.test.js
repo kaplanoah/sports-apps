@@ -413,15 +413,30 @@ test("a label change runs only the gate again once a run passed every test on th
   assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
 });
 
-// A run that wasn't asked to review, like a push's or a draft's, passes with a review still owed
-// on its code, so it never records its code for a later label to skip the review. A plan that
-// didn't finish says nothing, so it owes one too.
-test("a run that passed with a review still owed never records its code as reviewed", () => {
+// A run that wasn't asked to review, like a push's or a draft's, leaves a review owed on its
+// code, so it never records its code for a later label to skip the review. A plan that didn't
+// finish says nothing, so it owes one too.
+test("a run that leaves a review owed never records its code as reviewed", () => {
   assert.match(
     readJob("check"),
     /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.owed == 'false' \}\}/,
   );
   assert.match(readJob("review-plan"), /\n {6}owed: \$\{\{ steps\.decision\.outputs\.owed \}\}\n/);
+});
+
+// A ready pull request merges only once a review passed on exactly its code: a push, or a label
+// like phone-ok after a review that failed, never turns its check green without one. A draft is
+// reviewed once it's ready, so its check passes without one.
+test("check fails a ready pull request while a review of its code is owed", () => {
+  const check = readJob("check");
+  assert.match(
+    check,
+    /- name: Require a review of this code\n\s+if: needs\.review-plan\.outputs\.owed == 'true' && !github\.event\.pull_request\.draft\n\s+run: \|\n\s+echo "::error::.*\$REVIEW_LABEL.*"\n\s+exit 1\n/,
+  );
+  assert.ok(
+    check.indexOf("Require a review of this code") < check.indexOf("name: ci-passed-"),
+    "code a review is owed on never deploys at once from main",
+  );
 });
 
 /**
@@ -514,6 +529,15 @@ test("every reason not to review holds when the review is asked for", () => {
     assert.match(asked.notice, reason);
   }
   assert.match(readJob("review-plan"), /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
+});
+
+// The owner's phone-ok comes after the review passed on the same code, so check, which holds a
+// ready pull request while a review is owed, lets it through.
+test("a label on code a run already passed the review on owes no review", () => {
+  const phoneOk = decideReview({ ACTION: "labeled", LABEL: "phone-ok", PASSED_RUN: "7" });
+  assert.equal(phoneOk.review, "false");
+  assert.equal(phoneOk.owed, "false");
+  assert.match(phoneOk.notice, /already passed its review/);
 });
 
 // Each ask is a fresh label, which GitHub sends only when the label isn't on the pull request, so
@@ -694,7 +718,7 @@ test("the areas are reviewed with the matrix the plan writes, each area as a uni
   assert.match(caller, /CLAUDE_CODE_OAUTH_TOKEN: \$\{\{ secrets\.CLAUDE_CODE_OAUTH_TOKEN \}\}/);
 });
 
-// Only the posting and summary steps, and the plan's step that takes off the review label, hold a
+// Only the posting and summary jobs, and review-label, which takes off the review label, hold a
 // token that writes to the pull request; no job that runs Claude, which reads the pull request's
 // untrusted text, can write to it, and none is handed a tool that comments. A job that calls a
 // workflow caps the token of every job in it.
@@ -705,8 +729,9 @@ test("no job that runs Claude can write to the pull request", () => {
   ].filter((job) => /anthropics\/claude-code-action|review-area\.yml/.test(job));
   assert.equal(withClaude.length, 3);
   for (const job of withClaude) assert.doesNotMatch(job, /pull-requests: write/, job);
-  for (const job of ["review-plan", "review-post", "review"])
-    assert.doesNotMatch(readJob(job), /claude-code-action/, job);
+  const writers = listJobs().filter((job) => /pull-requests: write/.test(readJob(job)));
+  assert.deepEqual(writers.toSorted(), ["review", "review-label", "review-post"]);
+  for (const job of writers) assert.doesNotMatch(readJob(job), /claude-code-action/, job);
   for (const workflow of ["ci.yml", AREA_WORKFLOW]) {
     const text = readRepoFile(`.github/workflows/${workflow}`);
     assert.doesNotMatch(text, /create_inline_comment/);

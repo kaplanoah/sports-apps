@@ -75,8 +75,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and the check across areas once.
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
   where a review stalled, or a re-run that failed too.
-  That run's `check` can't pass until the job does,
-  and the PR doesn't merge until a review of its head passes, as the steward skill says.
+  `check` can't pass until the job does.
 
 ## Step 8: a red PR
 

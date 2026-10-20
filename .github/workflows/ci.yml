@@ -422,8 +422,9 @@ jobs:
   # summary as it is.
   # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
   # nothing to review, such as a push to main or to a pull request, it plans nothing and passes,
-  # since check fails on a skipped job. A label that asks for a review on exactly the code a run
-  # already passed the review on reviews nothing.
+  # since check fails on a skipped job, and says whether a review is still owed on the code, which
+  # check holds a ready pull request on. A run on exactly the code a run already passed the review
+  # on reviews nothing and owes none.
   review-plan:
     needs: passed
     if: ${{ !cancelled() }}
@@ -469,11 +470,11 @@ jobs:
             reason="Dependabot's pull requests aren't reviewed"
           elif [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
             reason="there's no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY secret"
+          elif [ -n "$PASSED_RUN" ]; then
+            reason="a run on exactly this code already passed its review"
           elif [ "$asked" != "true" ]; then
             reason="a pull request is reviewed once it's ready, and again only when it's labeled $REVIEW_LABEL"
             owed=true
-          elif [ -n "$PASSED_RUN" ]; then
-            reason="a run on exactly this code already passed its review"
           elif [ "$IS_DRAFT" = "true" ]; then
             reason="a draft is reviewed once it's ready for review"
             owed=true
@@ -754,9 +755,9 @@ jobs:
             (needs.scope.outputs.apps == '' || (needs.browser.result == 'success' &&
             needs.webkit.result == 'success')) &&
             (needs.scope.outputs.specs == '' || needs.burn-in.result == 'success')) }}
-          # A run that wasn't asked to review, like a push's or a draft's, passes while a review is
-          # still owed on its code, so it doesn't stand in for one. Any other run reviewed, or
-          # skips a review that would never run or already passed.
+          # A run that wasn't asked to review, like a push's or a draft's, leaves a review owed on
+          # its code, so it doesn't stand in for one. Any other run reviewed, or skips a review that
+          # would never run or already passed.
           REVIEWED: >-
             ${{ needs.passed.outputs.run != '' || needs.review-plan.outputs.owed == 'false' }}
         run: |
@@ -797,6 +798,14 @@ jobs:
           name: ci-tested-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
+      # A ready pull request's code merges only once a review of exactly that code passed, so a run
+      # that wasn't asked to review, a push's or a label's, holds it until the review label asks.
+      # A draft is reviewed once it's ready, so it isn't held.
+      - name: Require a review of this code
+        if: needs.review-plan.outputs.owed == 'true' && !github.event.pull_request.draft
+        run: |
+          echo "::error::No review has passed on this code yet: add the $REVIEW_LABEL label to the pull request to have it reviewed."
+          exit 1
       - name: Require every job to pass
         if: >-
           steps.tested.outputs.tested != 'true' ||
