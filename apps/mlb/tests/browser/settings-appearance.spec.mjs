@@ -174,7 +174,9 @@ test("while the store can't list its seasons, a new current season joins the Sea
   await checkNewCurrentSeasonListed({
     page,
     pastSeason: "2025",
+    newSeason: 2027,
     moveCurrentTo: (year) => app.writeFromWorker("live/current", { season: year }),
+    seasons: ["2027", "2026", "2025"],
   });
 });
 

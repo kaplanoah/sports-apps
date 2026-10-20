@@ -76,8 +76,6 @@ const findSeasonRow = () => /** @type {HTMLElement} */ (document.getElementById(
 // Another season's Games view opens on its start day: today, or a season over's last day.
 async function switchYear(year) {
   await showYear(year);
-  // The picker marks the season shown in its markup too, which a reload puts back first.
-  fillYearPicker(null);
   if (session.activeYear !== year) return;
   startOverDayStrip();
   renderAll();

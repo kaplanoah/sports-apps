@@ -4,6 +4,7 @@ import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 import {
   checkNewCurrentSeasonListed,
   checkSeasonsOnFailedList,
@@ -96,7 +97,9 @@ test("while the store can't list its seasons, a new current season joins the Sea
   await checkNewCurrentSeasonListed({
     page,
     pastSeason: "2025",
+    newSeason: 2027,
     moveCurrentTo: (year) => app.writeDocument("live/current", { season: year }),
+    seasons: ["2027", "2026", "2025"],
   });
 });
 
@@ -209,7 +212,6 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
 
 test.describe("in an iPhone's Home Screen app", () => {
   test.use({ userAgent: IPHONE_AGENT });
-  const openSettings = (tab) => tab.getByRole("button", { name: "Settings", exact: true }).click();
   const looks = { light: "Maple", dark: "Walnut" };
 
   test("while the look picked isn't the icon's, settings shows both icons and how to update it, linking to Safari on the look picked, which System, the browser, and Android leave out", async ({

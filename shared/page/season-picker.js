@@ -93,13 +93,22 @@ export function fillSeasonPicker(row, { years, shownYear, currentYear }, words) 
   row.hidden = listed.length < 2;
 }
 
+// The picker's markup marks the season picked as it's picked, as its choice does, since the page
+// saves the markup as it leaves the screen and a reload shows it before the page's code arrives.
+/** @param {HTMLSelectElement} picker */
+function markPicked(picker) {
+  for (const option of picker.options) option.defaultSelected = option.selected;
+}
+
 /**
  * Calls `pick` with each season picked, from the picker the row draws now or later.
  * @param {HTMLElement} row
  * @param {(year: number) => void} pick
  */
 export function watchSeasonPicks(row, pick) {
-  row.addEventListener("change", (event) =>
-    pick(Number(/** @type {HTMLSelectElement} */ (event.target).value)),
-  );
+  row.addEventListener("change", (event) => {
+    const picker = /** @type {HTMLSelectElement} */ (event.target);
+    markPicked(picker);
+    pick(Number(picker.value));
+  });
 }

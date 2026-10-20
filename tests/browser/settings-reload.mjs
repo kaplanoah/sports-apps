@@ -57,13 +57,20 @@ export async function checkSettingsOnReload({ page, look, switchName, pastSeason
   await expect(settings).toBeVisible();
   await expect.poll(() => readSettings(page)).toEqual(shown);
 
-  // Another tab turns the switch back on while the page's code is still on its way, so only that
-  // code can show it.
-  await page.evaluate(() => localStorage.removeItem("newsChoices"));
+  // Another tab turns the switch back on while the page's code is still on its way, and the
+  // Notifications switch shows what it didn't, so only that code can show what each should.
+  await page.evaluate(() => {
+    localStorage.removeItem("newsChoices");
+    const notifySwitch = /** @type {HTMLElement} */ (document.getElementById("notifySwitch"));
+    const isOn = notifySwitch.getAttribute("aria-checked") === "true";
+    notifySwitch.setAttribute("aria-checked", String(!isOn));
+  });
   const filling = waitForSettingsFill(page);
   release();
   await filling;
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  const shownNotify = Object.fromEntries(shown.switches).notifySwitch;
+  await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-checked", shownNotify);
   const switchId = await toggle.getAttribute("id");
   await expect
     .poll(() => readSettings(page))
@@ -113,18 +120,26 @@ export async function checkSeasonsOnFailedList({ page, beforeReload, seasons, sh
  * @param {{
  *   page: import("@playwright/test").Page,
  *   pastSeason: string,
+ *   newSeason: number,
  *   moveCurrentTo: (year: number) => Promise<void>,
+ *   seasons: string[],
  * }} options
  */
-export async function checkNewCurrentSeasonListed({ page, pastSeason, moveCurrentTo }) {
+export async function checkNewCurrentSeasonListed({
+  page,
+  pastSeason,
+  newSeason,
+  moveCurrentTo,
+  seasons,
+}) {
   await openSettings(page);
   const picker = page.locator("#seasonPicker");
   await picker.selectOption(pastSeason);
   await expect(page.locator("#seasonPicker option[selected]")).toHaveAttribute("value", pastSeason);
   await page.route(matchPath("/store/seasons"), (route) => route.abort());
 
-  await moveCurrentTo(2027);
+  await moveCurrentTo(newSeason);
 
-  await expect(picker.locator("option")).toHaveText(["2027", "2026", "2025"]);
+  await expect(picker.locator("option")).toHaveText(seasons);
   await expect(picker).toHaveValue(pastSeason);
 }
