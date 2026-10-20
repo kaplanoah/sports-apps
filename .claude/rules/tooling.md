@@ -15,6 +15,10 @@ paths:
   `deploy-scope.mjs`, `flag-conflicts.mjs`, `red-change.mjs`, `release.mjs`,
   `rollback.mjs`, `set-app-key.mjs`, `set-access-code.mjs`, `set-page-host.mjs`, the secrets calls they share in `worker-secrets.mjs`,
   and the channels each command's `--channel` names in `channels.mjs`.
+  It keeps the beta channel to one pull request at a time (`beta-claim.mjs`):
+  a push to beta deploys only the head of the pull request that holds it,
+  and the `Beta` workflow (`.github/workflows/beta.yml`) keeps the `beta` and `beta-wait` labels right on every pull request event and tells the next in line once beta is free.
+  It and the gate read when a pull request's labels were added and when its head was pushed from `labeling.mjs`.
   Its tests are in the root `tests/`.
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`).
   Each deploy does this for its new version, putting the one before back when it doesn't.

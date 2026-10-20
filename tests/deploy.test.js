@@ -937,7 +937,7 @@ test("a beta release is what GitHub has as beta, and a push beta has since repla
   });
 });
 
-test("a checkout at a commit beta never held isn't a beta release, and says how to push one", async () => {
+test("a checkout at a commit beta never held isn't a beta release, and sends a session to the steps that claim beta", async () => {
   const { checkRelease } = await loadDeployModule();
   for (const pushedCommit of ["", "c".repeat(40)])
     assert.throws(
@@ -947,7 +947,14 @@ test("a checkout at a commit beta never held isn't a beta release, and says how 
           "beta",
           pushedCommit,
         ),
-      /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Push it with git push -f origin <branch>:beta/,
+      (/** @type {Error} */ error) => {
+        assert.match(
+          error.message,
+          /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Put it on beta by the ship skill's "The beta channel" \(\.claude\/skills\/ship\/SKILL\.md\), which claims beta first, or check out origin\/beta/,
+        );
+        assert.doesNotMatch(error.message, /git push/);
+        return true;
+      },
     );
 });
 
@@ -985,12 +992,19 @@ test("project settings ask before any deploy but beta's or a key change, and den
   const { permissions } = JSON.parse(readRepoFile(".claude/settings.json"));
   // A message to another of the owner's sessions changes nothing outside them, so a session a
   // session started reports to it without asking. A session opens an issue for work it leaves for
-  // later in the same turn, which a prompt it can't answer would lose.
+  // later in the same turn, which a prompt it can't answer would lose. A session claims beta, and
+  // waits in line for it, by adding and taking off one label at a time.
   assert.deepEqual(permissions.allow, [
     "Bash(git push -f origin *:beta)",
     "Bash(gh issue create *)",
     "Bash(gh issue comment *)",
     "Bash(gh issue close *)",
+    "Bash(gh pr list --label beta --state open)",
+    "Bash(gh pr list --label beta-wait --state open)",
+    "Bash(gh pr edit * --add-label beta)",
+    "Bash(gh pr edit * --remove-label beta)",
+    "Bash(gh pr edit * --add-label beta-wait)",
+    "Bash(gh pr edit * --remove-label beta-wait)",
     "mcp__github__add_issue_comment",
     "mcp__github__issue_write",
     "mcp__claude-code-remote__send_message",
@@ -1004,6 +1018,11 @@ test("project settings ask before any deploy but beta's or a key change, and den
     "Bash(node worker/rollback.mjs)",
     // A branch's name has no spaces, so this keeps the beta push from naming any other branch too.
     "Bash(git push -f origin * *:beta)",
+    // A PR's number has no spaces, so each label edit can't carry another flag, like a phone-ok.
+    "Bash(gh pr edit * * --add-label beta)",
+    "Bash(gh pr edit * * --remove-label beta)",
+    "Bash(gh pr edit * * --add-label beta-wait)",
+    "Bash(gh pr edit * * --remove-label beta-wait)",
   ]) {
     assert.ok(permissions.deny.includes(rule), rule);
   }

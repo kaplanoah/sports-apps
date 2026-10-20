@@ -1,5 +1,6 @@
 import { watchFailedImages } from "./failed-images.js";
 import { setHtml } from "./html.js";
+import { keepPagePlace } from "./kept-place.js";
 import { readNewsChoices, startNewsChoices } from "./news-choices.js";
 import { renderNews } from "./news-view.js";
 import { fitPhotoCredits, watchPhotoCredits } from "./photo-credits.js";
@@ -26,7 +27,8 @@ export function drawNews(list, news, league) {
 
 /**
  * Calls `redraw` after a News switch changes, the screen widens or narrows, or a photo fails to
- * load, and fits the photos' credits again whenever the list's width changes.
+ * load, fits the photos' credits again whenever the list's width changes, and keeps the stories on
+ * the screen where they are as what's above them grows or shrinks.
  * @param {HTMLElement} list
  * @param {() => void} redraw
  * @param {import("./news-view.js").NewsLeague} league
@@ -36,6 +38,7 @@ export function startNewsRedraws(list, redraw, league) {
   matchMedia(WIDE_SCREEN).addEventListener("change", redraw);
   watchFailedImages(list, redraw);
   watchPhotoCredits(list);
+  keepPagePlace(/** @type {HTMLElement} */ (list.closest("section.view")));
 }
 
 /**

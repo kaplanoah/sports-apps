@@ -18,7 +18,7 @@ function createFakeStore() {
       },
     };
     context.acceptWebSocket(socket);
-    return new Response("socket opened");
+    return { socket, response: new Response("socket opened") };
   };
   const store = new SeasonStore(ctx, {}, { openSocket });
   const seenPaths = [];
@@ -91,7 +91,7 @@ test("a collection lists its documents by id, up to the limit", async () => {
   assert.equal(limited.docs.length, 2);
 });
 
-test("every write reaches each open watcher, with the document as saved", async () => {
+test("each open watcher hears whether an update is coming, then every write, with the document as saved", async () => {
   const { env, sockets, write } = createFakeStore();
   const opened = await requestStore(env, "/watch", { headers: { upgrade: "websocket" } });
   assert.equal(await opened.text(), "socket opened");
@@ -101,6 +101,7 @@ test("every write reaches each open watcher, with the document as saved", async 
   await write("seasons/2026", { year: 2026, log: [] });
   for (const socket of sockets)
     assert.deepEqual(socket.sent, [
+      { updating: false },
       { path: "seasons/2026", data: { year: 2026 } },
       { path: "seasons/2026", data: { log: [], year: 2026 } },
     ]);

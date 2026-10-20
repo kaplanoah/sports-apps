@@ -23,12 +23,13 @@ import {
 import { dayStripLog } from "./day-strip-log.js";
 import { markBarStuck } from "./held-bar.js";
 import { html, setHtml } from "./html.js";
-import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { watchTimeAway } from "./resume.js";
 import { INTERRUPTING_EVENTS, scrollWithSpring } from "./spring-scroll.js";
 import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
+
+/* global isAwayLong -- from long-away.js */
 
 // A season's games as one list of its game days, from its first to its last, under a bar holding
 // a strip of every day between them. The strip's chosen day is the one at the top of the list, and
@@ -526,12 +527,15 @@ function placeDay({ day, offset }) {
   if (list && listed) list.scrollTop = listed.offsetTop - offset;
 }
 
-// Where the list stands at the start day, which a page that loads again after two minutes away
-// opens on (show-last-drawn.js).
-function noteStartTop() {
+// Where the list and its strip stand at the start day, which a page that loads again after two
+// minutes away opens on (show-last-drawn.js).
+function noteStartPlace() {
   const list = findList();
   const top = shown && findDayTop(shown.startDay);
   if (list && typeof top === "number") list.dataset.startTop = String(top);
+  const strip = findStrip();
+  const cell = shown && findCell(shown.startDay);
+  if (strip && cell) strip.dataset.startLeft = String(findCellLeft(strip, cell));
 }
 
 /**
@@ -757,7 +761,7 @@ function placeList(putBackDay) {
   else if (placement === "put back" && putBackDay) placeDay(putBackDay);
   else showDay(shown.startDay, "instant");
   isPlaced = true;
-  noteStartTop();
+  noteStartPlace();
   markStuck();
   const top = findTopDay();
   if (top && !isStillHeld()) chooseDay(top, "instant");

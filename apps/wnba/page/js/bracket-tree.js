@@ -1,6 +1,6 @@
 import { measureTopAtRest, observeRoomForPart } from "#shared/bracket-standings.js";
 import { html, setHtml } from "#shared/html.js";
-import { watchOpeningRound } from "#shared/opening-round.js";
+import { takeKeptLeft, watchOpeningRound } from "#shared/opening-round.js";
 import { markScrolledRound } from "#shared/round-dots.js";
 import { BRACKET_FEEDERS } from "./series.js";
 
@@ -195,7 +195,7 @@ function watchTree(tree) {
 }
 
 /** Where the reader has scrolled the bracket, to keep across a redraw. */
-export const readBracketScroll = () => findTree()?.scrollLeft ?? 0;
+export const takeBracketScroll = () => takeKeptLeft(findTree());
 
 /**
  * After each draw: opens the bracket on its opening round or keeps the reader's place, spaces

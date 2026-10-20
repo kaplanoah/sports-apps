@@ -15,10 +15,21 @@ function listImported(script) {
   return found;
 }
 
-test("every script the deploy runs, and every module those import, deploys when it changes", () => {
+// Every push to beta runs the claim's check whether or not a Worker deploys, and the production
+// deploy never does, so a change to it needs no deploy to show it works.
+const BETA_CLAIM_CHECK = "worker/beta-claim.mjs";
+
+test("every script the deploy runs, and every module those import, deploys when it changes, but the beta claim's check", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
-  const scripts = [...workflow.matchAll(/node (worker\/[\w-]+\.mjs)/g)].map(([, path]) => path);
+  const scripts = [...workflow.matchAll(/node (worker\/[\w-]+\.mjs)/g)]
+    .map(([, path]) => path)
+    .filter((path) => path !== BETA_CLAIM_CHECK);
   assert.ok(scripts.includes("worker/deploy.mjs"));
+  assert.match(
+    workflow,
+    /if: env\.CHANNEL == 'beta'\n.*\n.*\n\s+run: node worker\/beta-claim\.mjs/,
+  );
+  assert.equal(decideDeploy([BETA_CLAIM_CHECK, "worker/labeling.mjs"]).isNeeded, false);
   const run = [".github/workflows/deploy.yml", ...new Set(scripts.flatMap(listImported))];
   assert.deepEqual(
     run.filter((path) => !findDeployedChanges([path]).length),
@@ -35,6 +46,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "apps/mlb/tests/browser/page.spec.mjs",
     ".claude/hooks/context-limit.mjs",
     ".claude/settings.json",
+    ".github/workflows/beta.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
     ".github/workflows/review-area.yml",
