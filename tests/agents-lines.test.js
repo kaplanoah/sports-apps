@@ -34,12 +34,22 @@ const startsUnit = (/** @type {string} */ line) =>
 const SENTENCE_END = String.raw`(?<!\.)[.?!]["')*]*`;
 const ENDS_SENTENCE = new RegExp(`${SENTENCE_END}$`);
 const AFTER_SENTENCE = new RegExp(`(?<=${SENTENCE_END})\\s+`);
+const SECOND_SENTENCE = new RegExp(`${SENTENCE_END}\\s+["'(*]*[A-Z]`);
+// A bold label's stop, like **Bugs.**, ends the label, not a sentence the line starts.
+const BOLD_LABEL_STOP = /^(\*\*[^*]+)[.?!](?=\*\*)/;
 
 /**
  * A line's prose, without its list or heading mark, and with each code span as one word.
  * @param {string} line
  */
-const readProse = (line) => line.replace(LEADING_MARK, "").replaceAll(/`[^`]*`/g, "code");
+const readProse = (line) => line.replace(LEADING_MARK, "").replaceAll(/`[^`]*`/g, "Code");
+
+/**
+ * Whether a line starts a second sentence after its first.
+ * @param {string} line
+ */
+const startsSecondSentence = (line) =>
+  SECOND_SENTENCE.test(readProse(line).replace(BOLD_LABEL_STOP, "$1"));
 
 /** @param {string} piece */
 const countWords = (piece) => piece.split(/\s+/).filter(Boolean).length;
@@ -95,10 +105,7 @@ test("the guidance files include AGENTS.md, REVIEW.md, the rule files, and the s
 });
 
 test("each line of a guidance file starts at most one sentence", () => {
-  assert.deepEqual(
-    listBrokenLines((line) => /[.?!] [A-Z]/.test(readProse(line))),
-    [],
-  );
+  assert.deepEqual(listBrokenLines(startsSecondSentence), []);
 });
 
 test("AGENTS.md stays short enough for every session to follow", () => {
@@ -157,4 +164,22 @@ test("a sentence ends at any stop past a closing mark, but not inside a code spa
     { line: 5, words: 2 },
     { line: 6, words: 2 },
   ]);
+});
+
+test("a line starts a second sentence after any stop past a closing mark, but not after a bold label, inside a code span, or at an ellipsis", () => {
+  for (const line of [
+    "One. Two.",
+    'Run it." Then go.',
+    "Done.) Next step.",
+    "- Is it? Yes.",
+    "Use **this.** Then go.",
+    "**Bugs.** One. Two.",
+    "**Bugs. Edge cases.** State them.",
+    "Do it. **Then** go.",
+    "Run it. (Then go.)",
+    "Run it. `npm test` runs.",
+  ])
+    assert.ok(startsSecondSentence(line), line);
+  for (const line of ["**Bugs.** State the cases.", "Wait... Then go.", "Run `a. B` now.", "One."])
+    assert.ok(!startsSecondSentence(line), line);
 });
