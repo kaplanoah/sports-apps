@@ -13,7 +13,7 @@ Answer every review finding, a Nit or Pre-existing one too, as below; the `ship`
   A push stops a review still running or waiting, and a label change stops one still waiting,
   so when `check` says no review has passed on the PR's code, take the label off if the stopped run left it on, and add it again.
 - Fix a finding in every place the PR's own change shows the same problem, not only on its line,
-  and open an issue for a place outside the change that shows it, as the `ship` skill says, rather than widening the PR.
+  and leave what's outside the PR's one thing to an issue, as the `ship` skill's step 12 says, rather than widening the PR.
 - Once the push is up, resolve the thread of each finding you fixed, with no reply, since GitHub marks it outdated once its line changes,
   and of each you answered.
 - Resolve each checklist of Nits once every item in it is fixed or answered in a reply on its thread.
