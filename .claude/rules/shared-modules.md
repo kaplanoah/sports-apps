@@ -153,7 +153,7 @@ paths:
       from the list of a season's players the store keeps for it:
       - a team's
       - its section's
-      - a player's, even with a letter wrong, or by a team's name and the number a player wears,
+      - a player's, by any run of her name's words, even with a letter wrong, or by a team's name and the number a player wears,
         or while it's typed each number it starts, over the suggestions
       - a place's
       - a game's part's, like a final's Highlights or the next game's Matchup
