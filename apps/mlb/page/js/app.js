@@ -13,7 +13,7 @@ import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-stri
 import { startGameSearch } from "#shared/game-search-view.js";
 import { keepLastRead } from "#shared/kept-read.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
-import { endLoadNote } from "#shared/load-note.js";
+import { endLoadNote, hasDrawing } from "#shared/load-note.js";
 import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
 import {
@@ -264,17 +264,24 @@ function drawLastSeen() {
 
 const showNewData = () => redrawEased(renderAll);
 
-async function reloadSeason() {
-  await loadSeason();
-  showNewData();
+function reloadSeason() {
+  session.db.afterHandOver(async () => {
+    await loadSeason();
+    showNewData();
+  });
 }
 
-// A page whose load failed loads its season again.
+// A page whose load failed loads its season again, once the store's update is in, so it draws
+// that rather than what the store held. Otherwise what changed while it was away comes in one
+// redraw, with the store's latest.
 /** @param {number} awayMs */
 function catchUp(awayMs) {
   session.db.catchUp(awayMs);
   if (session.problem) reloadSeason();
-  else if (!session.isReordering) showNewData();
+  else
+    session.db.afterHandOver(() => {
+      if (!session.isReordering) showNewData();
+    });
 }
 
 // The season the store and MLB answer with eases in over the one the page last showed.
@@ -289,7 +296,7 @@ async function boot() {
   trackKeyboardFocus();
   watchPresses();
   wireControls();
-  session.db = createWorkerStore();
+  session.db = createWorkerStore({ isShowing: hasDrawing });
   showJobStatuses(session.db, BACKGROUND_JOBS);
   drawLastSeen();
   reopenLastSheets();
@@ -305,7 +312,7 @@ async function boot() {
   });
   const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillYearPicker(years);
-  redrawEased(drawLoadedSeason);
+  session.db.afterHandOver(() => redrawEased(drawLoadedSeason));
   watchNews(session.db, (news) => {
     session.news = news;
     redrawEased(drawNews);

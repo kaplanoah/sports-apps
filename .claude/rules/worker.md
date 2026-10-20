@@ -28,6 +28,7 @@ paths:
   so an uptime monitor can watch it without holding a secret, and asks the store once a minute at most however often it's hit (`shared/worker/health.js`).
   An alarm in its Durable Object (`worker/src/season-updater.js`) keeps the current season's saved data up to date from the league,
   less often while no page has its socket open, and a page that opens brings the next update forward; the page only reads it.
+  The store tells a page as its socket opens whether that update is coming, and tells every page when each update is done, even one that changed nothing.
   When the Worker has an `ACCESS_CODE` secret, the page's address shows the app's `page/gate.html`,
   built from the shared `gate.js` and `gate.css`, and the season's data answers 401 until the phone sends that code.
   The Worker keeps the phone signed in with a cookie that holds a signature over the code, made with the `ACCESS_SIGNING_KEY` secret,

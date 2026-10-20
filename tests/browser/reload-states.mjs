@@ -2,10 +2,11 @@ import { expect } from "@playwright/test";
 
 // What a phone can hold when the page loads again: the copy of the page it saved as it left, the
 // season it drew that from, either one alone, or neither, and a copy older than two minutes, after
-// which the Games list opens on today. The store's first answer is the season's record, which
-// lists fewer days than its whole schedule, so a reload without the season it saved keeps only a
-// day the record lists and opens on today otherwise. Whatever it holds, the list ends on the day it
-// showed or on today once the store has answered with the whole season.
+// which the Games list opens on today. A page showing the copy draws once the store has handed
+// over all it holds, the whole schedule with the season's record, so it keeps any day it showed. A
+// page that draws the season it saved without its whole schedule, from the record, which lists
+// fewer days, keeps only a day the record lists and opens on today otherwise. Whatever it holds,
+// the list ends on the day it showed or on today once the store has answered with the whole season.
 
 /** @typedef {"today" | "shown"} OpenDay */
 
@@ -23,7 +24,7 @@ export const RELOAD_STATES = [
     name: "a copy saved more than two minutes ago",
     opensOn: { recordDay: "today", earlierDay: "today" },
   },
-  { name: "the copy without its season", opensOn: { recordDay: "shown", earlierDay: "today" } },
+  { name: "the copy without its season", opensOn: { recordDay: "shown", earlierDay: "shown" } },
   { name: "the season without the copy", opensOn: { recordDay: "today", earlierDay: "today" } },
   {
     name: "a season without its whole schedule",
@@ -31,7 +32,7 @@ export const RELOAD_STATES = [
   },
   {
     name: "a season in a version the page doesn't read",
-    opensOn: { recordDay: "shown", earlierDay: "today" },
+    opensOn: { recordDay: "shown", earlierDay: "shown" },
   },
 ];
 

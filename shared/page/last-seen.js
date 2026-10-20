@@ -11,10 +11,13 @@
 
 import { readPath } from "./element-path.js";
 import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
+import { watchTimeAway } from "./resume.js";
 import { isSeasonPart } from "./season-part.js";
 import { keepImages } from "./service-worker.js";
 import { closeForgottenDialogs, noteShownEndsSeen } from "./sheet-memory.js";
 import { listOpenSheets, reopenSheets } from "./sheet-reopen.js";
+
+/* global isAwayLong -- from long-away.js */
 
 const LAST_SEEN_KEY = "lastSeen";
 // Another site's picture can count as several megabytes toward the storage the page's copy needs,
@@ -26,11 +29,18 @@ export const readLastSeen = () => readStoredJson(LAST_SEEN_KEY);
 /** Has the sheets the page showed when it was last on screen show again what they showed. */
 export const reopenLastSheets = () => reopenSheets(readStoredJson(OPEN_SHEETS_KEY));
 
-// A list or bracket that scrolls shows where it was, rather than its start, and a list that names
-// where it starts, as a season's days do, keeps that too, for a page left long enough ago.
+// A list or bracket that scrolls shows where it was, rather than its start, and one that names
+// where it starts, as a season's days and a sideways bracket do, keeps that too, for a page left
+// long enough ago.
 /** @param {HTMLElement} element */
 const hasScroll = (element) =>
-  element.scrollLeft > 0 || element.scrollTop > 0 || "startTop" in element.dataset;
+  element.scrollLeft > 0 ||
+  element.scrollTop > 0 ||
+  "startLeft" in element.dataset ||
+  "startTop" in element.dataset;
+
+/** @param {string | undefined} start */
+const readStart = (start) => (start === undefined ? undefined : Number(start));
 
 /** @param {Element} part */
 const readScrolls = (part) =>
@@ -40,14 +50,16 @@ const readScrolls = (part) =>
       path: readPath(part, element),
       left: element.scrollLeft,
       top: element.scrollTop,
-      startTop: Number(element.dataset.startTop ?? element.scrollTop),
+      startLeft: readStart(element.dataset.startLeft),
+      startTop: readStart(element.dataset.startTop),
     }));
 
 // A part drawn inside the season's standings or bracket, which each scroll on their own (pager.css),
 // keeps that holder's place too. A holder on a tab not shown reads as unscrolled, so it keeps the
-// place it last scrolled to, or the one a load put back that it hasn't shown yet.
+// place it last scrolled to, or the one a load put back that it hasn't shown yet, until the page
+// starts over after two minutes away (long-away.js).
 /** @type {WeakMap<Element, number>} */
-const holderTops = new WeakMap();
+let holderTops = new WeakMap();
 
 /** @param {Event} event */
 function noteHolderTop({ target }) {
@@ -62,6 +74,10 @@ function readHolderTop(part) {
   return Number(holder.dataset.putBackTop ?? holderTops.get(holder) ?? 0);
 }
 
+// A part on the tab shown keeps where the page was scrolled, as on the News tab.
+/** @param {HTMLElement} part */
+const readPageTop = (part) => (part.closest("section.view.active") ? scrollY : undefined);
+
 // A part's classes and colors can come from its code rather than its markup, like a pager's
 // classes and a game sheet's teams' colors.
 /**
@@ -75,6 +91,7 @@ const readDrawnPart = (part, savedAt) => ({
   style: part.getAttribute("style"),
   scrolls: readScrolls(part),
   holderTop: readHolderTop(part),
+  pageTop: readPageTop(part),
   savedAt,
 });
 
@@ -140,6 +157,9 @@ export function keepLastSeen(readShown) {
   let hiddenAt = null;
   const readLeftAt = () => hiddenAt ?? Date.now();
   document.addEventListener("scroll", noteHolderTop, { capture: true, passive: true });
+  watchTimeAway((awayMs) => {
+    if (isAwayLong(awayMs)) holderTops = new WeakMap();
+  });
   // Only what the page drew before it first left the screen was seen.
   const noteEndsSeenUntilLeft = () => {
     if (hiddenAt === null) noteShownEndsSeen(Date.now());

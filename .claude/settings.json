@@ -5,6 +5,12 @@
       "Bash(gh issue create *)",
       "Bash(gh issue comment *)",
       "Bash(gh issue close *)",
+      "Bash(gh pr list --label beta --state open)",
+      "Bash(gh pr list --label beta-wait --state open)",
+      "Bash(gh pr edit * --add-label beta)",
+      "Bash(gh pr edit * --remove-label beta)",
+      "Bash(gh pr edit * --add-label beta-wait)",
+      "Bash(gh pr edit * --remove-label beta-wait)",
       "mcp__github__add_issue_comment",
       "mcp__github__issue_write",
       "mcp__claude-code-remote__send_message"
@@ -24,7 +30,11 @@
       "Bash(node worker/set-page-host.mjs)",
       "Bash(node worker/rollback.mjs *)",
       "Bash(node worker/rollback.mjs)",
-      "Bash(git push -f origin * *:beta)"
+      "Bash(git push -f origin * *:beta)",
+      "Bash(gh pr edit * * --add-label beta)",
+      "Bash(gh pr edit * * --remove-label beta)",
+      "Bash(gh pr edit * * --add-label beta-wait)",
+      "Bash(gh pr edit * * --remove-label beta-wait)"
     ]
   },
   "hooks": {

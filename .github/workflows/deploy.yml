@@ -13,6 +13,11 @@ permissions:
   contents: read
   # To find a pull request's CI run that passed on main's exact code.
   actions: read
+  # To find the pull request that holds beta: its labels, its timeline, which the issues scope
+  # reads, and when its head was pushed, from its check suites.
+  pull-requests: read
+  issues: read
+  checks: read
 
 jobs:
   # A merge deploys at once when its pull request's CI passed on exactly the code main now has,
@@ -45,6 +50,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      # Beta holds one pull request at a time, so a push to beta deploys only the head of the one
+      # that holds it, and otherwise fails before anything deploys, keeping the build beta has
+      # (worker/beta-claim.mjs). When GitHub can't say who holds beta, nothing deploys either.
+      - name: Check that the pushed commit holds beta
+        if: env.CHANNEL == 'beta'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/beta-claim.mjs deploy "$GITHUB_SHA"
       - name: Find the pull request's CI run that passed on this code
         id: passed
         if: github.event_name == 'push' && env.CHANNEL == 'production'
