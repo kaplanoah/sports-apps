@@ -8,6 +8,7 @@ import {
   formatRgb,
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -280,7 +281,7 @@ test("on a phone, a game's teams sit at one height under its title whether it's 
   expect(upcoming.roomBelow).toBeCloseTo(ROOM_BELOW_CHANNELS_PX, 0);
 });
 
-test("on a phone, Bonus hangs under its own team's record, at its side's edge", async ({
+test("on a phone, Bonus hangs under its own team's record, at its side's edge, its capitals centered in its chip", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -297,6 +298,8 @@ test("on a phone, Bonus hangs under its own team's record, at its side's edge", 
 
   expect(bonus.y - (record.y + record.height)).toBeCloseTo(BONUS_GAP_PX, 0);
   expect(bonus.x + bonus.width).toBeCloseTo(sideBox.x + sideBox.width, 0);
+  const capitals = await readCapitals(side.locator(".bonus"));
+  expect(capitals.middle - (bonus.y + bonus.height / 2)).toBeCloseTo(0, 1);
   await expect(sheet.locator(".faceoff-side.away .bonus")).toHaveCount(0);
 });
 
