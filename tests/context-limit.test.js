@@ -60,15 +60,19 @@ function runHook(input) {
   return { status, output: stdout ? JSON.parse(stdout).hookSpecificOutput : null };
 }
 
+const BRANCH = "claude/x";
+
 /**
- * The hook's answer for a call at 300,000 tokens, or null when it lets the call through.
+ * The hook's answer for a call at 300,000 tokens on `branch`, or null when it lets the call through.
  * @param {string} toolName
  * @param {Record<string, unknown>} [toolInput]
+ * @param {string} [branch]
  */
-const answerStopCall = (toolName, toolInput = {}) =>
+const answerStopCall = (toolName, toolInput = {}, branch = BRANCH) =>
   decideHookOutput(
     { hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput },
     [300_000],
+    branch,
   );
 
 /** @param {string} command */
@@ -167,10 +171,20 @@ test("a whole handoff runs under the 300,000 block: reading, commit, push, the P
     ["Bash", { command: "git status" }],
     ["Bash", { command: "git diff origin/main" }],
     ["Bash", { command: "git add .claude/hooks/context-limit.mjs" }],
-    ["Bash", { command: "git commit -F - <<'EOF'\nchore: a; b && c\nEOF" }],
-    ["Bash", { command: "git push -u origin claude/serene-heisenberg-uksdx3" }],
+    ["Bash", { command: "git commit -F - <<'EOF'\nchore: a; b && c | d > e $(f) `g`\nEOF" }],
+    ["Bash", { command: "git commit -m 'a $(b) | c > d'" }],
+    ["Bash", { command: `git push -u origin ${BRANCH}` }],
+    ["Bash", { command: "git push origin HEAD" }],
+    ["Bash", { command: "git push" }],
+    [
+      "Bash",
+      { command: "gh pr create --draft --title 'fix: a' --body-file - <<'EOF'\n## Handoff\nEOF" },
+    ],
     ["mcp__github__update_pull_request", { pullNumber: 1, body: "## Handoff" }],
     ["Bash", { command: "gh api -X PATCH repos/o/r/pulls/1 -F body=@handoff.md" }],
+    ["Bash", { command: "gh api repos/{owner}/{repo}/pulls/1/comments/2/replies -f body=Fixed." }],
+    ["Bash", { command: "gh api --method PUT repos/o/r/pulls/1/merge -f merge_method=squash" }],
+    ["Bash", { command: "gh api repos/o/r/actions/runs/4/jobs" }],
     ["mcp__github__add_reply_to_pull_request_comment", { commentId: 2, body: "Fixed." }],
     ["mcp__github__resolve_review_thread", { threadId: "t" }],
     ["mcp__github__add_issue_comment", { issue_number: 1, body: "Handed off." }],
@@ -183,7 +197,11 @@ test("a whole handoff runs under the 300,000 block: reading, commit, push, the P
   ];
   for (const [tool_name, tool_input] of handoff)
     assert.equal(
-      decideHookOutput({ hook_event_name: "PreToolUse", tool_name, tool_input }, recentTokens),
+      decideHookOutput(
+        { hook_event_name: "PreToolUse", tool_name, tool_input },
+        recentTokens,
+        BRANCH,
+      ),
       null,
       `${tool_name} ${JSON.stringify(tool_input)}`,
     );
@@ -226,11 +244,74 @@ test("at 300,000 tokens every call but a handoff's is denied, through any tool t
     );
 });
 
+test("at 300,000 tokens a push lands only on the branch checked out, under its own name, without force", () => {
+  for (const command of [
+    `git push origin +${BRANCH}`,
+    "git push origin claude/another-sessions-branch",
+    "git push origin beta",
+    "git push --all",
+    "git push --tags",
+    "git push origin --mirror",
+    `git push upstream ${BRANCH}`,
+    `git push origin ${BRANCH} main`,
+    `git -C /repo push -u origin ${BRANCH}`,
+  ])
+    assert.ok(answerStopCommand(command), command);
+  assert.equal(answerStopCommand(`git push -u origin ${BRANCH}`), null);
+  for (const branch of ["beta", "main", ""])
+    assert.ok(answerStopCall("Bash", { command: "git push origin HEAD" }, branch), branch);
+});
+
+test("at 300,000 tokens gh api reads anything but writes only the PR, its comments, and its merge", () => {
+  for (const command of [
+    "gh api -X PUT repos/o/r/contents/AGENTS.md -f content=YQ==",
+    "gh api -X PATCH repos/o/r/git/refs/heads/beta -f sha=abc",
+    "gh api --method DELETE repos/o/r/git/refs/heads/claude/x",
+    "gh api repos/o/r/actions/workflows/deploy.yml/dispatches -f ref=main",
+    "gh api repos/o/r/actions/runs/4/rerun-failed-jobs -X POST",
+    "gh api repos/o/r/issues -f title=t",
+  ])
+    assert.ok(answerStopCommand(command), command);
+  assert.equal(answerStopCommand("gh api repos/o/r/contents/AGENTS.md"), null);
+});
+
+test("at 300,000 tokens a handoff's command can't pipe, redirect, or substitute another in", () => {
+  for (const command of [
+    "git status > AGENTS.md",
+    "git diff >> AGENTS.md",
+    "git log < input",
+    "git diff | sh",
+    "git diff origin/main | node worker/red-change.mjs",
+    'git commit -m "$(npm run format)"',
+    "git commit -m $(npm run format)",
+    "git commit -m `npm run format`",
+    "git commit -F - <<EOF\n$(npm run format)\nEOF",
+    "git status && npm run format",
+    "gh pr view 1 > notes.md",
+  ])
+    assert.ok(answerStopCommand(command), command);
+});
+
 test("a git command run with -C another folder is judged as the command it runs", () => {
   assert.equal(answerStopCommand("git -C /repo status"), null);
-  assert.equal(answerStopCommand("git -C /repo push -u origin claude/x"), null);
-  assert.ok(answerStopCommand("git -C /repo push -f origin claude/x"));
   assert.ok(answerStopCommand("git -C /repo reset --hard"));
+});
+
+test("the hook reads the branch checked out from the session's folder to judge a push", () => {
+  const repo = mkdtempSync(join(tmpdir(), "context-limit-repo-"));
+  spawnSync("git", ["init", "--initial-branch", BRANCH, repo]);
+  const transcript_path = writeTranscript(300_000);
+  /** @param {string} command */
+  const push = (command) =>
+    runHook({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command },
+      transcript_path,
+      cwd: repo,
+    }).output;
+  assert.equal(push(`git push -u origin ${BRANCH}`), null);
+  assert.ok(push("git push origin claude/another-sessions-branch"));
 });
 
 test("the context is the latest reply's, with a reply written as several entries counted once", () => {

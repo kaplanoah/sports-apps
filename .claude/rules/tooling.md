@@ -29,7 +29,9 @@ paths:
 - Another hook there hands a session off to a fresh one as its context grows, measured from its transcript's last reply (`.claude/hooks/context-limit.mjs`).
   At 200k tokens it asks the session to hand off at its next break, with each prompt and at each 10k after.
   At 300k it blocks every call but what a handoff needs:
-  reading, committing and pushing the session's own branch, writing the PR's description, replying on the PR, merging it, and reading its Deploy runs.
+  reading, committing, pushing the branch checked out to its own name without force,
+  opening the PR or writing its description, replying on it and resolving its threads, merging it, and reading its Deploy runs,
+  each command alone, with no pipe, redirect, or command substitution (`findPipeOrRedirect` in `one-command.mjs`).
   It lets a subagent's calls through, and any call when it can't read the transcript.
   CI's review turns hooks off.
 - `npm run rollback -- <app>` puts the app's previous version back at all of its traffic and prints which commit was live and which is now.
