@@ -656,22 +656,32 @@ test("a team's next game is marked with Phosphor's caret-right icon, which readi
   );
 });
 
-test("a team's playoff games never list one the league put off as its next, as its cards and the header don't", () => {
+test("a team's playoff games keep one the league put off as its next, as the bracket does, but not one a decided series no longer needs", () => {
   const isAtlanta = (/** @type {any} */ game) =>
     game.away.team === "ATL" || game.home.team === "ATL";
   const next = SEASON.games.find((game) => isAtlanta(game) && game.state === "pre");
-  const putOff = {
+  /** @param {object} change */
+  const changeNext = (change) => ({
     ...SEASON,
-    games: SEASON.games.map((game) => (game === next ? { ...game, status: "Postponed" } : game)),
-  };
+    games: SEASON.games.map((game) => (game === next ? { ...game, ...change } : game)),
+  });
   /** @param {any} season */
-  const readNextRow = (season) =>
+  const readNextNumber = (season) =>
     renderTeamSheet(season, "ATL", { year: 2026, now: NOW }).body.text.match(
-      /<div class="team-game next[^"]*">[\s\S]*?<\/div>/,
-    )?.[0] ?? "";
-  const nextNumber = new RegExp(`<span class="team-game-number">G${next.number}</span>`);
-  assert.match(readNextRow(SEASON), nextNumber);
-  assert.doesNotMatch(readNextRow(putOff), nextNumber);
+      /<div class="team-game next[^"]*">\s*<span class="team-game-number">G(\d+)<\/span>/,
+    )?.[1] ?? null;
+  assert.equal(readNextNumber(SEASON), String(next.number));
+  assert.equal(readNextNumber(changeNext({ status: "Postponed" })), String(next.number));
+  const isLeftOver = (/** @type {any} */ game) =>
+    game.series === next.series && game.state === "pre";
+  const decided = {
+    ...SEASON,
+    games: SEASON.games.map((game) => (isLeftOver(game) ? { ...game, isIfNeeded: true } : game)),
+    series: SEASON.series.map((series) =>
+      series.id === next.series ? { ...series, winner: "ATL" } : series,
+    ),
+  };
+  assert.equal(readNextNumber(decided), null);
 });
 
 test("a game later today stands out the same on the team's card and in its playoff games, and a game tomorrow in neither", () =>
