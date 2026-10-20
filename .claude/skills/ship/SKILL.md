@@ -66,7 +66,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - One red change goes live per deploy.
   Until a red change on beta has merged and gone live, no other red PR merges, and none replaces it on beta.
   Its `phone-ok` is the owner's check of the commit that merges,
-  so once it's live, tell the user so and never ask them to check it again.
+  so once it's live, never ask the owner to check it again.
 
 ## Step 4: conflicts
 
