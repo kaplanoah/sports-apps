@@ -418,17 +418,19 @@ test("words asking who is out list each player out, by team and then last name, 
   assert.ok(rows.every((row) => row.kind === "player" && row.out === "listed"));
 });
 
-test("words asking who is out list after who is the players whose names they start while typed", () => {
+test("words asking who is out list after who is the players whose names they start while typed, with no line saying they're all out", () => {
   const out = ["player FOX Stone", "player HAW Rook", "player HAW Stone"];
   assert.deepEqual(listRows("hurt", true, PAGES_WITH_NEWS).rows, [...out, "player FOX Hurtado"]);
   assert.deepEqual(listRows("hurt", false, PAGES_WITH_NEWS).rows, out);
-  const { rows } = findPages("hurt", {
+  const typed = findPages("hurt", {
     dictionary: DICTIONARY,
     pages: PAGES_WITH_NEWS,
     isTyping: true,
   });
-  const last = rows.at(-1);
-  assert.equal(last?.kind === "player" && last.out, "named");
+  assert.equal(typed.read, undefined);
+  const last = typed.rows.at(-1);
+  assert.equal(last?.kind === "player" && last.out, undefined);
+  assert.equal(readLine("hurt"), "Who's out | 3 players");
 });
 
 test("the start of a word asking who is out, from its third letter, asks it too", () => {

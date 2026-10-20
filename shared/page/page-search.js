@@ -631,10 +631,11 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
 }
 
 /**
- * Who is out, when the words ask with no name, then any other player they name, as "hurt" starts
- * Hurter's, or the players they name beside them, each saying whether she's out, or no page when
- * they name no one. A league whose players don't say who is out lists no one for the words alone,
- * and the players named without a word on it.
+ * Who is out, when the words ask with no name, then any other player whose name they start as
+ * they're typed, as "hurt" starts Hurter's, with no line over rows that aren't all out; or the
+ * players they name beside them, each saying whether she's out; or no page when they name no one.
+ * A league whose players don't say who is out lists no one for the words alone, and the players
+ * named without a word on it.
  * @param {import("./search-words.js").Token[]} rest the tokens besides those that ask who is out
  * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages, isTyping: boolean }} search
  * @returns {FoundPages}
@@ -646,9 +647,10 @@ function findOutPages(rest, { text, tokens, pages, isTyping }) {
     const others = findPlayers(tokens, pages.players, isTyping).filter(
       (player) => !listed.has(player.id),
     );
-    const named = listPlayerRows(others, pages, "named");
-    if (!rows.length) return { rows: named, gameText: text };
-    return { rows: [...rows, ...named], gameText: null, read: describeWhoIsOut(rows) };
+    const started = listPlayerRows(others, pages);
+    if (!rows.length) return { rows: started, gameText: text };
+    if (started.length) return { rows: [...rows, ...started], gameText: null };
+    return { rows, gameText: null, read: describeWhoIsOut(rows) };
   }
   const players = findPlayers(rest, pages.players, isTyping);
   const rows = listPlayerRows(players, pages, "named");

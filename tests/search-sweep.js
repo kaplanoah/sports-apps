@@ -294,12 +294,7 @@ function listBrokenNumberRules(shown, { text, expected, nameGames }) {
  * @param {{ context: SearchContext, pages: SearchPages }} search
  */
 export function sweepPlayerNumbers({ context, pages }) {
-  /**
-   * @param {string} text
-   * @param {boolean} isTyping
-   */
-  const show = (text, isTyping) =>
-    readTypedSearch(text, { context, pages, isTyping, isGamesOnly: false });
+  const show = createShow({ context, pages });
   return context.terms.teams.flatMap((team) => {
     const players = pages.players.filter((player) => player.team === team.code && player.number);
     const names = listOwnNames(team, context);
