@@ -1,7 +1,9 @@
 /*
  * A chip: a short word or two in the Label role's capitals on a small box, like a status beside a
  * title or Bonus under a team. Apps link it before their own styles.css, define --leading and
- * --radius-chip, and give each kind of chip its colors, border, and side padding.
+ * --radius-chip, and give each kind of chip its colors, border, and side padding. A kind whose
+ * words aren't a label, like MLB's rank tag, a caption's numbers, also sets its own type and the
+ * height that puts its baseline on a whole pixel.
  *
  * Its words are trimmed to their capitals and centered in its fixed height, so they sit in its
  * middle by what's drawn rather than by the font's line. At 15px, inside a 1px border or none, the

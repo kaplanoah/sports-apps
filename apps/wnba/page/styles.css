@@ -807,8 +807,9 @@ header.top h1 .title-letter:nth-child(3) {
   font-size: var(--type-stat-large-size);
   font-weight: var(--type-stat-large-weight);
 }
-/* Bonus is happening now, so it's outlined in orange, like foul trouble. */
-.bonus {
+/* Bonus and foul trouble are happening now, so they're outlined in orange. */
+.bonus,
+.foul-chip {
   padding: 0 5px;
   border: 1px solid currentColor;
   color: var(--now);
@@ -1299,10 +1300,6 @@ table.players td.quiet-stat {
 }
 .foul-chip {
   margin-left: 6px;
-  padding: 0 5px;
-  border: 1px solid currentColor;
-  font-family: var(--display);
-  color: var(--now);
 }
 
 /* A team's Roster section scrolls both ways on its own, stopping at its edges without springing
@@ -2033,14 +2030,17 @@ table.standings tr.below td {
 .playoff-out {
   color: var(--ink-dim);
 }
-/* The chip sits on the club's baseline, its dot's bottom, which keeps its words on a whole
-   pixel. */
 .team-cell {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   min-width: 0;
   vertical-align: middle;
+}
+/* A conference chip sits on the club's baseline, its dot's bottom, which keeps its words on a whole
+   pixel. */
+.team-cell:has(.conference-tag) {
+  align-items: baseline;
 }
 table.standings td.team .club {
   font-size: var(--type-team-size);

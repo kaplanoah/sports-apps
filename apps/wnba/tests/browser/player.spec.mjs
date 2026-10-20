@@ -4,6 +4,7 @@ import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
@@ -207,18 +208,10 @@ test.describe("a player who is out", () => {
       await expect(box).toHaveCSS("padding", "10px 9.5px 8px");
       expect(await measureOutLines(box)).toEqual({ sentence: 6, source: 4 });
       await expect(box.locator(".foul-chip")).toHaveCSS("margin-right", "7px");
-      const [chipBaseline, wordsBaseline] = await box.evaluate((element) =>
-        [".foul-chip", ".out-words"].map((name) => {
-          // A zero-size box set inline after a text has its top on the text's baseline.
-          const probe = document.createElement("span");
-          probe.style.cssText = "display: inline-block; width: 0; height: 0";
-          /** @type {HTMLElement} */ (element.querySelector(name)).append(probe);
-          const baseline = probe.getBoundingClientRect().top;
-          probe.remove();
-          return baseline;
-        }),
+      const [chip, words] = await Promise.all(
+        [".foul-chip", ".out-words"].map((name) => readCapitals(box.locator(name))),
       );
-      expect(chipBaseline).toBeCloseTo(wordsBaseline, 2);
+      expect(chip.bottom).toBeCloseTo(words.bottom, 2);
       const [body, detail, caption] = await Promise.all(
         ["body", "detail", "caption"].map(async (role) => `${(await readRole(page, role)).size}px`),
       );

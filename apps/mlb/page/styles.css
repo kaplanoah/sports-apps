@@ -171,6 +171,7 @@
   --gate-problem: var(--now);
   --radius-card: 3px;
   --radius-chip: 3px;
+  --rank-tag-height: 18px;
   --radius-control: 6px;
   --radius-tabs: 8px;
   --radius-sheet: 12px;
@@ -476,7 +477,8 @@ header.top h1 .title-letter:nth-child(2) {
   border-bottom: 1px solid var(--divider);
   padding: 7px 10px;
 }
-/* Always a tag's height, so a clinched tag's border can't make one title bar taller than its neighbor. */
+/* One fixed height, so a division's title bar is as tall as its neighbor's whether it holds a
+   clinched tag, a magic number, or neither. */
 .title-right {
   display: flex;
   align-items: center;
@@ -627,7 +629,7 @@ table.st .rank-cell {
 }
 /* The slot is there for unranked clubs too, and sets every row to a rank tag's height. */
 table.st .rank-slot {
-  height: 18px;
+  height: var(--rank-tag-height);
   vertical-align: middle;
 }
 table.st .seed-cell {
@@ -929,7 +931,7 @@ table.st .seed-cell {
    its baseline on a whole pixel only in an even height, so its chip is 18px rather than 15. */
 .rank-tag {
   min-width: 26px;
-  height: 18px;
+  height: var(--rank-tag-height);
   padding: 0 5px;
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 150);

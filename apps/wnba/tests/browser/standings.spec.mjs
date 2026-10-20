@@ -2,6 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { readTokenColor } from "./theme.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -50,26 +51,32 @@ test("a standings conference tag sits on its club's dot's bottom, its letter cen
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  const cell = page.locator("#standings-league .team-cell").first();
-  await expect(cell.locator(".conference-tag")).toHaveText(/^[EW]$/);
-  const { dotBottom, tagBaseline, rowTop } = await cell.evaluate((element) => {
-    // A zero-size box set inline after a text has its top on the text's baseline.
-    const probe = document.createElement("span");
-    probe.style.cssText = "display: inline-block; width: 0; height: 0";
-    /** @type {Element} */ (element.querySelector(".conference-tag")).append(probe);
-    const baseline = probe.getBoundingClientRect().top;
-    probe.remove();
-    return {
-      dotBottom: /** @type {Element} */ (element.querySelector(".dot")).getBoundingClientRect()
-        .bottom,
-      tagBaseline: baseline,
-      rowTop: /** @type {Element} */ (element.closest("tr")).getBoundingClientRect().top,
-    };
-  });
-  expect(tagBaseline).toBeCloseTo(dotBottom, 2);
-  const baselineInRow = tagBaseline - rowTop;
+  const row = page.locator("#standings-league tbody tr", { has: page.locator(".conference-tag") });
+  const tag = row.first().locator(".conference-tag");
+  await expect(tag).toHaveText(/^[EW]$/);
+  const [{ bottom: tagBaseline }, dot, rowBox] = await Promise.all([
+    readCapitals(tag),
+    row.first().locator(".dot").boundingBox(),
+    row.first().boundingBox(),
+  ]);
+  expect(tagBaseline).toBeCloseTo((dot?.y ?? 0) + (dot?.height ?? 0), 2);
+  const baselineInRow = tagBaseline - (rowBox?.y ?? 0);
   expect(baselineInRow).toBeCloseTo(Math.round(baselineInRow), 1);
   expect(await listChipsOffCenter(page)).toEqual([]);
+});
+
+test("a conference's standings center each seed note on its club", async ({ page }) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const cell = page.locator("#standings-east .team-cell", { has: page.locator(".seed-note") });
+  await expect(cell.first()).toBeAttached();
+  const [note, club] = await Promise.all([
+    cell.first().locator(".seed-note").boundingBox(),
+    cell.first().locator(".club").boundingBox(),
+  ]);
+  const findMiddle = (/** @type {{ y: number, height: number } | null} */ box) =>
+    (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  expect(findMiddle(note)).toBeCloseTo(findMiddle(club), 1);
 });
 
 test("the standings' recent form reads a step below the season, in the mid ink", async ({

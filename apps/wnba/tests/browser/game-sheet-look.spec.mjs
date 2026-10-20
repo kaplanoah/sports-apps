@@ -11,6 +11,7 @@ import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { readOklab } from "../../../../shared/page/team-colors.js";
 import { TEAMS } from "../../page/js/teams.js";
@@ -340,25 +341,13 @@ test("a box score's names rise a pixel beside the numbers, and a fouled-out chip
   const name = sheet.locator('table.players th[scope="row"]', { hasText: "Caitlin Clark" });
   await expect(name.locator(".foul-chip")).toHaveText("Fouled out");
   await expect(name).toHaveCSS("top", "-1px");
-  const { nameBaseline, chipBaseline, rowTop } = await name.evaluate((cell) => {
-    const chip = /** @type {HTMLElement} */ (cell.querySelector(".foul-chip"));
-    // A zero-size box set inline has its top on the line's baseline.
-    const readBaseline = (/** @type {Element} */ parent, /** @type {Node | null} */ before) => {
-      const probe = document.createElement("span");
-      probe.style.cssText = "display: inline-block; width: 0; height: 0";
-      parent.insertBefore(probe, before);
-      const baseline = probe.getBoundingClientRect().top;
-      probe.remove();
-      return baseline;
-    };
-    return {
-      nameBaseline: readBaseline(cell, chip),
-      chipBaseline: readBaseline(chip, null),
-      rowTop: /** @type {Element} */ (cell.closest("tr")).getBoundingClientRect().top,
-    };
-  });
+  const [{ bottom: nameBaseline }, { bottom: chipBaseline }, row] = await Promise.all([
+    readCapitals(name),
+    readCapitals(name.locator(".foul-chip")),
+    name.locator("xpath=..").boundingBox(),
+  ]);
   expect(chipBaseline).toBeCloseTo(nameBaseline, 2);
-  const baselineInRow = chipBaseline - rowTop;
+  const baselineInRow = chipBaseline - (row?.y ?? 0);
   expect(baselineInRow).toBeCloseTo(Math.round(baselineInRow), 1);
   expect(await listChipsOffCenter(page)).toEqual([]);
 });

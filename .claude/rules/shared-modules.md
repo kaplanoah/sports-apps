@@ -253,7 +253,8 @@ paths:
     the meetings of a season series, and a player's facts
   - `chip.css` styles every chip in both apps, like Bonus, a status beside a title, or a rank tag,
     its words trimmed to their capitals and centered on a whole pixel,
-    with each app setting each kind's colors, border, and side padding
+    with each app setting each kind's colors, border, and side padding,
+    and a kind whose words aren't a label, like MLB's rank tag, its own type and height too
   - `team-sheet.css` styles a team's sheet and the buttons that open a team's or a player's sheet
   - `row-button.css` styles a table's row that opens wherever it's tapped
   - `game-cards.css` styles the cards of a team's nearest games
