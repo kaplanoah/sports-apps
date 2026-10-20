@@ -48,7 +48,7 @@ import {
 
 const SWITCH_KEY = "diagnostics";
 const RECORDS_KEY = "diagnosticsRecords";
-const RECORD_MS = 5000;
+export const RECORD_MS = 5000;
 const KEPT_RECORDS = 5;
 // A part whose text shrinks by more than this share dipped, which is what a flicker looks like.
 const DIP_SHARE = 0.25;
@@ -774,8 +774,9 @@ export function startDiagnostics() {
   });
   addEventListener("pagehide", finishRecord);
   watchViewport(isRecording, drawRecords);
+  // Its line for the page leaving the screen comes before the step logs save as the page hides.
+  watchPhoneLook(noteStep);
   for (const log of STEP_LOGS) log.watchSteps(isRecording, drawRecords);
   watchErrors();
   watchTouches();
-  watchPhoneLook(noteStep);
 }

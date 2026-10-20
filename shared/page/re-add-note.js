@@ -58,7 +58,7 @@ const RETURN_SETTLE_MS = 1000;
  * has already shown the app in its new look by then, so the note takes its new state at once,
  * rather than easing from the old one.
  * @param {{ isHidden: boolean, changedAt: number, shownAt: number }} change
- *   `changedAt` and `shownAt`, when the page last came to the screen, on one clock in milliseconds
+ *   `changedAt` and `shownAt`, when the page last came back, on one clock in milliseconds
  * @returns {boolean}
  */
 export const isLookChangeOnReturn = ({ isHidden, changedAt, shownAt }) =>

@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { RECORD_MS, findRecords, reloadToRecord } from "./diagnostics-records.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -9,18 +10,12 @@ test.use({
   contextOptions: { reducedMotion: "reduce" },
 });
 
-const RECORD_MS = 5000;
-
-/** @param {import("@playwright/test").Page} page */
-const findRecords = (page) => page.locator("#diagnostics");
-
 test("with Diagnostics on, each change of the phone's look is logged, with what the page reads then and a task later, and among the steps of the open under way", async ({
   page,
 }) => {
   await openApp(page);
   await turnOnDiagnostics(page);
-  await page.reload();
-  await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
+  await reloadToRecord(page);
 
   await page.emulateMedia({ colorScheme: "dark" });
   await page.clock.runFor(100);
@@ -42,4 +37,19 @@ test("with Diagnostics on, each change of the phone's look is logged, with what 
       hasText: "the phone reports dark",
     }),
   ).toHaveCount(1);
+});
+
+test("with Diagnostics on, the page leaving the screen is kept on the device as it leaves, so a phone that drops the page while it's away keeps the line", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+
+  const kept = await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    return localStorage.getItem("diagnosticsPhoneLook") ?? "";
+  });
+
+  expect(kept).toContain("the page left the screen; reads light, shows light");
 });

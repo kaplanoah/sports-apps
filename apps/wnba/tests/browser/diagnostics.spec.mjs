@@ -6,6 +6,7 @@ import {
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { RECORD_MS, findRecords, reloadAndRecord } from "./diagnostics-records.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -13,18 +14,6 @@ test.use({
   isMobile: true,
   contextOptions: { reducedMotion: "reduce" },
 });
-
-const RECORD_MS = 5000;
-
-/** @param {import("@playwright/test").Page} page */
-const findRecords = (page) => page.locator("#diagnostics");
-
-/** @param {import("@playwright/test").Page} page */
-async function reloadAndRecord(page) {
-  await page.reload();
-  await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
-  await page.clock.runFor(RECORD_MS + 1000);
-}
 
 test("Diagnostics sit past the end of settings, off, with nothing recorded, with no note under their name", async ({
   page,

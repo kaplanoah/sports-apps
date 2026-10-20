@@ -490,9 +490,24 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
 }
 
 /**
+ * Has the page come back to the screen with only its window getting focus, as iOS sometimes
+ * reports a Home Screen app coming back.
+ * @param {import("@playwright/test").Page} page
+ */
+const comeBackByFocus = async (page) => {
+  await setHidden(page, true);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+    window.dispatchEvent(new Event("focus"));
+  });
+};
+
+/**
  * On System, a change of the phone's look that comes as the app comes back, as a phone reports one
  * made while the app was away, takes the note to its new state at once, both ways, since the phone
- * has already shown the app in its new look. One that comes a second after eases it.
+ * has already shown the app in its new look, though the app came back by focus alone. One that
+ * comes a second after eases it. A close the page left frozen as it went away doesn't empty the
+ * note drawn for a change while it was away.
  * @param {App} app
  */
 export async function checkReAddNoteOnReturn({ page, openApp, openSettings }) {
@@ -517,12 +532,26 @@ export async function checkReAddNoteOnReturn({ page, openApp, openSettings }) {
   await expect(note).toHaveText(NOTE_WORDS);
   await comeBackOn("dark");
   await expect(note).toBeEmpty();
+  await page.clock.runFor(1000);
+  await comeBackByFocus(page);
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(note).toHaveText(NOTE_WORDS);
   expect(await countEasings()).toBe(easingsBefore);
 
   await page.clock.runFor(1000);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect.poll(() => countEasings()).toBe(easingsBefore + 1);
+  await note.evaluate((element, halfway) => {
+    for (const animation of element.getAnimations()) {
+      animation.pause();
+      animation.currentTime = halfway;
+    }
+  }, EASE_HALFWAY_MS);
+  await setHidden(page, true);
   await page.emulateMedia({ colorScheme: "light" });
+  await setHidden(page, false);
+  await finishTimedAnimations(page);
   await expect(note).toHaveText(NOTE_WORDS);
-  expect(await countEasings()).toBe(easingsBefore + 1);
 }
 
 /**

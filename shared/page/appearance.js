@@ -220,11 +220,20 @@ function renewIfDue() {
   if (Date.now() >= renewDueAt) renewHandoff();
 }
 
-// A page that opens reads the phone's look as it opens, so only a return to the screen counts.
+// A page that opens reads the phone's look as it opens, so only a return counts.
 let shownAt = -Infinity;
 
-function noteShown() {
-  if (!document.hidden) shownAt = performance.now();
+function keepReturnTime() {
+  shownAt = performance.now();
+}
+
+// A close frozen while the page was away would finish once it's back and empty the note drawn
+// meanwhile, so it stops, and the note opens from wherever the close reached.
+function drawNoteAtOnce() {
+  const note = findNote();
+  if (isEasingClosed(note)) easeBackOpen(note, drawNote);
+  else drawNote();
+  followHandoff();
 }
 
 // On System, the icon re-adding gives follows the phone's setting. A change that comes as the page
@@ -234,10 +243,8 @@ function noteShown() {
 // then misses, showing the note at its end for that frame.
 function followPhoneLook() {
   const change = { isHidden: document.hidden, changedAt: performance.now(), shownAt };
-  if (isLookChangeOnReturn(change)) {
-    drawNote();
-    followHandoff();
-  } else setTimeout(updateNote);
+  if (isLookChangeOnReturn(change)) drawNoteAtOnce();
+  else setTimeout(updateNote);
 }
 
 function dismissNote() {
@@ -290,7 +297,7 @@ export function startAppearance(looks) {
     showChosenTheme();
     updateNote();
   });
-  document.addEventListener("visibilitychange", noteShown);
+  watchTimeAway(keepReturnTime);
   darkScheme.addEventListener("change", followPhoneLook);
   wireNote();
 }
