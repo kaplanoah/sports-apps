@@ -85,22 +85,6 @@ test("a team stays put as Bonus comes and goes, level with the score", async ({ 
   expect(Math.abs(before[0] - (await findCenter(row.locator(".score"))))).toBeLessThan(1);
 });
 
-test("Bonus's capitals center in its chip", async ({ page }) => {
-  const app = await openApp(page);
-  await page.getByRole("tab", { name: "Games" }).click();
-  await app.changeSeason((season) => {
-    const game = season.games.find((each) => each.id === "1042600132");
-    Object.assign(game, { state: "live", status: "Q2 5:10", period: 2, clock: "5:10" });
-    Object.assign(game.home, { score: 27, isInBonus: true });
-    return season;
-  });
-  const bonus = page.locator('[data-game="1042600132"] .bonus');
-  await expect(bonus).toHaveText("Bonus");
-  const box = await bonus.boundingBox();
-  expect((await readCapitals(bonus)).middle - (box.y + box.height / 2)).toBeCloseTo(0, 1);
-  expect(box.height).toBe(14);
-});
-
 test("a regular-season game's score and status sit where a playoff game's do, the score level with its teams", async ({
   page,
 }) => {

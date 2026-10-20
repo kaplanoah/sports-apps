@@ -804,19 +804,16 @@ header.top h1 .title-letter:nth-child(3) {
   font-size: var(--type-stat-large-size);
   font-weight: var(--type-stat-large-weight);
 }
-/* Bonus is happening now, so it's outlined in orange, like foul trouble. Barlow's line runs well
-   above its capitals, so the words are trimmed to their capitals and center in the chip's 12px by
-   what's drawn. */
+/* Bonus is happening now, so it's outlined in orange, like foul trouble. */
 .bonus {
-  padding: calc((12px - 1cap) / 2) 5px;
+  padding: 0 5px;
   border: 1px solid currentColor;
   border-radius: var(--radius-chip);
   color: var(--now);
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
-  line-height: var(--leading);
-  text-box: trim-both cap alphabetic;
+  line-height: 12px;
   text-transform: uppercase;
   letter-spacing: var(--type-label-tracking);
 }
