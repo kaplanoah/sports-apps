@@ -71,7 +71,8 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 - `day-strip-log.js`: what a season's list of days does
 - `list-log.js`: where each list of days stands, at each record's end
 - `bracket-standings-log.js`: each touch on the standings and bracket
-- `phone-look-log.js`: each change of the phone's light or dark look, with the look the stylesheets see then
+- `phone-look-log.js`: each change of the phone's light or dark look,
+  and each time the page leaves, comes back, or changes focus, with the look the stylesheets see then
 - `error-log.js`: each error the page's code doesn't catch
 
 ### The Home Screen welcome and theme
