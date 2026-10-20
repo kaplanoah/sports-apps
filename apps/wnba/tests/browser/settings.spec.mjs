@@ -1,4 +1,4 @@
-import { test, expect, openApp, serveLockedApp } from "./harness.mjs";
+import { test, expect, matchPath, openApp, serveLockedApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -101,6 +101,25 @@ test("a season picked while its record is on its way stays picked as the picker 
     newSeason: 2027,
     moveCurrentTo: (year) => app.writeDocument("live/current", { season: year }),
   });
+});
+
+test("a reload while the store can't be reached keeps the Season picker on the past season the page shows", async ({
+  page,
+}) => {
+  await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await picker.selectOption("2025");
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+  await page.route(matchPath("/store/"), (route) => route.abort());
+  // The page watches the news right after it fills settings.
+  const filling = page.waitForRequest(matchPath("/store/news/cards"));
+
+  await page.reload();
+
+  await filling;
+  await expect(picker).toHaveValue("2025");
+  await expect(picker.locator("option")).toHaveText(["2026", "2025"]);
 });
 
 test("while the store can't list its seasons, a new current season joins the Season picker, with the past season shown still chosen", async ({

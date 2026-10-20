@@ -128,10 +128,11 @@ const readLastSeenSchedule = (schedule) =>
 function drawLastSeen() {
   const lastSeen = readLastSeen();
   if (!lastSeen?.season || !isReadableSeason(lastSeen.season, SNAPSHOT_VERSION)) return;
-  const { year, season, schedule, news } = session;
+  const { year, pickedYear, season, schedule, news } = session;
   try {
     Object.assign(session, {
       year: lastSeen.year,
+      pickedYear: lastSeen.year,
       season: lastSeen.season,
       schedule: readLastSeenSchedule(lastSeen.schedule),
       news: readLastSeenNews(lastSeen.news),
@@ -139,7 +140,7 @@ function drawLastSeen() {
     renderAll();
     endLoadNote();
   } catch {
-    Object.assign(session, { year, season, schedule, news });
+    Object.assign(session, { year, pickedYear, season, schedule, news });
   }
 }
 
