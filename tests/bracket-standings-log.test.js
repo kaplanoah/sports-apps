@@ -5,10 +5,16 @@ import {
   describeTouchEnd,
   watchTouches,
 } from "../shared/page/bracket-standings-log.js";
+import { watchPresses } from "../shared/page/press.js";
 import { useSavedStorage } from "./saved-storage.js";
 
 useSavedStorage(new Map());
-globalThis.document = /** @type {any} */ ({ addEventListener: () => {} });
+/** @type {Map<string, ((event: any) => void)[]>} */
+const documentListeners = new Map();
+globalThis.document = /** @type {any} */ ({
+  addEventListener: (/** @type {string} */ type, /** @type {(event: any) => void} */ listener) =>
+    documentListeners.set(type, [...(documentListeners.get(type) ?? []), listener]),
+});
 /** @type {Map<string, (event: any) => void>} */
 const windowListeners = new Map();
 globalThis.addEventListener = /** @type {any} */ (
@@ -26,14 +32,21 @@ class FakeElement {
   closest(selector) {
     return selector === ".season-part" && this.dataset.part ? this : null;
   }
+  /** @param {FakeElement} element */
+  contains(element) {
+    return element === this;
+  }
 }
 globalThis.Element = /** @type {any} */ (FakeElement);
+globalThis.HTMLElement = /** @type {any} */ (class {});
+globalThis.getComputedStyle = /** @type {any} */ (() => ({ position: "static" }));
 
 bracketStandingsLog.watchSteps(
   () => true,
   () => {},
 );
 watchTouches();
+watchPresses();
 
 /**
  * Sends the window a touch's event, with a finger at each of `points`.
@@ -51,6 +64,16 @@ function sendTouch(type, { target, points, defaultPrevented = false }) {
  */
 const sendPointerCancel = ({ isPrimary }) =>
   windowListeners.get("pointercancel")?.({ type: "pointercancel", isPrimary });
+
+/**
+ * Sends the document an event press.js listens for, as the browser does for a pointer, a touch, or
+ * a scroll.
+ * @param {string} type
+ * @param {object} event
+ */
+function sendToDocument(type, event) {
+  for (const listener of documentListeners.get(type) ?? []) listener({ type, ...event });
+}
 
 /** The log's lines from the touches `sendTouches` sends. */
 function readLiftsFrom(/** @type {() => void} */ sendTouches) {
@@ -80,9 +103,9 @@ test("a touch on the standings and bracket is logged as it lifts, with where the
     sendTouch("touchend", { target: bracket, points: [] });
   });
   assert.deepEqual(lines, [
-    "lifted after moving 30 left and 3 down; the page's code took the touch once it had moved 7 left and 1 down; its pointer wasn't cancelled; the standings didn't scroll",
-    "lifted after moving 200 up; the browser kept the touch; its pointer was cancelled; the standings scrolled 240px down",
-    "lifted after moving 100 down; the browser kept the touch; its pointer wasn't cancelled; the bracket scrolled 60px up",
+    "lifted after moving 30 left and 3 down; it landed on a list at rest; the page's code took the touch once it had moved 7 left and 1 down; its pointer wasn't cancelled; the standings didn't scroll",
+    "lifted after moving 200 up; it landed on a list at rest; the browser kept the touch; its pointer was cancelled; the standings scrolled 240px down",
+    "lifted after moving 100 down; it landed on a list at rest; the browser kept the touch; its pointer wasn't cancelled; the bracket scrolled 60px up",
   ]);
 });
 
@@ -111,12 +134,13 @@ test("a touch the page's code took says how far the finger had moved when it did
     describeTouchEnd({
       isCancelled: false,
       moved: { x: 9.4, y: -14.2 },
+      isLandingOnGlide: false,
       takenAt: { x: 6.6, y: -2 },
       isPointerCancelled: false,
       part: "standings",
       scrolled: 0,
     }),
-    "lifted after moving 9 right and 14 up; the page's code took the touch once it had moved 7 right and 2 up; its pointer wasn't cancelled; the standings didn't scroll",
+    "lifted after moving 9 right and 14 up; it landed on a list at rest; the page's code took the touch once it had moved 7 right and 2 up; its pointer wasn't cancelled; the standings didn't scroll",
   );
 });
 
@@ -125,23 +149,25 @@ test("a touch the browser kept says whether it cancelled its pointer, and how fa
     describeTouchEnd({
       isCancelled: false,
       moved: { x: -3, y: -120 },
+      isLandingOnGlide: false,
       takenAt: null,
       isPointerCancelled: true,
       part: "standings",
       scrolled: 240.5,
     }),
-    "lifted after moving 3 left and 120 up; the browser kept the touch; its pointer was cancelled; the standings scrolled 241px down",
+    "lifted after moving 3 left and 120 up; it landed on a list at rest; the browser kept the touch; its pointer was cancelled; the standings scrolled 241px down",
   );
   assert.equal(
     describeTouchEnd({
       isCancelled: false,
       moved: { x: -0.4, y: 80 },
+      isLandingOnGlide: false,
       takenAt: null,
       isPointerCancelled: false,
       part: "bracket",
       scrolled: -160,
     }),
-    "lifted after moving 80 down; the browser kept the touch; its pointer wasn't cancelled; the bracket scrolled 160px up",
+    "lifted after moving 80 down; it landed on a list at rest; the browser kept the touch; its pointer wasn't cancelled; the bracket scrolled 160px up",
   );
 });
 
@@ -150,22 +176,63 @@ test("a touch the browser cancels says so, and one that didn't move says that", 
     describeTouchEnd({
       isCancelled: true,
       moved: { x: 0.3, y: 0 },
+      isLandingOnGlide: false,
       takenAt: null,
       isPointerCancelled: true,
       part: "bracket",
       scrolled: 0,
     }),
-    "cancelled without moving; the browser kept the touch; its pointer was cancelled; the bracket didn't scroll",
+    "cancelled without moving; it landed on a list at rest; the browser kept the touch; its pointer was cancelled; the bracket didn't scroll",
   );
   assert.equal(
     describeTouchEnd({
       isCancelled: false,
       moved: { x: 0, y: -0.2 },
+      isLandingOnGlide: false,
       takenAt: { x: 0, y: 0 },
       isPointerCancelled: false,
       part: "standings",
       scrolled: 0,
     }),
-    "lifted without moving; the page's code took the touch before it moved; its pointer wasn't cancelled; the standings didn't scroll",
+    "lifted without moving; it landed on a list at rest; the page's code took the touch before it moved; its pointer wasn't cancelled; the standings didn't scroll",
   );
+});
+
+test("a touch that landed on a list still gliding says so", () => {
+  assert.equal(
+    describeTouchEnd({
+      isCancelled: false,
+      moved: { x: 0, y: 0 },
+      isLandingOnGlide: true,
+      takenAt: null,
+      isPointerCancelled: false,
+      part: "standings",
+      scrolled: 0,
+    }),
+    "lifted without moving; it landed on a list still gliding; the browser kept the touch; its pointer wasn't cancelled; the standings didn't scroll",
+  );
+});
+
+test("a still finger on the standings while a fling still glides them says it landed on a list still gliding, as press.js reads it", () => {
+  const target = new FakeElement("standings");
+  const finger = { target, isPrimary: true, pointerType: "touch", button: 0 };
+  const lines = readLiftsFrom(() => {
+    sendToDocument("pointerdown", { ...finger, pointerId: 1 });
+    sendTouch("touchstart", { target, points: [{ x: 100, y: 400 }] });
+    sendTouch("touchmove", { target, points: [{ x: 100, y: 300 }] });
+    sendToDocument("pointercancel", finger);
+    sendPointerCancel({ isPrimary: true });
+    target.scrollTop = 74;
+    sendToDocument("scroll", { target });
+    sendTouch("touchend", { target, points: [] });
+    sendToDocument("touchend", {});
+    sendToDocument("scroll", { target });
+    sendToDocument("pointerdown", { ...finger, pointerId: 2 });
+    sendTouch("touchstart", { target, points: [{ x: 100, y: 200 }] });
+    sendTouch("touchend", { target, points: [] });
+  });
+  assert.deepEqual(lines, [
+    "lifted after moving 100 up; it landed on a list at rest; the browser kept the touch; its pointer was cancelled; the standings scrolled 74px down",
+    "lifted without moving; it landed on a list still gliding; the browser kept the touch; its pointer wasn't cancelled; the standings didn't scroll",
+  ]);
 });
