@@ -44,6 +44,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "tests/deploy.test.js",
     "apps/mlb/tests/store.test.js",
     "apps/mlb/tests/browser/page.spec.mjs",
+    ".claude/hooks/check-push.mjs",
     ".claude/hooks/context-limit.mjs",
     ".claude/hooks/install-packages.mjs",
     ".claude/settings.json",

@@ -9,7 +9,7 @@ import { findPipeOrRedirect, findSeparator } from "./one-command.mjs";
 
 const REMINDER_TOKENS = 200_000;
 const REMINDER_STEP_TOKENS = 10_000;
-const STOP_TOKENS = 300_000;
+export const STOP_TOKENS = 300_000;
 
 const HANDOFF_TOOLS = new Set([
   "Read",

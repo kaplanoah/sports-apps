@@ -21,6 +21,7 @@ export const CONFIG_ONLY_FILES = new Set([
 ]);
 const SKIPPED_FILES = new Set([
   ...CONFIG_ONLY_FILES,
+  ".claude/hooks/check-push.mjs",
   ".claude/hooks/context-limit.mjs",
   ".claude/hooks/install-packages.mjs",
   ".claude/hooks/one-command.mjs",
