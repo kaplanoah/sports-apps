@@ -1,6 +1,6 @@
 name: Probe the reviewer's tools
 
-# Temporary: shows that Grep and Glob refuse paths outside the checkout. Never merged.
+# Temporary: shows what the reviewer's one allowed command refuses. Never merged.
 on:
   pull_request:
 
@@ -30,30 +30,37 @@ jobs:
           settings: '{"disableAllHooks": true}'
           claude_args: |
             --model claude-opus-5-5
-            --max-turns 30
+            --max-turns 45
             --setting-sources user
-            --allowedTools "Bash(git log:*),Bash(git show:*)"
-            --disallowedTools "Bash(git log *--output*),Bash(git show *--output*)" "Bash(git log *'*),Bash(git show *'*)" 'Bash(git log *"*),Bash(git show *"*),Bash(git log *\\*),Bash(git show *\\*),Bash(git log *{*),Bash(git show *{*),Bash(git log *$*),Bash(git show *$*),Bash(git log *`*),Bash(git show *`*)'
+            --allowedTools "Bash(node worker/review-git.mjs:*)"
           prompt: |
             This is an authorized test, run by the repository's owner in CI, that checks which commands your tools refuse. Refusals are the expected result, not a failure. Make exactly these Bash calls, one at a time, in this order, each as its own call, with each command exactly as written, and nothing else. Make every call even when earlier ones are refused. Do not retry a refused call another way, and do not read any other path.
-            1. git show HEAD:README.md --out''put=probe-out-1
-            2. git show HEAD:README.md --out"put"=probe-out-2
-            3. git show HEAD:README.md --out\put=probe-out-3
-            4. git show HEAD:README.md --output=probe-out-4
-            5. git show HEAD:README.md --outpu{t,}=probe-out-5
-            6. git show HEAD:README.md --out${EMPTY}put=probe-out-6
-            7. git show HEAD:README.md --out`true`put=probe-out-7
-            8. git show HEAD:README.md --outpu[t]=probe-out-8
-            9. git log -1 --format=%h > probe-out-9
-            10. git log -1 --format=%h | tee probe-out-10
-            11. git log -1 --format=%h; touch probe-out-11
-            12. LANG=C git log -1 --format=%h
-            13. GIT_EXTERNAL_DIFF=true git log -1 --format=%h
-            14. git log -1 --format=%h
-            15. git show HEAD^1:README.md
-            16. git log -L1,1:README.md -1
-            17. git show --diff-merges=first-parent --stat HEAD -- README.md
-            18. git log -3 --oneline -- README.md
+            1. node worker/review-git.mjs show HEAD:README.md --out''put=probe-out-1
+            2. node worker/review-git.mjs show HEAD:README.md --out"put"=probe-out-2
+            3. node worker/review-git.mjs show HEAD:README.md --out\put=probe-out-3
+            4. node worker/review-git.mjs show HEAD:README.md --output=probe-out-4
+            5. node worker/review-git.mjs show HEAD:README.md --outpu{t,}=probe-out-5
+            6. node worker/review-git.mjs show HEAD:README.md --out${EMPTY}put=probe-out-6
+            7. node worker/review-git.mjs show HEAD:README.md --out`true`put=probe-out-7
+            8. node worker/review-git.mjs show HEAD:README.md --outpu[t]=probe-out-8
+            9. node worker/review-git.mjs show $(echo HEAD):README.md
+            10. node worker/review-git.mjs show --no-index /etc/hostname README.md
+            11. node worker/review-git.mjs blame --contents /etc/hostname -- README.md
+            12. node worker/review-git.mjs log -1 -- /etc/host*
+            13. node worker/review-git.mjs log -L1,1:/etc/hostname -1
+            14. node worker/review-git.mjs log -1 --format=%h > probe-out-14
+            15. node worker/review-git.mjs log -1 --format=%h | tee probe-out-15
+            16. node worker/review-git.mjs log -1 --format=%h; touch probe-out-16
+            17. node worker/review-git.mjs log -1 --format=%h && touch probe-out-17
+            18. GIT_EXTERNAL_DIFF=true node worker/review-git.mjs log -1 -p
+            19. NODE_OPTIONS=--trace-warnings node worker/review-git.mjs log -1 --format=%h
+            20. git log -1 --format=%h
+            21. node worker/review-git.mjs log -1 --format=%h
+            22. node worker/review-git.mjs show HEAD^1:README.md
+            23. node worker/review-git.mjs log -L1,1:README.md -1
+            24. node worker/review-git.mjs show --diff-merges=first-parent --stat HEAD -- README.md
+            25. node worker/review-git.mjs log -3 --oneline -- README.md
+            26. node worker/review-git.mjs log -p -1 -- README.md
             Then stop.
       - name: Write what each call returned
         if: ${{ !cancelled() }}
