@@ -2,8 +2,9 @@
 // merged into its base branch as that branch was then, and records that code's git tree: once
 // every check passed and the gate didn't hold the change, so that main can deploy without waiting
 // for CI to run again, since when the base is main and nothing else merged first, the squash merge
-// has the same tree; and once every test passed, whatever the gate said, so that a label change,
-// which brings no new code, runs only the gate again.
+// has the same tree; once every test passed, whatever the gate said, so that a label change,
+// which brings no new code, runs only the gate again, and the review when it's asked for; and
+// once the review passed on it too, so that asking again on the same code reviews nothing.
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -16,6 +17,9 @@ export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
 
 /** @param {string} tree */
 export const nameTestedArtifact = (tree) => `ci-tested-${tree}`;
+
+/** @param {string} tree */
+export const nameReviewedArtifact = (tree) => `ci-reviewed-${tree}`;
 
 // Only a pull request's run of the CI workflow's path, from a branch of this repository. A branch's
 // run uses the branch's own copy of the workflow, which only someone who can push here could
@@ -70,13 +74,24 @@ export const findPassedRun = ({ tree, ...options }) =>
 
 /**
  * A run on which every test passed. Its check may have held a red change, so the run's own
- * conclusion doesn't count: the record is made only once every test and the review passed.
+ * conclusion doesn't count: the record is made only once every test passed.
  * @param {FindOptions} options
  */
 export const findTestedRun = ({ tree, ...options }) =>
   findRecordingRun({
     ...options,
     artifact: nameTestedArtifact(tree),
+    isRecordingRun: isPullRequestRun,
+  });
+
+/**
+ * A run on which every test and the review passed. As for a tested run, the record alone counts.
+ * @param {FindOptions} options
+ */
+export const findReviewedRun = ({ tree, ...options }) =>
+  findRecordingRun({
+    ...options,
+    artifact: nameReviewedArtifact(tree),
     isRecordingRun: isPullRequestRun,
   });
 
@@ -94,7 +109,24 @@ const SEARCHES = {
       `CI run ${runId} passed every test on exactly this code, so only the gate runs again.`,
     waiting: "so every check runs again",
   },
+  reviewed: {
+    find: findReviewedRun,
+    missing: "No CI run passed its review on exactly this code",
+    found: (runId) =>
+      `CI run ${runId} passed its review on exactly this code, so it isn't reviewed again.`,
+    waiting: "so a review asked for runs",
+  },
 };
+
+/**
+ * Which record the command looks for, by its flag.
+ * @param {string[]} args
+ * @returns {keyof typeof SEARCHES}
+ */
+export function readSearchKind(args) {
+  if (args.includes("--reviewed")) return "reviewed";
+  return args.includes("--tested") ? "tested" : "passed";
+}
 
 /**
  * The run that passed on this code, or why it isn't there.
@@ -114,7 +146,7 @@ async function lookForRun(kind, tree) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const kind = process.argv.includes("--tested") ? "tested" : "passed";
+  const kind = readSearchKind(process.argv);
   const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim();
   const found = await lookForRun(kind, tree);
   if ("runId" in found) {

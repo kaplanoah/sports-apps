@@ -1,7 +1,8 @@
 name: CI
 
 # Every pull request is checked, including one stacked on another pull request's branch. A label
-# change checks it again, so the phone-ok label lets a red change through without a push.
+# change checks it again, so the phone-ok label lets a red change through without a push, and the
+# review label asks for a review.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
@@ -15,6 +16,8 @@ permissions:
 # rules.
 env:
   PHONE_CONTEXT: phone
+  # The label that asks CI to review a pull request again, which the review takes off.
+  REVIEW_LABEL: review
 
 # A new push to a pull request stops the checks still running on the one before it. A label
 # change waits for them instead, since it brings no new code and reuses what they find.
@@ -25,7 +28,8 @@ concurrency:
 jobs:
   # On main, a pull request's CI that passed on exactly this code has already run every check, so
   # they're skipped. A label change brings no new code, so once a run passed every test on exactly
-  # this code, only the gate runs again (worker/find-passed-ci.mjs).
+  # this code, only the gate runs again, and the review when the label asks for one and no run
+  # passed it on exactly this code (worker/find-passed-ci.mjs).
   passed:
     if: github.event_name == 'push' || github.event.action == 'labeled' || github.event.action == 'unlabeled'
     runs-on: ubuntu-latest
@@ -35,6 +39,7 @@ jobs:
       actions: read
     outputs:
       run: ${{ steps.find.outputs.run }}
+      reviewed-run: ${{ steps.reviewed.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -50,6 +55,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SEARCH: ${{ github.event_name == 'pull_request' && '--tested' || '' }}
         run: node worker/find-passed-ci.mjs $SEARCH
+      - name: Find the CI run that passed its review on this code
+        id: reviewed
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/find-passed-ci.mjs --reviewed
 
   # A red change merges only once the owner has used it on the beta app and labeled it phone-ok
   # (worker/red-change.mjs), which reads the pull request's timeline for who added the label, and
@@ -406,21 +417,21 @@ jobs:
           path: ~/.cache/ms-playwright
           key: *browsers-key
 
-  # Each pull request is reviewed in areas, by what its files are about, each test with its code
-  # (worker/plan-review.mjs). In each area a reviewer for each kind of problem in KINDS reads every
-  # line, listing each problem of its kind once with every place it shows, and then a checker
-  # confirms each against the code; a check across areas names repeats and looks for what spans
-  # them; and one step with no Claude posts what the checkers confirmed or left unsure, less the
-  # repeats the check across areas named and with what it added (worker/post-review.mjs), so no
-  # reviewer or checker can write to the pull request. The first review reads the whole change. A
-  # review after it reads what the pushes since the last full read changed, and the whole change
-  # is read once more alongside it, by FINAL_KIND's reviewer, whose findings are posted only when
-  # the push's review finishes and posts nothing. A run on the head the last full read ended on
-  # reads nothing and leaves that read's summary as it is.
+  # A pull request is reviewed once it's ready, when it's opened ready or marked ready, and again
+  # only when the review label asks, never on a push alone, so a session answers a review's
+  # findings in one push and then asks. Its change is split into areas, by what its files are
+  # about, each test with its code (worker/plan-review.mjs). In each area one reviewer reads every
+  # line and lists each problem it finds once, with every place it shows; one check across every
+  # area confirms each against the code, merges repeats, weighs each, and looks for what spans
+  # areas; and one step with no Claude posts what it confirmed or left unsure
+  # (worker/post-review.mjs), so no job that runs Claude can write to the pull request. The first
+  # review reads the whole change, and a review after it what the pushes since the last full read
+  # changed. A run on the head the last full read ended on reads nothing and leaves that read's
+  # summary as it is.
   # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
-  # nothing to review, such as a push to main, it plans nothing and passes, since check fails on a
-  # skipped job. A label change brings no new code, so it reviews again only when no run passed
-  # every test and the review on exactly this code.
+  # nothing to review, such as a push to main or to a pull request, it plans nothing and passes,
+  # since check fails on a skipped job. A label that asks for a review on exactly the code a run
+  # already passed the review on reviews nothing.
   review-plan:
     needs: passed
     if: ${{ !cancelled() }}
@@ -428,34 +439,35 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
     outputs:
       stage: ${{ steps.plan.outputs.stage }}
       areas: ${{ steps.plan.outputs.areas }}
       area-numbers: ${{ steps.plan.outputs.area-numbers }}
-      area-count: ${{ steps.plan.outputs.area-count }}
-      kinds: ${{ steps.plan.outputs.kinds }}
       count: ${{ steps.plan.outputs.count }}
-      final-areas: ${{ steps.plan.outputs.final-areas }}
-      final-area-numbers: ${{ steps.plan.outputs.final-area-numbers }}
-      final-area-count: ${{ steps.plan.outputs.final-area-count }}
-      final-kinds: ${{ steps.plan.outputs.final-kinds }}
-      final-count: ${{ steps.plan.outputs.final-count }}
     steps:
       - name: Decide whether to review
         id: decision
         env:
           EVENT: ${{ github.event_name }}
-          PASSED_RUN: ${{ needs.passed.outputs.run }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          REVIEWED_RUN: ${{ needs.passed.outputs.reviewed-run }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          case "$ACTION:$LABEL" in
+            opened:* | ready_for_review:* | "labeled:$REVIEW_LABEL") asked=true ;;
+            *) asked=false ;;
+          esac
           reason=""
           if [ "$EVENT" != "pull_request" ]; then
             reason="only pull requests are reviewed"
-          elif [ -n "$PASSED_RUN" ]; then
+          elif [ "$asked" != "true" ]; then
+            reason="a pull request is reviewed once it's ready, and again only when it's labeled $REVIEW_LABEL"
+          elif [ -n "$REVIEWED_RUN" ]; then
             reason="a run on exactly this code already passed its review"
           elif [ "$IS_DRAFT" = "true" ]; then
             reason="a draft is reviewed once it's ready for review"
@@ -505,9 +517,21 @@ jobs:
           include-hidden-files: true
           retention-days: 14
           overwrite: true
+      # So the next ask is a fresh label, which starts a run of its own. A label already gone is
+      # what this step wants, so GitHub's answer that it's not there passes.
+      - name: Take off the review label
+        if: ${{ !cancelled() && github.event.action == 'labeled' && github.event.label.name == env.REVIEW_LABEL }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if ! gh api --method DELETE "repos/$REPO/issues/$PR/labels/$REVIEW_LABEL" --silent 2> removal-error.txt; then
+            cat removal-error.txt
+            grep -q "HTTP 404" removal-error.txt
+          fi
 
-  # Each area's reviewers and then its checker, as one unit that waits for no other area
-  # (review-area.yml).
+  # Each area's reviewer, as one unit that waits for no other area (review-area.yml).
   review-area:
     needs: review-plan
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
@@ -523,50 +547,46 @@ jobs:
       stage: ${{ needs.review-plan.outputs.stage }}
       area: ${{ fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name] }}
       name: ${{ matrix.name }}
-      kinds: ${{ needs.review-plan.outputs.kinds }}
-    secrets: &review-secrets
+    secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-  # What no one area can see: a change one area's files rely on in another's, the same fix due in
-  # the other app, and one fact or rule now in two places. It names only the repeats to merge, with
-  # the words that name each place they show, and what it adds, so no finding a checker kept drops
-  # out of its answer, and leaves its answer for the posting step. A change of one area needs none.
+  # Confirms each problem the areas' reviewers listed against the code, merges repeats in one area
+  # or across them, and weighs each, before anything is posted, and adds what no one area can see:
+  # a change one area's files rely on in another's, the same fix due in the other app, and one
+  # fact or rule now in two places. It leaves its answer for the posting step.
   review-across:
     needs: [review-plan, review-area]
-    if: ${{ !cancelled() && needs.review-area.result != 'skipped' && needs.review-plan.outputs.area-count > 1 }}
+    if: ${{ !cancelled() && needs.review-area.result != 'skipped' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: read
       pull-requests: read
     env:
       STAGE: ${{ needs.review-plan.outputs.stage }}
-      AREAS: ${{ needs.review-plan.outputs.area-count }}
-    steps: &across-steps
+    steps:
       - &review-checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
       - *setup-node
-      - &download-plan
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: review-plan
           path: .review/
-      - &download-checks
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: review-check-${{ env.STAGE }}-*
+          pattern: review-find-*
           path: .review/
           merge-multiple: true
-      - name: List the checkers' findings
-        run: node worker/post-review.mjs list .review "$STAGE"
+      - name: Gather the reviewers' candidates
+        run: node worker/judge-review.mjs candidates .review
       - name: Check across the areas
         id: across
         continue-on-error: true
-        timeout-minutes: 20
+        timeout-minutes: 30
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -576,150 +596,80 @@ jobs:
           settings: '{"disableAllHooks": true}'
           claude_args: |
             --model claude-opus-5-5
-            --max-turns 150
+            --max-turns 200
             --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git blame:*)"
-            --json-schema '{"type":"object","properties":{"duplicates":{"type":"array","items":{"type":"object","properties":{"refs":{"type":"array","items":{"type":"string"}},"body":{"type":"string"}},"required":["refs","body"]}},"added":{"type":"array","items":{"type":"object","properties":{"weight":{"type":"string","enum":["Important","Nit","Pre-existing","Unsure"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["weight","path","line","body"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["duplicates","added","unjudged"]}'
+            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}},"verdict":{"type":"string","enum":["confirmed","rejected","unsure"]},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"why":{"type":"string"}},"required":["ids","verdict","weight","path","line","body","why"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["findings","unjudged"]}'
           prompt: |
-            You make the last check of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}'s review before its findings are posted. Its change is split into ${{ env.AREAS }} areas, and each area's checker checked what its reviewers found. Every finding they confirmed or left unsure is in `.review/checked-${{ env.STAGE }}.json`, each with a ref, and all of them are posted unless you name them as repeats.
+            You check what the reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, across every area of its change, before anything is posted. Its change is split into areas by what the files are about, and one reviewer read each area and listed every problem it found, unsure ones included. Their candidates are in `.review/candidates.json`, each with an id.
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it. AGENTS.md and the rule files `.review/${{ env.STAGE }}.md` lists for each area hold the rules the code keeps.
-            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it, `.review/${{ env.STAGE }}.md`, which lists each area's diff files and rule files, and `.review/checked-${{ env.STAGE }}.json`.
-            3. Name each group of findings that are the same problem, in different areas or in different places, by their refs, the one on its first place first, with the body that one is posted with, without its weight: what is wrong, when it goes wrong, and how to fix it, naming every place the group's findings name. Only the first of each group is posted, on its line, at the heaviest weight a checker settled in its group.
-            4. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each against the code as a checker does, with Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects. Add each you confirm that no listed finding already says, one for each problem, naming every place it shows, on the line the diff changes nearest its first place, weighed as the guide says, its body saying what is wrong, when it goes wrong, and how to fix it, without its weight.
-            5. Post nothing. End with your answer: the groups of repeats, the findings you add, and anything you couldn't judge from the code, and why.
+            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, `.review/${{ env.STAGE }}.md`, which lists each area's diff files and rule files, which you read as you need, and `.review/candidates.json`.
+            3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with git show HEAD^1:<path>. Use Read, Grep, Glob, git log, git show, git diff, and git blame, each command on its own, with no pipes or redirects.
+            4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
+            5. Merge candidates that are the same problem into one finding, in one area or across areas, whether they name one place or several, naming every id it merges: one problem is one finding, however many places it shows, in both apps too. Every candidate's id appears in exactly one finding, rejected ones too: a step after you checks.
+            6. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each the same way, and add each you confirm or can't settle that no candidate already says as a finding of its own, with no ids.
+            7. Weigh each as the guide says: Important for a bug, meaning a wrong result someone can see, wrong data kept, or a failure, and for a security hole or a broken rule from AGENTS.md or a rule file; Nit for something worth fixing that doesn't block; Pre-existing for a problem in code the change didn't make worse.
+            8. Write each finding's body as the guide's "How to report" says: what is wrong, when it goes wrong, and how to fix it, in a few sentences, without its weight, which a later step adds, naming every place it shows. Put it on the line the diff changes nearest its first place, naming that place if it's another.
+            9. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
       - name: Keep the check's answer
+        id: keep
         if: steps.across.outcome == 'success'
         env:
           STRUCTURED_OUTPUT: ${{ steps.across.outputs.structured_output }}
-        run: node worker/post-review.mjs across .review "$STAGE"
-      - if: steps.across.outcome == 'success'
+        run: node worker/judge-review.mjs across .review >> "$GITHUB_OUTPUT"
+      - if: steps.keep.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: review-across-${{ env.STAGE }}
-          path: .review/across-${{ env.STAGE }}.json
+          name: review-across
+          path: |
+            .review/across.json
+            .review/candidates.json
           retention-days: 14
           overwrite: true
-      # So that re-running the failed jobs checks across the areas again.
+      # So that re-running the failed jobs checks across the areas again. A check that didn't
+      # finish keeps no answer, whose unchecked GitHub would compare as 0, so it fails here on that
+      # alone.
       - name: Fail when the check across areas didn't finish
-        if: steps.across.outcome != 'success'
+        if: steps.keep.outcome != 'success' || steps.keep.outputs.unchecked != '0'
         run: |
-          echo "::error::The check across areas didn't finish."
+          echo "::error::The check across areas didn't finish, or left problems unchecked."
           exit 1
 
-  # Posts what the checkers confirmed or left unsure, less the repeats the check across areas named
-  # and with what it added (worker/post-review.mjs). It and its final twin are the only review jobs
-  # but the summary that can write to the pull request, and run no Claude.
+  # Posts what the check across areas confirmed or left unsure (worker/post-review.mjs). It's the
+  # only review job but the summary that can write to the pull request, and runs no Claude.
   review-post:
-    needs: [review-plan, review-area, review-across]
+    needs: [review-plan, review-across]
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write
-    outputs:
-      posted: ${{ steps.post.outputs.posted }}
-    env:
-      STAGE: ${{ needs.review-plan.outputs.stage }}
-      AREAS: ${{ needs.review-plan.outputs.area-count }}
-    steps: &post-steps
+    steps:
       - *review-checkout
       - *setup-node
-      - *download-plan
-      - *download-checks
-      - if: env.AREAS > 1
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: review-across-${{ env.STAGE }}
+          name: review-across
           path: .review/
       - name: Post the findings
-        id: post
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
-        run: node worker/post-review.mjs post .review "$STAGE" >> "$GITHUB_OUTPUT"
+        run: node worker/post-review.mjs .review
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: review-post-${{ env.STAGE }}
-          path: .review/post-${{ env.STAGE }}.json
+          name: review-post
+          path: .review/post.json
           retention-days: 14
           overwrite: true
 
-  # A push's review that has anything to read reads the whole change once more alongside, by
-  # FINAL_KIND's reviewer in each area, to find what the earlier reads missed. check doesn't need
-  # it, since it fails when an area does, even one whose read wasn't due; review judges whether it
-  # was.
-  review-final-area:
-    needs: review-plan
-    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 && needs.review-plan.outputs.final-count > 0 }}
-    permissions:
-      contents: read
-      pull-requests: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.review-plan.outputs.final-areas || '[]') }}
-    uses: ./.github/workflows/review-area.yml
-    with:
-      stage: final
-      area: ${{ fromJSON(needs.review-plan.outputs.final-area-numbers)[matrix.name] }}
-      name: ${{ matrix.name }}
-      kinds: ${{ needs.review-plan.outputs.final-kinds }}
-    secrets: *review-secrets
-
-  # The last read's findings are due once the push's review finished and posted nothing, and each
-  # of the last read's areas finished: then they're checked across areas and posted, and the
-  # summary says what they found. Both of those jobs wait on this one, so the rule is in one place.
-  review-final-due:
-    needs: [review-plan, review-area, review-post, review-final-area]
-    if: ${{ !cancelled() && needs.review-area.result == 'success' && needs.review-post.result == 'success' && needs.review-post.outputs.posted == '0' && needs.review-final-area.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - run: echo "The last read of the whole change is due to be checked across areas and posted."
-
-  review-final-across:
-    needs: [review-plan, review-final-area, review-final-due]
-    if: ${{ !cancelled() && needs.review-final-due.result == 'success' && needs.review-plan.outputs.final-area-count > 1 }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      pull-requests: read
-    env:
-      STAGE: final
-      AREAS: ${{ needs.review-plan.outputs.final-area-count }}
-    steps: *across-steps
-
-  review-final-post:
-    needs: [review-plan, review-final-area, review-final-due, review-final-across]
-    if: ${{ !cancelled() && needs.review-final-due.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
-    env:
-      STAGE: final
-      AREAS: ${{ needs.review-plan.outputs.final-area-count }}
-    steps: *post-steps
-
   # Fails a review that left anything due unread or unchecked, naming it in the one summary comment
-  # it keeps up to date on the pull request. A run a newer push cancelled leaves the summary to the
-  # newer push's run.
+  # it keeps up to date on the pull request. A run a newer push cancelled leaves the summary as it
+  # was, until the review label asks again.
   review:
-    needs:
-      [
-        review-plan,
-        review-area,
-        review-across,
-        review-post,
-        review-final-area,
-        review-final-due,
-        review-final-across,
-        review-final-post,
-      ]
+    needs: [review-plan, review-area, review-across, review-post]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -772,9 +722,6 @@ jobs:
         review-area,
         review-across,
         review-post,
-        review-final-due,
-        review-final-across,
-        review-final-post,
         review,
       ]
     runs-on: ubuntu-latest
@@ -783,21 +730,22 @@ jobs:
       contents: read
     steps:
       # Every test passed when passed found a run that passed them on exactly this code, or when
-      # every job but the gate passed, the browser tests only where the change reaches them.
+      # every test job passed, the browser tests only where the change reaches them.
       - name: Tell whether every test passed
         id: tested
         env:
           TESTED: >-
             ${{ needs.passed.outputs.run != '' || (needs.checks.result == 'success' &&
-            needs.scope.result == 'success' && needs.review.result == 'success' &&
+            needs.scope.result == 'success' &&
             (needs.scope.outputs.apps == '' || (needs.browser.result == 'success' &&
             needs.webkit.result == 'success')) &&
             (needs.scope.outputs.specs == '' || needs.burn-in.result == 'success')) }}
-          # A draft's run passes without its review, which comes once it's ready on the same code, so
-          # it doesn't stand in for one. Any other run skips a review that would never run.
+          # The review passed on this code when passed found a run it passed on, or when this run
+          # planned one and it passed. A run that wasn't asked to review, like a push's or a
+          # draft's, plans none, so it never stands in for one.
           REVIEWED: >-
-            ${{ needs.passed.outputs.run != '' || needs.review-plan.outputs.count != '' ||
-            !github.event.pull_request.draft }}
+            ${{ needs.passed.outputs.reviewed-run != '' || (needs.review-plan.outputs.count != '' &&
+            needs.review.result == 'success') }}
         run: |
           echo "tested=$TESTED" >> "$GITHUB_OUTPUT"
           echo "reviewed=$REVIEWED" >> "$GITHUB_OUTPUT"
@@ -818,9 +766,11 @@ jobs:
           required=$(gh api "repos/$REPO/rules/branches/main" --jq 'any(.[]; .type == "required_status_checks" and any(.parameters.required_status_checks[]?; .context == $ENV.PHONE_CONTEXT))')
           echo "Main's rules require the phone status: $required"
           echo "required=$required" >> "$GITHUB_OUTPUT"
-      # Records the code this pull request's checks passed on: once every test and the review passed,
-      # so a label change runs only the gate again, and once the gate let it through too, so that once
-      # it merges, main deploys at once if it has exactly that code (worker/find-passed-ci.mjs).
+      # Records the code this pull request's checks passed on: once every test passed, so a label
+      # change runs only the gate again, and the review when it's asked for; once the review passed
+      # too, so asking again on the same code reviews nothing; and once the gate let it through too,
+      # so that once it merges, main deploys at once if it has exactly that code
+      # (worker/find-passed-ci.mjs).
       - name: Record the code the checks ran on
         id: code
         if: github.event_name == 'pull_request'
@@ -828,11 +778,17 @@ jobs:
           git rev-parse HEAD > passed-commit.txt
           echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true'
+        with:
+          name: ci-tested-${{ steps.code.outputs.tree }}
+          path: passed-commit.txt
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: >-
           github.event_name == 'pull_request' && steps.tested.outputs.tested == 'true' &&
           steps.tested.outputs.reviewed == 'true'
         with:
-          name: ci-tested-${{ steps.code.outputs.tree }}
+          name: ci-reviewed-${{ steps.code.outputs.tree }}
           path: passed-commit.txt
           retention-days: 14
       - name: Require every job to pass

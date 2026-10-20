@@ -51,29 +51,29 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Step 7: what CI's review does
 
+- CI reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
+  A push alone starts no review, and a push stops a review still running.
 - CI's review splits the change into areas by what the files are about, each test with its code (the root's `worker/plan-review.mjs`),
-  and in each area four reviewers each look for one kind of problem, bugs twice, then rules and tests, and list every problem they find, each once with every place it shows.
-  Each area's reviewers read the rule files whose `paths` match its files, as well as its diffs.
-  A checker for each area confirms each problem against the code, merges repeats, and weighs it,
-  a check across areas, when there's more than one, names repeats across them and adds what spans them,
-  and a step posts what they confirmed or left unsure: each Important or Unsure finding on the line it concerns, or its file,
+  and one reviewer an area looks for every item in `REVIEW.md`'s "What to look for" and lists every problem it finds, each once with every place it shows.
+  Each area's reviewer reads the rule files whose `paths` match its files, as well as its diffs.
+  Each area's reviewer runs on its own (`.github/workflows/review-area.yml`), so no area waits on another's.
+  Then one check across every area, one area too, confirms each problem against the code, merges repeats, weighs each, and adds what spans areas,
+  and a step posts what it confirmed or left unsure: each Important or Unsure finding on the line it concerns, or its file,
   and the review's Nits and Pre-existing findings together in a checklist, in one comment, or in more only past GitHub's limit on a comment's length,
   each on the first of its items' files GitHub takes and each a thread of its own,
   and any finding GitHub takes on no file in a comment in the PR's conversation.
-  Each area's reviewers and then its checker run on their own (`.github/workflows/review-area.yml`), so no area waits on another's.
   The first review reads the whole change, and each review after it reads what changed since the last review that finished.
-  A review of a push with anything to read reads the whole change once more alongside, one reviewer an area,
-  and posts what that read found only when the push's review finishes and posts nothing new, and the summary names it then.
-  A push that changes only what a merge of its base brings in isn't reviewed again.
+  A review asked for on code that already passed its review reads nothing,
+  and so does one whose pushes since change only what a merge of its base brings in.
   The `review` job checks what each reviewer actually read and updates one summary comment that says which commit it reviewed,
   how many findings it posted by weight, which files it left unread and why, like recorded data or a drawing,
   and anything it read but couldn't judge (the root's `worker/judge-review.mjs`).
-  It fails when any changed file went unread, or when a reviewer, checker, check across areas, or posting step didn't finish, naming each,
+  It fails when any changed file went unread, or when a reviewer, the check across areas, or the posting step didn't finish, naming each,
   a reviewer that left one of its area's rule files unread among them.
   If the summary names something it couldn't judge, tell the user.
-- If `review` fails, read its summary and the log of the failed job, an area's `find` or `check` under `review-area`, or `review-across` or `review-post`, or its `review-final-` twin, which shows each try's turns and tool calls.
+- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`, which shows each try's turns and tool calls.
   If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
-  Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and each checker and the check across areas once.
+  Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and the check across areas once.
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
   where a review stalled, or a re-run that failed too.
   `check` can't pass until the job does.

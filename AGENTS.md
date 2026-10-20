@@ -117,12 +117,11 @@ When a step says to go back to an earlier step, continue in order from there.
    If anything fails, fix it and run it again.
    Repeat until it passes.
    Never push while it fails.
-   - Before each push, have a helper agent review what you changed since the last push, or the whole change before the first,
-     by the root's `REVIEW.md`, and fix what it finds.
 3. Fetch `main` and merge it into your branch, or, for a stacked PR, the branch of the PR it builds on.
    If that brought in anything new, go back to step 2.
-   Then commit, push, and open a PR into `main`, or a stacked PR into the branch it builds on.
+   Then commit, push, and open a draft PR into `main`, or a stacked draft PR into the branch it builds on.
    If the PR is already open, the push updates it.
+   Mark it ready for review once step 2 passes and you've read its whole diff against `main`, which is when CI reviews it.
    If `git diff --text --no-textconv --no-ext-diff --no-renames origin/main | node worker/red-change.mjs` says the change is red, ship it by the `ship` skill's steps for one.
 4. Check whether the PR has merge conflicts with its base branch.
    GitHub runs no CI on a PR with conflicts, so waiting on one would never end.
@@ -137,6 +136,8 @@ When a step says to go back to an earlier step, continue in order from there.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
 7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
    Answer its findings as the `steward` skill says, and read a failed `review` job as the `ship` skill says.
+   Once you've answered a review's findings in one push, add the `review` label to the PR, which asks CI to review it again.
+   A push alone starts no review.
    `main` merges a PR only once every thread on it is resolved.
 8. Squash-merge the PR once all of these are true:
    `check` passed on the latest commit, the PR has no merge conflicts, every review thread is resolved, and its base is `main`.
