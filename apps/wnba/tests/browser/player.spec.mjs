@@ -207,7 +207,18 @@ test.describe("a player who is out", () => {
       await expect(box).toHaveCSS("padding", "10px 9.5px 8px");
       expect(await measureOutLines(box)).toEqual({ sentence: 6, source: 4 });
       await expect(box.locator(".foul-chip")).toHaveCSS("margin-right", "7px");
-      await expect(box.locator(".out-words")).toHaveCSS("top", "-1px");
+      const [chipBaseline, wordsBaseline] = await box.evaluate((element) =>
+        [".foul-chip", ".out-words"].map((name) => {
+          // A zero-size box set inline after a text has its top on the text's baseline.
+          const probe = document.createElement("span");
+          probe.style.cssText = "display: inline-block; width: 0; height: 0";
+          /** @type {HTMLElement} */ (element.querySelector(name)).append(probe);
+          const baseline = probe.getBoundingClientRect().top;
+          probe.remove();
+          return baseline;
+        }),
+      );
+      expect(chipBaseline).toBeCloseTo(wordsBaseline, 2);
       const [body, detail, caption] = await Promise.all(
         ["body", "detail", "caption"].map(async (role) => `${(await readRole(page, role)).size}px`),
       );

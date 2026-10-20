@@ -2422,8 +2422,8 @@ table.roster .player-open {
 /* A player who is out has a box as her sheet's first part, outlined like the team sheet's game
    cards and washed in the chip's orange, --out-box-space from the band, the sheet's sides, and the
    part under it, the sheet's sides being --sheet-side from its text. Her Out chip leads the box's
-   first line, its words a pixel up, so they sit centered on the chip, then RotoWire's sentence 6px
-   under it and where it's from 4px under that, closer, so it reads as the sentence's credit. Its
+   first line, on the same baseline as why she is out, then RotoWire's sentence 6px under it and
+   where it's from 4px under that, closer, so it reads as the sentence's credit. Its
    reason and sentence set their own sizes, matched by eye. */
 .out-box {
   --out-box-space: 11.5px;
@@ -2443,10 +2443,6 @@ table.roster .player-open {
 }
 .out-line .foul-chip {
   margin: 0 7px 0 0;
-}
-.out-words {
-  position: relative;
-  top: -1px;
 }
 .out-dash {
   margin-inline: 0.3em;
