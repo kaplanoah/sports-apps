@@ -152,6 +152,9 @@ test("a second finger landing after the browser took the first for a scroll does
   expect(await sendClick(button)).toBe(false);
 });
 
+/** @param {import("@playwright/test").Page} page */
+const findStandingsPart = (page) => page.locator('.season-part[data-part="standings"]');
+
 /**
  * Flings the standings from a team's row, as a finger does that lifts while they glide on, and
  * sends the first frame of their glide.
@@ -160,7 +163,19 @@ test("a second finger landing after the browser took the first for a scroll does
  */
 async function flingStandings(page, button) {
   await sendFinger(button, { moves: [12], isCancelled: true, isScrolling: true });
-  await sendScroll(page, page.locator('.season-part[data-part="standings"]'));
+  await sendScroll(page, findStandingsPart(page));
+}
+
+/**
+ * Sends two more frames of the standings' glide, 80ms apart, so the glide outlasts the time a
+ * list takes to count as at rest after any one frame.
+ * @param {import("@playwright/test").Page} page
+ */
+async function glideStandingsOn(page) {
+  for (let frame = 0; frame < 2; frame += 1) {
+    await page.clock.runFor(80);
+    await sendScroll(page, findStandingsPart(page));
+  }
 }
 
 test("a still finger on a team's row while the standings glide never opens the team, even when iOS sends the tap, and never tints the row", async ({
@@ -179,6 +194,35 @@ test("a still finger on a team's row while the standings glide never opens the t
   await expect(page.locator("#teamSheet")).toBeHidden();
 });
 
+test("a still finger on a team's row while the standings glide never opens the team, even when the glide's first frame comes after the finger lifts", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await sendFinger(button, { moves: [12], isCancelled: true });
+  await sendScroll(page, findStandingsPart(page));
+
+  await sendFinger(button, { moves: [] });
+
+  expect(await sendClick(button)).toBe(false);
+  await expect(page.locator("#teamSheet")).toBeHidden();
+});
+
+test("a still finger on a team's row while the standings glide never opens the team, even once the click iOS sends for the fling itself has come and gone", async ({
+  page,
+}) => {
+  const { button } = await openStandings(page);
+  await holdClock(page);
+  await flingStandings(page, button);
+  expect(await sendClick(button)).toBe(false);
+  await glideStandingsOn(page);
+
+  await sendFinger(button, { moves: [] });
+
+  expect(await sendClick(button)).toBe(false);
+  await expect(page.locator("#teamSheet")).toBeHidden();
+});
+
 test("a still tap on a team's row once the standings have come to rest opens the team, even right after the page's own code scrolls them", async ({
   page,
 }) => {
@@ -186,7 +230,7 @@ test("a still tap on a team's row once the standings have come to rest opens the
   await holdClock(page);
   await flingStandings(page, button);
   await page.clock.runFor(200);
-  await sendScroll(page, page.locator('.season-part[data-part="standings"]'));
+  await sendScroll(page, findStandingsPart(page));
 
   await sendFinger(button, { moves: [] });
 

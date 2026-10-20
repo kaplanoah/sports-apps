@@ -20,7 +20,7 @@ const DRIFT_PX = 10;
 // still finds the touch, while a click long after, like a screen reader's, never does.
 const LIFT_CLICK_MS = 1000;
 // A gliding list scrolls on every frame, so one that hasn't for a few frames has come to rest, and a
-// finger that lands then taps.
+// finger that lands then taps. A fling's first frame comes within as long of its finger's lift.
 const GLIDE_REST_MS = 100;
 
 // The buttons of the rows every app shares: a game's, a card's, a search's, and a table's.
@@ -64,14 +64,21 @@ const holds = (scroller, target) =>
   scroller === document ||
   (scroller instanceof Element && target instanceof Element && scroller.contains(target));
 
-// A finger's scroll moves what holds where it landed, and glides on frame by frame once it lifts,
-// so a scroll the page's code runs elsewhere, as the strip's dates sliding with the list, or after
-// the glide has come to rest, as a tap on Today flying the list, leaves a tap right after it alone.
+// A finger the browser took for a scroll moves what holds where it landed, while it's down and in
+// the frames right after its lift, since a fast flick's first frame can come after the lift.
 /** @param {EventTarget} scroller */
-const isFingersScroll = (scroller) =>
+const isMovedByFinger = (scroller) =>
   !!touch?.isScroll &&
   holds(scroller, touch.target) &&
-  (touch.liftedAt === null || isGliding(scroller));
+  (touch.liftedAt === null || performance.now() - touch.liftedAt < GLIDE_REST_MS);
+
+// What a finger moved glides on frame by frame once it lifts, until it rests, whatever the finger
+// does meanwhile, as the click iOS sends for the fling forgetting the touch. So a scroll the page's
+// code runs elsewhere, as the strip's dates sliding with the list, or on the list once its glide
+// has rested, as a redraw keeping its rows in place, is never a finger's, and a tap right after it
+// works.
+/** @param {EventTarget} scroller */
+const isFingersScroll = (scroller) => isGliding(scroller) || isMovedByFinger(scroller);
 
 /** @param {Event} event */
 function noteScroll(event) {
