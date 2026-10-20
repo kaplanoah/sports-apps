@@ -81,11 +81,11 @@ paths:
   - It lists every game of the season, the All-Star Game too, under a strip of its days,
     each day's heading held under the strip while its games pass,
     and only the days near the screen drawn whole.
-  - Each game's row (`page/js/series-games.js`):
+  - Each game's row (`page/js/games-view.js`):
     - each game away from today shows its starter with his arm
     - each club's record, as of the game once it's been played, from the schedule,
       and its record now for a game still to come, from the standings, as today's rows show it
-    - each postseason game, its series as it stood at the game, or its game until both clubs are known
+    - each postseason game, its series as it stood at the game, or its game until both clubs are known (`page/js/series-games.js`)
     - If necessary under one MLB may not need
     - each final, its inning when it didn't end in the ninth
   - The list comes from the season's whole schedule,

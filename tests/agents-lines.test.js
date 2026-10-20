@@ -15,21 +15,23 @@ const MOST_AGENTS_LINES = 200;
 // Past about this many words a reader loses a sentence's subject, so a long catalog is a list.
 const MOST_SENTENCE_WORDS = 60;
 
-const readProse = (line) => line.replace(/^\s*\d+\. /, "").replaceAll(/`[^`]*`/g, "``");
-
 const startsUnit = (/** @type {string} */ line) =>
   /^\s*(?:---|#|$)/.test(line) || /^\s*(?:[-*]|\d+\.)\s/.test(line);
 
+const isFence = (/** @type {string} */ line) => /^\s*---\s*$/.test(line);
+const isHeading = (/** @type {string} */ line) => /^#+\s/.test(line);
+
 // A sentence ends at a period, question mark, or exclamation mark, past any closing quote,
 // parenthesis, or bold, but never at an ellipsis's dots.
-const SENTENCE_END = /(?<!\.)[.?!]["')*]*$/;
-const SENTENCE_BREAK = /(?<=(?<!\.)[.?!]["')*]*)\s+/;
+const SENTENCE_END = String.raw`(?<!\.)[.?!]["')*]*`;
+const ENDS_SENTENCE = new RegExp(`${SENTENCE_END}$`);
+const AFTER_SENTENCE = new RegExp(`(?<=${SENTENCE_END})\\s+`);
 
 /**
  * A line's prose, without its list or heading mark, and with each code span as one word.
  * @param {string} line
  */
-const readSentenceProse = (line) =>
+const readProse = (line) =>
   line.replace(/^\s*(?:[-*]|\d+\.|#+)\s+/, "").replaceAll(/`[^`]*`/g, "code");
 
 /** @param {string} piece */
@@ -37,7 +39,8 @@ const countWords = (piece) => piece.split(/\s+/).filter(Boolean).length;
 
 /**
  * Each sentence of a text, as the line it starts on and its words. A sentence runs across lines
- * until it ends, or until a list item, a heading, or a blank line starts a new one.
+ * until it ends, or until a list item, a heading, a fence, or a blank line starts a new one, and
+ * a heading is a line of its own.
  * @param {string} text
  */
 function listSentences(text) {
@@ -51,14 +54,16 @@ function listSentences(text) {
   };
   text.split("\n").forEach((line, index) => {
     if (startsUnit(line)) endSentence();
-    for (const piece of readSentenceProse(line).split(SENTENCE_BREAK)) {
+    if (isFence(line)) return;
+    for (const piece of readProse(line).split(AFTER_SENTENCE)) {
       const words = countWords(piece);
       if (words) {
         current ??= { line: index + 1, words: 0 };
         current.words += words;
       }
-      if (SENTENCE_END.test(piece.trim())) endSentence();
+      if (ENDS_SENTENCE.test(piece.trim())) endSentence();
     }
+    if (isHeading(line)) endSentence();
   });
   endSentence();
   return sentences;
@@ -110,23 +115,36 @@ test(`a sentence in a guidance file is ${MOST_SENTENCE_WORDS} words or fewer`, (
   assert.deepEqual(long, []);
 });
 
-test("a sentence runs across lines to its period, and a list item or heading starts the next", () => {
-  const text = "# Title\n\n- One two\n  three `a b c` four.\n  Five six.\n- Seven\n  eight";
+test("a heading, a blank line, a list item of any mark, or a fence starts a new sentence", () => {
+  const text = "one two\n# Head\nthree\n\nfour\n- five\n* six\n1. seven\n---\neight";
   assert.deepEqual(listSentences(text), [
-    { line: 1, words: 1 },
-    { line: 3, words: 5 },
-    { line: 5, words: 2 },
-    { line: 6, words: 2 },
+    { line: 1, words: 2 },
+    { line: 2, words: 1 },
+    { line: 3, words: 1 },
+    { line: 5, words: 1 },
+    { line: 6, words: 1 },
+    { line: 7, words: 1 },
+    { line: 8, words: 1 },
+    { line: 10, words: 1 },
   ]);
 });
 
-test("a sentence ends past a closing quote or bold, but not inside a code span or at an ellipsis", () => {
-  const text = 'Run `a. b` now.\nWait... then go.\n1. **Bugs.** Look "here." Then stop.';
+test("a sentence ends at any stop past a closing mark, but not inside a code span or at an ellipsis", () => {
+  const text = [
+    "Is it? Yes! Done (really.)",
+    "Run `a. b` now. Wait... then",
+    "go on.",
+    '**Bugs.** Look "here."',
+    "Then stop.",
+  ].join("\n");
   assert.deepEqual(listSentences(text), [
-    { line: 1, words: 3 },
+    { line: 1, words: 2 },
+    { line: 1, words: 1 },
+    { line: 1, words: 2 },
     { line: 2, words: 3 },
-    { line: 3, words: 1 },
-    { line: 3, words: 2 },
-    { line: 3, words: 2 },
+    { line: 2, words: 4 },
+    { line: 4, words: 1 },
+    { line: 4, words: 2 },
+    { line: 5, words: 2 },
   ]);
 });
