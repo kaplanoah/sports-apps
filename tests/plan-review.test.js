@@ -4,8 +4,6 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  FINAL_KIND,
-  KINDS,
   PART_BYTES,
   PART_LINES,
   chooseStage,
@@ -26,7 +24,6 @@ import {
   readChangedFiles,
   splitDiffByFile,
   listPushedFiles,
-  listStageKinds,
   readPullHead,
   splitEvenly,
   WHOLE_CHANGE,
@@ -334,30 +331,20 @@ test("a plan reads every file but the unread ones, and names why each goes unrea
   ]);
 });
 
-test("each area has a reviewer for each kind of problem, two for bugs, and one checker", () => {
-  const areas = [
+test("each area has one reviewer, so the review has as many reviewers as areas", () => {
+  const jobs = listJobs([
     { area: 1, name: "mlb page" },
     { area: 2, name: "docs" },
-  ];
-  const jobs = listJobs(areas, KINDS);
-  assert.deepEqual(
-    jobs.kinds.map((reviewer) => reviewer.kind),
-    ["bugs", "bugs-from-end", "rules", "tests"],
-  );
-  assert.ok(jobs.kinds.every((reviewer) => reviewer.focus.includes("REVIEW.md")));
-  assert.deepEqual(jobs.areas, [{ name: "mlb page" }, { name: "docs" }]);
-  assert.deepEqual(jobs.areaNumbers, { "mlb page": 1, docs: 2 });
-  assert.equal(jobs.count, 8);
-  const last = listJobs(areas, [FINAL_KIND]);
-  assert.deepEqual(
-    last.kinds.map((reviewer) => reviewer.kind),
-    ["all"],
-  );
-  assert.equal(last.count, 2);
+  ]);
+  assert.deepEqual(jobs, {
+    areas: [{ name: "mlb page" }, { name: "docs" }],
+    areaNumbers: { "mlb page": 1, docs: 2 },
+    count: 2,
+  });
 });
 
 test("each area's matrix holds only the name its job shows", () => {
-  const { areas } = listJobs([{ area: 1, name: "mlb page" }], KINDS);
+  const { areas } = listJobs([{ area: 1, name: "mlb page" }]);
   assert.ok(areas.every((area) => Object.keys(area).join() === "name"));
 });
 
@@ -366,27 +353,15 @@ test("two areas of one name stop the plan rather than one area's job reviewing t
     { area: 1, name: "docs" },
     { area: 2, name: "docs" },
   ];
-  assert.throws(() => listJobs(areas, KINDS), /Two areas share a name/);
+  assert.throws(() => listJobs(areas), /Two areas share a name/);
 });
 
-test("each stage's matrices are handed to ci.yml under the names its review jobs read", () => {
-  const jobs = listJobs([{ area: 1, name: "mlb page" }], [FINAL_KIND]);
+test("the review's matrix is handed to ci.yml under the names its review jobs read", () => {
   assert.equal(
-    formatJobOutputs("final-", jobs),
-    [
-      'final-areas=[{"name":"mlb page"}]',
-      'final-area-numbers={"mlb page":1}',
-      "final-area-count=1",
-      `final-kinds=${JSON.stringify([{ kind: "all", focus: FINAL_KIND.focus }])}`,
-      "final-count=1",
-    ].join("\n"),
+    formatJobOutputs(listJobs([{ area: 1, name: "mlb page" }])),
+    ['areas=[{"name":"mlb page"}]', 'area-numbers={"mlb page":1}', "count=1"].join("\n"),
   );
-  assert.equal(
-    formatJobOutputs("", listJobs([], KINDS)),
-    "areas=[]\narea-numbers={}\narea-count=0\nkinds=" +
-      JSON.stringify(KINDS.map(({ kind, focus }) => ({ kind, focus }))) +
-      "\ncount=0",
-  );
+  assert.equal(formatJobOutputs(listJobs([])), "areas=[]\narea-numbers={}\ncount=0");
 });
 
 test("a change reads the same wherever a merge of the base moved it, but not once a block moves within it", () => {
@@ -684,18 +659,13 @@ test("a stage is written as each file's parts under the stage's folder, with its
   assert.match(readFileSync(join(folder, "first/shared/page/tabs.js.diff"), "utf8"), /^diff --git/);
 });
 
-test("a review of a push reads what it changed, and keeps the whole change for the last read", () => {
+test("a review of a push reads only what it changed", () => {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
   /** @type {string[][]} */
   const ranges = [];
   const readDiff = (/** @type {string[]} */ range, /** @type {string[]} */ files = []) => {
     ranges.push([...range, ...files]);
-    return files.length
-      ? { numstat: "3\t0\tshared/page/sheet.js\n", diff: diffFile("shared/page/sheet.js", [3]) }
-      : {
-          numstat: "3\t0\tshared/page/sheet.js\n1\t0\tworker/deploy.mjs\n9\t9\tpackage-lock.json\n",
-          diff: diffFile("shared/page/sheet.js", [3]) + diffFile("worker/deploy.mjs", [1]),
-        };
+    return { numstat: "3\t0\tshared/page/sheet.js\n", diff: diffFile("shared/page/sheet.js", [3]) };
   };
   const since = "b".repeat(40);
   const plan = writeReview(folder, {
@@ -707,26 +677,22 @@ test("a review of a push reads what it changed, and keeps the whole change for t
     listStale: () => [],
     rules: [],
   });
-  assert.deepEqual(ranges, [
-    ["merged-tree", "HEAD", "shared/page/sheet.js"],
-    ["HEAD^1", "HEAD"],
-  ]);
-  assert.equal(plan.stage, "push");
-  assert.equal(plan.since, since);
-  assert.deepEqual(
-    plan.areas.map((area) => area.files),
-    [["shared/page/sheet.js"]],
-  );
-  assert.deepEqual(
-    plan.final.map((area) => area.files),
-    [["shared/page/sheet.js", "worker/deploy.mjs"]],
-  );
-  assert.deepEqual(plan.unread, []);
-  assert.deepEqual(plan.finalUnread, [
-    { path: "package-lock.json", why: "the lockfile, which npm writes" },
-  ]);
+  assert.deepEqual(ranges, [["merged-tree", "HEAD", "shared/page/sheet.js"]]);
+  assert.deepEqual(plan, {
+    stage: "push",
+    since,
+    areas: [
+      {
+        area: 1,
+        name: "shared page",
+        files: ["shared/page/sheet.js"],
+        partsByFile: { "shared/page/sheet.js": ["push/shared/page/sheet.js.diff"] },
+        rules: [],
+      },
+    ],
+    unread: [],
+  });
   assert.match(readFileSync(join(folder, "push.md"), "utf8"), /hold only what the pushes since/);
-  assert.match(readFileSync(join(folder, "final.md"), "utf8"), /## Area 1: small changes/);
   assert.deepEqual(JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")), plan);
   assert.match(readFileSync(join(folder, "stale-names.md"), "utf8"), /Nothing the change removed/);
 });
@@ -751,7 +717,7 @@ test("a push whose merge of the base git can't set apart says its diffs may hold
   );
 });
 
-test("the first review reads the whole change and keeps nothing for a last read", () => {
+test("the first review reads the whole change", () => {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
   /** @type {string[][]} */
   const ranges = [];
@@ -775,7 +741,6 @@ test("the first review reads the whole change and keeps nothing for a last read"
     plan.areas.map((area) => area.files),
     [["shared/page/sheet.js"]],
   );
-  assert.deepEqual(plan.final, []);
   const index = readFileSync(join(folder, "first.md"), "utf8");
   assert.match(index, /The first review of this pull request/);
   assert.match(
@@ -797,14 +762,7 @@ test("a review with no reviewers reads nothing, and keeps the head the last full
       rules: [{ path: ".claude/rules/page.md", text: '---\npaths:\n  - "shared/**"\n---\n' }],
     });
     assert.ok(!existsSync(join(folder, "rules")), "no rule file is copied");
-    assert.deepEqual(plan, {
-      stage,
-      since: "b".repeat(40),
-      areas: [],
-      unread: [],
-      final: [],
-      finalUnread: [],
-    });
+    assert.deepEqual(plan, { stage, since: "b".repeat(40), areas: [], unread: [] });
     assert.ok(!existsSync(join(folder, "stale-names.md")));
   }
 });
@@ -963,24 +921,7 @@ test("the files a push changed are the ones its reviewers read, so a merge that 
   ]);
 });
 
-test("the first review and a push's have every kind of reviewer, and a review that reads nothing none", () => {
-  assert.equal(listStageKinds("first"), KINDS);
-  assert.equal(listStageKinds("push"), KINDS);
-  assert.deepEqual(listStageKinds("final"), [FINAL_KIND]);
-  assert.deepEqual(listStageKinds("none"), []);
-});
-
-test("each kind of reviewer names REVIEW.md's items by the number and title REVIEW.md gives them", () => {
-  const guide = readFileSync(new URL("../REVIEW.md", import.meta.url), "utf8");
-  const titles = new Map(
-    [...guide.matchAll(/^(\d+)\. \*\*(.+?)\.?\*\*/gm)].map(([, number, title]) => [number, title]),
-  );
-  const cited = KINDS.flatMap(({ focus }) => [...focus.matchAll(/(\d+) \(([^)]+)\)/g)]);
-  assert.ok(cited.length >= 11);
-  for (const [, number, title] of cited) assert.equal(titles.get(number), title, number);
-});
-
-test("the stale names are written for the rules reviewer, each with where the repo still names it", () => {
+test("the stale names are written for the reviewers, each with where the repo still names it", () => {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
   writeReview(folder, {
     choice: { stage: "first" },

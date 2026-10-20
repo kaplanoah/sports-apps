@@ -1,24 +1,22 @@
 // Tells whether CI's review read everything it was due, from what each reviewer actually read
-// rather than what it says it read, gathers each area's candidates for its checker, and keeps one
-// summary comment on the pull request up to date. A reviewer has read a diff part once a Read of
-// it returned every line, so a part it never opened, or opened only in part, is named for its
-// retry and, still unread then, fails the review, as does a rule file its area calls for
-// (plan-review.mjs writes the parts and the rule files' copies).
-// A reviewer that gave no answer, as one that ran out of turns, is tried again too, and a checker
-// that left any of its reviewers' cases unnamed hasn't finished.
-// Usage, after each try of a reviewer: node worker/judge-review.mjs find <folder> <stage> <area>
-// <kind>, with EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> and
-// answered=<true|false> for $GITHUB_OUTPUT. Before an area's check: node worker/judge-review.mjs
-// candidates <folder> <stage> <area>; it prints count=<candidates> for $GITHUB_OUTPUT. After the
-// checker, or in its place when there are none: node worker/judge-review.mjs check <folder>
-// <stage> <area>, with STRUCTURED_OUTPUT; it prints unchecked=<count of cases it left unnamed>
-// for $GITHUB_OUTPUT. Last: node worker/judge-review.mjs summary <folder>, with GH_TOKEN,
+// rather than what it says it read, gathers the reviewers' candidates for the check across areas,
+// and keeps one summary comment on the pull request up to date. A reviewer has read a diff part
+// once a Read of it returned every line, so a part it never opened, or opened only in part, is
+// named for its retry and, still unread then, fails the review, as does a rule file its area calls
+// for (plan-review.mjs writes the parts and the rule files' copies).
+// A reviewer that gave no answer, as one that ran out of turns, is tried again too, and a check
+// across areas that left any of the reviewers' cases unnamed hasn't finished.
+// Usage, after each try of an area's reviewer: node worker/judge-review.mjs find <folder> <area>,
+// with EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> and
+// answered=<true|false> for $GITHUB_OUTPUT. Before the check across areas: node
+// worker/judge-review.mjs candidates <folder>. After it: node worker/judge-review.mjs across
+// <folder>, with STRUCTURED_OUTPUT; it prints unchecked=<count of cases it left unnamed> for
+// $GITHUB_OUTPUT. Last: node worker/judge-review.mjs summary <folder>, with GH_TOKEN,
 // GITHUB_REPOSITORY, PR, and SHA set, which fails when anything due went unread or unchecked.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { listStageKinds } from "./plan-review.mjs";
 import { SUMMARY_MARKER, WEIGHTS, findSummary, writeReviewedHead } from "./review-state.mjs";
 
 // What Claude Code's Read returns when it's given no limit.
@@ -89,21 +87,21 @@ export function findUnreadParts(parts, triesReads, readPart, folder) {
 const isObject = (item) => typeof item === "object" && item !== null;
 
 /**
- * A Claude step's structured answer, its lists by the keys it must hold and what it couldn't
+ * A Claude step's structured answer, its list by the key it must hold and what it couldn't
  * judge, or null when it gave none, as when it ran out of turns, or gave one of another shape.
- * Each list keeps only its entries that are objects, and what it couldn't judge only those that
+ * The list keeps only its entries that are objects, and what it couldn't judge only those that
  * name a file and why, so every later step reads the same lists however Claude shaped them.
  * @param {string | undefined} structuredOutput
- * @param {string[]} keys
- * @returns {({ unjudged: { file: string, why: string }[] } & Record<string, any[]>) | null}
+ * @param {"candidates" | "findings"} key
+ * @returns {{ items: any[], unjudged: { file: string, why: string }[] } | null}
  */
-export function readAnswer(structuredOutput, keys) {
+export function readAnswer(structuredOutput, key) {
   try {
     const answer = JSON.parse(structuredOutput || "null");
-    if (!keys.every((key) => Array.isArray(answer?.[key]))) return null;
+    if (!Array.isArray(answer?.[key])) return null;
     const unjudged = Array.isArray(answer.unjudged) ? answer.unjudged : [];
     return {
-      ...Object.fromEntries(keys.map((key) => [key, answer[key].filter(isObject)])),
+      items: answer[key].filter(isObject),
       unjudged: unjudged.filter(
         (item) => isObject(item) && typeof item.file === "string" && typeof item.why === "string",
       ),
@@ -113,17 +111,6 @@ export function readAnswer(structuredOutput, keys) {
   }
 }
 
-/**
- * A reviewer's or checker's answer as its record keeps it: the cases or findings it listed, and
- * what it couldn't judge, or null when it gave none.
- * @param {string | undefined} structuredOutput
- * @param {"candidates" | "findings"} key
- */
-const readListAnswer = (structuredOutput, key) => {
-  const answer = readAnswer(structuredOutput, [key]);
-  return answer && { items: answer[key], unjudged: answer.unjudged };
-};
-
 /** @param {string} path */
 export const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
@@ -132,41 +119,31 @@ const readExecution = (path) => (path && existsSync(path) ? readJson(path) : [])
 
 /** @typedef {import('./plan-review.mjs').PlannedArea} PlannedArea */
 
-/**
- * The areas of a stage, from the plan.
- * @param {import('./plan-review.mjs').Plan} plan
- * @param {string} stage
- */
-const listStageAreas = (plan, stage) => (stage === "final" ? plan.final : plan.areas);
+/** @typedef {import('./plan-review.mjs').Plan} Plan */
 
-// Each job's record, by the name it's saved under in the review's folder: its job, then what it
-// covers, so the judge reads back each job's records, and only theirs, by the job alone. An area
-// can be the expression a workflow names it by, so a test can check the workflows' paths against
-// these.
+/**
+ * The review's plan, as plan-review.mjs leaves it in the folder.
+ * @param {string} folder
+ * @returns {Plan}
+ */
+const readPlan = (folder) => readJson(join(folder, "plan.json"));
+
+// Each job's record, by the name it's saved under in the review's folder: its job, then the area
+// it covers, so the judge reads back each job's records, and only theirs, by the job alone. An
+// area can be the expression a workflow names it by, so a test can check the workflows' paths
+// against these.
 const RECORD_JOBS = Object.freeze({
   find: "find",
   candidates: "candidates",
-  check: "check",
   across: "across",
   post: "post",
 });
-/** @param {(string | number)[]} parts */
-const joinRecordName = (...parts) => parts.join("-");
-/** @param {string} stage @param {number | string} area @param {string} kind */
-export const nameFindRecord = (stage, area, kind) =>
-  `${joinRecordName(RECORD_JOBS.find, stage, area, kind)}.json`;
-/** @param {string} stage @param {number | string} area */
-export const nameCandidatesRecord = (stage, area) =>
-  `${joinRecordName(RECORD_JOBS.candidates, stage, area)}.json`;
-/** @param {string} stage @param {number | string} area */
-export const nameCheckRecord = (stage, area) =>
-  `${joinRecordName(RECORD_JOBS.check, stage, area)}.json`;
-/** @param {string} stage */
-export const nameAcrossRecord = (stage) => `${joinRecordName(RECORD_JOBS.across, stage)}.json`;
-/** @param {string} stage */
-export const namePostRecord = (stage) => `${joinRecordName(RECORD_JOBS.post, stage)}.json`;
-/** @param {string} stage */
-export const nameCheckedRecord = (stage) => `${joinRecordName("checked", stage)}.json`;
+/** @param {number | string} area */
+export const nameFindRecord = (area) => `${RECORD_JOBS.find}-${area}.json`;
+export const CANDIDATES_RECORD = `${RECORD_JOBS.candidates}.json`;
+export const ACROSS_RECORD = `${RECORD_JOBS.across}.json`;
+export const POST_RECORD = `${RECORD_JOBS.post}.json`;
+const RECORD_NAME = new RegExp(`^(${Object.values(RECORD_JOBS).join("|")})(-\\d+)?\\.json$`);
 
 /**
  * A reviewer's try as the lines for $GITHUB_OUTPUT: its unread parts and whether it answered.
@@ -176,22 +153,21 @@ export const formatFindOutputs = ({ unread, isAnswered }) =>
   `unread=${unread.join(" ")}\nanswered=${isAnswered}`;
 
 /**
- * Adds a try to a reviewer's record, and returns the parts it still hasn't read and whether its
- * last try answered.
+ * Adds a try to an area's reviewer's record, and returns the parts it still hasn't read and
+ * whether its last try answered.
  * @param {string} folder
- * @param {{ stage: string, area: number, kind: string }} reviewer
+ * @param {number} area
  * @param {NodeJS.ProcessEnv} env
  */
-export function recordFindTry(folder, { stage, area, kind }, env) {
-  const plan = readJson(join(folder, "plan.json"));
-  const planned = listStageAreas(plan, stage).find((entry) => entry.area === area);
-  if (!planned) throw new Error(`The plan's ${stage} stage has no area ${area}.`);
+export function recordFindTry(folder, area, env) {
+  const planned = readPlan(folder).areas.find((entry) => entry.area === area);
+  if (!planned) throw new Error(`The plan has no area ${area}.`);
   const parts = [...Object.values(planned.partsByFile).flat(), ...planned.rules];
-  const recordPath = join(folder, nameFindRecord(stage, area, kind));
-  const record = existsSync(recordPath) ? readJson(recordPath) : { stage, area, kind, tries: [] };
+  const recordPath = join(folder, nameFindRecord(area));
+  const record = existsSync(recordPath) ? readJson(recordPath) : { area, tries: [] };
   record.tries.push({
     reads: [...listReads(readExecution(env.EXECUTION_FILE ?? "")).entries()],
-    answer: readListAnswer(env.STRUCTURED_OUTPUT, "candidates"),
+    answer: readAnswer(env.STRUCTURED_OUTPUT, "candidates"),
   });
   record.unread = findUnreadParts(
     parts,
@@ -205,30 +181,19 @@ export function recordFindTry(folder, { stage, area, kind }, env) {
 }
 
 /**
- * Every candidate an area's reviewers listed over their tries, each with an id its checker names
- * it by.
- * @param {any[]} records the area's reviewers' records
+ * Every candidate the areas' reviewers listed over their tries, each with an id the check across
+ * areas names it by.
+ * @param {any[]} records the reviewers' records
  */
 export const gatherCandidates = (records) =>
   records.flatMap((record) =>
     record.tries
       .flatMap((/** @type {any} */ attempt) => attempt.answer?.items ?? [])
       .map((/** @type {any} */ candidate, /** @type {number} */ index) => ({
-        id: `${record.kind}-${index + 1}`,
+        id: `${record.area}.${index + 1}`,
         ...candidate,
       })),
   );
-
-/**
- * The records of one area's reviewers, never another area's whose number starts the same.
- * @param {Map<string, any>} records by file name
- * @param {string} stage
- * @param {number} area
- */
-export const listAreaRecords = (records, stage, area) =>
-  [...records.entries()]
-    .filter(([name]) => name.startsWith(`${joinRecordName(RECORD_JOBS.find, stage, area)}-`))
-    .map(([, record]) => record);
 
 /**
  * The records the review's jobs leave in the folder, by file name.
@@ -237,14 +202,19 @@ export const listAreaRecords = (records, stage, area) =>
 export function readRecords(folder) {
   /** @type {Map<string, any>} */
   const records = new Map();
-  for (const name of readdirSync(folder)) {
-    const isRecord =
-      Object.values(RECORD_JOBS).some((job) => name.startsWith(`${job}-`)) &&
-      name.endsWith(".json");
-    if (isRecord) records.set(name, readJson(join(folder, name)));
-  }
+  for (const name of readdirSync(folder))
+    if (RECORD_NAME.test(name)) records.set(name, readJson(join(folder, name)));
   return records;
 }
+
+/**
+ * The records of the planned areas' reviewers, in area order, leaving out an area whose reviewer
+ * left none, which the summary names.
+ * @param {Map<string, any>} records by file name
+ * @param {PlannedArea[]} areas
+ */
+const listReviewerRecords = (records, areas) =>
+  areas.flatMap(({ area }) => records.get(nameFindRecord(area)) ?? []);
 
 /** @param {string[]} weights */
 const countByWeight = (weights) =>
@@ -269,7 +239,7 @@ const describeFound = (weights) =>
     : "no findings";
 
 /**
- * The ids of an area's candidates that no finding of its checker names.
+ * The ids of the candidates that no finding of the check across areas names.
  * @param {{ id: string }[]} candidates
  * @param {{ ids: string[] }[]} findings
  */
@@ -279,104 +249,84 @@ export function listUnchecked(candidates, findings) {
 }
 
 /**
- * Keeps an area's candidates, every reviewer's over every try, for its check, and returns how
- * many there are, or stops when a reviewer the stage has left no record, rather than counting
- * what it found as none.
+ * Keeps every area's candidates, every try's, for the check across areas, and returns how many
+ * there are.
  * @param {string} folder
- * @param {{ stage: string, area: number }} place
  */
-export function keepCandidates(folder, { stage, area }) {
-  const records = readRecords(folder);
-  const absent = listStageKinds(stage)
-    .map(({ kind }) => nameFindRecord(stage, area, kind))
-    .filter((name) => !records.has(name));
-  if (absent.length) throw new Error(`No reviewer's record named ${absent.join(", ")}.`);
-  const candidates = gatherCandidates(listAreaRecords(records, stage, area));
-  writeFileSync(
-    join(folder, nameCandidatesRecord(stage, area)),
-    JSON.stringify(candidates, null, 1),
-  );
+export function keepCandidates(folder) {
+  const reviewers = listReviewerRecords(readRecords(folder), readPlan(folder).areas);
+  const candidates = gatherCandidates(reviewers);
+  writeFileSync(join(folder, CANDIDATES_RECORD), JSON.stringify(candidates, null, 1));
   return candidates.length;
 }
 
 /**
- * Keeps a checker's answer as its area's record, an empty one for an area with no candidates,
- * which has no checker, and returns the candidates it left unchecked, which the judge counts the
- * same way, so the job fails where the judge would.
+ * Keeps the check across areas' answer as its record, and returns the candidates it left
+ * unchecked, which the judge counts the same way, so the job fails where the judge would.
  * @param {string} folder
- * @param {{ stage: string, area: number }} place
  * @param {string | undefined} structuredOutput
  */
-export function keepCheck(folder, { stage, area }, structuredOutput) {
-  const candidates = readJson(join(folder, nameCandidatesRecord(stage, area)));
-  const answer = candidates.length
-    ? readListAnswer(structuredOutput, "findings")
-    : { items: [], unjudged: [] };
-  if (!answer) throw new Error("The checker gave no answer.");
-  writeFileSync(join(folder, nameCheckRecord(stage, area)), JSON.stringify(answer));
+export function keepAcross(folder, structuredOutput) {
+  const candidates = readJson(join(folder, CANDIDATES_RECORD));
+  const answer = readAnswer(structuredOutput, "findings");
+  if (!answer) throw new Error("The check across areas gave no answer.");
+  writeFileSync(join(folder, ACROSS_RECORD), JSON.stringify(answer));
   return listUnchecked(candidates, answer.items);
 }
 
 /**
- * The files an area's reviewers left unread, and the reviewers and checker that didn't finish,
- * a reviewer that left a rule file unread among them.
- * @param {string} stage
+ * Whether a finding of the check across areas stands for candidates the reviewers listed, rather
+ * than one the check added itself.
+ * @param {{ ids?: unknown }} finding
+ */
+const isFromReviewers = (finding) => Array.isArray(finding.ids) && finding.ids.length > 0;
+
+/**
+ * The files an area's reviewer left unread, and whether it didn't finish, as one that left a rule
+ * file unread hasn't.
  * @param {PlannedArea} area
  * @param {Map<string, any>} records
  */
-function judgeArea(stage, { area, name, files, partsByFile, rules }, records) {
-  /** @type {string[]} */
-  const unreadFiles = [];
-  /** @type {string[]} */
-  const missing = [];
-  for (const { kind, role } of listStageKinds(stage)) {
-    const record = records.get(nameFindRecord(stage, area, kind));
-    const unreadRules = record ? rules.filter((rule) => record.unread.includes(rule)) : [];
-    if (!record || !record.isAnswered) missing.push(`the ${role} of ${name}`);
-    else if (unreadRules.length)
-      missing.push(`the ${role} of ${name}, which left ${unreadRules.join(", ")} unread`);
-    unreadFiles.push(
-      ...files.filter(
-        (path) => !record || partsByFile[path].some((part) => record.unread.includes(part)),
-      ),
-    );
-  }
-  const check = records.get(nameCheckRecord(stage, area));
-  const unchecked = check
-    ? listUnchecked(records.get(nameCandidatesRecord(stage, area)) ?? [], check.items)
-    : [];
-  if (!check) missing.push(`the checker of ${name}`);
-  else if (unchecked.length)
-    missing.push(
-      `the checker of ${name}, which left ${pluralize(unchecked.length, "case")} unchecked`,
-    );
-  return { unreadFiles, missing };
+function judgeArea({ area, name, files, partsByFile, rules }, records) {
+  const record = records.get(nameFindRecord(area));
+  const unreadRules = record ? rules.filter((rule) => record.unread.includes(rule)) : [];
+  const unreadFiles = files.filter(
+    (path) => !record || partsByFile[path].some((part) => record.unread.includes(part)),
+  );
+  if (!record || !record.isAnswered) return { unreadFiles, missing: [`the reviewer of ${name}`] };
+  if (unreadRules.length)
+    return {
+      unreadFiles,
+      missing: [`the reviewer of ${name}, which left ${unreadRules.join(", ")} unread`],
+    };
+  return { unreadFiles, missing: [] };
 }
 
 /**
- * What one stage read, checked, and posted, and what it left undone.
- * @param {string} stage
+ * What the review read, checked, and posted, and what it left undone.
  * @param {PlannedArea[]} areas
  * @param {Map<string, any>} records
  */
-function judgeStage(stage, areas, records) {
-  const judged = areas.map((area) => judgeArea(stage, area, records));
-  const post = records.get(namePostRecord(stage)) ?? null;
+function judgeAreas(areas, records) {
+  const judged = areas.map((area) => judgeArea(area, records));
+  const across = records.get(ACROSS_RECORD) ?? null;
+  const post = records.get(POST_RECORD) ?? null;
   const missing = judged.flatMap((area) => area.missing);
-  if (areas.length > 1 && !records.has(nameAcrossRecord(stage)))
-    missing.push("the check across areas");
+  const unchecked = across ? listUnchecked(records.get(CANDIDATES_RECORD) ?? [], across.items) : [];
+  if (!across) missing.push("the check across areas");
+  else if (unchecked.length)
+    missing.push(
+      `the check across areas, which left ${pluralize(unchecked.length, "case")} unchecked`,
+    );
   if (!post) missing.push("the step that posts the findings");
-  const checks = areas.flatMap(({ area }) => records.get(nameCheckRecord(stage, area)) ?? []);
-  const verdicts = checks.flatMap((check) =>
-    check.items.map((/** @type {any} */ item) => item.verdict),
-  );
-  const reviewers = areas.flatMap(({ area }) => listAreaRecords(records, stage, area));
+  const verdicts = (across?.items ?? [])
+    .filter(isFromReviewers)
+    .map((/** @type {any} */ item) => item.verdict);
   const unjudged = [
-    ...reviewers.flatMap((record) =>
+    ...listReviewerRecords(records, areas).flatMap((record) =>
       record.tries.flatMap((/** @type {any} */ attempt) => attempt.answer?.unjudged ?? []),
     ),
-    ...checks.flatMap((check) => check.unjudged),
-    ...(post?.unjudged ?? []),
+    ...(across?.unjudged ?? []),
   ];
   return {
     unreadFiles: [...new Set(judged.flatMap((area) => area.unreadFiles))],
@@ -392,51 +342,25 @@ function judgeStage(stage, areas, records) {
 
 const LEADS = {
   first: (/** @type {number} */ areaCount) =>
-    `read the whole change in ${pluralize(areaCount, "area")}, ${pluralize(listStageKinds("first").length, "reviewer")} an area`,
+    `read the whole change in ${pluralize(areaCount, "area")}`,
   push: (/** @type {number} */ areaCount, /** @type {string} */ since) =>
     `read what the pushes since ${since.slice(0, 7)} changed, in ${pluralize(areaCount, "area")}`,
 };
 
 /**
- * Whether a stage read every file and finished every job.
- * @param {ReturnType<typeof judgeStage>} judged
+ * The summary's lines on what the review read, checked, and posted.
+ * @param {ReturnType<typeof judgeAreas>} judged
+ * @param {{ plan: Plan, sha: string }} context
  */
-const isStageFinished = (judged) => !judged.unreadFiles.length && !judged.missing.length;
-
-/**
- * The stages the review was due to finish: the one the plan chose, and the last read of the
- * whole change when a review of the pushes since finished and posted nothing.
- * @param {import('./plan-review.mjs').Plan} plan
- * @param {Map<string, any>} records
- * @returns {{ stage: string, areas: PlannedArea[] }[]}
- */
-export function listDueStages(plan, records) {
-  if (!plan.areas.length) return [];
-  const stages = [{ stage: plan.stage, areas: plan.areas }];
-  const isFinalDue =
-    plan.stage === "push" &&
-    plan.final.length > 0 &&
-    isStageFinished(judgeStage(plan.stage, plan.areas, records)) &&
-    records.get(namePostRecord(plan.stage))?.weights.length === 0;
-  return isFinalDue ? [...stages, { stage: "final", areas: plan.final }] : stages;
-}
-
-/**
- * The summary's lines on what one stage read, checked, and posted.
- * @param {ReturnType<typeof judgeStage>} judged
- * @param {{ stage: string, areas: PlannedArea[], sha: string, since: string | null }} context
- */
-function describeStage(judged, { stage, areas, sha, since }) {
+function describeReview(judged, { plan, sha }) {
   const repeated = judged.repeated
     ? `, and found ${pluralize(judged.repeated, "finding")} already on it`
     : "";
-  const found = `${describeFound(judged.weights)}${repeated}`;
+  const lead = LEADS[/** @type {"first" | "push"} */ (plan.stage)];
   const lines = [
-    stage === "final"
-      ? `Then it read the whole change once more, ${pluralize(listStageKinds("final").length, "reviewer")} an area, to find what the earlier reads missed: ${found}.`
-      : `Claude reviewed ${sha}: it ${LEADS[/** @type {"first" | "push"} */ (stage)](areas.length, since ?? "")}, and posted ${found}.`,
+    `Claude reviewed ${sha}: it ${lead(plan.areas.length, plan.since ?? "")}, and posted ${describeFound(judged.weights)}${repeated}.`,
     "",
-    `Checked: the checkers turned down ${judged.rejected} of ${pluralize(judged.checked, "candidate")} the reviewers listed, after merging repeats.`,
+    `Checked: the check across areas turned down ${judged.rejected} of ${pluralize(judged.checked, "candidate")} the reviewers listed, after merging repeats.`,
     `Read in full: ${judged.fileCount - judged.unreadFiles.length} of ${pluralize(judged.fileCount, "changed file")} to read.`,
   ];
   if (judged.unreadFiles.length)
@@ -461,8 +385,8 @@ function describeStage(judged, { stage, areas, sha, since }) {
 }
 
 /**
- * The summary's opening when no stage was due.
- * @param {import('./plan-review.mjs').Plan} plan
+ * The summary's opening when there was nothing to read.
+ * @param {Plan} plan
  * @param {string} sha
  */
 const describeNothingDue = (plan, sha) =>
@@ -472,43 +396,28 @@ const describeNothingDue = (plan, sha) =>
 
 /**
  * What the review read, found, and checked, whether it did everything it was due, and the head
- * the next push's review reads since, which moves on only once it did. A run on the head the last
- * full read ended on has no summary of its own, so that read's stands.
+ * the next review reads since, which moves on only once it did. A run on the head the last full
+ * read ended on has no summary of its own, so that read's stands.
  * @param {object} review
  * @param {string} review.sha the pull request's head
- * @param {import('./plan-review.mjs').Plan} review.plan
- * @param {Map<string, any>} review.records the reviewers', checkers', and posting steps' records
+ * @param {Plan} review.plan
+ * @param {Map<string, any>} review.records the reviewers', the check across areas', and the
+ *   posting step's records
  */
 export function judgeReview({ sha, plan, records }) {
   if (plan.stage === "reviewed") return { isComplete: true, body: null };
-  const stages = listDueStages(plan, records);
-  const judged = stages.map(({ stage, areas }) => judgeStage(stage, areas, records));
-  const isComplete = judged.every(isStageFinished);
+  const judged = plan.areas.length ? judgeAreas(plan.areas, records) : null;
+  const isComplete = !judged || (!judged.unreadFiles.length && !judged.missing.length);
   const reviewedHead = isComplete ? sha : plan.since;
   const lines = [
     SUMMARY_MARKER,
     ...(reviewedHead ? [writeReviewedHead(reviewedHead)] : []),
-    ...(stages.length
-      ? stages.flatMap(({ stage, areas }, index) =>
-          describeStage(judged[index], { stage, areas, sha, since: plan.since }),
-        )
-      : [describeNothingDue(plan, sha), ""]),
-    ...listLeftUnread(plan, stages),
+    ...(judged ? describeReview(judged, { plan, sha }) : [describeNothingDue(plan, sha), ""]),
+    ...(plan.unread.length
+      ? ["Left unread, as nothing to review:", ...plan.unread.map(listUnread)]
+      : []),
   ];
   return { isComplete, body: lines.join("\n").trimEnd() };
-}
-
-/**
- * The summary's lines on the files the due stages left unread, as nothing to review, each once,
- * so the last read of the whole change names the ones the push it follows didn't touch too.
- * @param {import('./plan-review.mjs').Plan} plan
- * @param {{ stage: string }[]} stages
- */
-function listLeftUnread(plan, stages) {
-  const isFinalDue = stages.some(({ stage }) => stage === "final");
-  const unread = [...plan.unread, ...(isFinalDue ? plan.finalUnread : [])];
-  const once = [...new Map(unread.map((file) => [file.path, file])).values()];
-  return once.length ? ["Left unread, as nothing to review:", ...once.map(listUnread)] : [];
 }
 
 /**
@@ -535,16 +444,14 @@ async function postSummary(callGitHub, pullNumber, earlier, body) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [command, folder, stage, area, kind] = process.argv.slice(2);
+  const [command, folder, area] = process.argv.slice(2);
   const { env } = process;
   if (command === "find") {
-    const kept = recordFindTry(folder, { stage, area: Number(area), kind }, env);
-    console.log(formatFindOutputs(kept));
+    console.log(formatFindOutputs(recordFindTry(folder, Number(area), env)));
   } else if (command === "candidates") {
-    console.log(`count=${keepCandidates(folder, { stage, area: Number(area) })}`);
-  } else if (command === "check") {
-    const unchecked = keepCheck(folder, { stage, area: Number(area) }, env.STRUCTURED_OUTPUT);
-    console.log(`unchecked=${unchecked.length}`);
+    console.log(`The reviewers listed ${pluralize(keepCandidates(folder), "candidate")}.`);
+  } else if (command === "across") {
+    console.log(`unchecked=${keepAcross(folder, env.STRUCTURED_OUTPUT).length}`);
   } else if (command === "summary") {
     const callGitHub = createGitHub({
       repository: env.GITHUB_REPOSITORY ?? "",
@@ -554,7 +461,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const earlier = findSummary(await readAllPages(callGitHub, `/issues/${env.PR}/comments`));
     const { isComplete, body } = judgeReview({
       sha: env.SHA ?? "",
-      plan: readJson(join(folder, "plan.json")),
+      plan: readPlan(folder),
       records: readRecords(folder),
     });
     await settleSummary(callGitHub, { pullNumber: env.PR ?? "", earlier, body });
@@ -564,7 +471,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       process.exit(1);
     }
   } else {
-    console.error("Usage: node worker/judge-review.mjs find|candidates|check|summary <folder> ...");
+    console.error(
+      "Usage: node worker/judge-review.mjs find|candidates|across|summary <folder> ...",
+    );
     process.exit(1);
   }
 }
