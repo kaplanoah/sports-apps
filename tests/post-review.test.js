@@ -4,21 +4,16 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitHubError } from "../worker/github-api.mjs";
+import { ACROSS_RECORD } from "../worker/judge-review.mjs";
 import {
   LIST_HEADING,
-  listCheckedFindings,
   listPosted,
   listToPost,
   nameFinding,
   postFindings,
-  readAcross,
-  readAreaCount,
-  readChecks,
   readPostInputs,
 } from "../worker/post-review.mjs";
 import { OFF_DIFF_HEADING, readReviewComments, writeFindingMark } from "../worker/review-state.mjs";
-
-/** @typedef {import("../worker/post-review.mjs").Across} Across */
 
 const SHA = "a".repeat(40);
 const EARLIER = "e".repeat(40);
@@ -31,43 +26,16 @@ const finding = (/** @type {object} */ fields) => ({
   ...fields,
 });
 
-/**
- * Groups of repeats that keep their first finding's words.
- * @param {string[][]} groups
- */
-const repeats = (groups) => groups.map((refs) => ({ refs, body: "" }));
-
-const CHECKS = [
-  {
-    area: 2,
-    items: [
-      finding({ verdict: "unsure", weight: "Important", body: "can't settle" }),
-      finding({ verdict: "confirmed", weight: "Important", body: "a bug" }),
-    ],
-  },
-  {
-    area: 1,
-    items: [
-      finding({ verdict: "rejected", weight: "Important", body: "turned down" }),
-      finding({ verdict: "confirmed", body: "a nit" }),
-    ],
-  },
+const JUDGED = [
+  finding({ verdict: "unsure", weight: "Important", body: "can't settle" }),
+  finding({ verdict: "rejected", weight: "Important", body: "turned down" }),
+  finding({ verdict: "confirmed", body: "a nit" }),
+  finding({ verdict: "confirmed", weight: "Important", body: "a bug" }),
 ];
 
-test("what the checkers confirmed or left unsure is listed in area order, each with its ref", () => {
+test("what the check across areas confirmed is posted at its weight, what it left unsure as Unsure, weightiest first, and nothing it rejected", () => {
   assert.deepEqual(
-    listCheckedFindings(CHECKS).map(({ ref, weight, body }) => [ref, weight, body]),
-    [
-      ["1.1", "Nit", "a nit"],
-      ["2.1", "Unsure", "can't settle"],
-      ["2.2", "Important", "a bug"],
-    ],
-  );
-});
-
-test("every finding the checkers kept is posted, weightiest first, without a check across areas", () => {
-  assert.deepEqual(
-    listToPost(listCheckedFindings(CHECKS), null).map(({ weight, body }) => [weight, body]),
+    listToPost(JUDGED).map(({ weight, body }) => [weight, body]),
     [
       ["Important", "a bug"],
       ["Unsure", "can't settle"],
@@ -76,186 +44,21 @@ test("every finding the checkers kept is posted, weightiest first, without a che
   );
 });
 
-test("the check across areas drops only the later repeats it names, and adds what it found", () => {
-  const across = {
-    duplicates: repeats([["2.2", "1.1"]]),
-    added: [
-      finding({ weight: "Pre-existing", body: "spans two areas" }),
-      finding({ weight: "Serious", body: "no such weight" }),
-      finding({ path: "", body: "nowhere" }),
-    ],
-    unjudged: [],
-  };
-  assert.deepEqual(
-    listToPost(listCheckedFindings(CHECKS), across).map((item) => item.body),
-    ["a bug", "can't settle", "spans two areas"],
-  );
-});
-
-test("a repeat group the check across areas got wrong never drops a finding nothing else stands in for", () => {
-  const checked = listCheckedFindings(CHECKS);
-  const posted = (/** @type {string[][]} */ duplicates) =>
-    listToPost(checked, { duplicates: repeats(duplicates), added: [], unjudged: [] }).map(
-      (item) => item.body,
-    );
-  assert.deepEqual(posted([["9.9", "1.1"]]), ["a bug", "can't settle", "a nit"]);
-  assert.deepEqual(posted([["1.1", "1.1"]]), ["a bug", "can't settle", "a nit"]);
-  assert.deepEqual(
-    posted([
-      ["1.1", "2.2"],
-      ["2.2", "1.1"],
-    ]),
-    ["a nit", "can't settle"],
-  );
-  assert.deepEqual(
-    posted([
-      ["2.1", "1.1"],
-      ["1.1", "2.2"],
-    ]),
-    ["a bug", "can't settle"],
-  );
-  assert.deepEqual(
-    posted([
-      ["1.1", "2.2"],
-      ["2.1", "1.1"],
-    ]),
-    ["a nit", "can't settle"],
-  );
-});
-
-test("a finding that stands in for its repeats takes the heaviest weight a checker settled", () => {
-  const checked = listCheckedFindings(CHECKS);
-  const posted = (/** @type {string[][]} */ duplicates) =>
-    listToPost(checked, { duplicates: repeats(duplicates), added: [], unjudged: [] }).map(
-      ({ weight, body }) => [weight, body],
-    );
-  assert.deepEqual(posted([["1.1", "2.2"]]), [
-    ["Important", "a nit"],
-    ["Unsure", "can't settle"],
-  ]);
-  assert.deepEqual(posted([["2.2", "1.1"]]), [
-    ["Important", "a bug"],
-    ["Unsure", "can't settle"],
-  ]);
-  assert.deepEqual(posted([["1.1", "2.1"]]), [
-    ["Important", "a bug"],
-    ["Nit", "a nit"],
-  ]);
-  assert.deepEqual(posted([["2.1", "1.1"]]), [
-    ["Important", "a bug"],
-    ["Nit", "can't settle"],
-  ]);
-  assert.deepEqual(
-    posted([
-      ["2.2", "1.1"],
-      ["2.1", "2.2"],
-    ]),
-    [
-      ["Important", "a bug"],
-      ["Unsure", "can't settle"],
-    ],
-  );
-});
-
-test("a finding that can't be posted neither leads nor joins a group", () => {
+test("a finding that can't be posted is left out rather than stopping the post", () => {
   const unpostable = [
-    finding({ weight: "Minor", body: "odd weight" }),
-    finding({ weight: "Important", body: "" }),
-    finding({ weight: "Important", path: "", body: "nowhere" }),
+    finding({ verdict: "confirmed", weight: "Minor", body: "odd weight" }),
+    finding({ verdict: "confirmed", weight: "Important", body: "" }),
+    finding({ verdict: "confirmed", weight: "Important", path: "", body: "nowhere" }),
+    finding({ verdict: "confirmed", path: 3, body: "a number for a path" }),
+    finding({ verdict: "confirmed", body: 5 }),
+    finding({ verdict: "maybe", body: "no such verdict" }),
   ];
-  for (const bad of unpostable) {
-    const checked = [
-      { ...finding({ weight: "Unsure", body: "can't settle" }), ref: "1.1" },
-      { ...bad, ref: "2.1" },
-    ];
-    const posted = (/** @type {string[][]} */ duplicates) =>
-      listToPost(checked, { duplicates: repeats(duplicates), added: [], unjudged: [] }).map(
-        ({ weight, body }) => [weight, body],
-      );
-    assert.deepEqual(posted([["1.1", "2.1"]]), [["Unsure", "can't settle"]], bad.body);
-    assert.deepEqual(posted([["2.1", "1.1"]]), [["Unsure", "can't settle"]], bad.body);
-    assert.deepEqual(posted([["2.1"]]), [["Unsure", "can't settle"]], bad.body);
-  }
-});
-
-test("a finding of another shape the check across areas added is left out rather than stopping the post", () => {
-  const checks = [{ area: 1, items: [finding({ verdict: "confirmed" })] }];
-  const across = readAcross(
-    JSON.stringify({
-      duplicates: [],
-      added: [
-        null,
-        "a string",
-        { weight: "Nit", path: 3, body: "a number for a path" },
-        { weight: "Nit", path: "a.js", body: 5 },
-      ],
-      unjudged: [
-        null,
-        "a string",
-        { why: "names no file" },
-        { file: "b.js" },
-        { file: "a.js", why: "too big" },
-      ],
-    }),
-  );
-  assert.deepEqual(across?.unjudged, [{ file: "a.js", why: "too big" }]);
   assert.deepEqual(
-    listToPost(listCheckedFindings(checks), across).map(({ body }) => body),
-    [finding({}).body],
+    listToPost([...unpostable, finding({ verdict: "confirmed", body: "kept" })]).map(
+      ({ body }) => body,
+    ),
+    ["kept"],
   );
-});
-
-test("a check across areas that gave no answer, or one of another shape, reads as none", () => {
-  assert.equal(readAcross(undefined), null);
-  assert.equal(readAcross("not json"), null);
-  assert.equal(readAcross('{"findings": []}'), null);
-  const duplicates = [
-    { refs: ["1.1", "2.1"], body: "in both apps" },
-    null,
-    ["1.2"],
-    "1.3",
-    { refs: "1.4" },
-    { refs: ["1.5", 5] },
-    { refs: ["1.6"], body: 6 },
-  ];
-  assert.deepEqual(readAcross(JSON.stringify({ duplicates, added: [], unjudged: "x" })), {
-    duplicates: [
-      { refs: ["1.1", "2.1"], body: "in both apps" },
-      { refs: ["1.6"], body: "" },
-    ],
-    added: [],
-    unjudged: [],
-  });
-});
-
-test("a finding that stands in for its repeats says what the check across areas wrote of every place, or else keeps its own words", () => {
-  const checked = listCheckedFindings(CHECKS);
-  const posted = (/** @type {Across["duplicates"]} */ duplicates) =>
-    listToPost(checked, { duplicates, added: [], unjudged: [] }).map(({ path, line, body }) => [
-      path,
-      line,
-      body,
-    ]);
-  assert.deepEqual(posted([{ refs: ["2.2", "1.1"], body: "a bug, here and in mlb" }]), [
-    ["shared/page/sheet.js", 12, "a bug, here and in mlb"],
-    ["shared/page/sheet.js", 12, "can't settle"],
-  ]);
-  assert.deepEqual(posted([{ refs: ["2.2", "1.1"], body: "" }]), [
-    ["shared/page/sheet.js", 12, "a bug"],
-    ["shared/page/sheet.js", 12, "can't settle"],
-  ]);
-  for (const [lastWords, shown] of [
-    ["the bug in both apps and the nit", "the bug in both apps and the nit"],
-    ["", "the bug in both apps"],
-  ])
-    assert.deepEqual(
-      posted([
-        { refs: ["2.2", "1.1"], body: "the bug in both apps" },
-        { refs: ["2.2", "2.1"], body: lastWords },
-      ]),
-      [["shared/page/sheet.js", 12, shown]],
-      `a second group led by the same ref, with ${lastWords ? "words" : "none"}`,
-    );
 });
 
 /**
@@ -436,13 +239,9 @@ test("a finding that names no line goes on its file without one, or off the pull
       body.path === undefined ||
       (body.subject_type === "file" && body.path !== "apps/wnba/page/js/app.js"),
   );
-  const checks = [
-    {
-      area: 1,
-      items: [finding({ verdict: "confirmed", weight: "Important", line: 0, body: "whole file" })],
-    },
-  ];
-  const wholeFile = listToPost(listCheckedFindings(checks), null);
+  const wholeFile = listToPost([
+    finding({ verdict: "confirmed", weight: "Important", line: 0, body: "whole file" }),
+  ]);
   const offFile = finding({
     weight: "Unsure",
     path: "apps/wnba/page/js/app.js",
@@ -469,34 +268,15 @@ test("a finding that names no line goes on its file without one, or off the pull
 });
 
 test("a finding whose line is missing or isn't a whole number goes on its file without one, or off the pull request's files by its file alone", async () => {
-  const checks = [
-    {
-      area: 1,
-      items: [
-        {
-          verdict: "confirmed",
-          weight: "Important",
-          path: "shared/page/sheet.js",
-          body: "no line",
-        },
-      ],
-    },
-  ];
-  const across = readAcross(
-    JSON.stringify({
-      duplicates: [],
-      added: [
-        finding({
-          weight: "Unsure",
-          path: "shared/page/tape.js",
-          line: "3",
-          body: "a line as text",
-        }),
-      ],
-      unjudged: [],
+  const findings = listToPost([
+    { verdict: "confirmed", weight: "Important", path: "shared/page/sheet.js", body: "no line" },
+    finding({
+      verdict: "unsure",
+      path: "shared/page/tape.js",
+      line: "3",
+      body: "a line as text",
     }),
-  );
-  const findings = listToPost(listCheckedFindings(checks), across);
+  ]);
   for (const isFileTaken of [true, false]) {
     const { calls, callGitHub } = fakeGitHub(
       (body) => body.path === undefined || (isFileTaken && body.subject_type === "file"),
@@ -531,27 +311,21 @@ test("a finding whose line is missing or isn't a whole number goes on its file w
   }
 });
 
-test("a finding said twice word for word is posted once, at the heaviest weight a checker settled", () => {
-  const posted = (
-    /** @type {ReturnType<typeof finding>[]} */ checked,
-    /** @type {ReturnType<typeof finding>[]} */ added,
-  ) =>
-    listToPost(
-      checked.map((item, index) => ({ ...item, ref: `1.${index + 1}` })),
-      { duplicates: [], added, unjudged: [] },
-    ).map(({ weight, line, body }) => [weight, line, body]);
+test("a finding said twice word for word is posted once, at the heaviest weight the check settled", () => {
+  const posted = (/** @type {ReturnType<typeof finding>[]} */ judged) =>
+    listToPost(judged).map(({ weight, line, body }) => [weight, line, body]);
   assert.deepEqual(
-    posted(
-      [finding({ weight: "Nit", line: 30, body: "said twice" })],
-      [finding({ weight: "Important", line: 12, body: "said twice" })],
-    ),
+    posted([
+      finding({ verdict: "confirmed", weight: "Nit", line: 30, body: "said twice" }),
+      finding({ verdict: "confirmed", weight: "Important", line: 12, body: "said twice" }),
+    ]),
     [["Important", 30, "said twice"]],
   );
   assert.deepEqual(
-    posted(
-      [finding({ weight: "Unsure", line: 12, body: "said twice" })],
-      [finding({ weight: "Nit", line: 30, body: "said twice" })],
-    ),
+    posted([
+      finding({ verdict: "unsure", weight: "Important", line: 12, body: "said twice" }),
+      finding({ verdict: "confirmed", weight: "Nit", line: 30, body: "said twice" }),
+    ]),
     [["Nit", 12, "said twice"]],
   );
 });
@@ -638,41 +412,10 @@ test("a finding already posted in any form isn't posted again, and counts as new
   );
 });
 
-test("a stage's checks are read as the checkers leave them, each with its area, and no other stage's", () => {
-  const folder = mkdtempSync(join(tmpdir(), "post-review-"));
-  const record = (/** @type {string} */ body) =>
-    JSON.stringify({ items: [finding({ verdict: "confirmed", body })], unjudged: [] });
-  writeFileSync(join(folder, "check-push-10.json"), record("ten"));
-  writeFileSync(join(folder, "check-push-1.json"), record("one"));
-  writeFileSync(join(folder, "check-final-1.json"), record("final"));
-  writeFileSync(join(folder, "candidates-push-1.json"), "[]");
-  assert.deepEqual(
-    listCheckedFindings(readChecks(folder, "push", 10)).map(({ ref, body }) => [ref, body]),
-    [
-      ["1.1", "one"],
-      ["10.1", "ten"],
-    ],
-  );
-});
-
-test("a stage's count of areas must be named, so a job that lost it stops rather than posting nothing", () => {
-  assert.equal(readAreaCount("3"), 3);
-  for (const areas of [undefined, "", "0", "two", "1.5"])
-    assert.throws(() => readAreaCount(areas), /AREAS must name how many areas/, String(areas));
-});
-
 test("the posting step reads every finding already on the pull request, and the check across areas' answer", async () => {
   const folder = mkdtempSync(join(tmpdir(), "post-review-"));
   const onLine = finding({ body: "on its line" });
   const offFile = finding({ path: "apps/wnba/page/js/app.js", body: "elsewhere" });
-  const repeat = finding({ path: "apps/mlb/page/js/app.js", body: "the same, in mlb" });
-  const record = (/** @type {object[]} */ items) =>
-    JSON.stringify({
-      items: items.map((item) => ({ ...item, ids: ["bugs-1"], verdict: "confirmed" })),
-      unjudged: [],
-    });
-  writeFileSync(join(folder, "check-push-1.json"), record([onLine, offFile]));
-  writeFileSync(join(folder, "check-push-2.json"), record([repeat]));
   const bot = { login: "github-actions[bot]" };
   const lineComment = {
     user: bot,
@@ -686,45 +429,23 @@ test("the posting step reads every finding already on the pull request, and the 
     if (path.startsWith("/pulls/7/comments")) return [lineComment];
     return path.startsWith("/issues/7/comments") ? [offDiffComment] : [];
   };
-  const inputs = { folder, stage: "push", areaCount: 2, pullNumber: "7" };
+  const inputs = { folder, pullNumber: "7" };
   await assert.rejects(
     readPostInputs(callGitHub, inputs),
     /check across areas didn't leave its answer/,
   );
-  const across = {
-    duplicates: repeats([["1.1", "2.1"]]),
-    added: [finding({ body: "spans two areas" })],
-    unjudged: [],
-  };
-  writeFileSync(join(folder, "across-push.json"), JSON.stringify(across));
+  const items = [
+    { ...onLine, ids: ["1.1"], verdict: "confirmed" },
+    { ...offFile, ids: ["1.2", "2.1"], verdict: "confirmed" },
+    { ...finding({ body: "spans two areas" }), ids: [], verdict: "confirmed" },
+    { ...finding({ body: "turned down" }), ids: ["2.2"], verdict: "rejected" },
+  ];
+  writeFileSync(join(folder, ACROSS_RECORD), JSON.stringify({ items, unjudged: [] }));
   const read = await readPostInputs(callGitHub, inputs);
   assert.deepEqual(
     read.findings.map((item) => item.body),
     ["on its line", "elsewhere", "spans two areas"],
   );
-  assert.deepEqual(read.across, across);
   assert.deepEqual([...(read.posted.get(nameFinding(onLine)) ?? [])], [EARLIER]);
   assert.deepEqual([...(read.posted.get(nameFinding(offFile)) ?? [])], [EARLIER]);
-});
-
-test("a stage of one area posts its checker's findings with no check across areas", async () => {
-  const folder = mkdtempSync(join(tmpdir(), "post-review-"));
-  writeFileSync(
-    join(folder, "check-push-1.json"),
-    JSON.stringify({
-      items: [{ ...finding({ body: "alone" }), ids: ["bugs-1"], verdict: "confirmed" }],
-      unjudged: [],
-    }),
-  );
-  const read = await readPostInputs(async () => [], {
-    folder,
-    stage: "push",
-    areaCount: 1,
-    pullNumber: "7",
-  });
-  assert.deepEqual(
-    read.findings.map((item) => item.body),
-    ["alone"],
-  );
-  assert.equal(read.across, null);
 });
