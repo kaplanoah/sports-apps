@@ -14,6 +14,7 @@ import { easeBackOpen, easeClosed, isEasingClosed, redrawEased } from "./eased-r
 import { html, noteHeight, setHtml } from "./html.js";
 import {
   chooseReAddNote,
+  isLookChangeOnReturn,
   isLookSwitched,
   isReAddNoteDismissed,
   keepLookSwitched,
@@ -219,6 +220,33 @@ function renewIfDue() {
   if (Date.now() >= renewDueAt) renewHandoff();
 }
 
+// A page that opens reads the phone's look as it opens, so only a return counts.
+let shownAt = -Infinity;
+
+function keepReturnTime() {
+  shownAt = performance.now();
+}
+
+// A close frozen while the page was away would finish once it's back and empty the note drawn
+// meanwhile, so it stops, and the note opens from wherever the close reached.
+function drawNoteAtOnce() {
+  const note = findNote();
+  if (isEasingClosed(note)) easeBackOpen(note, drawNote);
+  else drawNote();
+  followHandoff();
+}
+
+// On System, the icon re-adding gives follows the phone's setting. A change that comes as the page
+// comes back takes the note to its new state at once, in the same frame as the theme, to match the
+// app the phone has just shown in its new look. Any other eases the note in a task of its own, as
+// for a pick, since Safari reports it in the middle of drawing a frame, which an easing started
+// then misses, showing the note at its end for that frame.
+function followPhoneLook() {
+  const change = { isHidden: document.hidden, changedAt: performance.now(), shownAt };
+  if (isLookChangeOnReturn(change)) drawNoteAtOnce();
+  else setTimeout(updateNote);
+}
+
 function dismissNote() {
   keepReAddNoteDismissed();
   updateNote();
@@ -269,9 +297,7 @@ export function startAppearance(looks) {
     showChosenTheme();
     updateNote();
   });
-  // On System, the icon re-adding gives follows the phone's setting. Safari reports a change of it
-  // in the middle of drawing a frame, which an easing started then misses, showing the note at its
-  // end for that frame, so the note eases in a task of its own, as for a pick.
-  darkScheme.addEventListener("change", () => setTimeout(updateNote));
+  watchTimeAway(keepReturnTime);
+  darkScheme.addEventListener("change", followPhoneLook);
   wireNote();
 }
