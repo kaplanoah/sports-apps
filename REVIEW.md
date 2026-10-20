@@ -49,7 +49,7 @@ In order of what has mattered here.
    A link from a feed reaches an `href` only through `isWebAddress`.
 5. **Security.**
    Text reaching the page without the `html` template, anything that weakens the `APP_KEY` check or the access gate,
-   and anything the public-repo bullet in `.claude/rules/tooling.md` keeps out of the repo, wherever it shows: code, docs, logs, issues, or a Diagnostics report.
+   and anything AGENTS.md's public-repo bullet keeps out of the repo, wherever it shows: code, docs, logs, issues, or a Diagnostics report.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.

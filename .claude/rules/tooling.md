@@ -34,12 +34,7 @@ paths:
   so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
   The address with the key keeps working as it was, and phones stay signed in there.
   Keep the host out of the repo, as the Worker's own address is.
-- The repo is public.
-  Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, page hosts, or personal data; use placeholders in tests and docs:
-  `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
-  which the root's `tests/no-secrets.test.js` tells from a real one, failing on any real one in a tracked file.
-  Nothing a change logs or posts where the public can read it, like a workflow's log or an issue, carries any of these either.
-- Mask, in anything a workflow logs or posts, what the bullet above keeps out of the repo,
+- Mask, in anything a workflow logs or posts, what AGENTS.md's public-repo bullet keeps out of the repo,
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.
 - An app's deploy is skipped when nothing but docs, tests, tooling,
   and other apps' folders changed since its live version's commit; the root's `worker/deploy-scope.mjs` lists those files.

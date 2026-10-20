@@ -90,7 +90,11 @@
   `beta` is a scratch branch: never commit to it or open a PR from it.
 - A red change is one only the owner's phone can test: `.claude/rules/red-change.md` says what makes one, and the `ship` skill how it ships.
 - `npm run rollback`, `set-app-key`, `set-access-code`, and `set-page-host` change the live apps: run each only as `.claude/rules/tooling.md` says.
-- The repo is public: never commit or post secrets, keys, addresses, or personal data, as `.claude/rules/tooling.md` lists.
+- The repo is public.
+  Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, page hosts, or personal data; use placeholders in tests and docs:
+  `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
+  which the root's `tests/no-secrets.test.js` tells from a real one, failing on any real one in a tracked file.
+  Nothing a change logs or posts where the public can read it, like a workflow's log or an issue, carries any of these either.
 - The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
   each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
   Never ask for one in chat or put one in environment variables, code, or commits.
@@ -179,6 +183,7 @@ When a step says to go back to an earlier step, continue in order from there.
 
 README and anything user-facing: be clear, direct, and concise.
 
-In this file, the rule files, the skills, and `REVIEW.md`, put each sentence on a line of its own, at 60 words or fewer,
-and keep this file to 200 lines, so a rule only some work needs goes in its rule file or skill (the root's `tests/agents-lines.test.js`).
+In this file, the rule files, the skills, and `REVIEW.md`, start each sentence on a line of its own,
+break a long one after its commas, keep each to 60 words or fewer, and write a long catalog as a list.
+Keep this file to 200 lines, so a rule only some work needs goes in its rule file or skill (the root's `tests/agents-lines.test.js`).
 Each rule file's `paths` match files in the repo (the root's `tests/rule-files.test.js`).

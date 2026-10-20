@@ -12,8 +12,8 @@ function readListedModules(text) {
     const heading = line.match(/^## `(shared\/[^`]+\/)`$/);
     if (heading) folder = heading[1];
     else if (/^## /.test(line)) folder = null;
-    if (!folder || heading) continue;
-    for (const [, name] of line.matchAll(/`([\w.-]+\.(?:js|css))`/g)) listed.add(folder + name);
+    const item = line.match(/^- `([\w.-]+\.(?:js|css))`:/);
+    if (folder && item) listed.add(folder + item[1]);
   }
   return listed;
 }
@@ -38,11 +38,19 @@ test("the shared modules' list names no module that's gone", () => {
   );
 });
 
-test("a module is listed under the heading of its folder", () => {
-  const text =
-    "## `shared/page/`\n\n- `a.js`: one\n- `b.css` and `c.js`\n\n## `shared/worker/`\n\n- `a.js`: two\n";
+test("a module is listed by the item it starts, under the heading of its folder", () => {
+  const text = [
+    "- `before.js`: before any folder",
+    "## `shared/page/`",
+    "- `a.js`: one",
+    "- `b.css`: what `c.js` decides",
+    "## `shared/worker/`",
+    "- `a.js`: two",
+    "## Other",
+    "- `after.js`: past the folders",
+  ].join("\n");
   assert.deepEqual(
     [...readListedModules(text)],
-    ["shared/page/a.js", "shared/page/b.css", "shared/page/c.js", "shared/worker/a.js"],
+    ["shared/page/a.js", "shared/page/b.css", "shared/worker/a.js"],
   );
 });
