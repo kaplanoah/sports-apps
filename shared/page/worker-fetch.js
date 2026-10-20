@@ -6,7 +6,7 @@ import { readWorkerError } from "./worker-error.js";
 
 /** @typedef {{ timeoutMs: number, isExpected: (body: any) => boolean }} ReadRules */
 
-/** @type {Map<string, { at: number, promise: Promise<any> }>} */
+/** @type {Map<string, { at: number, until: number, promise: Promise<any> }>} */
 const recentReads = new Map();
 
 /**
@@ -47,10 +47,21 @@ function forgetRead(path, promise) {
  * @returns {Promise<any>}
  */
 export function fetchFromWorker(path, { reuseMs, ...rules }) {
+  const now = Date.now();
+  forgetReadsPastReuse(now);
   const kept = recentReads.get(path);
-  if (kept && Date.now() - kept.at < reuseMs) return kept.promise;
+  if (kept && now - kept.at < reuseMs) return kept.promise;
   const promise = requestFromWorker(path, rules);
-  recentReads.set(path, { at: Date.now(), promise });
+  recentReads.set(path, { at: now, until: now + reuseMs, promise });
   promise.catch(() => forgetRead(path, promise));
   return promise;
 }
+
+// A read past the reuse time it was made with is let go, so reads never pile up as sheets open.
+/** @param {number} now */
+function forgetReadsPastReuse(now) {
+  for (const [path, { until }] of recentReads) if (until <= now) recentReads.delete(path);
+}
+
+/** How many reads are kept for reuse. */
+export const countKeptReads = () => recentReads.size;

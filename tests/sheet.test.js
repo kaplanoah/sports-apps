@@ -328,17 +328,27 @@ function createRowDialog(ids, partsById = {}, { isMoving = false } = {}) {
         const backButton = sheet.append(createBackButton());
         const body = sheet.append(new FakeElement({ id: `${id}Body` }));
         body.setAttribute("data-last-drawn", "");
-        const parts = { closeButton: new FakeElement(), backButton, ...partsById[id] };
-        wireSheet(/** @type {any} */ (sheet), /** @type {any} */ (parts));
-        return [id, { sheet, body, ...parts }];
+        const closeButton = sheet.append(new FakeElement({ className: "sheet-close" }));
+        wireSheet(/** @type {any} */ (sheet), /** @type {any} */ (partsById[id] ?? {}));
+        return [id, { sheet, body, closeButton, backButton }];
       }),
     )
   );
   return { dialog, row, sheets };
 }
 
-/** @param {EventTarget} target */
-const click = (target) => target.dispatchEvent(new Event("click"));
+/**
+ * A click on `target`, heard by it and then by each element it's in, as a browser's bubbles.
+ * @param {FakeElement} target
+ */
+function click(target) {
+  for (let element = /** @type {FakeElement | null} */ (target); element;) {
+    const event = new Event("click");
+    Object.defineProperty(event, "target", { value: target });
+    element.dispatchEvent(event);
+    element = element.parentElement;
+  }
+}
 
 /**
  * A sheet's id, or "copy" for a copy of one, which has none.
@@ -381,9 +391,10 @@ const open = (sheet) => openSheet(/** @type {any} */ (sheet));
 
 /**
  * A sheet's code that shows what it's opened to show, as `{ key }`, and lists each opening it
- * draws and each subject it shows again.
+ * draws and each subject it shows again, or, unless `canReopen`, that it couldn't.
+ * @param {{ canReopen?: boolean }} [options]
  */
-function createShowing() {
+function createShowing({ canReopen = true } = {}) {
   /** @type {unknown} */
   let shown = null;
   /** @type {string[]} */
@@ -394,9 +405,9 @@ function createShowing() {
   const keeper = {
     read: () => shown,
     reopen: (subject) => {
-      shown = subject;
       reopened.push(subject);
-      return true;
+      if (canReopen) shown = subject;
+      return canReopen;
     },
   };
   /**
@@ -415,12 +426,13 @@ function createShowing() {
 }
 
 /**
- * A row of a game's sheet and a team's, each showing what it's opened to show.
- * @param {{ isMoving?: boolean }} [options]
+ * A row of a game's sheet and a team's, each showing what it's opened to show, and, unless
+ * `canReopen`, unable to show again what a copy showed.
+ * @param {{ isMoving?: boolean, canReopen?: boolean }} [options]
  */
-function createShowingRow(options) {
-  const game = createShowing();
-  const team = createShowing();
+function createShowingRow({ canReopen, ...options } = {}) {
+  const game = createShowing({ canReopen });
+  const team = createShowing({ canReopen });
   /** @type {string[]} */
   const forgotten = [];
   const { dialog, row, sheets } = createRowDialog(
@@ -719,6 +731,28 @@ test("a sheet opened again from itself to show something else comes in over itse
   dialog.close();
 });
 
+test("a copy left on top, whose sheet can't show again what it showed, still steps back and closes with its own buttons", () => {
+  const { dialog, row, sheets, openGame, openTeam } = createShowingRow({ canReopen: false });
+  openTeam("NYL");
+  openGame("game-1");
+  openTeam("LVA");
+  openGame("game-2");
+  click(sheets.gameSheet.backButton);
+  click(sheets.teamSheet.backButton);
+  const [gameCopy, teamCopy] = row.children.filter((sheet) => !sheet.id);
+  assert.equal(findReachable(row), "copy");
+  assert.equal(readBackLabel(gameCopy.children[0])?.text, "Team");
+
+  click(gameCopy.children[0]);
+  assert.deepEqual(listInRow(row), ["copy"]);
+  assert.equal(
+    row.children.find((sheet) => !sheet.hidden),
+    teamCopy,
+  );
+  click(/** @type {FakeElement} */ (teamCopy.querySelector(".sheet-close")));
+  assert.equal(dialog.open, false);
+});
+
 test("closing the dialog takes every copy out of the row", () => {
   const { dialog, row, openGame, openTeam } = createShowingRow();
   openTeam("NYL");
@@ -775,10 +809,7 @@ function createPhoneSheet(parts = {}) {
       return motion;
     },
   });
-  wireSheet(/** @type {any} */ (dialog), {
-    closeButton: /** @type {any} */ (new EventTarget()),
-    ...parts,
-  });
+  wireSheet(/** @type {any} */ (dialog), parts);
   open(dialog);
   /**
    * @param {string} type

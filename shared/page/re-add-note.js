@@ -7,6 +7,8 @@
 // icon, and storage can refuse access, as in a private window, and then they last until the page
 // reloads.
 
+import { readStoredText, storeText } from "./local-storage.js";
+
 const DISMISSED_KEY = "reAddNoteDismissed";
 const SWITCHED_KEY = "lookSwitched";
 
@@ -48,28 +50,13 @@ export function chooseReAddNote({ isIosApp, choice, icon, phoneLook, isSwitched,
 }
 
 /** @param {string} key */
-const isKept = (key) => {
-  try {
-    return localStorage.getItem(key) !== null;
-  } catch {
-    return false;
-  }
-};
-
-/** @param {string} key @param {string} value */
-const keep = (key, value) => {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* it lasts until the page reloads */
-  }
-};
+const isKept = (key) => readStoredText(key) !== null;
 
 export const isReAddNoteDismissed = () => isDismissedInMemory || isKept(DISMISSED_KEY);
 
 export function keepReAddNoteDismissed() {
   isDismissedInMemory = true;
-  keep(DISMISSED_KEY, "dismissed");
+  storeText(DISMISSED_KEY, "dismissed");
 }
 
 /** Whether the viewer has switched looks on this install. */
@@ -77,5 +64,5 @@ export const isLookSwitched = () => isSwitchedInMemory || isKept(SWITCHED_KEY);
 
 export function keepLookSwitched() {
   isSwitchedInMemory = true;
-  keep(SWITCHED_KEY, "switched");
+  storeText(SWITCHED_KEY, "switched");
 }

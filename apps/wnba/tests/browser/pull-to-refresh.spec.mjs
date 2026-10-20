@@ -5,7 +5,7 @@ import {
 } from "../../../../tests/browser/page-left-down.mjs";
 import { findSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
-import { drag, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
+import { drag, dragAlong, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -158,6 +158,62 @@ test("a page let go eases back up", async ({ page }) => {
     () => /** @type {string[]} */ (/** @type {any} */ (window).headerTransitions),
   );
   expect(transitions).toContain("top 0.3s");
+});
+
+test("a page pulled down and back up to where it started settles in place at once", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await openFromHomeScreen(page);
+  await openApp(page);
+  await openGames(page);
+
+  const release = await dragAlong(
+    page,
+    [40, 70, 100, 70, 40].map((y) => ({ x: 200, y })),
+  );
+  await release();
+
+  await expect(page.locator("header.top")).toHaveCSS("top", "auto");
+  await expect(page.locator("header.top")).toHaveCSS("position", "static");
+});
+
+test("a page let go stays held to its pull's place until its own move back ends, not a move inside it or another of its own", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await openFromHomeScreen(page);
+  await openApp(page);
+  await openGames(page);
+  // Right after the page's own handler lets go, a part inside the first moved part ends a move of
+  // its top, and then the moved part ends a move of something other than its top.
+  await page.evaluate(() =>
+    document.addEventListener("touchend", () => {
+      const moved = /** @type {HTMLElement} */ (
+        [...document.body.children].find((part) => /** @type {HTMLElement} */ (part).style.top)
+      );
+      const inside = /** @type {HTMLElement} */ (moved.querySelector("*"));
+      /**
+       * @param {HTMLElement} part
+       * @param {string} propertyName
+       */
+      const endMove = (part, propertyName) => {
+        part.dispatchEvent(new TransitionEvent("transitionend", { bubbles: true, propertyName }));
+        return moved.style.position;
+      };
+      Object.assign(window, {
+        positionsAfterOtherMoves: [endMove(inside, "top"), endMove(moved, "opacity")],
+      });
+    }),
+  );
+
+  await pullDown(page, 60);
+
+  expect(await page.evaluate(() => /** @type {any} */ (window).positionsAfterOtherMoves)).toEqual([
+    "relative",
+    "relative",
+  ]);
+  await expect(page.locator("header.top")).toHaveCSS("top", "auto");
 });
 
 test("a swipe down in an open sheet is the sheet's, not a pull", async ({ page }) => {

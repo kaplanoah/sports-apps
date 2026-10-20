@@ -127,7 +127,7 @@ const pick = (page, name) =>
   page.locator("#settingsDialog").getByRole("radio", { name, exact: true }).check();
 
 /** @param {import("@playwright/test").Page} page */
-const closeSettings = (page) => page.locator("#settingsCloseBtn").click();
+const closeSettings = (page) => page.locator("#settingsDialog .settings-body .sheet-close").click();
 
 /**
  * In an iPhone's Home Screen app added on the dark look, picking the light one in settings shows

@@ -25,6 +25,7 @@
 //   (season-header.js), and nothing asks for an animation frame.
 // - Nothing filters what is behind it: no backdrop-filter anywhere.
 
+import { followPath, readPath } from "./element-path.js";
 import { noteSheetStep } from "./sheet-log.js";
 import { closeOnCancel, closeOnSwipeDown, closeSheet } from "./sheet-swipe.js";
 import { createSlidePanels } from "./slide-panels.js";
@@ -35,10 +36,10 @@ import { createSlidePanels } from "./slide-panels.js";
  * @typedef {{ read: () => unknown, reopen: (subject: any) => boolean }} SheetKeeper
  */
 /**
+ * A sheet's `.sheet-close` button closes its dialog, and its `.sheet-back` button, shown in place
+ * of it when the sheet opened from another, with its `.sheet-back-label` naming that one, steps
+ * back to it.
  * @typedef {object} SheetParts
- * @property {HTMLElement} closeButton
- * @property {HTMLElement} [backButton] shown in place of the close button when the sheet opened
- *   from another, with its `.sheet-back-label` naming that one
  * @property {(target: EventTarget) => boolean} [isOwnGesture] a touch on a target this claims,
  *   like a drag handle or a picker, never moves the sheet
  * @property {() => HTMLElement} [findScroller] what scrolls the content shown, when the sheet
@@ -105,14 +106,11 @@ export const readSubject = (sheet) =>
   copies.has(sheet) ? copies.get(sheet)?.subject : (sheetParts.get(sheet)?.keeper?.read() ?? null);
 
 /**
- * A copy's own back button, which it holds as the sheet's was when it was copied.
+ * A sheet's back button, which a copy holds as its sheet's was when it was copied.
  * @param {HTMLElement} sheet
- * @returns {HTMLElement | undefined}
  */
 export const findBackButton = (sheet) =>
-  copies.has(sheet)
-    ? /** @type {HTMLElement} */ (sheet.querySelector(".sheet-back"))
-    : sheetParts.get(sheet)?.backButton;
+  /** @type {HTMLElement | null} */ (sheet.querySelector(".sheet-back"));
 
 /**
  * The sheet's id, or its sheet's for a copy.
@@ -145,7 +143,7 @@ export const listOpenDialogs = () =>
 const placeSheet = (index, position) => Math.max(-1, Math.min(index - position, 1));
 
 /**
- * @param {HTMLElement | undefined} button
+ * @param {HTMLElement | null} button
  * @param {HTMLElement | undefined} before the sheet it steps back to, if any
  */
 function labelBackButton(button, before) {
@@ -186,21 +184,6 @@ function letGoOf(sheet) {
 }
 
 /**
- * Where `element` sits under `ancestor`, by child indexes.
- * @param {Element} ancestor
- * @param {Element} element
- */
-function findPath(ancestor, element) {
-  /** @type {number[]} */
-  const path = [];
-  for (let child = element; child !== ancestor && child.parentElement;) {
-    path.unshift([...child.parentElement.children].indexOf(child));
-    child = child.parentElement;
-  }
-  return path;
-}
-
-/**
  * Where the sheet, and each part of it that scrolls, is scrolled.
  * @param {HTMLElement} sheet
  * @returns {ScrollSpot[]}
@@ -209,7 +192,7 @@ const listScrolls = (sheet) =>
   [sheet, ...sheet.querySelectorAll("*")]
     .filter((element) => element.scrollTop || element.scrollLeft)
     .map((element) => ({
-      path: findPath(sheet, element),
+      path: readPath(sheet, element),
       top: element.scrollTop,
       left: element.scrollLeft,
     }));
@@ -220,11 +203,7 @@ const listScrolls = (sheet) =>
  */
 function restoreScrolls(sheet, scrolls) {
   for (const { path, top, left } of scrolls) {
-    /** @type {Element | undefined} */
-    const element = path.reduce(
-      (/** @type {Element | undefined} */ parent, index) => parent?.children[index],
-      sheet,
-    );
+    const element = followPath(sheet, path);
     if (element) Object.assign(element, { scrollTop: top, scrollLeft: left });
   }
 }
@@ -425,10 +404,12 @@ export function openSheet(sheet, opening) {
   sheet.scrollTop = 0;
 }
 
-/** @param {HTMLElement} sheet */
-function stepBack(sheet) {
-  const dialog = findDialog(sheet);
-  const index = listStack(dialog).indexOf(sheet);
+/**
+ * @param {HTMLDialogElement} dialog
+ * @param {Element} button
+ */
+function stepBack(dialog, button) {
+  const index = listStack(dialog).findIndex((sheet) => sheet.contains(button));
   if (index > 0) slideToSheet(dialog, index - 1);
 }
 
@@ -444,11 +425,15 @@ function forgetDialog(dialog) {
   placeRow(dialog);
 }
 
-// A click on the backdrop lands on the dialog itself; its content fills it edge to edge.
+// A click on the backdrop lands on the dialog itself; its content fills it edge to edge. The
+// dialog hears its sheets' buttons, a copy's among them, which keeps no listener of its sheet's.
 /** @param {HTMLDialogElement} dialog */
-function closeOnBackdropClick(dialog) {
+function followClicks(dialog) {
   dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) closeSheet(dialog);
+    const target = /** @type {Element} */ (event.target);
+    const backButton = target.closest(".sheet-back");
+    if (target === dialog || target.closest(".sheet-close")) closeSheet(dialog);
+    else if (backButton) stepBack(dialog, backButton);
   });
 }
 
@@ -472,7 +457,7 @@ const wiredDialogs = new WeakSet();
 function wireDialog(dialog) {
   if (wiredDialogs.has(dialog)) return;
   wiredDialogs.add(dialog);
-  closeOnBackdropClick(dialog);
+  followClicks(dialog);
   closeOnCancel(dialog);
   dialog.addEventListener("close", () => forgetDialog(dialog));
   /** @param {HTMLElement} sheet */
@@ -497,7 +482,5 @@ export function wireSheet(sheet, parts) {
   sheetParts.set(sheet, parts);
   const dialog = findDialog(sheet);
   if (sheet !== dialog) sheet.tabIndex = -1;
-  parts.closeButton.addEventListener("click", () => closeSheet(dialog));
-  parts.backButton?.addEventListener("click", () => stepBack(sheet));
   wireDialog(dialog);
 }

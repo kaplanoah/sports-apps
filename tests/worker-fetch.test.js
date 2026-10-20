@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fetchFromWorker } from "../shared/page/worker-fetch.js";
+import { countKeptReads, fetchFromWorker } from "../shared/page/worker-fetch.js";
 
 const PAGE = "https://wnba-app.example/k3y/";
 const RULES = { reuseMs: 1000, timeoutMs: 5000, isExpected: (body) => body.id === "1" };
@@ -54,6 +54,21 @@ test("each path keeps its own read, and each caller its own reuse time", async (
     reads.map((read) => read.url),
     [`${PAGE}one`, `${PAGE}two`, `${PAGE}one`],
   );
+});
+
+test("reads past their reuse time are let go as the next one is asked for", async (context) => {
+  // Later than any read the other tests kept.
+  context.mock.timers.enable({ apis: ["Date"], now: Date.parse("2100-01-01T00:00:00Z") });
+  startWorker(...Array.from({ length: 4 }, () => ({ body: { id: "1" } })));
+  await fetchFromWorker("gone-1", RULES);
+  await fetchFromWorker("gone-2", RULES);
+  await fetchFromWorker("gone-3", RULES);
+  assert.equal(countKeptReads(), 3);
+
+  context.mock.timers.tick(RULES.reuseMs);
+  await fetchFromWorker("kept", RULES);
+
+  assert.equal(countKeptReads(), 1);
 });
 
 test("a failed read is forgotten, so the next one asks again", async () => {

@@ -231,6 +231,9 @@
   --game-label-offset: -26.5px;
   --game-headline-offset: -1px;
   --game-status-offset: 20.5px;
+  /* A club's name sits over its record or starter, so without a label the score and its status
+     center as a pair, level with the two lines. */
+  --game-unlabeled-lift: calc((var(--game-headline-offset) + var(--game-status-offset)) / 2);
   --game-if-necessary-offset: 26.5px;
   /* Pitch colors run by family: fastballs warm, breaking balls blue, changeups pink. */
   --pitch-four-seam: #bf3623;
