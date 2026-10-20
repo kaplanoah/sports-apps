@@ -34,6 +34,7 @@ Delete it once the app's first PR merges.
 2. **The league's data.** `page/js/snapshot.js` names the league's feeds and turns their answers into one snapshot:
    `buildSnapshot(responses, { season, now })`, with the season's games,
    series, and standings and a `missing` list of feeds that didn't answer,
+   and the starts of games the league put off or called off, read from the schedule and not from one day's games,
    and `choosePollDelay(snapshot, now)`.
    That hands the shared one in `shared/page/poll-schedule.js` whether a game is live, the starts still to come,
    the starts of games the league put off or called off, and the league's live pace.
