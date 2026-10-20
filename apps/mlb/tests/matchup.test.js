@@ -325,7 +325,7 @@ test("a starter outside the qualified starters and short of a quarter of their i
   assert.deepEqual(readClass(markup, "tape-note"), [
     "Rank among qualified starters",
     "ERA and BB/9 ranked by fewest",
-    "Springs has pitched 39 1/3 of the 158 innings needed to qualify",
+    "Springs has pitched 39 1/3 of the 158 innings needed to qualify, too small a sample to fairly compare with qualified starters",
   ]);
 });
 
