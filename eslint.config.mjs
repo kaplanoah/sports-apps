@@ -39,6 +39,7 @@ const DEVICE_STORAGES = ["localStorage", "sessionStorage"];
 // The plain scripts the page loads before its modules, whose functions the page calls.
 export const PLAIN_SCRIPTS = [
   "shared/page/draw-home-screen-asks.js",
+  "shared/page/long-away.js",
   "shared/page/open-last-tab.js",
   "shared/page/pick-theme.js",
   "shared/page/season-header.js",

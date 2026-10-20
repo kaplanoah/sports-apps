@@ -8,7 +8,7 @@ import { renderStampWhen } from "./stamp.js";
 // were last current. A wait that goes on says the server isn't answering, while the page keeps
 // trying.
 
-const UPDATING_WAIT_MS = 2000;
+export const UPDATING_WAIT_MS = 2000;
 const STALLED_WAIT_MS = 10 * 1000;
 const SYNCED_AT_KEY = "syncedAt";
 

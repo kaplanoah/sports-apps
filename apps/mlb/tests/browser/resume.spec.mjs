@@ -3,6 +3,7 @@ import {
   retryReleaseCheck,
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
+import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import {
   test,
   expect,
@@ -13,6 +14,13 @@ import {
   keepUpdatesFromEarlierVisit,
   matchPath,
 } from "./harness.mjs";
+import {
+  SHORT_PHONE,
+  leaveScrolledFor,
+  readNewsPlace,
+  readPageScroll,
+  readSeasonPlace,
+} from "../../../../tests/browser/start-over.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
@@ -253,6 +261,103 @@ test("a page coming back to nothing new lets a faded band pass through the heade
   await expect(stamp).toHaveClass(/caught-up-band/);
   await expect(stamp).toHaveCSS("animation-duration", "3.2s");
   await expect(stamp).toHaveCSS("mask-image", /rgba\(0, 0, 0, 0\.75\)/);
+});
+
+test("a page coming back as the store updates draws once, with the update, never the copy the store held", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await app.updateFromWorker();
+  const stamp = page.locator("#stamp");
+  await expect(stamp).toContainText("Next first pitch");
+  // Only the page's code keeps when it was last current, once it has caught up.
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
+
+  const { texts } = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: async () => {
+      await app.writeWhileAway("live/status", { error: "upstream_error", detail: "", write: "" });
+      app.changeSnapshots((snapshot) => ({ ...snapshot, missing: ["wildCardRank"] }));
+    },
+  });
+
+  expect(texts).toHaveLength(1);
+  expect(texts[0]).toContain("MLB stopped sending wildCardRank");
+});
+
+/**
+ * The Cardinals' final rescored, in a copy of the season the page's socket never hears of.
+ * @param {any} season
+ */
+function rescoreFinal(season) {
+  const game = season.slate.today.games.find((/** @type {any} */ each) => each.away === "STL");
+  game.score = [11, 2];
+  return season;
+}
+
+test("a page whose load failed, coming back as the store updates, never draws the copy the store held, and says it has caught up once it has drawn the update", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await app.updateFromWorker();
+  await page.getByRole("tab", { name: "Games" }).click();
+  const final = page
+    .locator("#seasonGames .game-day.is-today .game-row")
+    .filter({ hasText: "Cardinals" });
+  await expect(final).toContainText("1-2Final");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
+  // Unrouting by the handler too leaves the store's own route, which has the same pattern.
+  const failStore = (route) => route.fulfill({ status: 503, body: "" });
+  await page.route(matchPath("/store/"), failStore);
+  await page.reload();
+  await expect(page.locator("#stamp")).toContainText("Can't reach the page's server");
+
+  const { texts, stampAsCaughtUp } = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: () => app.changeSeasonWhileAway(rescoreFinal),
+    onWake: () => page.unroute(matchPath("/store/"), failStore),
+  });
+
+  expect(texts.filter((text) => text.includes("11-2Final"))).toEqual([]);
+  expect(stampAsCaughtUp).not.toContain("Can't reach the page's server");
+  await expect(final).toContainText("1-2Final");
+});
+
+test.describe("on a short phone", () => {
+  test.use({ viewport: SHORT_PHONE, hasTouch: true, isMobile: true });
+
+  const SIDEWAYS = "#bracketWrap .tree-scroll";
+
+  /**
+   * @param {import("@playwright/test").Page} page
+   * @param {number} awayMs
+   */
+  async function openAndLeaveFor(page, awayMs) {
+    const app = await openApp(page);
+    return leaveScrolledFor(page, {
+      sideways: SIDEWAYS,
+      writeDocument: app.writeFromWorker,
+      awayMs,
+    });
+  }
+
+  test("after two minutes away, the season tab starts over on the part it's named for, each part at its top with the header back and the bracket on its opening round, and News at its top", async ({
+    page,
+  }) => {
+    const { start } = await openAndLeaveFor(page, 2 * MINUTE_MS);
+
+    await expect.poll(() => readSeasonPlace(page, SIDEWAYS)).toEqual(start);
+    await page.getByRole("tab", { name: "News" }).click();
+    expect(await readPageScroll(page)).toBe(0);
+  });
+
+  test("under two minutes away, the season tab and News stay where they were left", async ({
+    page,
+  }) => {
+    const { left, newsPlace } = await openAndLeaveFor(page, MINUTE_MS);
+
+    expect(await readSeasonPlace(page, SIDEWAYS)).toEqual(left);
+    await page.getByRole("tab", { name: "News" }).click();
+    expect(await readNewsPlace(page)).toBe(newsPlace);
+  });
 });
 
 test.describe("on a phone", () => {
