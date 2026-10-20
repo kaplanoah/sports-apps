@@ -38,6 +38,9 @@ paths:
   each command alone, with no pipe, redirect, or command substitution (`findPipeOrRedirect` in `one-command.mjs`).
   It lets a subagent's calls through, and any call when it can't read the transcript.
   CI's review turns hooks off.
+- Another hook there runs `npm ci` as every session starts, when `node_modules` is missing or was installed before `package-lock.json` last changed,
+  judged by the `node_modules/.package-lock.json` npm writes on each install (`.claude/hooks/install-packages.mjs`).
+  It says nothing when it skips, and never stops a session.
 - `npm run rollback -- <app>` puts the app's previous version back at all of its traffic and prints which commit was live and which is now.
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
@@ -53,4 +56,5 @@ paths:
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.
 - An app's deploy is skipped when nothing but docs, tests, tooling,
   and other apps' folders changed since its live version's commit; the root's `worker/deploy-scope.mjs` lists those files.
-  When you add a file that can't change the Worker, add it to that list.
+  It skips the root's `.claude/` folder whole, so a new hook, rule, or skill needs no entry.
+  When you add any other file that can't change the Worker, add it to that list.

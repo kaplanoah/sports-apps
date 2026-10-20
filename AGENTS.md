@@ -63,8 +63,7 @@
   `renderGameRow`, and `listSeasonDays` calls do; never copy it into a second app.
 - Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling.
   How to write them is under "Tests" above and in `.claude/rules/tests.md` and `browser-tests.md`.
-- Commands: `npm ci` once.
-  `npm run check` runs everything CI does, but locally run only what step 2 of "Shipping a change" names.
+- Commands: `npm run check` runs everything CI does, but locally run only what step 2 of "Shipping a change" names.
   `npm run format` fixes formatting.
   Types are checked from JSDoc by `npm run typecheck`; the code stays plain JavaScript.
   `npm run deadcode` runs knip, which fails on unused files, exports, and dependencies: delete them rather than ignoring them.
