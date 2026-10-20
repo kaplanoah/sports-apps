@@ -76,7 +76,7 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
     guessYear: (now) => readEasternDay(now).year,
     keepSeason: (year, season) => {
       if (year !== session.year) session.schedule = null;
-      Object.assign(session, { year, season, problem: "" });
+      Object.assign(session, { year, pickedYear: year, season, problem: "" });
       followSchedule(year, showChange);
       followPlayerIndex(session.db, year, showChange);
       followOvertimes(session.db, year, showChange);
@@ -110,6 +110,7 @@ export async function loadSeason() {
 
 /** @param {number} year */
 export async function showYear(year) {
+  session.pickedYear = year;
   try {
     await reader?.showYear(year);
   } catch {

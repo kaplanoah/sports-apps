@@ -3,6 +3,7 @@ import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { IPHONE_AGENT } from "../../../../tests/browser/devices.mjs";
 import {
   checkNewCurrentSeasonListed,
+  checkPickKeptThroughRedraw,
   checkSeasonsOnFailedList,
   checkSettingsOnReload,
 } from "../../../../tests/browser/settings-reload.mjs";
@@ -164,6 +165,18 @@ test("a reload with settings open shows its seasons, switches, and look picked b
     switchName: "Include content from The Athletic",
     pastSeason: "2025",
     currentSeason: "2026",
+  });
+});
+
+test("a season picked while its record is on its way stays picked as the picker is drawn again meanwhile", async ({
+  page,
+}) => {
+  const app = await openApp(page, WITH_A_PAST_SEASON);
+  await checkPickKeptThroughRedraw({
+    page,
+    pastSeason: "2025",
+    newSeason: 2027,
+    moveCurrentTo: (year) => app.writeFromWorker("live/current", { season: year }),
   });
 });
 

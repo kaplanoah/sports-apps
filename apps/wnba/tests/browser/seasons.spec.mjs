@@ -2,12 +2,10 @@ import { test, expect, expectDayAtTop, openApp, matchPath } from "./harness.mjs"
 import { SNAPSHOT_VERSION } from "../../page/js/snapshot.js";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { readYearTracking } from "../../../../tests/browser/title-row.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
 import { ONE_PAST_SEASON } from "./past-season.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
-
-/** @param {import("@playwright/test").Page} page */
-const openSettings = (page) => page.getByRole("button", { name: "Settings", exact: true }).click();
 
 /**
  * @param {import("@playwright/test").Page} page

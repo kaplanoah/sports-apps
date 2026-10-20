@@ -143,3 +143,29 @@ export async function checkNewCurrentSeasonListed({
   await expect(picker.locator("option")).toHaveText(seasons);
   await expect(picker).toHaveValue(pastSeason);
 }
+
+/**
+ * A season picked while its record is on its way stays picked through a redraw of the picker
+ * meanwhile, as when the store moves on to a new season, and once the record arrives.
+ * @param {{
+ *   page: import("@playwright/test").Page,
+ *   pastSeason: string,
+ *   newSeason: number,
+ *   moveCurrentTo: (year: number) => Promise<void>,
+ * }} options
+ */
+export async function checkPickKeptThroughRedraw({ page, pastSeason, newSeason, moveCurrentTo }) {
+  await openSettings(page);
+  const picker = page.locator("#seasonPicker");
+  await expect(picker.locator("option")).not.toHaveCount(0);
+  const release = await holdRequests(page, matchPath(`/store/seasons/${pastSeason}`), { times: 1 });
+  await picker.selectOption(pastSeason);
+
+  await moveCurrentTo(newSeason);
+  await expect(picker.locator(`option[value="${newSeason}"]`)).toBeAttached();
+  release();
+
+  await expect(page.locator("#titleYear")).toHaveText(pastSeason);
+  await expect(picker).toHaveValue(pastSeason);
+  await expect(page.locator("#seasonPicker option[selected]")).toHaveAttribute("value", pastSeason);
+}

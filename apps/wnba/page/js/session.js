@@ -6,6 +6,8 @@ export const session = {
   db: null,
   // The season shown, and the one the store says is current, null until it says.
   year: readCalendarYear(new Date()),
+  // The season picked, which the page shows once its record arrives.
+  pickedYear: readCalendarYear(new Date()),
   /** @type {number | null} */
   currentYear: null,
   /** @type {any} */
