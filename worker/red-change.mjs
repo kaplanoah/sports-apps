@@ -26,6 +26,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { findChannel } from "./channels.mjs";
 import { PHONE_OK_LABEL, findLabeling, readPushTime, readTimeline } from "./labeling.mjs";
 import {
   LAYER_PROPERTIES,
@@ -816,8 +817,7 @@ export function findRedReasons(
 
 /** @typedef {import('./labeling.mjs').Labeling} Labeling */
 
-const TO_BETA =
-  'Put it on beta by the ship skill\'s "The beta channel" (.claude/skills/ship/SKILL.md), which claims beta first.';
+const TO_BETA = `${findChannel("beta").howToShip}.`;
 
 /**
  * Why a red change labeled phone-ok is still held, or null when the label lets it through.

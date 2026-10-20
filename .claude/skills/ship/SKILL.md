@@ -55,6 +55,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   and off every PR but the one that holds beta, which it puts in line with `beta-wait`.
   Once beta is free, it comments on the PR that has waited longest, which wakes its session: "Beta is free, and this pull request has waited longest."
   A claim has no time limit, since the owner is the only tester.
+  GitHub starts no PR workflow for a PR in conflict with `main`, so a label change on one takes effect at the next merge to `main` or the PR's next push.
 - Change a PR's labels one at a time, never by setting its whole list, which would drop `phone-ok` or `review`:
   `gh pr edit <number> --add-label beta` or `--remove-label beta`, and the same for `beta-wait`.
   See who holds beta with `gh pr list --label beta --state open`, and who waits with `gh pr list --label beta-wait --state open`.
@@ -67,7 +68,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   3. Add `beta` to the PR.
   4. Confirm the PR holds beta: it does once it's the only open PR labeled `beta`.
      While another still has it, wait a minute for the `Beta` workflow and look again.
-     If the workflow took `beta` off the PR and added `beta-wait`, beta is held: see the next bullet.
+     If the workflow took `beta` off the PR, beta is held: see the next bullet.
   5. Take `beta-wait` off the PR if it has it, only now: taking it off first would tell the next in line, who would then lose the race.
   6. Push to beta: `git push -f origin <branch>:beta`.
   7. Wait for that push's Deploy run to say `worker check: ok` for each app, and tell the owner to use the beta app on the Home Screen.
@@ -175,7 +176,7 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   Read the CI log, fix the failure in a new PR, and start again at step 1.
 - A run for a push to beta says "so nothing was deployed to beta": the pushed commit isn't the head of the PR that holds beta,
   or GitHub couldn't say which PR does, so beta keeps the build it had.
-  The line names the PR holding beta and when it took it.
+  The line names the PR holding beta and when it took it, or else says no PR holds beta or GitHub couldn't say.
   Put the PR on beta by the steps under The beta channel above.
 - It says "No CLOUDFLARE_API_TOKEN": the channel's environment has no Cloudflare token, so nothing was deployed.
   Tell the user.

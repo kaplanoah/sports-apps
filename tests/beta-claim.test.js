@@ -422,15 +422,23 @@ test("a run adds beta-wait beside the labels a pull request has, and a label som
   );
 });
 
-test("the Beta workflow runs on pull request events alone, one run at a time across the repository", () => {
+test("the Beta workflow runs main's rules on pull request events and merges to main, one run at a time across the repository", () => {
   const workflow = readRepoFile(".github/workflows/beta.yml");
   assert.match(
     workflow,
-    /^on:\n {2}pull_request:\n {4}types: \[[^\]]*\bclosed\b[^\]]*\blabeled, unlabeled\]/m,
+    /^on:\n {2}pull_request:\n {4}types: \[[^\]]*\bclosed\b[^\]]*\blabeled, unlabeled\]\n {2}push:\n {4}branches: \[main\]\n/m,
   );
   assert.doesNotMatch(workflow, /pull_request_target|schedule:/);
-  assert.match(workflow, /concurrency:\n {2}group: beta\n {2}cancel-in-progress: false/);
-  assert.match(workflow, /run: node worker\/beta-claim\.mjs queue/);
+  const [, job = ""] = workflow.split(/^ {2}queue:\n/m);
+  assert.match(job, /\n {4}concurrency:\n {6}group: beta\n {6}cancel-in-progress: false/);
+  assert.match(job, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(job, /run: node worker\/beta-claim\.mjs queue/);
+  assert.doesNotMatch(workflow.split(/^jobs:$/m)[0], /concurrency:/);
+});
+
+// Sessions wait for this comment, which the skill quotes.
+test("the ship skill quotes the comment that tells a pull request beta is free", () => {
+  assert.ok(readRepoFile(".claude/skills/ship/SKILL.md").includes(FREE_MESSAGE));
 });
 
 test("a push to beta checks the claim before anything deploys", () => {

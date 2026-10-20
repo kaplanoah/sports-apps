@@ -1,5 +1,5 @@
 // Reads when a pull request's labels were added and when its head was pushed, from its timeline
-// and its head's check suites, for the gate's phone-ok label and the beta channel's claim.
+// and its head's check suites.
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
 export const PHONE_OK_LABEL = "phone-ok";

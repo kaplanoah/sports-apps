@@ -937,7 +937,7 @@ test("a beta release is what GitHub has as beta, and a push beta has since repla
   });
 });
 
-test("a checkout at a commit beta never held isn't a beta release, and says how to push one", async () => {
+test("a checkout at a commit beta never held isn't a beta release, and sends a session to the steps that claim beta", async () => {
   const { checkRelease } = await loadDeployModule();
   for (const pushedCommit of ["", "c".repeat(40)])
     assert.throws(
@@ -947,7 +947,14 @@ test("a checkout at a commit beta never held isn't a beta release, and says how 
           "beta",
           pushedCommit,
         ),
-      /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Push it with git push -f origin <branch>:beta/,
+      (/** @type {Error} */ error) => {
+        assert.match(
+          error.message,
+          /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Put it on beta by the ship skill's "The beta channel" \(\.claude\/skills\/ship\/SKILL\.md\), which claims beta first, or check out origin\/beta/,
+        );
+        assert.doesNotMatch(error.message, /git push/);
+        return true;
+      },
     );
 });
 
@@ -1011,6 +1018,11 @@ test("project settings ask before any deploy but beta's or a key change, and den
     "Bash(node worker/rollback.mjs)",
     // A branch's name has no spaces, so this keeps the beta push from naming any other branch too.
     "Bash(git push -f origin * *:beta)",
+    // A PR's number has no spaces, so each label edit can't carry another flag, like a phone-ok.
+    "Bash(gh pr edit * * --add-label beta)",
+    "Bash(gh pr edit * * --remove-label beta)",
+    "Bash(gh pr edit * * --add-label beta-wait)",
+    "Bash(gh pr edit * * --remove-label beta-wait)",
   ]) {
     assert.ok(permissions.deny.includes(rule), rule);
   }

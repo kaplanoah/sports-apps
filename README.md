@@ -363,7 +363,8 @@ since its live version's commit, since its Worker would be the same;
 `worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too
 once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
 CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
-always deploys. Without the token, merges deploy nothing.
+replaces whatever beta held, but only with the head of the pull request that holds beta, as
+"Trying a change on the phone" says. Without the token, merges deploy nothing.
 Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <app>` for
 one app. `npm run rollback -- <app>` puts the app's previous version back at all
 of its traffic and prints which commit was live and which is now; it refuses
@@ -382,7 +383,9 @@ the one that has waited longest once beta is free. To use a pull request's
 change on the phone before it merges:
 
 1. Merge `main` into its branch, push the branch, and label the pull request
-   `beta`. Once it's the only open pull request labeled `beta`, it holds beta.
+   `beta`, taking `beta` off first if it's still there from before the push,
+   since adding a label it already has changes nothing. Once it's the only open
+   pull request labeled `beta`, it holds beta.
 2. Reset `beta` to the pull request's branch and push it:
    `git push -f origin <branch>:beta`.
 3. Wait for the Deploy run for that push to finish. It deploys the beta Workers
