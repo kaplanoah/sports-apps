@@ -157,7 +157,7 @@ test("a sentence ends at any stop past a closing mark, but not after a bold labe
     '**Bugs.** Look at **this.** Then "here."',
     "Say 'yes.'",
     "Then stop.",
-    "1. **Label.**",
+    "1. **Label.**  ",
     "   one two.",
   ].join("\n");
   assert.deepEqual(listSentences(text), [
