@@ -31,6 +31,21 @@ test("with no game within a day, or none at all, the schedule is checked once a 
   assert.equal(choose({ starts: [NaN] }), OFF_DAY_CHECK_MS);
 });
 
+test("a game put off within a day isn't followed as late, but keeps the day a game day", () => {
+  const putOff = (/** @type {number} */ start) =>
+    choosePollDelay({
+      isLive: false,
+      starts: [],
+      putOffStarts: [start],
+      liveMs: LIVE_MS,
+      now: NOW,
+    });
+  assert.equal(putOff(NOW - 30 * MINUTE_MS), 3 * HOUR_MS);
+  assert.equal(putOff(NOW + 5 * HOUR_MS), 3 * HOUR_MS);
+  assert.equal(putOff(NOW - 30 * HOUR_MS), OFF_DAY_CHECK_MS);
+  assert.equal(putOff(NOW + 30 * HOUR_MS), OFF_DAY_CHECK_MS);
+});
+
 test("a delayed start is followed closely at first, then less, and dropped after eight hours", () => {
   assert.equal(choose({ starts: [NOW - 55 * MINUTE_MS] }), LIVE_MS);
   assert.equal(choose({ starts: [NOW - 90 * MINUTE_MS] }), MINUTE_MS);

@@ -11,8 +11,8 @@ import {
   renderStampWhen,
 } from "#shared/stamp.js";
 import { isGameToday, readGameDay } from "./days.js";
-import { describeLiveMoment, isCalledOff, listSeasonGames } from "./games-view.js";
-import { isPutOff } from "./nearest-games.js";
+import { describeLiveMoment, listSeasonGames } from "./games-view.js";
+import { isToBePlayed } from "./nearest-games.js";
 import { nameTeam, orderBySeriesWins } from "./series.js";
 
 // The header's lines on the latest score and the next tip-off, or on why the page isn't current.
@@ -101,13 +101,6 @@ const listGamesInState = (games, state) =>
       (game) => game.state === state && hasBothTeams(game) && Number.isFinite(readStart(game)),
     )
     .sort((first, second) => readStart(first) - readStart(second));
-
-/**
- * Whether a game will be played: one its series no longer needs, or the league put off, won't.
- * @param {Game} game
- * @param {Map<string, Series>} seriesById
- */
-const isToBePlayed = (game, seriesById) => !isCalledOff(game, seriesById) && !isPutOff(game);
 
 /**
  * The games that will be played on a game's day.

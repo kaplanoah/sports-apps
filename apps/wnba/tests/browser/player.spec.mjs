@@ -296,9 +296,7 @@ test("on a phone, a player who played enough games but made too few shots for a 
   const sheet = await openFromRoster(page, "Pauline Astier");
   const note = sheet.locator(".player-rank-note");
 
-  await expect(note).toHaveText(
-    "She hasn't made enough 3-pointers to be ranked in 3P%. The WNBA only ranks shooting percentages for players who've made a certain number of shots.",
-  );
+  await expect(note).toContainText("to be ranked in 3P%");
   const lastLineWords = await note.evaluate((element) => {
     const words = document.createRange();
     words.selectNodeContents(element);

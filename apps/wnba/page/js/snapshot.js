@@ -9,7 +9,7 @@
 import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import { findTeamCode, findTeamCodeByEspnId, TEAMS } from "./teams.js";
-import { findTeamNearestGames, isPutOff } from "./nearest-games.js";
+import { findTeamNearestGames, isPutOff, isToBePlayed } from "./nearest-games.js";
 import { REGULATION_PERIODS } from "./periods.js";
 
 // The shape of a snapshot, and of the season record saved from it, which a page reads only when it
@@ -627,11 +627,14 @@ function isClosingStretch(game) {
 // A live game on a team's sheet is followed as closely as a playoff game.
 export function choosePollDelay(snapshot, now = Date.now()) {
   const games = [...(snapshot?.games ?? []), ...(snapshot?.nearestGames ?? [])];
+  const seriesById = new Map((snapshot?.series ?? []).map((series) => [series.id, series]));
+  const timed = games.filter((game) => game.state === "pre" && game.isTimeSet);
   return PollSchedule.choosePollDelay({
     isLive: games.some((game) => game.state === "live"),
-    starts: games
-      .filter((game) => game.state === "pre" && game.isTimeSet && !isPutOff(game))
+    starts: timed
+      .filter((game) => isToBePlayed(game, seriesById))
       .map((game) => Date.parse(game.start)),
+    putOffStarts: timed.filter(isPutOff).map((game) => Date.parse(game.start)),
     liveMs: games.some(isClosingStretch) ? POLL_CLOSING_MS : POLL_LIVE_MS,
     now,
   });

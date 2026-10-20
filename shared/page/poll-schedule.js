@@ -27,11 +27,14 @@ function readLateStartDelay(lateMs, liveMs) {
  * @param {object} games
  * @param {boolean} games.isLive whether a game is under way
  * @param {number[]} games.starts the set starts of the games that haven't begun
+ * @param {number[]} [games.putOffStarts] the starts the league put games off from, which aren't
+ *   followed as late but keep a day within one of them a game day, since its make-up is still to
+ *   be set
  * @param {number} games.liveMs the league's wait during a game
  * @param {number} games.now
  * @returns {number} the wait until the next update
  */
-export function choosePollDelay({ isLive, starts, liveMs, now }) {
+export function choosePollDelay({ isLive, starts, putOffStarts = [], liveMs, now }) {
   if (isLive) return liveMs;
   const knownStarts = starts.filter(Number.isFinite);
   const lateDelays = knownStarts
@@ -39,7 +42,8 @@ export function choosePollDelay({ isLive, starts, liveMs, now }) {
     .map((start) => readLateStartDelay(now - start, liveMs))
     .filter((delay) => delay !== null);
   const nextStart = Math.min(...knownStarts.filter((start) => start > now));
-  const isGameDay = lateDelays.length > 0 || nextStart - now < DAY_MS;
+  const isNearPutOff = putOffStarts.some((start) => Math.abs(start - now) < DAY_MS);
+  const isGameDay = lateDelays.length > 0 || nextStart - now < DAY_MS || isNearPutOff;
   const untilLead = Math.max(nextStart - LEAD_MS - now, liveMs);
   return Math.min(...lateDelays, untilLead, isGameDay ? GAME_DAY_CHECK_MS : OFF_DAY_CHECK_MS);
 }

@@ -9,19 +9,12 @@ import { renderScoreboard } from "./scoreboard.js";
 import { describeSeriesAfterWin } from "#shared/series-text.js";
 import { nameTeam } from "./series.js";
 import { LEAGUE_WORDS } from "./league-words.js";
+import { isCalledOff } from "./nearest-games.js";
 import { countWinsNeeded, isCupFinal, ROUNDS } from "./snapshot.js";
 
 /** @typedef {import("./series.js").Series} Series */
 /** @typedef {{ team: string | null, seed: number | null, score: number | null, isInBonus: boolean }} GameSide */
 /** @typedef {{ id: string, round: number | null, series: string | null, number: number | null, start: string | null, state: string, status: string, isTimeSet: boolean, period: number | null, clock: string | null, isIfNeeded: boolean, away: GameSide, home: GameSide, end?: string, finalAt?: string, networks?: string[], allStar?: { away: string, home: string }, arena?: { name: string, city: string, state: string }, isNeutral?: boolean }} Game */
-
-// Once a series is decided, the games it no longer needs never happen.
-/**
- * @param {Game} game
- * @param {Map<string, Series>} seriesById
- */
-export const isCalledOff = (game, seriesById) =>
-  game.state === "pre" && game.isIfNeeded && !!seriesById.get(game.series ?? "")?.winner;
 
 /**
  * The side that lost a finished game, as its row or its box score has it, or null before it's

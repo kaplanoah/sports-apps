@@ -446,11 +446,24 @@ test("a game that hasn't started is followed closely at first, then less, and th
   assert.equal(WNBASnapshot.choosePollDelay(snapshot, start + 9 * HOUR_MS), 24 * HOUR_MS);
 });
 
-test("a playoff game the league put off isn't followed past its start as one about to tip off", () => {
+test("a playoff game the league put off isn't followed past its start as one about to tip off, but keeps its day a game day", () => {
   const lateGame = buildAfternoon().games.find((game) => game.id === "1042600132");
   const start = Date.parse(lateGame.start);
   const putOff = { games: [{ ...lateGame, status: "Postponed" }] };
-  assert.equal(WNBASnapshot.choosePollDelay(putOff, start + 30 * 60 * 1000), 24 * 60 * 60 * 1000);
+  assert.equal(WNBASnapshot.choosePollDelay(putOff, start + 30 * 60 * 1000), 3 * 60 * 60 * 1000);
+});
+
+test("a game a decided series no longer needs isn't followed past its start", () => {
+  const lateGame = buildAfternoon().games.find((game) => game.id === "1042600132");
+  const start = Date.parse(lateGame.start);
+  const calledOff = {
+    games: [{ ...lateGame, isIfNeeded: true }],
+    series: [{ id: lateGame.series, winner: lateGame.home.team }],
+  };
+  assert.equal(
+    WNBASnapshot.choosePollDelay(calledOff, start + 30 * 60 * 1000),
+    24 * 60 * 60 * 1000,
+  );
 });
 
 test("each game keeps the arena the schedule names, through the scoreboard's copy of today's games, and none while the league hasn't set it", () => {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { html } from "../shared/page/html.js";
-import { renderSeasonSeries } from "../shared/page/season-series.js";
+import { renderPendingSeasonSeries, renderSeasonSeries } from "../shared/page/season-series.js";
 import { EASTERN, checkInTimeZone } from "./time-zone.js";
 
 /** @type {import("../shared/page/season-series.js").TeamLooks} */
@@ -75,4 +75,37 @@ test("a season series still going reads as a playoff series does, and one that's
     readSummary(renderSeasonSeries(sweep, { ...series, isOver: true }, LOOKS)),
     "MIL won 2-0",
   );
+});
+
+/**
+ * The class of each part a row holds at its top, in order, an unclassed part as "".
+ * @param {string} row
+ */
+function listRowParts(row) {
+  const parts = [];
+  let depth = 0;
+  for (const [, closing, attributes] of row.matchAll(/<(\/?)span([^>]*)>/g)) {
+    if (closing) depth -= 1;
+    else {
+      if (depth === 0) parts.push(attributes.match(/class="([^"]*)"/)?.[1] ?? "");
+      depth += 1;
+    }
+  }
+  return parts;
+}
+
+/** @param {unknown} markup */
+const listRowShapes = (markup) =>
+  [...String(markup).matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, row]) => listRowParts(row));
+
+test("a season series still loading holds rows shaped as its meetings are", () => {
+  const meetings = [
+    makeMeeting("2026-05-20", ["MIL", 5], ["SD", 2]),
+    makeMeeting("2026-06-20", ["MIL", 1], ["SD", 4]),
+  ];
+  const loaded = listRowShapes(
+    renderSeasonSeries(meetings, { away: "MIL", home: "SD", isOver: false }, LOOKS),
+  );
+  assert.deepEqual(loaded[0], ["meeting-day tabular", "meeting-result", ""]);
+  assert.deepEqual(listRowShapes(renderPendingSeasonSeries(meetings.length)), loaded);
 });

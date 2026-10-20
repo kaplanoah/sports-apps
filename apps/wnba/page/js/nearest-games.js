@@ -2,7 +2,8 @@
 
 import { findNearestGames } from "#shared/nearest-games.js";
 
-/** @typedef {{ id: string, state: string, status?: string, series?: string | null, away: { team: string | null }, home: { team: string | null } }} SeasonGame */
+/** @typedef {{ id: string, state: string, status?: string, series?: string | null, isIfNeeded?: boolean, away: { team: string | null }, home: { team: string | null } }} SeasonGame */
+/** @typedef {{ winner?: string | null }} DecidedSeries */
 
 /**
  * @param {SeasonGame} game
@@ -13,6 +14,21 @@ const isPlaying = (game, team) => game.away.team === team || game.home.team === 
 // The league marks a game it put off or called off in its status, and keeps it as one to come.
 /** @param {{ status?: string }} game */
 export const isPutOff = (game) => /postpon|ppd|cancel/i.test(game.status ?? "");
+
+// Once a series is decided, the games it no longer needs never happen.
+/**
+ * @param {SeasonGame} game
+ * @param {Map<string, DecidedSeries>} seriesById
+ */
+export const isCalledOff = (game, seriesById) =>
+  game.state === "pre" && !!game.isIfNeeded && !!seriesById.get(game.series ?? "")?.winner;
+
+/**
+ * Whether a game will be played: one its series no longer needs, or the league put off, won't.
+ * @param {SeasonGame} game
+ * @param {Map<string, DecidedSeries>} seriesById
+ */
+export const isToBePlayed = (game, seriesById) => !isCalledOff(game, seriesById) && !isPutOff(game);
 
 /** @param {SeasonGame} game */
 const hasBothTeams = (game) => !!(game.away.team && game.home.team);
