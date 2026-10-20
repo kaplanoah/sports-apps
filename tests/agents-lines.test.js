@@ -35,12 +35,13 @@ const SENTENCE_END = String.raw`(?<!\.)[.?!]["')*]*`;
 const ENDS_SENTENCE = new RegExp(`${SENTENCE_END}$`);
 const AFTER_SENTENCE = new RegExp(`(?<=${SENTENCE_END})\\s+`);
 const SECOND_SENTENCE = new RegExp(`${SENTENCE_END}\\s+["'(*]*[A-Z]`);
-// A bold label's stop, like **Bugs.**, ends the label, not a sentence the line starts.
-const BOLD_LABEL_STOP = /^(\*\*[^*]+)[.?!](?=\*\*)/;
+// A bold label's stop, like **Bugs.**, ends the label, not the sentence after it on its line.
+// A label on a line of its own is a sentence.
+const BOLD_LABEL_STOP = /^(\*\*[^*]+)[.?!](?=\*\*\s*\S)/;
 
 /**
- * A line's prose, without its list or heading mark or its bold label's stop, and with each code
- * span as one word.
+ * A line's prose, without its list or heading mark or the stop of a bold label that leads its
+ * text, and with each code span as one word.
  * @param {string} line
  */
 const readProse = (line) =>
@@ -148,7 +149,7 @@ test("a heading, a blank line, a list item of any mark, or a fence starts a new 
   ]);
 });
 
-test("a sentence ends at any stop past a closing mark, but not inside a code span or at an ellipsis", () => {
+test("a sentence ends at any stop past a closing mark, but not after a bold label that leads its sentence, inside a code span, or at an ellipsis", () => {
   const text = [
     "Is it? Yes! Done (really.)",
     "Run `a. b` now. Wait... then",
@@ -156,6 +157,8 @@ test("a sentence ends at any stop past a closing mark, but not inside a code spa
     '**Bugs.** Look at **this.** Then "here."',
     "Say 'yes.'",
     "Then stop.",
+    "1. **Label.**",
+    "   one two.",
   ].join("\n");
   assert.deepEqual(listSentences(text), [
     { line: 1, words: 2 },
@@ -167,6 +170,8 @@ test("a sentence ends at any stop past a closing mark, but not inside a code spa
     { line: 4, words: 2 },
     { line: 5, words: 2 },
     { line: 6, words: 2 },
+    { line: 7, words: 1 },
+    { line: 8, words: 2 },
   ]);
 });
 
