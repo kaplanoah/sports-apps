@@ -10,6 +10,7 @@ import {
   checkReAddNoteDismissal,
   checkReAddNoteEases,
   checkReAddNoteOnReload,
+  checkReAddNoteOnReturn,
   checkSystemInstallIcon,
 } from "../../../../tests/browser/re-add-note.mjs";
 
@@ -61,6 +62,12 @@ test.describe("in an iPhone's Home Screen app", () => {
     page,
   }) => {
     await checkReAddNoteEases({ page, openApp, openSettings, looks });
+  });
+
+  test("on System, a change of the phone's look as the app comes back takes the icon note to its new state at once, and one later eases it", async ({
+    page,
+  }) => {
+    await checkReAddNoteOnReturn({ page, openApp, openSettings, looks });
   });
 
   test("behind an access code, the link signs Safari in, so it opens the welcome on the theme picked without asking for the code", async ({

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   chooseReAddNote,
+  isLookChangeOnReturn,
   isLookSwitched,
   isReAddNoteDismissed,
   keepLookSwitched,
@@ -82,6 +83,28 @@ test("an app that doesn't know its icon shows the note on System too, with the p
     picked: "light",
     choice: "auto",
   });
+});
+
+test("a change of the phone's look reported as the page comes back, as a phone reports one made while it was away, takes the note to its new state at once", () => {
+  const shownAt = 20_000;
+  assert.equal(isLookChangeOnReturn({ isHidden: false, changedAt: shownAt + 65, shownAt }), true);
+  assert.equal(isLookChangeOnReturn({ isHidden: false, changedAt: shownAt + 999, shownAt }), true);
+  assert.equal(
+    isLookChangeOnReturn({ isHidden: true, changedAt: shownAt + 60_000, shownAt }),
+    true,
+  );
+});
+
+test("a change of the phone's look while the page has been showing a while eases the note", () => {
+  const shownAt = 20_000;
+  assert.equal(
+    isLookChangeOnReturn({ isHidden: false, changedAt: shownAt + 1000, shownAt }),
+    false,
+  );
+  assert.equal(
+    isLookChangeOnReturn({ isHidden: false, changedAt: shownAt + 60_000, shownAt }),
+    false,
+  );
 });
 
 test("an install reads whether the viewer switched looks from its storage, so the note stays through a reload", (t) => {
