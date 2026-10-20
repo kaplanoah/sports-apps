@@ -561,8 +561,9 @@ test.describe("in full motion", () => {
     await setField();
 
     await expect(findSeasonTab(page)).toHaveAccessibleName("Bracket");
-    const tabAnimations = (await readAnimations()).filter(({ element }) =>
-      /\b(tab-face|tab-icon|tab-label|pager-bar|pager-tabs)\b/.test(element),
+    const tabParts = ["tab-face", "tab-icon", "tab-label", "pager-bar", "pager-tabs"];
+    const tabAnimations = (await readAnimations()).filter(({ classes }) =>
+      classes.some((name) => tabParts.includes(name)),
     );
     expect(tabAnimations).toEqual([]);
   });

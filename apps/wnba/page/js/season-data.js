@@ -1,6 +1,6 @@
 import { readEasternDay } from "#shared/days.js";
 import { listSeasonYears } from "#shared/season-picker.js";
-import { createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
+import { createSeasonPicks, createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
 import { namePlayerIndexKey, readPlayerIndex } from "#shared/page-search.js";
 import { createSeasonDocFollower } from "#shared/season-doc-follower.js";
 import { nameOvertimesKey } from "./search-pages.js";
@@ -14,6 +14,8 @@ const UNREACHABLE = "Can't reach the page's server right now";
 
 /** @type {ReturnType<typeof createSeasonReader> | null} */
 let reader = null;
+/** @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>} */
+let pickSeason = async () => ({ kind: "replaced" });
 /** @type {number | null} */
 let scheduleYear = null;
 let unwatchSchedule = () => {};
@@ -76,7 +78,7 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
     guessYear: (now) => readEasternDay(now).year,
     keepSeason: (year, season) => {
       if (year !== session.year) session.schedule = null;
-      Object.assign(session, { year, season, problem: "" });
+      Object.assign(session, { year, pickedYear: year, season, problem: "" });
       followSchedule(year, showChange);
       followPlayerIndex(session.db, year, showChange);
       followOvertimes(session.db, year, showChange);
@@ -95,6 +97,14 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
       showCurrentYear();
     },
   });
+  pickSeason = createSeasonPicks({
+    reader,
+    readPick: () => session.pickedYear,
+    keepPick: (year) => {
+      session.pickedYear = year;
+    },
+    noteUnreachable,
+  });
 }
 
 // A page whose load failed may be watching a season the store doesn't have yet, and the store may
@@ -108,14 +118,11 @@ export async function loadSeason() {
   }
 }
 
-/** @param {number} year */
-export async function showYear(year) {
-  try {
-    await reader?.showYear(year);
-  } catch {
-    noteUnreachable();
-  }
-}
+/**
+ * Shows the season picked, keeping it in `session.pickedYear` while its record is on its way.
+ * @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>}
+ */
+export const showYear = (year) => pickSeason(year);
 
 /** The years of the seasons the store keeps, newest first. */
 export async function loadSeasonYears() {
