@@ -13,10 +13,12 @@
 // the player they name, saying whether she is. A team's name beside the News tab's words lists the
 // tab and the newest stories about the team. A place's words list it, and leave the games to any of
 // them that a search of games reads, as "East" finds the East's standings and its games. Words that
-// ask for anything else, like a second team, a day, or "at", ask for games, and list no page. A
-// league hands it its teams, players, and places, and the search's dictionary, so a team is named
-// here by the same words it is in a search of games. Runs in the page and in Node, so it uses no
-// DOM.
+// ask for anything else, like a second team, a day, or "at", ask for games, and list no page. While
+// a search is typed, though, any word may also start a word of a player's name, even one a search
+// of games knows, as a phone's search reads it, and the players it starts list after the rows the
+// words find on their own, as "may" lists Maya Caldwell over May's games. A league hands it its
+// teams, players, and places, and the search's dictionary, so a team is named here by the same
+// words it is in a search of games. Runs in the page and in Node, so it uses no DOM.
 
 import { describeCount } from "./game-search.js";
 import { hasKind, isForgivenTypo, readTokens, splitWords } from "./search-words.js";
@@ -110,16 +112,19 @@ const RECORD_WORDS = ["record", "standing"];
 const TEAM_STORIES = 3;
 
 /**
- * Whether a typed word names a word: as written, as a plural's single, or, when it may be only the
- * start of one, as its start.
+ * Whether a typed word names a word: as written, as a plural's single unless plurals aren't read,
+ * or as its start once it's `shortestStart` letters long.
  * @param {string} typed
  * @param {string} word
- * @param {boolean} isPartial
+ * @param {{ shortestStart: number, isPluralRead?: boolean }} reading
  */
-const isWordOf = (typed, word, isPartial) =>
+const isWordOf = (typed, word, { shortestStart, isPluralRead = true }) =>
   typed === word ||
-  (typed.endsWith("s") && typed.slice(0, -1) === word) ||
-  (isPartial && typed.length >= SHORTEST_PREFIX && word.startsWith(typed));
+  (isPluralRead && typed.endsWith("s") && typed.slice(0, -1) === word) ||
+  (typed.length >= shortestStart && word.startsWith(typed));
+
+// How a word that may be only the start of one names it, from its third letter.
+const AS_START = { shortestStart: SHORTEST_PREFIX };
 
 // Words after a last name that a fan may leave off.
 const NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
@@ -129,8 +134,9 @@ const NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
 const playerNames = new WeakMap();
 
 /**
- * The words a player can be named by: her whole name, her last name, or her first, each with or
- * without a suffix after her last name, like "Jr.".
+ * The words a player can be named by: each run of her name's words, from her whole name to each
+ * word alone, as a phone's search finds "Lou" in Katie Lou Samuelson and "Ododa" in Nelson-Ododa,
+ * with or without a suffix after her last name, like "Jr.".
  * @param {PagePlayer} player
  */
 function listPlayerNames(player) {
@@ -141,14 +147,25 @@ function listPlayerNames(player) {
   return names;
 }
 
-/** @param {PagePlayer} player */
+/**
+ * Each run of a player's words, but for a word alone that is the suffix after her last name, or
+ * too short to start a name, as "De" in De La Cruz is, unless it's her whole first or last name, as
+ * "Jo" is.
+ * @param {PagePlayer} player
+ */
 function readPlayerNames(player) {
   const first = splitWords(player.firstName);
   const last = splitWords(player.lastName);
   const hasSuffix = last.length > 1 && NAME_SUFFIXES.has(last[last.length - 1]);
-  const lasts = hasSuffix ? [last, last.slice(0, -1)] : [last];
-  return [...lasts.map((each) => [...first, ...each]), ...lasts, first].filter(
-    (name) => name.length > 0,
+  const words = [...first, ...last];
+  const wholes = [first, hasSuffix ? last.slice(0, -1) : last].map((each) => each.join(" "));
+  const isNamingAlone = (/** @type {number} */ at) =>
+    !(hasSuffix && at === words.length - 1) &&
+    (words[at].length >= SHORTEST_PREFIX || wholes.includes(words[at]));
+  return words.flatMap((_, start) =>
+    Array.from({ length: words.length - start }, (_, index) =>
+      words.slice(start, start + index + 1),
+    ).filter((run) => run.length > 1 || isNamingAlone(start)),
   );
 }
 
@@ -164,32 +181,68 @@ export const startsPlayerName = (word, pages) =>
   );
 
 /**
- * A word of a search, and whether a search of games knows it, as it knows "east" or "NL".
- * @typedef {{ word: string, isKnown: boolean }} ReadWord
+ * A word of a search, whether a search of games knows it, as it knows "east" or "NL", and whether
+ * it passes over it, as it does "the" or "will".
+ * @typedef {{ word: string, isKnown: boolean, isPassedOver: boolean }} ReadWord
  */
 
 /**
- * How a typed word names a word of a name: as written or begun, as `isWordOf` reads it, or with one
- * wrong letter when a search of games doesn't know it, or not at all.
+ * A search's words, each as `ReadWord` reads it.
+ * @param {import("./search-words.js").Token[]} tokens
+ * @returns {ReadWord[]}
+ */
+const readWords = (tokens) =>
+  tokens.flatMap((token) =>
+    token.words.map((word) => ({
+      word,
+      isKnown: token.meanings.length > 0,
+      isPassedOver: hasKind(token, "filler"),
+    })),
+  );
+
+/**
+ * How a typed word names a word of a name: as written, as its start when it may be only that, or,
+ * when a search of games doesn't know it, as a plural's single or with one wrong letter, so
+ * "Angels" names the club rather than each Angel; or not at all.
  * @param {ReadWord} typed
  * @param {string} part
  * @param {boolean} isPartial
- * @returns {"exact" | "typo" | null}
+ * @returns {"exact" | "begun" | "typo" | null}
  */
 function matchNamePart({ word, isKnown }, part, isPartial) {
-  if (isWordOf(word, part, isPartial)) return "exact";
+  if (isWordOf(word, part, { shortestStart: Infinity, isPluralRead: !isKnown })) return "exact";
+  if (isPartial && part.startsWith(word)) return "begun";
   return !isKnown && isForgivenTypo(word, part) ? "typo" : null;
 }
 
 /**
- * How words name a player: by how many of them, and whether any has a wrong letter.
- * @typedef {{ length: number, hasTypo: boolean }} NameMatch
+ * Whether words can be a name's as they match its words: one only begun once three of its letters
+ * are typed, as "mara s" starts Mara Stone's but "a f" no Jose A. Ferrer's, and one of only words a
+ * search of games passes over, as "will" is Will Smith's, only while every word is such a one and
+ * still being typed, so "when will trout return" finds Trout alone.
+ * @param {ReadWord[]} typed the words that match the name's
+ * @param {("exact" | "begun" | "typo")[]} matches
+ * @param {{ words: ReadWord[], isTyping: boolean }} search
+ */
+function isNaming(typed, matches, { words, isTyping }) {
+  const letters = typed.reduce((count, each) => count + each.word.length, 0);
+  const isBegunEnough = matches.at(-1) !== "begun" || letters >= SHORTEST_PREFIX;
+  const isPassedOverOnly = typed.every((each) => each.isPassedOver);
+  const isAllPassedOver = isTyping && words.every((each) => each.isPassedOver);
+  return isBegunEnough && (!isPassedOverOnly || isAllPassedOver);
+}
+
+/**
+ * How words name a player: by how many of them, whether any has a wrong letter, and whether the
+ * last is a word a search of games knows read only as the start of one of her name's.
+ * @typedef {{ length: number, hasTypo: boolean, isKnownBegun: boolean }} NameMatch
  */
 
 /**
- * How the words from `start` name the player, as her whole name, last name, or first, by the most
- * words, and then without a wrong letter, or null. While words are typed, the last may be the start
- * of her name, unless a search of games knows it whole.
+ * How the words from `start` name the player, by the most words of her name, and then without a
+ * wrong letter, or null. While words are typed, the last may be the start of a word of her name,
+ * even one a search of games knows whole, as "may" starts Maya's and "will" Williams, as a phone's
+ * search lists every name a word starts, as `isNaming` allows.
  * @param {ReadWord[]} words
  * @param {number} start
  * @param {PagePlayer} player
@@ -201,13 +254,16 @@ function measurePlayerAt(words, start, player, isTyping) {
   let best = null;
   for (const name of listPlayerNames(player)) {
     if (start + name.length > words.length) continue;
-    const matches = name.map((part, offset) => {
-      const typed = words[start + offset];
-      const isLast = start + offset === words.length - 1 && offset === name.length - 1;
-      return matchNamePart(typed, part, isTyping && isLast && !typed.isKnown);
-    });
+    const typed = words.slice(start, start + name.length);
+    const isEndTyped = isTyping && start + name.length === words.length;
+    const matches = name.map((part, offset) =>
+      matchNamePart(typed[offset], part, isEndTyped && offset === name.length - 1),
+    );
     if (matches.includes(null)) continue;
-    const match = { length: name.length, hasTypo: matches.includes("typo") };
+    const named = /** @type {("exact" | "begun" | "typo")[]} */ (matches);
+    if (!isNaming(typed, named, { words, isTyping })) continue;
+    const isKnownBegun = named.at(-1) === "begun" && typed[typed.length - 1].isKnown;
+    const match = { length: name.length, hasTypo: named.includes("typo"), isKnownBegun };
     if (!best || compareMatches(match, best) < 0) best = match;
   }
   return best;
@@ -222,13 +278,20 @@ const compareMatches = (first, second) =>
   second.length - first.length || Number(first.hasTypo) - Number(second.hasTypo);
 
 /**
- * Whether only words a search of games doesn't know, like "stats", sit beside a name's.
+ * Whether only words a search of games passes over, like "the", sit beside a name's, or, but for a
+ * name whose last word is a known one only begun, also words it doesn't know, like "stats", so
+ * "great american bal" starts no Balcazar's.
  * @param {ReadWord[]} words
  * @param {number} start
- * @param {number} length
+ * @param {NameMatch} match
  */
-const isRestUnknown = (words, start, length) =>
-  words.every((each, index) => (index >= start && index < start + length) || !each.isKnown);
+const isRestFree = (words, start, match) =>
+  words.every(
+    (each, index) =>
+      (index >= start && index < start + match.length) ||
+      each.isPassedOver ||
+      (!each.isKnown && !match.isKnownBegun),
+  );
 
 /**
  * The players the words name, keeping only those named by the most words, so a whole name finds
@@ -240,13 +303,11 @@ const isRestUnknown = (words, start, length) =>
  * @param {boolean} isTyping
  */
 function findPlayers(tokens, players, isTyping) {
-  const words = tokens.flatMap((token) =>
-    token.words.map((word) => ({ word, isKnown: token.meanings.length > 0 })),
-  );
+  const words = readWords(tokens);
   const found = players.flatMap((player) => {
     for (let start = 0; start < words.length; start += 1) {
       const match = measurePlayerAt(words, start, player, isTyping);
-      if (match && isRestUnknown(words, start, match.length)) return [{ player, match }];
+      if (match && isRestFree(words, start, match)) return [{ player, match }];
     }
     return [];
   });
@@ -257,13 +318,31 @@ function findPlayers(tokens, players, isTyping) {
 }
 
 /**
+ * The rows of players' sheets, each on her team, and, for words asking who is out, saying whether
+ * she is.
+ * @param {PagePlayer[]} players
+ * @param {SearchPages} pages
+ * @param {"named"} [out]
+ * @returns {PageRow[]}
+ */
+function listPlayerRows(players, pages, out) {
+  const teams = new Map(pages.teams.map((team) => [team.code, team]));
+  return players.flatMap((player) => {
+    const team = teams.get(player.team);
+    if (!team) return [];
+    const row = /** @type {const} */ ({ kind: "player", team, player });
+    return [/** @type {PageRow} */ (out ? { ...row, out } : row)];
+  });
+}
+
+/**
  * Whether every one of the typed words is one of the words, each perhaps only the start of one.
  * @param {string[]} typed
  * @param {string[]} words
  */
 const isEveryWordOf = (typed, words) => {
   const parts = words.flatMap(splitWords);
-  return typed.every((word) => parts.some((part) => isWordOf(word, part, true)));
+  return typed.every((word) => parts.some((part) => isWordOf(word, part, AS_START)));
 };
 
 /**
@@ -360,7 +439,9 @@ function listTeamRows(team, typed, { pages, isNumberPartial }) {
   const number = readPlayerNumber(typed);
   if (number !== null) return listNumberRows(team, number, isNumberPartial, pages);
   const sectionWords = section ? splitWords(section.name) : [];
-  const isSection = typed.every((word) => sectionWords.some((part) => isWordOf(word, part, true)));
+  const isSection = typed.every((word) =>
+    sectionWords.some((part) => isWordOf(word, part, AS_START)),
+  );
   return isSection ? sectionRow : [];
 }
 
@@ -376,7 +457,7 @@ const AFTER_OUT_WORDS = ["report", "list"];
 function readOutAsked(tokens) {
   const words = tokens.flatMap((token) => token.words);
   const isOutWord = (/** @type {string | undefined} */ word) =>
-    !!word && OUT_WORDS.some((outWord) => isWordOf(word, outWord, true));
+    !!word && OUT_WORDS.some((outWord) => isWordOf(word, outWord, AS_START));
   const isAsking = words.map(
     (word, index) =>
       isOutWord(word) || (AFTER_OUT_WORDS.includes(word) && isOutWord(words[index - 1])),
@@ -473,7 +554,8 @@ function findAskedPages(text, { dictionary, pages, isTyping }) {
     (token) => !hasKind(token, "team") && !hasKind(token, "filler"),
   );
   const outRest = readOutAsked(otherTokens);
-  if (!teamTokens.length) return outRest && findOutPages(outRest, { text, pages, isTyping });
+  if (!teamTokens.length)
+    return outRest && findOutPages(outRest, { text, tokens, pages, isTyping });
   const team = findOneTeam(teamTokens, pages);
   const otherWords = otherTokens.flatMap((token) => token.words);
   if (!team || !otherWords.length) return null;
@@ -505,7 +587,10 @@ function findOneTeam(teamTokens, pages) {
 }
 
 /**
- * The pages the search's words find, read word by word.
+ * The pages the search's words find, read word by word: a game's part, a team's pages, or the
+ * places only words a search of games passes over find, each with the players the words name after
+ * them, as "fox" starts Foxworth's after the Foxes' pages, but for the players a team's number
+ * names, as "Sky 24" does; or else the players the words name, or the places they find.
  * @param {string} text
  * @param {{ dictionary: import("./search-words.js").Dictionary, pages: SearchPages, isTyping: boolean }} search
  * @returns {FoundPages}
@@ -517,19 +602,22 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
     (token) => !hasKind(token, "team") && !hasKind(token, "filler"),
   );
   const otherWords = otherTokens.flatMap((token) => token.words);
+  const players = listPlayerRows(findPlayers(tokens, pages.players, isTyping), pages);
   const found = findGamePart(tokens, pages.gameParts);
   if (found) {
     const gameText = leaveGameText(tokens, found.named);
-    return { rows: [{ kind: "game-part", part: found.part, gameText }], gameText: null };
+    const partRow = /** @type {PageRow} */ ({ kind: "game-part", part: found.part, gameText });
+    return { rows: [partRow, ...players], gameText: null };
   }
-  if (teamTokens.length)
-    return findTeamPages(teamTokens, otherTokens, { text, tokens, pages, isTyping });
-  if (!otherWords.length) return findPassedOverPlaces(tokens, text, pages);
-  const teams = new Map(pages.teams.map((team) => [team.code, team]));
-  const players = findPlayers(otherTokens, pages.players, isTyping).flatMap((player) => {
-    const team = teams.get(player.team);
-    return team ? [/** @type {PageRow} */ ({ kind: "player", team, player })] : [];
-  });
+  if (teamTokens.length) {
+    const teamPages = findTeamPages(teamTokens, otherTokens, { text, tokens, pages, isTyping });
+    if (teamPages.isFirst) return teamPages;
+    return { ...teamPages, rows: [...teamPages.rows, ...players] };
+  }
+  if (!otherWords.length) {
+    const places = findPassedOverPlaces(tokens, text, pages);
+    return players.length ? { rows: [...places.rows, ...players], gameText: null } : places;
+  }
   if (players.length) {
     const isKnownToGames = otherTokens.some((token) => token.meanings.length > 0);
     return { rows: players, gameText: isKnownToGames ? text : null };
@@ -543,33 +631,49 @@ function findWordPages(text, { dictionary, pages, isTyping }) {
 }
 
 /**
- * Who is out, when the words ask with no name, or the players they name, each saying whether
- * she's out, or no page when they name no one. A league whose players don't say who is out lists
- * no one for the words alone, and the players named without a word on it.
+ * Who is out, when the words ask with no name, then any other player whose name they start as
+ * they're typed, as "hurt" starts Hurter's; or the players they name beside them, each out saying
+ * why; or no page when they name no one. A line over the rows says they're who's out only when
+ * each is, and a player named alone, whether she is. A league whose players don't say who is out
+ * lists no one for the words alone, and the players named without a word on it.
  * @param {import("./search-words.js").Token[]} rest the tokens besides those that ask who is out
- * @param {{ text: string, pages: SearchPages, isTyping: boolean }} search
+ * @param {{ text: string, tokens: import("./search-words.js").Token[], pages: SearchPages, isTyping: boolean }} search
  * @returns {FoundPages}
  */
-function findOutPages(rest, { text, pages, isTyping }) {
+function findOutPages(rest, { text, tokens, pages, isTyping }) {
   if (!rest.length) {
     const rows = pages.isOutKnown ? listOutRows(pages.players, pages) : [];
-    if (!rows.length) return { rows: [], gameText: text };
+    const listed = new Set(rows.map((row) => row.kind === "player" && row.player.id));
+    const others = findPlayers(tokens, pages.players, isTyping).filter(
+      (player) => !listed.has(player.id),
+    );
+    const started = listPlayerRows(others, pages);
+    if (!rows.length) return { rows: started, gameText: text };
+    if (started.length) return { rows: [...rows, ...started], gameText: null };
     return { rows, gameText: null, read: describeWhoIsOut(rows) };
   }
-  const teams = new Map(pages.teams.map((team) => [team.code, team]));
   const players = findPlayers(rest, pages.players, isTyping);
-  const rows = players.flatMap((player) => {
-    const team = teams.get(player.team);
-    return team ? [/** @type {PageRow} */ ({ kind: "player", team, player, out: "named" })] : [];
-  });
+  const rows = listPlayerRows(players, pages, "named");
   if (!rows.length) return { rows: [], gameText: text };
   if (!pages.isOutKnown) return { rows, gameText: null };
+  const read = describeNamedOut(players, rows);
+  return read ? { rows, gameText: null, read } : { rows, gameText: null };
+}
+
+/**
+ * The line over the players named beside words asking who is out: whether she's out, for one, or
+ * who's out, when each of them is, or none when some aren't.
+ * @param {PagePlayer[]} players
+ * @param {PageRow[]} rows
+ */
+function describeNamedOut(players, rows) {
   const [player] = players;
-  const read =
-    players.length === 1
-      ? { lead: `${player.firstName} ${player.lastName}`, facts: [player.out ? "Out" : "Not out"] }
-      : describeWhoIsOut(rows);
-  return { rows, gameText: null, read };
+  if (players.length === 1)
+    return {
+      lead: `${player.firstName} ${player.lastName}`,
+      facts: [player.out ? "Out" : "Not out"],
+    };
+  return players.every((each) => each.out) ? describeWhoIsOut(rows) : undefined;
 }
 
 /**

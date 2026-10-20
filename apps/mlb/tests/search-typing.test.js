@@ -8,6 +8,7 @@ import {
   listPhrasings,
   sweepMisspellings,
   sweepPhrasings,
+  sweepPlayerNames,
   sweepPlayerNumbers,
 } from "../../../tests/search-sweep.js";
 import { listSeasonGames } from "../page/js/season-games.js";
@@ -46,6 +47,10 @@ test("typing each club's and place's name a key at a time, alone or in a search,
 
 test("typing each club's and place's name of five letters or more with a letter wrong, each way a thumb gets one wrong, finds only games the name's own letters find, or nothing, never another name's", () => {
   assert.deepEqual(sweepMisspellings({ context: CONTEXT, pages: PAGES }), []);
+});
+
+test("typing each player's first, last, or whole name a key at a time lists him from its third letter, even where a search of games knows the letters as a word, as Will or Mar", () => {
+  assert.deepEqual(sweepPlayerNames({ context: CONTEXT, pages: PAGES }), []);
 });
 
 /**
