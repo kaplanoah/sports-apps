@@ -15,11 +15,17 @@ const MOST_AGENTS_LINES = 200;
 // Past about this many words a reader loses a sentence's subject, so a long catalog is a list.
 const MOST_SENTENCE_WORDS = 60;
 
-const startsUnit = (/** @type {string} */ line) =>
-  /^\s*(?:---|#|$)/.test(line) || /^\s*(?:[-*]|\d+\.)\s/.test(line);
+const LIST_MARK = String.raw`[-*]|\d+\.`;
+const HEADING_MARK = "#+";
+const LEADING_MARK = new RegExp(String.raw`^\s*(?:${LIST_MARK}|${HEADING_MARK})\s+`);
 
 const isFence = (/** @type {string} */ line) => /^\s*---\s*$/.test(line);
-const isHeading = (/** @type {string} */ line) => /^#+\s/.test(line);
+const isHeading = (/** @type {string} */ line) =>
+  new RegExp(String.raw`^\s*(?:${HEADING_MARK})\s`).test(line);
+const isListItem = (/** @type {string} */ line) =>
+  new RegExp(String.raw`^\s*(?:${LIST_MARK})\s`).test(line);
+const startsUnit = (/** @type {string} */ line) =>
+  !line.trim() || isFence(line) || isHeading(line) || isListItem(line);
 
 // A sentence ends at a period, question mark, or exclamation mark, past any closing quote,
 // parenthesis, or bold, but never at an ellipsis's dots.
@@ -31,8 +37,7 @@ const AFTER_SENTENCE = new RegExp(`(?<=${SENTENCE_END})\\s+`);
  * A line's prose, without its list or heading mark, and with each code span as one word.
  * @param {string} line
  */
-const readProse = (line) =>
-  line.replace(/^\s*(?:[-*]|\d+\.|#+)\s+/, "").replaceAll(/`[^`]*`/g, "code");
+const readProse = (line) => line.replace(LEADING_MARK, "").replaceAll(/`[^`]*`/g, "code");
 
 /** @param {string} piece */
 const countWords = (piece) => piece.split(/\s+/).filter(Boolean).length;
@@ -135,6 +140,7 @@ test("a sentence ends at any stop past a closing mark, but not inside a code spa
     "Run `a. b` now. Wait... then",
     "go on.",
     '**Bugs.** Look "here."',
+    "Say 'yes.'",
     "Then stop.",
   ].join("\n");
   assert.deepEqual(listSentences(text), [
@@ -146,5 +152,6 @@ test("a sentence ends at any stop past a closing mark, but not inside a code spa
     { line: 4, words: 1 },
     { line: 4, words: 2 },
     { line: 5, words: 2 },
+    { line: 6, words: 2 },
   ]);
 });

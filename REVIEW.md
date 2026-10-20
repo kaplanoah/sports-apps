@@ -98,7 +98,7 @@ Don't run the tests: CI runs them all.
 In CI, each area's reviewers each look for one kind of problem
 (in the last read of the whole change, one reviewer an area looks for every kind)
 and list every problem they find.
-A checker confirms each against the code before anything is posted and merges repeats.
+A checker confirms each against the code before anything is posted, merges repeats, and weighs each.
 A check across areas, when there's more than one, names repeats across them and adds what spans them,
 and a step posts what they confirmed or left unsure.
 
@@ -130,4 +130,6 @@ and a step posts what they confirmed or left unsure.
 - The review ends with one summary comment: the commit reviewed, what it read, the findings by weight,
   how many of the problems the reviewers listed the checkers turned down, how many of the changed files were read in full out of how many,
   each one that wasn't and why, and anything read but not judged.
+  Recorded data and drawings are the kind of file a review leaves unread.
   In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge.
+  Each later review updates that one comment in place.
