@@ -613,6 +613,7 @@ jobs:
             --max-turns 200
             --setting-sources user
             --allowedTools "Bash(git log:*),Bash(git show:*)"
+            --disallowedTools "Bash(git log *--output*),Bash(git show *--output*)"
             --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}},"verdict":{"type":"string","enum":["confirmed","rejected","unsure"]},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"why":{"type":"string"}},"required":["ids","verdict","weight","path","line","body","why"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["findings","unjudged"]}'
           prompt: |
             You check what the reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, across every area of its change, before anything is posted. Its change is split into areas by what the files are about, and one reviewer read each area and listed every problem it found, unsure ones included. Their candidates are in `.review/candidates.json`, each with an id.

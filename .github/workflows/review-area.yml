@@ -69,6 +69,7 @@ jobs:
             --max-turns 150
             --setting-sources user
             --allowedTools "Bash(git log:*),Bash(git show:*)"
+            --disallowedTools "Bash(git log *--output*),Bash(git show *--output*)"
             --json-schema '{"type":"object","properties":{"candidates":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"weight":{"type":"string","enum":["Important","Nit","Pre-existing"]},"confidence":{"type":"string","enum":["high","medium","low"]},"claim":{"type":"string"},"when":{"type":"string"},"fix":{"type":"string"}},"required":["path","line","weight","confidence","claim","when","fix"]}},"unjudged":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"why":{"type":"string"}},"required":["file","why"]}}},"required":["candidates","unjudged"]}'
           prompt: |
             You are the reviewer of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. Its change is split into areas by what the files are about, each with a reviewer of its own. You review area ${{ inputs.area }}, "${{ inputs.name }}", for every item in the guide's "What to look for".
