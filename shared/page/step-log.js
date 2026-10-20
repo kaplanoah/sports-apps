@@ -1,12 +1,39 @@
 // While Diagnostics is on, a step log keeps what one part of the page does, with each touch and
-// click on it. The last few lines stay on this device, for Diagnostics to list.
+// click on it. The last few lines stay on this device, for Diagnostics to list: the page holds
+// them as it logs, since a touch or click can come many times a second, and keeps them on the
+// device a moment after a line comes, with every line that comes meanwhile, so a burst writes
+// once and a page that crashes, even mid-fling, still has them, and as it leaves the screen.
 
 import { formatClockTimeWithSeconds } from "./days.js";
+import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
 
 // Enough for a fling through a few weeks of a season's list, each day it passes a line.
 const KEPT_LINES = 200;
+const SAVE_AFTER_MS = 1000;
 
 /** @typedef {{ at: number, text: string }} StepLine */
+/** @typedef {StepLine & { id: string }} LoggedLine */
+
+/**
+ * Two tabs' lines as one log, each line once, oldest first, and only the last few.
+ * @param {LoggedLine[]} kept
+ * @param {LoggedLine[]} held
+ */
+function mergeLines(kept, held) {
+  const byId = new Map([...kept, ...held].map((line) => [line.id, line]));
+  return [...byId.values()].toSorted((first, second) => first.at - second.at).slice(-KEPT_LINES);
+}
+
+/**
+ * A line as storage kept it, its addresses hidden, named by when it came and what it says when
+ * storage names it by nothing else.
+ * @param {any} line
+ * @returns {LoggedLine}
+ */
+function readKeptLine(line) {
+  const text = hideAddresses(String(line.text));
+  return { id: String(line.id ?? `${line.at} ${text}`), at: line.at, text };
+}
 
 /**
  * A file by its own name, and the page by "page", never by an address, whose path holds the page's
@@ -31,8 +58,11 @@ function readLastPathPart(url) {
   }
 }
 
-/** @param {string} text */
-const hideAddresses = (text) => text.replace(/\bhttps?:\/\/[^\s"'<>]+/g, nameFile);
+/**
+ * Text with each address in it, a socket's too, named as nameFile names it.
+ * @param {string} text
+ */
+export const hideAddresses = (text) => text.replace(/\b(?:https?|wss?):\/\/[^\s"'<>]+/g, nameFile);
 
 /**
  * A log's lines as text under its title, or nothing when it has none.
@@ -89,34 +119,56 @@ function describeTouchOrClick(event) {
 export function createStepLog({ key, title, isWatched }) {
   let isOn = () => false;
   let onLogged = () => {};
+  /** @type {LoggedLine[] | null} */
+  let held = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let saveTimer;
+  // Each line is named by the tab's log that logged it and its count there, so two tabs' saves
+  // keep each line once, even two that say the same at the same moment. The id is made with the
+  // first line, since a Worker that imports a log may not make random values as it loads.
+  /** @type {string | undefined} */
+  let logId;
+  let linesLogged = 0;
 
-  /** @returns {StepLine[]} */
-  function readLines() {
-    try {
-      const lines = JSON.parse(localStorage.getItem(key) ?? "[]");
-      return Array.isArray(lines)
-        ? lines.map((line) => ({ ...line, text: hideAddresses(String(line.text)) }))
-        : [];
-    } catch {
-      return [];
-    }
+  /** @returns {LoggedLine[]} */
+  function loadLines() {
+    const kept = readStoredJson(key);
+    return Array.isArray(kept) ? kept.map(readKeptLine) : [];
   }
 
-  /** @param {StepLine[]} lines */
-  function saveLines(lines) {
-    try {
-      localStorage.setItem(key, JSON.stringify(lines.slice(-KEPT_LINES)));
-    } catch {
-      /* the line is lost, and the next step tries again */
+  const holdLines = () => (held ??= loadLines());
+
+  function stopSaveTimer() {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+  }
+
+  /** @returns {StepLine[]} oldest first */
+  const readLines = () => [...holdLines()];
+
+  // Every tab holds its own lines, so a save keeps the lines other tabs saved too. A log turned
+  // off, here or in another tab, has forgotten its lines, so they never go back. Lines storage
+  // won't take are lost once the page goes.
+  function saveLines() {
+    stopSaveTimer();
+    if (!held || !isOn()) return;
+    held = mergeLines(loadLines(), held);
+    storeJson(key, held);
+  }
+
+  // Another tab forgot the log, or storage was cleared.
+  /** @param {StorageEvent} event */
+  function dropForgottenLines(event) {
+    if (event.key === null || (event.key === key && event.newValue === null)) {
+      stopSaveTimer();
+      held = [];
     }
   }
 
   function forgetLines() {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      /* the lines stay until the next try */
-    }
+    stopSaveTimer();
+    held = [];
+    forgetStored(key);
   }
 
   /**
@@ -125,7 +177,12 @@ export function createStepLog({ key, title, isWatched }) {
    */
   function noteStep(text) {
     if (!isOn()) return;
-    saveLines([...readLines(), { at: Date.now(), text: hideAddresses(text) }]);
+    const lines = holdLines();
+    logId ??= crypto.randomUUID();
+    linesLogged += 1;
+    lines.push({ id: `${logId}-${linesLogged}`, at: Date.now(), text: hideAddresses(text) });
+    lines.splice(0, lines.length - KEPT_LINES);
+    saveTimer ??= setTimeout(saveLines, SAVE_AFTER_MS);
     onLogged();
   }
 
@@ -151,6 +208,9 @@ export function createStepLog({ key, title, isWatched }) {
     onLogged = onLineLogged;
     for (const type of ["touchstart", "touchend", "click"])
       document.addEventListener(type, noteTouchOrClick, { capture: true, passive: true });
+    document.addEventListener("visibilitychange", () => document.hidden && saveLines());
+    addEventListener("pagehide", saveLines);
+    addEventListener("storage", dropForgottenLines);
   }
 
   return {

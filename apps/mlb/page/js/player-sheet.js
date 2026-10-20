@@ -208,8 +208,6 @@ function openOnTap(event) {
 export function startPlayerSheet() {
   watchRetries(findSheet(), retryPlayer);
   wireSheet(findSheet(), {
-    closeButton: findElement("playerCloseBtn"),
-    backButton: findElement("playerBackBtn"),
     keeper: { read: readShownPlayer, reopen: reopenPlayer },
     name: "Player",
     forget: () => {

@@ -2,8 +2,10 @@
 // device as JSON under its key. Nobody signs in, and people share a page's address, so the page
 // saves nothing of a viewer's to the store. Every choice is listed, so carrying a viewer's choices
 // between their devices can find them all, and each tells the page when something other than the
-// page itself, like another tab, changes it. Storage can refuse access, as in a private window, and
-// then a choice lasts until the page reloads.
+// page itself, like another tab, changes it. Storage can refuse access, as in a private window, or
+// be full, and then a choice lasts until the page reloads.
+
+import { readStoredText, storeJson } from "./local-storage.js";
 
 /**
  * @template T
@@ -35,14 +37,9 @@ function parseKept(text) {
 // A choice storage refused to keep, as when it's full, lives in memory, ahead of the older value
 // storage still holds.
 /** @param {string} key */
-function readStored(key) {
+function readKept(key) {
   if (keptInMemory.has(key)) return keptInMemory.get(key);
-  let text;
-  try {
-    text = localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+  const text = readStoredText(key);
   return text === null ? null : parseKept(text);
 }
 
@@ -50,13 +47,9 @@ function readStored(key) {
  * @param {string} key
  * @param {unknown} value
  */
-function store(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    keptInMemory.delete(key);
-  } catch {
-    keptInMemory.set(key, value);
-  }
+function keep(key, value) {
+  if (storeJson(key, value)) keptInMemory.delete(key);
+  else keptInMemory.set(key, value);
 }
 
 /** @param {string | null} key */
@@ -107,8 +100,8 @@ function watchKey(key, onChange) {
 export function createViewerChoice(key, readValue) {
   viewerChoiceKeys.add(key);
   return {
-    read: () => readValue(readStored(key)),
-    keep: (value) => store(key, value),
+    read: () => readValue(readKept(key)),
+    keep: (value) => keep(key, value),
     watch: (onChange) => watchKey(key, onChange),
   };
 }
