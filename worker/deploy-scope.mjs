@@ -45,6 +45,7 @@ const SKIPPED_FILES = new Set([
   "worker/red-change-styles.mjs",
   "worker/report-flaky-tests.mjs",
   "worker/review-context.mjs",
+  "worker/review-git.mjs",
   "worker/review-state.mjs",
   "worker/rollback.mjs",
   "worker/rule-files.mjs",
