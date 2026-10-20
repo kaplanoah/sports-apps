@@ -80,7 +80,7 @@ function readPartsTop() {
   return Number.isNaN(top) ? null : top;
 }
 
-/** Where the parts started as each part's scroll last matched it, by part. */
+// Where the parts started as each part's scroll last matched it, by part.
 /** @type {WeakMap<HTMLElement, number>} */
 const keptPartsTops = new WeakMap();
 
