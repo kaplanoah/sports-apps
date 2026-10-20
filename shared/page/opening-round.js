@@ -59,15 +59,16 @@ export function showOpeningRound(behavior) {
 
 /**
  * Brings a sideways bracket to its opening round each time it comes into view, since a hidden tab
- * loses its scroll, and whenever that round changes. Any other redraw keeps the reader's place.
- * Returns what the app calls after each draw, with the scroller, the opening round's first
- * series, that round's index, and the scroll the bracket had before the draw.
+ * loses its scroll, and whenever that round changes. Any other redraw keeps the reader's place, as
+ * does the first draw of a bracket a reload put back scrolled (show-last-drawn.js). Returns what
+ * the app calls after each draw, with the scroller, the opening round's first series, that round's
+ * index, and the scroll the bracket had before the draw.
  * @param {HTMLElement} wrap holds the bracket, and stays across redraws
  */
 export function watchOpeningRound(wrap) {
   /** @type {{ scroller: HTMLElement, target: HTMLElement, round: number } | null} */
   let drawn = null;
-  let wasShown = false;
+  let wasShown = wrap.getClientRects().length > 0;
   new ResizeObserver(() => {
     const isShown = wrap.getClientRects().length > 0;
     if (isShown && !wasShown && drawn) scrollToTarget(drawn.scroller, drawn.target);
@@ -79,9 +80,10 @@ export function watchOpeningRound(wrap) {
 
   /** @param {{ scroller: HTMLElement, target: HTMLElement, round: number, keptLeft: number }} draw */
   return ({ scroller, target, round, keptLeft }) => {
+    const isPutBack = !drawn && keptLeft > 0;
     const isNewRound = round !== drawn?.round;
     drawn = { scroller, target, round };
-    if (isNewRound) scrollToTarget(scroller, target);
+    if (isNewRound && !isPutBack) scrollToTarget(scroller, target);
     else scroller.scrollLeft = keptLeft;
   };
 }

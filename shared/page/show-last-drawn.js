@@ -3,7 +3,9 @@
 // as it leaves the screen (last-seen.js), with the sheets it showed, and this plain script, loaded
 // in the head, puts it back: the page calls showLastDrawn() right after its views, its sheets, and
 // openLastTab(), before anything is painted, since a part on a hidden tab can't take back where it
-// was scrolled.
+// was scrolled. After two minutes away, what a viewer moved starts over (long-away.js).
+
+/* global findPlaceToShow, isLongAwayFrom -- from long-away.js */
 
 // Storage can be empty or refuse access, as in a private window, so the page never depends on it.
 /** @param {string} key */
@@ -41,34 +43,40 @@ function findByPath(part, path) {
   return element;
 }
 
-// After two minutes away, a list goes back to where it starts, as the Games view's list does
-// (long-away.js), and a part that starts hidden, like the Games view's search, is hidden again.
-const START_AFTER_AWAY_MS = 2 * 60 * 1000;
-
-/** @param {unknown} savedAt */
-const isLongAwayFrom = (savedAt) => !(Date.now() - Number(savedAt) < START_AFTER_AWAY_MS);
-
 /**
  * @param {Element} part
- * @param {unknown} scrolls
- * @param {unknown} savedAt
+ * @param {ReturnType<typeof findPlaceToShow>["scrolls"]} scrolls
  */
-function restoreScrolls(part, scrolls, savedAt) {
-  if (!Array.isArray(scrolls)) return;
-  const isLongAway = isLongAwayFrom(savedAt);
-  for (const { path, left, top, startTop } of scrolls) {
+function restoreScrolls(part, scrolls) {
+  for (const { path, left, top, isOnStart } of scrolls) {
     const element = Array.isArray(path) ? findByPath(part, path) : null;
     if (!element) continue;
-    element.scrollLeft = Number(left) || 0;
-    const isOnStart = isLongAway && startTop !== undefined;
-    const shownTop = Number(isOnStart ? startTop : top) || 0;
-    element.scrollTop = shownTop;
+    element.scrollLeft = left;
+    element.scrollTop = top;
+    // A part inside the season's standings or bracket is laid out only once season-header.js
+    // places them, right after this, which can widen it past where it could first be scrolled.
+    if (left > 0) requestAnimationFrame(() => (element.scrollLeft = left));
     if (!(element instanceof HTMLElement)) continue;
     // A list put back on its start day goes to the start day its code finds, which can have moved.
     if (isOnStart) element.dataset.putBackStart = "true";
     // The page around a list can settle a little shorter or taller once its code draws it, which
     // can stop a scroll near the list's end short, so the list's code can take it again.
-    else if (shownTop > 0) element.dataset.putBackTop = String(shownTop);
+    else if (top > 0) element.dataset.putBackTop = String(top);
+  }
+}
+
+/**
+ * Chooses the first of each row of tabs in `part`, as tabs.js chooses one.
+ * @param {Element} part
+ */
+function chooseFirstTabs(part) {
+  for (const tabList of part.querySelectorAll("[role=tablist]")) {
+    const tabs = /** @type {HTMLElement[]} */ ([...tabList.querySelectorAll("[role=tab]")]);
+    tabs.forEach((tab, index) => {
+      tab.classList.toggle("active", index === 0);
+      tab.setAttribute("aria-selected", String(index === 0));
+      tab.tabIndex = index === 0 ? 0 : -1;
+    });
   }
 }
 
@@ -84,25 +92,31 @@ const keepCustomProperties = (style) =>
     .join("; ");
 
 /**
+ * Puts back a part as it showed, or from its start after two minutes away, and says how far the
+ * page was scrolled while it showed.
  * @param {string} id
- * @param {{ markup: string, hidden: boolean, classes?: unknown, style?: unknown, scrolls?: unknown, holderTop?: unknown, savedAt?: unknown }} part
+ * @param {{ markup: string, hidden: boolean, style?: unknown, savedAt?: unknown }} part
  */
-function showPart(id, { markup, hidden, classes, style, scrolls, holderTop, savedAt }) {
+function showPart(id, part) {
   const element = /** @type {HTMLElement} */ (document.getElementById(id));
-  element.innerHTML = markup;
-  const isBackToStart = element.hasAttribute("data-start-hidden") && isLongAwayFrom(savedAt);
-  element.hidden = hidden === true || isBackToStart;
-  if (typeof classes === "string") element.classList.add(...classes.split(" ").filter(Boolean));
-  if (typeof style === "string") element.setAttribute("style", keepCustomProperties(style));
-  restoreScrolls(element, scrolls, savedAt);
+  const place = findPlaceToShow(part, !!element.closest("dialog"));
+  element.innerHTML = part.markup;
+  const isBackToStart = element.hasAttribute("data-start-hidden") && isLongAwayFrom(part.savedAt);
+  element.hidden = part.hidden === true || isBackToStart;
+  element.classList.add(...place.classes.split(" ").filter(Boolean));
+  if (typeof part.style === "string")
+    element.setAttribute("style", keepCustomProperties(part.style));
+  if (place.isOnFirstTab) chooseFirstTabs(element);
+  restoreScrolls(element, place.scrolls);
   // A part drawn inside the season's standings or bracket, which each scroll on their own, goes
   // back to where its holder was scrolled, which season-header.js takes again once it knows the
   // holder's room.
   const holder = element.parentElement;
-  if (Number(holderTop) > 0 && holder) {
-    holder.scrollTop = Number(holderTop);
-    holder.dataset.putBackTop = String(holderTop);
+  if (place.holderTop > 0 && holder) {
+    holder.scrollTop = place.holderTop;
+    holder.dataset.putBackTop = String(place.holderTop);
   }
+  return element.closest("section.view.active") ? place.pageTop : 0;
 }
 
 /** @param {any} saved */
@@ -202,7 +216,11 @@ function showLastSheets() {
 // goes with it.
 function showLastDrawn() {
   const parts = Object.entries(readLastDrawn()).filter(([id, part]) => isDrawnPart(id, part));
-  for (const [id, part] of parts) showPart(id, part);
+  const pageTops = parts.map(([id, part]) => showPart(id, part));
   if (parts.length) document.getElementById("loadNote")?.remove();
+  // The browser's own putting back of the page's scroll would undo a start over, and comes once
+  // the page has loaded, after its parts have shown where they were.
+  history.scrollRestoration = "manual";
+  scrollTo({ top: Math.max(0, ...pageTops), behavior: "instant" });
   showLastSheets();
 }

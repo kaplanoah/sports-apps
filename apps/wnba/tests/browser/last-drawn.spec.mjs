@@ -10,6 +10,12 @@ import {
   readSeasonRide,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
+import {
+  MINUTE_MS,
+  SHORT_PHONE,
+  expectNewsAfterReloads,
+  expectSeasonTabAfterReload,
+} from "../../../../tests/browser/start-over.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
 import { findRows, sendSearch, tapSearch } from "./search-page.mjs";
 
@@ -335,5 +341,32 @@ test.describe("on a phone", () => {
     expect(resting.x).toBeCloseTo(placed.x, 0);
     expect(resting.width).toBeCloseTo(placed.width, 0);
     release();
+  });
+
+  test.describe("on a short phone", () => {
+    test.use({ viewport: SHORT_PHONE });
+
+    const SIDEWAYS = "#bracketWrap .bracket";
+
+    test("a reload two minutes or more after the page left starts the season tab over, on the part it's named for, each part at its top with the header back, before the page's code arrives, and the bracket on its opening round once it runs", async ({
+      page,
+    }) => {
+      await openApp(page);
+      await expectSeasonTabAfterReload(page, { sideways: SIDEWAYS, awayMs: 2 * MINUTE_MS });
+    });
+
+    test("a reload under two minutes after the page left shows the season tab where it was left, the bracket sideways too", async ({
+      page,
+    }) => {
+      await openApp(page);
+      await expectSeasonTabAfterReload(page, { sideways: SIDEWAYS, awayMs: 2 * MINUTE_MS - 1000 });
+    });
+
+    test("a reload shows News where it was left under two minutes after the page left, and at its top after two", async ({
+      page,
+    }) => {
+      const app = await openApp(page);
+      await expectNewsAfterReloads(page, app.writeDocument);
+    });
   });
 });

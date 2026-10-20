@@ -13,6 +13,13 @@ import {
   keepUpdatesFromEarlierVisit,
   matchPath,
 } from "./harness.mjs";
+import {
+  SHORT_PHONE,
+  leaveScrolledFor,
+  readNewsPlace,
+  readPageScroll,
+  readSeasonPlace,
+} from "../../../../tests/browser/start-over.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
@@ -253,6 +260,89 @@ test("a page coming back to nothing new lets a faded band pass through the heade
   await expect(stamp).toHaveClass(/caught-up-band/);
   await expect(stamp).toHaveCSS("animation-duration", "3.2s");
   await expect(stamp).toHaveCSS("mask-image", /rgba\(0, 0, 0, 0\.75\)/);
+});
+
+/**
+ * Notes the header's lines each time what they say changes, until the returned function reads the
+ * notes.
+ * @param {import("@playwright/test").Page} page
+ */
+async function trackStampTexts(page) {
+  await page.evaluate(() => {
+    const stamp = /** @type {HTMLElement} */ (document.getElementById("stamp"));
+    const texts = /** @type {string[]} */ ([]);
+    let shown = stamp.textContent;
+    new MutationObserver(() => {
+      if (stamp.textContent === shown) return;
+      shown = stamp.textContent;
+      texts.push(shown ?? "");
+    }).observe(stamp, { subtree: true, childList: true, characterData: true });
+    Object.assign(window, { stampTexts: texts });
+  });
+  return () => page.evaluate(() => /** @type {string[]} */ (Reflect.get(window, "stampTexts")));
+}
+
+test("a page coming back as the store updates draws once, with the update, never the copy the store held", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await app.updateFromWorker();
+  const stamp = page.locator("#stamp");
+  await expect(stamp).toContainText("Next first pitch");
+  await app.writeWhileAway("live/status", { error: "upstream_error", detail: "", write: "" });
+  app.changeSnapshots((snapshot) => ({ ...snapshot, missing: ["wildCardRank"] }));
+  app.passTimeAtWorker(31 * MINUTE_MS);
+  const readStampTexts = await trackStampTexts(page);
+  const seasonReads = app.countSeasonReads();
+
+  await page.clock.setSystemTime(Date.parse(EVENING_FIXTURE.now) + 31 * MINUTE_MS);
+  await comeBack(page);
+  await expect.poll(() => app.countSeasonReads()).toBe(seasonReads + 1);
+  await app.updateFromWorker();
+
+  await expect(stamp).toContainText("MLB stopped sending wildCardRank");
+  const texts = await readStampTexts();
+  expect(texts).toHaveLength(1);
+  expect(texts[0]).toContain("MLB stopped sending wildCardRank");
+});
+
+test.describe("on a short phone", () => {
+  test.use({ viewport: SHORT_PHONE, hasTouch: true, isMobile: true });
+
+  const SIDEWAYS = "#bracketWrap .tree-scroll";
+
+  /**
+   * @param {import("@playwright/test").Page} page
+   * @param {number} awayMs
+   */
+  async function openAndLeaveFor(page, awayMs) {
+    const app = await openApp(page);
+    return leaveScrolledFor(page, {
+      sideways: SIDEWAYS,
+      writeDocument: app.writeFromWorker,
+      awayMs,
+    });
+  }
+
+  test("after two minutes away, the season tab starts over on the part it's named for, each part at its top with the header back and the bracket on its opening round, and News at its top", async ({
+    page,
+  }) => {
+    const { start } = await openAndLeaveFor(page, 2 * MINUTE_MS);
+
+    await expect.poll(() => readSeasonPlace(page, SIDEWAYS)).toEqual(start);
+    await page.getByRole("tab", { name: "News" }).click();
+    expect(await readPageScroll(page)).toBe(0);
+  });
+
+  test("under two minutes away, the season tab and News stay where they were left", async ({
+    page,
+  }) => {
+    const { left, newsPlace } = await openAndLeaveFor(page, 2 * MINUTE_MS - 1000);
+
+    expect(await readSeasonPlace(page, SIDEWAYS)).toEqual(left);
+    await page.getByRole("tab", { name: "News" }).click();
+    expect(await readNewsPlace(page)).toBe(newsPlace);
+  });
 });
 
 test.describe("on a phone", () => {

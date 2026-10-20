@@ -203,10 +203,12 @@ section.view.active {
    what's left under the header. A phone on the Home Screen lays the page out short of the screen
    by the top safe area unless the page is taller than it, so there the page stays that much
    taller. Safari doesn't lay the page out again when a tab changes only the root's height, so the
-   root keeps it on every tab, where what's taller than it still scrolls the page. */
+   root keeps it on every tab, where what's taller than it still scrolls the page. The page keeps
+   a tab's rows in place as what's above them grows (kept-place.js), so the browser doesn't too. */
 :root {
   --view-end-room: max(48px, env(safe-area-inset-bottom));
   height: 100%;
+  overflow-anchor: none;
 }
 :root:has(.view.active > :is(.day-view, .season-parts)) body {
   display: flex;

@@ -20,7 +20,7 @@ import { listSearchGames } from "#shared/game-search.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { keepLastRead } from "#shared/kept-read.js";
 import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
-import { endLoadNote } from "#shared/load-note.js";
+import { endLoadNote, hasDrawing } from "#shared/load-note.js";
 import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
@@ -253,11 +253,13 @@ async function reloadSeason() {
   showNewData();
 }
 
+// A page whose load failed loads its season again. Otherwise what changed while it was away
+// comes in one redraw, with the store's latest.
 /** @param {number} awayMs */
 function catchUp(awayMs) {
   session.db.catchUp(awayMs);
   if (session.problem) reloadSeason();
-  else showNewData();
+  else session.db.afterHandOver(showNewData);
 }
 
 async function boot() {
@@ -295,7 +297,7 @@ async function boot() {
   );
   startBracket();
   startBracketStandings();
-  session.db = createWorkerStore();
+  session.db = createWorkerStore({ isShowing: hasDrawing });
   showJobStatuses(session.db, BACKGROUND_JOBS);
   drawLastSeen();
   reopenLastSheets();
@@ -311,7 +313,7 @@ async function boot() {
   });
   const [years] = await Promise.all([listSeasonYears(), loadSeason()]);
   fillSeasonList(years);
-  redrawEased(drawLoadedSeason);
+  session.db.afterHandOver(() => redrawEased(drawLoadedSeason));
   watchNews(session.db, (news) => {
     session.news = news;
     redrawEased(drawNews);

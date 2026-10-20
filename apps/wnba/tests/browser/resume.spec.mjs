@@ -5,6 +5,13 @@ import {
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
+import {
+  SHORT_PHONE,
+  leaveScrolledFor,
+  readNewsPlace,
+  readPageScroll,
+  readSeasonPlace,
+} from "../../../../tests/browser/start-over.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
@@ -438,4 +445,39 @@ test("a page coming back to new scores sweeps the header's lines up to full stre
   await expect(stamp).toContainText("NOW");
   await expect(stamp).toHaveClass(/caught-up-wipe/);
   await expect(stamp).toHaveCSS("animation-duration", "1.4s");
+});
+
+test.describe("on a short phone", () => {
+  test.use({ viewport: SHORT_PHONE, hasTouch: true, isMobile: true });
+
+  const SIDEWAYS = "#bracketWrap .bracket";
+
+  /**
+   * @param {import("@playwright/test").Page} page
+   * @param {number} awayMs
+   */
+  async function openAndLeaveFor(page, awayMs) {
+    const app = await openApp(page);
+    return leaveScrolledFor(page, { sideways: SIDEWAYS, writeDocument: app.writeDocument, awayMs });
+  }
+
+  test("after two minutes away, the season tab starts over on the part it's named for, each part at its top with the header back and the bracket on its opening round, and News at its top", async ({
+    page,
+  }) => {
+    const { start } = await openAndLeaveFor(page, 2 * MINUTE_MS);
+
+    await expect.poll(() => readSeasonPlace(page, SIDEWAYS)).toEqual(start);
+    await page.getByRole("tab", { name: "News" }).click();
+    expect(await readPageScroll(page)).toBe(0);
+  });
+
+  test("under two minutes away, the season tab and News stay where they were left", async ({
+    page,
+  }) => {
+    const { left, newsPlace } = await openAndLeaveFor(page, 2 * MINUTE_MS - 1000);
+
+    expect(await readSeasonPlace(page, SIDEWAYS)).toEqual(left);
+    await page.getByRole("tab", { name: "News" }).click();
+    expect(await readNewsPlace(page)).toBe(newsPlace);
+  });
 });

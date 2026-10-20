@@ -463,6 +463,9 @@ export async function openApp(
     holdStore: () => holdStore(page),
     // What the Worker's alarm does on its own schedule.
     updateFromWorker: () => testStore.fireAlarm(),
+    // Time passing for the Worker while the page sleeps, which brings its next update due.
+    /** @param {number} ms */
+    passTimeAtWorker: (ms) => testStore.passTime(ms),
     countSeasonReads: () =>
       harness.storeReads.filter((path) => path === `/store/${currentPath}`).length,
     listStoreReads: () => [...harness.storeReads],

@@ -6,10 +6,13 @@
 // back what they showed. A sheet left open too long is gone by the time the page shows again
 // (sheet-memory.js).
 
+import { watchTimeAway } from "./resume.js";
 import { isSeasonPart } from "./season-part.js";
 import { keepImages } from "./service-worker.js";
 import { closeForgottenDialogs, noteShownEndsSeen } from "./sheet-memory.js";
 import { listOpenSheets, reopenSheets } from "./sheet-reopen.js";
+
+/* global isAwayLong -- from long-away.js */
 
 const LAST_SEEN_KEY = "lastSeen";
 const LAST_DRAWN_KEY = "lastDrawn";
@@ -68,9 +71,10 @@ const readScrolls = (part) =>
 
 // A part drawn inside the season's standings or bracket, which each scroll on their own (pager.css),
 // keeps that holder's place too. A holder on a tab not shown reads as unscrolled, so it keeps the
-// place it last scrolled to, or the one a load put back that it hasn't shown yet.
+// place it last scrolled to, or the one a load put back that it hasn't shown yet, until the page
+// starts over after two minutes away (long-away.js).
 /** @type {WeakMap<Element, number>} */
-const holderTops = new WeakMap();
+let holderTops = new WeakMap();
 
 /** @param {Event} event */
 function noteHolderTop({ target }) {
@@ -85,6 +89,10 @@ function readHolderTop(part) {
   return Number(holder.dataset.putBackTop ?? holderTops.get(holder) ?? 0);
 }
 
+// A part on the tab shown keeps where the page was scrolled, as on the News tab.
+/** @param {HTMLElement} part */
+const readPageTop = (part) => (part.closest("section.view.active") ? scrollY : undefined);
+
 // A part's classes and colors can come from its code rather than its markup, like a pager's
 // classes and a game sheet's teams' colors.
 /**
@@ -98,6 +106,7 @@ const readDrawnPart = (part, savedAt) => ({
   style: part.getAttribute("style"),
   scrolls: readScrolls(part),
   holderTop: readHolderTop(part),
+  pageTop: readPageTop(part),
   savedAt,
 });
 
@@ -167,6 +176,9 @@ export function keepLastSeen(readShown) {
   let hiddenAt = null;
   const readLeftAt = () => hiddenAt ?? Date.now();
   document.addEventListener("scroll", noteHolderTop, { capture: true, passive: true });
+  watchTimeAway((awayMs) => {
+    if (isAwayLong(awayMs)) holderTops = new WeakMap();
+  });
   // Only what the page drew before it first left the screen was seen.
   const noteEndsSeenUntilLeft = () => {
     if (hiddenAt === null) noteShownEndsSeen(Date.now());

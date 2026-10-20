@@ -14,7 +14,6 @@ import { describeDay, readCalendarDate } from "./days.js";
 import { createSearchContext, createSearchDictionary, describeNoGames } from "./game-search.js";
 import { markBarStuck } from "./held-bar.js";
 import { html, isWebAddress, joinWithSeparator, setHtml } from "./html.js";
-import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { nameStoryDay } from "./news-view.js";
 import { openPageTab, readShownTab, readTabBefore, setTabEnter, setTabStart } from "./page-tabs.js";
@@ -27,6 +26,8 @@ import {
   readSentWords,
   readTypedSearch,
 } from "./search-reading.js";
+
+/* global isAwayLong -- from long-away.js */
 
 /** @typedef {import("./html.js").Markup} Markup */
 /** @typedef {import("./game-search.js").SearchGame} SearchGame */

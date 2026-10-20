@@ -4,7 +4,8 @@ import { createWorkerStore } from "../shared/page/worker-store.js";
 
 // Stand-ins for the browser: each read waits until the test answers it, and the socket opens
 // when the test says so.
-function startStore() {
+/** @param {{ isShowing?: () => boolean }} [options] */
+function startStore({ isShowing } = {}) {
   const reads = [];
   const sockets = [];
   globalThis.fetch = /** @type {any} */ (
@@ -34,9 +35,11 @@ function startStore() {
       }
     }
   );
-  const store = createWorkerStore(new URL("https://mlb-app.example/k3y/"));
+  const store = createWorkerStore({ baseUrl: new URL("https://mlb-app.example/k3y/"), isShowing });
   const openSocket = () => sockets.at(-1).listeners.open();
-  return { store, reads, sockets, openSocket };
+  /** @param {unknown} message what the Worker sends down the open socket */
+  const hear = (message) => sockets.at(-1).listeners.message({ data: JSON.stringify(message) });
+  return { store, reads, sockets, openSocket, hear };
 }
 
 const START = Date.parse("2026-10-04T21:00:00Z");
@@ -449,4 +452,98 @@ test("waiting for a store that doesn't catch up gives up after ten seconds", asy
   mock.timers.tick(10 * 1000);
 
   assert.equal(await waiting, false);
+});
+
+const UPDATING_WAIT_MS = 2000;
+
+/**
+ * A store showing a drawing, caught up on the season, that comes back after time away to a store
+ * that says its update is coming: the season it last had, the season the store held, and each
+ * season and catch-up the page heard of since.
+ */
+async function startComingBack() {
+  const started = startStore({ isShowing: () => true });
+  const seen = [];
+  const changes = [];
+  started.store.doc("seasons/2026").onSnapshot((snapshot) => seen.push(snapshot.data().inning));
+  started.openSocket();
+  started.hear({ updating: false });
+  started.reads.at(-1).answer({ data: { inning: 3 } });
+  await settle();
+  started.store.watchCatchUp((isCaughtUp) => changes.push(isCaughtUp));
+
+  started.store.catchUp(3 * 60 * 1000);
+  started.openSocket();
+  started.hear({ updating: true });
+  started.reads.at(-1).answer({ data: { inning: 8 } });
+  await settle();
+  return { ...started, seen, changes };
+}
+
+test("a page coming back with a drawing holds what the store held until the store's update is done, then catches up with the latest at once", async () => {
+  const { seen, changes, hear } = await startComingBack();
+  assert.deepEqual(seen, [3]);
+  assert.deepEqual(changes, [true, false]);
+
+  hear({ path: "seasons/2026", data: { inning: 9 } });
+  assert.deepEqual(seen, [3]);
+
+  hear({ updating: false });
+  assert.deepEqual(seen, [3, 9]);
+  assert.deepEqual(changes, [true, false, true]);
+});
+
+test("a page coming back to an update that changed nothing catches up with what the store held as the update is done", async () => {
+  const { seen, changes, hear } = await startComingBack();
+
+  hear({ updating: false });
+
+  assert.deepEqual(seen, [3, 8]);
+  assert.deepEqual(changes, [true, false, true]);
+});
+
+test("a page coming back waits no longer for the store's update than it takes to say it's getting the latest scores", async () => {
+  const { seen, changes, hear } = await startComingBack();
+
+  mock.timers.tick(UPDATING_WAIT_MS - 1);
+  assert.deepEqual(seen, [3]);
+  mock.timers.tick(1);
+  assert.deepEqual(seen, [3, 8]);
+  assert.deepEqual(changes, [true, false, true]);
+
+  hear({ path: "seasons/2026", data: { inning: 9 } });
+  assert.deepEqual(seen, [3, 8, 9]);
+});
+
+test("a page with nothing drawn yet takes what the store holds at once, and catches up without waiting for the store's update", async () => {
+  const { store, reads, openSocket, hear } = startStore({ isShowing: () => false });
+  const seen = [];
+  const changes = [];
+  store.doc("seasons/2026").onSnapshot((snapshot) => seen.push(snapshot.data().inning));
+  store.watchCatchUp((isCaughtUp) => changes.push(isCaughtUp));
+  openSocket();
+  hear({ updating: true });
+
+  reads[0].answer({ data: { inning: 8 } });
+  await settle();
+
+  assert.deepEqual(seen, [8]);
+  assert.deepEqual(changes, [false, true]);
+});
+
+test("a page that loads with the copy it last showed waits for the store's update before it takes what the store holds, and draws it before it says it has caught up", async () => {
+  const { store, reads, openSocket, hear } = startStore({ isShowing: () => true });
+  const steps = [];
+  store.doc("seasons/2026").onSnapshot((snapshot) => steps.push(snapshot.data().inning));
+  store.afterHandOver(() => steps.push("drawn"));
+  store.watchCatchUp((isCaughtUp) => steps.push(isCaughtUp));
+  openSocket();
+  hear({ updating: true });
+  reads[0].answer({ data: { inning: 8 } });
+  await settle();
+  assert.deepEqual(steps, [false]);
+
+  hear({ updating: false });
+
+  assert.deepEqual(steps, [false, 8, "drawn", true]);
 });

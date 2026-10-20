@@ -23,12 +23,13 @@ import {
 import { dayStripLog } from "./day-strip-log.js";
 import { markBarStuck } from "./held-bar.js";
 import { html, setHtml } from "./html.js";
-import { isAwayLong } from "./long-away.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { watchTimeAway } from "./resume.js";
 import { scrollWithSpring } from "./spring-scroll.js";
 import { endStripSlide, noteStripMissed, slideStripTo } from "./strip-slide.js";
+
+/* global isAwayLong -- from long-away.js */
 
 // A season's games as one list of its game days, from its first to its last, under a bar holding
 // a strip of every day between them. The strip's chosen day is the one at the top of the list, and

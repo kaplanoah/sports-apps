@@ -1,16 +1,19 @@
 import { markBarHeld, markBarStuck } from "./held-bar.js";
+import { findKeptTop } from "./kept-place.js";
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
 import { startRiderTaps } from "./rider-taps.js";
 import { holdRoundDots } from "./round-dots.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
+import { watchTimeAway } from "./resume.js";
 import { findPartHolding } from "./season-part.js";
 import { createSlidePanels } from "./slide-panels.js";
 import { isAsFarAs, isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
 /* global followSeasonPart, listAboveSeasonView -- from season-header.js */
+/* global isAwayLong -- from long-away.js */
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
 // time, as slide-panels.js moves them: a tap on a name slides to its part, and a swipe drags the
@@ -67,6 +70,31 @@ const holdBracketDotsWhileSliding = () => {
  * where the header stays put.
  */
 const readHeaderReach = () => parseFloat(findView().style.getPropertyValue("--header-reach")) || 0;
+
+/**
+ * Where the parts start, under the pill, where the header rides, or null before season-header.js
+ * has measured it.
+ */
+function readPartsTop() {
+  const top = parseFloat(findView().style.getPropertyValue("--parts-top"));
+  return Number.isNaN(top) ? null : top;
+}
+
+/** @type {number | null} */
+let keptPartsTop = null;
+
+// Where the header rides, what's above the pill, like the Updates box or the header's lines, pads
+// the parts down as it grows, so each part scrolled keeps its rows where they are on the screen,
+// and a pill held stays held (kept-place.js). The ride is measured whenever what's above changes
+// size, frame by frame as it eases, and again as the tab shows after a change while it didn't.
+function keepPartsPlace() {
+  const partsTop = readPartsTop();
+  const change = keptPartsTop === null || partsTop === null ? 0 : partsTop - keptPartsTop;
+  keptPartsTop = partsTop;
+  if (change === 0) return;
+  for (const part of readOrder().map(findPart))
+    part.scrollTop = findKeptTop(part.scrollTop, change);
+}
 
 // The pill holds once the part shown has scrolled as far as the header rides, and ends in its line
 // once the part scrolls on under it.
@@ -215,6 +243,26 @@ function returnToStart() {
   if (panels.readShown() !== 0) panels.slideTo(0);
 }
 
+// After two minutes away, the tab starts over, as the page does (long-away.js): each part at its
+// top, with the header back, the pill on the part the tab is named for, and the bracket on its
+// opening round. A part on a tab not shown takes its top once it shows (season-header.js). Safari
+// loses a scroll made as the page comes back, before it draws again, so the parts move in the
+// first frame it draws.
+function startOver() {
+  for (const part of readOrder().map(findPart)) {
+    part.scrollTop = 0;
+    if (part.getClientRects().length) delete part.dataset.putBackTop;
+    else part.dataset.putBackTop = "0";
+  }
+  panels?.jumpTo(0);
+  showOpeningRound("instant");
+}
+
+/** @param {number} awayMs */
+function startOverAfterLongAway(awayMs) {
+  if (isAwayLong(awayMs)) requestAnimationFrame(startOver);
+}
+
 // The pill and the tab's two faces, its name and icon for each part, are drawn whole, as they last
 // showed (show-last-drawn.js), until the season says where it is.
 export function startBracketStandings() {
@@ -226,13 +274,18 @@ export function startBracketStandings() {
     onShow: showOn,
   });
   panels = slidePanels;
+  keptPartsTop = readPartsTop();
   slidePanels.jumpTo(readOrder().indexOf(readShownPart()));
   wireTabList(findPill(), (part) => showSeasonPart(/** @type {SeasonPart} */ (part)));
   setTabStart("bracket-standings", returnToStart);
   for (const part of readOrder().map(findPart))
     part.addEventListener("scroll", markPillHeld, { passive: true });
-  findView().addEventListener("headerride", markPillHeld);
+  findView().addEventListener("headerride", () => {
+    keepPartsPlace();
+    markPillHeld();
+  });
   startRiderTaps(findView(), findPill(), readOrder().map(findPart));
   findPart("bracket").addEventListener("scroll", holdBracketDotsWhileSliding, { passive: true });
   addEventListener("resize", holdBracketDotsWhileSliding);
+  watchTimeAway(startOverAfterLongAway);
 }

@@ -21,7 +21,9 @@ export { expect };
 /**
  * An app's store in a stand-in Durable Object, holding `stored`, whose clock starts at `now`, and
  * whose pushes all succeed, as does every other request but what `fetchImpl` answers.
- * `fireAlarm` runs its next update.
+ * `fireAlarm` runs its next update, `passTime` moves its clock on, and `acceptWatcher` opens a
+ * page's socket through the store, as the Worker does, so the page hears what the store says as it
+ * opens.
  * @template {{ fetch: (request: Request) => Promise<Response>, webSocketMessage: (socket: any, message: string | Buffer) => void, alarm: () => Promise<void> }} Store
  * @param {new (ctx: any, env: object, options: object) => Store} SeasonStore the app's store class
  * @param {object} options
@@ -37,6 +39,8 @@ export function createTestStore(
   const context = createDurableObjectContext();
   for (const [path, data] of Object.entries(stored)) context.stored.set(path, data);
   const clock = { now: Date.parse(now) };
+  // The page's sockets the store accepts next, in the order the page opened them.
+  const arriving = [];
   const store = new SeasonStore(
     context.ctx,
     {},
@@ -44,6 +48,11 @@ export function createTestStore(
       createLoadSnapshot: () => loadSnapshot,
       now: () => clock.now,
       fetchImpl,
+      openSocket: (ctx) => {
+        const socket = arriving.shift();
+        ctx.acceptWebSocket(socket);
+        return { socket, response: new Response(null) };
+      },
     },
   );
   // The store's next update runs when its alarm comes due, so firing it moves the clock there.
@@ -51,7 +60,16 @@ export function createTestStore(
     clock.now = Math.max(clock.now, (await context.ctx.storage.getAlarm()) ?? clock.now);
     await store.alarm();
   };
-  return { context, store, fireAlarm };
+  /** @param {{ send: (message: string) => void }} socket */
+  const acceptWatcher = (socket) => {
+    arriving.push(socket);
+    return store.fetch(new Request("https://store/watch", { headers: { upgrade: "websocket" } }));
+  };
+  /** @param {number} ms */
+  const passTime = (ms) => {
+    clock.now += ms;
+  };
+  return { context, store, fireAlarm, passTime, acceptWatcher };
 }
 
 // Routes match with patterns rather than functions: Playwright checks a pattern itself, but asks the
@@ -113,11 +131,10 @@ function removeItem(list, item) {
 
 /**
  * @param {import("@playwright/test").Page} page
- * @param {ReturnType<typeof createDurableObjectContext>["ctx"]} ctx
- * @param {{ webSocketMessage: (socket: any, message: string | Buffer) => void }} store
+ * @param {ReturnType<typeof createTestStore>} testStore
  * @returns {Promise<import("@playwright/test").WebSocketRoute[]>} the sockets the page has open
  */
-async function routeWatchSockets(page, ctx, store) {
+async function routeWatchSockets(page, { context, store, acceptWatcher }) {
   const openSockets = [];
   await page.routeWebSocket(
     (url) => url.pathname === "/watch",
@@ -131,11 +148,17 @@ async function routeWatchSockets(page, ctx, store) {
         deserializeAttachment: () => attachment,
       };
       openSockets.push(socket);
-      ctx.acceptWebSocket(accepted);
+      let isClosed = false;
+      const forget = () => removeItem(context.ctx.getWebSockets(), accepted);
       socket.onMessage((message) => store.webSocketMessage(accepted, message));
       socket.onClose(() => {
+        isClosed = true;
         removeItem(openSockets, socket);
-        removeItem(ctx.getWebSockets(), accepted);
+        forget();
+      });
+      // A socket the page closed before the store accepted it no longer counts as open.
+      acceptWatcher(accepted).then(() => {
+        if (isClosed) forget();
       });
     },
   );
@@ -148,10 +171,10 @@ async function routeWatchSockets(page, ctx, store) {
  * @param {import("@playwright/test").Page} page
  * @param {ReturnType<typeof createTestStore>} testStore
  */
-export async function connectToStore(page, { context, store }) {
+export async function connectToStore(page, testStore) {
   await blockOtherHosts(page);
-  await routeStoreRequests(page, store);
-  return routeWatchSockets(page, context.ctx, store);
+  await routeStoreRequests(page, testStore.store);
+  return routeWatchSockets(page, testStore);
 }
 
 /**
@@ -219,7 +242,7 @@ export async function serveLockedPage(page, { worker, testStore, accessCode, now
   await blockOtherHosts(page);
   await page.route(matchPath(LOCKED_PAGE_PATH), (route) => answerThroughWorker(route, worker, env));
   await page.routeWebSocket(isLockedWatchSocket, (socket) =>
-    testStore.context.ctx.acceptWebSocket({ send: (message) => socket.send(message) }),
+    testStore.acceptWatcher({ send: (message) => socket.send(message) }),
   );
   await page.clock.install({ time: new Date(now) });
 

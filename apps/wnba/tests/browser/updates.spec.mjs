@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
-import { listAnimations } from "../../../../tests/browser/animations.mjs";
+import { listAnimations, waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
+import { expectRowHeldStill, trackRowFrames } from "../../../../tests/browser/kept-place.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { scrollPageToEnd } from "../../../../tests/browser/page-left-down.mjs";
 import {
@@ -15,6 +16,7 @@ import {
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { fillNews, moveNewsOffTop } from "../../../../tests/browser/start-over.mjs";
 import { holdClock, sendClick, sendFinger } from "../../../../tests/browser/stray-click.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -441,6 +443,91 @@ test.describe("on a phone, in full motion", () => {
 
     await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
     expect((await readAnimations()).filter(isOpening)).toHaveLength(1);
+  });
+
+  test("with the standings scrolled, the Updates box growing open moves no row on the screen on any frame, and the pill stays held", async ({
+    page,
+  }) => {
+    const app = await openApp(page, { updatesBox: "new" });
+    await openSeasonPart(page, "Standings");
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await scrollSeasonPartToEnd(page, "standings");
+    await waitForLoadToSettle(page);
+    const readFrames = await trackRowFrames(page, "#standingsWrap tr");
+
+    await app.changeSeason(finishDreamAtMystics);
+
+    await expect(page.locator("#updates .updates-count")).toHaveText(
+      "1 update since earlier today",
+    );
+    await waitForTimedAnimations(page);
+    expectRowHeldStill(await readFrames(), { isPillHeld: true });
+  });
+
+  test("with the standings at their top, the Updates box grows open in view over them", async ({
+    page,
+  }) => {
+    const app = await openApp(page, { updatesBox: "new" });
+    await openSeasonPart(page, "Standings");
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await waitForLoadToSettle(page);
+
+    await app.changeSeason(finishDreamAtMystics);
+
+    await expect(page.locator("#updates .updates-count")).toHaveText(
+      "1 update since earlier today",
+    );
+    await waitForTimedAnimations(page);
+    await expect(page.locator("#updates")).toBeInViewport({ ratio: 1 });
+    expect(await readSeasonPartScroll(page, "standings")).toBe(0);
+  });
+
+  test("with News scrolled, the Updates box growing open moves no story on the screen on any frame", async ({
+    page,
+  }) => {
+    const app = await openApp(page, { updatesBox: "new" });
+    await fillNews(page, app.writeDocument);
+    await moveNewsOffTop(page);
+    await waitForLoadToSettle(page);
+    const readFrames = await trackRowFrames(page, "#newsList .news-card");
+
+    await app.changeSeason(finishDreamAtMystics);
+
+    await expect(page.locator("#updates .updates-count")).toHaveText(
+      "1 update since earlier today",
+    );
+    await waitForTimedAnimations(page);
+    expectRowHeldStill(await readFrames(), { isPillHeld: false });
+  });
+
+  test("with the Games list on an earlier day, the Updates box growing open keeps that day at the list's top", async ({
+    page,
+  }) => {
+    const app = await openApp(page, { updatesBox: "new", isWholeSeason: true });
+    await page.getByRole("tab", { name: "Games" }).click();
+    const day = page.locator('#seasonGames .listed-day[data-day="2026-09-20"]');
+    await page.locator('#seasonGames .day-cell[data-day="2026-09-20"]').click();
+    await expect(day).toBeInViewport();
+    await waitForLoadToSettle(page);
+    const readDayGap = () =>
+      day.evaluate(
+        (element) =>
+          element.getBoundingClientRect().top -
+          /** @type {Element} */ (element.closest(".day-list")).getBoundingClientRect().top,
+      );
+    const gap = await readDayGap();
+
+    await app.changeSeason(finishDreamAtMystics);
+
+    await expect(page.locator("#updates .updates-count")).toHaveText(
+      "1 update since earlier today",
+    );
+    await waitForTimedAnimations(page);
+    await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
+      "data-day",
+      "2026-09-20",
+    );
+    expect(await readDayGap()).toBeCloseTo(gap, 0);
   });
 
   test("an Updates box that fills again as it shrinks away stays open", async ({ page }) => {

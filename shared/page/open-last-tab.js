@@ -12,9 +12,10 @@ function readStored(key) {
   }
 }
 
+/* global isLongAwayFrom -- from long-away.js */
+
 // After two minutes away, a part that starts hidden, like a search, is hidden again
 // (show-last-drawn.js), and a tab that shows nothing else goes back to the tab before it.
-const TAB_START_AFTER_AWAY_MS = 2 * 60 * 1000;
 
 /**
  * The part a tab's view shows alone, when it starts hidden, as a search's own view does.
@@ -33,11 +34,7 @@ function isStartedOver(tab) {
   const part = findOnlyStartHiddenPart(tab);
   if (!part) return false;
   const saved = readSavedPart(part.id);
-  return (
-    !saved ||
-    saved.hidden === true ||
-    !(Date.now() - Number(saved.savedAt) < TAB_START_AFTER_AWAY_MS)
-  );
+  return !saved || saved.hidden === true || isLongAwayFrom(saved.savedAt);
 }
 
 /**

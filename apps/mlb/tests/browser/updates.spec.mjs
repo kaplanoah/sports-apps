@@ -15,6 +15,15 @@ import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
+import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
+import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
+import { expectRowHeldStill, trackRowFrames } from "../../../../tests/browser/kept-place.mjs";
+import {
+  readSeasonPartScroll,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
+import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { fillNews, moveNewsOffTop } from "../../../../tests/browser/start-over.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -92,6 +101,82 @@ test.describe("on a new phone", () => {
 
     await expect(updates.locator(".what")).toHaveCount(1);
     await expect(updates.locator(".what")).toContainText("Astros");
+  });
+});
+
+test.describe("on a new phone, in full motion", () => {
+  test.use({ ...ON_A_PHONE, contextOptions: { reducedMotion: "no-preference" } });
+
+  /**
+   * The Worker finding an elimination, which opens the Updates box over every view.
+   * @param {Awaited<ReturnType<typeof openApp>>} app
+   */
+  async function addElimination(app) {
+    const season = await app.readDocument("seasons/2026");
+    await app.writeFromWorker("seasons/2026", {
+      ...season,
+      log: [
+        ...(season.log ?? []),
+        {
+          kind: "elim",
+          team: "HOU",
+          via: [{ team: "HOU", won: false, opp: "LAA", score: [2, 5] }],
+          at: "2026-09-25T01:30:00Z",
+        },
+      ],
+    });
+  }
+
+  /** @param {import("@playwright/test").Page} page */
+  async function waitForBoxOpen(page) {
+    await expect(page.locator("#updates .what")).toContainText(["Astros"]);
+    await waitForTimedAnimations(page);
+  }
+
+  test("with the standings scrolled, the Updates box growing open moves no row on the screen on any frame, and the pill stays held", async ({
+    page,
+  }) => {
+    const app = await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await scrollSeasonPartToEnd(page, "standings");
+    await waitForLoadToSettle(page);
+    const readFrames = await trackRowFrames(page, "#standingsWrap tr");
+
+    await addElimination(app);
+
+    await waitForBoxOpen(page);
+    expectRowHeldStill(await readFrames(), { isPillHeld: true });
+  });
+
+  test("with the standings at their top, the Updates box grows open in view over them", async ({
+    page,
+  }) => {
+    const app = await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+    await waitForLoadToSettle(page);
+
+    await addElimination(app);
+
+    await waitForBoxOpen(page);
+    await expect(page.locator("#updates")).toBeInViewport({ ratio: 1 });
+    expect(await readSeasonPartScroll(page, "standings")).toBe(0);
+  });
+
+  test("with News scrolled, the Updates box growing open moves no story on the screen on any frame", async ({
+    page,
+  }) => {
+    const app = await openApp(page);
+    await fillNews(page, app.writeFromWorker);
+    await moveNewsOffTop(page);
+    await waitForLoadToSettle(page);
+    const readFrames = await trackRowFrames(page, "#newsList .news-card");
+
+    await addElimination(app);
+
+    await waitForBoxOpen(page);
+    expectRowHeldStill(await readFrames(), { isPillHeld: false });
   });
 });
 

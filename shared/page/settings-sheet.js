@@ -6,10 +6,11 @@
 
 import { formatDateAndTime } from "./days.js";
 import { joinWithSeparator, setHtml } from "./html.js";
-import { START_AFTER_AWAY_MS } from "./long-away.js";
 import { loadRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { keepDialogFor } from "./sheet-memory.js";
+
+/* global START_AFTER_AWAY_MS -- from long-away.js */
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const findDialog = () =>
