@@ -37,7 +37,7 @@ paths:
   signs the browser in with a handoff the Worker makes for a phone signed in,
   and opens the page at its own address without the handoff (`serveHandoff` in `shared/worker/access-gate.js`).
   A handoff is good for ten minutes under the code it was made under.
-  The app asks for a handoff again halfway through while settings stays open,
+  The app asks for a handoff as settings shows the note on updating the icon, and again halfway through while it does,
   or as it comes back once that's past, since a phone freezes its timers while it's away (`shared/page/appearance.js`).
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,
   `shared/worker/push.js` and `web-push.js`, and `page/sw.js`);
