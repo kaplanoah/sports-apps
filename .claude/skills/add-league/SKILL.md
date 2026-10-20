@@ -46,8 +46,8 @@ Delete it once the app's first PR merges.
 5. **The page.** `index.html` keeps the shared tab bar and settings markup, its element IDs, and the import map for `#shared/`.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,
-   around its own `styles.css`, which sets every token their top comments list,
-   and calls `openLastTab()`, `showLastDrawn()`, `followSeasonPart()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
+   around its own `styles.css`, which sets every token their top comments list.
+   It calls `openLastTab()`, `showLastDrawn()`, `followSeasonPart()`, `watchSlowLoad()`, and `drawHomeScreenAsks()` right after its views and sheets,
    in that order, so a part on the shown tab can take back its sideways scroll, the header rides as far as the season's part put back,
    and the welcome opens over any sheet put back.
    Its `gate.html`, which asks for the access code, and its `sw.js`, which sets `self.pageName`,
@@ -56,21 +56,21 @@ Delete it once the app's first PR merges.
    with `data-last-drawn`, and keeps the empty `#loadNote` above its views.
    Give it a manifest, icons, and an `apple-mobile-web-app-title` of the league's short name,
    which its manifest's `name` and `short_name` match.
-   Agree on the league's look with the owner from a mockup first: its fonts,
-   self-hosted in `page/fonts/`, with each type role's size and weight set in its `:root`, as `.claude/rules/page-look.md` says,
-   and its light and dark themes, each a set of colors, the dark one under `:root[data-theme="dark"]`,
+   Agree on the league's look with the owner from a mockup first: its fonts and its light and dark themes.
+   The league's fonts are self-hosted in `page/fonts/`, with each type role's size and weight set in its `:root`, as `.claude/rules/page-look.md` says.
+   The league's light and dark themes are each a set of colors, the dark one under `:root[data-theme="dark"]`,
    with an icon and a bar color of its own, which `page/js/looks.js` hands the shared `appearance.js`
    for the page and, through `page/js/gate-theme.js`, for the gate.
    Choose the league's All-Star colors with the owner too: each All-Star team's star takes its uniform's color,
    as the WNBA's orange West and white East do, its visitors orange and its home team white in a year of captains' teams,
-   and MLB's American and National League colors do, through `renderAllStarMark` in `shared/page/all-star.js`,
-   and `styles.css` sets the star's tokens that `game-row.css` lists from the league's own dot.
+   and MLB's American and National League colors do, through `renderAllStarMark` in `shared/page/all-star.js`.
+   The page's `styles.css` sets the star's tokens that `game-row.css` lists from the league's own dot.
    `page/js/league-words.js` names what the league's fans call things and the words its pages never show,
    as `.claude/rules/page-look.md` says, and its search terms hand it to the shared search as `words`.
 6. **Tests.** Record a real afternoon of the league's feeds as a fixture in `tests/fixtures/`,
    and test the snapshot, the Worker, the season updater, and the page's views against it.
-   Copy each of the WNBA's tests of what the PR builds, since they run the shared checks:
-   its browser harness, which runs the page against the real store,
+   Copy each of the WNBA's tests of what the PR builds, since they run the shared checks.
+   The tests that run the shared checks are its browser harness, which runs the page against the real store,
    `page.spec.mjs`, `themes.spec.mjs`, and `role-looks.spec.mjs`,
    which check every view for type roles, contrast, periods, words, taps, and theme layout,
    the last two walking the views listed in `tests/browser/views.mjs`,
