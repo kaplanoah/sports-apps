@@ -38,6 +38,34 @@ const KEY_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
  */
 
 /**
+ * What search shows for words, as typed or sent, each kept once shown, since a sweep shows the
+ * same words again and again.
+ * @param {{ context: SearchContext, pages: SearchPages }} search
+ */
+function createShow({ context, pages }) {
+  /** @type {Map<string, Shown>} */
+  const shownByText = new Map();
+  /**
+   * @param {string} text
+   * @param {boolean} isTyping
+   * @returns {Shown}
+   */
+  return (text, isTyping) => {
+    const key = `${isTyping}:${text}`;
+    if (!shownByText.has(key))
+      shownByText.set(key, readTypedSearch(text, { context, pages, isTyping, isGamesOnly: false }));
+    return /** @type {Shown} */ (shownByText.get(key));
+  };
+}
+
+/**
+ * What the field holds after each key as a name is typed.
+ * @param {string} name
+ */
+const listTypedKeys = (name) =>
+  Array.from({ length: name.length }, (_, index) => name.slice(0, index + 1));
+
+/**
  * What a search says it found, as the line over its games does.
  * @param {Shown} shown
  */
@@ -148,18 +176,7 @@ function listWrongKeys(misspelled, at) {
  */
 export function sweepMisspellings({ context, pages }) {
   const phrases = [...context.dictionary.keys()];
-  /** @type {Map<string, Shown>} */
-  const shownByText = new Map();
-  /**
-   * @param {string} text
-   * @param {boolean} [isTyping]
-   */
-  const show = (text, isTyping = true) => {
-    const key = `${isTyping}:${text}`;
-    if (!shownByText.has(key))
-      shownByText.set(key, readTypedSearch(text, { context, pages, isTyping, isGamesOnly: false }));
-    return /** @type {Shown} */ (shownByText.get(key));
-  };
+  const show = createShow({ context, pages });
   /**
    * @param {string} typed
    * @param {string} name
@@ -173,9 +190,9 @@ export function sweepMisspellings({ context, pages }) {
   const listFound = ({ search }) => (search ? findSearchGames(search, context).games : []);
   /** @param {string} name */
   const listNameGames = (name) => {
-    const keys = Array.from({ length: name.length - SHORTEST_GUESS + 1 }, (_, index) =>
-      show(name.slice(0, SHORTEST_GUESS + index)),
-    );
+    const keys = listTypedKeys(name)
+      .slice(SHORTEST_GUESS - 1)
+      .map((typed) => show(typed, true));
     const found = [...keys, show(name, false)].flatMap(listFound);
     return new Set(found.map((game) => game.id));
   };
@@ -186,7 +203,7 @@ export function sweepMisspellings({ context, pages }) {
         listWrongKeys(misspelled, at)
           .filter((typed) => !isOtherName(typed, name))
           .flatMap((typed) => {
-            const shown = show(typed);
+            const shown = show(typed, true);
             const isOthers = shown.games.some((game) => !nameGames.has(game.id));
             return isOthers
               ? [`${typed} (of ${misspelled}, meaning ${name}): finds ${describeFound(shown)}`]
@@ -312,28 +329,19 @@ export function sweepPlayerNumbers({ context, pages }) {
  * @param {{ context: SearchContext, pages: SearchPages }} search
  */
 export function sweepPlayerNames({ context, pages }) {
-  /** @type {Map<string, Set<string>>} */
-  const listedByText = new Map();
-  /** @param {string} text */
-  const listListed = (text) => {
-    if (!listedByText.has(text)) {
-      const { rows } = readTypedSearch(text, {
-        context,
-        pages,
-        isTyping: true,
-        isGamesOnly: false,
-      });
-      const ids = rows.flatMap((row) => (row.kind === "player" ? [row.player.id] : []));
-      listedByText.set(text, new Set(ids));
-    }
-    return /** @type {Set<string>} */ (listedByText.get(text));
-  };
+  const show = createShow({ context, pages });
+  /**
+   * @param {string} typed
+   * @param {string} id
+   */
+  const isListed = (typed, id) =>
+    show(typed, true).rows.some((row) => row.kind === "player" && row.player.id === id);
   return pages.players.flatMap((player) => {
     const names = [player.firstName, player.lastName, `${player.firstName} ${player.lastName}`];
     return [...new Set(names.map(normalizeText))].flatMap((name) =>
-      Array.from({ length: name.length }, (_, index) => name.slice(0, index + 1))
+      listTypedKeys(name)
         .filter((typed) => typed.replace(/\s+/g, "").length >= SHORTEST_GUESS)
-        .filter((typed) => !listListed(typed).has(player.id))
+        .filter((typed) => !isListed(typed, player.id))
         .map((typed) => `${typed} (of ${name})`),
     );
   });
@@ -420,31 +428,19 @@ function listBrokenRules(shown, { head, name, typedName, whole }, context) {
  * @param {{ context: SearchContext, pages: SearchPages }} search
  */
 export function sweepPhrasings(phrasings, { context, pages }) {
-  /** @type {Map<string, Shown>} */
-  const shownByText = new Map();
-  /**
-   * @param {string} text
-   * @param {boolean} isTyping
-   */
-  const show = (text, isTyping) => {
-    const key = `${isTyping}:${text}`;
-    if (!shownByText.has(key))
-      shownByText.set(key, readTypedSearch(text, { context, pages, isTyping, isGamesOnly: false }));
-    return /** @type {Shown} */ (shownByText.get(key));
-  };
+  const show = createShow({ context, pages });
   return phrasings.flatMap(({ head, name, sameAs }) => {
     const whole = show(`${head}${name}`, false);
     const same = sameAs ? describeFound(show(sameAs, false)) : describeFound(whole);
     const isSame = describeFound(whole) === same;
     return [
       ...(isSame ? [] : [`${head}${name}: finds ${describeFound(whole)}, but ${sameAs} ${same}`]),
-      ...Array.from({ length: name.length }, (_, index) => name.slice(0, index + 1)).flatMap(
-        (typedName) =>
-          listBrokenRules(
-            show(`${head}${typedName}`, true),
-            { head, name, typedName, whole },
-            context,
-          ).map((rule) => `${head}${typedName} (of ${head}${name}): ${rule}`),
+      ...listTypedKeys(name).flatMap((typedName) =>
+        listBrokenRules(
+          show(`${head}${typedName}`, true),
+          { head, name, typedName, whole },
+          context,
+        ).map((rule) => `${head}${typedName} (of ${head}${name}): ${rule}`),
       ),
     ];
   });
