@@ -39,17 +39,23 @@ test("with Diagnostics on, each change of the phone's look is logged, with what 
   ).toHaveCount(1);
 });
 
-test("with Diagnostics on, the page leaving the screen is kept on the device as it leaves, so a phone that drops the page while it's away keeps the line", async ({
+test("with Diagnostics on, the page leaving the screen is kept on the device as it leaves, in the log and in the record it closes, so a phone that drops the page while it's away keeps the line", async ({
   page,
 }) => {
   await openApp(page);
   await turnOnDiagnostics(page);
+  await reloadToRecord(page);
 
   const kept = await page.evaluate(() => {
     Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
     document.dispatchEvent(new Event("visibilitychange"));
-    return localStorage.getItem("diagnosticsPhoneLook") ?? "";
+    return {
+      log: localStorage.getItem("diagnosticsPhoneLook") ?? "",
+      records: localStorage.getItem("diagnosticsRecords") ?? "",
+    };
   });
 
-  expect(kept).toContain("the page left the screen; reads light, shows light");
+  const line = "the page left the screen; reads light, shows light";
+  expect(kept.log).toContain(line);
+  expect(kept.records).toContain(line);
 });

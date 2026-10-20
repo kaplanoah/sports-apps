@@ -763,6 +763,9 @@ export function startDiagnostics() {
   startRecord(describeLoad(readNavigationType()));
   watchTimings();
   watchTimeAway(noteReturn);
+  // Its line for the page leaving the screen joins the record before the record closes, and the
+  // step logs keep it as they save on the page's hiding.
+  watchPhoneLook(noteStep);
   loadRelease().then(
     (loaded) => {
       release = loaded;
@@ -774,8 +777,6 @@ export function startDiagnostics() {
   });
   addEventListener("pagehide", finishRecord);
   watchViewport(isRecording, drawRecords);
-  // Its line for the page leaving the screen comes before the step logs save as the page hides.
-  watchPhoneLook(noteStep);
   for (const log of STEP_LOGS) log.watchSteps(isRecording, drawRecords);
   watchErrors();
   watchTouches();

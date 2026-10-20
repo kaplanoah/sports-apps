@@ -490,6 +490,24 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
 }
 
 /**
+ * Holds the next easing the note starts at `halfway`, in the task that starts it, since easings
+ * run on the page's own timeline, which the test's clock doesn't hold.
+ * @param {number} halfway
+ */
+const holdNextNoteEasing = (halfway) => {
+  const { animate } = Element.prototype;
+  Element.prototype.animate = function (keyframes, options) {
+    const animation = animate.call(this, keyframes, options);
+    if (this.classList.contains("re-add-note")) {
+      Element.prototype.animate = animate;
+      animation.pause();
+      animation.currentTime = halfway;
+    }
+    return animation;
+  };
+};
+
+/**
  * Has the page come back to the screen with only its window getting focus, as iOS sometimes
  * reports a Home Screen app coming back.
  * @param {import("@playwright/test").Page} page
@@ -539,14 +557,15 @@ export async function checkReAddNoteOnReturn({ page, openApp, openSettings }) {
   expect(await countEasings()).toBe(easingsBefore);
 
   await page.clock.runFor(1000);
+  await page.evaluate(holdNextNoteEasing, EASE_HALFWAY_MS);
   await page.emulateMedia({ colorScheme: "dark" });
   await expect.poll(() => countEasings()).toBe(easingsBefore + 1);
-  await note.evaluate((element, halfway) => {
-    for (const animation of element.getAnimations()) {
-      animation.pause();
-      animation.currentTime = halfway;
-    }
-  }, EASE_HALFWAY_MS);
+  expect(
+    await note.evaluate((element) => ({
+      easings: element.getAnimations().length,
+      isFilled: element.childElementCount > 0,
+    })),
+  ).toEqual({ easings: 1, isFilled: true });
   await setHidden(page, true);
   await page.emulateMedia({ colorScheme: "light" });
   await setHidden(page, false);
