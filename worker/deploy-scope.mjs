@@ -21,9 +21,6 @@ export const CONFIG_ONLY_FILES = new Set([
 ]);
 const SKIPPED_FILES = new Set([
   ...CONFIG_ONLY_FILES,
-  ".claude/hooks/context-limit.mjs",
-  ".claude/hooks/one-command.mjs",
-  ".claude/settings.json",
   ".github/dependabot.yml",
   ".github/workflows/beta.yml",
   ".github/workflows/ci.yml",
@@ -58,6 +55,8 @@ const SKIPPED_FILES = new Set([
   "worker/worker-secrets.mjs",
 ]);
 const TEST_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
+// Claude Code's settings, hooks, rules, and skills, which only sessions run.
+const SESSION_FOLDER = /^\.claude\//;
 
 /**
  * Whether a path is in the root's tests or an app's.
@@ -72,7 +71,8 @@ export const isTestPath = (path) => TEST_FOLDERS.some((folder) => folder.test(pa
 export const isDocument = (path) => path.endsWith(".md");
 
 /** @param {string} path */
-const isSkipped = (path) => isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path);
+const isSkipped = (path) =>
+  isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path) || SESSION_FOLDER.test(path);
 
 /**
  * The app whose folder a path is in, or null for a path outside every app's.
