@@ -246,15 +246,16 @@ comment on the first of its items' files GitHub takes (in more than one, each
 its own thread, only past GitHub's limit on a comment's length), puts any
 finding GitHub takes on no file in a comment in the conversation, and keeps one
 summary comment up to date. The first review reads the whole change, and each
-review after it reads what changed since the last review that finished. A
-review is one of the checks that must pass, so a review that can't run, that
-left a changed file or a rule file unread, or whose reviewers, check across
-areas, or posting step didn't finish, blocks the merge. Its findings don't fail
-the check; answer all of a review's findings in one push, by fixing each or
-replying why not, add the `review` label to have it reviewed again, which takes
-the label off, and resolve each thread, since `main` merges only once every
-thread is resolved. A finding in the conversation has no thread, so answer it
-there.
+review after it reads what changed since the last review that finished. A run
+that reviews fails its `check` when the review can't run, left a changed file
+or a rule file unread, or its reviewers, check across areas, or posting step
+didn't finish. A run that wasn't asked to review passes its `check` without
+one, so merge only once the review summary names the pull request's latest
+commit and its review passed. A review's findings don't fail the check; answer
+all of them in one push, by fixing each or replying why not, add the `review`
+label to have it reviewed again, which takes the label off, and resolve each
+thread, since `main` merges only once every thread is resolved. A finding in the
+conversation has no thread, so answer it there.
 
 A change that only an iPhone can test, like one to how the page's parts slide or
 layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone`

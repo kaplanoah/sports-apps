@@ -14,7 +14,7 @@
   and leave nothing those rounds left behind: values or options no longer chosen,
   a setting or branch kept only to compare, a case that can no longer happen,
   a name for an earlier version, or a rule that overrides another where one rule would do.
-  Before each push, read the whole diff against `main` for it, and the review flags any of it.
+  Before each push, read the whole diff against `main` for it, and CI's review flags any of it.
 - Start function names with a verb naming the action (boolean predicates excepted).
   No generic names like `call`, `run`, `execute`, or `handle`,
   which lint rejects for a function.
@@ -140,7 +140,8 @@ When a step says to go back to an earlier step, continue in order from there.
    A push alone starts no review.
    `main` merges a PR only once every thread on it is resolved.
 8. Squash-merge the PR once all of these are true:
-   `check` passed on the latest commit, the PR has no merge conflicts, every review thread is resolved, and its base is `main`.
+   `check` passed on the latest commit, the review summary names that commit and its `review` job passed,
+   the PR has no merge conflicts, every review thread is resolved, and its base is `main`.
    If GitHub refuses the merge, go back to step 4.
 9. Don't deploy.
    Merging starts the Deploy workflow at once, and CI on `main`.

@@ -275,6 +275,13 @@ export function keepAcross(folder, structuredOutput) {
 }
 
 /**
+ * Whether a finding of the check across areas stands for candidates the reviewers listed, rather
+ * than one the check added itself.
+ * @param {{ ids?: unknown }} finding
+ */
+const isFromReviewers = (finding) => Array.isArray(finding.ids) && finding.ids.length > 0;
+
+/**
  * The files an area's reviewer left unread, and whether it didn't finish, as one that left a rule
  * file unread hasn't.
  * @param {PlannedArea} area
@@ -312,7 +319,9 @@ function judgeAreas(areas, records) {
       `the check across areas, which left ${pluralize(unchecked.length, "case")} unchecked`,
     );
   if (!post) missing.push("the step that posts the findings");
-  const verdicts = (across?.items ?? []).map((/** @type {any} */ item) => item.verdict);
+  const verdicts = (across?.items ?? [])
+    .filter(isFromReviewers)
+    .map((/** @type {any} */ item) => item.verdict);
   const unjudged = [
     ...listReviewerRecords(records, areas).flatMap((record) =>
       record.tries.flatMap((/** @type {any} */ attempt) => attempt.answer?.unjudged ?? []),

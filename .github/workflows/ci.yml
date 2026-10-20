@@ -431,8 +431,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
     outputs:
+      labeled: ${{ steps.decision.outputs.labeled }}
       owed: ${{ steps.decision.outputs.owed }}
       stage: ${{ steps.plan.outputs.stage }}
       areas: ${{ steps.plan.outputs.areas }}
@@ -451,9 +452,14 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          case "$ACTION:$LABEL" in
-            opened:* | ready_for_review:* | "labeled:$REVIEW_LABEL") asked=true ;;
-            *) asked=false ;;
+          labeled=false
+          if [ "$ACTION:$LABEL" = "labeled:$REVIEW_LABEL" ]; then
+            labeled=true
+          fi
+          echo "labeled=$labeled" >> "$GITHUB_OUTPUT"
+          case "$ACTION" in
+            opened | ready_for_review) asked=true ;;
+            *) asked=$labeled ;;
           esac
           reason=""
           owed=false
@@ -514,10 +520,20 @@ jobs:
           include-hidden-files: true
           retention-days: 14
           overwrite: true
-      # So the next ask is a fresh label, which starts a run of its own. A label already gone is
-      # what this step wants, so GitHub's answer that it's not there passes.
+
+  # Takes the review label off once the plan is written, so the next ask is a fresh label, which
+  # starts a run of its own. It runs none of the pull request's code, since its token can write to
+  # the pull request. A fork's pull request gets a token that can't, so it skips this. A label
+  # already gone is what it wants, so GitHub's answer that it's not there passes.
+  review-label:
+    needs: [gate, review-plan]
+    if: ${{ !cancelled() && needs.review-plan.outputs.labeled == 'true' && needs.gate.outputs.forked == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
       - name: Take off the review label
-        if: ${{ !cancelled() && github.event.action == 'labeled' && github.event.label.name == env.REVIEW_LABEL }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -716,6 +732,7 @@ jobs:
         burn-in,
         webkit,
         review-plan,
+        review-label,
         review-area,
         review-across,
         review-post,

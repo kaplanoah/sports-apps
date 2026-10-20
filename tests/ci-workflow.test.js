@@ -460,21 +460,26 @@ function decideReview(event) {
       .split("\n")
       .map((line) => line.split("=")),
   );
-  return { review: written.review, owed: written.owed, notice: stdout.trim() };
+  return {
+    review: written.review,
+    owed: written.owed,
+    labeled: written.labeled,
+    notice: stdout.trim(),
+  };
 }
 
 // A pull request is reviewed once it's ready, and again only when the review label asks, never on
 // a push alone, so a session answers every finding in one push and then asks. A run that skips a
 // review it was never asked for still owes one.
 test("a pull request is reviewed when it's opened ready, marked ready, or labeled review, and on nothing else", () => {
-  for (const event of [
-    { ACTION: "opened" },
-    { ACTION: "ready_for_review" },
-    { ACTION: "labeled", LABEL: "review" },
-  ])
+  for (const [event, labeled] of /** @type {[Record<string, string>, string][]} */ ([
+    [{ ACTION: "opened" }, "false"],
+    [{ ACTION: "ready_for_review" }, "false"],
+    [{ ACTION: "labeled", LABEL: "review" }, "true"],
+  ]))
     assert.deepEqual(
       decideReview(event),
-      { review: "true", owed: "false", notice: "" },
+      { review: "true", owed: "false", labeled, notice: "" },
       JSON.stringify(event),
     );
   for (const event of [
@@ -484,9 +489,10 @@ test("a pull request is reviewed when it's opened ready, marked ready, or labele
     { ACTION: "labeled", LABEL: "reviewed" },
     { ACTION: "unlabeled", LABEL: "review" },
   ]) {
-    const { review, owed, notice } = decideReview(event);
+    const { review, owed, labeled, notice } = decideReview(event);
     assert.equal(review, "false", JSON.stringify(event));
     assert.equal(owed, "true", JSON.stringify(event));
+    assert.equal(labeled, "false", JSON.stringify(event));
     assert.match(notice, /^::notice::Nothing was reviewed: a pull request is reviewed once/);
   }
   assert.equal(decideReview({ EVENT: "push", ACTION: "" }).review, "false");
@@ -504,6 +510,7 @@ test("every reason not to review holds when the review is asked for", () => {
     const asked = decideReview({ ACTION: "labeled", LABEL: "review", ...event });
     assert.equal(asked.review, "false", JSON.stringify(event));
     assert.equal(asked.owed, owed, JSON.stringify(event));
+    assert.equal(asked.labeled, "true", "a label that asks comes off however the run decides");
     assert.match(asked.notice, reason);
   }
   assert.match(readJob("review-plan"), /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
@@ -515,21 +522,26 @@ test("a run the review label started takes the label off, and the label is named
   const workflow = readRepoFile(".github/workflows/ci.yml");
   assert.match(workflow, /\nenv:\n(?: {2}.*\n)* {2}REVIEW_LABEL: review\n/);
   assert.doesNotMatch(workflow, /'review'|"review"|labels\/review/);
-  const plan = readJob("review-plan");
-  assert.match(plan, /permissions:\n\s+contents: read\n\s+pull-requests: write\n/);
+  assert.match(readJob("review-plan"), /permissions:\n\s+contents: read\n\s+pull-requests: read\n/);
   assert.match(
-    plan,
-    /- name: Take off the review label\n\s+if: \$\{\{ !cancelled\(\) && github\.event\.action == 'labeled' && github\.event\.label\.name == env\.REVIEW_LABEL \}\}\n/,
+    readJob("review-plan"),
+    /\n {6}labeled: \$\{\{ steps\.decision\.outputs\.labeled \}\}\n/,
   );
+  const label = readJob("review-label");
+  assert.deepEqual(readNeeds("review-label"), ["gate", "review-plan"]);
+  assert.ok(
+    label.includes(
+      "if: ${{ !cancelled() && needs.review-plan.outputs.labeled == 'true' && needs.gate.outputs.forked == 'false' }}",
+    ),
+    "the label comes off once the plan is written, but for a fork's pull request, whose token can't",
+  );
+  assert.match(label, /permissions:\n\s+pull-requests: write\n\s+steps:/);
   assert.match(
-    plan,
+    label,
     /gh api --method DELETE "repos\/\$REPO\/issues\/\$PR\/labels\/\$REVIEW_LABEL"/,
   );
-  assert.ok(
-    plan.indexOf("Take off the review label") > plan.indexOf("node worker/plan-review.mjs"),
-    "the label comes off once the plan is written",
-  );
-  for (const job of listJobs().filter((name) => name !== "review-plan"))
+  assert.doesNotMatch(label, /checkout|node /, "it runs none of the pull request's code");
+  for (const job of listJobs().filter((name) => name !== "review-label"))
     assert.doesNotMatch(readJob(job), /labels\//, job);
 });
 
@@ -611,7 +623,9 @@ test("the review reads every area in full, checks before it posts, and fails on 
   assert.ok(post.includes(`name: ${nameArtifact(ACROSS_RECORD)}\n`));
   assert.ok(post.includes(`name: ${nameArtifact(POST_RECORD)}\n`));
   const review = readJob("review");
-  const reviewJobs = listJobs().filter((job) => job.startsWith("review-"));
+  const reviewJobs = listJobs().filter(
+    (job) => job.startsWith("review-") && job !== "review-label",
+  );
   assert.deepEqual(readNeeds("review").toSorted(), reviewJobs.toSorted());
   assert.match(
     review,
@@ -625,7 +639,7 @@ test("the review reads every area in full, checks before it posts, and fails on 
 // One reviewer an area, then one check across every area, one area too: a review runs as many
 // Claude jobs as it has areas, and one more.
 test("a review has one reviewer an area and one check across them all, however many areas", () => {
-  assert.equal(listJobs().filter((job) => job.startsWith("review-")).length, 4);
+  assert.equal(listJobs().filter((job) => job.startsWith("review-")).length, 5);
   const across = readJob("review-across");
   assert.match(
     across,

@@ -411,10 +411,18 @@ test("a review isn't finished until the check across areas is, even of one area"
   }
 });
 
+// The count of candidates turned down leaves out what the check across areas added itself, which
+// no reviewer listed.
 test("a review that read and checked everything passes, and moves the reviewed head on", () => {
   const records = finishReview(AREAS, {
     [ACROSS_RECORD]: {
-      items: [{ verdict: "confirmed" }, { verdict: "rejected" }, { verdict: "rejected" }],
+      items: [
+        { ids: ["1.1", "2.1"], verdict: "confirmed" },
+        { ids: ["2.2"], verdict: "rejected" },
+        { ids: ["2.3"], verdict: "rejected" },
+        { ids: [], verdict: "confirmed" },
+        { ids: [], verdict: "rejected" },
+      ],
       unjudged: [{ file: "c.js", why: "only an iPhone shows it" }],
     },
     [POST_RECORD]: { weights: ["Important", "Nit", "Important"], repeated: 0 },

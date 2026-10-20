@@ -30,7 +30,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Red changes
 
-- Take a red change to its branch and PR, open it as a draft, deploy it to beta once its CI passes, as "The beta channel" above says,
+- Take a red change to its branch and PR, deploy it to beta once its CI passes, as "The beta channel" above says,
   and stop there: tell the user what to use on the phone, and wait, keeping to steps 4 to 6 of AGENTS.md's list meanwhile.
   Its PR stays a draft while the owner tries its design on beta:
   CI tests a draft, and beta deploys it, as for any PR, but CI reviews it only once it's ready for review.
@@ -52,7 +52,6 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 ## Step 7: what CI's review does
 
 - CI reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
-  A push alone starts no review, and a push stops a review still running.
 - CI's review splits the change into areas by what the files are about, each test with its code (the root's `worker/plan-review.mjs`),
   and one reviewer an area looks for every item in `REVIEW.md`'s "What to look for" and lists every problem it finds, each once with every place it shows.
   Each area's reviewer reads the rule files whose `paths` match its files, as well as its diffs.
@@ -76,7 +75,8 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and the check across areas once.
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
   where a review stalled, or a re-run that failed too.
-  `check` can't pass until the job does.
+  That run's `check` can't pass until the job does,
+  and the PR doesn't merge until a review of its head passes, as the steward skill says.
 
 ## Step 8: a red PR
 
