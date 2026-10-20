@@ -21,6 +21,7 @@ export const CONFIG_ONLY_FILES = new Set([
 ]);
 const SKIPPED_FILES = new Set([
   ...CONFIG_ONLY_FILES,
+  ".claude/hooks/context-limit.mjs",
   ".claude/hooks/one-command.mjs",
   ".claude/settings.json",
   ".github/dependabot.yml",

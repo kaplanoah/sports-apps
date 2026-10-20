@@ -73,7 +73,7 @@
 
 - `main` is the source of truth.
   Every change reaches it through a PR, by the steps in "Shipping a change" below.
-- Never push to another session's branch.
+- Never push to another session's branch, but for one the owner's handoff prompt names once the session that had it has stopped.
 - Run each command so it needs no approval: one command per call, from the repo's root, where every session starts.
   Never start with `cd`, never join `cd` to a `git` command, and never pipe or chain after a command `.claude/settings.json` allows, like the beta force-push.
   When a command still asks, add it to the allow list in `.claude/settings.json` in the same PR if it's safe for any session to run, or say why it asks.
