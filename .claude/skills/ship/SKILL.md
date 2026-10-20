@@ -82,6 +82,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   The first review reads the whole change, and each review after it reads what changed since the last review that finished.
   A review asked for on the head the last finished review read in full reads nothing,
   and so does one whose pushes since change only what a merge of its base brings in.
+  Where that merge had conflicts git couldn't settle on its own, the review reads only how each was resolved.
   The `review` job checks what each reviewer actually read and writes the summary comment "How to report" describes (the root's `worker/judge-review.mjs`).
   It fails when any changed file went unread, or when a reviewer, the check across areas, or the posting step didn't finish, naming each,
   a reviewer that left one of its area's rule files unread among them.
