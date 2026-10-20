@@ -26,6 +26,12 @@ paths:
 - A hook in `.claude/settings.json` blocks a call that starts with `cd`, a subshell's `(cd` too,
   or joins commands with `&&`, `||`, `;`, a lone `&` that runs one in the background, or a line break,
   in the call itself or in a script it hands a shell as a string, as `bash -c "a; b"` does (`.claude/hooks/one-command.mjs`).
+- Another hook there hands a session off to a fresh one as its context grows, measured from its transcript's last reply (`.claude/hooks/context-limit.mjs`).
+  At 200k tokens it asks the session to hand off at its next break, with each prompt and at each 10k after.
+  At 300k it blocks every call but what a handoff needs:
+  reading, committing and pushing the session's own branch, writing the PR's description, replying on the PR, merging it, and reading its Deploy runs.
+  It lets a subagent's calls through, and any call when it can't read the transcript.
+  CI's review turns hooks off.
 - `npm run rollback -- <app>` puts the app's previous version back at all of its traffic and prints which commit was live and which is now.
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
