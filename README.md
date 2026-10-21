@@ -168,8 +168,8 @@ private: anyone who has it can see and change the page. Never pass
 `--rotate` unless they ask. It replaces the key, which changes the address.
 
 To share the page beyond the user, have them pick an access code and run
-`npm run set-access-code -- <app> <code>`, with the same code for every app,
-since the deploy's check signs each in with one. The page then asks for it before it
+`npm run set-access-code -- <app> <code>`, with the same code for every app on
+a channel, since the deploy's check signs each in with its environment's one. The page then asks for it before it
 opens, and each phone types it once. Case, spaces, and hyphens don't count.
 Running it again with a new code signs every phone out until it types the new
 one, and `--remove` stops asking. Never commit or post the code.
@@ -403,9 +403,9 @@ in Cloudflare's dashboard, since the `beta` token can change only the Workers it
 names, then create the `beta` environment as "Deploying on merge" says, with its
 token limited to them. After the first one, give each beta Worker its key with
 `npm run set-app-key -- <app> --channel beta`, which prints its address, and,
-if the real page asks for a code, give it the same one with
-`npm run set-access-code -- <app> <code> --channel beta`. Add the address to the `beta`
-environment's secrets, beside its `ACCESS_CODE`, and add the page to the Home Screen from that address. `npm run deploy:api -- <app> --channel beta`
+if the real page asks for a code, give it the code in the `beta` environment's
+`ACCESS_CODE` with `npm run set-access-code -- <app> <code> --channel beta`. Add the address to the `beta`
+environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <app> --channel beta`
 deploys beta by hand, from a checkout of `origin/beta`, and
 `npm run rollback -- <app> --channel beta` rolls it back.
 
