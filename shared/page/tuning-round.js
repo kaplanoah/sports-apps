@@ -83,13 +83,16 @@ export function readNumber(text, { unit }) {
 }
 
 /**
- * A number as CSS text in the slider's unit, held on the slider's steps, inside its range.
+ * A number as CSS text in the slider's unit, held on the slider's steps, from its min to the last
+ * step at or below its max.
  * @param {number} number
  * @param {SliderValue} slider
  */
 export function writeNumber(number, { min, max, step, unit }) {
-  const stepped = min + Math.round((number - min) / step) * step;
-  const held = Math.min(max, Math.max(min, stepped));
+  // Rounded first, so a max that float division puts a hair under a step still reaches it.
+  const lastStep = Math.floor(Number(((max - min) / step).toFixed(6)));
+  const steps = Math.min(lastStep, Math.max(0, Math.round((number - min) / step)));
+  const held = min + steps * step;
   const decimals = Math.max(countDecimals(min), countDecimals(step));
   return `${Number(held.toFixed(decimals))}${unit}`;
 }

@@ -8,7 +8,8 @@ import { listLowContrastText } from "./contrast.mjs";
 import { buildTuningServer, servePageFiles } from "./release-worker.mjs";
 import { SETTINGS, openSettings } from "./settings.mjs";
 import { showTheme } from "./theme-layout.mjs";
-import { listTextOffRoles } from "./type-roles.mjs";
+import { listTextOffRoles, measureFieldFace, readRole } from "./type-roles.mjs";
+import { SENT_MS } from "../../shared/page/sent-label.js";
 
 const CORNERS = "--radius-control";
 const ALIGN = "--sample-align";
@@ -160,6 +161,24 @@ export async function checkOptionsAndCopy(app) {
 }
 
 /**
+ * A second Copy while the first still says so says it for its own full time.
+ * @param {App} app
+ */
+export async function checkCopiedAgain(app) {
+  const { page } = app;
+  await openTuning(app);
+  const copy = findPanel(page).locator(".tuning-copy");
+  await copy.click();
+  await expect(copy).toHaveText("Copied");
+  await page.clock.runFor(SENT_MS * 0.75);
+  await copy.click();
+  await page.clock.runFor(SENT_MS * 0.5);
+  await expect(copy).toHaveText("Copied");
+  await page.clock.runFor(SENT_MS * 0.5);
+  await expect(copy).toHaveText("Copy");
+}
+
+/**
  * Where the browser won't take the copy, Copy says so and shows the values as text to copy by hand.
  * @param {App} app
  */
@@ -278,7 +297,13 @@ export async function checkPanelInThemes(app) {
   await openTuning(app);
   await refuseCopies(page);
   await findPanel(page).getByRole("button", { name: "Copy" }).click();
-  await expect(findPanel(page).getByRole("textbox", { name: "Values to copy" })).toBeVisible();
+  const copyText = findPanel(page).getByRole("textbox", { name: "Values to copy" });
+  await expect(copyText).toBeVisible();
+  const widths = await measureFieldFace(copyText, "--type-body-size");
+  expect(widths.field).toBeCloseTo(widths.role, 0);
+  expect(await copyText.evaluate((field) => Number(getComputedStyle(field).fontWeight))).toBe(
+    (await readRole(page, "body")).weight,
+  );
   for (const theme of /** @type {const} */ (["light", "dark"])) {
     await showTheme(page, theme);
     expect(await listTextOffRoles(page), theme).toEqual([]);

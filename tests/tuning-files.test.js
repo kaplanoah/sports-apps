@@ -1,7 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { listApps } from "../worker/apps.mjs";
-import { listBundledFiles } from "../worker/build.mjs";
 import { addTuningPanel } from "../worker/tuning-files.mjs";
 
 const ROUND = {
@@ -57,12 +55,4 @@ test("a round's text can't end the script that holds it", () => {
   const page = files["index.html"].text ?? "";
   assert.equal(page.match(/<\/script>/g)?.length, 3);
   assert.match(page, /\\u003c\/script>\\u003cb>/);
-});
-
-test("each app's production build leaves the tuning panel out", () => {
-  for (const app of listApps()) {
-    const files = listBundledFiles(app, null);
-    for (const path of PANEL_FILES) assert.equal(files[path], undefined, `${app} ${path}`);
-    assert.doesNotMatch(files["index.html"].text ?? "", /tuning/, app);
-  }
 });

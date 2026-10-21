@@ -1,4 +1,5 @@
 import {
+  checkCopiedAgain,
   checkDock,
   checkFailedCopy,
   checkKeptOnReload,
@@ -22,6 +23,9 @@ test("a slider's arrows, its range, and its reset set its value on :root", ({ pa
 test("an option sets its value on :root, Copy hands over every value, and its reset unsets it", ({
   page,
 }) => checkOptionsAndCopy({ page, app: APP, openApp }));
+
+test("a second Copy says Copied for its own full time", ({ page }) =>
+  checkCopiedAgain({ page, app: APP, openApp }));
 
 test("a copy the browser refuses shows the values to copy by hand", ({ page }) =>
   checkFailedCopy({ page, app: APP, openApp }));

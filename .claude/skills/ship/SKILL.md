@@ -74,7 +74,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - A design round tuned on the phone opens with an app's `page/tuning-round.json`,
   which names each CSS variable on `:root` to tune,
   with a slider's `min`, `max`, `step`, and `unit`, or a list of `options`, as `readRound` in `shared/page/tuning-round.js` checks.
-  It tunes only a variable that's the same in every theme and at every width, since the panel reads each start once, as it opens.
+  It tunes only a variable that's the same in every theme and at every width, since the panel reads each start once, as the page loads.
   Beta's build writes it into the page with the tuning panel, and production's leaves both out (the root's `worker/tuning-files.mjs`).
   The owner pastes back what the panel's Copy gives, and the PR sets those values in its stylesheets and deletes the round file in the same push.
 - If beta is held, add `beta-wait` to the PR if the workflow hasn't, stay subscribed to the PR, and stop.

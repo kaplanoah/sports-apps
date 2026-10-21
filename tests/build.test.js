@@ -144,8 +144,13 @@ test("a beta build with a round open loads the tuning panel, and production's le
 
       const production = listBundledFiles(app, { ...RELEASE, label: null }, "production", appsRoot);
       assert.doesNotMatch(production["index.html"].text, /tuning/i, app);
-      assert.equal(production["shared/tuning-panel.js"], undefined, app);
-      assert.equal(production["tuning-round.json"], undefined, app);
+      for (const file of [
+        "shared/tuning-panel.js",
+        "shared/tuning-panel.css",
+        "shared/tuning-round.js",
+        "tuning-round.json",
+      ])
+        assert.equal(production[file], undefined, `${app} ${file}`);
     } finally {
       remove();
     }

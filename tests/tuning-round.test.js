@@ -85,10 +85,14 @@ test("a slider's value holds to its steps and its range, and writes no float noi
   assert.equal(writeNumber(-0.1, DOT_LIFT), "0px");
   const tenths = { ...DOT_LIFT, min: 0, max: 1, step: 0.1 };
   assert.equal(writeNumber(0.1 + 0.2, tenths), "0.3px");
+  assert.equal(writeNumber(5, tenths), "1px");
   const offGrid = { ...DOT_LIFT, min: -0.3, max: 1, step: 0.5 };
   assert.equal(writeNumber(0.1, offGrid), "0.2px");
+  assert.equal(writeNumber(1, offGrid), "0.7px");
   const halfStart = { ...DOT_LIFT, min: 0.5, max: 5, step: 1 };
   assert.equal(writeNumber(1.4, halfStart), "1.5px");
+  assert.equal(nudgeNumber("4.5px", halfStart, 1), "4.5px");
+  assert.equal(writeNumber(3, { ...DOT_LIFT, min: 0, max: 2.5, step: 1 }), "2px");
 });
 
 test("a slider's arrows move it a step at a time and stop at its ends", () => {
