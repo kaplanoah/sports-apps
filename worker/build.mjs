@@ -154,7 +154,11 @@ export async function buildWorker(
     bundle: true,
     format: "esm",
     platform: "neutral",
+    // A package resolves as Cloudflare's own wrangler resolves it for a Worker.
+    conditions: ["workerd", "worker", "browser"],
+    mainFields: ["browser", "module", "main"],
     target: "es2022",
+    external: ["cloudflare:*"],
     banner: { js: describeBanner(worker) },
     plugins: [embedPageFiles(worker, release, channel)],
     write: false,

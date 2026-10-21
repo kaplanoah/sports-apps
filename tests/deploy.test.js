@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listApps } from "../worker/apps.mjs";
+import { nameServiceBinding } from "../shared/worker/services.js";
+import { listApps, listServices } from "../worker/apps.mjs";
 import { readRepoFile } from "./repo-files.js";
 
 const loadDeployModule = () => import("../worker/deploy.mjs");
@@ -133,8 +134,13 @@ test("a beta deploy uploads to the beta Worker, with the same bindings", async (
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(
     metadata.bindings.map((binding) => binding.name),
-    ["STORE", "ACCESS_LIMIT"],
+    ["STORE", "ACCESS_LIMIT", "ACCOUNTS"],
   );
+  assert.deepEqual(metadata.bindings[2], {
+    type: "service",
+    name: "ACCOUNTS",
+    service: "accounts-beta",
+  });
   assert.deepEqual(metadata.migrations.new_tag, "v1");
 });
 
@@ -177,6 +183,7 @@ test("upload, route, and the Worker URL", async () => {
         namespace_id: "2701",
         simple: { limit: 10, period: 60 },
       },
+      { type: "service", name: "ACCOUNTS", service: "accounts" },
     ],
     keep_bindings: ["secret_text"],
     annotations: { "workers/message": NEW_COMMIT, "workers/tag": NEW_COMMIT.slice(0, 7) },
@@ -295,6 +302,43 @@ test("each app's wrangler.toml declares the same bindings and migrations", async
       /\[\[env\.beta\.ratelimits\]\]\nname = "ACCESS_LIMIT"\nnamespace_id = "2701"\n\n\[env\.beta\.ratelimits\.simple\]\nlimit = 10\nperiod = 60/,
     );
     for (const { tag, new_sqlite_classes: classes } of listMigrations("SeasonStore")) {
+      const declared = `[[migrations]]\ntag = "${tag}"\nnew_sqlite_classes = ${JSON.stringify(classes)}`;
+      assert.ok(toml.includes(declared), declared);
+    }
+    for (const service of listServices()) {
+      const binding = nameServiceBinding(service);
+      for (const [table, name] of [
+        ["services", service],
+        ["env.beta.services", `${service}-beta`],
+      ]) {
+        const declared = `[[${table}]]\nbinding = "${binding}"\nservice = "${name}"`;
+        assert.ok(toml.includes(declared), declared);
+      }
+    }
+  }
+});
+
+test("each service's wrangler.toml declares the bindings and migrations the deploy does", async () => {
+  const { listMigrations } = await loadDeployModule();
+  for (const service of listServices()) {
+    const toml = readRepoFile(`services/${service}/worker/wrangler.toml`);
+    const className = toml.match(/^class_name = "(\w+)"/m)?.[1];
+    assert.ok(className, service);
+    assert.match(toml.split("[env.beta]")[0], /^workers_dev = false\n/m);
+    for (const prefix of ["", "env.beta."]) {
+      assert.ok(
+        toml.includes(
+          `[[${prefix}durable_objects.bindings]]\nname = "STORE"\nclass_name = "${className}"`,
+        ),
+        `${service} ${prefix}STORE`,
+      );
+      assert.ok(
+        toml.includes(`[${prefix}version_metadata]\nbinding = "VERSION"`),
+        `${service} ${prefix}VERSION`,
+      );
+    }
+    assert.match(toml, /\[env\.beta\]\nname = "[\w-]+-beta"\nworkers_dev = false/);
+    for (const { tag, new_sqlite_classes: classes } of listMigrations(className)) {
       const declared = `[[migrations]]\ntag = "${tag}"\nnew_sqlite_classes = ${JSON.stringify(classes)}`;
       assert.ok(toml.includes(declared), declared);
     }
@@ -1008,7 +1052,7 @@ test("the deploy job runs no package's install scripts or tests while it holds t
   assert.match(workflow, /timeout-minutes: \d+/);
 });
 
-test("project settings ask before any deploy but beta's or a key change, and deny running them any other way", () => {
+test("project settings ask before each change to a live Worker but beta's, and deny making it any other way", () => {
   const { permissions } = JSON.parse(readRepoFile(".claude/settings.json"));
   // A message to another of the owner's sessions changes nothing outside them, so a session a
   // session started reports to it without asking. A session opens an issue for a finding or bug it
@@ -1033,9 +1077,6 @@ test("project settings ask before any deploy but beta's or a key change, and den
     "Bash(npm run deploy)",
     "Bash(npx wrangler *)",
     "Bash(wrangler *)",
-    "Bash(node worker/deploy.mjs)",
-    "Bash(node worker/set-app-key.mjs)",
-    "Bash(node worker/rollback.mjs)",
     // A branch's name has no spaces, so this keeps the beta push from naming any other branch too.
     "Bash(git push -f origin * *:beta)",
     // A PR's number has no spaces, so each label edit can't carry another flag, like a phone-ok.
@@ -1045,6 +1086,22 @@ test("project settings ask before any deploy but beta's or a key change, and den
     "Bash(gh pr edit * * --remove-label beta-wait)",
   ]) {
     assert.ok(permissions.deny.includes(rule), rule);
+  }
+  const scripts = Object.entries(JSON.parse(readRepoFile("package.json")).scripts);
+  const liveScripts = scripts.flatMap(([name, command]) => {
+    const [, file] = command.match(/NODE_USE_ENV_PROXY=1 node (worker\/[\w-]+\.mjs)/) ?? [];
+    return file ? [{ name, file }] : [];
+  });
+  assert.ok(liveScripts.length > 1);
+  // An ask rule prompts even in auto mode, so the owner approves each change a session makes.
+  for (const { name, file } of liveScripts) {
+    for (const rule of [`Bash(node ${file})`, `Bash(node ${file} *)`]) {
+      assert.ok(permissions.deny.includes(rule), rule);
+    }
+    for (const rule of [`Bash(npm run ${name})`, `Bash(npm run ${name} *)`]) {
+      assert.ok(permissions.ask.includes(rule), rule);
+      assert.ok(!permissions.allow.includes(rule) && !permissions.deny.includes(rule), rule);
+    }
   }
 });
 

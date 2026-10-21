@@ -1,20 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setAccessCode } from "../worker/set-access-code.mjs";
+import { createFakeCloudflare } from "./fake-cloudflare.js";
 
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123" };
 const SECRETS_URL =
   "https://api.cloudflare.com/client/v4/accounts/acct123/workers/scripts/wnba-app/secrets";
-
-function createFakeCloudflare({ secrets = [] } = {}) {
-  const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, init });
-    const result = url.endsWith("/secrets") && init.method === "GET" ? secrets : {};
-    return new Response(JSON.stringify({ success: true, result }));
-  };
-  return { fetchImpl, calls };
-}
 
 const changeCode = (cloudflare, options) =>
   setAccessCode({

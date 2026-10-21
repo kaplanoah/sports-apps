@@ -134,6 +134,7 @@ test("adding, renaming, or removing a service deploys every app, which binds it 
   const added = ["services/profiles/worker/wrangler.toml", "services/profiles/worker/src/index.js"];
   for (const worker of ["mlb", "wnba", "profiles"])
     assert.equal(decideDeploy(added, worker).isNeeded, true, worker);
+  assert.equal(decideDeploy(added, "accounts").isNeeded, false);
 });
 
 test("changes that can't be listed deploy", () => {
