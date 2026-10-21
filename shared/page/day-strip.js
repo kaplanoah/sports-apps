@@ -76,9 +76,9 @@ let view = null;
 let shown = null;
 /** @type {string | null} */
 let chosenDay = null;
-// A day a tap or Today sent the list to stays chosen while the list travels there, and until it
-// moves away again, since the season's last days can't all reach the top, with where its top was
-// last seen, for Diagnostics to say when it moves while the list travels.
+// A day a tap or Today sent the list to stays chosen while the list travels there, past other days
+// at the top, and until it moves away again, with where its top was last seen, for Diagnostics to
+// say when it moves while the list travels.
 /** @type {{ day: string, hasArrived: boolean, top: number | null } | null} */
 let held = null;
 let isPlaced = false;
