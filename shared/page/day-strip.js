@@ -855,11 +855,14 @@ function noteFill(drawing, before, after) {
   dayStripLog.noteStep(`${drawing || "redraw nothing"}; ${describeTopDay(after)}${was}`);
 }
 
+// A tap chose the held day before the list got there, and a list stopped short may send no more
+// scrolls, so the strip chooses the day at the top again.
 /** @param {string} taker what took the list over */
 function letGoOfHeldDay(taker) {
   if (!held) return;
   dayStripLog.noteStep(`${taker} takes the list over on its way to ${held.day}`);
   setHeld(null);
+  followList();
 }
 
 // A finger, wheel, click, or key on the list takes it over, even on its way to a day, as anything

@@ -184,6 +184,26 @@ test("a key pressed while the list flies to a day stops it where it is, and the 
   );
 });
 
+test("a key pressed before the list takes its first step to today leaves the list where it is, and the strip chooses the day at the top", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await findCell(page, "2026-09-29").click();
+  await page.clock.runFor(1000);
+  await expectDayAtTop(page, "2026-09-29");
+  const top = await findList(page).evaluate((list) => list.scrollTop);
+  // Each frame comes only as the test moves the clock, so the list sends no scroll after the key.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+
+  await page.locator("#seasonGames .go-today").click();
+  await page.keyboard.press("Shift");
+  await page.clock.runFor(2000);
+
+  await expect(page.locator("#seasonGames")).not.toHaveAttribute("data-held-day");
+  await expect(findCell(page, "2026-09-29")).toHaveClass(/is-chosen/);
+  expect(await findList(page).evaluate((list) => list.scrollTop)).toBe(top);
+});
+
 test("a tap on Games while a flick of the list still slides the dates to today ends the slide at once, today's date in the strip's middle", async ({
   page,
 }) => {
