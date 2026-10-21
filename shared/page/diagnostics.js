@@ -32,6 +32,7 @@ import { prefersReducedMotion } from "./reduced-motion.js";
 import { readPageRelease } from "./release.js";
 import { watchTimeAway } from "./resume.js";
 import { forgetServiceWorkerSteps, readServiceWorkerSteps } from "./service-worker.js";
+import { SENT_MS } from "./sent-label.js";
 import { listSheetsInOpenDialogs } from "./sheet-reopen.js";
 import { bracketStandingsLog, watchTouches } from "./bracket-standings-log.js";
 import { dayStripLog } from "./day-strip-log.js";
@@ -53,8 +54,6 @@ const KEPT_RECORDS = 5;
 // A part whose text shrinks by more than this share dipped, which is what a flicker looks like.
 const DIP_SHARE = 0.25;
 const MINUTE_MS = 60 * 1000;
-// The report button says it copied or shared the report for this long, then offers it again.
-const SENT_MS = 2000;
 const ON_REQUEST = "On request";
 const STEP_LOGS = [errorLog, sheetLog, dayStripLog, bracketStandingsLog, phoneLookLog];
 const SERVICE_WORKER_TITLE = "Service worker";

@@ -2,6 +2,8 @@
 // channel but production: the build writes the round into the page and loads the tuning panel
 // (shared/page/tuning-panel.js). Production never serves the panel, its round, or its files.
 
+import { writeJsonScript } from "./page-files.mjs";
+
 const ROUND_FILE = "tuning-round.json";
 const PANEL_FILES = ["shared/tuning-panel.js", "shared/tuning-panel.css", "shared/tuning-round.js"];
 const PAGE_END = "</html>";
@@ -11,7 +13,7 @@ const PAGE_END = "</html>";
 /** @param {string} round the round as JSON */
 const writePanelTags = (round) =>
   [
-    `<script type="application/json" id="tuningRound">${JSON.stringify(JSON.parse(round)).replaceAll("<", "\\u003c")}</script>`,
+    writeJsonScript("tuningRound", JSON.parse(round)),
     '<link rel="stylesheet" href="shared/tuning-panel.css" />',
     '<script type="module" src="shared/tuning-panel.js"></script>',
   ].join("\n");

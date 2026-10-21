@@ -207,6 +207,14 @@ function renderChannelTag({ label, commit, builtAt }) {
 }
 
 /**
+ * A JSON script tag holding a value, with every < escaped so no text in it can end the tag.
+ * @param {string} id
+ * @param {unknown} value
+ */
+export const writeJsonScript = (id, value) =>
+  `<script type="application/json" id="${id}">${JSON.stringify(value).replaceAll("<", "\\u003c")}</script>`;
+
+/**
  * A page with its release written in, for its code to read without asking the Worker, and with
  * its channel tag filled from it.
  * @param {string} page
@@ -214,11 +222,7 @@ function renderChannelTag({ label, commit, builtAt }) {
  */
 export const writeRelease = (page, release) =>
   page
-    .replace(
-      RELEASE_GUARD,
-      () =>
-        `<script type="application/json" id="release">${JSON.stringify(release).replaceAll("<", "\\u003c")}</script>\n  ${RELEASE_GUARD}`,
-    )
+    .replace(RELEASE_GUARD, () => `${writeJsonScript("release", release)}\n  ${RELEASE_GUARD}`)
     .replace(CHANNEL_TAG, () => renderChannelTag(release));
 
 /**

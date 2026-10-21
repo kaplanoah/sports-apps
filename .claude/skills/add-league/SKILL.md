@@ -60,6 +60,9 @@ Delete it once the app's first PR merges.
    Give it a manifest, icons, and an `apple-mobile-web-app-title` of the league's short name,
    which its manifest's `name` and `short_name` match.
    Agree on the league's look with the owner from a mockup first: its fonts and its light and dark themes.
+   The mockup is one plain HTML page that works on a phone, never a design canvas,
+   with the WNBA's styles, separators, and layout from its `page/styles.css`, and only the new league's fonts and colors in place of its own.
+   Once the views are built, look at each beside the mockup, with the same data, in each theme, and fix anything off.
    The league's fonts are self-hosted in `page/fonts/`, with each type role's size and weight set in its `:root`, as `.claude/rules/page-look.md` says.
    The league's light and dark themes are each a set of colors, the dark one under `:root[data-theme="dark"]`,
    with an icon and a bar color of its own, which `page/js/looks.js` hands the shared `appearance.js`

@@ -116,10 +116,12 @@ export function labelChannelFiles(files, label) {
  * @param {string} app
  * @param {ReturnType<typeof readRelease>} release
  * @param {string} [channel]
+ * @param {URL} [appsRoot] the folder that holds every app's
  */
-export function listBundledFiles(app, release, channel = "production") {
+export function listBundledFiles(app, release, channel = "production", appsRoot) {
   const { label } = findChannel(channel);
-  const files = addTuningPanel(labelChannelFiles(readPageFiles(findPageRoot(app)), label), label);
+  const pageFiles = readPageFiles(findPageRoot(app, appsRoot));
+  const files = addTuningPanel(labelChannelFiles(pageFiles, label), label);
   if (!release) return files;
   return {
     ...pinPageFiles(files, release),

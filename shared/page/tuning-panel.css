@@ -3,7 +3,8 @@
  * over the page, above the tab bar or at the top, whose list scrolls on its own and hands a scroll
  * at its end on to the page, and a Tune button that opens it. The build links it only where it
  * loads the panel. Apps define --sheet, --divider, --ink, --ink-mid, --ink-dim, --ink-hover,
- * --accent, --accent-ink, --radius-card, --radius-control, and --control-height.
+ * --accent, --accent-ink, --radius-card, --radius-control, --control-height, and --search-face,
+ * the face a field draws its text in at --type-field-size as big as the page's body text.
  */
 
 .tuning-panel,
@@ -108,8 +109,9 @@
   border-radius: var(--radius-control);
   background: none;
   color: var(--ink);
+  font-family: var(--search-face);
   font-size: var(--type-field-size);
-  font-weight: var(--type-setting-note-weight);
+  font-weight: var(--type-body-weight);
 }
 
 .tuning-list {

@@ -27,9 +27,9 @@ const readRoleSizes = (page) =>
 /**
  * Every piece of shown text off its app's type roles (shared/page/type.css), with what sets it and
  * why: a size that isn't one of the roles' sizes, a weight its font has no face for, which the
- * browser would fake from another, and Safari enlarging text on its own. A field's text is at
- * least 16px, which an iPhone doesn't zoom into on a tap. The tab bar's labels keep the phone's own
- * size, and text hidden for screen readers is left out.
+ * browser would fake from another, and Safari enlarging text on its own. A field's text, a
+ * textarea's too, is instead at least 16px, which an iPhone doesn't zoom into on a tap. The tab
+ * bar's labels keep the phone's own size, and text hidden for screen readers is left out.
  * @param {import("@playwright/test").Page} page
  */
 export const listTextOffRoles = async (page) =>
@@ -89,7 +89,8 @@ export const listTextOffRoles = async (page) =>
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const element = node.parentElement;
         if (!element || !node.textContent?.trim() || !element.checkVisibility()) continue;
-        if (element.closest(".tab-label") || isScreenReaderOnly(element)) continue;
+        if (element.closest(".tab-label") || element.matches(TYPED_FIELDS)) continue;
+        if (isScreenReaderOnly(element)) continue;
         const problems = listProblems(element);
         if (problems.length)
           offRoles.add(

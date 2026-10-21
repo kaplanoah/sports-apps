@@ -1,10 +1,10 @@
 import test, { mock } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { listApps, listServices } from "../worker/apps.mjs";
+import { findPageRoot, listApps, listServices } from "../worker/apps.mjs";
 import {
   buildWorker,
   describeBanner,
@@ -107,6 +107,49 @@ test("a production release has no label, so its page shows no channel tag", () =
     builtAt: BUILT_AT.toISOString(),
     label: null,
   });
+});
+
+const TUNING_ROUND = {
+  name: "Corners",
+  values: [{ property: "--radius-control", label: "Button corners", min: 0, max: 12, step: 1 }],
+};
+const TUNING_TAGS = [
+  /<script type="application\/json" id="tuningRound">/,
+  /<link rel="stylesheet" href="release\/b102733\/shared\/tuning-panel\.css"/,
+  /<script type="module" src="release\/b102733\/shared\/tuning-panel\.js"/,
+];
+
+/**
+ * A copy of an app's page with a tuning round open, as the apps' folder a build reads from.
+ * @param {string} app
+ */
+function createTuningRoot(app) {
+  const folder = mkdtempSync(path.join(tmpdir(), "apps-"));
+  cpSync(findPageRoot(app), path.join(folder, app, "page"), { recursive: true });
+  writeFileSync(path.join(folder, app, "page/tuning-round.json"), JSON.stringify(TUNING_ROUND));
+  return {
+    appsRoot: pathToFileURL(`${folder}/`),
+    remove: () => rmSync(folder, { recursive: true, force: true }),
+  };
+}
+
+test("a beta build with a round open loads the tuning panel, and production's leaves it out", () => {
+  for (const app of listApps()) {
+    const { appsRoot, remove } = createTuningRoot(app);
+    try {
+      const beta = listBundledFiles(app, RELEASE, "beta", appsRoot);
+      for (const tag of TUNING_TAGS) assert.ok(tag.test(beta["index.html"].text), `${app}: ${tag}`);
+      assert.ok(beta["shared/tuning-panel.js"], app);
+      assert.equal(beta["tuning-round.json"], undefined, app);
+
+      const production = listBundledFiles(app, { ...RELEASE, label: null }, "production", appsRoot);
+      assert.doesNotMatch(production["index.html"].text, /tuning/i, app);
+      assert.equal(production["shared/tuning-panel.js"], undefined, app);
+      assert.equal(production["tuning-round.json"], undefined, app);
+    } finally {
+      remove();
+    }
+  }
 });
 
 // Node has no Workers runtime, so the runtime's own module stands in as its two classes.

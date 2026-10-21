@@ -4,8 +4,10 @@
 // to paste back. The build writes the round into the page as #tuningRound and loads this module,
 // and leaves both out of production (worker/tuning-files.mjs).
 
+import { DISMISS_ICON } from "./dismiss-button.js";
 import { html, setHtml } from "./html.js";
 import { readStoredJson, storeJson } from "./local-storage.js";
+import { SENT_MS } from "./sent-label.js";
 import {
   isSlider,
   nudgeNumber,
@@ -15,8 +17,6 @@ import {
   writeCopyText,
   writeNumber,
 } from "./tuning-round.js";
-
-const COPIED_MS = 2000;
 
 // Phosphor's caret-left, at its Light weight.
 const STEP_DOWN_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
@@ -38,11 +38,6 @@ const DOCK_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidde
   <path d="M116.24,171.76a6,6,0,0,1,0,8.48l-32,32a6,6,0,0,1-8.48,0l-32-32a6,6,0,0,1,8.48-8.48L74,193.51V48a6,6,0,0,1,12,0V193.51l21.76-21.75A6,6,0,0,1,116.24,171.76Zm96-96-32-32a6,6,0,0,0-8.48,0l-32,32a6,6,0,0,0,8.48,8.48L170,62.49V208a6,6,0,0,0,12,0V62.49l21.76,21.75a6,6,0,0,0,8.48-8.48Z" />
 </svg>`;
 
-// Phosphor's x, at its Light weight, like the page's other close buttons.
-const CLOSE_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
-  <path d="M204.24,195.76a6,6,0,1,1-8.48,8.48L128,136.49,60.24,204.24a6,6,0,0,1-8.48-8.48L119.51,128,51.76,60.24a6,6,0,0,1,8.48-8.48L128,119.51l67.76-67.75a6,6,0,0,1,8.48,8.48L136.49,128Z" />
-</svg>`;
-
 /**
  * @typedef {object} PanelState
  * @property {import("./tuning-round.js").Round} round
@@ -51,6 +46,7 @@ const CLOSE_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidd
  * @property {boolean} isOpen
  * @property {"bottom" | "top"} dock
  * @property {"idle" | "copied" | "failed"} copy
+ * @property {ReturnType<typeof setTimeout> | undefined} [copyTimer]
  */
 
 /** @param {import("./tuning-round.js").Round} round */
@@ -149,7 +145,7 @@ const drawPanel = (state) =>
         ${DOCK_ICON}
       </button>
       <button type="button" class="tuning-icon" data-close aria-label="Close tuning">
-        ${CLOSE_ICON}
+        ${DISMISS_ICON}
       </button>
     </div>
     ${
@@ -241,11 +237,12 @@ async function copySettings(state, redraw) {
     state.copy = "failed";
   }
   redraw();
+  clearTimeout(state.copyTimer);
   if (state.copy === "copied")
-    setTimeout(() => {
+    state.copyTimer = setTimeout(() => {
       state.copy = "idle";
       redraw();
-    }, COPIED_MS);
+    }, SENT_MS);
 }
 
 /**
@@ -262,7 +259,7 @@ function watchTaps(panel, state, redraw) {
     if (button.matches("[data-dock]")) state.dock = state.dock === "bottom" ? "top" : "bottom";
     const property = button.closest("[data-property]")?.getAttribute("data-property");
     const setting = property && readTappedSetting(state, button, property);
-    if (property && setting !== null && setting !== "") state.settings[property] = setting;
+    if (property && setting !== null) state.settings[property] = setting;
     redraw();
   });
 }
@@ -294,6 +291,7 @@ function followModalSheets(parts) {
     const holder = sheets.at(-1) ?? document.body;
     for (const part of parts) if (part.parentElement !== holder) holder.append(part);
   };
+  placeParts();
   new MutationObserver(placeParts).observe(document.body, {
     subtree: true,
     attributeFilter: ["open"],

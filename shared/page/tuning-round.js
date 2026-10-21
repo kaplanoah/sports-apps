@@ -67,8 +67,8 @@ export function readRound(text) {
  */
 export const isSlider = (value) => !("options" in value);
 
-/** @param {number} step */
-const countDecimals = (step) => String(step).split(".")[1]?.length ?? 0;
+/** @param {number} number */
+const countDecimals = (number) => String(number).split(".")[1]?.length ?? 0;
 
 /**
  * The slider's number in a value's CSS text, or null when the text isn't a number in its unit.
@@ -90,7 +90,8 @@ export function readNumber(text, { unit }) {
 export function writeNumber(number, { min, max, step, unit }) {
   const stepped = min + Math.round((number - min) / step) * step;
   const held = Math.min(max, Math.max(min, stepped));
-  return `${Number(held.toFixed(countDecimals(step)))}${unit}`;
+  const decimals = Math.max(countDecimals(min), countDecimals(step));
+  return `${Number(held.toFixed(decimals))}${unit}`;
 }
 
 /**
