@@ -9,4 +9,5 @@ const REQUIRED_SECRETS = [
  * @param {Record<string, unknown>} secrets
  * @returns {{ name: string, problem: string }[]}
  */
-export const listMissingSecrets = (secrets) => REQUIRED_SECRETS.filter(({ name }) => !secrets[name]);
+export const listMissingSecrets = (secrets) =>
+  REQUIRED_SECRETS.filter(({ name }) => !secrets[name]);
