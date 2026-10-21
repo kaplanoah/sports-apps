@@ -335,14 +335,15 @@ add:
   subdomain, the part before `.workers.dev`, which a token limited to its
   Workers can't read, and which the deploy builds each Worker's address from;
 - for each app, a secret `<APP>_PAGE_URL` with its page's address, key and all,
-  like `WNBA_PAGE_URL`, and `<APP>_ACCESS_CODE` with its code if it asks for
-  one.
+  like `WNBA_PAGE_URL`;
+- a secret `ACCESS_CODE` with the one code every app asks for, if they ask
+  for one.
 
 The beta channel (see "Trying a change on the phone" below) deploys from an
 environment of its own, named `beta`, limited to the `beta` branch, with the
 same secrets: a token limited to each app's beta Worker,
-`<app>-app-beta`, the account ID and subdomain, and each page's address and code with
-`_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
+`<app>-app-beta`, the account ID and subdomain, beta's `ACCESS_CODE`, and each
+page's address with `_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
 change only its own channel's Workers, a branch pushed to `beta` can never
 reach the live apps.
 

@@ -10,14 +10,14 @@ import {
 
 const PAGE_URL = "https://wnba-app.example-subdomain.workers.dev/k3y/";
 
-test("each app's page is opened with its own channel's secrets", () => {
+test("each app's page is opened with its own address and its channel's one access code", () => {
   assert.deepEqual(nameAccessSecrets("wnba", "production"), {
     pageUrl: "WNBA_PAGE_URL",
-    accessCode: "WNBA_ACCESS_CODE",
+    accessCode: "ACCESS_CODE",
   });
   assert.deepEqual(nameAccessSecrets("mlb", "beta"), {
     pageUrl: "MLB_BETA_PAGE_URL",
-    accessCode: "MLB_BETA_ACCESS_CODE",
+    accessCode: "ACCESS_CODE",
   });
 });
 
@@ -28,7 +28,7 @@ test("a page with no address isn't opened, and one with no code opens without si
     accessCode: undefined,
   });
   assert.deepEqual(
-    readPageAccess("wnba", "production", { WNBA_PAGE_URL: PAGE_URL, WNBA_ACCESS_CODE: "LAYUP" }),
+    readPageAccess("wnba", "production", { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" }),
     { pageUrl: PAGE_URL, accessCode: "LAYUP" },
   );
 });

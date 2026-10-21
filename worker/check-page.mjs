@@ -17,14 +17,14 @@ const markBroken = (reason) => ({ status: "broken", reason });
 const markUnchecked = (reason) => ({ status: "unchecked", reason });
 
 /**
- * The secrets that open an app's page on a channel: its address, with its key, and its access
- * code when it asks for one.
+ * The secrets that open an app's page on a channel: its address, with its key, and the access
+ * code every app on the channel asks for, which the channel's environment holds once.
  * @param {string} app
  * @param {string} channel
  */
 export function nameAccessSecrets(app, channel) {
   const prefix = `${app.toUpperCase()}${channel === "beta" ? "_BETA" : ""}`;
-  return { pageUrl: `${prefix}_PAGE_URL`, accessCode: `${prefix}_ACCESS_CODE` };
+  return { pageUrl: `${prefix}_PAGE_URL`, accessCode: "ACCESS_CODE" };
 }
 
 // The page's routes, like its access code's, hang off its folder, so its address ends in a slash

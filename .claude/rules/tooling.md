@@ -16,8 +16,9 @@ paths:
   The `Watch apps` workflow does it every 15 minutes,
   keeping one open issue for each app that isn't opening, which closes once it opens again,
   and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`).
-  The deploy and the workflow both read each page's address and code from the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
-  and a beta deploy reads them from the `beta` environment's, with `_BETA` after the app's name.
+  The deploy and the workflow both read each page's address from the `production` environment's secrets, as `<APP>_PAGE_URL`,
+  and the one code every app asks for as `ACCESS_CODE`.
+  A beta deploy reads them from the `beta` environment's, with `_BETA` after the app's name in each address's.
 - Hooks in `.claude/settings.json`, each saying why when it blocks a call, and all off in CI's review:
   - `.claude/hooks/one-command.mjs` blocks a call that starts with `cd` or joins commands.
   - `.claude/hooks/context-limit.mjs` hands a session off to a fresh one as its context grows.
