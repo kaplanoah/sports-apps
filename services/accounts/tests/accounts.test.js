@@ -22,12 +22,9 @@ function createTestAccounts(secrets = {}) {
         return target[name](...args);
       },
   });
-  const accounts = createAccounts({
-    storage,
-    secrets: { EMAIL_KEY: "test-secret", RP_ID, ...secrets },
-    now: () => clock.now,
-  });
-  return { accounts, context, clock, counts };
+  const allSecrets = { EMAIL_KEY: "test-secret", RP_ID, ...secrets };
+  const accounts = createAccounts({ storage, secrets: allSecrets, now: () => clock.now });
+  return { accounts, secrets: allSecrets, context, clock, counts };
 }
 
 const createPasskey = () => createFakeAuthenticator({ rpId: RP_ID, origin: ORIGIN });
@@ -221,14 +218,13 @@ test("without its email key or its site, registration and sign-in refuse and sto
 
 test("the service's health is ok exactly when registration and sign-in don't refuse", async () => {
   const cases = [{}, { EMAIL_KEY: undefined }, { RP_ID: undefined }, { EMAIL_KEY: "", RP_ID: "" }];
-  for (const secrets of cases) {
-    const { accounts } = createTestAccounts(secrets);
-    const health = await readServiceHealth({
-      env: { EMAIL_KEY: "test-secret", RP_ID, ...secrets },
-      isStoreAnswering: async () => true,
-    });
-    const { problem } = await accounts.startSignIn();
-    assert.equal(health.ok, !problem, JSON.stringify(secrets));
+  for (const missing of cases) {
+    const { accounts, secrets } = createTestAccounts(missing);
+    const health = await readServiceHealth({ env: secrets, isStoreAnswering: async () => true });
+    const registration = await accounts.startRegistration({ email: EMAIL });
+    const signIn = await accounts.startSignIn();
+    assert.equal(health.ok, !registration.problem, JSON.stringify(missing));
+    assert.equal(health.ok, !signIn.problem, JSON.stringify(missing));
   }
 });
 
