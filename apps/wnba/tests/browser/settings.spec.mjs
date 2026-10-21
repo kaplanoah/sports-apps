@@ -41,7 +41,7 @@ async function expectTheme(page, theme) {
   );
   await expect(page.locator("#themeColor")).toHaveAttribute(
     "content",
-    isDark ? "#1d1511" : "#ead5b2",
+    isDark ? "#1a110b" : "#f3e4ce",
   );
 }
 
