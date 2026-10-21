@@ -40,8 +40,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 - Each app has a beta channel: a second Worker, `<app>-app-beta`,
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
-  key, and address, whose page says beta on the Home Screen and in settings' version line (the root's `worker/build.mjs`),
-  and in a tag beside the app's name, with the commit it runs and how long ago that went live (`writeRelease`).
+  key, and address, whose page says beta on the Home Screen and in settings' version line (the root's `worker/build.mjs`).
+  Its page also shows a tag beside the app's name, with the commit it runs and how long ago that went live
+  (`writeRelease` in the root's `worker/page-files.mjs`, its age drawn by `shared/page/draw-channel-tag-age.js`).
   A push to the `beta` branch deploys it at once, with the same checks and rollback as `main`'s deploy,
   but only when the pushed commit is the head of the PR that holds beta (the root's `worker/beta-claim.mjs`).
   Each of `deploy:api`, `rollback`, `set-app-key`, `set-access-code`, `set-page-host`, `set-email-key`, and `set-rp-id` takes `--channel beta`.

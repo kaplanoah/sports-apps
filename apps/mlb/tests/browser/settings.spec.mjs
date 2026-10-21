@@ -244,10 +244,11 @@ test("once the World Series is won, the current season's year is in the title to
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("MLB 2026");
 });
 
-test("at their foot, settings name the release and when it came out, in the viewer's time, over the copyright", async ({
+test("at their foot, settings name the release the page came from and when it came out, in the viewer's time, over the copyright, without asking the Worker", async ({
   page,
 }) => {
-  await serveReleases(page);
+  const served = await serveReleases(page);
+  served.isHanging = true;
   await openApp(page);
   await openSettings(page);
 
@@ -323,7 +324,9 @@ test("on a phone, a scroll just past the end of settings rests at their end, wit
   expect(distanceToEnd).toBeLessThan(1);
 });
 
-test("without a version file, settings leave the version out", async ({ page }) => {
+test("without a release written into the page, settings leave the version out", async ({
+  page,
+}) => {
   await openApp(page);
   await openSettings(page);
 

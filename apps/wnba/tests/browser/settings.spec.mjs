@@ -264,15 +264,16 @@ test("a look chosen in another tab shows in this one", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Walnut" })).toBeChecked();
 });
 
-test("settings end with the release, NBA.com's credit for the data, and the copyright", async ({
+test("settings end with the release the page came from, NBA.com's credit for the data, and the copyright, without asking the Worker", async ({
   page,
 }) => {
-  await serveReleases(page);
+  const served = await serveReleases(page);
+  served.isHanging = true;
   await openApp(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const footer = page.locator(`${SETTINGS} .settings-footer`);
   await expect(footer.locator(".settings-version")).toHaveText([
-    /^v\d/,
+    /^v2\.13\.0\u2022Released /,
     "Includes data from NBA.com",
     "\u00a9 2026 Noah Kaplan",
   ]);

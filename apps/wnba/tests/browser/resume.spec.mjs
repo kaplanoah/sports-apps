@@ -313,6 +313,17 @@ test("a file outside the release's folder that fails to load leaves the page as 
   expect(await isSameLoad(page)).toBe(true);
 });
 
+test("a page asks the Worker for no release as it opens, since the build wrote its own into it", async ({
+  page,
+}) => {
+  const served = await serveReleases(page);
+  await openApp(page);
+  await expect(page.locator("#stamp")).not.toBeEmpty();
+  await page.clock.runFor(60 * 1000);
+
+  expect(served.requests).toBe(0);
+});
+
 test("a page coming back reloads itself once a deploy has replaced it", async ({ page }) => {
   const served = await serveReleases(page);
   await openApp(page);

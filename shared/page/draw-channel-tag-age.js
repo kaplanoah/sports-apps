@@ -1,8 +1,6 @@
-// How long ago the release in the channel tag went live. The build fills the tag on any channel but
-// production with the channel, the commit, and a <time> of the deploy (`writeRelease` in the
-// root's worker/page-files.mjs). This plain script loads in the head, and the page calls
-// drawChannelTagAge() with what it draws before the first paint, so the tag shows whole as the
-// page opens; channel-tag.js draws it again each minute and on return.
+// The build writes the channel tag with a <time> of the deploy, and this plain script, in the
+// head, draws how long ago that was before the first paint, so the tag shows whole as the page
+// opens.
 
 /**
  * How long ago a moment was: "just now", then minutes, whole hours, and days.
