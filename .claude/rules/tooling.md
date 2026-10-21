@@ -29,6 +29,7 @@ paths:
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
   `--rotate` replaces the key, which changes the address; do that only when the user asks.
 - `npm run set-access-code -- <app> <code>` sets the code an app's page asks for, with a new random `ACCESS_SIGNING_KEY`; the user picks the code.
+  Every app on a channel takes the same code, since the deploy and the workflow sign each in with the environment's one `ACCESS_CODE`.
   A new code signs every phone out, and `--remove` stops asking.
   Never commit, log, or post the code.
 - `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,
