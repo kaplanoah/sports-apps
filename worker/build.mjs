@@ -120,7 +120,7 @@ export function listBundledFiles(app, release, channel = "production") {
   const files = labelChannelFiles(readPageFiles(findPageRoot(app)), findChannel(channel).label);
   if (!release) return files;
   return {
-    ...pinPageFiles(files, release.commit),
+    ...pinPageFiles(files, release),
     "version.json": { contentType: "application/json", text: JSON.stringify(release) },
   };
 }

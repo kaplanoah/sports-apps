@@ -3,7 +3,7 @@ declare const Sortable: {
 };
 
 // The page's plain scripts in its head share these, from shared/page/pick-theme.js,
-// long-away.js, open-last-tab.js, show-last-drawn.js, and season-header.js.
+// long-away.js, open-last-tab.js, show-last-drawn.js, season-header.js, and draw-channel-tag-age.js.
 declare function isOnHomeScreen(): boolean;
 declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;
@@ -47,6 +47,7 @@ declare function followSeasonPart(part?: HTMLElement): void;
 declare function listAboveSeasonView(): HTMLElement[];
 declare function listPageParts(): HTMLElement[];
 declare function isInFlow(element: Element): boolean;
+declare function drawChannelTagAge(): void;
 
 // Cloudflare Workers runtime: a Durable Object answers a WebSocket upgrade with one end of a pair.
 declare class WebSocketPair {

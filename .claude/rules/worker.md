@@ -60,6 +60,8 @@ paths:
   which only that release's Worker serves, and browsers keep for good,
   so a page loaded mid-deploy never runs two releases' files together;
   when one is missing, `shared/page/release-guard.js`, written into the page's head, reloads it.
+  The build also writes the release into the page, with beta's tag beside the app's name,
+  so the page shows them as it opens, without asking the Worker (`writeRelease`).
 - Read ahead of the page.
   What a view or sheet shows from a league, the store reads in the background and keeps,
   so a tap reads only the store and never waits on the league,
