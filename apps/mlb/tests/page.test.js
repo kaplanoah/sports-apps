@@ -775,7 +775,7 @@ test("standings rows keep room for a rank tag whether or not the club is ranked"
   session.state = { teams: { TB: { seed: 1 } } };
   const rendered = String(renderDivisionBlock("AL East", buildAlStandings()["AL East"]));
   assert.equal(rendered.match(/<td class="rank-cell"><span class="rank-slot">/g)?.length, 5);
-  assert.equal(rendered.match(/class="chip rank-tag/g)?.length, 1);
+  assert.equal(rendered.match(/class="chip numbers outlined rank-tag"/g)?.length, 1);
 });
 
 test("text from the shared store or MLB is shown as text, never as markup", () => {

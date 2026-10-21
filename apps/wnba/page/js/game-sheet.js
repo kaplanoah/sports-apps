@@ -87,7 +87,9 @@ function describeRecord(team) {
  * @param {"away" | "home"} place
  */
 const renderBonus = (game, place) =>
-  game.state === "live" && game[place].isInBonus && html`<span class="chip bonus">Bonus</span>`;
+  game.state === "live" &&
+  game[place].isInBonus &&
+  html`<span class="chip outlined bonus">Bonus</span>`;
 
 /**
  * @param {Game} game

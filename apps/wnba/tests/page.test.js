@@ -867,13 +867,21 @@ test("a team's Playoffs chip names its round, the same on a game day as any othe
     assert.match(readTeam(SEASON, "ATL").body, / Playoffs 1st Rd G1 /);
     assert.match(
       renderTeamSheet(SEASON, "ATL", { year: 2026, now: NOW }).body.text,
-      /<span class="chip status-chip alive">1st Rd<\/span>/,
+      /<span class="chip filled status-chip alive">1st Rd<\/span>/,
     );
     assert.match(
       readTeam(ATLANTA_SEASON, "ATL").body,
       / Playoffs 1st Rd G1 .* G13 vs Mystics 1st Rd Live /,
     );
   }));
+
+test("a team that missed the playoffs shows its chip outlined, with nothing to fill", () =>
+  inEastern(() =>
+    assert.match(
+      renderTeamSheet(SEASON, "SEA", { year: 2026, now: NOW }).body.text,
+      /<span class="chip outlined status-chip missed">Missed<\/span>/,
+    ),
+  ));
 
 test("a team's sheet shows its nearest games, its playoffs across from the field's with its record by its name and the legend for a line past the regular season, then its regular season ranked among every team's, its leading scorers, and its titles", () =>
   inEastern(() => {

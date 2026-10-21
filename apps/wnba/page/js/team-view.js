@@ -141,11 +141,11 @@ function describeWhen(game, now) {
  * @param {{ hasField: boolean }} context
  */
 function describeChip(run, { hasField }) {
-  if (!run) return hasField ? { label: "Missed", kind: "missed" } : null;
+  if (!run) return hasField ? { label: "Missed", kind: "missed", look: "outlined" } : null;
   const round = ROUNDS[run.round].shortName;
-  if (run.isChampion) return { label: "Champions", kind: "champion" };
-  if (run.isOut) return { label: `Out ${round}`, kind: "out" };
-  return { label: round, kind: "alive" };
+  if (run.isChampion) return { label: "Champions", kind: "champion", look: "filled" };
+  if (run.isOut) return { label: `Out ${round}`, kind: "out", look: "filled" };
+  return { label: round, kind: "alive", look: "filled" };
 }
 
 /**
@@ -165,9 +165,9 @@ export function readTeamPlayoffs(season, team) {
   };
 }
 
-/** @param {{ label: string, kind: string } | null} chip */
+/** @param {{ label: string, kind: string, look: string } | null} chip */
 export const renderChip = (chip) =>
-  chip && html`<span class="chip status-chip ${chip.kind}">${chip.label}</span>`;
+  chip && html`<span class="chip ${chip.look} status-chip ${chip.kind}">${chip.label}</span>`;
 
 /**
  * The seasons a team won it all: those it had won before, and this one once it has.

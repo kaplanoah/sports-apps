@@ -153,6 +153,20 @@ test("each ranked club shows its league at the start of its second line", async 
   expect(history.x).toBeGreaterThan(league.x + league.width);
 });
 
+test("the AL and NL chips are one width, so the lines after them start level", async ({ page }) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await openSettings(page);
+  await waitForSheetToRise(page);
+  await scrollSettingsToEnd(page);
+
+  const widths = await page
+    .locator("#rankList .league-tag")
+    .evaluateAll((tags) => tags.map((tag) => [tag.textContent, tag.getBoundingClientRect().width]));
+  expect(new Set(widths.map(([league]) => league))).toEqual(new Set(["AL", "NL"]));
+  expect(new Set(widths.map(([, width]) => width))).toEqual(new Set([27.5]));
+});
+
 test("a row too short for two lines keeps its league beside the club", async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await openApp(page);

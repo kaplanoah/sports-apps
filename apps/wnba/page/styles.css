@@ -807,13 +807,11 @@ header.top h1 .title-letter:nth-child(3) {
   font-size: var(--type-stat-large-size);
   font-weight: var(--type-stat-large-weight);
 }
-/* Bonus and foul trouble are happening now, so they're outlined in orange. */
+/* Each marks what's happening now to a team or a player, so it's outlined in orange. */
 .bonus,
 .foul-chip {
-  padding: 0 5px;
-  border: 1px solid currentColor;
-  color: var(--now);
-  font-family: var(--display);
+  --chip-ink: var(--now);
+  --chip-line: var(--now);
 }
 
 /* The game sheet: the two teams across the score in its band, then the game's parts, each under a
@@ -2038,7 +2036,7 @@ table.standings tr.below td {
   vertical-align: middle;
 }
 /* A conference chip sits on the club's baseline, its dot's bottom, which keeps its words on a whole
-   pixel. */
+   pixel, then rises half a pixel, where it looks level with the club's name. */
 .team-cell:has(.conference-tag) {
   align-items: baseline;
 }
@@ -2046,13 +2044,11 @@ table.standings td.team .club {
   font-size: var(--type-team-size);
   font-weight: var(--type-team-weight);
 }
-/* A lone letter takes no tracking, which would leave it left of the chip's middle. */
 .conference-tag {
-  padding: 0 4px;
-  border: 1px solid currentColor;
-  font-family: var(--display);
-  letter-spacing: 0;
-  color: var(--ink-mid);
+  --chip-ink: var(--ink-mid);
+  --chip-line: var(--ink-mid);
+  position: relative;
+  top: -0.5px;
 }
 .seed-note {
   font-family: var(--display);
@@ -2123,20 +2119,20 @@ table.standings tr.playoff-line + tr td {
   height: 9.5px;
 }
 .status-chip.alive {
-  background: color-mix(in srgb, var(--ink) 15%, transparent);
-  color: var(--ink-mid);
+  --chip-fill: color-mix(in srgb, var(--ink) 15%, transparent);
+  --chip-ink: var(--ink-mid);
 }
 .status-chip.champion {
-  background: var(--result);
-  color: var(--result-ink);
+  --chip-fill: var(--result);
+  --chip-ink: var(--result-ink);
 }
 .status-chip.out {
-  background: color-mix(in srgb, var(--ink-dim) 16%, transparent);
-  color: var(--ink-mid);
+  --chip-fill: color-mix(in srgb, var(--ink-dim) 16%, transparent);
+  --chip-ink: var(--ink-mid);
 }
 .status-chip.missed {
-  box-shadow: inset 0 0 0 1px var(--divider);
-  color: var(--ink-dim);
+  --chip-line: var(--divider);
+  --chip-ink: var(--ink-dim);
 }
 /* Each playoff game takes the same --game-row-height, whatever its row holds, and the numbers
    under them start --field-space-above the games. Over them, the team, with its record, and the

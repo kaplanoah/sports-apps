@@ -38,7 +38,7 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
       ["--orange", "--teal", "--ink-mid"].map((token) => readTokenColor(page, token)),
     );
 
-    for (const className of ["bonus", "foul-chip"]) {
+    for (const className of ["chip outlined bonus", "chip outlined foul-chip"]) {
       expect(await readChip(page, className), className).toEqual({
         color: now,
         borderTopColor: now,
@@ -46,9 +46,9 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
         backgroundColor: "rgba(0, 0, 0, 0)",
       });
     }
-    expect((await readChip(page, "status-chip champion")).backgroundColor).toBe(result);
-    expect((await readChip(page, "conference-tag east")).color).toBe(ink);
-    expect((await readChip(page, "conference-tag west")).color).toBe(ink);
+    expect((await readChip(page, "chip filled status-chip champion")).backgroundColor).toBe(result);
+    expect((await readChip(page, "chip outlined conference-tag east")).color).toBe(ink);
+    expect((await readChip(page, "chip outlined conference-tag west")).color).toBe(ink);
   });
 }
 

@@ -198,10 +198,6 @@
   text-align: right;
   color: var(--ink-dim);
 }
-.status-chip {
-  padding: 0 7px;
-}
-
 .tape {
   display: grid;
   gap: 10px;

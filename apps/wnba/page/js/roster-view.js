@@ -250,7 +250,7 @@ const renderFactsHead = (sort) =>
 /** @param {RosterRow} row */
 const identifyNameCell = (row) => `rosterName-${row.id}`;
 
-const OUT_CHIP = html`<span class="chip foul-chip">Out</span>`;
+const OUT_CHIP = html`<span class="chip outlined foul-chip">Out</span>`;
 
 /**
  * @param {RosterRow} row

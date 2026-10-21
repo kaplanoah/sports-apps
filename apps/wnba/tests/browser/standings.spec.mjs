@@ -46,22 +46,22 @@ test("the standings leave room between each group's name and its columns' names"
   expect(gap).toBeGreaterThanOrEqual(STANDINGS_HEADING_GAP_PX);
 });
 
-test("a standings conference tag sits on its club's dot's bottom, its letter centered on a whole pixel of its row", async ({
+test("a standings conference tag sits half a pixel above its club's baseline, its dot's bottom, where it looks level with the name", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  const row = page.locator("#standings-league tbody tr", { has: page.locator(".conference-tag") });
-  const tag = row.first().locator(".conference-tag");
+  const cell = page.locator("#standings-league .team-cell", {
+    has: page.locator(".conference-tag"),
+  });
+  const tag = cell.first().locator(".conference-tag");
   await expect(tag).toHaveText(/^[EW]$/);
-  const [{ bottom: tagBaseline }, dot, rowBox] = await Promise.all([
+  const [{ bottom: tagBaseline }, dot] = await Promise.all([
     readCapitals(tag),
-    row.first().locator(".dot").boundingBox(),
-    row.first().boundingBox(),
+    cell.first().locator(".dot").boundingBox(),
   ]);
-  expect(tagBaseline).toBeCloseTo((dot?.y ?? 0) + (dot?.height ?? 0), 2);
-  const baselineInRow = tagBaseline - (rowBox?.y ?? 0);
-  expect(baselineInRow).toBeCloseTo(Math.round(baselineInRow), 1);
+  const clubBaseline = (dot?.y ?? 0) + (dot?.height ?? 0);
+  expect(clubBaseline - tagBaseline).toBeCloseTo(0.5, 2);
   expect(await listChipsOffCenter(page)).toEqual([]);
 });
 

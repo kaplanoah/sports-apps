@@ -1,26 +1,57 @@
 /*
  * A chip: a short word or two in the Label role's capitals on a small box, like a status beside a
- * title or Bonus under a team. Apps link it before their own styles.css, define --leading and
- * --radius-chip, and give each kind of chip its colors, border, and side padding. A kind whose
- * words aren't a label, like MLB's rank tag, a caption's numbers, also sets its own type and the
- * height that puts its baseline on a whole pixel.
+ * title or Bonus under a team. Apps link it before their own styles.css and define --text,
+ * --leading, and --radius-chip.
+ *
+ * This file alone sets a chip's height, side padding, type, and border, so every chip in every app
+ * is the same chip. A kind of chip sets only its colors, as --chip-ink for its words, --chip-fill,
+ * and --chip-line, and picks one of the two looks in its markup: .filled, on its fill with 4.5px
+ * beside its words, or .outlined, 3px inside a 1px border of its line, where the border itself gives
+ * the words room. Where chips stack in a column, a kind also sets --chip-min-width, so the column
+ * is even.
+ *
+ * A chip of numbers rather than words, like MLB's rank tag, adds .numbers, which sets them in the
+ * Caption role, untracked and with no capitals, in the app's --chip-numbers-face and at its
+ * --chip-numbers-height, the height that puts that face's baseline on a whole pixel.
  *
  * Its words are trimmed to their capitals and centered in its fixed height, so they sit in its
  * middle by what's drawn rather than by the font's line. At 15px, inside a 1px border or none, the
  * words' baseline also lands on a whole pixel from the chip's top, where a screen draws them
- * without snapping a pixel up or down.
+ * without snapping a pixel up or down. text-indent balances the tracking after the last letter.
  */
 
 .chip {
   display: inline-block;
+  min-width: var(--chip-min-width, 0);
   height: 15px;
   align-content: center;
   border-radius: var(--radius-chip);
+  color: var(--chip-ink);
+  font-family: var(--text);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--leading);
   letter-spacing: var(--type-label-tracking);
+  text-indent: var(--type-label-tracking);
+  text-align: center;
   text-transform: uppercase;
   text-box: trim-both cap alphabetic;
   white-space: nowrap;
+}
+.chip.filled {
+  padding: 0 4.5px;
+  background: var(--chip-fill);
+}
+.chip.outlined {
+  padding: 0 3px;
+  border: 1px solid var(--chip-line);
+}
+.chip.numbers {
+  height: var(--chip-numbers-height);
+  font-family: var(--chip-numbers-face);
+  font-size: var(--type-caption-size);
+  font-weight: calc(var(--type-caption-weight) + 150);
+  letter-spacing: 0;
+  text-indent: 0;
+  text-transform: none;
 }
