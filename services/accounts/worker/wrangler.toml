@@ -10,7 +10,7 @@ workers_dev = false
 enabled = true
 
 # worker/deploy.mjs declares the same bindings and migrations for npm run deploy:api, and
-# npm run set-email-key gives it its EMAIL_KEY secret.
+# npm run set-email-key and set-rp-id give it its EMAIL_KEY and RP_ID secrets.
 [[durable_objects.bindings]]
 name = "STORE"
 class_name = "AccountStore"
@@ -22,7 +22,7 @@ binding = "VERSION"
 tag = "v1"
 new_sqlite_classes = ["AccountStore"]
 
-# The beta channel's Worker, with its own store and EMAIL_KEY. Durable Objects aren't inherited.
+# The beta channel's Worker, with its own store and secrets. Durable Objects aren't inherited.
 [env.beta]
 name = "accounts-beta"
 workers_dev = false
