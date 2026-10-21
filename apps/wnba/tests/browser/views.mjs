@@ -1,5 +1,6 @@
 import { expect, openApp, openGameSheet, keepHighlights } from "./harness.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 // A week of news with a card of each shape: one with a photo and stories under its lead, and one
 // with neither.
@@ -119,7 +120,7 @@ const VIEWS = [
   {
     name: "settings",
     open: (page) => page.getByRole("button", { name: "Settings", exact: true }).click(),
-    shown: (page) => page.locator("#settingsDialog .appearance-row"),
+    shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
     close: (page) => page.keyboard.press("Escape"),
   },
 ];

@@ -2,7 +2,7 @@ import test from "node:test";
 import { createHmac } from "node:crypto";
 import assert from "node:assert/strict";
 import { createAppWorker } from "../shared/worker/app-worker.js";
-import { ANDROID_AGENT, IPHONE_AGENT } from "./browser/devices.mjs";
+import { ANDROID_AGENT, IPAD_AGENT, IPHONE_AGENT } from "./browser/devices.mjs";
 
 const answerNothing = () => new Response(null, { status: 500 });
 const storeAnswers = async () => true;
@@ -469,7 +469,7 @@ test("with an address of its own, the page still answers under its key, and only
 
 const AGENTS = {
   iPhone: IPHONE_AGENT,
-  iPad: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+  iPad: IPAD_AGENT,
   android: ANDROID_AGENT,
   macChrome:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",

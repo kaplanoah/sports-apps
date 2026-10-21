@@ -21,6 +21,7 @@ import {
   readSeasonPartScroll,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -113,7 +114,7 @@ test("every piece of text keeps to its type role, in every view", async ({ page 
   await page.keyboard.press("Escape");
   await expect(page.locator("#teamSheet")).toBeHidden();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(page.locator(SETTINGS)).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
@@ -251,7 +252,7 @@ test.describe("on a phone, the text", () => {
     await expect(sheet).toBeHidden();
 
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(page.locator("#settingsDialog")).toBeVisible();
+    await expect(page.locator(SETTINGS)).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
@@ -561,7 +562,7 @@ test.describe("on a phone", () => {
     await expect(gameSheet).toBeHidden();
 
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(page.locator("#settingsDialog")).toBeVisible();
+    await expect(page.locator(SETTINGS)).toBeVisible();
     expect(await listTapsOffButtons(page)).toEqual([]);
   });
 });
