@@ -213,7 +213,8 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 
 - `app-worker.js`: the Worker's routing under the key
 - `access-gate.js`: asking for the access code before the page opens
-- `health.js`: the Worker's health, for an uptime monitor
+- `health.js`: the Worker's health, for an uptime monitor, and what each service it binds answers
+- `services.js`: the services an app may bind, and each one's binding name
 - `season-store.js`: the store's Durable Object, which each app's store hands its league
 - `background-job.js`: what a league's background jobs share
 - `job-status.js`: what each job's status says of its last run

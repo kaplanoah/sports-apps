@@ -125,8 +125,9 @@ themselves, see "If they deploy it themselves" below.
 1. Have them sign in at [dash.cloudflare.com](https://dash.cloudflare.com)
    and open **Workers & Pages**. A free account is fine. If it asks for a
    workers.dev subdomain, have them pick one and tell you what it is.
-2. Have them create a token at **Manage Account > API Tokens > Create Token**
-   with the **Edit Cloudflare Workers** template, scoped to their account.
+2. Have them create an account token at **Manage account > Account API tokens >
+   Create Token**, never a user token from **My Profile**, with the **Edit
+   Cloudflare Workers** template, scoped to their account.
    Skip IP filtering because cloud sessions don't have a fixed address. A
    one-week expiry is enough. They copy the token but don't paste it into the
    chat.
@@ -287,6 +288,11 @@ app's bundle to its `apps/<app>/worker/dist/`, which git ignores, if you want to
 look at it. The bundle records its version, the commit it was built from, and
 when, and the page's settings show them.
 
+A service is a Worker with no page, in `services/<name>/`, which the apps reach
+by a binding and the public never does. It's built, versioned, deployed, and
+rolled back as an app is. The `accounts` service keeps each account's passkeys
+and the choices it saves in each app, and knows an email only by a keyed hash.
+
 Code every app uses lives in `shared/`: the type roles every page's text takes,
 each app sizing and weighing them for its own fonts (`type.css`), the page's tab
 bar and settings sheet
@@ -304,12 +310,12 @@ Versions follow [semantic versioning](https://semver.org). Each pull request's
 title starts with a type: `feat:` for a new feature, `fix:`, `refactor:`, or
 `build:` for a patch, and `docs:`, `test:`, `ci:`, or `chore:` for changes that
 don't deploy. A `!` after a type that deploys, as in `feat!:`, marks a major
-change for every app it deploys; `feat(mlb)!:` makes it major for that app
-alone, and the others take the type's own bump. The build works out each app's
+change for each Worker it deploys; `feat(mlb)!:` makes it major for that Worker
+alone, and the others take the type's own bump. The build works out each Worker's
 version from these titles on `main`, so there are no tags to keep. A merge that
-changes nothing an app's deploy counts, like only its tests, docs, or other
-apps' folders, leaves that app's version alone. Each app counts on from a
-baseline version in `worker/release.mjs`; a new app starts at 1.0.0 with the
+changes nothing a Worker's deploy counts, like only its tests, docs, or other
+Workers' folders, leaves that Worker's version alone. Each Worker counts on from a
+baseline version in `worker/release.mjs`; a new one starts at 1.0.0 with the
 merge that adds its folder.
 
 Every deploy checks that the Worker answers afterward. If it doesn't, the
@@ -321,14 +327,20 @@ flash empty while it waits for its data.
 
 ### Deploying on merge
 
-GitHub can deploy each app's Worker, page included, after each merge: at once
+GitHub can deploy each Worker, each app's page included, after each merge: at once
 when the pull request's checks passed on exactly the code `main` now has, which
 is when it was up to date with `main` as it merged, and otherwise once the
-checks pass on `main`. In the repo's **Settings > Environments**, create an
+checks pass on `main`. First create each app's live Worker, `<app>-app`, and
+each service's, named in its `wrangler.toml`, in Cloudflare's dashboard, since a
+token can be limited only to Workers that exist. Create each Worker from the **Hello World** starter, which
+the first deploy replaces, and leave **Protect with Cloudflare Access** off: the
+deploy checks each app's workers.dev address, and a service answers only its
+apps. Then, in the repo's **Settings > Environments**, create an
 environment named `production`, limit its deployment branches to `main`, and
 add:
 
-- a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare account token with the
+- a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare account token, made at
+  **Manage account > Account API tokens > Create Token**, with the
   **Workers Scripts** permission at **Edit**, limited to each app's live
   Worker, `<app>-app`, and each service's, named in its `wrangler.toml`, with no
   IP filtering and a long expiry;
@@ -366,7 +378,8 @@ answers again.
 Each deploy records its commit on the Worker's version. A merge skips a Worker's
 deploy when nothing but docs, tests, tooling, and other Workers' folders changed
 since its live version's commit, since its Worker would be the same, though a
-service's `wrangler.toml` deploys every app, which binds the service by it;
+service's `wrangler.toml` deploys that service and every app, which binds the
+service by it, but no other service;
 `worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too
 once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
 CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
@@ -377,6 +390,20 @@ one app or service. `npm run rollback -- <worker>` puts its previous version bac
 of its traffic and prints which commit was live and which is now; it refuses
 when there's no earlier version. A rollback keeps the Worker's secrets as they
 are.
+
+Before the `accounts` service's first deploy on a channel, once its Worker
+exists and the channel's token can edit it, give it the key it
+hashes each email under with `npm run set-email-key`, or
+`npm run set-email-key -- --channel beta` for beta's. It makes the key at random
+and never prints it, and refuses to replace one, since a new key would leave
+every account's email unfindable.
+
+Then name the site every app's passkeys belong to with
+`npm run set-rp-id -- <domain>`, or `npm run set-rp-id -- <domain> --channel beta`
+for beta's: a domain each app's page host on that channel is under. It never
+prints the domain, and refuses to replace one, since a passkey signs in only to
+the site it was made under. A deploy keeps both. Until the service has both,
+its health says it isn't ok, and registration and sign-in refuse.
 
 ### Trying a change on the phone
 
@@ -404,7 +431,7 @@ A pull request gives beta up as it closes or merges, as its branch is pushed,
 and as it's labeled `phone-ok`.
 
 Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`,
-and each service's in Cloudflare's dashboard, since the `beta` token can change only the Workers it
+and each service's in Cloudflare's dashboard, as "Deploying on merge" says, since the `beta` token can change only the Workers it
 names, then create the `beta` environment as "Deploying on merge" says, with its
 token limited to them. After the first one, give each beta Worker its key with
 `npm run set-app-key -- <app> --channel beta`, which prints its address, and,

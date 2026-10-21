@@ -12,7 +12,7 @@ const LIVE_DEPLOYMENTS = [
 const skipPause = async () => {};
 
 /**
- * @param {{ ok: boolean, release: string | null } | null} report what each app says of accounts
+ * @param {{ ok: boolean, release: string | null, problem?: string } | null} report what each app says of accounts
  * @param {{ appStatus?: number }} [options]
  */
 const answerHealth =
@@ -94,7 +94,10 @@ test("a service uploads its store and version, has no workers.dev address, and a
 
 test("a service an app reports as down, or at another release, is put back, naming the app and never its address", async () => {
   for (const { report, problem } of [
-    { report: { ok: false, release: null }, problem: "mlb gets no answer from accounts" },
+    {
+      report: { ok: false, release: null, problem: "its store doesn't answer" },
+      problem: "mlb finds accounts not ok: its store doesn't answer",
+    },
     {
       report: { ok: true, release: "1111111" },
       problem: "mlb reaches accounts at 1111111, not 2222222",

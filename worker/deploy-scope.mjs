@@ -1,13 +1,15 @@
 // Decides whether main needs a deploy. Only when nothing but the docs, tests, and tooling listed
 // here changed since the live version does it skip one, so a new kind of file deploys until it
 // is listed. A Worker's own folder, an app's or a service's, deploys only that Worker, but for a
-// service's config, which each app's binding to it names; anything outside them deploys them all.
+// service's config, which deploys that service and every app, since each app's binding to it
+// names it; anything outside them deploys them all.
 // What the deploy runs, .github/workflows/deploy.yml and each script it runs and each module
 // those import, like worker/check-page.mjs, isn't listed: only a deploy shows that a change to
 // how the apps deploy still works. The beta claim's check is listed, since every push to beta
 // runs it, whether or not a Worker deploys, and the production deploy never does.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { isService } from "./apps.mjs";
 
 // What only configures the repository's checks, or what nothing runs, like the license, which
 // neither a deploy nor a browser test needs.
@@ -52,7 +54,9 @@ const SKIPPED_FILES = new Set([
   "worker/rule-files.mjs",
   "worker/set-access-code.mjs",
   "worker/set-app-key.mjs",
+  "worker/set-email-key.mjs",
   "worker/set-page-host.mjs",
+  "worker/set-rp-id.mjs",
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);
@@ -83,7 +87,8 @@ const isSkipped = (path) =>
  */
 const readWorkerFolder = (path) => path.match(/^(?:apps|services)\/([^/]+)\//)?.[1] ?? null;
 
-// Adding, renaming, or removing a service changes the bindings every app uploads.
+// Adding, renaming, or removing a service changes the bindings every app uploads, and no other
+// service's.
 const SERVICE_CONFIG = /^services\/[^/]+\/worker\/wrangler\.toml$/;
 
 /**
@@ -92,7 +97,9 @@ const SERVICE_CONFIG = /^services\/[^/]+\/worker\/wrangler\.toml$/;
  */
 const isForWorker = (path, worker) => {
   const folder = readWorkerFolder(path);
-  return !worker || !folder || folder === worker || SERVICE_CONFIG.test(path);
+  return (
+    !worker || !folder || folder === worker || (SERVICE_CONFIG.test(path) && !isService(worker))
+  );
 };
 
 /**

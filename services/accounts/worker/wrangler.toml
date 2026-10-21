@@ -1,0 +1,35 @@
+name = "accounts"
+main = "dist/worker.mjs"
+compatibility_date = "2026-09-01"
+# npm run build -- accounts bundles dist/worker.mjs with esbuild (worker/build.mjs); deploys build it themselves.
+no_bundle = true
+# The apps reach it only by their bindings, so it has no address of its own.
+workers_dev = false
+
+[observability]
+enabled = true
+
+# worker/deploy.mjs declares the same bindings and migrations for npm run deploy:api, and
+# npm run set-email-key and set-rp-id give it its EMAIL_KEY and RP_ID secrets.
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "AccountStore"
+
+[version_metadata]
+binding = "VERSION"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AccountStore"]
+
+# The beta channel's Worker, with its own store and secrets. Durable Objects aren't inherited.
+[env.beta]
+name = "accounts-beta"
+workers_dev = false
+
+[[env.beta.durable_objects.bindings]]
+name = "STORE"
+class_name = "AccountStore"
+
+[env.beta.version_metadata]
+binding = "VERSION"
