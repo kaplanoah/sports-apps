@@ -3,6 +3,7 @@
 // would wait on checks that never start. One comment for each of its head commits is enough: the
 // push that resolves the conflict brings a new head.
 import { fileURLToPath } from "node:url";
+import { waitFor } from "./check-timing.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
 // GitHub works out whether a pull request merges cleanly only once asked, a moment later.
@@ -52,7 +53,7 @@ export async function flagConflicts({
   mainCommit,
   fetchImpl = fetch,
   env = process.env,
-  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  wait = waitFor,
 }) {
   const github = createGitHub({ repository, fetchImpl, env });
   const pulls = await readAllPages(github, "/pulls?state=open&base=main");

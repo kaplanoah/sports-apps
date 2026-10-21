@@ -1,5 +1,5 @@
-// A stand-in for a Durable Object's ctx: its key-value storage, its alarm, and its accepted
-// WebSockets.
+// A stand-in for a Durable Object's ctx: its key-value storage, one key or many at a time, its
+// alarm, and its accepted WebSockets.
 export function createDurableObjectContext() {
   const stored = new Map();
   const sockets = [];
@@ -11,10 +11,14 @@ export function createDurableObjectContext() {
         alarm.at = at;
       },
       get: async (key) => structuredClone(stored.get(key)),
-      put: async (key, value) => {
-        stored.set(key, structuredClone(value));
+      put: async (keyOrEntries, value) => {
+        const entries = typeof keyOrEntries === "string" ? { [keyOrEntries]: value } : keyOrEntries;
+        for (const [key, entry] of Object.entries(entries)) stored.set(key, structuredClone(entry));
       },
-      delete: async (key) => stored.delete(key),
+      delete: async (keyOrKeys) => {
+        if (typeof keyOrKeys === "string") return stored.delete(keyOrKeys);
+        return keyOrKeys.filter((key) => stored.delete(key)).length;
+      },
       list: async ({ prefix, limit }) =>
         new Map(
           [...stored]

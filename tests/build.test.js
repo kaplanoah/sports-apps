@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { listApps } from "../worker/apps.mjs";
+import { listApps, listServices } from "../worker/apps.mjs";
 import {
   buildWorker,
   describeBanner,
@@ -109,11 +109,19 @@ test("a production release has no label, so its page shows no channel tag", () =
   });
 });
 
+// Node has no Workers runtime, so the runtime's own module stands in as its two classes.
+const WORKERS_RUNTIME_STAND_IN =
+  "data:text/javascript,export class DurableObject {} export class WorkerEntrypoint {}";
+
 /** @param {string} app */
 async function loadForbiddingGlobalWork(app) {
   const folder = mkdtempSync(path.join(tmpdir(), `${app}-worker-`));
   const bundlePath = path.join(folder, "worker.mjs");
-  writeFileSync(bundlePath, await buildWorker(app, { release: RELEASE }));
+  const built = await buildWorker(app, { release: RELEASE });
+  writeFileSync(
+    bundlePath,
+    built.replaceAll('"cloudflare:workers"', `"${WORKERS_RUNTIME_STAND_IN}"`),
+  );
   /** @param {string} name */
   const refuse = (name) => () => {
     throw new Error(`${app}'s Worker called ${name} while it loads`);
@@ -138,6 +146,16 @@ test("each app's Worker loads without what Cloudflare refuses while a Worker loa
   for (const app of listApps()) {
     const worker = await loadForbiddingGlobalWork(app);
     assert.equal(typeof worker.default.fetch, "function", app);
+  }
+});
+
+test("a service's Worker loads its packages as a Worker resolves them, importing only the runtime", async () => {
+  for (const service of listServices()) {
+    const built = await buildWorker(service, { release: RELEASE });
+    const imports = [...built.matchAll(/^import .* from "([^"]+)";$/gm)].map(([, from]) => from);
+    assert.deepEqual([...new Set(imports)], ["cloudflare:workers"], service);
+    const worker = await loadForbiddingGlobalWork(service);
+    assert.equal(typeof worker.default, "function", service);
   }
 });
 

@@ -74,14 +74,14 @@ test("each attempt after the first waits, and a later one can find the service a
 
 test("a service still wrong after every attempt is unanswered, with each app's problem from the last", async () => {
   const fake = createFakeApps({
-    mlb: [reporting({ ok: false, release: null })],
+    mlb: [reporting({ ok: false, release: null, problem: "no RP_ID secret" })],
     wnba: [reporting({ ok: true, release: null })],
   });
   const { result, pauses } = check(fake);
   assert.deepEqual(await result, {
     status: "unanswered",
     reason:
-      "mlb gets no answer from accounts; wnba reaches accounts at no known commit, not 2222222",
+      "mlb finds accounts not ok: no RP_ID secret; wnba reaches accounts at no known commit, not 2222222",
   });
   assert.equal(pauses.length, 2);
 });

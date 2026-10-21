@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setPageHost } from "../worker/set-page-host.mjs";
+import { createFakeCloudflare } from "./fake-cloudflare.js";
 
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123" };
 const API = "https://api.cloudflare.com/client/v4";
@@ -10,20 +11,8 @@ const ZONES = [
   { id: "zone-sports", name: "sports.example" },
 ];
 
-function createFakeCloudflare({ secrets = WITH_CODE } = {}) {
-  const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, init });
-    let result = {};
-    if (url.endsWith("/secrets") && init.method === "GET") result = secrets;
-    if (url.startsWith(`${API}/zones`)) result = ZONES;
-    return new Response(JSON.stringify({ success: true, result }));
-  };
-  return { fetchImpl, calls };
-}
-
 test("the address is pointed at the app's Worker on its domain, named in a secret, and printed", async () => {
-  const cloudflare = createFakeCloudflare();
+  const cloudflare = createFakeCloudflare({ secrets: WITH_CODE, zones: ZONES });
   const printed = [];
   const url = await setPageHost({
     app: "mlb",
@@ -57,7 +46,7 @@ test("the address is pointed at the app's Worker on its domain, named in a secre
 });
 
 test("a Worker without an access code gets no address without its key", async () => {
-  const cloudflare = createFakeCloudflare({ secrets: [] });
+  const cloudflare = createFakeCloudflare({ zones: ZONES });
   await assert.rejects(
     setPageHost({
       app: "mlb",
@@ -73,7 +62,7 @@ test("a Worker without an access code gets no address without its key", async ()
 
 test("an address on no domain in the account, or no address at all, changes nothing", async () => {
   for (const host of ["mlb.elsewhere.example", undefined, "https://mlb.sports.example/"]) {
-    const cloudflare = createFakeCloudflare();
+    const cloudflare = createFakeCloudflare({ secrets: WITH_CODE, zones: ZONES });
     await assert.rejects(
       setPageHost({ app: "mlb", host, fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {} }),
       /No domain|Name the page's address/,

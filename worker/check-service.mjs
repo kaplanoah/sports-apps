@@ -5,7 +5,7 @@
 // may be what a bad version of the service did to it.
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 
-/** @typedef {{ ok: boolean, release: string | null }} ServiceReport */
+/** @typedef {{ ok: boolean, release: string | null, problem?: string }} ServiceReport */
 /**
  * @typedef {{ status: "answering" }
  *   | { status: "unanswered", reason: string }
@@ -43,8 +43,8 @@ async function readAppHealth(url, service, fetchImpl) {
 function findHealthProblem(app, health, service, commit) {
   if (!health.answered) return `${app}'s health doesn't answer`;
   if (!health.report) return null;
-  const { ok, release } = health.report;
-  if (!ok) return `${app} gets no answer from ${service}`;
+  const { ok, release, problem } = health.report;
+  if (!ok) return `${app} finds ${service} not ok: ${problem ?? "no reason given"}`;
   if (commit && !(release && commit.startsWith(release)))
     return `${app} reaches ${service} at ${release ?? "no known commit"}, not ${commit.slice(0, 7)}`;
   return null;

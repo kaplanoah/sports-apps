@@ -24,6 +24,11 @@ namespace_id = "2701"
 limit = 10
 period = 60
 
+# Each service under services/, by its name in capitals, on the app's own channel.
+[[services]]
+binding = "ACCOUNTS"
+service = "accounts"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SeasonStore"]
@@ -44,3 +49,7 @@ namespace_id = "2701"
 [env.beta.ratelimits.simple]
 limit = 10
 period = 60
+
+[[env.beta.services]]
+binding = "ACCOUNTS"
+service = "accounts-beta"

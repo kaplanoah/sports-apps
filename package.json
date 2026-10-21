@@ -6,7 +6,7 @@
     "#page-files/*": "./apps/*/worker/page-files.mjs",
     "#shared/*": "./shared/page/*"
   },
-  "description": "Year-round tracker pages for sports leagues, and the Cloudflare Workers that serve them. No runtime dependencies; dev tools only.",
+  "description": "Year-round tracker pages for sports leagues, and the Cloudflare Workers that serve them. Its one runtime dependency checks passkeys for the accounts service.",
   "license": "MIT",
   "engines": {
     "node": ">=22.21"
@@ -25,7 +25,9 @@
     "rollback": "NODE_USE_ENV_PROXY=1 node worker/rollback.mjs",
     "set-app-key": "NODE_USE_ENV_PROXY=1 node worker/set-app-key.mjs",
     "set-access-code": "NODE_USE_ENV_PROXY=1 node worker/set-access-code.mjs",
-    "set-page-host": "NODE_USE_ENV_PROXY=1 node worker/set-page-host.mjs"
+    "set-page-host": "NODE_USE_ENV_PROXY=1 node worker/set-page-host.mjs",
+    "set-email-key": "NODE_USE_ENV_PROXY=1 node worker/set-email-key.mjs",
+    "set-rp-id": "NODE_USE_ENV_PROXY=1 node worker/set-rp-id.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -42,5 +44,8 @@
   "prettier": {
     "printWidth": 100,
     "embeddedLanguageFormatting": "off"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "14.0.3"
   }
 }
