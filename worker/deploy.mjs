@@ -8,6 +8,7 @@ import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
 import { checkAppPage } from "./check-page.mjs";
 import { checkService } from "./check-service.mjs";
+import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
 
@@ -122,7 +123,7 @@ const VERSION_BINDING = { type: "version_metadata", name: "VERSION" };
  * @param {string} channel
  * @param {import("./apps.mjs").WorkerRoots} [roots]
  */
-export const listServiceBindings = (channel, roots) =>
+const listServiceBindings = (channel, roots) =>
   listServices(roots?.servicesRoot).map((service) => ({
     type: "service",
     name: service.toUpperCase().replaceAll("-", "_"),
@@ -500,11 +501,6 @@ const SERVICE_CHECK_ATTEMPTS = 30;
 // A Worker's first workers.dev address can take minutes to resolve. A redeploy's already does, so
 // a slow answer there means a bad version to roll back.
 const FIRST_DEPLOY_CHECK_ATTEMPTS = 60;
-const CHECK_INTERVAL_MS = 5000;
-const CHECK_TIMEOUT_MS = 10000;
-
-const waitFor = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
 // The build names its commit in short form, and a version built from no known commit names none.
 /**
  * @param {Response} response

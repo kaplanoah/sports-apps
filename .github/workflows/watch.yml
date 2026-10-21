@@ -1,7 +1,8 @@
 name: Watch apps
 
-# Every 15 minutes, opens each app's live page as a phone does, and keeps one open issue for each
-# app that isn't opening, which closes once it opens again (worker/watch-apps.mjs).
+# Every 15 minutes, opens each app's live page as a phone does, and asks each app's health of each
+# service the apps reach. It keeps one open issue for each app that isn't opening, and one for each
+# service that isn't answering, which closes once it's right again (worker/watch-apps.mjs).
 on:
   schedule:
     - cron: "7,22,37,52 * * * *"
@@ -39,7 +40,8 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - if: steps.browsers.outputs.cache-hit != 'true'
         run: npx playwright install --only-shell chromium
-      # Secrets, so each page's address and code are masked in this public log.
+      # Secrets, so each page's address and code, and the subdomain in each Worker's address, are
+      # masked in this public log.
       - run: node worker/watch-apps.mjs
         env:
           GH_TOKEN: ${{ github.token }}

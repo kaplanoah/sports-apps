@@ -20,8 +20,8 @@ paths:
   and the one code every app asks for as `ACCESS_CODE`.
   A beta deploy reads them from the `beta` environment's, with `_BETA` after the app's name in each address's.
 - Services: each deploy uploads every service before any app, since an app binds each service, by its name in capitals, to its Worker on the app's channel (`listServiceBindings` in the root's `worker/deploy.mjs`).
-  A service has no workers.dev address, so its deploy reads each app's `health`,
-  which reports the service in a field of its own, `services.<name>`, apart from the app's own status,
+  A service has no workers.dev address, so its deploy reads what each app's `health` says of it,
+  in a field of its own, `services.<name>`, apart from the app's own status,
   and puts the service's earlier version back unless every app that reports it says it's ok at the new commit (`worker/check-service.mjs`).
   No app reports a service until its live version binds it, so a service's first deploy logs that the check was skipped.
   The service reads its release from its `VERSION` binding, which the upload's `workers/tag` sets to the short commit.
@@ -49,5 +49,6 @@ paths:
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.
 - A Worker's deploy is skipped when nothing but docs, tests, tooling,
   and other Workers' folders changed since its live version's commit; the root's `worker/deploy-scope.mjs` lists those files.
+  A service's `wrangler.toml` deploys every Worker, since each app binds the service by it, so adding, renaming, or removing one deploys them all.
   It skips the root's `.claude/` folder whole, so a new hook, rule, or skill needs no entry.
   When you add any other file that can't change the Worker, add it to that list.

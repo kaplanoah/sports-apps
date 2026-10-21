@@ -1,14 +1,15 @@
-// Names each app's releases with semantic versions. Each squash merge's title starts with a type
-// that says how far it moves the version, so main's history alone gives every commit's version:
-// no tags, and nothing written back to the repo. A merge that changes nothing an app's deploy
-// counts, such as only its tests or other apps' folders, leaves that app's version where it was,
-// so the app's version moves only for a merge that would deploy it. A major change counts for every
-// app the merge deploys, unless its title names the one app it breaks, as in feat(mlb)!:.
+// Names each Worker's releases, an app's or a service's, with semantic versions. Each squash
+// merge's title starts with a type that says how far it moves the version, so main's history alone
+// gives every commit's version: no tags, and nothing written back to the repo. A merge that changes
+// nothing a Worker's deploy counts, such as only its tests or other Workers' folders, leaves that
+// Worker's version where it was, so its version moves only for a merge that would deploy it. A
+// major change counts for every Worker the merge deploys, unless its title names the one Worker it
+// breaks, as in feat(mlb)!:.
 import { findWorkerFolder, listWorkers } from "./apps.mjs";
 import { findDeployedChanges } from "./deploy-scope.mjs";
 
-// Each app's version at the commit its count starts from, so a change to how merges count never
-// moves a version that already shipped. An app not listed counts from FIRST_VERSION at the merge
+// Each Worker's version at the commit its count starts from, so a change to how merges count never
+// moves a version that already shipped. A Worker not listed counts from FIRST_VERSION at the merge
 // that added its folder.
 const BASELINES = {
   mlb: { commit: "3cf716ccf7c056c3e598a7e4ce82c0c591ac210c", version: "2.32.2" },
@@ -64,7 +65,7 @@ function readTitleType(title) {
 function findScopeProblem({ scope, isBreaking }, changedFiles, workers) {
   if (!scope) return null;
   if (!isBreaking)
-    return `A scope only names the one Worker a major change breaks, as in feat(${scope})!:. Drop (${scope}).`;
+    return `A scope only names the one Worker a major change breaks, as in feat(${workers[0]})!:. Drop (${scope}).`;
   if (!workers.includes(scope))
     return `There's no Worker named ${scope}. The Workers are: ${workers.join(", ")}.`;
   if (!findDeployedChanges(changedFiles, scope).length)
@@ -118,31 +119,31 @@ function bumpVersion(version, bump) {
 // A title without a known type still shipped something, so it counts as a fix.
 /**
  * @param {string} subject
- * @param {string} app
+ * @param {string} worker
  * @returns {Bump}
  */
-function readBump(subject, app) {
+function readBump(subject, worker) {
   const titleType = readTitleType(subject);
   if (!titleType) return "patch";
   const { type, scope, isBreaking } = titleType;
-  const isBreakingApp = isBreaking && (!scope || scope === app);
-  return isBreakingApp ? "major" : BUMPS[type];
+  const isBreakingWorker = isBreaking && (!scope || scope === worker);
+  return isBreakingWorker ? "major" : BUMPS[type];
 }
 
 /**
- * @param {string} app
+ * @param {string} worker
  * @param {(args: string[]) => string} git
  * @param {URL} [servicesRoot]
  */
-function findBaseline(app, git, servicesRoot) {
-  if (BASELINES[app]) return BASELINES[app];
+function findBaseline(worker, git, servicesRoot) {
+  if (BASELINES[worker]) return BASELINES[worker];
   const [commit] = git([
     "log",
     "--first-parent",
     "--reverse",
     "--format=%H",
     "--",
-    findWorkerFolder(app, servicesRoot),
+    findWorkerFolder(worker, servicesRoot),
   ])
     .split("\n")
     .filter(Boolean);
@@ -162,19 +163,19 @@ const readMerges = (log) =>
 // Without --diff-merges=first-parent, older Git lists no files for a merge commit; without
 // --no-renames, a file moved out of an app's page/ lists only where it went.
 /**
- * The app's version at HEAD, from the merges on main's first-parent history since its baseline
- * that change what the app's deploy counts, or at the commit `head` names.
- * @param {string} app
+ * The Worker's version at HEAD, from the merges on main's first-parent history since its baseline
+ * that change what the Worker's deploy counts, or at the commit `head` names.
+ * @param {string} worker
  * @param {(args: string[]) => string} git
  * @param {{ head?: string, servicesRoot?: URL }} [options] the commit to read the version at, and
  *   the folder that holds every service's
  * @returns {string | null} null when HEAD's history doesn't reach the baseline
  */
-export function readVersion(app, git, { head = "HEAD", servicesRoot } = {}) {
+export function readVersion(worker, git, { head = "HEAD", servicesRoot } = {}) {
   let baseline;
   let log;
   try {
-    baseline = findBaseline(app, git, servicesRoot);
+    baseline = findBaseline(worker, git, servicesRoot);
     if (!baseline) return null;
     git(["merge-base", "--is-ancestor", baseline.commit, head]);
     log = git([
@@ -191,9 +192,9 @@ export function readVersion(app, git, { head = "HEAD", servicesRoot } = {}) {
     return null;
   }
   return readMerges(log)
-    .filter(({ files }) => findDeployedChanges(files, app).length > 0)
+    .filter(({ files }) => findDeployedChanges(files, worker).length > 0)
     .reduce(
-      (version, { subject }) => bumpVersion(version, readBump(subject, app)),
+      (version, { subject }) => bumpVersion(version, readBump(subject, worker)),
       baseline.version,
     );
 }

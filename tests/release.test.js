@@ -285,6 +285,10 @@ test("a scope is only for a major change", () => {
     );
   }
   assert.equal(
+    findTitleProblem("fix(ci): Pin a check", [".github/workflows/ci.yml"], APPS),
+    "A scope only names the one Worker a major change breaks, as in feat(mlb)!:. Drop (ci).",
+  );
+  assert.equal(
     findTitleProblem("docs(mlb)!: Explain versions", ["README.md"], APPS),
     "docs: doesn't release, so it can't mark a major change. Drop the !, or use feat:, fix:, refactor:, build:.",
   );

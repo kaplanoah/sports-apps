@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deploy, deployWorkers, listServiceBindings } from "../worker/deploy.mjs";
+import { deploy, deployWorkers } from "../worker/deploy.mjs";
 import { createServiceRoots } from "./service-roots.js";
 
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
@@ -42,15 +42,15 @@ function createFakeCloudflare(answerApp) {
 
 /**
  * @param {() => Response} answerApp
- * @param {{ channel?: string }} [options]
+ * @param {{ worker?: string, channel?: string }} [options]
  */
-async function deployAccounts(answerApp, { channel } = {}) {
+async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
   const { roots, remove } = createServiceRoots();
   const cloudflare = createFakeCloudflare(answerApp);
   const lines = [];
   try {
     const result = await deploy({
-      worker: "accounts",
+      worker,
       channel,
       roots,
       script: "export default {}",
@@ -60,7 +60,10 @@ async function deployAccounts(answerApp, { channel } = {}) {
       env: ENV,
       log: (line) => lines.push(line),
       pause: skipPause,
-      checkPage: () => assert.fail("a service has no page to check"),
+      checkPage: async ({ app }) => {
+        assert.notEqual(app, "accounts", "a service has no page to check");
+        return { status: "drawn" };
+      },
     }).catch((error) => error);
     return { result, lines, calls: cloudflare.calls };
   } finally {
@@ -71,7 +74,7 @@ async function deployAccounts(answerApp, { channel } = {}) {
 const RELEASED = { ok: true, release: NEW_COMMIT.slice(0, 7) };
 
 test("a service uploads its store and version, has no workers.dev address, and answers through each app's health", async () => {
-  const { result, lines, calls } = await deployAccounts(answerHealth(RELEASED));
+  const { result, lines, calls } = await deployWorker(answerHealth(RELEASED));
   assert.equal(result, "accounts");
   const upload = calls.find(({ init }) => init.method === "PUT");
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
@@ -97,7 +100,7 @@ test("a service an app reports as down, or at another release, is put back, nami
       problem: "mlb reaches accounts at 1111111, not 2222222",
     },
   ]) {
-    const { result, calls } = await deployAccounts(answerHealth(report));
+    const { result, calls } = await deployWorker(answerHealth(report));
     assert.ok(result instanceof Error);
     assert.match(result.message, new RegExp(problem));
     assert.match(result.message, /the earlier version is live again/);
@@ -110,7 +113,7 @@ test("a service an app reports as down, or at another release, is put back, nami
 });
 
 test("a service no app reports yet, as on its first deploy, deploys with a notice", async () => {
-  const { result, lines } = await deployAccounts(answerHealth(null));
+  const { result, lines } = await deployWorker(answerHealth(null));
   assert.equal(result, "accounts");
   assert.deepEqual(lines.slice(-2), [
     "::notice::health check: skipped, no app reaches accounts yet",
@@ -119,22 +122,24 @@ test("a service no app reports yet, as on its first deploy, deploys with a notic
 });
 
 test("an app whose own health fails still vouches for the service it reaches", async () => {
-  const { result, lines } = await deployAccounts(answerHealth(RELEASED, { appStatus: 503 }));
+  const { result, lines } = await deployWorker(answerHealth(RELEASED, { appStatus: 503 }));
   assert.equal(result, "accounts");
   assert.ok(lines.includes("health check: ok"));
 });
 
-test("an app binds each service by its name, to its Worker on the app's channel", () => {
-  const { roots, remove } = createServiceRoots();
-  try {
-    assert.deepEqual(listServiceBindings("production", roots), [
-      { type: "service", name: "ACCOUNTS", service: "accounts" },
-    ]);
-    assert.deepEqual(listServiceBindings("beta", roots), [
-      { type: "service", name: "ACCOUNTS", service: "accounts-beta" },
-    ]);
-  } finally {
-    remove();
+test("an app uploads a binding to each service by its name, to its Worker on the app's channel", async () => {
+  for (const [channel, service] of [
+    ["production", "accounts"],
+    ["beta", "accounts-beta"],
+  ]) {
+    const { calls } = await deployWorker(answerHealth(null), { worker: "mlb", channel });
+    const upload = calls.find(({ init }) => init.method === "PUT");
+    const metadata = JSON.parse(await upload.init.body.get("metadata").text());
+    assert.deepEqual(
+      metadata.bindings.at(-1),
+      { type: "service", name: "ACCOUNTS", service },
+      channel,
+    );
   }
 });
 

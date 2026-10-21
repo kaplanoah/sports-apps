@@ -40,6 +40,24 @@ const describeServiceOutage = (check, runUrl) =>
   `Asked through each app's health twice a minute apart, ${check.reason}.\n\nSee [the check's run](${runUrl}). This issue closes itself once the service answers again.`;
 
 /**
+ * @param {any[]} openIssues
+ * @param {string} title
+ */
+const findOpenIssue = (openIssues, title) =>
+  openIssues.find((issue) => issue.title === title && !issue.pull_request);
+
+/**
+ * @param {ReturnType<typeof createGitHub>} github
+ * @param {string} title
+ * @param {string} body
+ * @returns {Promise<number>} the new issue's number
+ */
+async function openIssue(github, title, body) {
+  const created = await github("/issues", { method: "POST", body: { title, body } });
+  return created.number;
+}
+
+/**
  * @param {ReturnType<typeof createGitHub>} github
  * @param {number} number
  * @param {string} comment
@@ -63,11 +81,8 @@ async function closeIssue(github, number, comment) {
  */
 async function reportOutage({ app, check, outage, github, runUrl }) {
   if (outage) return `${app}: still not opening, ${check.reason}; #${outage.number} is open`;
-  const created = await github("/issues", {
-    method: "POST",
-    body: { title: nameOutageIssue(app), body: describeOutage(check, runUrl) },
-  });
-  return `${app}: not opening, ${check.reason}; opened #${created.number}`;
+  const number = await openIssue(github, nameOutageIssue(app), describeOutage(check, runUrl));
+  return `${app}: not opening, ${check.reason}; opened #${number}`;
 }
 
 /**
@@ -98,11 +113,8 @@ async function reportNoCode({ app, isOpenWithoutCode, issue, github, runUrl }) {
   if (isOpenWithoutCode && issue)
     return [`::warning::${app}: opens without its code; #${issue.number} is open`];
   if (isOpenWithoutCode) {
-    const created = await github("/issues", {
-      method: "POST",
-      body: { title: nameNoCodeIssue(app), body: describeNoCode(app, runUrl) },
-    });
-    return [`::warning::${app}: opens without its code; opened #${created.number}`];
+    const number = await openIssue(github, nameNoCodeIssue(app), describeNoCode(app, runUrl));
+    return [`::warning::${app}: opens without its code; opened #${number}`];
   }
   if (!issue) return [];
   await closeIssue(
@@ -125,13 +137,10 @@ async function reportNoCode({ app, isOpenWithoutCode, issue, github, runUrl }) {
  */
 export async function reportCheck({ app, check, openIssues, github, runUrl }) {
   if (check.status === "unchecked") return [`::warning::${app}: not checked, ${check.reason}`];
-  /** @param {string} title */
-  const findOpen = (title) =>
-    openIssues.find((issue) => issue.title === title && !issue.pull_request);
-  const outage = findOpen(nameOutageIssue(app));
+  const outage = findOpenIssue(openIssues, nameOutageIssue(app));
   if (check.status === "broken")
     return [await reportOutage({ app, check, outage, github, runUrl })];
-  const issue = findOpen(nameNoCodeIssue(app));
+  const issue = findOpenIssue(openIssues, nameNoCodeIssue(app));
   return [
     await reportOpening({ app, outage, github, runUrl }),
     ...(await reportNoCode({ app, isOpenWithoutCode: !!check.note, issue, github, runUrl })),
@@ -150,16 +159,12 @@ export async function reportCheck({ app, check, openIssues, github, runUrl }) {
  */
 async function reportServiceCheck({ service, check, openIssues, github, runUrl }) {
   if (check.status === "unchecked") return `::warning::${service}: not checked, ${check.reason}`;
-  const issue = openIssues.find(
-    (open) => open.title === nameServiceIssue(service) && !open.pull_request,
-  );
+  const title = nameServiceIssue(service);
+  const issue = findOpenIssue(openIssues, title);
   if (check.status === "unanswered") {
     if (issue) return `${service}: still not answering, ${check.reason}; #${issue.number} is open`;
-    const created = await github("/issues", {
-      method: "POST",
-      body: { title: nameServiceIssue(service), body: describeServiceOutage(check, runUrl) },
-    });
-    return `${service}: not answering, ${check.reason}; opened #${created.number}`;
+    const number = await openIssue(github, title, describeServiceOutage(check, runUrl));
+    return `${service}: not answering, ${check.reason}; opened #${number}`;
   }
   if (!issue) return `${service}: answers`;
   await closeIssue(github, issue.number, `The service answers again, as of [this run](${runUrl}).`);

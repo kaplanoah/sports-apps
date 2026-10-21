@@ -9,7 +9,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## PR titles
 
-- A `!` is major for every app the deploy changes, or only the one a scope names, as in `feat(mlb)!:` (`findScopeProblem` in the root's `worker/release.mjs`).
+- A `!` is major for every Worker the deploy changes, or only the one a scope names, as in `feat(mlb)!:` (`findScopeProblem` in the root's `worker/release.mjs`).
   A PR that mixes kinds takes the biggest bump.
 - Don't spend time curating commit history.
   Squash merges make it irrelevant.
@@ -32,7 +32,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - The PR that does the work says "Fixes #N" in its description, which closes the issue as the PR merges into `main`.
   A PR that does only part of it says "Part of #N" and comments on the issue with what's left.
 - A PR's description names work outside it only by its issue.
-- Flaky browser tests and each app's outage and no-code issues belong to their workflows, which find each by its title and read the flaky table back from its body: never edit or close one by hand.
+- Flaky browser tests, each app's outage and no-code issues, and each service's outage issue belong to their workflows, which find each by its title and read the flaky table back from its body: never edit or close one by hand.
 - No labels, milestones, or projects on an issue.
   Labels like `beta` and `phone-ok` are for PRs.
 
@@ -137,9 +137,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - When the PR's CI passed on exactly the code `main` now has (the root's `worker/find-passed-ci.mjs`),
   which it did if the PR was up to date with `main` as it merged,
   that first Deploy run deploys, and CI on `main` skips the checks it already ran; otherwise the Deploy run that follows CI on `main` does.
-  Either runs the root's `worker/deploy.mjs`, which deploys each app's Worker and rolls back any new version that doesn't answer,
+  Either runs the root's `worker/deploy.mjs`, which deploys each Worker, each service's before any app's, and rolls back any new version that doesn't answer,
   or whose page doesn't draw (the root's `worker/check-page.mjs`).
-  Each line of the deploy log starts with its app's name, so read step 10's results for each app.
+  Each line of the deploy log starts with its Worker's name, so read step 10's results for each Worker.
 
 ## Step 10: reading a deploy's log
 

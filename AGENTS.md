@@ -49,9 +49,10 @@
 
 - Apps: one per league, each in `apps/<app>/` with its own `page/`,
   `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`.
+  Paths here, in the rule files, and in the skills are inside an app's or a service's folder,
+  except `shared/`, `.github/`, `.claude/`, and the ones named as the root's.
 - Services: a Worker with no page, which the apps reach by a binding and the public never does,
   each in `services/<name>/` with its own `worker/` and `tests/`, and built, deployed, and rolled back as an app is (`.claude/rules/tooling.md`).
-  Paths here, in the rule files, and in the skills are inside an app's folder, except `shared/`, `.github/`, `.claude/`, and the ones named as the root's.
 - More rules load from `.claude/rules/` once a session reads or edits a file they cover.
   They are `page-look.md` and `page-code.md` for the pages, `worker.md` for the Workers,
   `season-and-store.md` for the current season and the store, and `red-change.md` for what only a phone can test.
@@ -81,17 +82,17 @@
 - Refer to PRs by number, not branch.
 - A finding left out of a PR, or a bug that isn't the PR's, goes in an issue, as the `ship` skill says; planned work doesn't.
 - Start every PR title with a type.
-  The squash merge carries it to `main`, where it sets the next version of each app it changes,
+  The squash merge carries it to `main`, where it sets the next version of each Worker it changes,
   and CI's `title` job checks it (`findTitleProblem` in the root's `worker/release.mjs`).
   Use `feat:` for something new to see or do (minor), `fix:` for fixes and polish (patch),
   `refactor:` for code the Worker runs with no visible change (patch),
   `build:` for dependencies, the build, and the deploy (patch),
   and `docs:`, `test:`, `ci:`, or `chore:` for changes the deploy skips (no version).
-  Add `!` after a type that releases, as in `feat!:`, for a major change: a new address, lost data, or something that's gone; the `ship` skill says how it reaches each app.
+  Add `!` after a type that releases, as in `feat!:`, for a major change: a new address, lost data, or something that's gone; the `ship` skill says how it reaches each Worker.
 - Each app has a beta channel, a second Worker the `beta` branch deploys, which the `ship` skill says how to use.
   `beta` is a scratch branch: never commit to it or open a PR from it.
 - A red change is one only the owner's phone can test: `.claude/rules/red-change.md` says what makes one, and the `ship` skill how it ships.
-- `npm run rollback`, `set-app-key`, `set-access-code`, and `set-page-host` change the live apps: run each only as `.claude/rules/tooling.md` says.
+- `npm run rollback`, `set-app-key`, `set-access-code`, and `set-page-host` change the live Workers: run each only as `.claude/rules/tooling.md` says.
 - The repo is public.
   Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, page hosts, or personal data; use placeholders in tests and docs:
   `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,

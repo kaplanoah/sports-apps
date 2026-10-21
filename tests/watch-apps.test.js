@@ -227,6 +227,30 @@ test("a service that answers again says so on its issue and closes it, and one n
   ]);
 });
 
+test("the watch asks each production app's health of each service", async () => {
+  const github = createFakeGitHub([]);
+  const asked = [];
+  /** @type {typeof fetch} */
+  const fetchImpl = async (url, init) => {
+    if (String(url).startsWith(API)) return github.fetchImpl(url, init);
+    asked.push(String(url));
+    return Response.json({ ok: true, services: { accounts: { ok: true, release: "abc1234" } } });
+  };
+  const lines = await watchApps({
+    repository: REPOSITORY,
+    runUrl: RUN_URL,
+    apps: [],
+    services: ["accounts"],
+    fetchImpl,
+    env: { GH_TOKEN: "token", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" },
+  });
+  assert.deepEqual(lines, ["accounts: answers"]);
+  assert.deepEqual(asked, [
+    "https://mlb-app.example-subdomain.workers.dev/health",
+    "https://wnba-app.example-subdomain.workers.dev/health",
+  ]);
+});
+
 test("the watch reads each app's address from the workers.dev subdomain the production environment holds", () => {
   const workflow = readFileSync(new URL("../.github/workflows/watch.yml", import.meta.url), "utf8");
   assert.match(

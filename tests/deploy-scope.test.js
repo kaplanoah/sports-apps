@@ -123,6 +123,19 @@ test("a change in one app's folder deploys that app, and a change outside apps/ 
   }
 });
 
+test("a change in a service's folder deploys that service alone, and its tests deploy nothing", () => {
+  const serviceChange = ["services/accounts/worker/src/index.js"];
+  assert.equal(decideDeploy(serviceChange, "accounts").isNeeded, true);
+  assert.equal(decideDeploy(serviceChange, "mlb").isNeeded, false);
+  assert.equal(decideDeploy(["services/accounts/tests/a.test.js"]).isNeeded, false);
+});
+
+test("adding, renaming, or removing a service deploys every app, which binds it by its config", () => {
+  const added = ["services/profiles/worker/wrangler.toml", "services/profiles/worker/src/index.js"];
+  for (const worker of ["mlb", "wnba", "profiles"])
+    assert.equal(decideDeploy(added, worker).isNeeded, true, worker);
+});
+
 test("changes that can't be listed deploy", () => {
   const failingGit = () => {
     throw new Error("unknown revision abc1234");

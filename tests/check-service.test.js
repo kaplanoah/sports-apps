@@ -94,14 +94,42 @@ test("with no commit to match, any release that's ok answers", async () => {
   assert.deepEqual(await check(fake, { commit: "" }).result, { status: "answering" });
 });
 
-test("an app that doesn't answer, or binds no service, says nothing of it", async () => {
-  const fake = createFakeApps({ mlb: [new Error("unreachable")], wnba: [{ ok: true }] });
+test("an app that binds no service says nothing of it", async () => {
+  const fake = createFakeApps({ mlb: [{ ok: true }], wnba: [{ ok: true }] });
   const { result, pauses } = check(fake);
   assert.deepEqual(await result, { status: "unchecked", reason: "no app reaches accounts yet" });
   assert.deepEqual(pauses, []);
 
-  const silent = createFakeApps({ mlb: [new Error("unreachable")], wnba: [RELEASED] });
-  assert.deepEqual(await check(silent).result, { status: "answering" });
+  const partly = createFakeApps({ mlb: [{ ok: true }], wnba: [RELEASED] });
+  assert.deepEqual(await check(partly).result, { status: "answering" });
+});
+
+test("an app whose health doesn't answer is asked again, and is a problem until it answers", async () => {
+  const late = createFakeApps({ mlb: [new Error("unreachable"), RELEASED], wnba: [{ ok: true }] });
+  const { result, pauses } = check(late);
+  assert.deepEqual(await result, { status: "answering" });
+  assert.deepEqual(pauses, [60000]);
+
+  const silent = createFakeApps({ mlb: [new Error("timed out")], wnba: [new Error("timed out")] });
+  assert.deepEqual(await check(silent).result, {
+    status: "unanswered",
+    reason: "mlb's health doesn't answer; wnba's health doesn't answer",
+  });
+});
+
+test("once an attempt finds the service wrong, a later one that times out or finds it unbound never passes", async () => {
+  const old = reporting({ ok: true, release: "1111111" });
+  const timedOut = createFakeApps({ mlb: [old, new Error("timed out")], wnba: [{ ok: true }] });
+  assert.deepEqual(await check(timedOut, { attempts: 2 }).result, {
+    status: "unanswered",
+    reason: "mlb's health doesn't answer",
+  });
+
+  const unbound = createFakeApps({ mlb: [old, { ok: true }], wnba: [{ ok: true }] });
+  assert.deepEqual(await check(unbound, { attempts: 2 }).result, {
+    status: "unanswered",
+    reason: "mlb reaches accounts at 1111111, not 2222222",
+  });
 });
 
 test("an app whose own health fails still reports the service it reaches", async () => {

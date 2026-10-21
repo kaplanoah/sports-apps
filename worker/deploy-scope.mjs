@@ -1,7 +1,7 @@
 // Decides whether main needs a deploy. Only when nothing but the docs, tests, and tooling listed
 // here changed since the live version does it skip one, so a new kind of file deploys until it
-// is listed. A Worker's own folder, an app's or a service's, deploys only that Worker; anything
-// outside them deploys them all.
+// is listed. A Worker's own folder, an app's or a service's, deploys only that Worker, but for a
+// service's config, which each app's binding to it names; anything outside them deploys them all.
 // What the deploy runs, .github/workflows/deploy.yml and each script it runs and each module
 // those import, like worker/check-page.mjs, isn't listed: only a deploy shows that a change to
 // how the apps deploy still works. The beta claim's check is listed, since every push to beta
@@ -61,7 +61,7 @@ const TEST_FOLDERS = [/^tests\//, /^(?:apps|services)\/[^/]+\/tests\//];
 const SESSION_FOLDER = /^\.claude\//;
 
 /**
- * Whether a path is in the root's tests or an app's.
+ * Whether a path is in the root's tests or a Worker's.
  * @param {string} path
  */
 export const isTestPath = (path) => TEST_FOLDERS.some((folder) => folder.test(path));
@@ -81,23 +81,26 @@ const isSkipped = (path) =>
  * Worker's.
  * @param {string} path
  */
-export const readWorkerFolder = (path) => path.match(/^(?:apps|services)\/([^/]+)\//)?.[1] ?? null;
+const readWorkerFolder = (path) => path.match(/^(?:apps|services)\/([^/]+)\//)?.[1] ?? null;
+
+// Adding, renaming, or removing a service changes the bindings every app uploads.
+const SERVICE_CONFIG = /^services\/[^/]+\/worker\/wrangler\.toml$/;
 
 /**
  * @param {string} path
- * @param {string} [app] with none, whether the path deploys any app
+ * @param {string} [worker] with none, whether the path deploys any Worker
  */
-const isForApp = (path, app) => {
+const isForWorker = (path, worker) => {
   const folder = readWorkerFolder(path);
-  return !app || !folder || folder === app;
+  return !worker || !folder || folder === worker || SERVICE_CONFIG.test(path);
 };
 
 /**
  * @param {string[]} paths
- * @param {string} [app]
+ * @param {string} [worker]
  */
-export const findDeployedChanges = (paths, app) =>
-  paths.filter((path) => !isSkipped(path) && isForApp(path, app));
+export const findDeployedChanges = (paths, worker) =>
+  paths.filter((path) => !isSkipped(path) && isForWorker(path, worker));
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const runGit = (args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
@@ -114,15 +117,15 @@ export function listChangedFiles(since, git = runGit) {
 
 /**
  * @param {string[] | null} changedFiles null when they couldn't be listed
- * @param {string} [app]
+ * @param {string} [worker]
  */
-export function decideDeploy(changedFiles, app) {
+export function decideDeploy(changedFiles, worker) {
   if (changedFiles === null)
     return {
       isNeeded: true,
       reason: "Couldn't list the changes since the live version, so deploying.",
     };
-  const deployed = findDeployedChanges(changedFiles, app);
+  const deployed = findDeployedChanges(changedFiles, worker);
   if (deployed.length) return { isNeeded: true, reason: `Deploying for ${deployed.join(", ")}.` };
   return {
     isNeeded: false,
