@@ -401,7 +401,7 @@ export function renderNextGame(game, team, now) {
  * heads them rather than the field's side of the numbers.
  * @param {string} team
  * @param {{ finished: Game[], next: Game | null }} games
- * @param {{ label: string, kind: string } | null} chip
+ * @param {{ label: string, kind: string, look: string } | null} chip
  * @param {{ isPlaying: boolean, field: PhaseStats | null, teams: PhaseStats[], now: number }} context
  */
 function renderPlayoffs(team, { finished, next }, chip, { isPlaying, field, teams, now }) {
