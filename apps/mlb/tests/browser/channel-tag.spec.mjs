@@ -46,7 +46,7 @@ test("coming back after an hour away, the tag says how long ago the release went
   await expect(tag).toHaveText("beta•3f2a91c•1 h ago");
 });
 
-test("a reload shows no tag until it has read its release, rather than the age it last showed", async ({
+test("a reload shows the whole tag as the page opens, before its code or the Worker's version has loaded", async ({
   page,
 }) => {
   await serveReleases(page, BETA);
@@ -54,13 +54,13 @@ test("a reload shows no tag until it has read its release, rather than the age i
   const tag = page.locator("#channelTag");
   await expect(tag).toHaveText("beta•3f2a91c•4 min ago");
 
-  const releaseRead = await holdRequests(page, matchPath("/version.json"));
-  await page.reload();
-  await expect(page.locator("#stamp")).toBeVisible();
-  await expect(tag).toBeHidden();
+  const releaseCode = await holdRequests(page, matchPath("/js/app.js"));
+  const releaseVersion = await holdRequests(page, matchPath("/version.json"));
+  await page.reload({ waitUntil: "commit" });
 
-  releaseRead();
   await expect(tag).toHaveText(/^beta•3f2a91c•\d+ min ago$/);
+  releaseCode();
+  releaseVersion();
 });
 
 test("production has no tag", async ({ page }) => {

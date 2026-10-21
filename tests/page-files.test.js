@@ -9,6 +9,7 @@ import {
   listModules,
   pinPageFiles,
   readPageFiles,
+  writeRelease,
 } from "../worker/page-files.mjs";
 
 const IMPORTS = { "#shared/": "./shared/" };
@@ -119,17 +120,28 @@ const PAGE = `<!doctype html>
   <script type="module" src="js/app.js"></script>
 `;
 
-test("the page reads its code and styles from its release's folder, with its release guard written in", () => {
+const RELEASE = {
+  version: "2.33.0",
+  commit: "abc1234",
+  builtAt: "2026-10-18T20:00:00.000Z",
+  label: null,
+};
+const BETA_RELEASE = { ...RELEASE, version: "2.33.0-beta", label: "beta" };
+const WRITTEN_RELEASE = `<script type="application/json" id="release">${JSON.stringify(RELEASE)}</script>`;
+const HIDDEN_TAG = '<span class="channel-tag" id="channelTag" hidden></span>';
+
+test("the page reads its code and styles from its release's folder, with its release and release guard written in", () => {
   const files = {
     "index.html": { contentType: "text/html", text: PAGE },
     "shared/release-guard.js": { contentType: "text/javascript", text: "guardPage();\n" },
   };
 
-  const pinned = pinPageFiles(files, "abc1234");
+  const pinned = pinPageFiles(files, RELEASE);
 
   assert.equal(
     pinned["index.html"].text,
     `<!doctype html>
+  ${WRITTEN_RELEASE}
   <script>
 guardPage();
 </script>
@@ -157,7 +169,7 @@ guardPage();
 test("a page whose head doesn't load the release guard isn't built", () => {
   const files = { "index.html": { contentType: "text/html", text: "<!doctype html>\n" } };
 
-  assert.throws(() => pinPageFiles(files, "abc1234"), /release-guard\.js/);
+  assert.throws(() => pinPageFiles(files, RELEASE), /release-guard\.js/);
 });
 
 test("every page at the folder's top is pinned, the gate too, and each must load the guard", () => {
@@ -170,14 +182,14 @@ test("every page at the folder's top is pinned, the gate too, and each must load
   };
 
   assert.equal(
-    pinPageFiles(files, "abc1234")["gate.html"].text,
-    '<!doctype html>\n  <script>\nguardPage();\n</script>\n  <link rel="stylesheet" href="release/abc1234/shared/gate.css" />\n',
+    pinPageFiles(files, RELEASE)["gate.html"].text,
+    `<!doctype html>\n  ${WRITTEN_RELEASE}\n  <script>\nguardPage();\n</script>\n  <link rel="stylesheet" href="release/abc1234/shared/gate.css" />\n`,
   );
   const unguarded = {
     ...files,
     "gate.html": { contentType: "text/html", text: "<!doctype html>\n" },
   };
-  assert.throws(() => pinPageFiles(unguarded, "abc1234"), /The head of gate\.html/);
+  assert.throws(() => pinPageFiles(unguarded, RELEASE), /The head of gate\.html/);
 });
 
 for (const [app, page] of listApps().flatMap((app) => [
@@ -186,7 +198,7 @@ for (const [app, page] of listApps().flatMap((app) => [
 ])) {
   test(`${app}: every file the built ${page} loads is in its release's folder and served`, async () => {
     const { default: files } = await import(`#page-files/${app}`);
-    const pinned = pinPageFiles(files, "abc1234")[page].text;
+    const pinned = pinPageFiles(files, RELEASE)[page].text;
     const loaded = [...pinned.matchAll(/<(?:script|link)\b[^>]*>/g)]
       .map(([tag]) => tag)
       .filter(
@@ -200,5 +212,37 @@ for (const [app, page] of listApps().flatMap((app) => [
       assert.ok(files[path.slice("release/abc1234/".length)], `${path} is served`);
     }
     assert.ok(!pinned.includes("release-guard.js"), "the guard is written in");
+  });
+}
+
+const TAGGED_PAGE = `<script src="shared/release-guard.js"></script>\n${HIDDEN_TAG}\n`;
+
+test("a beta page's tag names its channel, its commit, and the moment it went live, shown as the page opens", () => {
+  assert.equal(
+    writeRelease(TAGGED_PAGE, BETA_RELEASE).split("\n")[2],
+    '<span class="channel-tag" id="channelTag"><span class="fact">beta<span class="sep">&bull;</span></span><span class="fact">abc1234<span class="sep">&bull;</span></span><span class="fact"><time datetime="2026-10-18T20:00:00.000Z"></time></span></span>',
+  );
+});
+
+test("production's tag stays hidden and empty", () => {
+  assert.equal(writeRelease(TAGGED_PAGE, RELEASE).split("\n")[2], HIDDEN_TAG);
+});
+
+test("the release written into a page can't end its script", () => {
+  const release = { ...BETA_RELEASE, label: "</script><b>" };
+  const written = writeRelease(TAGGED_PAGE, release);
+  const script = written.match(/<script type="application\/json" id="release">(.*?)<\/script>/);
+  assert.deepEqual(JSON.parse(script?.[1] ?? "null"), release);
+});
+
+for (const app of listApps()) {
+  test(`${app}: the page holds the tag the build fills and draws its age before the first paint`, async () => {
+    const { default: files } = await import(`#page-files/${app}`);
+    const page = files["index.html"].text;
+    const tag = page.indexOf(HIDDEN_TAG);
+    const headScript = page.indexOf('<script src="shared/draw-channel-tag-age.js"></script>');
+    assert.ok(tag >= 0);
+    assert.ok(headScript >= 0 && headScript < tag);
+    assert.ok(page.indexOf("drawChannelTagAge();") > tag);
   });
 }

@@ -122,7 +122,7 @@ export function listBundledFiles(app, release, channel = "production") {
   const files = addTuningPanel(labelChannelFiles(readPageFiles(findPageRoot(app)), label), label);
   if (!release) return files;
   return {
-    ...pinPageFiles(files, release.commit),
+    ...pinPageFiles(files, release),
     "version.json": { contentType: "application/json", text: JSON.stringify(release) },
   };
 }

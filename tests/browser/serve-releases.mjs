@@ -1,3 +1,4 @@
+import { writeRelease } from "../../worker/page-files.mjs";
 import { matchPath } from "./harness.mjs";
 
 /** @typedef {import("../../shared/page/release.js").Release} Release */
@@ -17,14 +18,21 @@ export const NEXT_RELEASE = {
   label: null,
 };
 
+const PAGE = /^\w+:\/\/[^/]+\/(?:[?#]|$)/;
+
 /**
- * Serves version.json, starting with `release`, and lets a test deploy a newer release, fail the
- * next few reads, or leave reads unanswered.
+ * Serves the page with the release a deploy writes into it, and version.json, each the latest
+ * release, starting with `release`, and lets a test deploy a newer release, fail the next few
+ * reads of version.json, or leave them unanswered.
  * @param {import("@playwright/test").Page} page
  * @param {Release} [release]
  */
 export async function serveReleases(page, release = RELEASE) {
   const served = { release, requests: 0, failures: 0, isHanging: false };
+  await page.route(PAGE, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: writeRelease(await response.text(), served.release) });
+  });
   await page.route(matchPath("/version.json"), (route) => {
     served.requests++;
     if (served.isHanging) return undefined;
@@ -35,17 +43,4 @@ export async function serveReleases(page, release = RELEASE) {
     return route.fulfill({ json: served.release });
   });
   return served;
-}
-
-/**
- * Moves the page a tick on and returns how many release reads it has made, for a poll that waits
- * for a failed check to be tried again. A check that starts before the page has taken in a failed
- * read shares that read and fails with it, so only a tick after the failure reads both releases
- * again.
- * @param {import("@playwright/test").Page} page
- * @param {{ requests: number }} served
- */
-export async function retryReleaseCheck(page, served) {
-  await page.clock.runFor(15 * 1000);
-  return served.requests;
 }

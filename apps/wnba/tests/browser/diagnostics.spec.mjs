@@ -29,15 +29,16 @@ test("Diagnostics sit past the end of settings, off, with nothing recorded, with
   await expect(page.locator(".diagnostics-area .control-label")).toHaveText("Diagnostics");
 });
 
-test("Diagnostics, once on, start with the app, the release, and its commit, set apart by dots", async ({
+test("Diagnostics, once on, start with the app, the release the page came from, and its commit, set apart by dots, without asking the Worker", async ({
   page,
 }) => {
-  await serveReleases(page, {
+  const served = await serveReleases(page, {
     version: "3.6.0-beta",
     commit: "abc1234",
     builtAt: "2026-10-08T03:14:57Z",
     label: "beta",
   });
+  served.isHanging = true;
   await openApp(page);
 
   await turnOnDiagnostics(page);
