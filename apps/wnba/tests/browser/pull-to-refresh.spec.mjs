@@ -8,6 +8,7 @@ import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { fillNews, readNewsPlace } from "../../../../tests/browser/start-over.mjs";
 import { drag, dragAlong, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -281,7 +282,7 @@ test("a swipe down in an open sheet is the sheet's, not a pull", async ({ page }
   await openFromHomeScreen(page);
   await openApp(page);
   await page.getByRole("button", { name: "Settings" }).click();
-  const sheet = page.locator("#settingsDialog");
+  const sheet = page.locator(SETTINGS);
   await expect(sheet).toBeVisible();
   const box = /** @type {{ x: number, y: number }} */ (await sheet.boundingBox());
 

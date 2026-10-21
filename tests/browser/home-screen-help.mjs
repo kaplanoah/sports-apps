@@ -66,7 +66,8 @@ const measureNoteLines = (page) =>
 /**
  * On an iPhone's or iPad's browser, the note says why notifications need the Home Screen and ends
  * with a ?, 15px and a pixel up in its 44px tap, that keeps each line at the note's line height and
- * opens the welcome over settings, which its caret and Escape each close back to settings.
+ * opens the welcome with Safari's steps over settings, which its caret and Escape each close back to
+ * settings.
  * @param {App} app
  */
 export async function checkHelpOpensWelcome(app) {
@@ -86,6 +87,7 @@ export async function checkHelpOpensWelcome(app) {
   await findHelp(page).click();
   const welcome = page.locator(WELCOME);
   await expect(welcome).toBeVisible();
+  await expect(welcome).toContainText("Tap Share");
   await expect(page.locator(SETTINGS)).toBeVisible();
 
   await welcome.getByRole("button", { name: "Close" }).click();

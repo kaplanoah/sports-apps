@@ -9,6 +9,7 @@ import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -17,7 +18,7 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
  * @param {number} distance
  */
 const scrollSettings = (page, distance) =>
-  waitForScrollEnd(page.locator("#settingsDialog"), () => page.mouse.wheel(0, distance));
+  waitForScrollEnd(page.locator(SETTINGS), () => page.mouse.wheel(0, distance));
 
 test("on a phone, Diagnostics sit past the copyright, a scroll beyond where settings rest, off, with no note under their name", async ({
   page,

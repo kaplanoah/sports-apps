@@ -4,6 +4,7 @@ import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ ...ON_A_PHONE, contextOptions: { reducedMotion: "reduce" } });
 
@@ -82,7 +83,7 @@ async function switchOff(page, name) {
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
+  await expect(page.locator(SETTINGS)).toBeHidden();
 }
 
 test("the News tab shows a card for each piece of news the Worker saves, newest first, with the stories under its lead", async ({

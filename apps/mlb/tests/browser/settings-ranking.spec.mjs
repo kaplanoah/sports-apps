@@ -2,6 +2,7 @@ import { test, expect, openApp, openSettings, chooseSeason, SEASON_2025 } from "
 import { scrollSettingsToEnd, waitForSheetToRise, WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -10,7 +11,7 @@ const SHORT_SCREEN = { width: 375, height: 600 };
 
 /** @param {import("@playwright/test").Page} page */
 async function expectWholeRankingInView(page) {
-  const sheet = await page.locator("#settingsDialog").boundingBox();
+  const sheet = await page.locator(SETTINGS).boundingBox();
   const first = await page.locator("#rankList .rank-item").first().boundingBox();
   const last = await page.locator("#rankList .rank-item").last().boundingBox();
   expect(first.y).toBeGreaterThanOrEqual(sheet.y - 1);
@@ -100,7 +101,7 @@ test("on a wide screen, the settings and the whole ranking show side by side wit
   await openApp(page);
   await openSettings(page);
 
-  const dialog = page.locator("#settingsDialog");
+  const dialog = page.locator(SETTINGS);
   expect(
     await dialog.evaluate(
       (element) =>
@@ -121,7 +122,7 @@ test("on a wide screen, the settings start right under the header, level with th
   await openApp(page, WITH_A_PAST_SEASON);
   await openSettings(page);
 
-  const header = await page.locator("#settingsDialog .sheet-top").boundingBox();
+  const header = await page.locator(`${SETTINGS} .sheet-top`).boundingBox();
   const controls = await page.locator(".settings-main > .settings-controls").boundingBox();
   const [season] = await readCenters(page.locator(".control-row > span").first());
   const [ranking] = await readCenters(page.locator("#rankingTitle"));

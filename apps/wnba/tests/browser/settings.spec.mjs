@@ -3,7 +3,7 @@ import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
 import {
   checkFailedPickPutBack,
   checkNewCurrentSeasonListed,
@@ -48,7 +48,7 @@ async function expectTheme(page, theme) {
 test("settings' header holds its title, its close button, and the room under them alike on a phone and a wide screen", async ({
   page,
 }) => {
-  const top = page.locator("#settingsDialog .sheet-top");
+  const top = page.locator(`${SETTINGS} .sheet-top`);
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -182,7 +182,7 @@ test("settings list Notifications, the News switches, and Appearance, with lines
   });
   await openApp(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const rows = page.locator("#settingsDialog .settings-controls .control-row");
+  const rows = page.locator(`${SETTINGS} .settings-controls .control-row`);
   await expect(rows.locator(".control-label > span:first-child")).toHaveText([
     "Notifications",
     "Include dedicated Liberty sources",
@@ -190,13 +190,13 @@ test("settings list Notifications, the News switches, and Appearance, with lines
     "Appearance",
   ]);
   await expect(page.locator("#notifyNote")).toHaveText("Final scores");
-  const groups = page.locator("#settingsDialog .settings-controls > *");
+  const groups = page.locator(`${SETTINGS} .settings-controls > *`);
   const readBorders = () =>
     Promise.all([
       groups.evaluateAll((each) => each.map((group) => getComputedStyle(group).borderTopStyle)),
       rows.evaluateAll((each) => each.map((row) => getComputedStyle(row).borderTopStyle)),
       page
-        .locator("#settingsDialog .settings-controls")
+        .locator(`${SETTINGS} .settings-controls`)
         .evaluate((controls) => getComputedStyle(controls).borderBottomStyle),
     ]);
   // The Season row stays hidden while the store keeps only the current season.
@@ -270,13 +270,13 @@ test("settings end with the release, NBA.com's credit for the data, and the copy
   await serveReleases(page);
   await openApp(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const footer = page.locator("#settingsDialog .settings-footer");
+  const footer = page.locator(`${SETTINGS} .settings-footer`);
   await expect(footer.locator(".settings-version")).toHaveText([
     /^v\d/,
     "Includes data from NBA.com",
     "\u00a9 2026 Noah Kaplan",
   ]);
-  await expect(page.locator("#settingsDialog .sheet-top")).not.toContainText("NBA.com");
+  await expect(page.locator(`${SETTINGS} .sheet-top`)).not.toContainText("NBA.com");
 });
 
 /**
@@ -293,7 +293,7 @@ async function openSettingsWithRelease(page) {
 
 /** @param {import("@playwright/test").Page} page */
 const readSettingsBoxes = (page) =>
-  page.locator("#settingsDialog").evaluate((dialog) => {
+  page.locator(SETTINGS).evaluate((dialog) => {
     const readBox = (selector) => dialog.querySelector(selector).getBoundingClientRect().toJSON();
     return {
       sheet: dialog.getBoundingClientRect().toJSON(),
@@ -382,10 +382,10 @@ test.describe("on a phone", () => {
 
     expect(await readSize(page.getByText("Include content from The Athletic"))).toBe(setting);
     expect(await readSize(page.getByText("Most stories need a subscription"))).toBe(note);
-    expect(await readSize(page.locator("#settingsDialog .appearance-choice").first())).toBe(note);
+    expect(await readSize(page.locator(`${SETTINGS} .appearance-choice`).first())).toBe(note);
     expect(setting).toBeGreaterThan(body);
     expect(note).toBeGreaterThan(detail);
-    const icon = await page.locator("#settingsDialog .appearance-icon").first().boundingBox();
+    const icon = await page.locator(`${SETTINGS} .appearance-icon`).first().boundingBox();
     expect(icon.width).toBe(60);
   });
 
@@ -395,7 +395,7 @@ test.describe("on a phone", () => {
       await chooseAppearance(page, appearance);
       await page.getByRole("button", { name: "Settings", exact: true }).click();
       const knobs = await page
-        .locator("#settingsDialog .switch:visible")
+        .locator(`${SETTINGS} .switch:visible`)
         .evaluateAll((switches) =>
           switches.map((element) => [
             element.getAttribute("aria-checked"),

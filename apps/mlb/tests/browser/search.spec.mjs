@@ -16,6 +16,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { findSeasonTab, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { readSeasonPartScroll } from "../../../../tests/browser/season-scroll.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 // Search, the round button beside the tab bar, over MLB's whole 2026 season and its players, on a
 // phone. Today is Thursday, September 24, the last week of the regular season.
@@ -565,7 +566,7 @@ test("a setting's words find it, and its row opens settings with the setting in 
 
   await findRows(page).tap();
 
-  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(page.locator("#rankingTitle")).toBeInViewport();
 });
 

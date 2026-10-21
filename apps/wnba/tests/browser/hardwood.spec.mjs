@@ -5,6 +5,7 @@ import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { scrollSeasonPartToEnd } from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { readTokenColor } from "./theme.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -324,7 +325,7 @@ test("an All-Star team's star sits 1px above its name's middle, where a dot sits
 test("a sheet leaves the page behind it as it is, and a switch stays round", async ({ page }) => {
   await openApp(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const settings = page.locator("#settingsDialog");
+  const settings = page.locator(SETTINGS);
   await expect(settings).toBeVisible();
   const dim = await settings.evaluate(
     (dialog) => getComputedStyle(dialog, "::backdrop").backgroundColor,

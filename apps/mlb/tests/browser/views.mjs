@@ -11,6 +11,7 @@ import {
   ROSTER_DOCS,
 } from "./harness.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 // Highlights for a final on the evening's slate, Brewers at Phillies, as MLB cut them for another.
 const SEP_23_HIGHLIGHTS = {
@@ -115,7 +116,7 @@ export const VIEW_GROUPS = {
     {
       name: "settings",
       open: (page) => openSettings(page),
-      shown: (page) => page.locator("#settingsDialog .appearance-row"),
+      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
       close: (page) => page.keyboard.press("Escape"),
     },
   ],
