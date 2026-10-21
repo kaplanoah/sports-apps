@@ -58,6 +58,8 @@ In order of what has mattered here.
    `worker/review-context.mjs`, `worker/review-state.mjs`, or `worker/rule-files.mjs`, and the modules they import, like `shared/page/escape-pattern.js`, or to a guard test,
    that lets less through is Important, naming what it no longer catches,
    since the pull request's own copy of them runs its review.
+   So is a change to `worker/review-git.mjs`, the reviewer's only command, that lets it run more,
+   naming what the reviewer could newly read or write.
    So is a change to the red-change gate that lets less through,
    its `gate`, `phone`, or `check` job in `.github/workflows/ci.yml`,
    `worker/red-change.mjs`, or `worker/red-change-styles.mjs`,
