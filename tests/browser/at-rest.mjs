@@ -199,12 +199,13 @@ const waitForNoFrameRequests = (page) =>
   waitForNone(() => listFrameRequestsAcross(page, 1000), "asking for frames", LOAD_TIMEOUT_MS);
 
 /**
- * Waits, inside the page, for its store to keep when it was current, which it does once it has
- * caught up. A trace's snapshot of a whole season's page can take CI's WebKit seconds, and a poll
- * from the test takes one each time it asks, so it would ask only a few times before its timeout.
+ * Waits, inside the page, for its store to keep when it was current, which it notes for its next
+ * visit once it has caught up. A trace's snapshot of a whole season's page can take CI's WebKit
+ * seconds, and a poll from the test takes one each time it asks, so it would ask only a few times
+ * before its timeout.
  * @param {import("@playwright/test").Page} page
  */
-const waitForCatchUp = (page) =>
+export const waitForCatchUp = (page) =>
   page.waitForFunction(() => localStorage.getItem("syncedAt") !== null, null, {
     polling: 100,
     timeout: LOAD_TIMEOUT_MS,

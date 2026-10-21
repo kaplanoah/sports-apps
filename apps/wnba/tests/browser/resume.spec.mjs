@@ -5,6 +5,7 @@ import {
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
+import { waitForCatchUp } from "../../../../tests/browser/at-rest.mjs";
 import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import {
   SHORT_PHONE,
@@ -64,14 +65,6 @@ async function sleepUnannounced(page, minutes) {
 
 /** @param {import("@playwright/test").Page} page */
 const findFinalWinner = (page) => page.locator('[data-series="1-0"] .team-line.won');
-
-/**
- * The page has its last read once it has caught up with the store, which it notes for its next
- * visit.
- * @param {import("@playwright/test").Page} page
- */
-const waitForCatchUp = (page) =>
-  expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
 
 test("a reload shows the bracket the page last showed while the store is still answering", async ({
   page,
