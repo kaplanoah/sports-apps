@@ -1,4 +1,4 @@
-import { IPAD, IPHONE } from "../../../../tests/browser/devices.mjs";
+import { IPHONE, useIpad } from "../../../../tests/browser/devices.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -242,14 +242,14 @@ test.describe("on a computer", () => {
 });
 
 test.describe("on a tablet, in the browser", () => {
-  test.use(IPAD);
+  useIpad(test);
 
-  test("the Home Screen box sits at the top of the settings, level with the ranking's heading beside it, and 14px over the settings' line, as on a phone", async ({
+  test("the Home Screen box, with Safari's steps, sits at the top of the settings, level with the ranking's heading beside it, and 14px over the settings' line, as on a phone", async ({
     page,
   }) => {
     await openApp(page);
     await openSettings(page);
-    await expect(page.locator("#homeScreenTip")).toBeVisible();
+    await expect(page.locator("#homeScreenTip")).toContainText("Tap Share then Add to Home Screen");
     const { aboveSettings, besideRanking, levelWithRanking } = await measureTip(page);
     expect([aboveSettings, levelWithRanking]).toEqual([14, 0]);
     expect(besideRanking).toBeGreaterThan(0);

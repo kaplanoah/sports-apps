@@ -330,7 +330,8 @@ add:
 
 - a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare account token with the
   **Workers Scripts** permission at **Edit**, limited to each app's live
-  Worker, `<app>-app`, with no IP filtering and a long expiry;
+  Worker, `<app>-app`, and each service's, named in its `wrangler.toml`, with no
+  IP filtering and a long expiry;
 - a secret `CLOUDFLARE_ACCOUNT_ID`, so it stays out of the public deploy logs;
 - a secret `CLOUDFLARE_WORKERS_SUBDOMAIN`: the account's workers.dev
   subdomain, the part before `.workers.dev`, which a token limited to its
@@ -343,7 +344,7 @@ add:
 The beta channel (see "Trying a change on the phone" below) deploys from an
 environment of its own, named `beta`, limited to the `beta` branch, with the
 same secrets: a token limited to each app's beta Worker,
-`<app>-app-beta`, the account ID and subdomain, beta's `ACCESS_CODE`, and each
+`<app>-app-beta`, and each service's, from the `[env.beta]` in its `wrangler.toml`, the account ID and subdomain, beta's `ACCESS_CODE`, and each
 page's address with `_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
 change only its own channel's Workers, a branch pushed to `beta` can never
 reach the live apps.
@@ -357,18 +358,22 @@ opened, and the deploy log and the workflow say so. A page that asks for no code
 while its environment holds an `ACCESS_CODE` opens without it, and they say that
 too. The workflow also keeps one open issue for each live app that opens without
 asking for its code, which closes itself once the app asks again or the
-environment holds no `ACCESS_CODE`.
+environment holds no `ACCESS_CODE`. A service has no address of its own, so each
+deploy and the workflow ask each app's health of it, and the workflow keeps one
+open issue for each service that isn't answering, which closes itself once it
+answers again.
 
-Each deploy records its commit on the Worker's version. A merge skips an app's
-deploy when nothing but docs, tests, tooling, and other apps' folders changed
-since its live version's commit, since its Worker would be the same;
+Each deploy records its commit on the Worker's version. A merge skips a Worker's
+deploy when nothing but docs, tests, tooling, and other Workers' folders changed
+since its live version's commit, since its Worker would be the same, though a
+service's `wrangler.toml` deploys every app, which binds the service by it;
 `worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too
 once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
 CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
 replaces whatever beta held, but only with the head of the pull request that holds beta, as
 "Trying a change on the phone" says. Without the token, merges deploy nothing.
-Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <app>` for
-one app. `npm run rollback -- <app>` puts the app's previous version back at all
+Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <worker>` for
+one app or service. `npm run rollback -- <worker>` puts its previous version back at all
 of its traffic and prints which commit was live and which is now; it refuses
 when there's no earlier version. A rollback keeps the Worker's secrets as they
 are.
@@ -399,15 +404,15 @@ A pull request gives beta up as it closes or merges, as its branch is pushed,
 and as it's labeled `phone-ok`.
 
 Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`,
-in Cloudflare's dashboard, since the `beta` token can change only the Workers it
+and each service's in Cloudflare's dashboard, since the `beta` token can change only the Workers it
 names, then create the `beta` environment as "Deploying on merge" says, with its
 token limited to them. After the first one, give each beta Worker its key with
 `npm run set-app-key -- <app> --channel beta`, which prints its address, and,
 if the real page asks for a code, give it the code in the `beta` environment's
 `ACCESS_CODE` with `npm run set-access-code -- <app> <code> --channel beta`. Add the address to the `beta`
-environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <app> --channel beta`
+environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <worker> --channel beta`
 deploys beta by hand, from a checkout of `origin/beta`, and
-`npm run rollback -- <app> --channel beta` rolls it back.
+`npm run rollback -- <worker> --channel beta` rolls it back.
 
 ## License
 

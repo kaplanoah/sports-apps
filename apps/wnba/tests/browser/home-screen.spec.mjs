@@ -1,9 +1,9 @@
-import { IPHONE } from "../../../../tests/browser/devices.mjs";
+import { ANDROID_PHONE, IPHONE } from "../../../../tests/browser/devices.mjs";
 import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
 import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp } from "./harness.mjs";
-import { PHONE, CONTINUE, openSettings } from "./home-screen.mjs";
+import { CONTINUE, openSettings } from "./home-screen.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -12,6 +12,7 @@ import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.m
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -229,7 +230,7 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(icon).toHaveCSS("background-image", drawIcon(PAGE_FOLDER, "icon-light-180.png"));
     await page.emulateMedia({ colorScheme: "dark" });
     await expect(icon).toHaveCSS("background-image", drawIcon(PAGE_FOLDER, "icon-180.png"));
-    const choiceIcons = page.locator("#settingsDialog .appearance-icon");
+    const choiceIcons = page.locator(`${SETTINGS} .appearance-icon`);
     await expect(choiceIcons.nth(0)).toHaveCSS(
       "background-image",
       drawIcon(PAGE_FOLDER, "icon-system-180.png"),
@@ -257,7 +258,7 @@ test.describe("on an iPhone, in the browser", () => {
 });
 
 test.describe("on an Android phone, in the browser", () => {
-  test.use(PHONE);
+  test.use(ANDROID_PHONE);
 
   test("without Chrome's install dialog, the welcome and Settings point to the browser's menu", async ({
     page,

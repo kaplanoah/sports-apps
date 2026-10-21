@@ -67,7 +67,7 @@ test("the version before the live one goes back to all of the traffic", async ()
   ]);
   const printed = [];
   const result = await rollBack({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,
     git,
     env: ENV,
@@ -95,7 +95,7 @@ test("a secret change's version deploys the same code, so it's passed over", asy
     { id: "v5", at: "2026-10-05T10:00:00Z" },
   ]);
   const result = await rollBack({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,
     git,
     env: ENV,
@@ -119,7 +119,7 @@ test("a version a rollback took down is passed over, so the one before the live 
   const rollBackFrom = async (deployed) => {
     const cloudflare = createFakeCloudflare(deployed);
     const result = await rollBack({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: cloudflare.fetchImpl,
       env: ENV,
       log: () => {},
@@ -155,7 +155,7 @@ test("beta, pushed back to a branch it held before, goes back to what it held ju
     { id: "v5", at: "2026-10-05T10:00:00Z" },
   ]);
   const result = await rollBack({
-    app: "mlb",
+    worker: "mlb",
     channel: "beta",
     fetchImpl: cloudflare.fetchImpl,
     env: ENV,
@@ -176,7 +176,7 @@ test("the beta channel rolls back its own Worker", async () => {
     { id: "v2", at: "2026-10-02T10:00:00Z", commit: COMMIT_B },
   ]);
   await rollBack({
-    app: "wnba",
+    worker: "wnba",
     channel: "beta",
     fetchImpl: cloudflare.fetchImpl,
     git,
@@ -205,7 +205,7 @@ test("with no earlier version, nothing changes", async () => {
   for (const { deployed, reason } of cases) {
     const cloudflare = createFakeCloudflare(deployed);
     await assert.rejects(
-      rollBack({ app: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {}, git }),
+      rollBack({ worker: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {}, git }),
       reason,
     );
     assert.equal(findRollback(cloudflare.calls), undefined);
@@ -221,7 +221,7 @@ test("a refused rollback says so", async () => {
     { refuseRollback: true },
   );
   await assert.rejects(
-    rollBack({ app: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {}, git }),
+    rollBack({ worker: "mlb", fetchImpl: cloudflare.fetchImpl, env: ENV, log: () => {}, git }),
     /rollback failed: 10000: Refused/,
   );
 });

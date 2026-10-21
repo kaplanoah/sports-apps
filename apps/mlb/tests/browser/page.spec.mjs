@@ -45,6 +45,7 @@ import {
   scrollSeasonPartToEnd,
   wheelPastSeasonPartEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -638,7 +639,7 @@ for (const { screen, viewport } of [
       expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
       await openSettings(page);
-      await expect(page.locator("#settingsDialog")).toBeVisible();
+      await expect(page.locator(SETTINGS)).toBeVisible();
       expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
@@ -695,7 +696,7 @@ for (const { screen, viewport } of [
       await expect(page.locator(".news-more-title")).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);
       await openSettings(page);
-      await expect(page.locator("#settingsDialog")).toBeVisible();
+      await expect(page.locator(SETTINGS)).toBeVisible();
       expect(await listTapsOffButtons(page)).toEqual([]);
     });
   });

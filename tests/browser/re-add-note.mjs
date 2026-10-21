@@ -124,10 +124,10 @@ async function checkNoteReads(page) {
  * @param {string} name
  */
 const pick = (page, name) =>
-  page.locator("#settingsDialog").getByRole("radio", { name, exact: true }).check();
+  page.locator(SETTINGS).getByRole("radio", { name, exact: true }).check();
 
 /** @param {import("@playwright/test").Page} page */
-const closeSettings = (page) => page.locator("#settingsDialog .settings-body .sheet-close").click();
+const closeSettings = (page) => page.locator(`${SETTINGS} .settings-body .sheet-close`).click();
 
 /**
  * In an iPhone's Home Screen app added on the dark look, picking the light one in settings shows
@@ -239,7 +239,7 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
 
   await page.reload({ waitUntil: "commit" });
 
-  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(note).toHaveText(NOTE_WORDS);
   expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
   await expect.poll(readHeight).toBe(height);
@@ -307,7 +307,7 @@ export async function checkSystemInstallIcon({ page, openApp, openSettings, look
   await expect(findNote(page)).toBeHidden();
   await page.emulateMedia({ colorScheme: "dark" });
   await page.reload();
-  if (!(await page.locator("#settingsDialog").isVisible())) await openSettings(page);
+  if (!(await page.locator(SETTINGS).isVisible())) await openSettings(page);
   await expect(findNote(page)).toBeVisible();
   expect(await readNoteIcons(page)).toEqual(["light", "dark"]);
   await checkNoteReads(page);
@@ -328,7 +328,7 @@ export async function checkIconKeptOnlyOnOpen({ page, openApp, openSettings }) {
 
   expect(await readIcon()).toBeNull();
   await openSettings(page);
-  await expect(page.locator("#settingsDialog")).toBeVisible();
+  await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(findNote(page)).toBeHidden();
 }
 
@@ -383,7 +383,7 @@ export async function checkNoteWithoutIcon({ page, openApp, openSettings, looks 
   await expect.poll(() => readNoteIcons(page)).toEqual(["light", "dark"]);
 
   await page.reload();
-  if (!(await page.locator("#settingsDialog").isVisible())) await openSettings(page);
+  if (!(await page.locator(SETTINGS).isVisible())) await openSettings(page);
   await expect(note).toHaveText(NOTE_WORDS);
   await note.getByRole("button", { name: "Dismiss icon note" }).click();
   await expect(note).toBeHidden();
@@ -415,9 +415,9 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   // finish between them, and reads what the note shows there.
   /** @param {"light" | "dark"} look */
   const pickHeldHalfway = (look) =>
-    note.evaluate((element, [value, halfway]) => {
+    note.evaluate((element, [value, halfway, settings]) => {
       /** @type {HTMLInputElement} */ (
-        document.querySelector(`#settingsDialog input[name="appearance"][value="${value}"]`)
+        document.querySelector(`${settings} input[name="appearance"][value="${value}"]`)
       ).click();
       for (const animation of element.getAnimations()) {
         animation.pause();
@@ -425,7 +425,7 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
       }
       const { height, opacity } = getComputedStyle(element);
       return { height, opacity, isFilled: element.childElementCount > 0 };
-    }, /** @type {const} */ ([look, EASE_HALFWAY_MS]));
+    }, /** @type {const} */ ([look, EASE_HALFWAY_MS, SETTINGS]));
 
   await pick(page, looks.light);
   await expect(note).toBeVisible();

@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { openSettings } from "./settings.mjs";
+import { SETTINGS, openSettings } from "./settings.mjs";
 
 // The settings switch that turns Diagnostics on, which every app's settings has.
 
@@ -15,5 +15,5 @@ export async function turnOnDiagnostics(page) {
   await findDiagnosticsSwitch(page).click();
   await expect(findDiagnosticsSwitch(page)).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("Escape");
-  await expect(page.locator("#settingsDialog")).toBeHidden();
+  await expect(page.locator(SETTINGS)).toBeHidden();
 }

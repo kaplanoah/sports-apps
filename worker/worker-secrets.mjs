@@ -5,7 +5,7 @@ import {
   findWorkersApi,
   formatWorkerUrl,
   readAccount,
-  readAppWorkerConfig,
+  loadWorkerConfig,
   readWorkersSubdomain,
 } from "./deploy.mjs";
 
@@ -19,7 +19,7 @@ import {
  */
 export function createSecretsClient({ app, channel, fetchImpl, env, log }) {
   const base = findWorkersApi(readAccount(env));
-  const { name } = readAppWorkerConfig(app, channel);
+  const { name } = loadWorkerConfig(app, channel);
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const secretsUrl = `${base}/scripts/${name}/secrets`;
 

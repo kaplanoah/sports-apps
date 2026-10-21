@@ -23,6 +23,7 @@ test("a change to the docs, the other workflows, or the tooling no browser test 
       "worker/plan-review.mjs",
       "tests/plan-review.test.js",
       "apps/wnba/tests/search.test.js",
+      "services/accounts/tests/health.test.js",
       "knip.json",
       "types/globals.d.ts",
     ]),
@@ -39,9 +40,10 @@ test("a change in one app's folder runs that app's browser tests", () => {
   assert.deepEqual(listApps(["apps/nhl/page/styles.css"]), [], "an app with no browser tests yet");
 });
 
-test("shared code, CI's own workflow, the dependencies, and an unknown file run every app's", () => {
+test("shared code, a service, CI's own workflow, the dependencies, and an unknown file run every app's", () => {
   for (const path of [
     "shared/page/sheet.js",
+    "services/accounts/worker/src/index.js",
     ".github/workflows/ci.yml",
     "package-lock.json",
     "playwright.config.mjs",
