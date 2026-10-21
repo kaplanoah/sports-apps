@@ -1,5 +1,8 @@
 // The page's saved data, kept by the Worker that serves the page and pushed to it as it changes.
+// A page coming back with a drawing on the screen holds what the store sends until the update the
+// store brought forward is done, so it redraws once.
 import { reloadWhenSignedOut } from "./access.js";
+import { UPDATING_WAIT_MS } from "./catch-up-note.js";
 import { noteStep } from "./diagnostics.js";
 import { readWorkerError } from "./worker-error.js";
 
@@ -67,7 +70,14 @@ async function readDocs(url) {
   return body.docs;
 }
 
-export function createWorkerStore(baseUrl = new URL("./", location.href)) {
+/**
+ * @param {{ baseUrl?: URL, isShowing?: () => boolean }} [options] `isShowing` says whether the page
+ *   shows a drawing yet, its own or the one it last showed
+ */
+export function createWorkerStore({
+  baseUrl = new URL("./", location.href),
+  isShowing = () => false,
+} = {}) {
   const listenersByPath = new Map();
   // Each watched collection keeps its documents by id, so a push changes one without a new listing.
   const collectionWatches = new Map();
@@ -77,6 +87,22 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
   let reconnectTimer = null;
   let reconnectDelay = RECONNECT_FIRST_MS;
   let isCaughtUp = false;
+  let hasReadOnOpen = false;
+  // The store says as a socket opens whether an update is coming, and says when each is done.
+  let isUpdateAwaited = false;
+  // While the page catches up with a drawing on the screen, it holds what the store sends until
+  // the update the store brought forward has come too, so it draws once, with the latest, rather
+  // than what the store held and then the update. It holds no longer than it takes the header to
+  // say the page is getting the latest scores, and not at all with nothing drawn as it begins.
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let holdTimer = null;
+  /** @type {Map<string, () => void>} */
+  const held = new Map();
+  /** @type {(() => unknown)[]} */
+  let afterHandOvers = [];
+  // A redraw that reads first, as a page whose load failed reads its season again, holds the page's
+  // word that it has caught up until it has drawn, so the header's sweep shows that drawing.
+  let redrawsUnderWay = 0;
   /** @type {number | null} */
   let syncedAt = null;
   /** @type {Set<(isCaughtUp: boolean) => void>} */
@@ -92,9 +118,23 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
   const findListUrl = (name, count) => new URL(`store/${name}?limit=${count}`, baseUrl);
   const hasWatchers = () => listenersByPath.size > 0 || collectionWatches.size > 0;
 
+  const isHolding = () => holdTimer !== null;
+
+  /**
+   * Hands what the store sent to the page, or holds it, keeping only the latest of each.
+   * @param {string} key
+   * @param {() => void} deliver
+   */
+  function handOver(key, deliver) {
+    if (isHolding()) held.set(key, deliver);
+    else deliver();
+  }
+
   function deliverSnapshot(path, snapshot) {
     noteStep(`Store sent ${path}${snapshot.exists ? "" : ", not found"}`);
-    for (const listener of listenersByPath.get(path) || []) listener.onNext(snapshot);
+    handOver(path, () => {
+      for (const listener of listenersByPath.get(path) || []) listener.onNext(snapshot);
+    });
   }
 
   function deliverError(path, error) {
@@ -121,9 +161,48 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
   }
 
   function deliverCollection(watch) {
-    const docs = [...watch.docsById].sort(compareIds).map(([id, data]) => createSnapshot(id, data));
-    noteStep(`Store sent ${watch.name}, ${docs.length} in all`);
-    for (const listener of watch.listeners) listener.onNext({ docs });
+    noteStep(`Store sent ${watch.name}, ${watch.docsById.size} in all`);
+    handOver(`${watch.name}/`, () => {
+      const docs = [...watch.docsById]
+        .sort(compareIds)
+        .map(([id, data]) => createSnapshot(id, data));
+      for (const listener of watch.listeners) listener.onNext({ docs });
+    });
+  }
+
+  function releaseHeld() {
+    clearTimeout(holdTimer ?? undefined);
+    holdTimer = null;
+    if (held.size) noteStep(`Store handed over the ${held.size} it held for its update`);
+    const deliveries = [...held.values()];
+    held.clear();
+    for (const deliver of deliveries) deliver();
+    const callbacks = afterHandOvers;
+    afterHandOvers = [];
+    for (const callback of callbacks) awaitRedraw(callback());
+  }
+
+  /** @param {unknown} redraw what a callback of afterHandOver returned */
+  function awaitRedraw(redraw) {
+    if (!(redraw instanceof Promise)) return;
+    redrawsUnderWay++;
+    redraw
+      .catch(() => {})
+      .then(() => {
+        redrawsUnderWay--;
+        settleCatchUp();
+      });
+  }
+
+  // Set before the page says it's behind, so a hold that runs out does before the header's line
+  // that it's getting the latest scores would show.
+  function startHolding() {
+    if (!isShowing()) return;
+    clearTimeout(holdTimer ?? undefined);
+    holdTimer = setTimeout(() => {
+      releaseHeld();
+      settleCatchUp();
+    }, UPDATING_WAIT_MS);
   }
 
   async function refreshCollection(name) {
@@ -189,15 +268,25 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
   }
 
   function markCaughtUp() {
+    releaseHeld();
+    if (redrawsUnderWay > 0) return;
     reconnectDelay = RECONNECT_FIRST_MS;
     syncedAt = Date.now();
     if (!isCaughtUp) announceCatchUp(true);
+  }
+
+  // The page has caught up once every watched document has been read and its socket is open to
+  // hear what changes next, and, while it holds what the store sends, once the update the store
+  // said is coming is done.
+  function settleCatchUp() {
+    if (!isCaughtUp && hasReadOnOpen && !(isUpdateAwaited && isHolding())) markCaughtUp();
   }
 
   // A page that was caught up had what the store holds until the moment it fell behind.
   function markBehind() {
     if (!isCaughtUp) return;
     syncedAt = Date.now();
+    startHolding();
     announceCatchUp(false);
   }
 
@@ -209,15 +298,15 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     stuck?.close();
   }
 
-  // The page has caught up once every watched document has been read and its socket is open to
-  // hear what changes next.
   /** @param {WebSocket | null} reader the socket the reads were made for */
   async function readWatchedPaths(reader) {
     const hasRead = await refreshWatchedPaths();
     if (socket !== reader) return;
     if (!hasRead) abandonSocket();
-    else if (isSocketOpen) markCaughtUp();
-    else replaceHungSocket(reader);
+    else if (isSocketOpen) {
+      hasReadOnOpen = true;
+      settleCatchUp();
+    } else replaceHungSocket(reader);
   }
 
   // A handshake that never ends leaves its socket neither open nor closed, so once the reads made
@@ -254,8 +343,8 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     deliverCollection(watch);
   }
 
-  function receivePush(event) {
-    const { path, data } = JSON.parse(event.data);
+  /** @param {{ path: string, data: any }} push */
+  function receivePush({ path, data }) {
     deliveredAt.set(path, ++clock);
     deliverSnapshot(path, createSnapshot(readId(path), data));
     applyCollectionPush(path, data);
@@ -265,6 +354,7 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
   function scheduleReconnect() {
     socket = null;
     isSocketOpen = false;
+    hasReadOnOpen = false;
     markBehind();
     clearTimeout(handshakeTimer);
     handshakeTimer = null;
@@ -283,6 +373,8 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     const opened = new WebSocket(url);
     socket = opened;
     isSocketOpen = false;
+    hasReadOnOpen = false;
+    isUpdateAwaited = true;
     clearTimeout(handshakeTimer);
     handshakeTimer = setTimeout(() => {
       handshakeTimer = null;
@@ -298,13 +390,25 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
       sendWatching();
       readWatchedPaths(opened);
     });
-    opened.addEventListener("message", receivePush);
+    opened.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (!("updating" in message)) receivePush(message);
+      else if (socket === opened) noteUpdating(message.updating);
+    });
     opened.addEventListener("close", () => {
       noteStep("Store connection closed");
       if (socket !== opened) return;
       stopReplacingHungSocket();
       scheduleReconnect();
     });
+  }
+
+  // The store says each update is done, but only one the page waits on is worth a step.
+  /** @param {boolean} isUpdating */
+  function noteUpdating(isUpdating) {
+    if (!isCaughtUp) noteStep(isUpdating ? "Store is updating" : "Store is up to date");
+    isUpdateAwaited = isUpdating;
+    if (!isUpdating) settleCatchUp();
   }
 
   // A phone suspends a page in the background, and its socket can still look open after the
@@ -321,6 +425,7 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     socket = null;
     isSocketOpen = false;
     stale?.close();
+    startHolding();
     announceCatchUp(false);
     openSocket();
   }
@@ -335,6 +440,7 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     const open = socket;
     socket = null;
     isSocketOpen = false;
+    hasReadOnOpen = false;
     open?.close();
     markBehind();
   }
@@ -453,6 +559,20 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     };
   }
 
+  /**
+   * Calls `callback` once the page has what the store sent since it fell behind: at once while it
+   * holds nothing back, or as it hands over what it held, before it says it has caught up, so a
+   * redraw then is the one the header's sweep shows. A callback that returns a promise, as one that
+   * reads before it draws, holds that word until the promise settles.
+   * @param {() => unknown} callback
+   */
+  function afterHandOver(callback) {
+    if (isHolding()) afterHandOvers.push(callback);
+    else awaitRedraw(callback());
+  }
+
+  startHolding();
+
   return {
     doc,
     collection,
@@ -462,5 +582,6 @@ export function createWorkerStore(baseUrl = new URL("./", location.href)) {
     readSyncedAt,
     watchSyncedAt,
     waitForCatchUp,
+    afterHandOver,
   };
 }

@@ -117,7 +117,7 @@ test("an app that opens without asking for its code gets an issue of its own, an
       path: "/issues",
       body: {
         title: "The MLB app asks for no code",
-        body: `The page opened without asking for its access code, so anyone with its address can open it. Give it its code again with \`npm run set-access-code -- mlb <code>\`, or, if it's meant to be open, remove its code from the \`production\` environment's secrets.\n\nSee [the check's run](${RUN_URL}). This issue closes itself once the app asks for its code again, or no code is held for it.`,
+        body: `The page opened without asking for its access code, so anyone with its address can open it. Give it the code every app asks for again with \`npm run set-access-code -- mlb <code>\`.\n\nSee [the check's run](${RUN_URL}). This issue closes itself once the app asks for its code again, or the \`production\` environment holds no \`ACCESS_CODE\`, which stops this check for every app.`,
       },
     },
   ]);

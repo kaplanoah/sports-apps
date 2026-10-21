@@ -93,14 +93,9 @@ paths:
   Light for the page's controls, like the tab bar and close buttons,
   and Regular in a line of text.
   Name the icon and weight in a comment where the code holds it, as `team-view.js` does for its caret-right.
-  Never draw an icon by hand or take one from another set, but for the four drawn for their place: the Home Screen steps' Share and menu glyphs,
-  which copy the browser's own buttons so people find them (`shared/page/draw-home-screen-asks.js`).
-  The other two are MLB's seed lock (`games-view.js`) and the catching-up ring,
-  Phosphor's circle-notch at its Light weight with a 55-degree gap, set in a line of text (`shared/page/catch-up-note.js`).
-  The root's `tests/icons.test.js` fails on any other icon on the pages whose shapes aren't Phosphor's, and names those four,
-  and on a Phosphor icon the last comment before it doesn't name with its weight.
-  An All-Star team's star isn't an icon but stands in for its dot,
-  so it's drawn for its place too, filled with soft tips and set in as the app's dot is (`shared/page/all-star.js`).
+  Never draw an icon by hand or take one from another set, but for those `HAND_DRAWN_ICONS` in the root's `tests/icons.test.js` lists,
+  which fails on any other and on a Phosphor icon whose comment doesn't name it with its weight.
+  An All-Star team's star isn't an icon but stands in for its dot (`shared/page/all-star.js`).
 - Make every tap land on a button or a link.
   An iPhone hands the page a tap only where one is, whatever listens for it,
   so a page's listener never finds what was tapped from the row or card around a button.
@@ -138,6 +133,9 @@ paths:
   and the words its pages never show, like another sport's.
   The root's `tests/browser/never-shown-words.mjs` lists any shown text that holds one,
   and each app's `page.spec.mjs` checks every view with it, wherever it checks the type roles.
+- On the pages, write how fans talk, not a league's official or press words:
+  the playoffs in every app, never the postseason or a berth,
+  and a league's own word only where its fans say it too, like the World Series, Opening Day, and extra innings.
 - Before pushing a change to how a page looks, screenshot every view it touches,
   in each of the app's themes, on a phone and a wide screen, and look at each one: a test checks only what it names.
   Look at a view built from a mockup beside the mockup, with the same data,

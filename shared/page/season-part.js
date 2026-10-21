@@ -1,3 +1,5 @@
+// The season's standings and bracket are its parts, each of which scrolls on its own.
+
 const SEASON_PART = ".season-part";
 
 /**

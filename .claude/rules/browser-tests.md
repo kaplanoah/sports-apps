@@ -17,34 +17,13 @@ paths:
   Get past the page's timers and animation frames by moving its fake clock with `page.clock.runFor`,
   and past a scroll by waiting for its `scroll` or `scrollend` event.
 - A browser test that passes only some of the time has a bug to find and fix, in the page or the test, in its own PR.
-  CI retries a failed browser test once, so it can't fail a pull request it has nothing to do with.
-  CI stops a run once five tests have failed even on their retry (`maxFailures` in the root's `playwright.config.mjs`).
-  Every failed try keeps its trace, with each step but not the page at each step, which only burn-in and the nightly run record.
-  For each test that passed only on its retry:
-  - GitHub's reporter marks it on the pull request's checks.
-  - The next nightly run adds it to the table in the issue Flaky browser tests, from the reports CI keeps (the root's `worker/report-flaky-tests.mjs`),
-    unless a test in the same run failed even on its retry, which says the change broke it, and likely the others too.
-- CI runs the browser tests only of the apps a change reaches, by its own folder or by an import from a spec, a helper, or the Playwright config.
-  So a change to the docs, the other workflows, the files that only configure the checks,
-  or tooling or Node tests no browser test imports, runs none.
-  CI runs every app's browser tests for shared code, CI's own workflow, the dependencies, or a kind of file it doesn't know (the root's `worker/browser-scope.mjs`).
-- CI's `burn-in` checks each browser spec a pull request adds or changes:
-  - It runs the spec ten times with no retry, in WebKit too for the at-rest specs.
-    So a spec holds 30 tests at most, split by what its tests are about, which the root's `tests/browser-spec-size.test.js` checks.
-  - It skips a spec that passed burn-in in an earlier run, on this push or one before it, and hasn't changed since,
-    with every helper and config the specs reach by import, and the dependencies, the Node version, and CI's own workflow, unchanged too,
-    on the pull request's side and its base's (the root's `worker/burn-in-specs.mjs`).
-  - It fails the pull request only on a test the pull request wrote or edited.
-    A change in a spec outside every test, like an import or a helper, edits them all.
-  - The next nightly run adds any other test that failed to the table in the issue Flaky browser tests (the root's `worker/judge-burn-in.mjs`).
-- Each night, main's browser tests run three times over with no retry,
-  and add each test that failed to the table in the open issue Flaky browser tests (`.github/workflows/flaky.yml` and the root's `worker/report-flaky-tests.mjs`).
-  The nightly run comments on the issue for each test new to it and starts the routine that fixes the table's top test,
-  through its API trigger, from the `FLAKY_ROUTINE_URL` and `FLAKY_ROUTINE_TOKEN` secrets.
-  It drops a test once it hasn't failed for a week, and closes the issue once none is left.
+  CI retries a failed browser test once and runs only the apps a change reaches (the root's `playwright.config.mjs` and `worker/browser-scope.mjs`).
+- CI's `burn-in` runs each spec a pull request adds or changes 10 times, so a spec holds at most 30 tests,
+  which the root's `tests/browser-spec-size.test.js` checks (`worker/burn-in-specs.mjs` and `worker/judge-burn-in.mjs`).
+- Each night, main's browser tests run three times over, and each test that failed goes in the issue Flaky browser tests (`.github/workflows/flaky.yml`).
   To reproduce a flaky test, or to show a fix holds, run that workflow by hand with the tests,
   the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have.
-  After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
+- After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
   so the test waits for `domcontentloaded` to know the code has run.
 - Route a browser test's requests by a pattern, like the root's `matchPath` in `tests/browser/harness.mjs`,
   never a function, which makes Playwright ask the test about every request the page makes and slows each load; lint rejects one.

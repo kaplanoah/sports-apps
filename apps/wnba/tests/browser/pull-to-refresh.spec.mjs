@@ -5,6 +5,7 @@ import {
 } from "../../../../tests/browser/page-left-down.mjs";
 import { findSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { fillNews, readNewsPlace } from "../../../../tests/browser/start-over.mjs";
 import { drag, dragAlong, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -88,6 +89,66 @@ test("a page that reloads while held down, as for a newer release, comes back in
   await expect(page.locator("#updates")).toHaveCSS("top", "auto");
   await expect(header).toHaveCSS("top", "auto");
   release();
+});
+
+test("on News, the header changing while the page is held down doesn't move the stories later, once they're scrolled and it changes again", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  const header = page.locator("header.top");
+  /** @param {number} pixels */
+  const growHeader = (pixels) =>
+    header.evaluate((element, room) => (element.style.paddingBottom = `${room}px`), pixels);
+  const release = await app.holdStore();
+  await pullDown(page, 200);
+  await expect(header).toHaveCSS("top", "56px");
+  await growHeader(40);
+  await page.clock.runFor(100);
+  release();
+  await page.clock.runFor(SHORTEST_REFRESH_MS);
+  await expect(header).toHaveCSS("top", "auto");
+  await page.evaluate(() => scrollTo({ top: 300, behavior: "instant" }));
+  const place = await readNewsPlace(page);
+
+  await growHeader(120);
+
+  await expect.poll(() => readNewsPlace(page)).toBe(place);
+});
+
+test("on News, the header changing as the page eases back up doesn't move the stories later, once they're scrolled and it changes again", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  const header = page.locator("header.top");
+  // The header grows as the page starts to ease back up from the pull's hold.
+  await header.evaluate((element) =>
+    element.addEventListener("transitionrun", function growAsEased(event) {
+      const { propertyName } = /** @type {TransitionEvent} */ (event);
+      if (propertyName !== "top" || element.style.top !== "0px") return;
+      element.removeEventListener("transitionrun", growAsEased);
+      element.style.paddingBottom = "40px";
+    }),
+  );
+  const release = await app.holdStore();
+  await pullDown(page, 200);
+  await expect(header).toHaveCSS("top", "56px");
+  release();
+  await page.clock.runFor(SHORTEST_REFRESH_MS);
+  await expect(header).toHaveCSS("padding-bottom", "40px");
+  await expect(header).toHaveCSS("top", "auto");
+  await page.evaluate(() => scrollTo({ top: 300, behavior: "instant" }));
+  const place = await readNewsPlace(page);
+
+  await header.evaluate((element) => (element.style.paddingBottom = "160px"));
+
+  await expect.poll(() => readNewsPlace(page)).toBe(place);
 });
 
 test("a pull on a page left a fraction of a pixel down, as a phone can leave it, still refreshes", async ({

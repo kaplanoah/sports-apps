@@ -11,6 +11,7 @@ import {
   nameFindRecord,
 } from "../worker/judge-review.mjs";
 import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
+import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
@@ -737,6 +738,94 @@ test("no job that runs Claude can write to the pull request", () => {
     assert.doesNotMatch(text, /create_inline_comment/);
     assert.doesNotMatch(text, /secrets: inherit/, workflow);
   }
+});
+
+/**
+ * A step's input, through the YAML anchor it names when it names one.
+ * @param {string} workflow the workflow's text
+ * @param {string} step
+ * @param {string} input
+ */
+function readStepInput(workflow, step, input) {
+  const value = step.match(new RegExp(`^ {10}${input}: (.*(?:\\n(?: {12}.*)?)*)`, "m"))?.[1] ?? "";
+  const alias = value.trim().match(/^\*([\w-]+)$/)?.[1];
+  if (!alias) return value.trim();
+  return (
+    workflow
+      .match(new RegExp(`^ {10}[\\w-]+: &${alias} (.*(?:\\n(?: {12}.*)?)*)`, "m"))?.[1]
+      ?.trim() ?? ""
+  );
+}
+
+/**
+ * Each step that runs Claude in the named workflows, with the workflow's name and text.
+ * @param {string[]} names
+ */
+const listClaudeSteps = (names) =>
+  names.flatMap((name) => {
+    const workflow = readRepoFile(`.github/workflows/${name}`);
+    return workflow
+      .split(/^ {6}- /m)
+      .filter((step) => /uses: anthropics\/claude-code-action@/.test(step))
+      .map((step) => ({ name, workflow, step }));
+  });
+
+// The repo is public, so a Claude step's transcript stays out of its log, and the reviewer, which
+// reads text anyone may have written, can reach nothing but the checkout and its history: Read,
+// Grep, and Glob need no rule within the checkout and are refused outside it, the only command it
+// may run is worker/review-git.mjs, whose allowed options can't read or write outside the
+// checkout, as a shell's quoting could spell an option past a rule refusing it, and the repo's own
+// settings, whose allow list and hooks are for sessions, aren't loaded.
+test("every Claude step keeps its transcript out of the log and reads only the checkout and its history", () => {
+  const steps = listClaudeSteps(WORKFLOWS);
+  assert.ok(steps.length >= 3);
+  for (const { name, workflow, step } of steps) {
+    assert.equal(readStepInput(workflow, step, "show_full_output"), "false", name);
+    const args = readStepInput(workflow, step, "claude_args");
+    const tools = [...args.matchAll(/--allowedTools "([^"]*)"/g)].map(([, list]) => list);
+    assert.deepEqual(tools, ["Bash(node worker/review-git.mjs:*)"], name);
+    assert.doesNotMatch(args, /--disallowedTools/, name);
+    const sources = [...args.matchAll(/--setting-sources (\S+)/g)].map(([, list]) => list);
+    assert.deepEqual(sources, ["user"], name);
+  }
+});
+
+// With only user settings loaded, CLAUDE.md doesn't load, so each reviewer is told to read
+// AGENTS.md, the rules the code keeps.
+test("every reviewer reads AGENTS.md whole along with the review guide", () => {
+  const steps = listClaudeSteps(["ci.yml", AREA_WORKFLOW]);
+  assert.equal(steps.length, 3);
+  for (const { name, workflow, step } of steps)
+    assert.match(
+      readStepInput(workflow, step, "prompt"),
+      /1\. Read `\.review\/REVIEW\.md`, the review guide as the default branch has it,(?: and follow it,)? and AGENTS\.md, each whole\./,
+      name,
+    );
+});
+
+// Each reviewer learns the same forms of review-git.mjs, and the script allows each of them, so
+// no prompt drifts from another or names a form the script refuses.
+test("every reviewer prompt names the same forms of review-git.mjs, each one it allows", () => {
+  const steps = listClaudeSteps(["ci.yml", AREA_WORKFLOW]);
+  const sentences = steps.map(
+    ({ workflow, step }) =>
+      readStepInput(workflow, step, "prompt").match(
+        /History comes from [^\n]*?outside this checkout\./,
+      )?.[0],
+  );
+  assert.equal(sentences.length, 3);
+  assert.ok(sentences[0]);
+  for (const sentence of sentences) assert.equal(sentence, sentences[0]);
+  const forms = [...sentences[0].matchAll(/`node worker\/review-git\.mjs ([^`]+)`/g)].map(
+    ([, form]) =>
+      form
+        .replaceAll("<path>", "README.md")
+        .replaceAll("<start>,<end>", "1,2")
+        .replaceAll("<function>", "main")
+        .split(" "),
+  );
+  assert.equal(forms.length, 4);
+  for (const form of forms) assert.equal(findRefusal(form, "/repo"), null, form.join(" "));
 });
 
 // Each review job runs only once the jobs whose records it reads have finished.

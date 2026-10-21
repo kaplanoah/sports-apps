@@ -8,11 +8,14 @@ import { describeError, respondError, respondJson } from "./responses.js";
 //
 // An alarm keeps the current season up to date from the league while no page is open, and tells
 // subscribed devices about new updates. With no page open, only notifications need the updates,
-// and those can wait a little, so updates come less often until a page opens. Each page says
+// and those can wait a little, so updates come less often until a page opens, which hears whether
+// the update it brings forward is coming and when each update is done. Each page says
 // which documents it watches, and hears only of changes to those. A league can keep
 // details of the games pages have open, like a box score, read with each update while they need
 // it, and run work of its own beside the season's updates, like reading the news. The Worker, and
 // never the page, can add to a count a job keeps, like how often a sheet had to read the league.
+// Each update's status goes in `live/status`, and an update that fails is tried again after a wait
+// that grows with each failure in a row.
 
 /**
  * What a league's own work gets from the store: its documents, storage of its own under keys the
@@ -152,7 +155,21 @@ const createFeedStorage = (storage) => ({
 function openWatchSocket(ctx) {
   const [client, server] = Object.values(new WebSocketPair());
   ctx.acceptWebSocket(server);
-  return new Response(null, { status: 101, webSocket: client });
+  return { socket: server, response: new Response(null, { status: 101, webSocket: client }) };
+}
+
+/**
+ * Tells a page whether the store is updating the season, so a page that opens can wait for that
+ * update rather than draw what the store holds and then draw again.
+ * @param {{ send: (message: string) => void }} socket
+ * @param {boolean} isUpdating
+ */
+function sendUpdating(socket, isUpdating) {
+  try {
+    socket.send(JSON.stringify({ updating: isUpdating }));
+  } catch {
+    // A socket that closed mid-send reconnects and hears it again.
+  }
 }
 
 /** @param {League} league */
@@ -217,21 +234,24 @@ export function createSeasonStore(league) {
     async acceptWatcher(request) {
       if (request.headers.get("upgrade") !== "websocket")
         return respondError(426, "upgrade_required", "Open this path as a WebSocket.");
-      const response = this.openSocket(this.ctx);
-      await this.bringUpdateForward();
+      const { socket, response } = this.openSocket(this.ctx);
+      sendUpdating(socket, await this.bringUpdateForward());
       return response;
     }
 
     // The update an open page would have had comes now, rather than when the store, with no page
-    // open, would next have looked.
+    // open, would next have looked. Returns whether that update is due at once, as it is for a
+    // season the last release updated.
     async bringUpdateForward() {
       const schedule = await this.ctx.storage.get(SCHEDULE_KEY);
-      if (!schedule) return;
-      const dueAt = Math.max(this.now(), schedule.at + Math.min(schedule.delay, STALE_MS));
+      if (!schedule) return false;
+      const now = this.now();
+      const dueAt = Math.max(now, schedule.at + Math.min(schedule.delay, STALE_MS));
       if (!(schedule.dueAt <= dueAt))
         await this.ctx.storage.put(SCHEDULE_KEY, { ...schedule, dueAt });
       const alarmAt = await this.ctx.storage.getAlarm();
       if (alarmAt === null || alarmAt > dueAt) await this.ctx.storage.setAlarm(dueAt);
+      return dueAt <= now || isFromEarlierRelease(schedule);
     }
 
     // Kept in the job's own storage, where its next run reads it.
@@ -349,6 +369,8 @@ export function createSeasonStore(league) {
       const at = this.now();
       const dueAt = at + this.slowWhenUnwatched(delay);
       await this.ctx.storage.put(SCHEDULE_KEY, { at, delay, dueAt, release });
+      // An update that changed nothing pushes nothing, so a page waiting for it hears it's done.
+      for (const socket of this.ctx.getWebSockets()) sendUpdating(socket, false);
       return dueAt;
     }
 

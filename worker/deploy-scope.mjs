@@ -3,7 +3,8 @@
 // is listed. An app's own folder deploys only that app; anything outside apps/ deploys them all.
 // What the deploy runs, .github/workflows/deploy.yml and each script it runs and each module
 // those import, like worker/check-page.mjs, isn't listed: only a deploy shows that a change to
-// how the apps deploy still works.
+// how the apps deploy still works. The beta claim's check is listed, since every push to beta
+// runs it, whether or not a Worker deploys, and the production deploy never does.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -20,9 +21,8 @@ export const CONFIG_ONLY_FILES = new Set([
 ]);
 const SKIPPED_FILES = new Set([
   ...CONFIG_ONLY_FILES,
-  ".claude/hooks/one-command.mjs",
-  ".claude/settings.json",
   ".github/dependabot.yml",
+  ".github/workflows/beta.yml",
   ".github/workflows/ci.yml",
   ".github/workflows/conflicts.yml",
   ".github/workflows/flaky.yml",
@@ -30,12 +30,14 @@ const SKIPPED_FILES = new Set([
   ".github/workflows/watch.yml",
   "playwright.config.mjs",
   "types/globals.d.ts",
+  "worker/beta-claim.mjs",
   "worker/browser-scope.mjs",
   "worker/burn-in-specs.mjs",
   "worker/check-pr-title.mjs",
   "worker/flag-conflicts.mjs",
   "worker/judge-burn-in.mjs",
   "worker/judge-review.mjs",
+  "worker/labeling.mjs",
   "worker/package-imports.mjs",
   "worker/plan-review.mjs",
   "worker/post-review.mjs",
@@ -43,6 +45,7 @@ const SKIPPED_FILES = new Set([
   "worker/red-change-styles.mjs",
   "worker/report-flaky-tests.mjs",
   "worker/review-context.mjs",
+  "worker/review-git.mjs",
   "worker/review-state.mjs",
   "worker/rollback.mjs",
   "worker/rule-files.mjs",
@@ -53,6 +56,8 @@ const SKIPPED_FILES = new Set([
   "worker/worker-secrets.mjs",
 ]);
 const TEST_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
+// Claude Code's settings, hooks, rules, and skills, which only sessions run.
+const SESSION_FOLDER = /^\.claude\//;
 
 /**
  * Whether a path is in the root's tests or an app's.
@@ -67,7 +72,8 @@ export const isTestPath = (path) => TEST_FOLDERS.some((folder) => folder.test(pa
 export const isDocument = (path) => path.endsWith(".md");
 
 /** @param {string} path */
-const isSkipped = (path) => isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path);
+const isSkipped = (path) =>
+  isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path) || SESSION_FOLDER.test(path);
 
 /**
  * The app whose folder a path is in, or null for a path outside every app's.

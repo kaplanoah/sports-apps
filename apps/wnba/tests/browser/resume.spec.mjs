@@ -5,6 +5,14 @@ import {
   serveReleases,
 } from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
+import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
+import {
+  SHORT_PHONE,
+  leaveScrolledFor,
+  readNewsPlace,
+  readPageScroll,
+  readSeasonPlace,
+} from "../../../../tests/browser/start-over.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
 
 const MINUTE_MS = 60 * 1000;
@@ -148,6 +156,54 @@ test("a page shown again without saying so keeps the socket it opens", async ({ 
   });
 
   await expect(row.locator(".game-status .clock")).toHaveText("Q2 5:10");
+});
+
+/**
+ * A game started, in a copy of the season the page's socket never hears of.
+ * @param {any} season
+ */
+function startGame(season) {
+  const game = season.games.find((/** @type {any} */ each) => each.id === "1042600132");
+  Object.assign(game, { state: "live", status: "Q2 5:10", period: 2, clock: "5:10" });
+  return season;
+}
+
+test("a page coming back as the store updates draws once, with the update, never the copy the store held", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator('[data-game="1042600132"]')).toBeVisible();
+  await waitForCatchUp(page);
+
+  const { texts } = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: () => app.changeSeasonWhileAway(startGame),
+  });
+
+  expect(texts).toEqual([]);
+});
+
+test("a page whose load failed, coming back as the store updates, never draws the copy the store held, and says it has caught up once it has drawn the update", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator('[data-game="1042600132"]')).toBeVisible();
+  await waitForCatchUp(page);
+  // Unrouting by the handler too leaves the store's own route, which has the same pattern.
+  const failStore = (route) => route.fulfill({ status: 503, body: "" });
+  await page.route(matchPath("/store/"), failStore);
+  await page.reload();
+  await expect(page.locator("#stamp")).toContainText("Can't reach the page's server");
+
+  const { texts, stampAsCaughtUp } = await wakeAsStoreUpdates(page, app, {
+    changeWhileAway: () => app.changeSeasonWhileAway(startGame),
+    onWake: () => page.unroute(matchPath("/store/"), failStore),
+  });
+
+  expect(texts.filter((text) => text.includes("5:10"))).toEqual([]);
+  expect(stampAsCaughtUp).not.toContain("Can't reach the page's server");
+  await expect(page.locator("#stamp")).not.toContainText("Can't reach the page's server");
 });
 
 test("a page whose first load failed loads the last season once the store answers", async ({
@@ -438,4 +494,39 @@ test("a page coming back to new scores sweeps the header's lines up to full stre
   await expect(stamp).toContainText("NOW");
   await expect(stamp).toHaveClass(/caught-up-wipe/);
   await expect(stamp).toHaveCSS("animation-duration", "1.4s");
+});
+
+test.describe("on a short phone", () => {
+  test.use({ viewport: SHORT_PHONE, hasTouch: true, isMobile: true });
+
+  const SIDEWAYS = "#bracketWrap .bracket";
+
+  /**
+   * @param {import("@playwright/test").Page} page
+   * @param {number} awayMs
+   */
+  async function openAndLeaveFor(page, awayMs) {
+    const app = await openApp(page);
+    return leaveScrolledFor(page, { sideways: SIDEWAYS, writeDocument: app.writeDocument, awayMs });
+  }
+
+  test("after two minutes away, the season tab starts over on the part it's named for, each part at its top with the header back and the bracket on its opening round, and News at its top", async ({
+    page,
+  }) => {
+    const { start } = await openAndLeaveFor(page, 2 * MINUTE_MS);
+
+    await expect.poll(() => readSeasonPlace(page, SIDEWAYS)).toEqual(start);
+    await page.getByRole("tab", { name: "News" }).click();
+    expect(await readPageScroll(page)).toBe(0);
+  });
+
+  test("under two minutes away, the season tab and News stay where they were left", async ({
+    page,
+  }) => {
+    const { left, newsPlace } = await openAndLeaveFor(page, MINUTE_MS);
+
+    expect(await readSeasonPlace(page, SIDEWAYS)).toEqual(left);
+    await page.getByRole("tab", { name: "News" }).click();
+    expect(await readNewsPlace(page)).toBe(newsPlace);
+  });
 });

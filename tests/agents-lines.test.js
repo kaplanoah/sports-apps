@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isRuleFile } from "../worker/rule-files.mjs";
+import { countWords, isFence, isHeading, readProse, startsUnit } from "./guidance-text.js";
 import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
 
 // Two changes to a guidance file conflict only when they touch the same or neighboring lines, so
@@ -15,49 +16,19 @@ const MOST_AGENTS_LINES = 200;
 // Past about this many words a reader loses a sentence's subject, so a long catalog is a list.
 const MOST_SENTENCE_WORDS = 60;
 
-const LIST_MARK = String.raw`[-*]|\d+\.`;
-const HEADING_MARK = "#+";
-const LIST_START = String.raw`^\s*(?:${LIST_MARK})\s`;
-const HEADING_START = String.raw`^(?:${HEADING_MARK})\s`;
-const LEADING_MARK = new RegExp(String.raw`(?:${LIST_START}|${HEADING_START})\s*`);
-
-const isFence = (/** @type {string} */ line) => /^---\s*$/.test(line);
-const HEADING = new RegExp(HEADING_START);
-const LIST_ITEM = new RegExp(LIST_START);
-const isHeading = (/** @type {string} */ line) => HEADING.test(line);
-const isListItem = (/** @type {string} */ line) => LIST_ITEM.test(line);
-const startsUnit = (/** @type {string} */ line) =>
-  !line.trim() || isFence(line) || isHeading(line) || isListItem(line);
-
 // A sentence ends at a period, question mark, or exclamation mark, past any closing quote,
-// parenthesis, or bold, but never at an ellipsis's dots.
+// parenthesis, or bold, but never at an ellipsis's dots. A bold label on a line of its own is a
+// sentence.
 const SENTENCE_END = String.raw`(?<!\.)[.?!]["')*]*`;
 const ENDS_SENTENCE = new RegExp(`${SENTENCE_END}$`);
 const AFTER_SENTENCE = new RegExp(`(?<=${SENTENCE_END})\\s+`);
 const SECOND_SENTENCE = new RegExp(`${SENTENCE_END}\\s+["'(*]*[A-Z]`);
-// A bold label's stop, like **Bugs.**, ends the label, not the sentence after it on its line.
-// A label on a line of its own is a sentence.
-const BOLD_LABEL_STOP = /^(\*\*[^*]+)[.?!](?=\*\*\s*\S)/;
-
-/**
- * A line's prose, without its list or heading mark or the stop of a bold label that leads its
- * text, and with each code span as one word.
- * @param {string} line
- */
-const readProse = (line) =>
-  line
-    .replace(LEADING_MARK, "")
-    .replace(BOLD_LABEL_STOP, "$1")
-    .replaceAll(/`[^`]*`/g, "Code");
 
 /**
  * Whether a line starts a second sentence after its first.
  * @param {string} line
  */
 const startsSecondSentence = (line) => SECOND_SENTENCE.test(readProse(line));
-
-/** @param {string} piece */
-const countWords = (piece) => piece.split(/\s+/).filter(Boolean).length;
 
 /**
  * Each sentence of a text, as the line it starts on and its words. A sentence runs across lines

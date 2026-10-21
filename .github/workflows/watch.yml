@@ -44,7 +44,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ACCESS_CODE: ${{ secrets.ACCESS_CODE }}
           MLB_PAGE_URL: ${{ secrets.MLB_PAGE_URL }}
-          MLB_ACCESS_CODE: ${{ secrets.MLB_ACCESS_CODE }}
           WNBA_PAGE_URL: ${{ secrets.WNBA_PAGE_URL }}
-          WNBA_ACCESS_CODE: ${{ secrets.WNBA_ACCESS_CODE }}

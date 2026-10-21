@@ -1,0 +1,49 @@
+name: Beta
+
+# One pull request uses the beta channel at a time, while the owner tests it on the phone
+# (worker/beta-claim.mjs). Each run takes beta off a pull request that gave it up and off every
+# one but the one that holds it, which waits in line, and once beta is free tells the one that has
+# waited longest. Labels this run's token changes start no workflow, so the same run tells the
+# next in line. GitHub starts no pull request workflow for one in conflict with main, so a merge
+# to main runs the queue too, catching up on label changes made while the holder was in conflict.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed, labeled, unlabeled]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  # To add and take off labels, make the beta labels when they're missing, and comment.
+  pull-requests: write
+  # A pull request's timeline is an issue's, which the issues scope reads, as it does closed
+  # pull requests by label.
+  issues: read
+  # When a head was pushed, from its check suites.
+  checks: read
+
+jobs:
+  queue:
+    # A fork's token can't change labels, and only the owner's sessions claim beta.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # GitHub keeps only one waiting run in a group, cancelling the one before it, so each run
+    # reads every pull request rather than reacting to its own event. A skipped run stays out.
+    concurrency:
+      group: beta
+      cancel-in-progress: false
+    steps:
+      # Main's rules run the queue, never a pull request's own copy, since the token can change
+      # every pull request's labels.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+      - name: Keep beta to one pull request and tell the next in line
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/beta-claim.mjs queue
