@@ -483,16 +483,15 @@ export async function deploy({
   const migrations = listPendingMigrations(await readMigrationTag(), storeClass);
   await uploadWorker(migrations);
   await setWorkersDevRoute(previousVersions);
+  const deployed = isPageless ? name : formatWorkerUrl(name, subdomain);
   if (isPageless) {
     await confirmServiceAnswers(previousVersions);
-    log("worker check: ok");
-    return name;
+  } else {
+    await confirmWorkerAnswers(deployed, previousVersions);
+    await confirmPageDraws(previousVersions);
   }
-  const url = formatWorkerUrl(name, subdomain);
-  await confirmWorkerAnswers(url, previousVersions);
-  await confirmPageDraws(previousVersions);
   log("worker check: ok");
-  return url;
+  return deployed;
 }
 
 const CHECK_ATTEMPTS = 12;
