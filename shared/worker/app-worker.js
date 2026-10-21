@@ -66,7 +66,8 @@ const serveNotFound = () => respondText("Not found\n", 404, PAGE_HEADERS);
 
 // A Worker serves only its own release's folder, so a page still running an earlier release finds
 // that folder gone. Its version.json still names the release it asks about, so the page learns
-// it has been replaced and reloads, whatever release its own code is from.
+// it has been replaced and reloads. Only a page from before the build wrote the release into the
+// page asks here, so this answer's null builtAt stays out of the page's Release type.
 const REPLACED_RELEASE_PATH = /^release\/([^/]+)\/version\.json$/;
 
 /** @param {string} commit */

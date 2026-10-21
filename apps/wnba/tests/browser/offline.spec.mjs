@@ -43,7 +43,6 @@ async function openKeptApp(page) {
   await openApp(page);
   await waitForCopy(page);
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
-  await expect.poll(() => served.requests).toBe(1);
   await markPage(page);
   return served;
 }
@@ -84,7 +83,7 @@ test("a page a deploy replaced waits to reload until its copy can hold the newer
 
   await comeBack(page);
 
-  await expect.poll(() => served.requests).toBe(2);
+  await expect.poll(() => served.requests).toBe(1);
   expect(await askForFreshCopy(page)).toBe(false);
   expect(await isSameLoad(page)).toBe(true);
   await page.context().setOffline(false);

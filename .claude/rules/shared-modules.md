@@ -32,8 +32,9 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 - `local-storage.js`: what the page keeps on the device, safe when storage refuses or is full
 - `keyboard-focus.js`: focus rings only for keyboard use
 - `league-words.js`: what a league's pages call things, in its fans' words
-- `channel-tag.js`: the tag beside the app's name on beta
-- `release.js`: a release's version, commit, and channel
+- `draw-channel-tag-age.js`: how long ago beta's release went live, in the tag beside the app's name, before the first paint
+- `channel-tag.js`: keeping that tag's age current while the page stays open
+- `release.js`: the release the build writes into the page, and the latest one the Worker serves
 - `release-guard.js`: reloading until every file comes from one release, as a deploy lands
 
 ### Opening, coming back, and catching up

@@ -10,6 +10,7 @@ import {
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
+import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -93,6 +94,27 @@ test.describe("on a phone", () => {
     const [{ text: copied }] = await readShares(page);
     expect(copied).toMatch(/^Pitchers job(: no run saved| last ran .*, \d+ requests?)/m);
   });
+});
+
+test("Diagnostics, once on, start with the app, the release the page came from, and its commit, set apart by dots, without asking the Worker", async ({
+  page,
+}) => {
+  const served = await serveReleases(page, {
+    version: "2.33.0-beta",
+    commit: "abc1234",
+    builtAt: "2026-09-28T00:10:41Z",
+    label: "beta",
+  });
+  served.isHanging = true;
+  await openApp(page);
+
+  await turnOnDiagnostics(page);
+  await page.reload();
+  await openSettings(page);
+
+  await expect(page.locator("#diagnostics .diagnostics-release")).toHaveText(
+    "MLB\u2022v2.33.0-beta\u2022abc1234",
+  );
 });
 
 /**
