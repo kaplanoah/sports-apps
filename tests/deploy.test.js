@@ -991,9 +991,9 @@ test("the deploy job runs no package's install scripts or tests while it holds t
 test("project settings ask before any deploy but beta's or a key change, and deny running them any other way", () => {
   const { permissions } = JSON.parse(readRepoFile(".claude/settings.json"));
   // A message to another of the owner's sessions changes nothing outside them, so a session a
-  // session started reports to it without asking. A session opens an issue for work it leaves for
-  // later in the same turn, which a prompt it can't answer would lose. A session claims beta, and
-  // waits in line for it, by adding and taking off one label at a time.
+  // session started reports to it without asking. A session opens an issue for a finding or bug it
+  // leaves out of a PR in the same turn, which a prompt it can't answer would lose. A session
+  // claims beta, and waits in line for it, by adding and taking off one label at a time.
   assert.deepEqual(permissions.allow, [
     "Bash(git push -f origin *:beta)",
     "Bash(gh issue create *)",
