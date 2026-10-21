@@ -52,7 +52,7 @@ function findReportProblem(app, { ok, release }, service, commit) {
  * @param {{ app: string, url: string }[]} options.apps each app's Worker on the service's channel
  * @param {string} [options.commit] the commit the service should be running, in any length
  * @param {number} [options.attempts]
- * @param {number} [options.pauseMs] how long to wait before each attempt
+ * @param {number} [options.pauseMs] how long to wait between attempts
  * @param {(milliseconds: number) => Promise<unknown>} [options.pause]
  * @param {typeof fetch} [options.fetchImpl]
  * @returns {Promise<ServiceCheck>}
@@ -68,7 +68,7 @@ export async function checkService({
 }) {
   let problems = [];
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    await pause(pauseMs);
+    if (attempt) await pause(pauseMs);
     const reports = await Promise.all(
       apps.map(async ({ app, url }) => ({
         app,

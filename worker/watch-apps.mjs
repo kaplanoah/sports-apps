@@ -1,10 +1,13 @@
 // Opens each app's live page on a schedule, as a phone does, and keeps one open issue for each app
 // that isn't opening, so its owner hears of an outage before the people who use it do, and one for
-// each that opens without asking for its code. An app that fails once is opened again a minute
-// later, so a moment's hiccup opens nothing; each issue closes once its app is right again.
+// each that opens without asking for its code. It keeps one for each service the apps reach that
+// isn't answering them, too. An app or service that fails once is checked again a minute later, so
+// a moment's hiccup opens nothing; each issue closes once its app or service is right again.
 import { fileURLToPath } from "node:url";
-import { listApps } from "./apps.mjs";
+import { listApps, listServices } from "./apps.mjs";
 import { checkAppPage } from "./check-page.mjs";
+import { checkService } from "./check-service.mjs";
+import { listAppWorkers, readWorkersSubdomain } from "./deploy.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
 const RECHECK_DELAY_MS = 60 * 1000;
@@ -25,6 +28,16 @@ export const nameNoCodeIssue = (app) => `The ${app.toUpperCase()} app asks for n
 /** @param {string} app @param {string} runUrl */
 const describeNoCode = (app, runUrl) =>
   `The page opened without asking for its access code, so anyone with its address can open it. Give it the code every app asks for again with \`npm run set-access-code -- ${app} <code>\`.\n\nSee [the check's run](${runUrl}). This issue closes itself once the app asks for its code again, or the \`production\` environment holds no \`ACCESS_CODE\`, which stops this check for every app.`;
+
+/** @param {string} service */
+export const nameServiceIssue = (service) => `The ${service} service isn't answering`;
+
+/**
+ * @param {import("./check-service.mjs").ServiceCheck & { status: "unanswered" }} check
+ * @param {string} runUrl
+ */
+const describeServiceOutage = (check, runUrl) =>
+  `Asked through each app's health twice a minute apart, ${check.reason}.\n\nSee [the check's run](${runUrl}). This issue closes itself once the service answers again.`;
 
 /**
  * @param {ReturnType<typeof createGitHub>} github
@@ -126,11 +139,41 @@ export async function reportCheck({ app, check, openIssues, github, runUrl }) {
 }
 
 /**
+ * Keeps the service's one issue open while it isn't answering the apps, and says what it did.
+ * @param {object} options
+ * @param {string} options.service
+ * @param {import("./check-service.mjs").ServiceCheck} options.check
+ * @param {any[]} options.openIssues
+ * @param {ReturnType<typeof createGitHub>} options.github
+ * @param {string} options.runUrl
+ * @returns {Promise<string>}
+ */
+async function reportServiceCheck({ service, check, openIssues, github, runUrl }) {
+  if (check.status === "unchecked") return `::warning::${service}: not checked, ${check.reason}`;
+  const issue = openIssues.find(
+    (open) => open.title === nameServiceIssue(service) && !open.pull_request,
+  );
+  if (check.status === "unanswered") {
+    if (issue) return `${service}: still not answering, ${check.reason}; #${issue.number} is open`;
+    const created = await github("/issues", {
+      method: "POST",
+      body: { title: nameServiceIssue(service), body: describeServiceOutage(check, runUrl) },
+    });
+    return `${service}: not answering, ${check.reason}; opened #${created.number}`;
+  }
+  if (!issue) return `${service}: answers`;
+  await closeIssue(github, issue.number, `The service answers again, as of [this run](${runUrl}).`);
+  return `${service}: answers again, so #${issue.number} is closed`;
+}
+
+/**
  * @param {object} options
  * @param {string} options.repository as owner/name
  * @param {string} options.runUrl
  * @param {string[]} [options.apps]
  * @param {(app: string) => Promise<import("./check-page.mjs").PageCheck>} [options.checkApp]
+ * @param {string[]} [options.services]
+ * @param {(service: string) => Promise<import("./check-service.mjs").ServiceCheck>} [options.checkServiceOf]
  * @param {typeof fetch} [options.fetchImpl]
  * @param {NodeJS.ProcessEnv} [options.env]
  */
@@ -140,15 +183,37 @@ export async function watchApps({
   apps = listApps(),
   checkApp = (app) =>
     checkAppPage({ app, channel: "production", attempts: 2, pauseMs: RECHECK_DELAY_MS }),
+  services = listServices(),
   fetchImpl = fetch,
   env = process.env,
+  checkServiceOf = (service) =>
+    checkService({
+      service,
+      apps: listAppWorkers("production", readWorkersSubdomain(env)),
+      attempts: 2,
+      pauseMs: RECHECK_DELAY_MS,
+      fetchImpl,
+    }),
 }) {
   const github = createGitHub({ repository, fetchImpl, env });
   const openIssues = await readAllPages(github, "/issues?state=open");
-  const checks = await Promise.all(apps.map((app) => checkApp(app)));
+  const [checks, serviceChecks] = await Promise.all([
+    Promise.all(apps.map((app) => checkApp(app))),
+    Promise.all(services.map((service) => checkServiceOf(service))),
+  ]);
   const lines = [];
   for (const [index, app] of apps.entries())
     lines.push(...(await reportCheck({ app, check: checks[index], openIssues, github, runUrl })));
+  for (const [index, service] of services.entries())
+    lines.push(
+      await reportServiceCheck({
+        service,
+        check: serviceChecks[index],
+        openIssues,
+        github,
+        runUrl,
+      }),
+    );
   return lines;
 }
 

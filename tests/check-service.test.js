@@ -61,15 +61,15 @@ test("a service answers once every app that reports it says it's ok at the commi
     "https://mlb-app.example-subdomain.workers.dev/health",
     "https://wnba-app.example-subdomain.workers.dev/health",
   ]);
-  assert.deepEqual(pauses, [60000]);
+  assert.deepEqual(pauses, []);
 });
 
-test("each attempt waits first, and a later one can find the service answering", async () => {
+test("each attempt after the first waits, and a later one can find the service answering", async () => {
   const old = reporting({ ok: true, release: "1111111" });
   const fake = createFakeApps({ mlb: [old, RELEASED], wnba: [RELEASED] });
   const { result, pauses } = check(fake);
   assert.deepEqual(await result, { status: "answering" });
-  assert.deepEqual(pauses, [60000, 60000]);
+  assert.deepEqual(pauses, [60000]);
 });
 
 test("a service still wrong after every attempt is unanswered, with each app's problem from the last", async () => {
@@ -83,7 +83,7 @@ test("a service still wrong after every attempt is unanswered, with each app's p
     reason:
       "mlb gets no answer from accounts; wnba reaches accounts at no known commit, not 2222222",
   });
-  assert.equal(pauses.length, 3);
+  assert.equal(pauses.length, 2);
 });
 
 test("with no commit to match, any release that's ok answers", async () => {
@@ -98,7 +98,7 @@ test("an app that doesn't answer, or binds no service, says nothing of it", asyn
   const fake = createFakeApps({ mlb: [new Error("unreachable")], wnba: [{ ok: true }] });
   const { result, pauses } = check(fake);
   assert.deepEqual(await result, { status: "unchecked", reason: "no app reaches accounts yet" });
-  assert.equal(pauses.length, 1);
+  assert.deepEqual(pauses, []);
 
   const silent = createFakeApps({ mlb: [new Error("unreachable")], wnba: [RELEASED] });
   assert.deepEqual(await check(silent).result, { status: "answering" });

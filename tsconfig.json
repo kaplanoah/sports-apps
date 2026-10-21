@@ -15,13 +15,14 @@
     "strictBindCallApply": true,
     "useUnknownInCatchVariables": true
   },
-  "include": ["apps", "shared", "worker", "tests", "*.mjs", "types", ".claude/hooks"],
+  "include": ["apps", "services", "shared", "worker", "tests", "*.mjs", "types", ".claude/hooks"],
   "exclude": [
     "apps/*/page/js/sortable.min.js",
     "apps/*/page/sw.js",
     "shared/page/push-worker.js",
     "shared/page/offline-worker.js",
     "shared/page/service-worker-steps.js",
-    "apps/*/worker/dist"
+    "apps/*/worker/dist",
+    "services/*/worker/dist"
   ]
 }

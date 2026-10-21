@@ -90,9 +90,12 @@ test("a service uploads its store and version, has no workers.dev address, and a
 });
 
 test("a service an app reports as down, or at another release, is put back, naming the app and never its address", async () => {
-  for (const [report, problem] of [
-    [{ ok: false, release: null }, "mlb gets no answer from accounts"],
-    [{ ok: true, release: "1111111" }, "mlb reaches accounts at 1111111, not 2222222"],
+  for (const { report, problem } of [
+    { report: { ok: false, release: null }, problem: "mlb gets no answer from accounts" },
+    {
+      report: { ok: true, release: "1111111" },
+      problem: "mlb reaches accounts at 1111111, not 2222222",
+    },
   ]) {
     const { result, calls } = await deployAccounts(answerHealth(report));
     assert.ok(result instanceof Error);
@@ -150,9 +153,12 @@ test("every service deploys before any app starts, and one that fails holds back
   );
   assert.equal(isDeployed, false);
   assert.deepEqual(events.slice(0, 2), ["start accounts", "end accounts"]);
-  assert.deepEqual(events.slice(2).filter((event) => event.startsWith("start")).sort(), [
-    "start mlb",
-    "start wnba",
-  ]);
+  assert.deepEqual(
+    events
+      .slice(2)
+      .filter((event) => event.startsWith("start"))
+      .sort(),
+    ["start mlb", "start wnba"],
+  );
   assert.deepEqual(errors, ["accounts: refused"]);
 });

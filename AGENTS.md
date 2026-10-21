@@ -49,6 +49,8 @@
 
 - Apps: one per league, each in `apps/<app>/` with its own `page/`,
   `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`.
+- Services: a Worker with no page, which the apps reach by a binding and the public never does,
+  each in `services/<name>/` with its own `worker/` and `tests/`, and built, deployed, and rolled back as an app is (`.claude/rules/tooling.md`).
   Paths here, in the rule files, and in the skills are inside an app's folder, except `shared/`, `.github/`, `.claude/`, and the ones named as the root's.
 - More rules load from `.claude/rules/` once a session reads or edits a file they cover.
   They are `page-look.md` and `page-code.md` for the pages, `worker.md` for the Workers,

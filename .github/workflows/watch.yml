@@ -47,3 +47,4 @@ jobs:
           ACCESS_CODE: ${{ secrets.ACCESS_CODE }}
           MLB_PAGE_URL: ${{ secrets.MLB_PAGE_URL }}
           WNBA_PAGE_URL: ${{ secrets.WNBA_PAGE_URL }}
+          CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ secrets.CLOUDFLARE_WORKERS_SUBDOMAIN }}

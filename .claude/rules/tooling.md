@@ -8,7 +8,7 @@ paths:
 
 # Tooling
 
-- Tooling: the root `worker/` builds, versions, deploys, and rolls back every app, tells a red change for CI's gate,
+- Tooling: the root `worker/` builds, versions, deploys, and rolls back every Worker, each app's and each service's, tells a red change for CI's gate,
   and keeps beta to one pull request at a time, as the `ship` skill's "The beta channel" says.
   `ls worker/` lists its modules, and its tests are in the root `tests/`.
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`).
@@ -19,12 +19,21 @@ paths:
   The deploy and the workflow both read each page's address from the `production` environment's secrets, as `<APP>_PAGE_URL`,
   and the one code every app asks for as `ACCESS_CODE`.
   A beta deploy reads them from the `beta` environment's, with `_BETA` after the app's name in each address's.
+- Services: each deploy uploads every service before any app, since an app binds each service, by its name in capitals, to its Worker on the app's channel (`listServiceBindings` in the root's `worker/deploy.mjs`).
+  A service has no workers.dev address, so its deploy reads each app's `health`,
+  which reports the service in a field of its own, `services.<name>`, apart from the app's own status,
+  and puts the service's earlier version back unless every app that reports it says it's ok at the new commit (`worker/check-service.mjs`).
+  No app reports a service until its live version binds it, so a service's first deploy logs that the check was skipped.
+  The service reads its release from its `VERSION` binding, which the upload's `workers/tag` sets to the short commit.
+  The `Watch apps` workflow checks each service the same way, keeping one open issue for each that isn't answering, which closes once it answers again.
+  Each channel's Cloudflare token edits only the Workers it names, so before a service's first deploy on a channel,
+  the owner creates its Worker and adds it to that environment's token, as the `add-league` skill says for an app.
 - Hooks in `.claude/settings.json`, each saying why when it blocks a call, and all off in CI's review:
   - `.claude/hooks/one-command.mjs` blocks a call that starts with `cd` or joins commands.
   - `.claude/hooks/context-limit.mjs` hands a session off to a fresh one as its context grows.
   - `.claude/hooks/install-packages.mjs` runs `npm ci` as a session starts when `node_modules` is out of date.
   - `.claude/hooks/check-push.mjs` runs lint, format, types, and dead code before each `git push`.
-- `npm run rollback -- <app>` puts the app's previous version back at all of its traffic and prints which commit was live and which is now.
+- `npm run rollback -- <worker>` puts an app's or a service's previous version back at all of its traffic and prints which commit was live and which is now.
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
   `--rotate` replaces the key, which changes the address; do that only when the user asks.
@@ -38,7 +47,7 @@ paths:
   Keep the host out of the repo, as the Worker's own address is.
 - Mask, in anything a workflow logs or posts, what AGENTS.md's public-repo bullet keeps out of the repo,
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.
-- An app's deploy is skipped when nothing but docs, tests, tooling,
-  and other apps' folders changed since its live version's commit; the root's `worker/deploy-scope.mjs` lists those files.
+- A Worker's deploy is skipped when nothing but docs, tests, tooling,
+  and other Workers' folders changed since its live version's commit; the root's `worker/deploy-scope.mjs` lists those files.
   It skips the root's `.claude/` folder whole, so a new hook, rule, or skill needs no entry.
   When you add any other file that can't change the Worker, add it to that list.

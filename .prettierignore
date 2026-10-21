@@ -1,4 +1,5 @@
 apps/*/worker/dist/
+services/*/worker/dist/
 apps/*/tests/fixtures/*.json
 apps/*/page/js/sortable.min.js
 package-lock.json
