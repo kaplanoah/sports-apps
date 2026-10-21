@@ -107,9 +107,10 @@ paths:
   and each app's browser tests check every view with it; a new view or sheet joins that list,
   and a test of a row's tap checks where a finger lands, with `document.elementFromPoint`, as well as what opens.
 - Separate items in a line of facts with `joinWithSeparator` from `shared/page/html.js`; lint rejects a bullet or middle dot typed by hand.
-  Design mockups are one plain HTML artifact page that works on a phone,
-  never a design canvas, and copy the app's existing styles, separators,
-  and colors from its `page/styles.css` instead of inventing new ones.
+- Tune a design on the real app on beta with the tuning panel (`shared/page/tuning-panel.js`),
+  in Safari: the Simulator, Mac Safari, or the phone, never in a copied mockup.
+  A round names the CSS variables it tunes,
+  and the values the owner copies back become fixed values in the code.
 - A phone and a wide screen look the same, except where the width forces a difference.
 - Things shown side by side for comparison share one scale, like two pitchers' speed lines.
 - Desktop hover is a subtle change of text color only, to the app's `--ink-hover`: never an underline, border, or highlight,
@@ -138,6 +139,5 @@ paths:
   and a league's own word only where its fans say it too, like the World Series, Opening Day, and extra innings.
 - Before pushing a change to how a page looks, screenshot every view it touches,
   in each of the app's themes, on a phone and a wide screen, and look at each one: a test checks only what it names.
-  Look at a view built from a mockup beside the mockup, with the same data,
-  and a new view beside its siblings, like a new sheet beside the others, rather than on its own.
+  Look at a new view beside its siblings, like a new sheet beside the others, rather than on its own.
   Fix anything off, and name the views and themes you looked at in the PR's description.
