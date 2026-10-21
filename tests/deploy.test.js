@@ -78,23 +78,34 @@ const describeCalls = (calls) =>
   calls.map((request) => `${request.init.method} ${request.url.replace(API, "")}`);
 
 test("the name and compatibility date come from wrangler.toml", async () => {
-  const { readAppWorkerConfig, readWorkerConfig } = await loadDeployModule();
-  assert.deepEqual(readAppWorkerConfig("mlb"), {
+  const { loadWorkerConfig, readWorkerConfig } = await loadDeployModule();
+  assert.deepEqual(loadWorkerConfig("mlb"), {
     name: "mlb-app",
     compatibilityDate: "2026-09-01",
+    storeClass: "SeasonStore",
   });
   assert.throws(() => readWorkerConfig('name = "x"'), /compatibility_date/);
 });
 
 test("the beta channel's Worker is named by its environment, with the top level's date", async () => {
-  const { readAppWorkerConfig, readWorkerConfig } = await loadDeployModule();
+  const { loadWorkerConfig, readWorkerConfig } = await loadDeployModule();
   for (const app of listApps())
-    assert.deepEqual(readAppWorkerConfig(app, "beta"), {
+    assert.deepEqual(loadWorkerConfig(app, "beta"), {
       name: `${app}-app-beta`,
       compatibilityDate: "2026-09-01",
+      storeClass: "SeasonStore",
     });
-  const toml = 'name = "x"\ncompatibility_date = "2026-09-01"\n';
-  assert.deepEqual(readWorkerConfig(toml), { name: "x", compatibilityDate: "2026-09-01" });
+  const toml =
+    'name = "x"\ncompatibility_date = "2026-09-01"\n\n[[durable_objects.bindings]]\nclass_name = "Store"\n';
+  assert.deepEqual(readWorkerConfig(toml), {
+    name: "x",
+    compatibilityDate: "2026-09-01",
+    storeClass: "Store",
+  });
+  assert.throws(
+    () => readWorkerConfig('name = "x"\ncompatibility_date = "2026-09-01"\n'),
+    /class_name/,
+  );
   assert.throws(() => readWorkerConfig(toml, "beta"), /\[env\.beta\] with a name/);
   assert.throws(() => readWorkerConfig(toml, "staging"), /no channel named staging/);
 });
@@ -103,7 +114,7 @@ test("a beta deploy uploads to the beta Worker, with the same bindings", async (
   const { deploy } = await loadDeployModule();
   const cloudflare = createFakeCloudflare({ isNew: true });
   const url = await deploy({
-    app: "mlb",
+    worker: "mlb",
     channel: "beta",
     fetchImpl: cloudflare.fetchImpl,
     env: ENV,
@@ -131,7 +142,7 @@ test("upload, route, and the Worker URL", async () => {
   const { deploy } = await loadDeployModule();
   const cloudflare = createFakeCloudflare();
   const url = await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,
     env: ENV,
     script: "export default {}",
@@ -168,7 +179,7 @@ test("upload, route, and the Worker URL", async () => {
       },
     ],
     keep_bindings: ["secret_text"],
-    annotations: { "workers/message": NEW_COMMIT },
+    annotations: { "workers/message": NEW_COMMIT, "workers/tag": NEW_COMMIT.slice(0, 7) },
     migrations: { new_tag: "v1", steps: [{ new_sqlite_classes: ["SeasonStore"] }] },
   });
   const file = form.get("worker.mjs");
@@ -186,7 +197,7 @@ test("nothing is uploaded when nothing the Worker runs changed since the live ve
   const asked = [];
   const lines = [];
   const url = await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,
     env: ENV,
     script: "",
@@ -208,7 +219,7 @@ test("every change since the live version counts, not just the last merge's", as
   const { deploy } = await loadDeployModule();
   const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
   const url = await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,
     env: ENV,
     script: "",
@@ -228,7 +239,7 @@ test("a live version with no recorded commit, or changes that can't be listed, d
   /** @param {string | undefined} liveCommit @param {string[] | null} changes */
   const deployWith = (liveCommit, changes) =>
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: createFakeCloudflare({ liveCommit }).fetchImpl,
       env: ENV,
       script: "",
@@ -243,8 +254,8 @@ test("a live version with no recorded commit, or changes that can't be listed, d
 
 test("a migration already applied isn't sent again", async () => {
   const { deploy, listPendingMigrations } = await loadDeployModule();
-  assert.equal(listPendingMigrations("v1"), null);
-  assert.deepEqual(listPendingMigrations(undefined), {
+  assert.equal(listPendingMigrations("v1", "SeasonStore"), null);
+  assert.deepEqual(listPendingMigrations(undefined, "SeasonStore"), {
     old_tag: undefined,
     new_tag: "v1",
     steps: [{ new_sqlite_classes: ["SeasonStore"] }],
@@ -252,7 +263,7 @@ test("a migration already applied isn't sent again", async () => {
 
   const cloudflare = createFakeCloudflare({ migrationTag: "v1" });
   await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,
     env: ENV,
     script: "",
@@ -264,7 +275,7 @@ test("a migration already applied isn't sent again", async () => {
 });
 
 test("each app's wrangler.toml declares the same bindings and migrations", async () => {
-  const { MIGRATIONS } = await loadDeployModule();
+  const { listMigrations } = await loadDeployModule();
   for (const app of listApps()) {
     const toml = readRepoFile(`apps/${app}/worker/wrangler.toml`);
     assert.match(
@@ -283,7 +294,7 @@ test("each app's wrangler.toml declares the same bindings and migrations", async
       toml,
       /\[\[env\.beta\.ratelimits\]\]\nname = "ACCESS_LIMIT"\nnamespace_id = "2701"\n\n\[env\.beta\.ratelimits\.simple\]\nlimit = 10\nperiod = 60/,
     );
-    for (const { tag, new_sqlite_classes: classes } of MIGRATIONS) {
+    for (const { tag, new_sqlite_classes: classes } of listMigrations("SeasonStore")) {
       const declared = `[[migrations]]\ntag = "${tag}"\nnew_sqlite_classes = ${JSON.stringify(classes)}`;
       assert.ok(toml.includes(declared), declared);
     }
@@ -295,7 +306,7 @@ test("a token is sent only when one is in the environment", async () => {
   // In a cloud session the proxy adds the token; the script must not send its own.
   const proxied = createFakeCloudflare();
   await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: proxied.fetchImpl,
     env: ENV,
     script: "",
@@ -306,7 +317,7 @@ test("a token is sent only when one is in the environment", async () => {
 
   const local = createFakeCloudflare();
   await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: local.fetchImpl,
     env: { ...ENV, CLOUDFLARE_API_TOKEN: "t0k" },
     script: "",
@@ -326,7 +337,7 @@ test("a refusal names the step and Cloudflare's reason; no account ID is caught 
   const cloudflare = createFakeCloudflare({ refuse: "/scripts/mlb-app/subdomain" });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: cloudflare.fetchImpl,
       env: ENV,
       script: "",
@@ -337,7 +348,7 @@ test("a refusal names the step and Cloudflare's reason; no account ID is caught 
   );
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: cloudflare.fetchImpl,
       env: {},
       script: "",
@@ -360,7 +371,7 @@ test("the workers.dev subdomain comes from its secret, checked before anything i
     { subdomain: "https://example-subdomain", reason: tooMuch },
   ]) {
     const failure = await deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: cloudflare.fetchImpl,
       env: { ...ENV, CLOUDFLARE_WORKERS_SUBDOMAIN: subdomain },
       script: "",
@@ -389,7 +400,7 @@ test("a refusal that isn't Cloudflare's shows its status, server, and raw body",
     new Response("Forbidden by policy\n", { status: 403, headers: { server: "envoy" } });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: refuseAsProxy,
       env: ENV,
       script: "",
@@ -401,7 +412,7 @@ test("a refusal that isn't Cloudflare's shows its status, server, and raw body",
   const answerEmpty = async () => new Response("", { status: 502 });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: answerEmpty,
       env: ENV,
       script: "",
@@ -426,7 +437,7 @@ test("a request that carried no token says why, unless the script sent one itsel
     );
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: refuseWithoutToken,
       env: ENV,
       script: "",
@@ -440,7 +451,7 @@ test("a request that carried no token says why, unless the script sent one itsel
   );
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: refuseWithoutToken,
       env: { ...ENV, CLOUDFLARE_API_TOKEN: "t0k" },
       script: "",
@@ -453,7 +464,7 @@ test("a request that carried no token says why, unless the script sent one itsel
   const cloudflare = createFakeCloudflare({ refuse: "/scripts/mlb-app" });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: cloudflare.fetchImpl,
       env: ENV,
       script: "",
@@ -469,7 +480,7 @@ test("a first deploy has no live version to look up", async () => {
   const { deploy } = await loadDeployModule();
   const cloudflare = createFakeCloudflare({ isNew: true });
   const url = await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,
     env: ENV,
     script: "",
@@ -484,7 +495,7 @@ test("the log and errors never show the Worker's address", async () => {
   const lines = [];
   const logLine = (line) => lines.push(line);
   await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: createFakeCloudflare().fetchImpl,
     env: ENV,
     script: "",
@@ -493,7 +504,7 @@ test("the log and errors never show the Worker's address", async () => {
   });
   const silent = createFakeCloudflare({ answerWorker: () => new Response("", { status: 500 }) });
   const failure = await deploy({
-    app: "mlb",
+    worker: "mlb",
     fetchImpl: silent.fetchImpl,
     env: ENV,
     script: "",
@@ -516,7 +527,7 @@ test("a Worker that doesn't answer puts the live version back", async () => {
   });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: cloudflare.fetchImpl,
       env: ENV,
       script: "",
@@ -538,7 +549,7 @@ test("a Worker still answering as the version before isn't the new one, and is p
   const { deploy } = await loadDeployModule();
   const deployWhileAnswering = (answerWorker) =>
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: createFakeCloudflare({ liveCommit: LIVE_COMMIT, answerWorker }).fetchImpl,
       env: ENV,
       script: "",
@@ -564,7 +575,7 @@ test("a new version's page that doesn't draw puts the live version back", async 
   const checked = [];
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       channel: "beta",
       fetchImpl: cloudflare.fetchImpl,
       env: ENV,
@@ -592,7 +603,7 @@ test("a page check that fails puts the live version back", async () => {
   const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: cloudflare.fetchImpl,
       env: ENV,
       script: "",
@@ -621,7 +632,7 @@ test("a merge whose live version already has it isn't deployed, but a push to be
     const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
     const lines = [];
     const url = deploy({
-      app: "mlb",
+      worker: "mlb",
       channel,
       fetchImpl: cloudflare.fetchImpl,
       env: ENV,
@@ -749,7 +760,7 @@ test("a new version passes once its Worker answers and its page draws, or has no
   ]) {
     const lines = [];
     const url = await deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: createFakeCloudflare().fetchImpl,
       env: ENV,
       script: "",
@@ -791,7 +802,7 @@ test("a failed check says so when there's nothing to go back to, or going back f
   const brandNew = createFakeCloudflare({ isNew: true, answerWorker });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: brandNew.fetchImpl,
       env: ENV,
       script: "",
@@ -809,7 +820,7 @@ test("a failed check says so when there's nothing to go back to, or going back f
   const stuck = createFakeCloudflare({ answerWorker, refuseRollback: true });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: stuck.fetchImpl,
       env: ENV,
       script: "",
@@ -828,7 +839,7 @@ test("a first deploy waits minutes for its new address, and a redeploy doesn't",
       ++checks < answeringCheck ? new Response("", { status: 404 }) : ANSWER_ROBOTS();
     const lines = [];
     const result = deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: createFakeCloudflare({ isNew, answerWorker }).fetchImpl,
       env: ENV,
       script: "",
@@ -859,7 +870,7 @@ test("a step that fails after the upload puts the live version back", async () =
   const cloudflare = createFakeCloudflare({ refuse: "/mlb-app/subdomain" });
   await assert.rejects(
     deploy({
-      app: "mlb",
+      worker: "mlb",
       fetchImpl: cloudflare.fetchImpl,
       env: ENV,
       script: "",
@@ -1043,13 +1054,13 @@ test(
     timeout: 2000,
   },
   async () => {
-    const { deployApps } = await loadDeployModule();
+    const { deployWorkers } = await loadDeployModule();
     const started = [];
     const errors = [];
     /** @type {(value?: unknown) => void} */
     let releaseMlb = () => {};
     const mlbHeld = new Promise((resolve) => (releaseMlb = resolve));
-    const isDeployed = await deployApps(
+    const isDeployed = await deployWorkers(
       ["mlb", "wnba"],
       async (app) => {
         started.push(app);
@@ -1059,7 +1070,7 @@ test(
         }
         releaseMlb();
       },
-      (line) => errors.push(line),
+      { logError: (line) => errors.push(line) },
     );
     assert.deepEqual(started, ["mlb", "wnba"]);
     assert.equal(isDeployed, false);

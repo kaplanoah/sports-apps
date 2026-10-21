@@ -1,11 +1,11 @@
-// Puts an app's previous version back at all of its traffic, with the call a deploy makes when its
+// Puts a Worker's previous version back at all of its traffic, with the call a deploy makes when its
 // new version doesn't answer. The previous version is the newest deployment before the live code
 // whose version records another commit, since a secret change deploys the same code again, and
 // a rollback keeps the secrets as they are. On main, a version a rollback already took down is
 // passed over: one deployed between two deployments of the live commit, and one whose commit the
 // live one doesn't build on.
 import { fileURLToPath } from "node:url";
-import { checkAppName } from "./apps.mjs";
+import { checkWorkerName } from "./apps.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
 import {
   createCloudflareCaller,
@@ -14,7 +14,7 @@ import {
   findWorkersApi,
   isAncestor,
   readAccount,
-  readAppWorkerConfig,
+  loadWorkerConfig,
   runGit,
 } from "./deploy.mjs";
 
@@ -53,7 +53,7 @@ function findEarlier(recorded, { isForcePushed, isBuiltOn }) {
 
 /**
  * @param {object} options
- * @param {string} options.app
+ * @param {string} options.worker an app or a service
  * @param {string} [options.channel]
  * @param {typeof fetch} [options.fetchImpl]
  * @param {NodeJS.ProcessEnv} [options.env]
@@ -62,14 +62,14 @@ function findEarlier(recorded, { isForcePushed, isBuiltOn }) {
  * @returns {Promise<{ from: string, to: string }>} the commit that was live, and the one now
  */
 export async function rollBack({
-  app,
+  worker,
   channel = "production",
   fetchImpl = fetch,
   env = process.env,
   log = console.log,
   git = runGit,
 }) {
-  const { name } = readAppWorkerConfig(app, channel);
+  const { name } = loadWorkerConfig(worker, channel);
   const { branch, isForcePushed } = findChannel(channel);
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const client = createDeploymentsClient({
@@ -102,7 +102,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   Promise.resolve()
     .then(() => {
       const { positionals, channel } = readCommandLine(process.argv.slice(2));
-      return rollBack({ app: checkAppName(positionals[0]), channel });
+      return rollBack({ worker: checkWorkerName(positionals[0]), channel });
     })
     .catch((error) => {
       console.error(error.message);

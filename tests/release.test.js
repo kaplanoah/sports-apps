@@ -226,14 +226,14 @@ test("a type that doesn't release can't mark a major change", () => {
   }
 });
 
-test("a major change may name the one app it breaks, among those it changes", () => {
+test("a major change may name the one Worker it breaks, among those it changes", () => {
   const files = ["apps/mlb/page/js/app.js", "shared/page/team-sheet.js"];
   for (const title of ["feat(mlb)!: Drop the old saved rankings", "fix(wnba)!: Drop a view"]) {
     assert.equal(findTitleProblem(title, files, APPS), null, title);
   }
   assert.equal(
     findTitleProblem("feat(nhl)!: Drop the old saved rankings", files, APPS),
-    "There's no app named nhl. The apps are: mlb, wnba.",
+    "There's no Worker named nhl. The Workers are: mlb, wnba.",
   );
   assert.equal(
     findTitleProblem("feat(wnba)!: Drop the old saved rankings", ["apps/mlb/page/js/app.js"], APPS),
@@ -249,7 +249,7 @@ test("a scope is only for a major change", () => {
   for (const { title, files } of cases) {
     assert.equal(
       findTitleProblem(title, files, APPS),
-      "A scope only names the one app a major change breaks, as in feat(mlb)!:. Drop (mlb).",
+      "A scope only names the one Worker a major change breaks, as in feat(mlb)!:. Drop (mlb).",
       title,
     );
   }

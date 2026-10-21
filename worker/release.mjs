@@ -4,7 +4,7 @@
 // counts, such as only its tests or other apps' folders, leaves that app's version where it was,
 // so the app's version moves only for a merge that would deploy it. A major change counts for every
 // app the merge deploys, unless its title names the one app it breaks, as in feat(mlb)!:.
-import { listApps } from "./apps.mjs";
+import { findWorkerFolder, listWorkers } from "./apps.mjs";
 import { findDeployedChanges } from "./deploy-scope.mjs";
 
 // Each app's version at the commit its count starts from, so a change to how merges count never
@@ -56,17 +56,17 @@ function readTitleType(title) {
 }
 
 /**
- * What's wrong with the app a major change names, or null when nothing is.
+ * What's wrong with the Worker a major change names, or null when nothing is.
  * @param {TitleType} titleType
  * @param {string[]} changedFiles
- * @param {string[]} apps
+ * @param {string[]} workers
  */
-function findScopeProblem({ scope, isBreaking }, changedFiles, apps) {
+function findScopeProblem({ scope, isBreaking }, changedFiles, workers) {
   if (!scope) return null;
   if (!isBreaking)
-    return `A scope only names the one app a major change breaks, as in feat(${apps[0]})!:. Drop (${scope}).`;
-  if (!apps.includes(scope))
-    return `There's no app named ${scope}. The apps are: ${apps.join(", ")}.`;
+    return `A scope only names the one Worker a major change breaks, as in feat(${scope})!:. Drop (${scope}).`;
+  if (!workers.includes(scope))
+    return `There's no Worker named ${scope}. The Workers are: ${workers.join(", ")}.`;
   if (!findDeployedChanges(changedFiles, scope).length)
     return `This doesn't change what ${scope}'s deploy runs, so it can't break ${scope}.`;
   return null;
@@ -92,14 +92,14 @@ function findTypeProblem({ type, isBreaking }, changedFiles) {
  * Says what's wrong with a pull request's title, or null when nothing is.
  * @param {string} title
  * @param {string[]} changedFiles
- * @param {string[]} [apps]
+ * @param {string[]} [workers]
  */
-export function findTitleProblem(title, changedFiles, apps = listApps()) {
+export function findTitleProblem(title, changedFiles, workers = listWorkers()) {
   const titleType = readTitleType(title);
   if (!titleType)
     return `Start the title with a type: ${listTypes(true)}, ${listTypes(false)}. A ! after the type, as in feat!:, marks a major change.`;
   return (
-    findTypeProblem(titleType, changedFiles) ?? findScopeProblem(titleType, changedFiles, apps)
+    findTypeProblem(titleType, changedFiles) ?? findScopeProblem(titleType, changedFiles, workers)
   );
 }
 
@@ -135,7 +135,14 @@ function readBump(subject, app) {
  */
 function findBaseline(app, git) {
   if (BASELINES[app]) return BASELINES[app];
-  const [commit] = git(["log", "--first-parent", "--reverse", "--format=%H", "--", `apps/${app}/`])
+  const [commit] = git([
+    "log",
+    "--first-parent",
+    "--reverse",
+    "--format=%H",
+    "--",
+    findWorkerFolder(app),
+  ])
     .split("\n")
     .filter(Boolean);
   return commit ? { commit, version: FIRST_VERSION } : null;

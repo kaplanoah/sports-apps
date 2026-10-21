@@ -57,6 +57,14 @@ export const findWorkerRoot = (
   { appsRoot = APPS_ROOT, servicesRoot = SERVICES_ROOT } = {},
 ) => new URL(`${worker}/`, isService(worker, servicesRoot) ? servicesRoot : appsRoot);
 
+/**
+ * A Worker's folder from the repo's root, as git names it, like apps/mlb/.
+ * @param {string} worker
+ * @param {URL} [servicesRoot]
+ */
+export const findWorkerFolder = (worker, servicesRoot = SERVICES_ROOT) =>
+  `${isService(worker, servicesRoot) ? "services" : "apps"}/${worker}/`;
+
 // The apps with browser tests, each of which Playwright runs as its own project.
 /** @param {URL} [appsRoot] the folder that holds every app's */
 export const listAppsWithBrowserTests = (appsRoot = APPS_ROOT) =>
