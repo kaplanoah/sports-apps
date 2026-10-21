@@ -4,6 +4,8 @@
 // request event, takes beta off a pull request that closed, was pushed after its label, or got
 // phone-ok after it, and off every one but the holder, which waits in line with beta-wait. Once
 // beta is free, it comments on the one that has waited longest, which wakes whoever drives it.
+// When another takes beta before the one told claims it, it comments that the one told stays
+// first in line, which spends the telling, so it's told again once beta is free.
 // GitHub keeps one waiting run of the workflow and cancels the one before it, so each run reads
 // every pull request rather than the event that started it.
 // Usage: node worker/beta-claim.mjs deploy <commit>, or node worker/beta-claim.mjs queue, with
@@ -32,6 +34,7 @@ const LABELS = [
 
 export const FREE_MESSAGE = "Beta is free, and this pull request has waited longest.";
 const FREE_MARKER = "<!-- beta-free -->";
+const TAKEN_MARKER = "<!-- beta-taken -->";
 const REFUSED = "so nothing was deployed to beta";
 
 /** @typedef {import('./labeling.mjs').TimelineEvent} TimelineEvent */
@@ -47,6 +50,14 @@ const REFUSED = "so nothing was deployed to beta";
  */
 
 /** @typedef {{ number: number, label: string, isAdded: boolean }} LabelChange */
+
+/**
+ * @typedef {object} Plan
+ * @property {number | null} holder
+ * @property {LabelChange[]} changes
+ * @property {number | null} told the pull request told beta is free
+ * @property {number | null} taken the one told before the holder took beta, told it stays first
+ */
 
 /**
  * @param {PullRequest} pull
@@ -165,25 +176,32 @@ function listLabelChanges(pull, holder) {
 }
 
 /**
- * When a pull request was last told beta is free, or -Infinity when it never was.
+ * When the workflow last commented on a pull request with `marker`, or -Infinity when it never
+ * did.
  * @param {PullRequest} pull
+ * @param {string} marker
  */
-const findToldAt = (pull) =>
+const findCommentedAt = (pull, marker) =>
   Math.max(
     -Infinity,
     ...pull.events
-      .filter((event) => event.event === "commented" && event.body?.includes(FREE_MARKER))
+      .filter((event) => event.event === "commented" && event.body?.includes(marker))
       .map(readEventTime),
   );
 
 /**
- * Whether a waiting pull request has been told beta is free since it last went in line. One told
- * that then claimed beta and lost it to another has spent the telling, so it can be told again.
+ * Whether a waiting pull request has been told beta is free since it last went in line. A telling
+ * is spent once the one told claims beta, or once another takes beta first, so it can be told
+ * again.
  * @param {PullRequest} pull
  */
 function isTold(pull) {
-  const toldAt = findToldAt(pull);
-  return toldAt > findAddedAt(pull, WAIT_LABEL) && !(findAddedAt(pull, BETA_LABEL) > toldAt);
+  const toldAt = findCommentedAt(pull, FREE_MARKER);
+  return (
+    toldAt > findAddedAt(pull, WAIT_LABEL) &&
+    !(findAddedAt(pull, BETA_LABEL) > toldAt) &&
+    !(findCommentedAt(pull, TAKEN_MARKER) > toldAt)
+  );
 }
 
 /**
@@ -207,11 +225,24 @@ function findNextWaiter(pulls) {
 }
 
 /**
- * What one run of the Beta workflow does, from every pull request labeled beta or beta-wait: who
- * holds beta, the label changes, and the pull request it tells beta is free, if any. It reads
- * no event, so any run puts the labels right, a run after one GitHub dropped too.
+ * The pull request told beta is free before another took it: the one that has waited longest,
+ * while its telling is unspent and another holds beta.
  * @param {PullRequest[]} pulls
- * @returns {{ holder: number | null, changes: LabelChange[], told: number | null }}
+ * @param {PullRequest} holder
+ * @returns {PullRequest | null}
+ */
+function findPassedWaiter(pulls, holder) {
+  const [first] = listLine(pulls);
+  return first && first !== holder && isTold(first) ? first : null;
+}
+
+/**
+ * What one run of the Beta workflow does, from every pull request labeled beta or beta-wait: who
+ * holds beta, the label changes, the pull request it tells beta is free, if any, and the one
+ * told before another took beta, if any. It reads no event, so any run puts the labels right, a
+ * run after one GitHub dropped too.
+ * @param {PullRequest[]} pulls
+ * @returns {Plan}
  */
 export function planQueue(pulls) {
   const holder = findHolder(pulls);
@@ -219,8 +250,16 @@ export function planQueue(pulls) {
     holder: holder?.number ?? null,
     changes: pulls.flatMap((pull) => listLabelChanges(pull, holder)),
     told: holder ? null : (findNextWaiter(pulls)?.number ?? null),
+    taken: holder ? (findPassedWaiter(pulls, holder)?.number ?? null) : null,
   };
 }
+
+/**
+ * The comment that tells a pull request another took beta before it claimed it.
+ * @param {number} holder
+ */
+export const formatTakenMessage = (holder) =>
+  `#${holder} took beta before this pull request claimed it, so it stays first in line.`;
 
 /**
  * @typedef {object} ReadOptions
@@ -326,17 +365,21 @@ export async function updateQueue({ repository, fetchImpl = fetch, env = process
       method: "POST",
       body: { body: `${FREE_MESSAGE}\n\n${FREE_MARKER}` },
     });
+  if (plan.taken && plan.holder)
+    await github(`/issues/${plan.taken}/comments`, {
+      method: "POST",
+      body: { body: `${formatTakenMessage(plan.holder)}\n\n${TAKEN_MARKER}` },
+    });
   return plan;
 }
 
-/**
- * @param {{ holder: number | null, changes: LabelChange[], told: number | null }} plan
- */
-function describePlan({ holder, changes, told }) {
+/** @param {Plan} plan */
+function describePlan({ holder, changes, told, taken }) {
   const lines = [holder ? `#${holder} holds beta.` : "Beta is free."];
   for (const { number, label, isAdded } of changes)
     lines.push(`${isAdded ? "Added" : "Took off"} ${label} on #${number}.`);
   lines.push(told ? `Told #${told} beta is free.` : "Told no one.");
+  if (taken) lines.push(`Told #${taken} that #${holder} took beta first.`);
   return lines.join("\n");
 }
 
