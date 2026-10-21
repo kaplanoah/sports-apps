@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { readThemeToken } from "./css-rules.js";
 import {
   describeChannel,
   listNetworkLogos,
@@ -81,6 +83,19 @@ test("every logo is a PNG or a plain drawing: no scripts, links, or anything it 
     assert.match(svg, /^<svg[^>]*viewBox=/, file);
     assert.doesNotMatch(svg, /<script|\son\w+=|href="(?!#)|url\((?!#)|@import/i, file);
   }
+});
+
+test("every dark drawing of a logo draws its cream in the WNBA's Walnut ink", () => {
+  const walnutInk = readThemeToken(
+    fileURLToPath(new URL("../apps/wnba/page/styles.css", import.meta.url)),
+    "dark",
+    "--ink",
+  );
+  for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.svg")))
+    assert.ok(
+      readFileSync(new URL(file, LOGO_FOLDER), "utf8").includes(`fill="${walnutInk}"`),
+      file,
+    );
 });
 
 test("the line of channels shows each logo, its dark version beside it, and names without one, apart by space alone", () => {
