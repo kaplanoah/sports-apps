@@ -168,7 +168,8 @@ private: anyone who has it can see and change the page. Never pass
 `--rotate` unless they ask. It replaces the key, which changes the address.
 
 To share the page beyond the user, have them pick an access code and run
-`npm run set-access-code -- <app> <code>`. The page then asks for it before it
+`npm run set-access-code -- <app> <code>`, with the same code for every app on
+a channel, since the deploy's check signs each in with its environment's one. The page then asks for it before it
 opens, and each phone types it once. Case, spaces, and hyphens don't count.
 Running it again with a new code signs every phone out until it types the new
 one, and `--remove` stops asking. Never commit or post the code.
@@ -335,14 +336,15 @@ add:
   subdomain, the part before `.workers.dev`, which a token limited to its
   Workers can't read, and which the deploy builds each Worker's address from;
 - for each app, a secret `<APP>_PAGE_URL` with its page's address, key and all,
-  like `WNBA_PAGE_URL`, and `<APP>_ACCESS_CODE` with its code if it asks for
-  one.
+  like `WNBA_PAGE_URL`;
+- a secret `ACCESS_CODE` with the one code every app asks for, if they ask
+  for one.
 
 The beta channel (see "Trying a change on the phone" below) deploys from an
 environment of its own, named `beta`, limited to the `beta` branch, with the
 same secrets: a token limited to each app's beta Worker,
-`<app>-app-beta`, the account ID and subdomain, and each page's address and code with
-`_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
+`<app>-app-beta`, the account ID and subdomain, beta's `ACCESS_CODE`, and each
+page's address with `_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
 change only its own channel's Workers, a branch pushed to `beta` can never
 reach the live apps.
 
@@ -352,10 +354,10 @@ sends. Every 15 minutes, the **Watch apps** workflow opens each app's page the
 same way and keeps one open issue for each app that isn't opening, which closes
 itself once the app opens again. An app without its page's secrets isn't
 opened, and the deploy log and the workflow say so. A page that asks for no code
-while its environment holds one opens without it, and they say that too. The
-workflow also keeps one open issue for each live app that opens without asking
-for its code, which closes itself once the app asks again or no code is held
-for it.
+while its environment holds an `ACCESS_CODE` opens without it, and they say that
+too. The workflow also keeps one open issue for each live app that opens without
+asking for its code, which closes itself once the app asks again or the
+environment holds no `ACCESS_CODE`.
 
 Each deploy records its commit on the Worker's version. A merge skips an app's
 deploy when nothing but docs, tests, tooling, and other apps' folders changed
@@ -401,8 +403,8 @@ in Cloudflare's dashboard, since the `beta` token can change only the Workers it
 names, then create the `beta` environment as "Deploying on merge" says, with its
 token limited to them. After the first one, give each beta Worker its key with
 `npm run set-app-key -- <app> --channel beta`, which prints its address, and,
-if the real page asks for a code, set one with
-`npm run set-access-code -- <app> <code> --channel beta`. Add both to the `beta`
+if the real page asks for a code, give it the code in the `beta` environment's
+`ACCESS_CODE` with `npm run set-access-code -- <app> <code> --channel beta`. Add the address to the `beta`
 environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <app> --channel beta`
 deploys beta by hand, from a checkout of `origin/beta`, and
 `npm run rollback -- <app> --channel beta` rolls it back.

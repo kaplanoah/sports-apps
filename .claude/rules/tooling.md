@@ -16,8 +16,9 @@ paths:
   The `Watch apps` workflow does it every 15 minutes,
   keeping one open issue for each app that isn't opening, which closes once it opens again,
   and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`).
-  The deploy and the workflow both read each page's address and code from the `production` environment's secrets, as `<APP>_PAGE_URL` and `<APP>_ACCESS_CODE`,
-  and a beta deploy reads them from the `beta` environment's, with `_BETA` after the app's name.
+  The deploy and the workflow both read each page's address from the `production` environment's secrets, as `<APP>_PAGE_URL`,
+  and the one code every app asks for as `ACCESS_CODE`.
+  A beta deploy reads them from the `beta` environment's, with `_BETA` after the app's name in each address's.
 - Hooks in `.claude/settings.json`, each saying why when it blocks a call, and all off in CI's review:
   - `.claude/hooks/one-command.mjs` blocks a call that starts with `cd` or joins commands.
   - `.claude/hooks/context-limit.mjs` hands a session off to a fresh one as its context grows.
@@ -28,6 +29,7 @@ paths:
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
   `--rotate` replaces the key, which changes the address; do that only when the user asks.
 - `npm run set-access-code -- <app> <code>` sets the code an app's page asks for, with a new random `ACCESS_SIGNING_KEY`; the user picks the code.
+  Every app on a channel takes the same code, since the deploy and the workflow sign each in with the environment's one `ACCESS_CODE`.
   A new code signs every phone out, and `--remove` stops asking.
   Never commit, log, or post the code.
 - `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,

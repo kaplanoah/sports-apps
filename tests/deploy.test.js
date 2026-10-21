@@ -776,6 +776,15 @@ test("each deploy and each watch of the apps opens every app's page with its own
   assert.deepEqual(listPassed(readWorkflow("watch.yml"), "production"), []);
 });
 
+test("each workflow passes one access code for every app, never one of an app's own", () => {
+  for (const name of ["deploy.yml", "watch.yml"])
+    assert.deepEqual(
+      readRepoFile(`.github/workflows/${name}`).match(/\w+_ACCESS_CODE(?=:)/g),
+      null,
+      name,
+    );
+});
+
 test("a failed check says so when there's nothing to go back to, or going back fails", async () => {
   const { deploy } = await loadDeployModule();
   const answerWorker = () => new Response("", { status: 404 });
