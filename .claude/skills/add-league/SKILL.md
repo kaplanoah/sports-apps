@@ -91,7 +91,7 @@ Delete it once the app's first PR merges.
    Its page adds lines that give parts layers of their own, so it's a red change,
    tried on the owner's phone from beta before it merges, as the `ship` skill says.
    Each channel's token can edit only the Workers it names, so before the first deploy of each channel,
-   the owner creates its Worker in Cloudflare's dashboard and adds it to that environment's token:
+   the owner creates its Worker in Cloudflare's dashboard, as the README's "Deploying on merge" says, and adds it to that environment's token:
    `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
    Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`,
    which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.

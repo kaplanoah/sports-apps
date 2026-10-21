@@ -125,8 +125,9 @@ themselves, see "If they deploy it themselves" below.
 1. Have them sign in at [dash.cloudflare.com](https://dash.cloudflare.com)
    and open **Workers & Pages**. A free account is fine. If it asks for a
    workers.dev subdomain, have them pick one and tell you what it is.
-2. Have them create a token at **Manage Account > API Tokens > Create Token**
-   with the **Edit Cloudflare Workers** template, scoped to their account.
+2. Have them create an account token at **Manage account > Account API tokens >
+   Create Token**, never a user token from **My Profile**, with the **Edit
+   Cloudflare Workers** template, scoped to their account.
    Skip IP filtering because cloud sessions don't have a fixed address. A
    one-week expiry is enough. They copy the token but don't paste it into the
    chat.
@@ -331,11 +332,15 @@ when the pull request's checks passed on exactly the code `main` now has, which
 is when it was up to date with `main` as it merged, and otherwise once the
 checks pass on `main`. First create each service's live Worker, named in its
 `wrangler.toml`, in Cloudflare's dashboard, since a token can be limited only to
-Workers that exist. Then, in the repo's **Settings > Environments**, create an
+Workers that exist. Create each Worker from the **Hello World** starter, which
+the first deploy replaces, and leave **Protect with Cloudflare Access** off: the
+deploy checks each app's workers.dev address, and a service answers only its
+apps. Then, in the repo's **Settings > Environments**, create an
 environment named `production`, limit its deployment branches to `main`, and
 add:
 
-- a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare account token with the
+- a secret `CLOUDFLARE_API_TOKEN`: a Cloudflare account token, made at
+  **Manage account > Account API tokens > Create Token**, with the
   **Workers Scripts** permission at **Edit**, limited to each app's live
   Worker, `<app>-app`, and each service's, named in its `wrangler.toml`, with no
   IP filtering and a long expiry;
@@ -426,7 +431,7 @@ A pull request gives beta up as it closes or merges, as its branch is pushed,
 and as it's labeled `phone-ok`.
 
 Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`,
-and each service's in Cloudflare's dashboard, since the `beta` token can change only the Workers it
+and each service's in Cloudflare's dashboard, as "Deploying on merge" says, since the `beta` token can change only the Workers it
 names, then create the `beta` environment as "Deploying on merge" says, with its
 token limited to them. After the first one, give each beta Worker its key with
 `npm run set-app-key -- <app> --channel beta`, which prints its address, and,
