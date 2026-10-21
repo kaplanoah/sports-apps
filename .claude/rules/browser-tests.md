@@ -16,6 +16,9 @@ paths:
   never for a fixed time or for the network to go quiet; lint rejects `waitForTimeout`, `setTimeout`, and `networkidle`.
   Get past the page's timers and animation frames by moving its fake clock with `page.clock.runFor`,
   and past a scroll by waiting for its `scroll` or `scrollend` event.
+  Wait for what the page keeps rather than shows inside the page, with `page.waitForFunction`,
+  as the root's `tests/browser/at-rest.mjs` does for catching up:
+  a poll from the test takes a trace snapshot each time it asks, which can take CI's WebKit seconds on a whole season's page.
 - A browser test that passes only some of the time has a bug to find and fix, in the page or the test, in its own PR.
   CI retries a failed browser test once and runs only the apps a change reaches (the root's `playwright.config.mjs` and `worker/browser-scope.mjs`).
 - CI's `burn-in` runs each spec a pull request adds or changes 10 times, so a spec holds at most 30 tests,
