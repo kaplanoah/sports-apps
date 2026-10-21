@@ -386,7 +386,8 @@ of its traffic and prints which commit was live and which is now; it refuses
 when there's no earlier version. A rollback keeps the Worker's secrets as they
 are.
 
-After the `accounts` service's first deploy on a channel, give it the key it
+Before the `accounts` service's first deploy on a channel, once its Worker
+exists and the channel's token can edit it, give it the key it
 hashes each email under with `npm run set-email-key`, or
 `npm run set-email-key -- --channel beta` for beta's. It makes the key at random
 and never prints it, and refuses to replace one, since a new key would leave
@@ -396,8 +397,8 @@ Then name the site every app's passkeys belong to with
 `npm run set-rp-id -- <domain>`, or `npm run set-rp-id -- <domain> --channel beta`
 for beta's: a domain each app's page host on that channel is under. It never
 prints the domain, and refuses to replace one, since a passkey signs in only to
-the site it was made under. Until the service has both, its health says it isn't
-ok, and registration and sign-in refuse.
+the site it was made under. A deploy keeps both. Until the service has both,
+its health says it isn't ok, and registration and sign-in refuse.
 
 ### Trying a change on the phone
 
