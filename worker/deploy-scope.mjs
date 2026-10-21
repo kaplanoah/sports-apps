@@ -1,6 +1,7 @@
 // Decides whether main needs a deploy. Only when nothing but the docs, tests, and tooling listed
 // here changed since the live version does it skip one, so a new kind of file deploys until it
-// is listed. A Worker's own folder, an app's or a service's, deploys only that Worker; anything outside them deploys them all.
+// is listed. A Worker's own folder, an app's or a service's, deploys only that Worker; anything
+// outside them deploys them all.
 // What the deploy runs, .github/workflows/deploy.yml and each script it runs and each module
 // those import, like worker/check-page.mjs, isn't listed: only a deploy shows that a change to
 // how the apps deploy still works. The beta claim's check is listed, since every push to beta
