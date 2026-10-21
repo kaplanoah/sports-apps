@@ -1,7 +1,10 @@
 // Picks the theme before the first paint, so a dark look never flashes the light one. It loads as
 // a plain script in each page's head, before the other plain scripts, which read the picked look
 // and the Home Screen as it does; appearance.js keeps the theme, and the icons and bar color that
-// go with it, current.
+// go with it, current. The browser's address names the theme picked, which a Home Screen app keeps
+// on its first open, and Safari loads the page again after a pick, since it takes the app's
+// address and its bars' color from the page as it loaded. It keeps the look of each install's
+// icon, and an iPhone's app hands Safari a link to add the site again on the theme picked.
 
 // The same test of the Home Screen as device.js makes for the page's modules.
 const isOnHomeScreen = () =>

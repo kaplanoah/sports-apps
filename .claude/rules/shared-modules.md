@@ -70,9 +70,8 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 - `sheet-log.js`: what each dialog's sheets do
 - `day-strip-log.js`: what a season's list of days does
 - `list-log.js`: where each list of days stands, at each record's end
-- `bracket-standings-log.js`: each touch on the standings and bracket, and whether it landed on a list still gliding
-- `phone-look-log.js`: each change of the phone's light or dark look,
-  and each time the page leaves, comes back, or changes focus, with the look the stylesheets see then
+- `bracket-standings-log.js`: each touch on the standings and bracket
+- `phone-look-log.js`: each change of the phone's light or dark look, and of the page's focus
 - `error-log.js`: each error the page's code doesn't catch
 
 ### The Home Screen welcome and theme
@@ -126,7 +125,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 
 - `spring-scroll.js`: a scroll that eases into place on a spring
 - `reduced-motion.js`: whether the device asks for less motion
-- `press.js`: a row's tint while pressed, and a scroll, or a finger stopping a list still gliding, never tapping
+- `press.js`: a row's tint while pressed, and telling a tap from a scroll
 - `kept-place.js`: keeping rows in place as what's above them changes
 - `eased-redraw.js`: easing parts to their new heights on a redraw
 - `slide-panels.js`: side-by-side panels a finger drags
@@ -134,7 +133,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 
 ### Sheets
 
-- `sheet.js`: a sheet and a dialog's stack of sheets, whose top comment states the rules every motion keeps
+- `sheet.js`: a sheet and a dialog's stack of sheets, and the rules every motion keeps
 - `sheet-swipe.js`: a swipe down closing a sheet
 - `sheet-reopen.js`: the sheets open as the page leaves, put back on reload
 - `sheet-sections.js`: a sheet's sections under pills
@@ -192,7 +191,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 
 - `type.css`: the type roles
 - `chrome.css`: the tab bar, settings, round dots, the welcome and its box, the catching-up line, and pull to refresh
-- `diagnostics.css`: the Diagnostics, linked right after `chrome.css`, and the look the stylesheets see for the Phone look log
+- `diagnostics.css`: the Diagnostics and the look the stylesheets see
 - `pager.css`: a pill's names and the standings and bracket under one
 - `day-strip.css`: a season's list of days and its strip
 - `game-search.css`: the search's view
