@@ -95,8 +95,9 @@ Delete it once the app's first PR merges.
    `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
    Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`,
    which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
-   Give the owner that address, and ask them to set its code, the one every app asks for, with `npm run set-access-code -- <app> <code> --channel beta`,
-   add the address as `<APP>_BETA_PAGE_URL` in the `beta` environment's secrets, beside its `ACCESS_CODE`,
+   Give the owner that address, and ask them for its code, the one every app asks for,
+   then run `npm run set-access-code -- <app> <code> --channel beta` yourself, which the owner approves when `.claude/settings.json` asks.
+   Ask the owner to add the address as `<APP>_BETA_PAGE_URL` in the `beta` environment's secrets, beside its `ACCESS_CODE`,
    add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
    The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
    and the owner adds its address as `<APP>_PAGE_URL`, beside the `production` environment's `ACCESS_CODE`,
