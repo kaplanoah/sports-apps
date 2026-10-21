@@ -49,7 +49,7 @@ paths:
   It refuses when the Worker already has one, since a new key would leave every account's email unfindable.
   The owner runs it once on each channel, once the service's Worker exists and the channel's token can edit it, before the service's first deploy there, which keeps it.
 - `npm run set-rp-id -- <domain>` names, in the accounts service's `RP_ID` secret, the site every app's passkeys belong to, with `--channel beta` for beta's.
-  It's a domain each app's `PAGE_HOST` on that channel is under, and each app hands the service its own page's origin.
+  It's a domain each app's `PAGE_HOST` on that channel is under, since the service checks each passkey against the origin of the caller's page.
   It never prints the domain, and refuses when the Worker already has one, since a passkey signs in only to the site it was made under.
   The owner picks the domain and runs it once on each channel, beside `set-email-key`; keep the domain out of the repo, as the page hosts are.
 - Until the accounts service has both secrets, its health says it isn't ok, naming the secret missing, and registration and sign-in refuse.

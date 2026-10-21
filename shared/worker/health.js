@@ -1,8 +1,8 @@
-// The Worker's health, for an uptime monitor. It answers without the page's key, so the monitor
-// holds no secret, and says only whether the Worker and its store answer. It asks the store once a
-// minute at most, however often it's hit, so a flood of requests costs the store no more than the
-// monitor does. It also says, apart from its own status, what each service it binds answers, as
-// often, since a service has no address of its own and the deploy checks it through the apps.
+// The Worker's health, for an uptime monitor: whether the Worker and its store answer, and, apart
+// from its own status, what each service it binds answers, since a service has no address of its
+// own and the deploy checks it through the apps. It answers without the page's key, so the monitor
+// holds no secret, and asks the store and each service once a minute at most, however often it's
+// hit, so a flood of requests costs them no more than the monitor does.
 import { SERVICES, nameServiceBinding } from "./services.js";
 import { abortAfter } from "./timeout.js";
 import { createReusedLoader } from "./upstream.js";
@@ -65,18 +65,12 @@ const askService = (binding) =>
  * @param {object} options
  * @param {(env: any) => Promise<boolean>} options.isStoreAnswering
  * @param {string | null} options.release the commit the Worker was built from
- * @param {string[]} [options.services] the services an app may bind
  * @param {() => number} [options.now]
  */
-export function createHealthServer({
-  isStoreAnswering,
-  release,
-  services = SERVICES,
-  now = Date.now,
-}) {
+export function createHealthServer({ isStoreAnswering, release, now = Date.now }) {
   const askStore = (env) => askInTime(() => isStoreAnswering(env)).catch(() => false);
   const checkStore = createReusedLoader(askStore, HEALTH_REUSE_MS, now);
-  const serviceChecks = services.map((service) => ({
+  const serviceChecks = SERVICES.map((service) => ({
     service,
     binding: nameServiceBinding(service),
     check: createReusedLoader(askService, HEALTH_REUSE_MS, now),

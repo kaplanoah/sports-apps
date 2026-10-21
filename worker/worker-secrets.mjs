@@ -10,6 +10,12 @@ import {
 } from "./deploy.mjs";
 
 /**
+ * Whether text names a host, like example.com, in lowercase and with no scheme or path.
+ * @param {string | undefined} text
+ */
+export const isHostName = (text) => Boolean(text) && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(text);
+
+/**
  * @param {object} options
  * @param {string} options.app
  * @param {string} [options.channel]
@@ -23,20 +29,38 @@ export function createSecretsClient({ app, channel, fetchImpl, env, log }) {
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const secretsUrl = `${base}/scripts/${name}/secrets`;
 
+  /** @returns {Promise<string[]>} */
+  const listSecretNames = async () =>
+    (await callCloudflare("secrets", secretsUrl, { method: "GET" })).map((secret) => secret.name);
+
+  /**
+   * @param {string} secretName
+   * @param {string} text
+   */
+  const putSecret = (secretName, text) =>
+    callCloudflare(secretName, secretsUrl, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: secretName, text, type: "secret_text" }),
+    });
+
+  /**
+   * Puts a secret that, once set, stays, refusing when the Worker already has it.
+   * @param {string} secretName
+   * @param {string} text
+   * @param {string} whyItStays
+   */
+  async function putLastingSecret(secretName, text, whyItStays) {
+    if ((await listSecretNames()).includes(secretName))
+      throw new Error(`The ${app} Worker already has an ${secretName}. ${whyItStays}`);
+    await putSecret(secretName, text);
+    log(`Set ${secretName} on the ${app} Worker.`);
+  }
+
   return {
-    /** @returns {Promise<string[]>} */
-    listSecretNames: async () =>
-      (await callCloudflare("secrets", secretsUrl, { method: "GET" })).map((secret) => secret.name),
-    /**
-     * @param {string} secretName
-     * @param {string} text
-     */
-    putSecret: (secretName, text) =>
-      callCloudflare(secretName, secretsUrl, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: secretName, text, type: "secret_text" }),
-      }),
+    listSecretNames,
+    putSecret,
+    putLastingSecret,
     /** @param {string} secretName */
     deleteSecret: (secretName) =>
       callCloudflare(secretName, `${secretsUrl}/${secretName}`, { method: "DELETE" }),

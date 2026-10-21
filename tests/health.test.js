@@ -132,6 +132,27 @@ test("an app whose service is down still reports itself healthy", async (context
   ]);
 });
 
+test("a service's problem is reported only while it isn't ok, and only as text", async () => {
+  const cases = [
+    [
+      { ok: true, release: "def5678", problem: "no RP_ID secret" },
+      { ok: true, release: "def5678" },
+    ],
+    [
+      { ok: false, release: "def5678", problem: 42 },
+      { ok: false, release: "def5678" },
+    ],
+  ];
+  for (const [answer, report] of cases) {
+    const { serveHealth } = createCountedHealth(async () => true);
+    const response = await serveHealth({
+      ...ENV,
+      ACCOUNTS: createCountedService(async () => answer),
+    });
+    assert.deepEqual((await response.json()).services.accounts, report);
+  }
+});
+
 test("each service is asked once a minute at most, however often health is hit", async () => {
   let at = 0;
   const accounts = createCountedService(async () => ({ ok: true, release: "def5678" }));

@@ -52,19 +52,30 @@ function readChallenge(response) {
 /** @param {Account} account */
 const listPasskeyKeys = (account) => Object.keys(account.passkeys).map(passkeyKey);
 
-const NO_RELYING_PARTY = { problem: "no-relying-party" };
+/**
+ * What every passkey call answers while the service lacks a secret it needs, or null once it has
+ * both.
+ * @param {{ emailSecret: string | undefined, relyingPartyId: string | undefined }} secrets
+ */
+function findMissingSecret({ emailSecret, relyingPartyId }) {
+  if (!emailSecret) return { problem: "no-email-key" };
+  if (!relyingPartyId) return { problem: "no-relying-party" };
+  return null;
+}
 
 // The site every app's passkeys belong to is the service's to name, so an app names only the
 // origin its own page is served from, and a passkey made on one app signs in on the others.
 /**
  * @param {{
  *   storage: AccountStorage,
- *   emailSecret: string,
+ *   emailSecret: string | undefined,
  *   relyingPartyId: string | undefined,
  *   now?: () => number,
  * }} options
  */
 export function createAccounts({ storage, emailSecret, relyingPartyId, now = Date.now }) {
+  const missingSecret = findMissingSecret({ emailSecret, relyingPartyId });
+
   /** @param {string} accountId @returns {Promise<Account | undefined>} */
   const readAccount = (accountId) => storage.get(accountKey(accountId));
 
@@ -95,7 +106,7 @@ export function createAccounts({ storage, emailSecret, relyingPartyId, now = Dat
    * @param {{ email: string, accountId?: string }} request
    */
   async function startRegistration({ email, accountId }) {
-    if (!relyingPartyId) return NO_RELYING_PARTY;
+    if (missingSecret) return missingSecret;
     if (!email?.trim()) return { problem: "needs-email" };
     const emailHash = await hashEmail(email, emailSecret);
     const account = accountId && (await readAccount(accountId));
@@ -127,7 +138,7 @@ export function createAccounts({ storage, emailSecret, relyingPartyId, now = Dat
 
   /** @param {{ origin: string, response: unknown }} request */
   async function finishRegistration({ origin, response }) {
-    if (!relyingPartyId) return NO_RELYING_PARTY;
+    if (missingSecret) return missingSecret;
     const taken = await takeChallenge(response, "register");
     if (!taken) return { problem: "no-challenge" };
     const { challenge, record } = taken;
@@ -178,7 +189,7 @@ export function createAccounts({ storage, emailSecret, relyingPartyId, now = Dat
 
   // Any passkey the phone holds for the site may answer, so sign-in names no account.
   async function startSignIn() {
-    if (!relyingPartyId) return NO_RELYING_PARTY;
+    if (missingSecret) return missingSecret;
     const options = await generateAuthenticationOptions({
       rpID: relyingPartyId,
       userVerification: "required",
@@ -189,7 +200,7 @@ export function createAccounts({ storage, emailSecret, relyingPartyId, now = Dat
 
   /** @param {{ origin: string, response: unknown }} request */
   async function finishSignIn({ origin, response }) {
-    if (!relyingPartyId) return NO_RELYING_PARTY;
+    if (missingSecret) return missingSecret;
     const taken = await takeChallenge(response, "sign-in");
     if (!taken) return { problem: "no-challenge" };
     // @ts-ignore a response is whatever the page sent

@@ -1,21 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setRelyingPartyId } from "../worker/set-rp-id.mjs";
+import { createFakeCloudflare } from "./fake-cloudflare.js";
 
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123" };
 const API = "https://api.cloudflare.com/client/v4/accounts/acct123/workers";
 const SITE = "example.test";
-
-function createFakeCloudflare({ secrets = [] } = {}) {
-  const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, init });
-    let result = {};
-    if (url.endsWith("/secrets") && init.method === "GET") result = secrets;
-    return new Response(JSON.stringify({ success: true, result }));
-  };
-  return { fetchImpl, calls };
-}
 
 test("the accounts Worker on each channel gets the site as its RP_ID, which is never printed", async () => {
   for (const channel of ["production", "beta"]) {

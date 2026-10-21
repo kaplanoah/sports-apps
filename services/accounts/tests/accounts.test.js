@@ -9,7 +9,7 @@ const RP_ID = "example.test";
 const ORIGIN = "https://example.test";
 const EMAIL = "Fan@Example.test";
 
-function createTestAccounts({ relyingPartyId } = { relyingPartyId: RP_ID }) {
+function createTestAccounts(secrets = {}) {
   const context = createDurableObjectContext();
   const clock = { now: Date.UTC(2026, 9, 21, 12) };
   const counts = {};
@@ -24,7 +24,8 @@ function createTestAccounts({ relyingPartyId } = { relyingPartyId: RP_ID }) {
   const accounts = createAccounts({
     storage,
     emailSecret: "test-secret",
-    relyingPartyId,
+    relyingPartyId: RP_ID,
+    ...secrets,
     now: () => clock.now,
   });
   return { accounts, context, clock, counts };
@@ -204,14 +205,19 @@ test("a passkey made on one app's page signs in on another's, under the one site
   );
 });
 
-test("with no site named, registration and sign-in refuse and store nothing", async () => {
-  const { accounts, context } = createTestAccounts({ relyingPartyId: undefined });
-  const refused = { problem: "no-relying-party" };
-  assert.deepEqual(await accounts.startRegistration({ email: EMAIL }), refused);
-  assert.deepEqual(await accounts.finishRegistration({ origin: ORIGIN, response: {} }), refused);
-  assert.deepEqual(await accounts.startSignIn(), refused);
-  assert.deepEqual(await accounts.finishSignIn({ origin: ORIGIN, response: {} }), refused);
-  assert.equal(context.stored.size, 0);
+test("without its email key or its site, registration and sign-in refuse and store nothing", async () => {
+  const missing = [
+    [{ emailSecret: undefined }, { problem: "no-email-key" }],
+    [{ relyingPartyId: undefined }, { problem: "no-relying-party" }],
+  ];
+  for (const [secrets, refused] of missing) {
+    const { accounts, context } = createTestAccounts(secrets);
+    assert.deepEqual(await accounts.startRegistration({ email: EMAIL }), refused);
+    assert.deepEqual(await accounts.finishRegistration({ origin: ORIGIN, response: {} }), refused);
+    assert.deepEqual(await accounts.startSignIn(), refused);
+    assert.deepEqual(await accounts.finishSignIn({ origin: ORIGIN, response: {} }), refused);
+    assert.equal(context.stored.size, 0);
+  }
 });
 
 test("the last passkey stays, and a removed one no longer signs in", async () => {

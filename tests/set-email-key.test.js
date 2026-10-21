@@ -1,20 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setEmailKey } from "../worker/set-email-key.mjs";
+import { createFakeCloudflare } from "./fake-cloudflare.js";
 
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123" };
 const API = "https://api.cloudflare.com/client/v4/accounts/acct123/workers";
-
-function createFakeCloudflare({ secrets = [] } = {}) {
-  const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, init });
-    let result = {};
-    if (url.endsWith("/secrets") && init.method === "GET") result = secrets;
-    return new Response(JSON.stringify({ success: true, result }));
-  };
-  return { fetchImpl, calls };
-}
 
 test("the accounts Worker gets a random email key, which is never printed", async () => {
   const keys = [];

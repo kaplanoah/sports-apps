@@ -11,14 +11,14 @@ import {
   readAccount,
   loadWorkerConfig,
 } from "./deploy.mjs";
-import { createSecretsClient } from "./worker-secrets.mjs";
+import { createSecretsClient, isHostName } from "./worker-secrets.mjs";
 
 const HOST_SECRET = "PAGE_HOST";
 const CODE_SECRET = "ACCESS_CODE";
 
 /** @param {string | undefined} host */
 function checkHost(host) {
-  if (!host || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host))
+  if (!isHostName(host))
     throw new Error("Name the page's address as a host, like mlb.example.com.");
 }
 

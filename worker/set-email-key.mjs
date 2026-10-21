@@ -24,14 +24,11 @@ export async function setEmailKey({
   log = console.log,
 }) {
   const secrets = createSecretsClient({ app: SERVICE, channel, fetchImpl, env, log });
-  // Every email kept is a hash under this key, so a new one would leave no email findable.
-  if ((await secrets.listSecretNames()).includes(SECRET_NAME))
-    throw new Error(
-      `The ${SERVICE} Worker already has an ${SECRET_NAME}. A new one would lose every account's ` +
-        "email, so it stays.",
-    );
-  await secrets.putSecret(SECRET_NAME, createEmailKey());
-  log(`Set ${SECRET_NAME} on the ${SERVICE} Worker.`);
+  await secrets.putLastingSecret(
+    SECRET_NAME,
+    createEmailKey(),
+    "Every email kept is a hash under it, so a new one would lose every account's email.",
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -2,15 +2,14 @@
 // each app's page host is under. It's never printed, so it stays out of the repo and the logs.
 import { fileURLToPath } from "node:url";
 import { readCommandLine } from "./channels.mjs";
-import { createSecretsClient } from "./worker-secrets.mjs";
+import { createSecretsClient, isHostName } from "./worker-secrets.mjs";
 
 const SECRET_NAME = "RP_ID";
 const SERVICE = "accounts";
 
 /** @param {string | undefined} relyingPartyId */
 function checkRelyingPartyId(relyingPartyId) {
-  if (!relyingPartyId || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(relyingPartyId))
-    throw new Error("Name the site as a domain, like example.com.");
+  if (!isHostName(relyingPartyId)) throw new Error("Name the site as a domain, like example.com.");
 }
 
 /**
@@ -30,13 +29,11 @@ export async function setRelyingPartyId({
 }) {
   checkRelyingPartyId(relyingPartyId);
   const secrets = createSecretsClient({ app: SERVICE, channel, fetchImpl, env, log });
-  if ((await secrets.listSecretNames()).includes(SECRET_NAME))
-    throw new Error(
-      `The ${SERVICE} Worker already has an ${SECRET_NAME}. Another would leave every passkey ` +
-        "unable to sign in, so it stays.",
-    );
-  await secrets.putSecret(SECRET_NAME, relyingPartyId);
-  log(`Set ${SECRET_NAME} on the ${SERVICE} Worker.`);
+  await secrets.putLastingSecret(
+    SECRET_NAME,
+    relyingPartyId,
+    "Another would leave every passkey unable to sign in, so it stays.",
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

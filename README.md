@@ -330,9 +330,9 @@ flash empty while it waits for its data.
 GitHub can deploy each Worker, each app's page included, after each merge: at once
 when the pull request's checks passed on exactly the code `main` now has, which
 is when it was up to date with `main` as it merged, and otherwise once the
-checks pass on `main`. First create each service's live Worker, named in its
-`wrangler.toml`, in Cloudflare's dashboard, since a token can be limited only to
-Workers that exist. Create each Worker from the **Hello World** starter, which
+checks pass on `main`. First create each app's live Worker, `<app>-app`, and
+each service's, named in its `wrangler.toml`, in Cloudflare's dashboard, since a
+token can be limited only to Workers that exist. Create each Worker from the **Hello World** starter, which
 the first deploy replaces, and leave **Protect with Cloudflare Access** off: the
 deploy checks each app's workers.dev address, and a service answers only its
 apps. Then, in the repo's **Settings > Environments**, create an
