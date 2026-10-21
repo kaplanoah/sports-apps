@@ -33,6 +33,10 @@ paths:
   - `.claude/hooks/context-limit.mjs` hands a session off to a fresh one as its context grows.
   - `.claude/hooks/install-packages.mjs` runs `npm ci` as a session starts when `node_modules` is out of date.
   - `.claude/hooks/check-push.mjs` runs lint, format, types, and dead code before each `git push`.
+- A session runs `deploy:api`, `rollback`, and each `set-` script itself, in the cloud environment that holds the Cloudflare token,
+  and the owner approves each when `.claude/settings.json` asks.
+  Never hand the owner one to run on their own computer, which has neither the token nor the account ID,
+  unless they ask to, as the README's "If they deploy it themselves" says.
 - `npm run rollback -- <worker>` puts an app's or a service's previous version back at all of its traffic and prints which commit was live and which is now.
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
@@ -47,11 +51,11 @@ paths:
   Keep the host out of the repo, as the Worker's own address is.
 - `npm run set-email-key` gives the accounts service the `EMAIL_KEY` secret it hashes each email under, made at random and never printed, with `-- --channel beta` for beta's.
   It refuses when the Worker already has one, since a new key would leave every account's email unfindable.
-  The owner runs it once on each channel, once the service's Worker exists and the channel's token can edit it, before the service's first deploy there, which keeps it.
+  Run it once on each channel, once the service's Worker exists and the channel's token can edit it, before the service's first deploy there, which keeps it.
 - `npm run set-rp-id -- <domain>` names, in the accounts service's `RP_ID` secret, the site every app's passkeys belong to, with `--channel beta` for beta's.
   It's a domain each app's `PAGE_HOST` on that channel is under, since the service checks each passkey against the origin of the caller's page.
   It never prints the domain, and refuses when the Worker already has one, since a passkey signs in only to the site it was made under.
-  The owner picks the domain and runs it once on each channel, beside `set-email-key`; keep the domain out of the repo, as the page hosts are.
+  The owner picks the domain; run it once on each channel, beside `set-email-key`; keep the domain out of the repo, as the page hosts are.
 - Until the accounts service has both secrets, its health says it isn't ok, naming the secret missing, and registration and sign-in refuse.
 - Mask, in anything a workflow logs or posts, what AGENTS.md's public-repo bullet keeps out of the repo,
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.

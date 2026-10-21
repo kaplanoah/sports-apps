@@ -1052,7 +1052,7 @@ test("the deploy job runs no package's install scripts or tests while it holds t
   assert.match(workflow, /timeout-minutes: \d+/);
 });
 
-test("project settings ask before any deploy but beta's or a key change, and deny running them any other way", () => {
+test("project settings ask before each change to a live Worker but beta's, and deny making it any other way", () => {
   const { permissions } = JSON.parse(readRepoFile(".claude/settings.json"));
   // A message to another of the owner's sessions changes nothing outside them, so a session a
   // session started reports to it without asking. A session opens an issue for a finding or bug it
@@ -1090,13 +1090,18 @@ test("project settings ask before any deploy but beta's or a key change, and den
   const scripts = Object.entries(JSON.parse(readRepoFile("package.json")).scripts);
   const liveScripts = scripts.flatMap(([name, command]) => {
     const [, file] = command.match(/NODE_USE_ENV_PROXY=1 node (worker\/[\w-]+\.mjs)/) ?? [];
-    return file ? [{ name, file, isAsked: name === "deploy:api" }] : [];
+    return file ? [{ name, file }] : [];
   });
   assert.ok(liveScripts.length > 1);
-  for (const { name, file, isAsked } of liveScripts) {
-    const rules = [`Bash(node ${file})`, `Bash(node ${file} *)`];
-    if (!isAsked) rules.push(`Bash(npm run ${name})`, `Bash(npm run ${name} *)`);
-    for (const rule of rules) assert.ok(permissions.deny.includes(rule), rule);
+  // An ask rule prompts even in auto mode, so the owner approves each change a session makes.
+  for (const { name, file } of liveScripts) {
+    for (const rule of [`Bash(node ${file})`, `Bash(node ${file} *)`]) {
+      assert.ok(permissions.deny.includes(rule), rule);
+    }
+    for (const rule of [`Bash(npm run ${name})`, `Bash(npm run ${name} *)`]) {
+      assert.ok(permissions.ask.includes(rule), rule);
+      assert.ok(!permissions.allow.includes(rule) && !permissions.deny.includes(rule), rule);
+    }
   }
 });
 
