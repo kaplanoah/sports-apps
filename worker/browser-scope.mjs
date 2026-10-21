@@ -9,7 +9,7 @@ import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listAppsWithBrowserTests } from "./apps.mjs";
-import { CONFIG_ONLY_FILES, isDocument, readAppFolder } from "./deploy-scope.mjs";
+import { CONFIG_ONLY_FILES, isDocument, readWorkerFolder } from "./deploy-scope.mjs";
 import { CI_WORKFLOW } from "./find-passed-ci.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 
@@ -74,7 +74,7 @@ const isUntested = (path, reached) =>
 export function listTestedApps(paths, { apps, reached }) {
   const tested = new Set();
   for (const path of paths.filter((changed) => !isUntested(changed, reached))) {
-    const app = readAppFolder(path);
+    const app = readWorkerFolder(path);
     for (const each of app ? [app] : apps) tested.add(each);
   }
   return apps.filter((app) => tested.has(app));

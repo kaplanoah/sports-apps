@@ -1,6 +1,6 @@
 // Decides whether main needs a deploy. Only when nothing but the docs, tests, and tooling listed
 // here changed since the live version does it skip one, so a new kind of file deploys until it
-// is listed. An app's own folder deploys only that app; anything outside apps/ deploys them all.
+// is listed. A Worker's own folder, an app's or a service's, deploys only that Worker; anything outside them deploys them all.
 // What the deploy runs, .github/workflows/deploy.yml and each script it runs and each module
 // those import, like worker/check-page.mjs, isn't listed: only a deploy shows that a change to
 // how the apps deploy still works. The beta claim's check is listed, since every push to beta
@@ -55,7 +55,7 @@ const SKIPPED_FILES = new Set([
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);
-const TEST_FOLDERS = [/^tests\//, /^apps\/[^/]+\/tests\//];
+const TEST_FOLDERS = [/^tests\//, /^(?:apps|services)\/[^/]+\/tests\//];
 // Claude Code's settings, hooks, rules, and skills, which only sessions run.
 const SESSION_FOLDER = /^\.claude\//;
 
@@ -76,17 +76,18 @@ const isSkipped = (path) =>
   isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path) || SESSION_FOLDER.test(path);
 
 /**
- * The app whose folder a path is in, or null for a path outside every app's.
+ * The Worker whose folder a path is in, an app's or a service's, or null for a path outside every
+ * Worker's.
  * @param {string} path
  */
-export const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
+export const readWorkerFolder = (path) => path.match(/^(?:apps|services)\/([^/]+)\//)?.[1] ?? null;
 
 /**
  * @param {string} path
  * @param {string} [app] with none, whether the path deploys any app
  */
 const isForApp = (path, app) => {
-  const folder = readAppFolder(path);
+  const folder = readWorkerFolder(path);
   return !app || !folder || folder === app;
 };
 

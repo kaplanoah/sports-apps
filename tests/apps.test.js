@@ -8,9 +8,9 @@ import {
   checkAppName,
   findPageRoot,
   listApps,
-  listAppsOrExit,
   listAppsWithBrowserTests,
-  listNamedApps,
+  listNamedWorkers,
+  listWorkersOrExit,
 } from "../worker/apps.mjs";
 
 test("an app is a folder under apps/ whose Worker has a wrangler.toml", () => {
@@ -81,17 +81,19 @@ test("a command takes only an app that exists, and says which ones do", () => {
   });
 });
 
-test("a command runs for the app it names, or for them all", () => {
-  assert.deepEqual(listNamedApps("wnba", ["mlb", "wnba"]), ["wnba"]);
-  assert.deepEqual(listNamedApps(undefined, ["mlb", "wnba"]), ["mlb", "wnba"]);
-  assert.throws(() => listNamedApps("nfl", ["mlb"]), { message: /^There's no app named nfl\./ });
+test("a command runs for the Worker it names, or for them all", () => {
+  assert.deepEqual(listNamedWorkers("wnba", ["mlb", "wnba"]), ["wnba"]);
+  assert.deepEqual(listNamedWorkers(undefined, ["mlb", "wnba"]), ["mlb", "wnba"]);
+  assert.throws(() => listNamedWorkers("nfl", ["mlb"]), {
+    message: /^There's no Worker named nfl\./,
+  });
 });
 
-test("a command naming an app that doesn't exist says so plainly and fails", () => {
+test("a command naming a Worker that doesn't exist says so plainly and fails", () => {
   const logged = [];
   const exits = [];
   const options = {
-    apps: ["mlb", "wnba"],
+    workers: ["mlb", "wnba"],
     log: (message) => {
       logged.push(message);
     },
@@ -99,8 +101,8 @@ test("a command naming an app that doesn't exist says so plainly and fails", () 
       exits.push(code);
     },
   };
-  assert.deepEqual(listAppsOrExit("mlb", options), ["mlb"]);
-  listAppsOrExit("nfl", options);
-  assert.deepEqual(logged, ["There's no app named nfl. The apps are: mlb, wnba."]);
+  assert.deepEqual(listWorkersOrExit("mlb", options), ["mlb"]);
+  listWorkersOrExit("nfl", options);
+  assert.deepEqual(logged, ["There's no Worker named nfl. The Workers are: mlb, wnba."]);
   assert.deepEqual(exits, [1]);
 });

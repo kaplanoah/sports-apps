@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { findAppRoot, listAppsOrExit } from "./apps.mjs";
+import { findWorkerRoot, listWorkersOrExit } from "./apps.mjs";
 import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
 import { checkAppPage } from "./check-page.mjs";
@@ -43,7 +43,7 @@ export function readWorkerConfig(toml, channel = "production") {
  */
 export const readAppWorkerConfig = (app, channel) =>
   readWorkerConfig(
-    readFileSync(new URL("worker/wrangler.toml", findAppRoot(app)), "utf8"),
+    readFileSync(new URL("worker/wrangler.toml", findWorkerRoot(app)), "utf8"),
     channel,
   );
 
@@ -560,7 +560,7 @@ export async function decideMovedOn({ commit, newer, channel }, readCiState) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { positionals, channel } = readCommandLineOrExit(process.argv.slice(2));
-  const apps = listAppsOrExit(positionals[0]);
+  const apps = listWorkersOrExit(positionals[0]);
   const { branch } = findChannel(channel);
   const { commit, newer } = readReleaseOrExit(channel);
   if (newer) {
