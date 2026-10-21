@@ -77,11 +77,10 @@
   Never start with `cd`, never join `cd` to a `git` command, and never pipe or chain after a command `.claude/settings.json` allows, like the beta force-push.
   When a command still asks, add it to the allow list in `.claude/settings.json` in the same PR if it's safe for any session to run, or say why it asks.
 - Refer to PRs by number, not branch.
-- Work decided but left for later goes in an issue, opened in the turn it's left out, as the `ship` skill says.
+- A finding left out of a PR, or a bug that isn't the PR's, goes in an issue, as the `ship` skill says; planned work doesn't.
 - Start every PR title with a type.
-  The squash merge carries it to `main`, where it sets the next version of each app it changes (the root's `worker/release.mjs`).
-  A PR that changes nothing an app's deploy counts (the root's `worker/deploy-scope.mjs`),
-  such as only its tests or other apps' folders, leaves that app's version alone.
+  The squash merge carries it to `main`, where it sets the next version of each app it changes,
+  and CI's `title` job checks it (`findTitleProblem` in the root's `worker/release.mjs`).
   Use `feat:` for something new to see or do (minor), `fix:` for fixes and polish (patch),
   `refactor:` for code the Worker runs with no visible change (patch),
   `build:` for dependencies, the build, and the deploy (patch),
@@ -184,15 +183,7 @@ When a step says to go back to an earlier step, continue in order from there.
 
 README and anything user-facing: be clear, direct, and concise.
 
-In this file, the rule files in `.claude/rules/`, the skills, and `REVIEW.md`,
-start each sentence on a line of its own, and break a long one after its commas,
-so two changes to one bullet touch different lines and rarely conflict.
-Keep each sentence to 60 words or fewer, and write a long catalog as a list.
-The root's `tests/agents-lines.test.js` checks the lines and the cap.
-Each rule file lists the `paths` it loads for, each matching a file in the repo, which the root's `tests/rule-files.test.js` checks.
-This file stays at 200 lines or fewer, since every session reads all of it,
-so a rule only some work needs goes in the rule file or skill for that work (the root's `tests/agents-lines.test.js`).
-
-On the pages, write how fans talk, not a league's official or press words:
-the playoffs in every app, never the postseason or a berth,
-and a league's own word only where its fans say it too, like the World Series, Opening Day, and extra innings.
+In this file, the rule files, the skills, and `REVIEW.md`, start each sentence on a line of its own,
+break a long one after its commas, keep each to 60 words or fewer, and write a long catalog as a list.
+Keep this file to 200 lines, so a rule only some work needs goes in its rule file or skill (the root's `tests/agents-lines.test.js`).
+Each rule file's `paths` match files in the repo (the root's `tests/rule-files.test.js`).

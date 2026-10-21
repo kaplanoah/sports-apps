@@ -14,6 +14,8 @@ import { describeError, respondError, respondJson } from "./responses.js";
 // details of the games pages have open, like a box score, read with each update while they need
 // it, and run work of its own beside the season's updates, like reading the news. The Worker, and
 // never the page, can add to a count a job keeps, like how often a sheet had to read the league.
+// Each update's status goes in `live/status`, and an update that fails is tried again after a wait
+// that grows with each failure in a row.
 
 /**
  * What a league's own work gets from the store: its documents, storage of its own under keys the

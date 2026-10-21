@@ -1,11 +1,12 @@
 // The page's asks to be added to the Home Screen, which only a phone's or tablet's browser shows:
 // the welcome over the whole screen that it opens on, until the viewer adds the page or goes on in
-// the browser, and the box at the top of settings, which keeps the steps. Modules run only once
-// all of them have loaded, so a welcome they drew would arrive over a page already painted. This
-// plain script loads in the head, and the page calls drawHomeScreenAsks() right after its
-// settings, before anything is painted, and it answers the welcome's own taps from then on, so they
-// work while the modules still load. home-screen.js runs Chrome's Install in both, and slides the
-// welcome closed as settings closes.
+// the browser, which keeps it closed on that device, and the box at the top of settings, which
+// keeps the steps. The welcome's numbered steps pick the theme the Home Screen icon takes and say
+// how to add the page there. Modules run only once all of them have loaded, so a welcome they drew
+// would arrive over a page already painted. This plain script loads in the head, and the page calls
+// drawHomeScreenAsks() right after its settings, before anything is painted, and it answers the
+// welcome's own taps from then on, so they work while the modules still load. home-screen.js runs
+// Chrome's Install in both, and slides the welcome closed as settings closes.
 
 /* global isOnHomeScreen, WELCOME_CLOSED_KEY -- from pick-theme.js */
 /* global checkPickedChoice, keepPickedAppearance, readPickedAppearance -- from pick-theme.js */

@@ -58,6 +58,8 @@ In order of what has mattered here.
    `worker/review-context.mjs`, `worker/review-state.mjs`, or `worker/rule-files.mjs`, and the modules they import, like `shared/page/escape-pattern.js`, or to a guard test,
    that lets less through is Important, naming what it no longer catches,
    since the pull request's own copy of them runs its review.
+   So is a change to `worker/review-git.mjs`, the reviewer's only command, that lets it run more,
+   naming what the reviewer could newly read or write.
    So is a change to the red-change gate that lets less through,
    its `gate`, `phone`, or `check` job in `.github/workflows/ci.yml`,
    `worker/red-change.mjs`, or `worker/red-change-styles.mjs`,
@@ -114,12 +116,7 @@ and a step posts what it confirmed or left unsure.
   for a security hole, or for a broken rule from AGENTS.md or a rule file;
   **Nit** for something worth fixing that doesn't block;
   **Pre-existing** for a problem in code the change didn't make worse.
-- An **Important** or **Unsure** finding is posted on its line, a thread of its own, or on its file when GitHub won't take the line.
-  A review's **Nit** and **Pre-existing** findings are posted together as a checklist, each item naming its file and line,
-  in one comment, or in more only past GitHub's limit on a comment's length, each on the first of its items' files GitHub takes.
-  Each checklist comment is one thread to answer and resolve.
-  A finding GitHub takes on no file goes in a comment in the pull request's conversation, which has no thread to resolve:
-  answer it with a reply in the conversation.
+- Each **Important** or **Unsure** finding gets a thread of its own, and the **Nit** and **Pre-existing** ones a checklist, as the root's `worker/post-review.mjs` posts them.
 - The numbered items above are never matters of taste:
   a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it.
 - Read the pull request's threads first.

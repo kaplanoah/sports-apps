@@ -24,7 +24,7 @@ export const nameNoCodeIssue = (app) => `The ${app.toUpperCase()} app asks for n
 
 /** @param {string} app @param {string} runUrl */
 const describeNoCode = (app, runUrl) =>
-  `The page opened without asking for its access code, so anyone with its address can open it. Give it its code again with \`npm run set-access-code -- ${app} <code>\`, or, if it's meant to be open, remove its code from the \`production\` environment's secrets.\n\nSee [the check's run](${runUrl}). This issue closes itself once the app asks for its code again, or no code is held for it.`;
+  `The page opened without asking for its access code, so anyone with its address can open it. Give it the code every app asks for again with \`npm run set-access-code -- ${app} <code>\`.\n\nSee [the check's run](${runUrl}). This issue closes itself once the app asks for its code again, or the \`production\` environment holds no \`ACCESS_CODE\`, which stops this check for every app.`;
 
 /**
  * @param {ReturnType<typeof createGitHub>} github

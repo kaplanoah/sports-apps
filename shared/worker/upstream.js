@@ -1,6 +1,7 @@
 import { abortAfter } from "./timeout.js";
 
-// Reading a league's own feeds, which every app's Worker does the same way.
+// Reading a league's own feeds, which every app's Worker does the same way, and reusing a recent
+// load.
 
 export const UPSTREAM_TIMEOUT_MS = 8000;
 

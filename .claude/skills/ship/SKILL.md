@@ -1,6 +1,6 @@
 ---
 name: ship
-description: "What the Shipping a change steps in AGENTS.md leave out: major bumps, issues for later work, the beta channel, red changes and phone-ok, CI's review and its failures, the deploy's log, and one thing a PR, stacked or not"
+description: "What the Shipping a change steps in AGENTS.md leave out: major bumps, issues for what's left out, the beta channel, red changes and phone-ok, CI's review and its failures, the deploy's log, and one thing a PR, stacked or not"
 ---
 
 # Shipping a change
@@ -9,18 +9,15 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## PR titles
 
-- A `!` after a type is major for every app the PR's deploy changes, through shared code too;
-  when only one app breaks, name it, as in `feat(mlb)!:`, and the others take the type's own bump.
-  A scope is only for that.
+- A `!` is major for every app the deploy changes, or only the one a scope names, as in `feat(mlb)!:` (`findScopeProblem` in the root's `worker/release.mjs`).
   A PR that mixes kinds takes the biggest bump.
-  CI's `title` job checks it.
 - Don't spend time curating commit history.
   Squash merges make it irrelevant.
 
 ## Issues
 
-- An issue holds one thing a PR could do, as AGENTS.md's step 12 says, decided but left for later, written so a session can build it with no other prompt.
-- Open one in the turn the work is left out: a finding step 12 leaves out of a PR, something the owner chose not to build yet, or a bug seen on beta that isn't this PR's.
+- An issue holds one thing a PR could do, as AGENTS.md's step 12 says, a finding or bug left out of a PR, written so a session can build it with no other prompt.
+- Open one in the turn the work is left out: a finding step 12 leaves out of a PR, or a bug that isn't this PR's, like one seen on beta.
   A finding declined as not worth its code gets no issue: the reply on its thread says why.
 - First search the open issues, and comment on one that already covers the work rather than open a second.
 - Write it under these headings:
@@ -112,24 +109,16 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 ## Step 7: what CI's review does
 
 - CI reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
-- CI's review splits the change into areas by what the files are about, each test with its code (the root's `worker/plan-review.mjs`),
-  and one reviewer an area looks for every item in `REVIEW.md`'s "What to look for" and lists every problem it finds.
-  Each area's reviewer reads the rule files whose `paths` match its files, as well as its diffs.
-  Each area's reviewer runs on its own (`.github/workflows/review-area.yml`), so no area waits on another's.
-  How the check across areas then confirms what they find, and how each finding is posted, is under "How to report" in the root's `REVIEW.md`.
-  The first review reads the whole change, and each review after it reads what changed since the last review that finished.
-  A review asked for on the head the last finished review read in full reads nothing,
-  and so does one whose pushes since change only what a merge of its base brings in.
-  Where that merge had conflicts git couldn't settle on its own, the review reads only how each was resolved.
-  The `review` job checks what each reviewer actually read and writes the summary comment "How to report" describes (the root's `worker/judge-review.mjs`).
-  It fails when any changed file went unread, or when a reviewer, the check across areas, or the posting step didn't finish, naming each,
-  a reviewer that left one of its area's rule files unread among them.
+  Each review after the first reads only what changed since the last one that finished (the root's `worker/plan-review.mjs` and `worker/judge-review.mjs`).
   If the summary names something it couldn't judge, tell the user.
-- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`, which shows each try's turns and tool calls.
-  If one stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
+- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`.
+  An area's `find` and `review-across` show the action's own errors but not each try's turns and tool calls, since they'd be public,
+  and `review-post` shows the errors of the root's `worker/post-review.mjs`.
+  If an area's `find` or `review-across` stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
   Otherwise don't reproduce it locally or re-run it: each reviewer already tried twice, and the check across areas once.
+  If `review-post` failed, re-run the failed jobs once yourself, since it starts no Claude and posts each finding only once.
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
-  where a review stalled, or a re-run that failed too.
+  an error from `worker/post-review.mjs`, like a GitHub API call that failed, or a re-run that failed too.
   `check` can't pass until the job does.
 
 ## Step 8: a red PR

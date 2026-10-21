@@ -658,6 +658,12 @@ test("a review of a push reads only what it changed", () => {
     index,
     /starts from git's conflict markers, so it shows how the conflict was resolved/,
   );
+  assert.ok(
+    index.includes(
+      "`node worker/review-git.mjs show --diff-merges=first-parent HEAD -- <path>` shows a file's whole change.",
+    ),
+    "a reviewer runs git only through worker/review-git.mjs",
+  );
   assert.deepEqual(JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")), plan);
   assert.match(readFileSync(join(folder, "stale-names.md"), "utf8"), /Nothing the change removed/);
 });

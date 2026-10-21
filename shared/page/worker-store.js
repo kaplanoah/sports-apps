@@ -1,4 +1,6 @@
 // The page's saved data, kept by the Worker that serves the page and pushed to it as it changes.
+// A page coming back with a drawing on the screen holds what the store sends until the update the
+// store brought forward is done, so it redraws once.
 import { reloadWhenSignedOut } from "./access.js";
 import { UPDATING_WAIT_MS } from "./catch-up-note.js";
 import { noteStep } from "./diagnostics.js";
