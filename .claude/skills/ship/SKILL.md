@@ -1,6 +1,6 @@
 ---
 name: ship
-description: "What the Shipping a change steps in AGENTS.md leave out: major bumps, issues for later work, the beta channel, red changes and phone-ok, CI's review and its failures, the deploy's log, and one thing a PR, stacked or not"
+description: "What the Shipping a change steps in AGENTS.md leave out: major bumps, issues for what's left out, the beta channel, red changes and phone-ok, CI's review and its failures, the deploy's log, and one thing a PR, stacked or not"
 ---
 
 # Shipping a change
@@ -16,8 +16,8 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Issues
 
-- An issue holds one thing a PR could do, as AGENTS.md's step 12 says, decided but left for later, written so a session can build it with no other prompt.
-- Open one in the turn the work is left out: a finding step 12 leaves out of a PR, something the owner chose not to build yet, or a bug seen on beta that isn't this PR's.
+- An issue holds one thing a PR could do, as AGENTS.md's step 12 says, a finding or bug left out of a PR, written so a session can build it with no other prompt.
+- Open one in the turn the work is left out: a finding step 12 leaves out of a PR, or a bug that isn't this PR's, like one seen on beta.
   A finding declined as not worth its code gets no issue: the reply on its thread says why.
 - First search the open issues, and comment on one that already covers the work rather than open a second.
 - Write it under these headings:
