@@ -1,6 +1,6 @@
-// Each app has a Worker per channel. Production deploys from main. Beta deploys from the beta
-// branch, so a change can be used on a phone before it merges, with its own store, key, and
-// address, from the environment of the same name in the app's wrangler.toml.
+// Each app and service has a Worker per channel. Production deploys from main. Beta deploys from
+// the beta branch, so a change can be used on a phone before it merges, with its own store, and
+// for an app its own key and address, from the environment of the same name in its wrangler.toml.
 import { parseArgs } from "node:util";
 
 /**

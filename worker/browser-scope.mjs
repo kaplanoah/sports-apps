@@ -1,15 +1,16 @@
 // Decides which apps' browser tests a change needs. A file the browser tests can't reach needs
 // none: the docs, the other workflows, the files that only configure the checks, and the tooling
 // and Node tests that no browser spec, helper, or the Playwright config imports. A file in an
-// app's own folder needs that app's, if it has any. Anything else needs every app's, so a new kind
-// of file runs them all until it's known.
+// app's own folder needs that app's, if it has any. Anything else needs every app's, a service's
+// folder too, since every app binds every service, and a new kind of file runs them all until
+// it's known.
 // Usage: git diff --name-only --no-renames <base> <head> | node worker/browser-scope.mjs, which
 // writes the apps to $GITHUB_OUTPUT as apps=<app> <app>.
 import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listAppsWithBrowserTests } from "./apps.mjs";
-import { CONFIG_ONLY_FILES, isDocument, readAppFolder } from "./deploy-scope.mjs";
+import { CONFIG_ONLY_FILES, isDocument } from "./deploy-scope.mjs";
 import { CI_WORKFLOW } from "./find-passed-ci.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 
@@ -18,7 +19,7 @@ const UNTESTED_FOLDERS = [/^\.claude\//, /^\.github\//, /^types\//];
 const IMPORTED_ONLY = [
   /^worker\/[^/]+\.mjs$/,
   /^tests\/.+\.m?js$/,
-  /^apps\/[^/]+\/tests\/[^/]+\.test\.js$/,
+  /^(?:apps|services)\/[^/]+\/tests\/[^/]+\.test\.js$/,
 ];
 // A static import, a re-export, a dynamic import, and an import for its side effects alone.
 const IMPORT = /(?:\bfrom|\bimport\s*\(?)\s*["']([^"']+)["']/g;
@@ -65,6 +66,9 @@ const isUntested = (path, reached) =>
   // CI's own workflow runs the browser tests, so a change to it runs them to show they still do.
   (path !== CI_WORKFLOW && UNTESTED_FOLDERS.some((folder) => folder.test(path))) ||
   (IMPORTED_ONLY.some((pattern) => pattern.test(path)) && !reached.has(path));
+
+/** @param {string} path */
+const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
 
 /**
  * The apps whose browser tests the changed files need, in order.

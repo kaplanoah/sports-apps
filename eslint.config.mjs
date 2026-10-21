@@ -72,7 +72,14 @@ const GENERIC_FUNCTION_NAMES = [
 }));
 
 export default [
-  { ignores: [".claude/worktrees/", "apps/*/worker/dist/", "apps/*/page/js/sortable.min.js"] },
+  {
+    ignores: [
+      ".claude/worktrees/",
+      "apps/*/worker/dist/",
+      "services/*/worker/dist/",
+      "apps/*/page/js/sortable.min.js",
+    ],
+  },
   js.configs.recommended,
   { rules: { "no-unused-vars": ["error", { ignoreRestSiblings: true }] } },
   { files: ["**/*.{js,mjs}"], languageOptions: { sourceType: "module", globals: globals.node } },
@@ -116,6 +123,7 @@ export default [
     files: [
       "apps/*/page/**/*.js",
       "apps/*/worker/src/**/*.js",
+      "services/*/worker/src/**/*.js",
       "shared/**/*.js",
       "worker/**/*.mjs",
     ],
@@ -212,13 +220,18 @@ export default [
     rules: { "no-unused-vars": ["error", { vars: "local" }] },
   },
   {
-    files: ["apps/*/worker/src/**/*.js", "shared/worker/**/*.js"],
+    files: ["apps/*/worker/src/**/*.js", "services/*/worker/src/**/*.js", "shared/worker/**/*.js"],
     languageOptions: { globals: { ...globals.serviceworker, WebSocketPair: "readonly" } },
   },
   {
     // Every answer the Worker and the tooling ask Claude for comes through requestClaude, which holds
     // it to a JSON schema, so none has to be picked out of prose.
-    files: ["apps/*/worker/src/**/*.js", "shared/worker/**/*.js", "worker/**/*.mjs"],
+    files: [
+      "apps/*/worker/src/**/*.js",
+      "services/*/worker/src/**/*.js",
+      "shared/worker/**/*.js",
+      "worker/**/*.mjs",
+    ],
     ignores: ["shared/worker/claude.js"],
     rules: {
       "no-restricted-syntax": [

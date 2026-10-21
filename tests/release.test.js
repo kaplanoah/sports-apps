@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findTitleProblem, readVersion } from "../worker/release.mjs";
+import { createServiceRoots } from "./service-roots.js";
 
 const BASELINE = "3cf716ccf7c056c3e598a7e4ce82c0c591ac210c";
 const NEW_APP_FIRST = "d".repeat(40);
@@ -158,6 +159,29 @@ test("an app with no baseline counts from 1.0.0 at the merge that added its fold
   assert.equal(readVersion("nhl", createGit(merges, NEW_APP_FIRST)), "1.1.0");
 });
 
+test("a service counts from 1.0.0 at the merge that added its folder, by the merges that change it", () => {
+  const { roots, remove } = createServiceRoots();
+  try {
+    const git = (args) => {
+      if (args[0] === "merge-base") return "";
+      if (args.includes("--format=%H")) {
+        assert.deepEqual(args.slice(-2), ["--", "services/accounts/"]);
+        return `${NEW_APP_FIRST}\n`;
+      }
+      assert.equal(args.at(-1), `${NEW_APP_FIRST}..HEAD`);
+      return [
+        ["fix: Tidy the baseball page (#132)", "apps/mlb/page/styles.css"],
+        ["feat: Save each app's choices (#133)", "services/accounts/worker/src/index.js"],
+      ]
+        .map(([subject, file]) => `\x1e${subject}\n\n${file}\n`)
+        .join("");
+    };
+    assert.equal(readVersion("accounts", git, { servicesRoot: roots.servicesRoot }), "1.1.0");
+  } finally {
+    remove();
+  }
+});
+
 test("without the baseline in HEAD's history, there's no version", () => {
   const git = (args) => {
     if (args[0] === "merge-base") throw new Error("not an ancestor");
@@ -226,18 +250,25 @@ test("a type that doesn't release can't mark a major change", () => {
   }
 });
 
-test("a major change may name the one app it breaks, among those it changes", () => {
+test("a major change may name the one Worker it breaks, among those it changes", () => {
   const files = ["apps/mlb/page/js/app.js", "shared/page/team-sheet.js"];
   for (const title of ["feat(mlb)!: Drop the old saved rankings", "fix(wnba)!: Drop a view"]) {
     assert.equal(findTitleProblem(title, files, APPS), null, title);
   }
   assert.equal(
     findTitleProblem("feat(nhl)!: Drop the old saved rankings", files, APPS),
-    "There's no app named nhl. The apps are: mlb, wnba.",
+    "There's no Worker named nhl. The Workers are: mlb, wnba.",
   );
   assert.equal(
     findTitleProblem("feat(wnba)!: Drop the old saved rankings", ["apps/mlb/page/js/app.js"], APPS),
     "This doesn't change what wnba's deploy runs, so it can't break wnba.",
+  );
+  const workers = ["accounts", ...APPS];
+  const serviceFiles = ["services/accounts/worker/src/index.js"];
+  assert.equal(findTitleProblem("feat(accounts)!: Drop a call", serviceFiles, workers), null);
+  assert.equal(
+    findTitleProblem("feat(mlb)!: Drop a call", serviceFiles, workers),
+    "This doesn't change what mlb's deploy runs, so it can't break mlb.",
   );
 });
 
@@ -249,10 +280,14 @@ test("a scope is only for a major change", () => {
   for (const { title, files } of cases) {
     assert.equal(
       findTitleProblem(title, files, APPS),
-      "A scope only names the one app a major change breaks, as in feat(mlb)!:. Drop (mlb).",
+      "A scope only names the one Worker a major change breaks, as in feat(mlb)!:. Drop (mlb).",
       title,
     );
   }
+  assert.equal(
+    findTitleProblem("fix(ci): Pin a check", [".github/workflows/ci.yml"], APPS),
+    "A scope only names the one Worker a major change breaks, as in feat(mlb)!:. Drop (ci).",
+  );
   assert.equal(
     findTitleProblem("docs(mlb)!: Explain versions", ["README.md"], APPS),
     "docs: doesn't release, so it can't mark a major change. Drop the !, or use feat:, fix:, refactor:, build:.",

@@ -1,6 +1,7 @@
 // Opens an app's live page as a phone does, signed in with its access code, and says whether it
 // drew what its store sent. CI runs the page against recorded data; this reaches what only the
 // live Worker has, like its secrets, its store, and what the league says today.
+import { waitFor } from "./check-timing.mjs";
 
 const DRAW_TIMEOUT_MS = 30 * 1000;
 const RELEASE_FOLDER = /\/release\/([^/]+)\//;
@@ -210,8 +211,6 @@ export function hideAddress(check, pageUrl) {
   );
   return { ...check, reason };
 }
-
-const waitFor = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 /**
  * Chromium, from CHROMIUM_PATH when it names one.

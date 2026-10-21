@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nameNoCodeIssue, nameOutageIssue, watchApps } from "../worker/watch-apps.mjs";
+import { readFileSync } from "node:fs";
+import {
+  nameNoCodeIssue,
+  nameOutageIssue,
+  nameServiceIssue,
+  watchApps,
+} from "../worker/watch-apps.mjs";
 
 const REPOSITORY = "owner/sports-apps";
 const RUN_URL = "https://github.com/owner/sports-apps/actions/runs/1";
@@ -26,14 +32,17 @@ function createFakeGitHub(openIssues) {
 /**
  * @param {Record<string, import("../worker/check-page.mjs").PageCheck>} checks by app
  * @param {any[]} [openIssues]
+ * @param {Record<string, import("../worker/check-service.mjs").ServiceCheck>} [serviceChecks] by service
  */
-async function watch(checks, openIssues = []) {
+async function watch(checks, openIssues = [], serviceChecks = {}) {
   const github = createFakeGitHub(openIssues);
   const lines = await watchApps({
     repository: REPOSITORY,
     runUrl: RUN_URL,
     apps: Object.keys(checks),
     checkApp: async (app) => checks[app],
+    services: Object.keys(serviceChecks),
+    checkServiceOf: async (service) => serviceChecks[service],
     fetchImpl: github.fetchImpl,
     env: { GH_TOKEN: "token" },
   });
@@ -170,5 +179,82 @@ test("a check that can't open a browser fails the watch's run, rather than passi
       env: { GH_TOKEN: "token" },
     }),
     /Executable doesn't exist/,
+  );
+});
+
+const SERVICE_ISSUE = { number: 9, title: nameServiceIssue("accounts") };
+/** @type {import("../worker/check-service.mjs").ServiceCheck} */
+const UNANSWERED = { status: "unanswered", reason: "mlb gets no answer from accounts" };
+
+test("a service that isn't answering the apps gets one issue, saying why and linking the run", async () => {
+  const { lines, writes } = await watch({}, [], { accounts: UNANSWERED });
+  assert.deepEqual(writes, [
+    {
+      method: "POST",
+      path: "/issues",
+      body: {
+        title: "The accounts service isn't answering",
+        body: `Asked through each app's health twice a minute apart, mlb gets no answer from accounts.\n\nSee [the check's run](${RUN_URL}). This issue closes itself once the service answers again.`,
+      },
+    },
+  ]);
+  assert.deepEqual(lines, ["accounts: not answering, mlb gets no answer from accounts; opened #7"]);
+
+  const still = await watch({}, [SERVICE_ISSUE], { accounts: UNANSWERED });
+  assert.deepEqual(still.writes, []);
+  assert.deepEqual(still.lines, [
+    "accounts: still not answering, mlb gets no answer from accounts; #9 is open",
+  ]);
+});
+
+test("a service that answers again says so on its issue and closes it, and one no app reaches warns", async () => {
+  const { lines, writes } = await watch({}, [SERVICE_ISSUE], {
+    accounts: { status: "answering" },
+  });
+  assert.deepEqual(
+    writes.map(({ method, path }) => `${method} ${path}`),
+    ["POST /issues/9/comments", "PATCH /issues/9"],
+  );
+  assert.deepEqual(writes[1].body, { state: "closed", state_reason: "completed" });
+  assert.deepEqual(lines, ["accounts: answers again, so #9 is closed"]);
+
+  const unchecked = await watch({}, [SERVICE_ISSUE], {
+    accounts: { status: "unchecked", reason: "no app reaches accounts yet" },
+  });
+  assert.deepEqual(unchecked.writes, []);
+  assert.deepEqual(unchecked.lines, [
+    "::warning::accounts: not checked, no app reaches accounts yet",
+  ]);
+});
+
+test("the watch asks each production app's health of each service", async () => {
+  const github = createFakeGitHub([]);
+  const asked = [];
+  /** @type {typeof fetch} */
+  const fetchImpl = async (url, init) => {
+    if (String(url).startsWith(API)) return github.fetchImpl(url, init);
+    asked.push(String(url));
+    return Response.json({ ok: true, services: { accounts: { ok: true, release: "abc1234" } } });
+  };
+  const lines = await watchApps({
+    repository: REPOSITORY,
+    runUrl: RUN_URL,
+    apps: [],
+    services: ["accounts"],
+    fetchImpl,
+    env: { GH_TOKEN: "token", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" },
+  });
+  assert.deepEqual(lines, ["accounts: answers"]);
+  assert.deepEqual(asked, [
+    "https://mlb-app.example-subdomain.workers.dev/health",
+    "https://wnba-app.example-subdomain.workers.dev/health",
+  ]);
+});
+
+test("the watch reads each app's address from the workers.dev subdomain the production environment holds", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/watch.yml", import.meta.url), "utf8");
+  assert.match(
+    workflow,
+    /CLOUDFLARE_WORKERS_SUBDOMAIN: \$\{\{ secrets\.CLOUDFLARE_WORKERS_SUBDOMAIN \}\}/,
   );
 });

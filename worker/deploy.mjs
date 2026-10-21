@@ -3,10 +3,12 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { findAppRoot, listAppsOrExit } from "./apps.mjs";
+import { findWorkerRoot, isService, listApps, listServices, listWorkersOrExit } from "./apps.mjs";
 import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
 import { checkAppPage } from "./check-page.mjs";
+import { checkService } from "./check-service.mjs";
+import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
 
@@ -28,22 +30,25 @@ export function readWorkerConfig(toml, channel = "production") {
     : topLevel;
   const name = readSetting(section, "name");
   const compatibilityDate = readSetting(topLevel, "compatibility_date");
-  if (!name || !compatibilityDate)
+  const storeClass = readSetting(toml, "class_name");
+  if (!name || !compatibilityDate || !storeClass)
     throw new Error(
       environment
-        ? `wrangler.toml needs compatibility_date, and an [env.${environment}] with a name`
-        : "wrangler.toml needs name and compatibility_date",
+        ? `wrangler.toml needs compatibility_date, its store's class_name, and an [env.${environment}] with a name`
+        : "wrangler.toml needs name, compatibility_date, and its store's class_name",
     );
-  return { name, compatibilityDate };
+  return { name, compatibilityDate, storeClass };
 }
 
 /**
- * @param {string} app
+ * The config of a Worker, an app's or a service's, on a channel.
+ * @param {string} worker
  * @param {string} [channel]
+ * @param {import("./apps.mjs").WorkerRoots} [roots]
  */
-export const readAppWorkerConfig = (app, channel) =>
+export const loadWorkerConfig = (worker, channel, roots) =>
   readWorkerConfig(
-    readFileSync(new URL("worker/wrangler.toml", findAppRoot(app)), "utf8"),
+    readFileSync(new URL("worker/wrangler.toml", findWorkerRoot(worker, roots)), "utf8"),
     channel,
   );
 
@@ -102,11 +107,6 @@ export function checkRelease(
 
 const NO_CREDENTIALS = new Set([9106, 1001]);
 
-const STORE_BINDING = {
-  type: "durable_object_namespace",
-  name: "STORE",
-  class_name: "SeasonStore",
-};
 // Counts each phone's tries at the access code. The namespace is the account's own number for
 // these counts, and each Worker keys its counts by its own address.
 const ACCESS_LIMIT_BINDING = {
@@ -115,11 +115,41 @@ const ACCESS_LIMIT_BINDING = {
   namespace_id: "2701",
   simple: { limit: 10, period: 60 },
 };
-// Cloudflare records the last tag applied and rejects an upload that repeats one.
-export const MIGRATIONS = [{ tag: "v1", new_sqlite_classes: ["SeasonStore"] }];
+// The version a service runs, as its upload's tag names it, which its health reports.
+const VERSION_BINDING = { type: "version_metadata", name: "VERSION" };
 
-export function listPendingMigrations(appliedTag) {
-  const pending = MIGRATIONS.slice(MIGRATIONS.findIndex(({ tag }) => tag === appliedTag) + 1);
+/**
+ * An app's binding to each service, named for it, to its Worker on the app's own channel.
+ * @param {string} channel
+ * @param {import("./apps.mjs").WorkerRoots} [roots]
+ */
+const listServiceBindings = (channel, roots) =>
+  listServices(roots?.servicesRoot).map((service) => ({
+    type: "service",
+    name: service.toUpperCase().replaceAll("-", "_"),
+    service: loadWorkerConfig(service, channel, roots).name,
+  }));
+
+/**
+ * @param {{ storeClass: string, isPageless: boolean, channel: string, roots?: import("./apps.mjs").WorkerRoots }} worker
+ */
+function listBindings({ storeClass, isPageless, channel, roots }) {
+  const store = { type: "durable_object_namespace", name: "STORE", class_name: storeClass };
+  if (isPageless) return [store, VERSION_BINDING];
+  return [store, ACCESS_LIMIT_BINDING, ...listServiceBindings(channel, roots)];
+}
+
+// Cloudflare records the last tag applied and rejects an upload that repeats one.
+/** @param {string} storeClass the Worker's Durable Object */
+export const listMigrations = (storeClass) => [{ tag: "v1", new_sqlite_classes: [storeClass] }];
+
+/**
+ * @param {string | undefined} appliedTag
+ * @param {string} storeClass
+ */
+export function listPendingMigrations(appliedTag, storeClass) {
+  const migrations = listMigrations(storeClass);
+  const pending = migrations.slice(migrations.findIndex(({ tag }) => tag === appliedTag) + 1);
   if (!pending.length) return null;
   return {
     old_tag: appliedTag,
@@ -265,9 +295,24 @@ export function createDeploymentsClient({ base, name, callCloudflare }) {
 }
 
 /**
+ * The app Workers on a channel, each with its address, where a service's health is read.
+ * @param {string} channel
+ * @param {string} subdomain The account's workers.dev subdomain.
+ * @param {import("./apps.mjs").WorkerRoots} [roots]
+ */
+export const listAppWorkers = (channel, subdomain, roots) =>
+  listApps(roots?.appsRoot).map((app) => ({
+    app,
+    url: formatWorkerUrl(loadWorkerConfig(app, channel, roots).name, subdomain),
+  }));
+
+/**
+ * Deploys a Worker. An app's answers at its workers.dev address, and its page has to draw. A
+ * service has no address, so it answers through the apps' health.
  * @param {object} options
- * @param {string} options.app The app whose Worker this is.
+ * @param {string} options.worker The app or service whose Worker this is.
  * @param {string} [options.channel] The channel whose Worker this is.
+ * @param {import("./apps.mjs").WorkerRoots} [options.roots] Where the apps and services are.
  * @param {string} options.script The bundled Worker to upload.
  * @param {string} [options.commit] The commit the bundle was built from, recorded on the version.
  * @param {(since: string) => string[] | null} [options.findChanges] Files changed since a commit.
@@ -278,11 +323,13 @@ export function createDeploymentsClient({ base, name, callCloudflare }) {
  * @param {typeof checkAppPage} [options.checkPage] Opens the new version's page.
  * @param {(commit: string, of: string) => boolean} [options.isEarlier] Whether a commit comes
  *   before another in main's history.
- * @returns {Promise<string | null>} the Worker's address, or null when nothing needed deploying
+ * @returns {Promise<string | null>} the app's address or the service's name, or null when nothing
+ *   needed deploying
  */
 export async function deploy({
-  app,
+  worker,
   channel = "production",
+  roots,
   script,
   commit,
   findChanges = listChangedFiles,
@@ -295,7 +342,8 @@ export async function deploy({
 }) {
   const account = readAccount(env);
   const subdomain = readWorkersSubdomain(env);
-  const { name, compatibilityDate } = readAppWorkerConfig(app, channel);
+  const { name, compatibilityDate, storeClass } = loadWorkerConfig(worker, channel, roots);
+  const isPageless = isService(worker, roots?.servicesRoot);
   const { isForcePushed } = findChannel(channel);
   const base = findWorkersApi(account);
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
@@ -323,7 +371,7 @@ export async function deploy({
       );
       return false;
     }
-    const { isNeeded, reason } = decideDeploy(findChanges(liveCommit), app);
+    const { isNeeded, reason } = decideDeploy(findChanges(liveCommit), worker);
     log(isNeeded ? reason : `::notice::${reason}`);
     return isNeeded;
   }
@@ -343,9 +391,11 @@ export async function deploy({
             main_module: "worker.mjs",
             compatibility_date: compatibilityDate,
             observability: { enabled: true, traces: { enabled: true } },
-            bindings: [STORE_BINDING, ACCESS_LIMIT_BINDING],
+            bindings: listBindings({ storeClass, isPageless, channel, roots }),
             keep_bindings: ["secret_text"],
-            ...(commit && { annotations: { "workers/message": commit } }),
+            ...(commit && {
+              annotations: { "workers/message": commit, "workers/tag": commit.slice(0, 7) },
+            }),
             ...(migrations && { migrations }),
           }),
         ],
@@ -382,7 +432,7 @@ export async function deploy({
   // A Worker can answer while its page throws or never draws, which a phone would show. A check
   // that itself fails is no proof the page draws.
   async function confirmPageDraws(previousVersions) {
-    const check = await checkPage({ app, channel, commit, env }).catch((error) => ({
+    const check = await checkPage({ app: worker, channel, commit, env }).catch((error) => ({
       status: /** @type {const} */ ("broken"),
       reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
     }));
@@ -396,39 +446,61 @@ export async function deploy({
       );
   }
 
-  async function enableWorkersDevRoute(previousVersions) {
+  // A service faces only the apps, through their bindings, so it has no address of its own.
+  async function setWorkersDevRoute(previousVersions) {
     try {
       await callCloudflare("workers.dev route", `${base}/scripts/${name}/subdomain`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ enabled: true, previews_enabled: false }),
+        body: JSON.stringify({ enabled: !isPageless, previews_enabled: false }),
       });
     } catch (error) {
       await restoreAfter(error instanceof Error ? error.message : String(error), previousVersions);
     }
   }
 
+  // Until an app's live version binds the service, as on the service's first deploy, no app
+  // reports it, and the Watch apps workflow is the first to read it.
+  async function confirmServiceAnswers(previousVersions) {
+    const check = await checkService({
+      service: worker,
+      apps: listAppWorkers(channel, subdomain, roots),
+      commit,
+      attempts: SERVICE_CHECK_ATTEMPTS,
+      pause,
+      fetchImpl,
+    });
+    if (check.status === "answering") log("health check: ok");
+    if (check.status === "unchecked") log(`::notice::health check: skipped, ${check.reason}`);
+    if (check.status === "unanswered")
+      await restoreAfter(
+        `The service didn't answer as the new version: ${check.reason}`,
+        previousVersions,
+      );
+  }
+
   const previousVersions = await findLiveVersions();
   if (!(await isDeployNeeded(previousVersions))) return null;
-  const migrations = listPendingMigrations(await readMigrationTag());
+  const migrations = listPendingMigrations(await readMigrationTag(), storeClass);
   await uploadWorker(migrations);
-  await enableWorkersDevRoute(previousVersions);
-  const url = formatWorkerUrl(name, subdomain);
-  await confirmWorkerAnswers(url, previousVersions);
-  await confirmPageDraws(previousVersions);
+  await setWorkersDevRoute(previousVersions);
+  const deployed = isPageless ? name : formatWorkerUrl(name, subdomain);
+  if (isPageless) {
+    await confirmServiceAnswers(previousVersions);
+  } else {
+    await confirmWorkerAnswers(deployed, previousVersions);
+    await confirmPageDraws(previousVersions);
+  }
   log("worker check: ok");
-  return url;
+  return deployed;
 }
 
 const CHECK_ATTEMPTS = 12;
+// An app may keep a service's answer for a minute, as its health keeps its store's.
+const SERVICE_CHECK_ATTEMPTS = 30;
 // A Worker's first workers.dev address can take minutes to resolve. A redeploy's already does, so
 // a slow answer there means a bad version to roll back.
 const FIRST_DEPLOY_CHECK_ATTEMPTS = 60;
-const CHECK_INTERVAL_MS = 5000;
-const CHECK_TIMEOUT_MS = 10000;
-
-const waitFor = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
 // The build names its commit in short form, and a version built from no known commit names none.
 /**
  * @param {Response} response
@@ -466,29 +538,48 @@ async function isWorkerAnswering(
   return false;
 }
 
-// Each line names its app, after any GitHub annotation that has to start it.
-/** @param {string} app */
-const createAppLog = (app) => (message) => {
+// Each line names its Worker, after any GitHub annotation that has to start it.
+/** @param {string} worker */
+const createWorkerLog = (worker) => (message) => {
   const [, annotation = "", text] = message.match(/^(::\w+::)?(.*)$/s);
-  console.log(`${annotation}${app}: ${text}`);
+  console.log(`${annotation}${worker}: ${text}`);
 };
 
 /**
- * Deploys every app at once. One app's failed deploy doesn't hold back the others; each puts its
- * own earlier version back.
- * @param {string[]} apps
- * @param {(app: string) => Promise<unknown>} deployApp
- * @param {(line: string) => void} [logError]
- * @returns {Promise<boolean>} whether every app deployed
+ * Deploys a group of Workers at once, and says whether every one deployed.
+ * @param {string[]} workers
+ * @param {(worker: string) => Promise<unknown>} deployWorker
+ * @param {(line: string) => void} logError
  */
-export async function deployApps(apps, deployApp, logError = console.error) {
-  const results = await Promise.allSettled(apps.map((app) => deployApp(app)));
+async function deployGroup(workers, deployWorker, logError) {
+  const results = await Promise.allSettled(workers.map((worker) => deployWorker(worker)));
   for (const [index, result] of results.entries()) {
     if (result.status === "fulfilled") continue;
     const { reason } = result;
-    logError(`${apps[index]}: ${reason instanceof Error ? reason.message : reason}`);
+    logError(`${workers[index]}: ${reason instanceof Error ? reason.message : reason}`);
   }
   return results.every((result) => result.status === "fulfilled");
+}
+
+/**
+ * Deploys every service at once, then every app at once, since an app's binding to a service needs
+ * the service to exist. One Worker's failed deploy doesn't hold back the others; each puts its own
+ * earlier version back.
+ * @param {string[]} workers
+ * @param {(worker: string) => Promise<unknown>} deployWorker
+ * @param {{ logError?: (line: string) => void, isServiceWorker?: (worker: string) => boolean }} [options]
+ * @returns {Promise<boolean>} whether every Worker deployed
+ */
+export async function deployWorkers(
+  workers,
+  deployWorker,
+  { logError = console.error, isServiceWorker = (worker) => isService(worker) } = {},
+) {
+  const services = workers.filter(isServiceWorker);
+  const apps = workers.filter((worker) => !isServiceWorker(worker));
+  const areServicesDeployed = await deployGroup(services, deployWorker, logError);
+  const areAppsDeployed = await deployGroup(apps, deployWorker, logError);
+  return areServicesDeployed && areAppsDeployed;
 }
 
 /** @param {string} channel */
@@ -560,7 +651,7 @@ export async function decideMovedOn({ commit, newer, channel }, readCiState) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { positionals, channel } = readCommandLineOrExit(process.argv.slice(2));
-  const apps = listAppsOrExit(positionals[0]);
+  const workers = listWorkersOrExit(positionals[0]);
   const { branch } = findChannel(channel);
   const { commit, newer } = readReleaseOrExit(channel);
   if (newer) {
@@ -569,14 +660,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (isCovered) process.exit(0);
   }
   console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
-  const isDeployed = await deployApps(apps, async (app) =>
+  /** @param {string} worker */
+  const deployWorker = async (worker) =>
     deploy({
-      app,
+      worker,
       channel,
-      script: await buildWorker(app, { channel }),
+      script: await buildWorker(worker, { channel }),
       commit,
-      log: createAppLog(app),
-    }),
-  );
-  if (!isDeployed) process.exit(1);
+      log: createWorkerLog(worker),
+    });
+  if (!(await deployWorkers(workers, deployWorker))) process.exit(1);
 }

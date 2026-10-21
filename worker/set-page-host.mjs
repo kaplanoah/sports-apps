@@ -9,7 +9,7 @@ import {
   createCloudflareCaller,
   findWorkersApi,
   readAccount,
-  readAppWorkerConfig,
+  loadWorkerConfig,
 } from "./deploy.mjs";
 import { createSecretsClient } from "./worker-secrets.mjs";
 
@@ -60,7 +60,7 @@ export async function setPageHost({
 
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const zones = await callCloudflare("zones", `${API}/zones?per_page=50`, { method: "GET" });
-  const { name } = readAppWorkerConfig(app, channel);
+  const { name } = loadWorkerConfig(app, channel);
   await callCloudflare("domain", `${findWorkersApi(readAccount(env))}/domains`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
