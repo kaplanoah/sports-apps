@@ -9,6 +9,7 @@ import {
 import { decodeClientDataJSON, isoBase64URL } from "@simplewebauthn/server/helpers";
 import { mergeChoices } from "./choices.js";
 import { hashEmail } from "./email-hash.js";
+import { listMissingSecrets } from "./secrets.js";
 
 export const CHALLENGE_LIFETIME_MS = 5 * 60 * 1000;
 const RELYING_PARTY_NAME = "Sports Apps";
@@ -53,14 +54,13 @@ function readChallenge(response) {
 const listPasskeyKeys = (account) => Object.keys(account.passkeys).map(passkeyKey);
 
 /**
- * What every passkey call answers while the service lacks a secret it needs, or null once it has
- * both.
- * @param {{ emailSecret: string | undefined, relyingPartyId: string | undefined }} secrets
+ * What each registration and sign-in call answers while the service lacks a secret it needs, or
+ * null once it has them all.
+ * @param {Record<string, unknown>} secrets
  */
-function findMissingSecret({ emailSecret, relyingPartyId }) {
-  if (!emailSecret) return { problem: "no-email-key" };
-  if (!relyingPartyId) return { problem: "no-relying-party" };
-  return null;
+function findRefusal(secrets) {
+  const [missing] = listMissingSecrets(secrets);
+  return missing ? { problem: missing.problem } : null;
 }
 
 // The site every app's passkeys belong to is the service's to name, so an app names only the
@@ -68,13 +68,13 @@ function findMissingSecret({ emailSecret, relyingPartyId }) {
 /**
  * @param {{
  *   storage: AccountStorage,
- *   emailSecret: string | undefined,
- *   relyingPartyId: string | undefined,
+ *   secrets: { EMAIL_KEY?: string, RP_ID?: string },
  *   now?: () => number,
  * }} options
  */
-export function createAccounts({ storage, emailSecret, relyingPartyId, now = Date.now }) {
-  const missingSecret = findMissingSecret({ emailSecret, relyingPartyId });
+export function createAccounts({ storage, secrets, now = Date.now }) {
+  const { EMAIL_KEY: emailSecret, RP_ID: relyingPartyId } = secrets;
+  const refusal = findRefusal(secrets);
 
   /** @param {string} accountId @returns {Promise<Account | undefined>} */
   const readAccount = (accountId) => storage.get(accountKey(accountId));
@@ -106,7 +106,7 @@ export function createAccounts({ storage, emailSecret, relyingPartyId, now = Dat
    * @param {{ email: string, accountId?: string }} request
    */
   async function startRegistration({ email, accountId }) {
-    if (missingSecret) return missingSecret;
+    if (refusal) return refusal;
     if (!email?.trim()) return { problem: "needs-email" };
     const emailHash = await hashEmail(email, emailSecret);
     const account = accountId && (await readAccount(accountId));
@@ -138,7 +138,7 @@ export function createAccounts({ storage, emailSecret, relyingPartyId, now = Dat
 
   /** @param {{ origin: string, response: unknown }} request */
   async function finishRegistration({ origin, response }) {
-    if (missingSecret) return missingSecret;
+    if (refusal) return refusal;
     const taken = await takeChallenge(response, "register");
     if (!taken) return { problem: "no-challenge" };
     const { challenge, record } = taken;
@@ -189,7 +189,7 @@ export function createAccounts({ storage, emailSecret, relyingPartyId, now = Dat
 
   // Any passkey the phone holds for the site may answer, so sign-in names no account.
   async function startSignIn() {
-    if (missingSecret) return missingSecret;
+    if (refusal) return refusal;
     const options = await generateAuthenticationOptions({
       rpID: relyingPartyId,
       userVerification: "required",
@@ -200,7 +200,7 @@ export function createAccounts({ storage, emailSecret, relyingPartyId, now = Dat
 
   /** @param {{ origin: string, response: unknown }} request */
   async function finishSignIn({ origin, response }) {
-    if (missingSecret) return missingSecret;
+    if (refusal) return refusal;
     const taken = await takeChallenge(response, "sign-in");
     if (!taken) return { problem: "no-challenge" };
     // @ts-ignore a response is whatever the page sent

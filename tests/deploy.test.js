@@ -1077,9 +1077,6 @@ test("project settings ask before any deploy but beta's or a key change, and den
     "Bash(npm run deploy)",
     "Bash(npx wrangler *)",
     "Bash(wrangler *)",
-    "Bash(node worker/deploy.mjs)",
-    "Bash(node worker/set-app-key.mjs)",
-    "Bash(node worker/rollback.mjs)",
     // A branch's name has no spaces, so this keeps the beta push from naming any other branch too.
     "Bash(git push -f origin * *:beta)",
     // A PR's number has no spaces, so each label edit can't carry another flag, like a phone-ok.
@@ -1089,6 +1086,17 @@ test("project settings ask before any deploy but beta's or a key change, and den
     "Bash(gh pr edit * * --remove-label beta-wait)",
   ]) {
     assert.ok(permissions.deny.includes(rule), rule);
+  }
+  const scripts = Object.entries(JSON.parse(readRepoFile("package.json")).scripts);
+  const liveScripts = scripts.flatMap(([name, command]) => {
+    const [, file] = command.match(/NODE_USE_ENV_PROXY=1 node (worker\/[\w-]+\.mjs)/) ?? [];
+    return file ? [{ name, file, isAsked: name === "deploy:api" }] : [];
+  });
+  assert.ok(liveScripts.length > 1);
+  for (const { name, file, isAsked } of liveScripts) {
+    const rules = [`Bash(node ${file})`, `Bash(node ${file} *)`];
+    if (!isAsked) rules.push(`Bash(npm run ${name})`, `Bash(npm run ${name} *)`);
+    for (const rule of rules) assert.ok(permissions.deny.includes(rule), rule);
   }
 });
 

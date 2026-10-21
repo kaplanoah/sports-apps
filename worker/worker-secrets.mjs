@@ -1,5 +1,5 @@
-// Reads and changes the secrets of an app's Worker on a channel through Cloudflare's API. Each change deploys the
-// Worker's live version again with the new secret.
+// Reads and changes the secrets of an app's or a service's Worker on a channel through Cloudflare's API, and checks
+// a host named for one. Each change deploys the Worker's live version again with the new secret.
 import {
   createCloudflareCaller,
   findWorkersApi,

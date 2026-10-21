@@ -5,11 +5,7 @@ import { readServiceHealth } from "./health.js";
 export class AccountStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.accounts = createAccounts({
-      storage: ctx.storage,
-      emailSecret: env.EMAIL_KEY,
-      relyingPartyId: env.RP_ID,
-    });
+    this.accounts = createAccounts({ storage: ctx.storage, secrets: env });
   }
 
   async isAnswering() {

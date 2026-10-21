@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 import { CHALLENGE_LIFETIME_MS, createAccounts } from "../worker/src/accounts.js";
 import { hashEmail } from "../worker/src/email-hash.js";
+import { readServiceHealth } from "../worker/src/health.js";
 import { createFakeAuthenticator } from "./fake-authenticator.js";
 
 const RP_ID = "example.test";
@@ -23,9 +24,7 @@ function createTestAccounts(secrets = {}) {
   });
   const accounts = createAccounts({
     storage,
-    emailSecret: "test-secret",
-    relyingPartyId: RP_ID,
-    ...secrets,
+    secrets: { EMAIL_KEY: "test-secret", RP_ID, ...secrets },
     now: () => clock.now,
   });
   return { accounts, context, clock, counts };
@@ -207,8 +206,8 @@ test("a passkey made on one app's page signs in on another's, under the one site
 
 test("without its email key or its site, registration and sign-in refuse and store nothing", async () => {
   const missing = [
-    [{ emailSecret: undefined }, { problem: "no-email-key" }],
-    [{ relyingPartyId: undefined }, { problem: "no-relying-party" }],
+    [{ EMAIL_KEY: undefined }, { problem: "no-email-key" }],
+    [{ RP_ID: undefined }, { problem: "no-relying-party" }],
   ];
   for (const [secrets, refused] of missing) {
     const { accounts, context } = createTestAccounts(secrets);
@@ -217,6 +216,19 @@ test("without its email key or its site, registration and sign-in refuse and sto
     assert.deepEqual(await accounts.startSignIn(), refused);
     assert.deepEqual(await accounts.finishSignIn({ origin: ORIGIN, response: {} }), refused);
     assert.equal(context.stored.size, 0);
+  }
+});
+
+test("the service's health is ok exactly when registration and sign-in don't refuse", async () => {
+  const cases = [{}, { EMAIL_KEY: undefined }, { RP_ID: undefined }, { EMAIL_KEY: "", RP_ID: "" }];
+  for (const secrets of cases) {
+    const { accounts } = createTestAccounts(secrets);
+    const health = await readServiceHealth({
+      env: { EMAIL_KEY: "test-secret", RP_ID, ...secrets },
+      isStoreAnswering: async () => true,
+    });
+    const { problem } = await accounts.startSignIn();
+    assert.equal(health.ok, !problem, JSON.stringify(secrets));
   }
 });
 
