@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readThemeToken } from "./css-rules.js";
+import { readPngPixels } from "./png-pixels.js";
 import {
   describeChannel,
   listNetworkLogos,
@@ -85,17 +86,56 @@ test("every logo is a PNG or a plain drawing: no scripts, links, or anything it 
   }
 });
 
-test("every dark drawing of a logo draws its cream in the WNBA's Walnut ink", () => {
-  const walnutInk = readThemeToken(
-    fileURLToPath(new URL("../apps/wnba/page/styles.css", import.meta.url)),
-    "dark",
-    "--ink",
+const WALNUT_INK = readThemeToken(
+  fileURLToPath(new URL("../apps/wnba/page/styles.css", import.meta.url)),
+  "dark",
+  "--ink",
+);
+
+/** @param {string} file */
+const listDrawingColors = (file) =>
+  new Set(
+    [
+      ...readFileSync(new URL(file, LOGO_FOLDER), "utf8").matchAll(
+        /(?:fill|stroke|stop-color)\s*[=:]\s*"?(#[0-9a-f]{3,6})/gi,
+      ),
+    ].map(([, color]) => color.toLowerCase()),
   );
-  for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.svg")))
-    assert.ok(
-      readFileSync(new URL(file, LOGO_FOLDER), "utf8").includes(`fill="${walnutInk}"`),
-      file,
-    );
+
+/** @param {number[]} pixel */
+const formatHex = (pixel) =>
+  `#${pixel
+    .slice(0, 3)
+    .map((channel) => channel.toString(16).padStart(2, "0"))
+    .join("")}`;
+
+/** @param {number[]} pixel */
+const isOpaque = (pixel) => pixel[3] === 255;
+
+/**
+ * A picture's most common color where it's opaque.
+ * @param {string} file
+ */
+function readMainColor(file) {
+  const counts = new Map();
+  for (const pixel of readPngPixels(new URL(file, LOGO_FOLDER)).filter(isOpaque)) {
+    const color = formatHex(pixel);
+    counts.set(color, (counts.get(color) ?? 0) + 1);
+  }
+  return [...counts].sort(([, first], [, second]) => second - first)[0][0];
+}
+
+test("every color a dark drawing of a logo adds to its light one is the WNBA's Walnut ink", () => {
+  for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.svg"))) {
+    const light = listDrawingColors(file.replace("-dark", ""));
+    const added = [...listDrawingColors(file)].filter((color) => !light.has(color));
+    assert.deepEqual(added, [WALNUT_INK], file);
+  }
+});
+
+test("every dark picture of a logo draws its cream, its main color, in the WNBA's Walnut ink", () => {
+  for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.png")))
+    assert.equal(readMainColor(file), WALNUT_INK, file);
 });
 
 test("the line of channels shows each logo, its dark version beside it, and names without one, apart by space alone", () => {

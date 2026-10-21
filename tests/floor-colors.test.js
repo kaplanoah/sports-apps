@@ -1,16 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { listApps } from "../worker/apps.mjs";
 import { readThemeToken } from "./css-rules.js";
-
-/**
- * @param {string} app
- * @param {string} name
- */
-const readPageFile = (app, name) =>
-  readFileSync(new URL(`../apps/${app}/page/${name}`, import.meta.url), "utf8");
+import { readRepoFile } from "./repo-files.js";
 
 /**
  * @param {string} app
@@ -28,7 +21,7 @@ const readFloor = (app, theme) =>
  * @param {string} name
  */
 const readMetaThemeColor = (app, name) =>
-  readPageFile(app, name).match(/<meta name="theme-color" content="([^"]+)"/)?.[1];
+  readRepoFile(`apps/${app}/page/${name}`).match(/<meta name="theme-color" content="([^"]+)"/)?.[1];
 
 test("every app colors the phone's bar each theme's floor", async () => {
   for (const app of listApps()) {
@@ -40,7 +33,7 @@ test("every app colors the phone's bar each theme's floor", async () => {
 
 test("every app's Home Screen app opens on its dark theme's floor", () => {
   for (const app of listApps()) {
-    const manifest = JSON.parse(readPageFile(app, "manifest.webmanifest"));
+    const manifest = JSON.parse(readRepoFile(`apps/${app}/page/manifest.webmanifest`));
     assert.equal(manifest.background_color, readFloor(app, "dark"), app);
     assert.equal(manifest.theme_color, readFloor(app, "dark"), app);
   }

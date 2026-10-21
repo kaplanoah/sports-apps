@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { TEAMS } from "../page/js/teams.js";
 import { readOklab } from "../../../shared/page/team-colors.js";
+import { readThemeToken } from "../../../tests/css-rules.js";
 
-const STYLES = readFileSync(`${import.meta.dirname}/../page/styles.css`, "utf8");
+const STYLES = fileURLToPath(new URL("../page/styles.css", import.meta.url));
 // What a number in a club's color needs to read, as WCAG asks of text its size, and how far past it
 // a color made lighter may go.
 const SMALLEST_CONTRAST = 4.5;
@@ -15,15 +16,6 @@ const BLACK_STAND_IN = "#e4e4e4";
 const WHITE_STAND_IN = "#6f6e6e";
 // A lightened color with less chroma than this, in OKLCH, reads as gray more than as the club's.
 const MUTED_CHROMA = 0.075;
-
-// Ball's colors are the page's own, and Night Game's redefine them where it's chosen.
-const NIGHT_GAME_BLOCK = STYLES.slice(STYLES.indexOf(':root[data-theme="dark"] {'));
-
-/**
- * @param {string} block
- * @param {string} token
- */
-const readToken = (block, token) => block.match(new RegExp(`${token}: (#[0-9a-f]{6});`))[1];
 
 /** @param {string} hex */
 function measureLuminance(hex) {
@@ -70,11 +62,11 @@ const isNearWhite = (hex) => measureLuminance(hex) > 0.9;
 const THEMES = {
   "Night Game": {
     readColors: (club) => club.chartColors,
-    surfaces: [readToken(NIGHT_GAME_BLOCK, "--card"), readToken(NIGHT_GAME_BLOCK, "--bg")],
+    surfaces: [readThemeToken(STYLES, "dark", "--card"), readThemeToken(STYLES, "dark", "--bg")],
   },
   Ball: {
     readColors: (club) => club.lightChartColors,
-    surfaces: [readToken(STYLES, "--card"), readToken(STYLES, "--bg")],
+    surfaces: [readThemeToken(STYLES, "light", "--card"), readThemeToken(STYLES, "light", "--bg")],
   },
 };
 
@@ -92,7 +84,7 @@ test("every club's two chart colors read as text on the sheet and the page, in e
 });
 
 test("each Ball chart color is one of the club's own colors, or its hue made only as dark as reading needs, or gray for white, first color first", () => {
-  const surface = readToken(STYLES, "--bg");
+  const surface = readThemeToken(STYLES, "light", "--bg");
   for (const [code, club] of Object.entries(TEAMS)) {
     const own = [club.color, club.color2];
     club.lightChartColors.forEach((color, index) => {
@@ -116,7 +108,7 @@ test("each Ball chart color is one of the club's own colors, or its hue made onl
 });
 
 test("each Night Game chart color is one of the club's own colors, or its hue made only as light as reading needs, or light gray for black", () => {
-  const surface = readToken(NIGHT_GAME_BLOCK, "--card");
+  const surface = readThemeToken(STYLES, "dark", "--card");
   for (const [code, club] of Object.entries(TEAMS)) {
     const own = [club.color, club.color2];
     for (const color of club.chartColors) {
