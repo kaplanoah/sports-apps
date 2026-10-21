@@ -6,7 +6,9 @@ import {
   WAIT_LABEL,
   checkBetaDeploy,
   decideBetaDeploy,
+  describePlan,
   findHolder,
+  formatTakenMessage,
   isReleased,
   listLine,
   planQueue,
@@ -57,6 +59,19 @@ const tell = (minute) => ({
   body: `${FREE_MESSAGE}\n\n<!-- beta-free -->`,
 });
 
+/**
+ * The comment that tells a pull request `holder` took beta before it claimed it, as the workflow
+ * posts it.
+ * @param {number} minute
+ * @param {number} holder
+ * @returns {TimelineEvent}
+ */
+const noteTaken = (minute, holder) => ({
+  event: "commented",
+  created_at: at(minute),
+  body: `${formatTakenMessage(holder)}\n\n<!-- beta-taken -->`,
+});
+
 /** @param {number} number */
 const nameHead = (number) => String(number).repeat(40).slice(0, 40);
 
@@ -103,6 +118,7 @@ const applyPlan = (pulls, plan, minute) =>
         .filter(({ number }) => number === pull.number)
         .map(({ label, isAdded }) => (isAdded ? addLabel : removeLabel)(label, minute)),
       ...(plan.told === pull.number ? [tell(minute)] : []),
+      ...(plan.taken === pull.number && plan.holder ? [noteTaken(minute, plan.holder)] : []),
     ];
     return { ...pull, events, labels: listLabels(events) };
   });
@@ -224,7 +240,7 @@ test("a run puts every holder and waiter right whatever event started it, a run 
   assert.equal(plan.told, null);
 
   const after = applyPlan(pulls, plan, 10);
-  assert.deepEqual(planQueue(after), { holder: 5, changes: [], told: null });
+  assert.deepEqual(planQueue(after), { holder: 5, changes: [], told: null, taken: null });
   assert.deepEqual(listLineNumbers(after), [4, 6]);
 });
 
@@ -237,6 +253,7 @@ test("a run that frees beta tells the next in line in the same run", () => {
     holder: null,
     changes: [{ number: 5, label: BETA_LABEL, isAdded: false }],
     told: 6,
+    taken: null,
   });
 });
 
@@ -305,6 +322,34 @@ test("a pull request put on beta now holds it, the one it replaced is last in li
   assert.equal(planQueue(pulls).told, 2);
 });
 
+test("a waiter told before another takes beta is told it stays first in line, once while that one holds it", () => {
+  let pulls = [createPull(2, [addLabel(WAIT_LABEL, 2), tell(5)]), createPull(3, [])];
+  // The owner puts #3 on beta now, before #2 claims it.
+  pulls = addEvents(pulls, 3, [addLabel(BETA_LABEL, 6)]);
+  const taken = planQueue(pulls);
+  assert.deepEqual(taken, { holder: 3, changes: [], told: null, taken: 2 });
+  pulls = applyPlan(pulls, taken, 7);
+  assert.equal(planQueue(pulls).taken, null, "not twice while #3 holds beta");
+  pulls = addEvents(pulls, 3, [addLabel("review", 8)]);
+  assert.equal(planQueue(pulls).taken, null, "not on a later run either");
+});
+
+test("a waiter told it stays first in line is told again once beta is free", () => {
+  const pulls = [
+    createPull(2, [addLabel(WAIT_LABEL, 2), tell(5), noteTaken(7, 3)]),
+    createPull(3, [addLabel(BETA_LABEL, 6)], { isOpen: false }),
+  ];
+  assert.equal(planQueue(pulls).told, 2);
+});
+
+test("a waiter told with no one taking beta since isn't told again while beta is free", () => {
+  const pulls = [
+    createPull(2, [addLabel(WAIT_LABEL, 2), tell(5), noteTaken(4, 3)]),
+    createPull(4, [addLabel(WAIT_LABEL, 3)]),
+  ];
+  assert.deepEqual(planQueue(pulls), { holder: null, changes: [], told: null, taken: null });
+});
+
 /**
  * A fake GitHub that answers from these pull requests and records each request.
  * @param {{ open: object[], closed: { number: number, pull_request: object, labels: { name: string }[] }[], timelines: Record<number, TimelineEvent[]>, missingLabels?: string[] }} state
@@ -367,6 +412,7 @@ test("a run adds and takes off one label at a time, comments to tell the next in
       { number: 8, label: WAIT_LABEL, isAdded: false },
     ],
     told: 6,
+    taken: null,
   });
   const writes = requests.filter(({ method }) => method !== "GET");
   assert.deepEqual(writes, [
@@ -390,6 +436,47 @@ test("a run adds and takes off one label at a time, comments to tell the next in
   assert.ok(
     !requests.some(({ path }) => path.startsWith("/issues/9/")),
     "an unlabeled one isn't read",
+  );
+});
+
+test("a run comments on a waiter told before another took beta that it stays first in line", async () => {
+  const { fetchImpl, requests } = createGitHubFake({
+    open: [createListedPull(5, [BETA_LABEL]), createListedPull(6, [WAIT_LABEL])],
+    closed: [],
+    timelines: {
+      5: [addLabel(BETA_LABEL, 3)],
+      6: [addLabel(WAIT_LABEL, 1), tell(2)],
+    },
+  });
+  const plan = await updateQueue({ repository: "owner/repo", fetchImpl, env: { GH_TOKEN: "t" } });
+  assert.deepEqual(plan, { holder: 5, changes: [], told: null, taken: 6 });
+  assert.deepEqual(
+    requests.filter(({ path }) => path.endsWith("/comments")),
+    [
+      {
+        method: "POST",
+        path: "/issues/6/comments",
+        body: {
+          body: "#5 took beta before this pull request claimed it, so it stays first in line.\n\n<!-- beta-taken -->",
+        },
+      },
+    ],
+  );
+});
+
+test("a run's log says whom it told beta is free, whom it told another took beta first, or that it told no one", () => {
+  const change = { number: 4, label: BETA_LABEL, isAdded: false };
+  assert.equal(
+    describePlan({ holder: null, changes: [change], told: 6, taken: null }),
+    "Beta is free.\nTook off beta on #4.\nTold #6 beta is free.",
+  );
+  assert.equal(
+    describePlan({ holder: 3, changes: [], told: null, taken: 2 }),
+    "#3 holds beta.\nTold #2 that #3 took beta first.",
+  );
+  assert.equal(
+    describePlan({ holder: 3, changes: [], told: null, taken: null }),
+    "#3 holds beta.\nTold no one.",
   );
 });
 
