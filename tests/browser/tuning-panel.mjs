@@ -83,7 +83,7 @@ const refuseCopies = (page) =>
 /**
  * Opens the app as beta serves it while a round is open, with the panel open.
  * @param {App} app
- * @param {object} [round]
+ * @param {import("../../shared/page/tuning-round.js").Round} [round]
  */
 async function openTuning({ page, app, openApp }, round = SAMPLE_ROUND) {
   await keepCopies(page);
