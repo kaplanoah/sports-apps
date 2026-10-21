@@ -45,10 +45,14 @@ paths:
   so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
   The address with the key keeps working as it was, and phones stay signed in there.
   Keep the host out of the repo, as the Worker's own address is.
+- `npm run set-email-key` gives the accounts service the `EMAIL_KEY` secret it hashes each email under, made at random and never printed, with `-- --channel beta` for beta's.
+  It refuses when the Worker already has one, since a new key would leave every account's email unfindable.
+  The owner runs it once on each channel, after the service's first deploy there.
 - Mask, in anything a workflow logs or posts, what AGENTS.md's public-repo bullet keeps out of the repo,
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.
 - A Worker's deploy is skipped when nothing but docs, tests, tooling,
   and other Workers' folders changed since its live version's commit; the root's `worker/deploy-scope.mjs` lists those files.
-  A service's `wrangler.toml` deploys every Worker, since each app binds the service by it, so adding, renaming, or removing one deploys them all.
   It skips the root's `.claude/` folder whole, so a new hook, rule, or skill needs no entry.
   When you add any other file that can't change the Worker, add it to that list.
+  A service's `wrangler.toml` deploys that service and every app, since each app binds the service by it,
+  so adding, renaming, or removing one deploys them, but no other service.

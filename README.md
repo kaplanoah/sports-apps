@@ -287,6 +287,11 @@ app's bundle to its `apps/<app>/worker/dist/`, which git ignores, if you want to
 look at it. The bundle records its version, the commit it was built from, and
 when, and the page's settings show them.
 
+A service is a Worker with no page, in `services/<name>/`, which the apps reach
+by a binding and the public never does. It's built, versioned, deployed, and
+rolled back as an app is. The `accounts` service keeps each account's passkeys
+and the choices it saves in each app, and knows an email only by a keyed hash.
+
 Code every app uses lives in `shared/`: the type roles every page's text takes,
 each app sizing and weighing them for its own fonts (`type.css`), the page's tab
 bar and settings sheet
@@ -304,12 +309,12 @@ Versions follow [semantic versioning](https://semver.org). Each pull request's
 title starts with a type: `feat:` for a new feature, `fix:`, `refactor:`, or
 `build:` for a patch, and `docs:`, `test:`, `ci:`, or `chore:` for changes that
 don't deploy. A `!` after a type that deploys, as in `feat!:`, marks a major
-change for every app it deploys; `feat(mlb)!:` makes it major for that app
-alone, and the others take the type's own bump. The build works out each app's
+change for each Worker it deploys; `feat(mlb)!:` makes it major for that Worker
+alone, and the others take the type's own bump. The build works out each Worker's
 version from these titles on `main`, so there are no tags to keep. A merge that
-changes nothing an app's deploy counts, like only its tests, docs, or other
-apps' folders, leaves that app's version alone. Each app counts on from a
-baseline version in `worker/release.mjs`; a new app starts at 1.0.0 with the
+changes nothing a Worker's deploy counts, like only its tests, docs, or other
+Workers' folders, leaves that Worker's version alone. Each Worker counts on from a
+baseline version in `worker/release.mjs`; a new one starts at 1.0.0 with the
 merge that adds its folder.
 
 Every deploy checks that the Worker answers afterward. If it doesn't, the
@@ -321,10 +326,12 @@ flash empty while it waits for its data.
 
 ### Deploying on merge
 
-GitHub can deploy each app's Worker, page included, after each merge: at once
+GitHub can deploy each Worker, each app's page included, after each merge: at once
 when the pull request's checks passed on exactly the code `main` now has, which
 is when it was up to date with `main` as it merged, and otherwise once the
-checks pass on `main`. In the repo's **Settings > Environments**, create an
+checks pass on `main`. First create each service's live Worker, named in its
+`wrangler.toml`, in Cloudflare's dashboard, since a token can be limited only to
+Workers that exist. Then, in the repo's **Settings > Environments**, create an
 environment named `production`, limit its deployment branches to `main`, and
 add:
 
@@ -366,7 +373,8 @@ answers again.
 Each deploy records its commit on the Worker's version. A merge skips a Worker's
 deploy when nothing but docs, tests, tooling, and other Workers' folders changed
 since its live version's commit, since its Worker would be the same, though a
-service's `wrangler.toml` deploys every app, which binds the service by it;
+service's `wrangler.toml` deploys that service and every app, which binds the
+service by it, but no other service;
 `worker/deploy-scope.mjs` lists those files. A merge that main has already moved past skips too
 once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
 CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
@@ -377,6 +385,12 @@ one app or service. `npm run rollback -- <worker>` puts its previous version bac
 of its traffic and prints which commit was live and which is now; it refuses
 when there's no earlier version. A rollback keeps the Worker's secrets as they
 are.
+
+After the `accounts` service's first deploy on a channel, give it the key it
+hashes each email under with `npm run set-email-key`, or
+`npm run set-email-key -- --channel beta` for beta's. It makes the key at random
+and never prints it, and refuses to replace one, since a new key would leave
+every account's email unfindable.
 
 ### Trying a change on the phone
 

@@ -2,6 +2,8 @@
 paths:
   - "apps/*/worker/**"
   - "shared/worker/**"
+  - "services/*/worker/**"
+  - "services/*/tests/**"
   - "apps/*/page/gate.html"
   - "apps/*/page/sw.js"
   - "shared/page/access.js"
@@ -26,6 +28,8 @@ paths:
   and so only while it has one (`findAppPrefix` in `shared/worker/app-worker.js`).
   `health` says whether the Worker and its store answer, 200 or 503 with the release's commit,
   so an uptime monitor can watch it without holding a secret, and asks the store once a minute at most however often it's hit (`shared/worker/health.js`).
+  It also says, under `services`, whether each service it binds answers and at which release, asked as seldom,
+  apart from its own status, so an app whose service is down still answers 200.
   An alarm in its Durable Object (`worker/src/season-updater.js`) keeps the current season's saved data up to date from the league,
   less often while no page has its socket open, and a page that opens brings the next update forward; the page only reads it.
   The store tells a page as its socket opens whether that update is coming, and tells every page when each update is done, even one that changed nothing.
@@ -74,3 +78,11 @@ paths:
   Fill past seasons a little at a time, newest first.
   A test counts the requests each run makes, as the WNBA's `tests/player-updater.test.js` does, so a change that reads more than it needs fails.
   The Worker reads the league on a tap only for what the store doesn't keep.
+- The `accounts` service (`services/accounts/`):
+  a Worker with no page or address, which each app reaches by its `ACCOUNTS` binding with RPC calls on its default export.
+  Its one Durable Object keeps each account under a random id, with only its passkeys, keyed hashes of its emails, and each app's choices.
+  It never keeps a name or an email as typed: an email is an HMAC under the service's own `EMAIL_KEY` secret (`worker/src/email-hash.js`).
+  A choice saved keeps its write time, and the latest write wins (`worker/src/choices.js`).
+  Its calls start and finish a passkey's registration and sign-in, read and save choices, remove a passkey, and delete the account,
+  and they check passkeys with `@simplewebauthn/server` (`worker/src/accounts.js`).
+  The logic takes the store's storage, so a Node test runs each call against a fake authenticator (`tests/fake-authenticator.js`).

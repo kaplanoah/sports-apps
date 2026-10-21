@@ -175,6 +175,7 @@ test("a check that can't open a browser fails the watch's run, rather than passi
       checkApp: async () => {
         throw new Error("browserType.launch: Executable doesn't exist");
       },
+      services: [],
       fetchImpl: github.fetchImpl,
       env: { GH_TOKEN: "token" },
     }),
