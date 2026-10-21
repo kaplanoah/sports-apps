@@ -242,7 +242,9 @@ test("a page that asks a server still on the last release for one of its files r
   await expect(findFinalWinner(page)).toContainText("Liberty");
   await expect(page.locator(".view.active")).toBeVisible();
   // The page forgets its reloads once every file has loaded, which can come after it draws.
-  await expect.poll(() => readReleaseReloads(page)).toBe(null);
+  await page.waitForFunction(() => sessionStorage.getItem("releaseReloads") === null, null, {
+    polling: 100,
+  });
   await page.clock.runFor(2000);
   expect(loads.page).toBe(2);
 });

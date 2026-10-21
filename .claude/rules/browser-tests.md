@@ -13,7 +13,8 @@ paths:
 # Browser tests
 
 - In a browser test, wait for what the page shows with `expect(locator)`,
-  and for what it keeps inside the page with `page.waitForFunction`, as the root's `tests/browser/at-rest.mjs` does for catching up,
+  for what it keeps inside the page with `page.waitForFunction`, as the root's `tests/browser/at-rest.mjs` does for catching up,
+  and for what the test counts, or what no locator reads, with `expect.poll`,
   never for a fixed time or for the network to go quiet; lint rejects `waitForTimeout`, `setTimeout`, and `networkidle`.
   An `expect.poll` over `page.evaluate` takes a trace snapshot each time it asks, which can take CI's WebKit seconds on a whole season's page,
   so it may ask only a few times before its timeout.
