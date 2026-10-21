@@ -14,8 +14,6 @@ export const CHALLENGE_LIFETIME_MS = 5 * 60 * 1000;
 const RELYING_PARTY_NAME = "Sports Apps";
 
 /**
- * @typedef {{ id: string, origin: string }} RelyingParty the site a passkey belongs to, as the
- * app's page is served
  * @typedef {{ publicKey: string, counter: number, transports?: string[] }} Passkey
  * @typedef {{
  *   passkeys: Record<string, Passkey>,
@@ -54,10 +52,19 @@ function readChallenge(response) {
 /** @param {Account} account */
 const listPasskeyKeys = (account) => Object.keys(account.passkeys).map(passkeyKey);
 
+const NO_RELYING_PARTY = { problem: "no-relying-party" };
+
+// The site every app's passkeys belong to is the service's to name, so an app names only the
+// origin its own page is served from, and a passkey made on one app signs in on the others.
 /**
- * @param {{ storage: AccountStorage, emailSecret: string, now?: () => number }} options
+ * @param {{
+ *   storage: AccountStorage,
+ *   emailSecret: string,
+ *   relyingPartyId: string | undefined,
+ *   now?: () => number,
+ * }} options
  */
-export function createAccounts({ storage, emailSecret, now = Date.now }) {
+export function createAccounts({ storage, emailSecret, relyingPartyId, now = Date.now }) {
   /** @param {string} accountId @returns {Promise<Account | undefined>} */
   const readAccount = (accountId) => storage.get(accountKey(accountId));
 
@@ -85,9 +92,10 @@ export function createAccounts({ storage, emailSecret, now = Date.now }) {
   /**
    * A new account's first passkey, under an email no account has, or another passkey for an
    * account, under one of its emails.
-   * @param {{ relyingParty: RelyingParty, email: string, accountId?: string }} request
+   * @param {{ email: string, accountId?: string }} request
    */
-  async function startRegistration({ relyingParty, email, accountId }) {
+  async function startRegistration({ email, accountId }) {
+    if (!relyingPartyId) return NO_RELYING_PARTY;
     if (!email?.trim()) return { problem: "needs-email" };
     const emailHash = await hashEmail(email, emailSecret);
     const account = accountId && (await readAccount(accountId));
@@ -97,7 +105,7 @@ export function createAccounts({ storage, emailSecret, now = Date.now }) {
     const id = accountId ?? createAccountId();
     const options = await generateRegistrationOptions({
       rpName: RELYING_PARTY_NAME,
-      rpID: relyingParty.id,
+      rpID: relyingPartyId,
       userName: email.trim(),
       userID: isoBase64URL.toBuffer(id),
       attestationType: "none",
@@ -117,8 +125,9 @@ export function createAccounts({ storage, emailSecret, now = Date.now }) {
     return { options };
   }
 
-  /** @param {{ relyingParty: RelyingParty, response: unknown }} request */
-  async function finishRegistration({ relyingParty, response }) {
+  /** @param {{ origin: string, response: unknown }} request */
+  async function finishRegistration({ origin, response }) {
+    if (!relyingPartyId) return NO_RELYING_PARTY;
     const taken = await takeChallenge(response, "register");
     if (!taken) return { problem: "no-challenge" };
     const { challenge, record } = taken;
@@ -128,8 +137,8 @@ export function createAccounts({ storage, emailSecret, now = Date.now }) {
         // @ts-ignore the library checks the response's shape
         response,
         expectedChallenge: challenge,
-        expectedOrigin: relyingParty.origin,
-        expectedRPID: relyingParty.id,
+        expectedOrigin: origin,
+        expectedRPID: relyingPartyId,
         requireUserVerification: true,
       });
     } catch {
@@ -168,18 +177,19 @@ export function createAccounts({ storage, emailSecret, now = Date.now }) {
   }
 
   // Any passkey the phone holds for the site may answer, so sign-in names no account.
-  /** @param {{ relyingParty: RelyingParty }} request */
-  async function startSignIn({ relyingParty }) {
+  async function startSignIn() {
+    if (!relyingPartyId) return NO_RELYING_PARTY;
     const options = await generateAuthenticationOptions({
-      rpID: relyingParty.id,
+      rpID: relyingPartyId,
       userVerification: "required",
     });
     await keepChallenge(options.challenge, { purpose: "sign-in" });
     return { options };
   }
 
-  /** @param {{ relyingParty: RelyingParty, response: unknown }} request */
-  async function finishSignIn({ relyingParty, response }) {
+  /** @param {{ origin: string, response: unknown }} request */
+  async function finishSignIn({ origin, response }) {
+    if (!relyingPartyId) return NO_RELYING_PARTY;
     const taken = await takeChallenge(response, "sign-in");
     if (!taken) return { problem: "no-challenge" };
     // @ts-ignore a response is whatever the page sent
@@ -194,8 +204,8 @@ export function createAccounts({ storage, emailSecret, now = Date.now }) {
         // @ts-ignore the library checks the response's shape
         response,
         expectedChallenge: taken.challenge,
-        expectedOrigin: relyingParty.origin,
-        expectedRPID: relyingParty.id,
+        expectedOrigin: origin,
+        expectedRPID: relyingPartyId,
         requireUserVerification: true,
         credential: {
           id: credentialId,

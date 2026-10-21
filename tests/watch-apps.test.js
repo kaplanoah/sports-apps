@@ -185,7 +185,7 @@ test("a check that can't open a browser fails the watch's run, rather than passi
 
 const SERVICE_ISSUE = { number: 9, title: nameServiceIssue("accounts") };
 /** @type {import("../worker/check-service.mjs").ServiceCheck} */
-const UNANSWERED = { status: "unanswered", reason: "mlb gets no answer from accounts" };
+const UNANSWERED = { status: "unanswered", reason: "mlb finds accounts not ok: no RP_ID secret" };
 
 test("a service that isn't answering the apps gets one issue, saying why and linking the run", async () => {
   const { lines, writes } = await watch({}, [], { accounts: UNANSWERED });
@@ -195,16 +195,18 @@ test("a service that isn't answering the apps gets one issue, saying why and lin
       path: "/issues",
       body: {
         title: "The accounts service isn't answering",
-        body: `Asked through each app's health twice a minute apart, mlb gets no answer from accounts.\n\nSee [the check's run](${RUN_URL}). This issue closes itself once the service answers again.`,
+        body: `Asked through each app's health twice a minute apart, mlb finds accounts not ok: no RP_ID secret.\n\nSee [the check's run](${RUN_URL}). This issue closes itself once the service answers again.`,
       },
     },
   ]);
-  assert.deepEqual(lines, ["accounts: not answering, mlb gets no answer from accounts; opened #7"]);
+  assert.deepEqual(lines, [
+    "accounts: not answering, mlb finds accounts not ok: no RP_ID secret; opened #7",
+  ]);
 
   const still = await watch({}, [SERVICE_ISSUE], { accounts: UNANSWERED });
   assert.deepEqual(still.writes, []);
   assert.deepEqual(still.lines, [
-    "accounts: still not answering, mlb gets no answer from accounts; #9 is open",
+    "accounts: still not answering, mlb finds accounts not ok: no RP_ID secret; #9 is open",
   ]);
 });
 

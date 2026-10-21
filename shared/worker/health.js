@@ -37,7 +37,17 @@ const giveUpOnAbort = (signal, ask) =>
  */
 const askInTime = (ask) => abortAfter(ANSWER_TIMEOUT_MS, (signal) => giveUpOnAbort(signal, ask));
 
-/** @typedef {{ ok: boolean, release: string | null }} ServiceHealth */
+/** @typedef {{ ok: boolean, release: string | null, problem?: string }} ServiceHealth */
+
+/**
+ * @param {any} health what the service answered
+ * @returns {ServiceHealth}
+ */
+function readServiceAnswer(health) {
+  const answer = { ok: health?.ok === true, release: health?.release ?? null };
+  if (answer.ok || typeof health?.problem !== "string") return answer;
+  return { ...answer, problem: health.problem };
+}
 
 /**
  * What a service says of itself through its binding, or that it didn't answer.
@@ -45,10 +55,11 @@ const askInTime = (ask) => abortAfter(ANSWER_TIMEOUT_MS, (signal) => giveUpOnAbo
  * @returns {Promise<ServiceHealth>}
  */
 const askService = (binding) =>
-  askInTime(() => binding.readHealth()).then(
-    (health) => ({ ok: health?.ok === true, release: health?.release ?? null }),
-    () => ({ ok: false, release: null }),
-  );
+  askInTime(() => binding.readHealth()).then(readServiceAnswer, () => ({
+    ok: false,
+    release: null,
+    problem: "it doesn't answer",
+  }));
 
 /**
  * @param {object} options

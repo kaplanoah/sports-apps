@@ -85,4 +85,7 @@ paths:
   A choice saved keeps its write time, and the latest write wins (`worker/src/choices.js`).
   Its calls start and finish a passkey's registration and sign-in, read and save choices, remove a passkey, and delete the account,
   and they check passkeys with `@simplewebauthn/server` (`worker/src/accounts.js`).
+  Every app's passkeys belong to the one site the service's `RP_ID` secret names, so a passkey made on one app signs in on the others,
+  and each app hands the finishing calls its own page's origin, from its `PAGE_HOST`, which the service trusts since only the apps' bindings reach it.
+  Its health says it isn't ok while it lacks `EMAIL_KEY` or `RP_ID`, naming the secret and never a value (`worker/src/health.js`).
   The logic takes the store's storage, so a Node test runs each call against a fake authenticator (`tests/fake-authenticator.js`).

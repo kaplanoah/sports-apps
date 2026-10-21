@@ -108,10 +108,11 @@ export async function createFakeAuthenticator({ rpId, origin }) {
     };
   }
 
-  /** @param {{ challenge: string }} options */
-  async function signIn(options) {
+  // A passkey signs in on any page under its site, and the phone names the page it's on.
+  /** @param {{ challenge: string }} options @param {{ origin?: string }} [page] */
+  async function signIn(options, { origin: pageOrigin = origin } = {}) {
     counter += 1;
-    const clientData = encodeClientData("webauthn.get", options.challenge, origin);
+    const clientData = encodeClientData("webauthn.get", options.challenge, pageOrigin);
     const authenticatorData = joinBytes([
       await hashText(rpId),
       new Uint8Array([SIGN_IN_FLAGS]),

@@ -44,7 +44,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   and in a tag beside the app's name, with the commit it runs and how long ago that went live (`shared/page/channel-tag.js`).
   A push to the `beta` branch deploys it at once, with the same checks and rollback as `main`'s deploy,
   but only when the pushed commit is the head of the PR that holds beta (the root's `worker/beta-claim.mjs`).
-  Each of `deploy:api`, `rollback`, `set-app-key`, `set-access-code`, and `set-page-host` takes `--channel beta`.
+  Each of `deploy:api`, `rollback`, `set-app-key`, `set-access-code`, `set-page-host`, `set-email-key`, and `set-rp-id` takes `--channel beta`.
 - Beta holds one PR at a time, while the owner tests it on the phone.
   A PR claims beta with the `beta` label, and of the open PRs labeled `beta`, the one labeled first holds it.
   A PR waiting for beta has the `beta-wait` label, and the one labeled first has waited longest.

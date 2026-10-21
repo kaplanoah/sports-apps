@@ -48,6 +48,11 @@ paths:
 - `npm run set-email-key` gives the accounts service the `EMAIL_KEY` secret it hashes each email under, made at random and never printed, with `-- --channel beta` for beta's.
   It refuses when the Worker already has one, since a new key would leave every account's email unfindable.
   The owner runs it once on each channel, after the service's first deploy there.
+- `npm run set-rp-id -- <domain>` names, in the accounts service's `RP_ID` secret, the site every app's passkeys belong to, with `--channel beta` for beta's.
+  It's a domain each app's `PAGE_HOST` on that channel is under, and each app hands the service its own page's origin.
+  It never prints the domain, and refuses when the Worker already has one, since a passkey signs in only to the site it was made under.
+  The owner picks the domain and runs it once on each channel, beside `set-email-key`; keep the domain out of the repo, as the page hosts are.
+- Until the accounts service has both secrets, its health says it isn't ok, naming the secret missing, and registration and sign-in refuse.
 - Mask, in anything a workflow logs or posts, what AGENTS.md's public-repo bullet keeps out of the repo,
   as `hideAddress` in the root's `worker/check-page.mjs` masks a check's reason.
 - A Worker's deploy is skipped when nothing but docs, tests, tooling,

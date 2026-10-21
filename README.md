@@ -392,6 +392,13 @@ hashes each email under with `npm run set-email-key`, or
 and never prints it, and refuses to replace one, since a new key would leave
 every account's email unfindable.
 
+Then name the site every app's passkeys belong to with
+`npm run set-rp-id -- <domain>`, or `npm run set-rp-id -- <domain> --channel beta`
+for beta's: a domain each app's page host on that channel is under. It never
+prints the domain, and refuses to replace one, since a passkey signs in only to
+the site it was made under. Until the service has both, its health says it isn't
+ok, and registration and sign-in refuse.
+
 ### Trying a change on the phone
 
 Each app also has a beta Worker, `<app>-app-beta`, named in the `[env.beta]` of

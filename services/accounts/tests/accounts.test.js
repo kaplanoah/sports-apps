@@ -5,10 +5,11 @@ import { CHALLENGE_LIFETIME_MS, createAccounts } from "../worker/src/accounts.js
 import { hashEmail } from "../worker/src/email-hash.js";
 import { createFakeAuthenticator } from "./fake-authenticator.js";
 
-const relyingParty = { id: "example.test", origin: "https://example.test" };
+const RP_ID = "example.test";
+const ORIGIN = "https://example.test";
 const EMAIL = "Fan@Example.test";
 
-function createTestAccounts() {
+function createTestAccounts({ relyingPartyId } = { relyingPartyId: RP_ID }) {
   const context = createDurableObjectContext();
   const clock = { now: Date.UTC(2026, 9, 21, 12) };
   const counts = {};
@@ -20,23 +21,27 @@ function createTestAccounts() {
         return target[name](...args);
       },
   });
-  const accounts = createAccounts({ storage, emailSecret: "test-secret", now: () => clock.now });
+  const accounts = createAccounts({
+    storage,
+    emailSecret: "test-secret",
+    relyingPartyId,
+    now: () => clock.now,
+  });
   return { accounts, context, clock, counts };
 }
 
-const createPasskey = () =>
-  createFakeAuthenticator({ rpId: relyingParty.id, origin: relyingParty.origin });
+const createPasskey = () => createFakeAuthenticator({ rpId: RP_ID, origin: ORIGIN });
 
 /** @param {ReturnType<typeof createAccounts>} accounts */
 async function registerAccount(accounts, passkey, email = EMAIL) {
-  const { options } = await accounts.startRegistration({ relyingParty, email });
-  return accounts.finishRegistration({ relyingParty, response: await passkey.register(options) });
+  const { options } = await accounts.startRegistration({ email });
+  return accounts.finishRegistration({ origin: ORIGIN, response: await passkey.register(options) });
 }
 
 /** @param {ReturnType<typeof createAccounts>} accounts */
 async function signIn(accounts, passkey) {
-  const { options } = await accounts.startSignIn({ relyingParty });
-  return accounts.finishSignIn({ relyingParty, response: await passkey.signIn(options) });
+  const { options } = await accounts.startSignIn();
+  return accounts.finishSignIn({ origin: ORIGIN, response: await passkey.signIn(options) });
 }
 
 test("a passkey registers an account and signs back in to it", async () => {
@@ -69,27 +74,27 @@ test("an email hashes the same however it's typed, and differently under another
 test("an email in use can't start another account", async () => {
   const { accounts } = createTestAccounts();
   await registerAccount(accounts, await createPasskey());
-  assert.deepEqual(await accounts.startRegistration({ relyingParty, email: " fan@example.TEST" }), {
+  assert.deepEqual(await accounts.startRegistration({ email: " fan@example.TEST" }), {
     problem: "email-taken",
   });
-  assert.deepEqual(await accounts.startRegistration({ relyingParty, email: " " }), {
+  assert.deepEqual(await accounts.startRegistration({ email: " " }), {
     problem: "needs-email",
   });
 });
 
 test("an email claimed while another registration was open isn't claimed twice", async () => {
   const { accounts } = createTestAccounts();
-  const first = await accounts.startRegistration({ relyingParty, email: EMAIL });
-  const second = await accounts.startRegistration({ relyingParty, email: EMAIL });
+  const first = await accounts.startRegistration({ email: EMAIL });
+  const second = await accounts.startRegistration({ email: EMAIL });
   const firstPasskey = await createPasskey();
   const secondPasskey = await createPasskey();
   await accounts.finishRegistration({
-    relyingParty,
+    origin: ORIGIN,
     response: await firstPasskey.register(first.options),
   });
   assert.deepEqual(
     await accounts.finishRegistration({
-      relyingParty,
+      origin: ORIGIN,
       response: await secondPasskey.register(second.options),
     }),
     { problem: "email-taken" },
@@ -100,22 +105,20 @@ test("an account adds a passkey under one of its emails, and either signs in", a
   const { accounts } = createTestAccounts();
   const first = await createPasskey();
   const { accountId } = await registerAccount(accounts, first);
-  assert.deepEqual(
-    await accounts.startRegistration({ relyingParty, email: "other@example.test", accountId }),
-    { problem: "not-account-email" },
-  );
-  assert.deepEqual(
-    await accounts.startRegistration({ relyingParty, email: EMAIL, accountId: "missing" }),
-    { problem: "no-account" },
-  );
-  const { options } = await accounts.startRegistration({ relyingParty, email: EMAIL, accountId });
+  assert.deepEqual(await accounts.startRegistration({ email: "other@example.test", accountId }), {
+    problem: "not-account-email",
+  });
+  assert.deepEqual(await accounts.startRegistration({ email: EMAIL, accountId: "missing" }), {
+    problem: "no-account",
+  });
+  const { options } = await accounts.startRegistration({ email: EMAIL, accountId });
   assert.deepEqual(
     options.excludeCredentials.map(({ id }) => id),
     [first.id],
   );
   const second = await createPasskey();
   assert.deepEqual(
-    await accounts.finishRegistration({ relyingParty, response: await second.register(options) }),
+    await accounts.finishRegistration({ origin: ORIGIN, response: await second.register(options) }),
     { accountId },
   );
   assert.deepEqual(await signIn(accounts, first), { accountId });
@@ -126,24 +129,24 @@ test("a challenge answers once, for its own purpose, and only before it expires"
   const { accounts, clock } = createTestAccounts();
   const passkey = await createPasskey();
   await registerAccount(accounts, passkey);
-  const { options } = await accounts.startSignIn({ relyingParty });
+  const { options } = await accounts.startSignIn();
   const response = await passkey.signIn(options);
-  assert.ok((await accounts.finishSignIn({ relyingParty, response })).accountId);
-  assert.deepEqual(await accounts.finishSignIn({ relyingParty, response }), {
+  assert.ok((await accounts.finishSignIn({ origin: ORIGIN, response })).accountId);
+  assert.deepEqual(await accounts.finishSignIn({ origin: ORIGIN, response }), {
     problem: "no-challenge",
   });
 
-  const late = await accounts.startSignIn({ relyingParty });
+  const late = await accounts.startSignIn();
   clock.now += CHALLENGE_LIFETIME_MS;
   assert.deepEqual(
-    await accounts.finishSignIn({ relyingParty, response: await passkey.signIn(late.options) }),
+    await accounts.finishSignIn({ origin: ORIGIN, response: await passkey.signIn(late.options) }),
     { problem: "no-challenge" },
   );
 
-  const signInChallenge = await accounts.startSignIn({ relyingParty });
+  const signInChallenge = await accounts.startSignIn();
   assert.deepEqual(
     await accounts.finishRegistration({
-      relyingParty,
+      origin: ORIGIN,
       response: await (
         await createPasskey()
       ).register({
@@ -153,7 +156,7 @@ test("a challenge answers once, for its own purpose, and only before it expires"
     }),
     { problem: "no-challenge" },
   );
-  assert.deepEqual(await accounts.finishSignIn({ relyingParty, response: { id: "x" } }), {
+  assert.deepEqual(await accounts.finishSignIn({ origin: ORIGIN, response: { id: "x" } }), {
     problem: "no-challenge",
   });
 });
@@ -163,21 +166,52 @@ test("a response from another site or an unknown passkey doesn't sign in", async
   const passkey = await createPasskey();
   await registerAccount(accounts, passkey);
   const elsewhere = await createFakeAuthenticator({
-    rpId: relyingParty.id,
+    rpId: RP_ID,
     origin: "https://elsewhere.test",
   });
-  const registration = await accounts.startRegistration({
-    relyingParty,
-    email: "new@example.test",
-  });
+  const registration = await accounts.startRegistration({ email: "new@example.test" });
   assert.deepEqual(
     await accounts.finishRegistration({
-      relyingParty,
+      origin: ORIGIN,
       response: await elsewhere.register(registration.options),
     }),
     { problem: "not-verified" },
   );
   assert.deepEqual(await signIn(accounts, elsewhere), { problem: "no-passkey" });
+});
+
+test("a passkey made on one app's page signs in on another's, under the one site", async () => {
+  const { accounts } = createTestAccounts();
+  const passkey = await createPasskey();
+  const { accountId } = await registerAccount(accounts, passkey);
+  const otherApp = "https://other.example.test";
+  const { options } = await accounts.startSignIn();
+  assert.equal(options.rpId, RP_ID);
+  assert.deepEqual(
+    await accounts.finishSignIn({
+      origin: otherApp,
+      response: await passkey.signIn(options, { origin: otherApp }),
+    }),
+    { accountId },
+  );
+  const again = await accounts.startSignIn();
+  assert.deepEqual(
+    await accounts.finishSignIn({
+      origin: ORIGIN,
+      response: await passkey.signIn(again.options, { origin: otherApp }),
+    }),
+    { problem: "not-verified" },
+  );
+});
+
+test("with no site named, registration and sign-in refuse and store nothing", async () => {
+  const { accounts, context } = createTestAccounts({ relyingPartyId: undefined });
+  const refused = { problem: "no-relying-party" };
+  assert.deepEqual(await accounts.startRegistration({ email: EMAIL }), refused);
+  assert.deepEqual(await accounts.finishRegistration({ origin: ORIGIN, response: {} }), refused);
+  assert.deepEqual(await accounts.startSignIn(), refused);
+  assert.deepEqual(await accounts.finishSignIn({ origin: ORIGIN, response: {} }), refused);
+  assert.equal(context.stored.size, 0);
 });
 
 test("the last passkey stays, and a removed one no longer signs in", async () => {
@@ -188,8 +222,8 @@ test("the last passkey stays, and a removed one no longer signs in", async () =>
     problem: "last-passkey",
   });
   const second = await createPasskey();
-  const { options } = await accounts.startRegistration({ relyingParty, email: EMAIL, accountId });
-  await accounts.finishRegistration({ relyingParty, response: await second.register(options) });
+  const { options } = await accounts.startRegistration({ email: EMAIL, accountId });
+  await accounts.finishRegistration({ origin: ORIGIN, response: await second.register(options) });
   assert.deepEqual(await accounts.removePasskey({ accountId, credentialId: first.id }), {
     removed: first.id,
   });
@@ -250,11 +284,11 @@ test("each app's choices stay apart, and the one made last wins", async () => {
 
 test("the alarm sweeps challenges never answered and comes back for the next", async () => {
   const { accounts, context, clock } = createTestAccounts();
-  await accounts.startSignIn({ relyingParty });
+  await accounts.startSignIn();
   const firstExpiry = clock.now + CHALLENGE_LIFETIME_MS;
   assert.equal(context.alarm.at, firstExpiry);
   clock.now += 60_000;
-  await accounts.startSignIn({ relyingParty });
+  await accounts.startSignIn();
   clock.now = firstExpiry;
   await accounts.sweepChallenges();
   assert.equal([...context.stored.keys()].length, 1);

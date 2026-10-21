@@ -26,7 +26,8 @@
     "set-app-key": "NODE_USE_ENV_PROXY=1 node worker/set-app-key.mjs",
     "set-access-code": "NODE_USE_ENV_PROXY=1 node worker/set-access-code.mjs",
     "set-page-host": "NODE_USE_ENV_PROXY=1 node worker/set-page-host.mjs",
-    "set-email-key": "NODE_USE_ENV_PROXY=1 node worker/set-email-key.mjs"
+    "set-email-key": "NODE_USE_ENV_PROXY=1 node worker/set-email-key.mjs",
+    "set-rp-id": "NODE_USE_ENV_PROXY=1 node worker/set-rp-id.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

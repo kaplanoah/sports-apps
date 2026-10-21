@@ -1,10 +1,15 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { createAccounts } from "./accounts.js";
+import { readServiceHealth } from "./health.js";
 
 export class AccountStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.accounts = createAccounts({ storage: ctx.storage, emailSecret: env.EMAIL_KEY });
+    this.accounts = createAccounts({
+      storage: ctx.storage,
+      emailSecret: env.EMAIL_KEY,
+      relyingPartyId: env.RP_ID,
+    });
   }
 
   async isAnswering() {
@@ -24,8 +29,8 @@ export class AccountStore extends DurableObject {
     return this.accounts.finishRegistration(request);
   }
 
-  startSignIn(request) {
-    return this.accounts.startSignIn(request);
+  startSignIn() {
+    return this.accounts.startSignIn();
   }
 
   finishSignIn(request) {
@@ -54,11 +59,11 @@ const findStore = (env) => env.STORE.get(env.STORE.idFromName("accounts"));
 
 // What each app's binding can ask, each answered by the store.
 export default class Accounts extends WorkerEntrypoint {
-  async readHealth() {
-    const ok = await findStore(this.env)
-      .isAnswering()
-      .catch(() => false);
-    return { ok, release: this.env.VERSION?.tag ?? null };
+  readHealth() {
+    return readServiceHealth({
+      env: this.env,
+      isStoreAnswering: () => findStore(this.env).isAnswering(),
+    });
   }
 
   startRegistration(request) {
@@ -69,8 +74,8 @@ export default class Accounts extends WorkerEntrypoint {
     return findStore(this.env).finishRegistration(request);
   }
 
-  startSignIn(request) {
-    return findStore(this.env).startSignIn(request);
+  startSignIn() {
+    return findStore(this.env).startSignIn();
   }
 
   finishSignIn(request) {

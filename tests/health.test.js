@@ -107,6 +107,7 @@ test("an app whose service is down still reports itself healthy", async (context
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const cases = [
     async () => ({ ok: false, release: "def5678" }),
+    async () => ({ ok: false, release: "def5678", problem: "no RP_ID secret" }),
     async () => {
       throw new Error("The service threw");
     },
@@ -125,8 +126,9 @@ test("an app whose service is down still reports itself healthy", async (context
 
   assert.deepEqual(reports, [
     { ok: false, release: "def5678" },
-    { ok: false, release: null },
-    { ok: false, release: null },
+    { ok: false, release: "def5678", problem: "no RP_ID secret" },
+    { ok: false, release: null, problem: "it doesn't answer" },
+    { ok: false, release: null, problem: "it doesn't answer" },
   ]);
 });
 
