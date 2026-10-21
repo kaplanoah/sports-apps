@@ -33,7 +33,7 @@ export const TEAMS = {
     color2: "#ffd520",
     dotSplit: 51,
     chartColors: { light: ["#186099", "#6f5b01"], dark: ["#4d90cd", "#ffd520"] },
-    markColors: { light: "#4588c5", dark: "#4d90cd" },
+    markColors: { light: "#4d90cd", dark: "#4d90cd" },
     titles: [2021],
   },
   CON: {
@@ -45,7 +45,7 @@ export const TEAMS = {
     color2: "#0a2240",
     dotSplit: 49,
     chartColors: { light: ["#ae2d00", "#0a2240"], dark: ["#f45427", "#708cb1"] },
-    markColors: { light: "#eb4c1d", dark: "#f05023" },
+    markColors: { light: "#f05023", dark: "#f05023" },
     titles: [],
   },
   DAL: {
@@ -57,7 +57,7 @@ export const TEAMS = {
     color2: "#c4d600",
     dotSplit: 52,
     chartColors: { light: ["#5a6200", "#002b5c"], dark: ["#c4d600", "#618dc6"] },
-    markColors: { light: "#7f8b00", dark: "#c4d600" },
+    markColors: { light: "#89951a", dark: "#c4d600" },
     titles: [2003, 2006, 2008],
     titlesAs: "Detroit Shock",
   },
@@ -70,7 +70,7 @@ export const TEAMS = {
     color2: "#000000",
     dotSplit: 48,
     chartColors: { light: ["#6f4f88", "#000000"], dark: ["#b896d4", "#e4e4e4"] },
-    markColors: { light: "#9876b2", dark: "#b896d4" },
+    markColors: { light: "#a380bd", dark: "#b896d4" },
     titles: [],
   },
   IND: {
@@ -130,7 +130,7 @@ export const TEAMS = {
     color2: "#100f0d",
     dotSplit: 48,
     chartColors: { light: ["#11694d", "#100f0d"], dark: ["#87d5b5", "#e4e4e4"] },
-    markColors: { light: "#449274", dark: "#87d5b5" },
+    markColors: { light: "#4f9c7e", dark: "#87d5b5" },
     titles: [2024],
   },
   PDX: {
@@ -142,7 +142,7 @@ export const TEAMS = {
     color2: "#ffffff",
     dotSplit: 52,
     chartColors: { light: ["#bb0127", "#5c5c5c"], dark: ["#f74c54", "#ffffff"] },
-    markColors: { light: "#c8102e", dark: "#d11f35" },
+    markColors: { light: "#c8102e", dark: "#ce1b33" },
     titles: [],
   },
   PHX: {
@@ -154,7 +154,7 @@ export const TEAMS = {
     color2: "#3c286e",
     dotSplit: 50,
     chartColors: { light: ["#aa2f02", "#3c286e"], dark: ["#fa4b0a", "#8f7fcd"] },
-    markColors: { light: "#f14501", dark: "#fa4b0a" },
+    markColors: { light: "#fa4b0a", dark: "#fa4b0a" },
     titles: [2007, 2009, 2014],
   },
   SEA: {
@@ -179,7 +179,7 @@ export const TEAMS = {
     color2: "#b3c7e7",
     dotSplit: 51,
     chartColors: { light: ["#772d5e", "#4c5d79"], dark: ["#ab7d98", "#b3c7e7"] },
-    markColors: { light: "#441e36", dark: "#8a5e78" },
+    markColors: { light: "#441e36", dark: "#875c76" },
     titles: [],
   },
   WAS: {

@@ -269,7 +269,7 @@ test("her regular season ranks each average among the players the WNBA ranks, on
         now: NOW,
       }).text,
     ),
-    /class="player-ranks" style="--mark-light: #449274; --mark-dark: #87d5b5;"/,
+    /class="player-ranks" style="--mark-light: #4f9c7e; --mark-dark: #87d5b5;"/,
   );
 });
 

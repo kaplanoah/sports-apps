@@ -21,8 +21,8 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const readBackground = (page) =>
   page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-const MAPLE = "rgb(234, 213, 178)";
-const WALNUT = "rgb(29, 21, 17)";
+const MAPLE = "rgb(243, 228, 206)";
+const WALNUT = "rgb(26, 17, 11)";
 
 /**
  * @param {import("@playwright/test").Page} page
@@ -407,7 +407,7 @@ test.describe("on a phone", () => {
         new Set(["true", "false"]),
       );
       for (const [checked, color] of knobs)
-        expect(color, `${appearance}, ${checked}`).toBe("rgb(241, 233, 223)");
+        expect(color, `${appearance}, ${checked}`).toBe("rgb(244, 232, 225)");
       await page.keyboard.press("Escape");
     }
   });

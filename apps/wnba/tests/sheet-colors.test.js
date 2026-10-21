@@ -175,7 +175,7 @@ test("every team's mark colors stand out on the sheet, each one of its own color
 });
 
 test("a player's sheet hands its curves her team's mark color on each theme", () => {
-  assert.equal(formatMarkColors("NYL"), "--mark-light: #449274; --mark-dark: #87d5b5;");
+  assert.equal(formatMarkColors("NYL"), "--mark-light: #4f9c7e; --mark-dark: #87d5b5;");
 });
 
 test("every pairing of teams, either way round, gets two colors that read apart, on each theme", () => {
