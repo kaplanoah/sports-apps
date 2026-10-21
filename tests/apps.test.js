@@ -6,12 +6,18 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   checkAppName,
+  checkWorkerName,
   findPageRoot,
+  findWorkerFolder,
+  findWorkerRoot,
+  isService,
   listApps,
   listAppsWithBrowserTests,
   listNamedWorkers,
+  listWorkers,
   listWorkersOrExit,
 } from "../worker/apps.mjs";
+import { createServiceRoots } from "./service-roots.js";
 
 test("an app is a folder under apps/ whose Worker has a wrangler.toml", () => {
   assert.ok(listApps().includes("mlb"));
@@ -105,4 +111,23 @@ test("a command naming a Worker that doesn't exist says so plainly and fails", (
   listWorkersOrExit("nfl", options);
   assert.deepEqual(logged, ["There's no Worker named nfl. The Workers are: mlb, wnba."]);
   assert.deepEqual(exits, [1]);
+});
+
+test("a service is a folder under services/ whose Worker has a wrangler.toml, and comes before the apps", () => {
+  const { roots, remove } = createServiceRoots();
+  try {
+    const { servicesRoot } = roots;
+    assert.deepEqual(listWorkers(roots), ["accounts", ...listApps()]);
+    assert.equal(isService("accounts", servicesRoot), true);
+    assert.equal(isService("mlb", servicesRoot), false);
+    assert.equal(findWorkerFolder("accounts", servicesRoot), "services/accounts/");
+    assert.equal(findWorkerFolder("mlb", servicesRoot), "apps/mlb/");
+    assert.equal(findWorkerRoot("accounts", roots).href, new URL("accounts/", servicesRoot).href);
+    assert.throws(() => checkWorkerName("nfl", listWorkers(roots)), {
+      message: `There's no Worker named nfl. The Workers are: ${["accounts", ...listApps()].join(", ")}.`,
+    });
+    assert.throws(() => checkAppName("accounts"), { message: /^There's no app named accounts\./ });
+  } finally {
+    remove();
+  }
 });

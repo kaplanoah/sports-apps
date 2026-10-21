@@ -132,8 +132,9 @@ function readBump(subject, app) {
 /**
  * @param {string} app
  * @param {(args: string[]) => string} git
+ * @param {URL} [servicesRoot]
  */
-function findBaseline(app, git) {
+function findBaseline(app, git, servicesRoot) {
   if (BASELINES[app]) return BASELINES[app];
   const [commit] = git([
     "log",
@@ -141,7 +142,7 @@ function findBaseline(app, git) {
     "--reverse",
     "--format=%H",
     "--",
-    findWorkerFolder(app),
+    findWorkerFolder(app, servicesRoot),
   ])
     .split("\n")
     .filter(Boolean);
@@ -165,14 +166,15 @@ const readMerges = (log) =>
  * that change what the app's deploy counts, or at the commit `head` names.
  * @param {string} app
  * @param {(args: string[]) => string} git
- * @param {string} [head] the commit to read the version at
+ * @param {{ head?: string, servicesRoot?: URL }} [options] the commit to read the version at, and
+ *   the folder that holds every service's
  * @returns {string | null} null when HEAD's history doesn't reach the baseline
  */
-export function readVersion(app, git, head = "HEAD") {
+export function readVersion(app, git, { head = "HEAD", servicesRoot } = {}) {
   let baseline;
   let log;
   try {
-    baseline = findBaseline(app, git);
+    baseline = findBaseline(app, git, servicesRoot);
     if (!baseline) return null;
     git(["merge-base", "--is-ancestor", baseline.commit, head]);
     log = git([

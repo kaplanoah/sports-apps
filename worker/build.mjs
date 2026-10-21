@@ -60,7 +60,7 @@ export function readRelease(app, git = runGit, now = new Date(), channel = "prod
   const { label } = findChannel(channel);
   if (!label) return { version: readVersion(app, git), commit, builtAt, label };
   const base = readBranchBase(git);
-  const version = base && readVersion(app, git, base);
+  const version = base && readVersion(app, git, { head: base });
   return { version: `${version ?? commit}-${label}`, commit, builtAt, label };
 }
 
