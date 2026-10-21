@@ -77,7 +77,7 @@ function createFakeCloudflare({
 const describeCalls = (calls) =>
   calls.map((request) => `${request.init.method} ${request.url.replace(API, "")}`);
 
-test("the name and compatibility date come from wrangler.toml", async () => {
+test("the name, compatibility date, and store class come from wrangler.toml", async () => {
   const { loadWorkerConfig, readWorkerConfig } = await loadDeployModule();
   assert.deepEqual(loadWorkerConfig("mlb"), {
     name: "mlb-app",
