@@ -35,6 +35,8 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 - `channel-tag.js`: the tag beside the app's name on beta
 - `release.js`: a release's version, commit, and channel
 - `release-guard.js`: reloading until every file comes from one release, as a deploy lands
+- `tuning-panel.js`: off production, the panel that tunes a round's values on the page
+- `tuning-round.js`: what a tuning round asks for, and its values as text to copy
 
 ### Opening, coming back, and catching up
 
@@ -207,6 +209,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `rank-curve.css`: a rank curve and its notes
 - `no-field-note.css`: the bracket before the playoff field is set
 - `channel-tag.css`: the tag beside the app's name on beta
+- `tuning-panel.css`: the tuning panel and its Tune button
 - `gate.css`: the access code's gate
 
 ## `shared/worker/`

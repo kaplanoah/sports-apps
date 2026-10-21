@@ -70,6 +70,10 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   6. Push to beta: `git push -f origin <branch>:beta`.
   7. Wait for that push's Deploy run to say `worker check: ok` for each Worker, and tell the owner to use the beta app on the Home Screen.
      Name the commit the beta tag at the top of the app should show, so a build swapped since is plain to see.
+- A design round tuned on the phone opens with an app's `page/tuning-round.json`,
+  which names each CSS variable on `:root` to tune, with a slider's `min`, `max`, `step`, and `unit`, or a list of `options`, as `readRound` in `shared/page/tuning-round.js` checks.
+  Beta's build writes it into the page with the tuning panel, and production's leaves both out (the root's `worker/tuning-files.mjs`).
+  The owner pastes back what the panel's Copy gives, and the PR sets those values in its stylesheets and deletes the round file in the same push.
 - If beta is held, add `beta-wait` to the PR if the workflow hasn't, stay subscribed to the PR, and stop.
   The last message to the owner names the PR holding beta, with its link,
   and says the owner can say "put this on beta now" to take it.

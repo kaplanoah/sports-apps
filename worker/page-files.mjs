@@ -16,6 +16,7 @@ const TEXT_TYPES = {
   ".svg": "image/svg+xml",
   ".webmanifest": "application/manifest+json",
   ".txt": "text/plain; charset=utf-8",
+  ".json": "application/json",
 };
 const BINARY_TYPES = { ".png": "image/png", ".woff2": "font/woff2" };
 

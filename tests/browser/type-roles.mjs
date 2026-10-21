@@ -38,7 +38,7 @@ export const listTextOffRoles = async (page) =>
       await document.fonts.ready;
       const SMALLEST_FIELD_SIZE = 16;
       const TYPED_FIELDS =
-        "select, textarea, input:not([type=checkbox], [type=radio], [type=hidden])";
+        "select, textarea, input:not([type=checkbox], [type=radio], [type=range], [type=hidden])";
 
       /** @param {string} range a face's weight, like "300" or "100 900" @param {number} weight */
       const isInRange = (range, weight) => {
