@@ -79,7 +79,8 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   then put this PR on beta from step 1.
   This is the only time a session changes another PR's labels, and only on the owner's word.
   If the workflow told another waiter before this PR took beta, it comments on that waiter that it stays first in line,
-  which spends the telling, so the workflow tells it again once beta is free.
+  or, when that waiter claimed beta meanwhile, takes `beta` off it.
+  Either way, the workflow tells it again once beta is free.
 - A PR gives beta up as it closes or merges, as its branch is pushed, and as the owner adds `phone-ok`, and the workflow takes the label off.
   Take `beta` off yourself when going back to work without a push yet, as when the owner's test found a problem,
   and when the owner is done testing a PR that isn't red, which never gets `phone-ok`.

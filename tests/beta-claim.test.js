@@ -6,6 +6,7 @@ import {
   WAIT_LABEL,
   checkBetaDeploy,
   decideBetaDeploy,
+  describePlan,
   findHolder,
   formatTakenMessage,
   isReleased,
@@ -460,6 +461,22 @@ test("a run comments on a waiter told before another took beta that it stays fir
         },
       },
     ],
+  );
+});
+
+test("a run's log says whom it told beta is free, whom it told another took beta first, or that it told no one", () => {
+  const change = { number: 4, label: BETA_LABEL, isAdded: false };
+  assert.equal(
+    describePlan({ holder: null, changes: [change], told: 6, taken: null }),
+    "Beta is free.\nTook off beta on #4.\nTold #6 beta is free.",
+  );
+  assert.equal(
+    describePlan({ holder: 3, changes: [], told: null, taken: 2 }),
+    "#3 holds beta.\nTold #2 that #3 took beta first.",
+  );
+  assert.equal(
+    describePlan({ holder: 3, changes: [], told: null, taken: null }),
+    "#3 holds beta.\nTold no one.",
   );
 });
 

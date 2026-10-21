@@ -347,7 +347,7 @@ function applyLabelChange(github, { number, label, isAdded }) {
 
 /**
  * Reads every pull request labeled beta or beta-wait, puts their labels right, and tells the
- * next in line when beta is free.
+ * next in line when beta is free, or the one told that another took beta first.
  * @param {ReadOptions} options
  */
 export async function updateQueue({ repository, fetchImpl = fetch, env = process.env }) {
@@ -373,13 +373,26 @@ export async function updateQueue({ repository, fetchImpl = fetch, env = process
   return plan;
 }
 
-/** @param {Plan} plan */
-function describePlan({ holder, changes, told, taken }) {
+/**
+ * The line of a run's log that says whom it told what.
+ * @param {Plan} plan
+ */
+function describeTelling({ holder, told, taken }) {
+  if (told) return `Told #${told} beta is free.`;
+  if (taken) return `Told #${taken} that #${holder} took beta first.`;
+  return "Told no one.";
+}
+
+/**
+ * A run's log.
+ * @param {Plan} plan
+ */
+export function describePlan(plan) {
+  const { holder, changes } = plan;
   const lines = [holder ? `#${holder} holds beta.` : "Beta is free."];
   for (const { number, label, isAdded } of changes)
     lines.push(`${isAdded ? "Added" : "Took off"} ${label} on #${number}.`);
-  lines.push(told ? `Told #${told} beta is free.` : "Told no one.");
-  if (taken) lines.push(`Told #${taken} that #${holder} took beta first.`);
+  lines.push(describeTelling(plan));
   return lines.join("\n");
 }
 

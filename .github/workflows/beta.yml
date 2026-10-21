@@ -3,8 +3,9 @@ name: Beta
 # One pull request uses the beta channel at a time, while the owner tests it on the phone
 # (worker/beta-claim.mjs). Each run takes beta off a pull request that gave it up and off every
 # one but the one that holds it, which waits in line, and once beta is free tells the one that has
-# waited longest. Labels this run's token changes start no workflow, so the same run tells the
-# next in line. GitHub starts no pull request workflow for one in conflict with main, so a merge
+# waited longest. When another takes beta before the one told claims it, it tells that one it
+# stays first in line. Labels this run's token changes start no workflow, so the same run tells
+# the next in line. GitHub starts no pull request workflow for one in conflict with main, so a merge
 # to main runs the queue too, catching up on label changes made while the holder was in conflict.
 on:
   pull_request:
@@ -43,7 +44,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
-      - name: Keep beta to one pull request and tell the next in line
+      - name: Keep beta to one pull request and tell the first in line
         env:
           GH_TOKEN: ${{ github.token }}
         run: node worker/beta-claim.mjs queue
