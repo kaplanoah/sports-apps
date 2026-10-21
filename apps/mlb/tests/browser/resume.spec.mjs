@@ -1,8 +1,4 @@
-import {
-  NEXT_RELEASE,
-  retryReleaseCheck,
-  serveReleases,
-} from "../../../../tests/browser/serve-releases.mjs";
+import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import {
   test,
@@ -55,30 +51,26 @@ async function sleepUnannounced(page, minutes) {
   await page.clock.runFor(15 * 1000);
 }
 
+test("a page asks the Worker for no release as it opens, since the build wrote its own into it", async ({
+  page,
+}) => {
+  const served = await serveReleases(page);
+  await openApp(page);
+  await expect(page.locator("#stamp")).not.toBeEmpty();
+  await page.clock.runFor(60 * 1000);
+
+  expect(served.requests).toBe(0);
+});
+
 test("a page coming back stays as it is when nothing was deployed", async ({ page }) => {
   const served = await serveReleases(page);
   await openApp(page);
-  await expect.poll(() => served.requests).toBe(1);
   await markPage(page);
 
   await comeBack(page);
 
-  await expect.poll(() => served.requests).toBe(2);
-  expect(await isSameLoad(page)).toBe(true);
-});
-
-test("a page whose first release check failed still reloads for a later deploy", async ({
-  page,
-}) => {
-  const served = await serveReleases(page);
-  served.failures = 1;
-  await openApp(page);
   await expect.poll(() => served.requests).toBe(1);
-  await expect.poll(() => retryReleaseCheck(page, served)).toBeGreaterThanOrEqual(3);
-  await markPage(page);
-
-  served.release = NEXT_RELEASE;
-  await expectReload(page, () => comeBack(page));
+  expect(await isSameLoad(page)).toBe(true);
 });
 
 const BRACKET_SET = "The official bracket is set";
@@ -157,19 +149,17 @@ test("a reload leaves out a season it last showed that it can no longer read", a
 test("a page asleep a few minutes checks for a deploy instead of reloading", async ({ page }) => {
   const served = await serveReleases(page);
   await openApp(page);
-  await expect.poll(() => served.requests).toBe(1);
   await markPage(page);
 
   await sleepUnannounced(page, 5);
 
-  await expect.poll(() => served.requests).toBe(2);
+  await expect.poll(() => served.requests).toBe(1);
   expect(await isSameLoad(page)).toBe(true);
 });
 
 test("live scores the page can't read reload it once a newer release is out", async ({ page }) => {
   const served = await serveReleases(page);
   const app = await openApp(page);
-  await expect.poll(() => served.requests).toBe(1);
   // The page plans its next read only once it has shown the last one's scores.
   await expect(page.locator("#stamp")).toContainText("Next first pitch");
   await markPage(page);
@@ -213,13 +203,12 @@ test("a deploy found mid-drag reloads the page once the drag ends", async ({ pag
   const served = await serveReleases(page);
   const app = await openApp(page);
   await expect.poll(() => app.countSeasonReads()).toBe(2);
-  await expect.poll(() => served.requests).toBe(1);
   await startDrag(page);
   await markPage(page);
 
   served.release = NEXT_RELEASE;
   await comeBack(page);
-  await expect.poll(() => served.requests).toBe(2);
+  await expect.poll(() => served.requests).toBe(1);
   expect(await isSameLoad(page)).toBe(true);
 
   await expectReload(page, async () => {
